@@ -24,6 +24,8 @@ class LiteRtLm(private val cacheDir: String) {
     }
 
     private var engine: Engine? = null
+    private var path = ""
+    private var onGpu = false
     private var conversation: Conversation? = null
     @Volatile private var stopped = false
 
@@ -54,6 +56,8 @@ class LiteRtLm(private val cacheDir: String) {
             try {
                 engine = start(path, g, v)
                 seesImages = v
+                this.path = path
+                onGpu = g
                 return if (g) "gpu" else "cpu"
             } catch (t: Throwable) {
                 last = t
@@ -70,13 +74,22 @@ class LiteRtLm(private val cacheDir: String) {
         val e = engine ?: throw IllegalStateException("No model is loaded.")
         try { conversation?.close() } catch (_: Throwable) { }
         val history = roles.indices.map { i -> if (roles[i] == "assistant") Message.model(texts[i]) else Message.user(texts[i]) }
-        val c = e.createConversation(
-            ConversationConfig(
-                systemInstruction = Contents.of(system),
-                initialMessages = history,
-                samplerConfig = SamplerConfig(topK = topK, topP = topP, temperature = temperature),
-            ),
+        val config = ConversationConfig(
+            systemInstruction = Contents.of(system),
+            initialMessages = history,
+            samplerConfig = SamplerConfig(topK = topK, topP = topP, temperature = temperature),
         )
+        val c = try {
+            e.createConversation(config)
+        } catch (t: Throwable) {
+            // Some builds have no image part (e.g. "tf_lite_vision_encoder not found"): reload for text only.
+            if (!seesImages || !(t.message ?: "").contains("vision", ignoreCase = true)) throw t
+            try { e.close() } catch (_: Throwable) { }
+            val textOnly = start(path, onGpu, false)
+            engine = textOnly
+            seesImages = false
+            textOnly.createConversation(config)
+        }
         conversation = c
         stopped = false
         val callback = object : MessageCallback {

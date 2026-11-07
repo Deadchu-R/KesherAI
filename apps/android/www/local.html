@@ -1208,7 +1208,7 @@
       }
     } catch (err) {
       if (abort?.signal.aborted) { reply += T(" (נעצר)", " (stopped)"); stoppedByUser = true; }
-      else addMsg("note", T("שגיאה: ", "Error: ") + (err.message || err));
+      else { addMsg("note", T("שגיאה: ", "Error: ") + (err.message || err)); $("status").textContent = ""; }
     } finally {
       abort = null;
       paintSend();
