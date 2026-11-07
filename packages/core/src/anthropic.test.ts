@@ -82,6 +82,8 @@ test("Anthropic Messages API: text, system, images, tools, streaming, and app ke
     await app.inject({ method: "PUT", url: "/api/api-keys/settings", payload: { requireKeyLocally: true } });
     assert.equal((await post(body)).statusCode, 401, "this computer needs a key too now");
     assert.equal((await post(body, { "x-api-key": made.key })).statusCode, 200);
+    const log = (await app.inject({ method: "GET", url: "/api/api-keys/log" })).json() as Array<{ caller: string; path: string; model?: string; status: number }>;
+    assert.ok(log.some((l) => l.caller === "Cursor" && l.path === "/v1/messages" && l.model === "t/m" && l.status === 200));
     await app.inject({ method: "DELETE", url: `/api/api-keys/${made.entry.id}` });
     assert.equal((await post(body, { "x-api-key": made.key })).statusCode, 401);
   } finally {

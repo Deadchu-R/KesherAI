@@ -357,7 +357,9 @@ ipcMain.handle("kesher:restart", () => {
 let awakeBlocker: number | undefined;
 setInterval(() => {
   const remote = server?.services.config.remote;
-  const want = !!remote?.enabled && !!remote.keepAwake;
+  // Also while serving other apps and devices through the API, until a minute after the last request.
+  const serving = Date.now() - (server?.services.lastServed?.() ?? 0) < 60_000;
+  const want = (!!remote?.enabled && !!remote.keepAwake) || serving;
   if (want && awakeBlocker === undefined) awakeBlocker = powerSaveBlocker.start("prevent-app-suspension");
   if (!want && awakeBlocker !== undefined) {
     powerSaveBlocker.stop(awakeBlocker);

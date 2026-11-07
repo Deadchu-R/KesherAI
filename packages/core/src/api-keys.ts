@@ -35,6 +35,34 @@ export class ApiKeys {
     private readonly save: () => Promise<void>,
   ) {}
 
+  /** The last requests to the model APIs, newest last. */
+  readonly log: Array<{ at: string; caller: string; method: string; path: string; model?: string; status: number; ms: number }> = [];
+  /** When the model APIs last answered someone (for staying awake while serving). */
+  lastServedAt = 0;
+
+  /**
+   * Names who made a request, without counting a use.
+   *
+   * @param given - The key or token sent, if any.
+   * @param local - Whether it came from this computer.
+   * @returns The key's name, "this computer" or "remote token".
+   */
+  identify(given: string | undefined, local: boolean): string {
+    if (given?.startsWith("kai-")) {
+      const h = hashOf(given);
+      const k = this.keys().find((x) => x.hash === h);
+      if (k) return k.name;
+    }
+    return local ? "this computer" : "remote token";
+  }
+
+  /** Adds a request to the log. */
+  record(entry: (typeof this.log)[number]): void {
+    this.log.push(entry);
+    if (this.log.length > 300) this.log.splice(0, this.log.length - 300);
+    if (!entry.caller.startsWith("this computer")) this.lastServedAt = Date.now();
+  }
+
   /** @returns The keys, newest first. */
   list(): ApiKey[] {
     return [...this.keys()].reverse();

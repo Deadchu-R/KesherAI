@@ -22,6 +22,8 @@ export async function apiKeyRoutes(app: FastifyInstance, s: KesherServices, keys
     base: `http://127.0.0.1:${s.config.port}`,
   });
   app.get("/api/api-keys", { preHandler: local }, async () => view());
+  /** The last requests to the model APIs: who, which model, the answer and how long it took. */
+  app.get("/api/api-keys/log", { preHandler: local }, async () => [...keys.log].reverse().slice(0, 100));
   app.post<{ Body: { name?: string } }>("/api/api-keys", { preHandler: local }, async (req) => {
     const { key, entry } = await keys.create(String(req.body?.name ?? ""));
     const { hash: _h, ...rest } = entry;

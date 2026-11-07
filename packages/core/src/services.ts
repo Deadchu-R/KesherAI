@@ -93,6 +93,8 @@ export interface KesherServices {
   comfy: ComfyManager;
   /** Search across conversations. */
   conversationSearch: ConversationSearch;
+  /** When the model APIs last answered another app or device (ms), for staying awake while serving. */
+  lastServed?: () => number;
   /** Search by meaning (embeddings). */
   semantic: Semantic;
   /** "Access from anywhere" (Cloudflare tunnel). */

@@ -286,28 +286,47 @@ function useSearching(): boolean {
 }
 
 interface Hit { id: string; title: string; updatedAt: string; kind: string; snippet: string; role: string }
+interface KnowledgeHit { base: string; source: string; page: number; text: string }
+interface DayHit { kind: string; day: string; t: number; title: string; snippet: string }
+interface Results { chats: Hit[]; knowledge: KnowledgeHit[]; day: DayHit[] }
 
-/** Search every conversation, from the sidebar. */
+/** One search, from the sidebar: chats, knowledge bases, and "My day" with meetings. */
 function ConversationSearch() {
   const [q, setQ] = useState(searchQuery);
-  const [hits, setHits] = useState<Hit[] | null>(null);
+  const [r, setR] = useState<Results | null>(null);
   useEffect(() => {
     searchQuery = q;
     for (const l of searchListeners) l(q);
-    if (!q.trim()) return setHits(null);
-    const id = setTimeout(() => void api<Hit[]>(`/api/conversations/search?q=${encodeURIComponent(q)}`).then(setHits, () => setHits([])), 250);
+    if (!q.trim()) return setR(null);
+    const id = setTimeout(() => void api<Results>(`/api/search?q=${encodeURIComponent(q)}`).then(setR, () => setR({ chats: [], knowledge: [], day: [] })), 250);
     return () => clearTimeout(id);
   }, [q]);
+  const none = r && !r.chats.length && !r.knowledge.length && !r.day.length;
   return (
     <div className="conv-search">
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("searchChats")} aria-label={t("searchChats")} onKeyDown={(e) => e.key === "Escape" && setQ("")} />
-      {hits && (
+      {r && (
         <div className="conv-hits">
-          {hits.length === 0 && <p className="muted small">{t("searchNone")}</p>}
-          {hits.map((h) => (
+          {none && <p className="muted small">{t("searchNone")}</p>}
+          {r.chats.length > 0 && <span className="conv-hits-head">{t("searchInChats")}</span>}
+          {r.chats.map((h) => (
             <a key={h.id} className="conv-hit" href={`#/c/${h.id}`}>
               <span className="conv-hit-title" dir="auto">{h.kind === "code" ? "</> " : ""}{h.title}</span>
               <span className="muted small" dir="auto">{h.snippet}</span>
+            </a>
+          ))}
+          {r.knowledge.length > 0 && <span className="conv-hits-head">{t("knowledgeNav")}</span>}
+          {r.knowledge.map((h, i) => (
+            <a key={`k${i}`} className="conv-hit" href="#/knowledge">
+              <span className="conv-hit-title" dir="auto">{h.source}{/^https?:/.test(h.source) ? "" : `, p. ${h.page}`}</span>
+              <span className="muted small" dir="auto">{h.text}</span>
+            </a>
+          ))}
+          {r.day.length > 0 && <span className="conv-hits-head">{t("dayNav")}</span>}
+          {r.day.map((h, i) => (
+            <a key={`d${i}`} className="conv-hit" href="#/day">
+              <span className="conv-hit-title" dir="auto">{h.title}</span>
+              <span className="muted small" dir="auto">{h.day} · {h.snippet}</span>
             </a>
           ))}
         </div>

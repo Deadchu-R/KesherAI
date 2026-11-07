@@ -67,7 +67,7 @@ import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { detectHardwareCached } from "@kesher/downloads";
-import { registerRemoteAuth } from "./auth.js";
+import { isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
 import { modelRoutes } from "./routes/models.js";
@@ -452,6 +452,20 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // The desktop window and the Vite dev server are separate origins.
   await app.register(cors, { origin: true });
   const apiKeys = new ApiKeys(() => config.apiKeys, persist);
+  services.lastServed = () => apiKeys.lastServedAt;
+  // A log of model-API requests (who, which model, how long), shown in Settings.
+  // preHandler (not onResponse) so streamed answers, which take over the reply, are logged too.
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0] ?? "";
+    if (!(path.startsWith("/v1/") || path === "/mcp") || request.method === "OPTIONS") return;
+    const started = Date.now();
+    const xKey = request.headers["x-api-key"];
+    const given = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? (typeof xKey === "string" ? xKey : undefined);
+    const body = request.body as { model?: unknown; method?: unknown; params?: { name?: unknown } } | undefined;
+    const model = typeof body?.model === "string" ? body.model : path === "/mcp" && body?.method === "tools/call" ? `mcp: ${String(body.params?.name ?? "")}` : undefined;
+    const caller = apiKeys.identify(given, isLocalRequest(request));
+    reply.raw.once("finish", () => apiKeys.record({ at: new Date(started).toISOString(), caller, method: request.method, path, ...(model ? { model } : {}), status: reply.raw.statusCode, ms: Date.now() - started }));
+  });
   if (features.remote) registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally });
 
   await systemRoutes(app, services);

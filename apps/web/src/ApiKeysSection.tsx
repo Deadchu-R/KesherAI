@@ -19,6 +19,7 @@ export function ApiKeysSection() {
   const [name, setName] = useState("");
   const [fresh, setFresh] = useState<{ key: string; name: string } | null>(null);
   const [tab, setTab] = useState<"openai" | "anthropic" | "claude">("openai");
+  const [log, setLog] = useState<Array<{ at: string; caller: string; method: string; path: string; model?: string; status: number; ms: number }> | null>(null);
   useEffect(() => {
     api<View>("/api/api-keys").then(setV, () => undefined);
   }, []);
@@ -77,6 +78,26 @@ export function ApiKeysSection() {
           ))}
         </ul>
       )}
+      <details onToggle={(e) => (e.target as HTMLDetailsElement).open && void api<NonNullable<typeof log>>("/api/api-keys/log").then(setLog)}>
+        <summary className="muted small">{L("בקשות אחרונות", "Recent requests")}</summary>
+        {log && log.length === 0 && <p className="muted small">{L("עוד אין.", "None yet.")}</p>}
+        {log && log.length > 0 && (
+          <table className="api-log small">
+            <tbody>
+              {log.map((l, i) => (
+                <tr key={i}>
+                  <td className="muted">{new Date(l.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined)}</td>
+                  <td dir="auto">{l.caller}</td>
+                  <td dir="ltr">{l.path}</td>
+                  <td dir="ltr">{l.model ?? ""}</td>
+                  <td className={l.status >= 400 ? "bad" : ""}>{l.status}</td>
+                  <td className="muted">{l.ms < 1000 ? `${l.ms} ms` : `${(l.ms / 1000).toFixed(1)} s`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </details>
       <label className="check">
         <input type="checkbox" checked={v.requireKeyLocally} onChange={(e) => void api<View>("/api/api-keys/settings", { method: "PUT", body: { requireKeyLocally: e.target.checked } }).then(setV)} />
         {L("לדרוש מפתח גם מאפליקציות במחשב הזה (ממכשירים אחרים תמיד צריך מפתח או את טוקן הגישה מרחוק)", "Ask apps on this computer for a key too (other devices always need a key or the remote token)")}

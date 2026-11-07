@@ -69,6 +69,18 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.library.listConversations(q === undefined ? undefined : q === "none" ? null : q);
   });
 
+  /** One search across chats, knowledge bases and (on this computer) "My day" and meetings. */
+  app.get<{ Querystring: { q?: string } }>("/api/search", async (req) => {
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return { chats: [], knowledge: [], day: [] };
+    const [chats, knowledge, day] = await Promise.all([
+      s.conversationSearch.search(q, 8),
+      s.knowledge.search(q, undefined, 5).catch(() => []),
+      isLocalRequest(req) ? s.journal.search(q, 8).catch(() => []) : Promise.resolve([]),
+    ]);
+    return { chats, knowledge: knowledge.map((h) => ({ ...h, text: h.text.replace(/\s+/g, " ").slice(0, 220) })), day: day.map(({ frame: _f, ...d }) => d) };
+  });
+
   /** Search every conversation: `?q=words` → the best matches with a passage. */
   app.get<{ Querystring: { q?: string; limit?: string } }>("/api/conversations/search", async (req) => s.conversationSearch.search(String(req.query.q ?? ""), Math.min(50, Math.max(1, Number(req.query.limit) || 20))));
 
