@@ -1,11 +1,15 @@
 name: Release
 
 # Builds installers for Windows, macOS and Linux when a version tag is pushed
-# (git tag v0.1.0 && git push --tags) and attaches them to a draft release.
+# (git tag v0.1.0 && git push --tags), or when main is pushed to the `release`
+# branch, and attaches them to a draft release.
 
 on:
   push:
     tags: ["v*"]
+    # Pushing to the `release` branch also builds the installers (a draft release for package.json's version).
+    branches: [release]
+  workflow_dispatch:
 
 jobs:
   build:
