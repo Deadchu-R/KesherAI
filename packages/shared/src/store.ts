@@ -32,6 +32,8 @@ export interface Conversation {
   workspace?: string;
   /** Other models that plan or review alongside the main one. */
   team?: Teammate[];
+  /** The persona this chat talks as (its instructions join the system prompt). */
+  personaId?: string;
   /** What the model sees. */
   messages: AgentMessage[];
   /** What the user sees. */

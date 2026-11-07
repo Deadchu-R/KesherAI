@@ -66,6 +66,7 @@ export async function createConversation(body: {
   projectId?: string | null;
   workspace?: string;
   modelId?: string;
+  personaId?: string;
 }): Promise<string> {
   let c: { id: string };
   try {

@@ -6,6 +6,7 @@ import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
+import { PersonaChip } from "../Personas";
 import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
 import { Mic } from "../Mic";
@@ -465,9 +466,15 @@ export function ConversationPage({ id }: { id: string }) {
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[] }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; personaId: string | null }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
-    setConv({ ...conv, ...body });
+    const { personaId, ...rest } = body;
+    const next = { ...conv, ...rest };
+    if (personaId !== undefined) {
+      delete next.personaId;
+      if (personaId) next.personaId = personaId;
+    }
+    setConv(next);
     await refreshLibrary().catch(() => undefined);
   };
   const remove = async () => {
@@ -691,6 +698,7 @@ export function ConversationPage({ id }: { id: string }) {
               )}
               <WebToggle on={web} onChange={setWeb} />
               <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
+              {conv.kind === "chat" && <PersonaChip value={conv.personaId} onChange={(p) => void patch({ personaId: p?.id ?? null })} />}
               <ModelMenu models={modelOptions} value={conv.modelId} onChange={(id) => void patch({ modelId: id })} />
               <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
                 <option value="plan">{t("modePlan")}</option>

@@ -70,7 +70,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** Which conversations are working right now (`running`) or waiting for an answer (`waiting`). */
   app.get("/api/conversations/activity", async () => s.conversations.activity());
 
-  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string } }>(
+  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string } }>(
     "/api/conversations",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -82,6 +82,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
           ...(b.modelId ? { modelId: b.modelId } : {}),
           ...(b.mode ? { mode: b.mode } : {}),
           ...(b.workspace ? { workspace: b.workspace } : {}),
+          ...(b.personaId ? { personaId: b.personaId } : {}),
         });
         const { messages: _m, events: _e, ...summary } = c;
         return summary;
@@ -99,7 +100,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ...summary, session: opened.session.info(), events: opened.session.events };
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[] } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; personaId?: string | null } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};

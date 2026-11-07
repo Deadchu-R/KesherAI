@@ -806,3 +806,10 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .kb-sources { margin: 0; padding-inline-start: 18px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .kb-hit { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
 .kb-hit p { margin: 4px 0 0; white-space: pre-wrap; font-size: 14px; }
+
+/* Personas */
+.persona-card { display: flex; flex-direction: column; gap: 6px; }
+.persona-mark { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--border); font-size: 16px; }
+.persona-text { margin: 0; white-space: pre-wrap; }
+.persona-icon input { width: 64px; text-align: center; }
+.persona-templates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

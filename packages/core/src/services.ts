@@ -21,6 +21,7 @@ import type { Devices } from "./devices.js";
 import type { Speeds } from "./speeds.js";
 import type { Journal } from "./journal.js";
 import type { Knowledge } from "./knowledge.js";
+import type { Personas } from "./personas.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -68,6 +69,8 @@ export interface KesherServices {
   journal: Journal;
   /** Knowledge bases: folders and web pages the models search, with sources. */
   knowledge: Knowledge;
+  /** Saved personas: instructions, model and knowledge base per assistant. */
+  personas: Personas;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

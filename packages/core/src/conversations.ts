@@ -1,4 +1,5 @@
 import type { Checkpoints } from "./checkpoints.js";
+import { personaPrompt, type Personas } from "./personas.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -18,6 +19,7 @@ export interface NewConversation {
   mode?: PermissionMode;
   workspace?: string;
   title?: string;
+  personaId?: string;
 }
 
 let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
@@ -156,6 +158,8 @@ export class ConversationManager {
       mcpTools?(): AgentTool[];
       /** Notes the coach learned about how the user works, added to every system prompt. */
       userNotes?(): Promise<string[]>;
+      /** Saved personas. */
+      personas?: Personas;
     },
   ) {}
 
@@ -334,14 +338,16 @@ export class ConversationManager {
     return c.workspace ?? (c.projectId ? this.deps.library.getProject(c.projectId)?.workspace : undefined);
   }
 
-  private async promptFor(c: Pick<Conversation, "id" | "kind" | "workspace" | "projectId">, notes: string[]): Promise<string> {
+  private async promptFor(c: Pick<Conversation, "id" | "kind" | "workspace" | "projectId" | "personaId">, notes: string[]): Promise<string> {
     const project = c.projectId ? this.deps.library.getProject(c.projectId) : undefined;
+    const persona = this.deps.personas?.get(c.personaId);
     const workspace = this.workspaceOf(c);
     return buildSystemPrompt({
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
       toolNotes: [...notes, ...(await this.learnedNotes())],
+      ...(persona ? { persona: personaPrompt(persona) } : {}),
     });
   }
 
@@ -374,7 +380,9 @@ export class ConversationManager {
    * @throws Error if no model is given and no chat model is active, or a code conversation has no valid folder.
    */
   async create(opts: NewConversation): Promise<Conversation> {
-    const modelId = opts.modelId ?? this.defaultChatModel();
+    await this.deps.personas?.load();
+    const persona = this.deps.personas?.get(opts.personaId);
+    const modelId = opts.modelId ?? persona?.modelId ?? this.defaultChatModel();
     if (!modelId) throw new NoModelError("chat");
     const projectId = opts.projectId ?? null;
     if (projectId && !this.deps.library.getProject(projectId)) throw new Error("That project does not exist.");
@@ -388,6 +396,7 @@ export class ConversationManager {
       id: randomUUID(),
       projectId,
       title: opts.title ?? (opts.kind === "code" ? "New code session" : "New chat"),
+      ...(persona ? { personaId: persona.id } : {}),
       kind: opts.kind,
       modelId,
       // A chat writes only into its own outputs folder, so file edits need no approval there; commands still ask.
@@ -573,16 +582,22 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team">>): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team">> & { personaId?: string | null }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
+    const { personaId, ...rest } = patch;
+    let next: Conversation = { ...conversation, ...rest };
+    if (personaId !== undefined) {
+      const { personaId: _old, ...without } = next;
+      next = personaId ? { ...without, personaId } : without;
+      session.systemPrompt = await this.promptFor(next, this.toolsFor(next.kind, next.id).notes);
+    }
     if (patch.team) this.teamCache.set(id, patch.team);
     if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId));
     if (patch.mode) session.setMode(patch.mode);
     return this.deps.library.saveConversation({
-      ...conversation,
-      ...patch,
+      ...next,
       modelId: session.modelId,
       mode: session.mode,
       messages: session.messages,

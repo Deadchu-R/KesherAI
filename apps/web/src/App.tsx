@@ -5,6 +5,8 @@ import { ComputerBanner } from "./ComputerSection";
 import { UsagePage } from "./pages/Usage";
 import { DayPage } from "./pages/Day";
 import { KnowledgePage } from "./pages/Knowledge";
+import { PersonasPage } from "./pages/PersonasPage";
+import { PersonaChip } from "./Personas";
 import { PluginsPage } from "./pages/Plugins";
 import { CommunityPage } from "./pages/Community";
 import { PluginPage } from "./pages/PluginPage";
@@ -41,6 +43,7 @@ function Home() {
   const { models } = useModels("chat");
   const [text, setText] = useState("");
   const [modelId, setModelId] = useState("");
+  const [personaId, setPersonaId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [web, setWeb] = useWebSearch();
   useEffect(() => {
@@ -53,7 +56,7 @@ function Home() {
     if (!value || busy) return;
     setBusy(true);
     try {
-      const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}) });
+      const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
       if (!id) return;
       await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value, ...(web ? { web: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
@@ -86,6 +89,7 @@ function Home() {
           <div className="box-bar">
             <WebToggle on={web} onChange={setWeb} />
             <Mic onText={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
+            <PersonaChip value={personaId} onChange={(p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); }} />
             <select className="model-chip" value={modelId} onChange={(e) => setModelId(e.target.value)} aria-label={t("pickModel")}>
               {!modelId && <option value="">{t("pickModel")}</option>}
               {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -145,6 +149,7 @@ export function App() {
   else if (hash === "#/usage") page = <UsagePage />;
   else if (hash === "#/day") page = <DayPage />;
   else if (hash === "#/knowledge") page = <KnowledgePage />;
+  else if (hash === "#/personas") page = <PersonasPage />;
   else if (hash === "#/plugins") page = <PluginsPage />;
   else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;

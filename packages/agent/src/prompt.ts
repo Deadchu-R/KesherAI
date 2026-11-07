@@ -14,6 +14,8 @@ export interface PromptOptions {
   projectInstructions?: string;
   /** Lines describing extra tools (e.g. which model generate_image uses). */
   toolNotes?: string[];
+  /** A persona's part of the prompt, if the chat has one. */
+  persona?: string;
 }
 
 /**
@@ -86,5 +88,6 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
   }
   if (opts.toolNotes?.length) parts.push(opts.toolNotes.join("\n"));
   if (opts.projectInstructions) parts.push(`Instructions for this project:\n${opts.projectInstructions}`);
+  if (opts.persona) parts.push(opts.persona);
   return parts.join("\n\n");
 }
