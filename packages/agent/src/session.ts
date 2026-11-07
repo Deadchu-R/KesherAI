@@ -14,7 +14,11 @@ import type {
 } from "@kesher/shared";
 import { decide } from "./permissions.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { ASK_USER_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+import { ASK_USER_TOOL, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+
+/** Added to the system prompt in plan mode. */
+const PLAN_NOTE =
+  "PLAN MODE is on. Do not change anything: no file edits, no commands that change things (those tools are refused). Look around with the read-only tools (list, read and search files) until you understand what is needed, ask the user with ask_user if a choice is theirs, then call present_plan with a clear, numbered plan. After that, stop and wait.";
 import { stat } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { displayPath } from "./workspace.js";
@@ -292,6 +296,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     return path;
   }
 
+  /** Adds a short note to the conversation (shown in grey). */
+  note(text: string): void {
+    this.push({ type: "note", text });
+  }
+
+  /** Records a checkpoint (the app saved the project folder before the next message). */
+  checkpoint(id: string, files: number): void {
+    this.push({ type: "checkpoint", id, files });
+  }
+
   private push(e: NewEvent, persist = true): AgentEvent {
     const event = { ...e, seq: persist ? this.events.length + 1 : 0, at: new Date().toISOString() } as AgentEvent;
     if (persist) this.events.push(event);
@@ -432,7 +446,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * The stored conversation is never changed.
    */
   private async fitContext(signal: AbortSignal): Promise<AgentMessage[]> {
-    const system: AgentMessage = { role: "system", content: this.systemPrompt };
+    const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
     const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - 2000;
     const msgs = shortenOldToolOutputs(this.messages);
     if (sizeOf(msgs) <= budget) return [system, ...msgs];
@@ -462,7 +476,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private specs(): ToolSpec[] {
     if (this.toolsUnsupported) return [];
-    return [askUserSpec, requestAccessSpec, ...[...this.tools.values()].map((t) => t.spec)];
+    return [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...[...this.tools.values()].map((t) => t.spec)];
   }
 
   private async run(): Promise<void> {
@@ -575,6 +589,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       return answer;
     }
 
+    if (call.name === PRESENT_PLAN_TOOL) {
+      const plan = typeof call.arguments.plan === "string" ? call.arguments.plan.trim() : "";
+      if (!plan) return fail('present_plan needs a "plan".');
+      this.push({ type: "plan", callId: call.id, text: plan });
+      this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output: "Shown to the user." });
+      return "The plan is shown to the user. Stop now: reply with one short sentence and wait. They will approve it (then you carry it out) or ask for changes.";
+    }
+
     if (call.name === REQUEST_ACCESS_TOOL) {
       const reason = typeof call.arguments.reason === "string" ? call.arguments.reason : "";
       const path = typeof call.arguments.path === "string" && call.arguments.path.trim() ? call.arguments.path.trim() : undefined;
@@ -611,6 +633,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     };
     const always = this.alwaysAllowed.has(tool.spec.name) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId);
     const verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
+    if (verdict.action === "deny") return fail(verdict.reason);
     if (verdict.action === "ask") {
       let preview = "";
       try {

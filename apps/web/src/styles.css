@@ -794,3 +794,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .device-list li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); }
 .device-list .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-top: 6px; flex-shrink: 0; }
 .device-list .dot.on { background: #6fd3a5; box-shadow: 0 0 0 3px rgb(111 211 165 / .18); }
+.plan-card { border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.plan-head { color: var(--accent); font-size: 13px; letter-spacing: .01em; }
+.checkpoint-line { display: flex; justify-content: flex-end; margin: -4px 0 -6px; opacity: .55; }
+.checkpoint-line:hover, .checkpoint-line:focus-within { opacity: 1; }

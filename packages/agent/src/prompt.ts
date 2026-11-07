@@ -43,6 +43,7 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
     `You are the assistant inside ${opts.productName}, an app that runs AI models on the user's own computer (${os}).`,
     "Answer in the language the user writes in. Be direct and concise.",
     "When a request is ambiguous or a choice is really the user's to make, call ask_user instead of guessing. Do not ask about things you can find out yourself.",
+    "In a project you do not know yet, call code_map first and then read only the files you need. After you change code, call check_code and fix the errors it reports before you say you are done.",
     [
       "Your tools on this computer:",
       "- Files: list_files, read_file, search, write_file, edit_file; run_command for any shell command; build_executable to package a Python program as an .exe.",

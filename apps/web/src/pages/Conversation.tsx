@@ -556,6 +556,30 @@ export function ConversationPage({ id }: { id: string }) {
                 return <div key={e.seq} className="msg"><RichText text={e.text} /><SpeakButton text={e.text} /></div>;
               case "approval_request":
                 return <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
+              case "plan":
+                return (
+                  <div key={e.seq} className="plan-card">
+                    <div className="plan-head"><strong>{t("agentPlanTitle")}</strong></div>
+                    <RichText text={e.text} />
+                    {(info?.mode ?? conv.mode) === "plan" && !busy && (
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() =>
+                            void (async () => {
+                              await patch({ mode: "auto-edit" });
+                              await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: t("planGo") } }).catch((err: Error) => setError(err.message));
+                            })()
+                          }
+                        >
+                          {t("planApprove")}
+                        </button>
+                        <span className="muted small">{t("planChangeHint")}</span>
+                      </div>
+                    )}
+                  </div>
+                );
               case "question":
                 return <QuestionCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingQuestions.includes(e.questionId)} answer={answers.get(e.questionId)} />;
               case "teammate":
@@ -571,6 +595,23 @@ export function ConversationPage({ id }: { id: string }) {
                 );
               case "note":
                 return <p key={e.seq} className="muted note">{e.text}</p>;
+              case "checkpoint":
+                return (
+                  <div key={e.seq} className="checkpoint-line">
+                    <button
+                      type="button"
+                      className="link-btn small"
+                      disabled={busy}
+                      title={t("cpHint")}
+                      onClick={() => {
+                        if (!confirm(t("cpConfirm"))) return;
+                        void api(`/api/conversations/${id}/checkpoints/${e.id}/restore`, { method: "POST" }).catch((err: Error) => setError(err.message));
+                      }}
+                    >
+                      ↺ {t("cpRestore")}
+                    </button>
+                  </div>
+                );
               case "compacted":
                 return <p key={e.seq} className="muted note">{t("compactedNote")}</p>;
               case "access":
@@ -652,6 +693,7 @@ export function ConversationPage({ id }: { id: string }) {
               <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
               <ModelMenu models={modelOptions} value={conv.modelId} onChange={(id) => void patch({ modelId: id })} />
               <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
+                <option value="plan">{t("modePlan")}</option>
                 <option value="ask">{t("modeAsk")}</option>
                 <option value="auto-edit">{t("modeAutoEdit")}</option>
                 <option value="auto">{t("modeAuto")}</option>

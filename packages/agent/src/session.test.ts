@@ -312,3 +312,26 @@ test("a team: the planner's plan reaches the worker, and the reviewer sends a we
   assert.deepEqual(mates.map((e) => (e.type === "teammate" ? [e.role, e.approved] : [])), [["planner", undefined], ["reviewer", false], ["reviewer", true]]);
   assert.equal(answers, 2);
 });
+
+test("plan mode: reading works, changes are refused, present_plan shows the plan", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  await writeFile(join(workspace, "a.ts"), "export const a = 1;\n");
+  const { model, seen } = scripted([
+    { calls: [{ name: "write_file", arguments: { path: "a.ts", content: "changed" } }] },
+    { calls: [{ name: "read_file", arguments: { path: "a.ts" } }] },
+    { calls: [{ name: "present_plan", arguments: { plan: "1. Change a.ts" } }] },
+    { text: "Here is my plan." },
+  ]);
+  const session = new AgentSession({ id: "p", modelId: "m", model, mode: "plan", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });
+  session.send("Add a feature");
+  const plan = await waitFor(session, (e) => e.type === "plan");
+  assert.equal(plan.type === "plan" && plan.text, "1. Change a.ts");
+  await waitFor(session, (e) => e.type === "assistant" && /my plan/.test(e.text));
+  assert.ok(seen[0]!.tools.some((t) => t.name === "present_plan"));
+  assert.match(String(seen[0]!.messages[0]!.content), /PLAN MODE/);
+  const toolText = seen.at(-1)!.messages.filter((m) => m.role === "tool").map((m) => String(m.content)).join("\n");
+  assert.match(toolText, /Plan mode: you may only read/);
+  assert.match(toolText, /export const a = 1/);
+  assert.equal(await readFile(join(workspace, "a.ts"), "utf8"), "export const a = 1;\n", "nothing changed");
+  assert.ok(!session.events.some((e) => e.type === "approval_request"));
+});

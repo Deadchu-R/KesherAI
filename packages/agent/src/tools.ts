@@ -6,6 +6,7 @@ import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./works
 import { buildExecutableTool } from "./build.js";
 import { SYSTEM_TOOLS } from "./system-tools.js";
 import { MAX_OUTPUT, runShell } from "./shell.js";
+import { checkCodeTool, codeMapTool } from "./code-intel.js";
 
 /** What a tool returns. */
 export interface ToolOutput {
@@ -351,6 +352,17 @@ export const askUserSpec: ToolSpec = {
   },
 };
 
+/** Name of the special tool through which the agent shows its plan in plan mode. */
+export const PRESENT_PLAN_TOOL = "present_plan";
+
+/** Spec of present_plan; the session handles it itself (offered only in plan mode). */
+export const presentPlanSpec: ToolSpec = {
+  name: PRESENT_PLAN_TOOL,
+  description:
+    "Plan mode: show the user your plan and stop. Write it in Markdown, in the user's language: the goal in one line, then numbered steps naming the files you will change or create and how, the commands you will run, and how you will check that it works. Mention risks or choices the user should know about.",
+  inputSchema: { type: "object", properties: { plan: { type: "string" } }, required: ["plan"] },
+};
+
 /** Name of the special tool through which the agent asks for a folder or file outside its own. */
 export const REQUEST_ACCESS_TOOL = "request_access";
 
@@ -370,4 +382,4 @@ export const requestAccessSpec: ToolSpec = {
 };
 
 /** The file and terminal tools of a code conversation. */
-export const CODE_TOOLS: readonly AgentTool[] = [listFiles, readFileTool, searchTool, writeFileTool, editFileTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];
+export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, readFileTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];

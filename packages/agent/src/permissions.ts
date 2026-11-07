@@ -1,7 +1,7 @@
 import type { PermissionMode, ToolRisk } from "@kesher/shared";
 
 /** What to do with a tool call before running it. */
-export type PermissionVerdict = { action: "allow" } | { action: "ask"; reason: string };
+export type PermissionVerdict = { action: "allow" } | { action: "ask"; reason: string } | { action: "deny"; reason: string };
 
 /**
  * Commands that always need the user's approval, whatever the mode: they
@@ -54,6 +54,8 @@ export function dangerReason(command: string): string | undefined {
  */
 export function decide(mode: PermissionMode, risk: ToolRisk, alwaysAllowed: boolean, command?: string): PermissionVerdict {
   if (risk === "safe" || risk === "read") return { action: "allow" };
+  // Plan mode: look, don't touch.
+  if (mode === "plan") return { action: "deny", reason: "Plan mode: you may only read and look around. Put this step in your plan and finish with present_plan." };
   const danger = command ? dangerReason(command) : undefined;
   if (danger) return { action: "ask", reason: `This command ${danger}, so it always needs your approval.` };
   if (alwaysAllowed) return { action: "allow" };

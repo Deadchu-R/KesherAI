@@ -31,6 +31,7 @@ import { journalRoutes } from "./routes/journal.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
 import { Runtimes } from "./runtimes.js";
+import { Checkpoints } from "./checkpoints.js";
 import { Devices } from "./devices.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { Journal, type ScreenSource } from "./journal.js";
@@ -242,6 +243,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       plugins,
       config,
       outputsDir: join(paths.root, "outputs"),
+      checkpoints: new Checkpoints(join(paths.root, "checkpoints")),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
       computerTools: (id) => computer.tools(id),
       mcpTools: () => [

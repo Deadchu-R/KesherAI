@@ -51,7 +51,8 @@ export interface ToolSpec {
  * - `auto-edit`: file changes inside the folder are approved automatically; commands still ask.
  * - `auto`: file changes and commands run automatically; dangerous commands still ask.
  */
-export type PermissionMode = "ask" | "auto-edit" | "auto";
+/** `plan`: the agent only looks around and writes a plan for the user to approve; nothing is changed. */
+export type PermissionMode = "plan" | "ask" | "auto-edit" | "auto";
 
 /** How risky a tool is, which decides when it needs approval. */
 export type ToolRisk = "safe" | "read" | "write" | "exec";
@@ -96,6 +97,8 @@ export type AgentEvent = EventBase &
         folder?: string;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
+    /** Plan mode: the agent's plan, for the user to approve (then it runs) or change. */
+    | { type: "plan"; callId: string; text: string }
     | {
         type: "question";
         questionId: string;
@@ -134,6 +137,8 @@ export type AgentEvent = EventBase &
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
     | { type: "status"; status: AgentStatus; message?: string }
     | { type: "note"; text: string }
+    /** A saved state of the project folder, taken before the next message (coding sessions). */
+    | { type: "checkpoint"; id: string; files: number }
     | {
         /** What one model call cost, in tokens (reported by the provider, or `estimated` from the text). */
         type: "usage";

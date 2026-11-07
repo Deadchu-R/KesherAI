@@ -8,7 +8,7 @@ import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
 
-const MODES: PermissionMode[] = ["ask", "auto-edit", "auto"];
+const MODES: PermissionMode[] = ["plan", "ask", "auto-edit", "auto"];
 
 /**
  * Projects, conversations (each one a live agent session), approvals,
@@ -142,6 +142,17 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       clearInterval(ping);
       session.off("event", onEvent);
     });
+  });
+
+  /** Coding sessions: puts the project folder back as it was before a message (the current state is saved first). */
+  app.post<{ Params: { id: string; cp: string } }>("/api/conversations/:id/checkpoints/:cp/restore", async (req, reply) => {
+    if (!/^[0-9a-f]{40}$/.test(req.params.cp)) return reply.code(400).send({ error: "Bad checkpoint" });
+    try {
+      await s.conversations.restoreCheckpoint(req.params.id, req.params.cp);
+      return { ok: true };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
   });
 
   /** Lets the queue go on after Stop. */

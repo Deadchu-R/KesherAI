@@ -1,3 +1,4 @@
+import type { Checkpoints } from "./checkpoints.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -108,6 +109,8 @@ export class ConversationManager {
       config: KesherConfig;
       /** Folder for the files chats make (one sub-folder per conversation). */
       outputsDir: string;
+      /** Saves the project folder before each message in coding sessions. */
+      checkpoints?: Checkpoints;
       /**
        * Finds an image model that runs on this computer when none usable is
        * active: uses a downloaded one, or starts downloading the best fit.
@@ -437,6 +440,22 @@ export class ConversationManager {
     return {};
   }
 
+  /**
+   * Puts a coding session's folder back as it was before a message.
+   *
+   * @param id - The conversation.
+   * @param checkpoint - The checkpoint id.
+   */
+  async restoreCheckpoint(id: string, checkpoint: string): Promise<void> {
+    const opened = await this.open(id);
+    if (!opened) throw new Error("Conversation not found");
+    const ws = this.workspaceOf(opened.conversation);
+    if (!ws || !this.deps.checkpoints) throw new Error("This conversation has no project folder.");
+    if (opened.session.busy) throw new Error("Stop the agent first.");
+    await this.deps.checkpoints.restore(id, ws, checkpoint);
+    opened.session.note("Restored the project folder to this checkpoint.");
+  }
+
   /** Sends the next queued message, if the agent is free and the queue is not paused. */
   private async drain(id: string): Promise<void> {
     const session = this.sessions.get(id);
@@ -508,6 +527,12 @@ export class ConversationManager {
       } catch (err) {
         context = `(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;
       }
+    }
+    // Coding sessions: save the folder first, so this point can be restored with one click.
+    const ws = conversation.kind === "code" ? this.workspaceOf(conversation) : undefined;
+    if (ws && this.deps.checkpoints && !session.busy) {
+      const cp = await this.deps.checkpoints.snapshot(conversation.id, ws, text).catch(() => undefined);
+      if (cp) session.checkpoint(cp.id, cp.files);
     }
     session.send(text, context, note);
   }
