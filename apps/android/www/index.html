@@ -305,7 +305,16 @@
         const c = await googleClient();
         $("status").className = "";
         $("status").textContent = gtr.signing[lang];
-        const r = await Google.signIn({ clientId: c.clientId, clientSecret: c.clientSecret, scope: "openid email https://www.googleapis.com/auth/drive.file" });
+        // While the browser is in front, Android freezes apps in the background; a short foreground
+        // service keeps this app awake so it can receive Google's answer.
+        const Bg = window.Capacitor?.Plugins?.KesherBackground;
+        await Bg?.start({ title: "KesherAI", text: lang === "he" ? "מתחבר עם Google…" : "Signing in with Google…" }).catch(() => undefined);
+        let r;
+        try {
+          r = await Google.signIn({ clientId: c.clientId, clientSecret: c.clientSecret, scope: "openid email https://www.googleapis.com/auth/drive.file" });
+        } finally {
+          await Bg?.stop().catch(() => undefined);
+        }
         if (!r.refreshToken) throw new Error("Google did not return a refresh token.");
         localStorage.setItem(GKEY, JSON.stringify({ refreshToken: r.refreshToken, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, email: emailOf(r.idToken) }));
         await showGoogle();
