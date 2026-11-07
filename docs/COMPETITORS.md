@@ -144,7 +144,7 @@ Working on now, in this order:
 5. Engine updates: a newer llama.cpp without an app update (Off Grid) ✅
 6. "Enhance prompt" before images and video (LU prompt rewriting) ✅
 7. A download speed limit (LU) ✅ (the downloads circle, saved in config)
-8. Voice conversation on the computer: talk, hear the answer, interrupt (LU voice, Off Grid hands-free) ⬜
+8. Voice conversation on the computer: talk, hear the answer, interrupt (LU voice, Off Grid hands-free) ✅ (the voice-wave button by the microphone)
 
 Later (priority to be decided):
 
