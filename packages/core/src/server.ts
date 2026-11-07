@@ -21,6 +21,8 @@ import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js
 import { googleTools } from "./google-tools.js";
 import { Knowledge, knowledgeTools } from "./knowledge.js";
 import { Personas } from "./personas.js";
+import { Prompts } from "./prompts.js";
+import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
@@ -290,6 +292,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     journal,
     knowledge,
     personas,
+    prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
       const nv = await nvidiaGpus();
       return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
@@ -330,6 +333,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await journalRoutes(app, services);
   await knowledgeRoutes(app, services);
   await personaRoutes(app, services);
+  await promptRoutes(app, services);
   await githubRoutes(app, services);
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);

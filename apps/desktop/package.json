@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.4.14",
+  "version": "0.4.15",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",

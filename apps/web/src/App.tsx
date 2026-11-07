@@ -7,6 +7,8 @@ import { DayPage } from "./pages/Day";
 import { KnowledgePage } from "./pages/Knowledge";
 import { PersonasPage } from "./pages/PersonasPage";
 import { PersonaChip } from "./Personas";
+import { PromptTextarea, expandSlash } from "./SlashMenu";
+import { PromptsPage } from "./pages/PromptsPage";
 import { PluginsPage } from "./pages/Plugins";
 import { CommunityPage } from "./pages/Community";
 import { PluginPage } from "./pages/PluginPage";
@@ -52,7 +54,7 @@ function Home() {
   const hour = new Date().getHours();
   const greeting = t(hour < 5 ? "greetNight" : hour < 12 ? "greetMorning" : hour < 18 ? "greetDay" : "greetEvening");
   const start = async () => {
-    const value = text.trim();
+    const value = expandSlash(text.trim());
     if (!value || busy) return;
     setBusy(true);
     try {
@@ -72,13 +74,13 @@ function Home() {
       <h1 className="greeting">{greeting}</h1>
       <form className="composer home-composer" onSubmit={(e) => { e.preventDefault(); void start(); }}>
         <div className="box">
-          <textarea
+          <PromptTextarea
             rows={3}
             autoFocus
             value={text}
             placeholder={t("homePlaceholder")}
             aria-label={t("messagePlaceholder")}
-            onChange={(e) => setText(e.target.value)}
+            onValue={setText}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -150,6 +152,7 @@ export function App() {
   else if (hash === "#/day") page = <DayPage />;
   else if (hash === "#/knowledge") page = <KnowledgePage />;
   else if (hash === "#/personas") page = <PersonasPage />;
+  else if (hash === "#/prompts") page = <PromptsPage />;
   else if (hash === "#/plugins") page = <PluginsPage />;
   else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;

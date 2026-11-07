@@ -824,3 +824,12 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .branch-btn { margin-inline-start: 4px; }
 .branch-bar { display: flex; flex-wrap: wrap; gap: 16px; padding: 6px 28px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); }
 .branch-bar a { color: var(--text); }
+
+/* Slash prompts */
+.slash-wrap { position: relative; display: flex; flex-direction: column; }
+.slash-wrap > textarea { width: 100%; }
+.slash-menu { position: absolute; inset-inline: 0; bottom: calc(100% + 8px); z-index: 30; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--panel); box-shadow: 0 12px 32px rgb(0 0 0 / .35); max-height: 320px; overflow: auto; }
+.slash-menu button { display: flex; gap: 12px; align-items: baseline; justify-content: flex-start; text-align: start; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; }
+.slash-menu button.on { background: var(--raised); }
+.slash-cmd { font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+.slash-empty { padding: 8px 10px; }

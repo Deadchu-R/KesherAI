@@ -7,6 +7,7 @@ import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
 import { PersonaChip } from "../Personas";
+import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
 import { Mic } from "../Mic";
@@ -443,7 +444,7 @@ export function ConversationPage({ id }: { id: string }) {
   // The server titles a conversation from its first message; the sidebar list has the latest title.
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
   const send = async () => {
-    const text = input.trim();
+    const text = expandSlash(input.trim());
     // While the agent works, the message joins the queue and goes when it is free.
     if (!text) return;
     setInput("");
@@ -700,12 +701,12 @@ export function ConversationPage({ id }: { id: string }) {
           }}
         >
           <div className="box">
-            <textarea
+            <PromptTextarea
               rows={2}
               value={input}
               placeholder={conv.kind === "code" ? t("codePlaceholder") : t("messagePlaceholder")}
               aria-label={t("messagePlaceholder")}
-              onChange={(e) => setInput(e.target.value)}
+              onValue={setInput}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
