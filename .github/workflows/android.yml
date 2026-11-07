@@ -97,20 +97,7 @@ jobs:
       - name: Describe this build for the app's update button
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          node -e '
-            const { execSync } = require("node:child_process");
-            // Only what changed in the phone app (not the computer's), newest first, with dates.
-            // A commit can say it in Hebrew too, with a line "Phone-he: …" in its message.
-            const log = execSync("git log -60 --format=%H%x1f%ct%x1f%s%x1f%b%x1e -- apps/android", { encoding: "utf8" }).split("\x1e").map((x) => x.trim()).filter(Boolean);
-            const changes = log.map((l) => {
-              const [sha, t, subject, body = ""] = l.split("\x1f");
-              const he = /^Phone-he:\s*(.+)$/m.exec(body)?.[1]?.trim();
-              return { sha, t: Number(t), subject: subject.replace(/^Phone( app)?:\s*/i, ""), ...(he ? { he } : {}) };
-            });
-            require("node:fs").writeFileSync("android-version.json", JSON.stringify({
-              versionCode: Number(process.argv[1]), versionName: `${process.argv[2]} (${process.argv[1]})`,
-              apkUrl: `https://github.com/${process.argv[3]}/releases/download/android-latest/KesherAI-android.apk`, changes }));
-          ' "${{ github.run_number }}" "$VERSION" "${{ github.repository }}"
+          node apps/android/scripts/version-info.cjs "${{ github.run_number }}" "$VERSION" "${{ github.repository }}" android-version.json
           cat android-version.json
       - uses: actions/upload-artifact@v4
         with:

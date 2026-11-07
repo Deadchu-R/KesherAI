@@ -44,6 +44,8 @@
     .composer .web { background: transparent; border: 1px solid var(--border); font-size: 17px; filter: grayscale(1); opacity: .65; }
     .composer .web.on { background: rgb(152 163 255 / 0.16); border-color: rgb(152 163 255 / 0.5); filter: none; opacity: 1; }
     .composer button { min-height: 40px; width: 40px; padding: 0; border-radius: 12px; font-size: 18px; }
+    .tune-bar { height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; margin: 0 4px 6px; }
+    .tune-bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
     .status { font-size: 12.5px; color: var(--muted); margin: 0 4px 6px; min-height: 1em; }
     .error { color: var(--bad); }
     [hidden] { display: none !important; }
@@ -67,6 +69,7 @@
     <div class="msgs" id="msgs"></div>
   </main>
   <footer id="chatFoot" hidden>
+    <div class="tune-bar" id="tuneBar" hidden><span></span></div>
     <p class="status" id="status"></p>
     <form class="composer" id="composer">
       <button type="button" id="web" class="web" aria-pressed="false" title="Search the web">🌐</button>
@@ -331,7 +334,7 @@
    *
    * @returns { ok, tps }
    */
-  async function check() {
+  async function check(onStep = () => undefined) {
     const ask = async (q) => {
       const t0 = performance.now();
       const r = await wllama.createChatCompletion({ messages: [{ role: "user", content: q }], max_tokens: 24, temp: 0, temperature: 0, top_k: 1 });
@@ -340,7 +343,9 @@
       return { text, tps: n / ((performance.now() - t0) / 1000) };
     };
     try {
+      onStep(1);
       const a = await ask("Count from 1 to 8, separated by commas. Only the numbers.");
+      onStep(2);
       const b = await ask("What is the capital of France? Answer with one word.");
       const ok = /1\D{1,3}2\D{1,3}3\D{1,3}4\D{1,3}5/.test(a.text) && /paris/i.test(b.text) && !/\uFFFD/.test(a.text + b.text);
       return { ok, tps: (a.tps + b.tps) / 2 };
@@ -356,11 +361,30 @@
    * mistakes. Saved per model, done once (Retune redoes it).
    */
   async function tune(url, load) {
-    const say = (msg) => ($("status").textContent = msg);
-    say(T("מכוונן לטלפון הזה (פעם אחת): בודק מעבד…", "Tuning for this phone (once): checking the processor…"));
+    // Progress: each setup is 3 parts (load, question 1, question 2); 1 processor setup + up to 5 graphics setups.
+    const PARTS = 3, SETUPS = 6;
+    const bar = $("tuneBar");
+    bar.hidden = false;
+    const started = performance.now();
+    let doneSetups = 0;
+    let label = "";
+    const say = (part, msg) => {
+      if (msg) label = msg;
+      const pct = Math.min(99, Math.round(((doneSetups * PARTS + part) / (SETUPS * PARTS)) * 100));
+      bar.firstElementChild.style.width = pct + "%";
+      const secs = Math.round((performance.now() - started) / 1000);
+      $("status").textContent = `${pct}% · ${label} · ${T(`${secs} שניות`, `${secs}s`)}`;
+    };
+    const tick = setInterval(() => say(currentPart), 1000);
+    let currentPart = 0;
+    const step = (part) => { currentPart = part; say(part); };
+    step(0);
+    say(0, T("מכוונן לטלפון הזה (פעם אחת): טוען למעבד", "Tuning for this phone (once): loading on the processor"));
     await load(0);
     const total = wllama.getLoadedContextInfo?.().n_layer ?? 28;
-    const cpu = await check();
+    say(0, T("בודק את המעבד", "Checking the processor"));
+    const cpu = await check(step);
+    doneSetups = 1;
     let best = { layers: 0, total, tps: cpu.ok ? cpu.tps : 0.01, extra: {} };
     const safe = { flash_attn: false, cache_type_k: "f32", cache_type_v: "f32" };
     const tries = [
@@ -371,18 +395,25 @@
       { layers: Math.ceil(total / 4), extra: safe },
     ];
     for (const [i, cfg] of tries.entries()) {
-      say(T(`מכוונן לטלפון הזה: מנסה כרטיס גרפי (${i + 1}/${tries.length})…`, `Tuning for this phone: trying the graphics chip (${i + 1}/${tries.length})…`));
+      const what = cfg.layers >= total ? T("הכול על הכרטיס הגרפי", "all on the graphics chip") : T(`${Math.min(cfg.layers, total)}/${total} שכבות על הכרטיס הגרפי`, `${Math.min(cfg.layers, total)}/${total} layers on the graphics chip`);
+      step(0);
+      say(0, T(`ניסיון ${i + 1}/${tries.length}: ${what}`, `Try ${i + 1}/${tries.length}: ${what}`));
       try {
         await wllama.exit();
         await load(cfg.layers, cfg.extra);
-        const r = await check();
+        const r = await check(step);
+        doneSetups = 2 + i;
         if (r.ok && r.tps > best.tps * 1.1) best = { layers: Math.min(cfg.layers, total), total, tps: r.tps, extra: cfg.extra };
         // The first setup that is correct and clearly faster than the processor is kept; fewer layers will not beat it.
         if (r.ok && best.layers > 0) break;
       } catch {
         // This setup does not load on this phone: try the next one.
+        doneSetups = 2 + i;
       }
     }
+    clearInterval(tick);
+    bar.firstElementChild.style.width = "100%";
+    setTimeout(() => (bar.hidden = true), 1200);
     await wllama.exit();
     localStorage.setItem(TUNE(url), JSON.stringify(best));
     addMsg("note", best.layers === 0
