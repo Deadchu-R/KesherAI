@@ -86,7 +86,7 @@ public class KesherGooglePlugin extends Plugin {
             return;
         }
         new Thread(() -> {
-            try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+            try (ServerSocket server = new ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))) {
                 server.setSoTimeout(5 * 60 * 1000);
                 String redirect = "http://127.0.0.1:" + server.getLocalPort();
                 SecureRandom rnd = new SecureRandom();
@@ -109,8 +109,15 @@ public class KesherGooglePlugin extends Plugin {
                 String error = null;
                 while (code == null && error == null) {
                     try (Socket sock = server.accept()) {
+                        // Browsers open spare connections that never send a request: do not wait on those.
+                        sock.setSoTimeout(4000);
                         BufferedReader r = new BufferedReader(new InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8));
-                        String first = r.readLine();
+                        String first;
+                        try {
+                            first = r.readLine();
+                        } catch (java.net.SocketTimeoutException idle) {
+                            continue;
+                        }
                         if (first == null || !first.startsWith("GET ")) continue;
                         String path = first.split(" ")[1];
                         int q = path.indexOf('?');
