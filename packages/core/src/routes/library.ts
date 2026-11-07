@@ -237,6 +237,13 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
+  /** What the model reads on its next turn: system prompt, tools, messages, with sizes. */
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/context", async (req, reply) => {
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    return opened.session.contextView();
+  });
+
   /** Branch at an event (`seq`); with `text`, edit that message of the user's and resend it in the branch. */
   app.post<{ Params: { id: string }; Body: { seq?: number; text?: string } }>("/api/conversations/:id/branch", async (req, reply) => {
     const seq = Number(req.body?.seq);

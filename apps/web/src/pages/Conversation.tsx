@@ -7,6 +7,7 @@ import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
 import { PersonaChip } from "../Personas";
+import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
@@ -325,6 +326,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [titleMenu, setTitleMenu] = useState(false);
   const [openedAt] = useState(() => Date.now());
   const [coachOpen, setCoachOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [web, setWeb] = useWebSearch();
   const [openPanel, setOpenPanel] = useState("");
   const pluginUi = usePluginUi();
@@ -533,6 +535,7 @@ export function ConversationPage({ id }: { id: string }) {
           return <button key={key} type="button" className={openPanel === key ? "on" : ""} aria-pressed={openPanel === key} onClick={() => setOpenPanel(openPanel === key ? "" : key)}>{x.title}</button>;
         })}
         <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
+        <button type="button" className={contextOpen ? "on" : ""} aria-pressed={contextOpen} onClick={() => setContextOpen(!contextOpen)} title={t("contextHint")}>{t("contextNav")}</button>
         <span className="grow" />
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
@@ -560,6 +563,7 @@ export function ConversationPage({ id }: { id: string }) {
         const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);
         return panel ? <div className="plugin-panel"><PluginFrame pluginId={panel.pluginId} file={panel.file} title={panel.title} conversationId={id} onInsertPrompt={setInput} /></div> : null;
       })()}
+      {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
       {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
 
       <div className={`conv-split ${showIde ? "with-ide" : ""}`}>

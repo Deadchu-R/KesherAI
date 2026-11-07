@@ -116,7 +116,7 @@ Working on now, in this order:
 2. Personas: assistants with their own instructions, model, tools and knowledge (Msty, Open WebUI) ✅ (Personas page; instructions, model and knowledge base)
 3. Conversation branches: edit an earlier message, compare branches (Msty Branch Explorer) ✅ (✎ edit and resend, ⑂ branch from a reply)
 4. Prompt library with variables and `/` commands (Msty Prompts Studio) ✅ (Prompts page, `/` menu in every message box, `{{input}}`)
-5. Context explorer: what the model sees now and how many tokens each part takes (Msty) ⬜
+5. Context explorer: what the model sees now and how many tokens each part takes (Msty) ✅ ("Context" panel in every conversation)
 6. Several chats at once on one local model (LM Studio 0.4 parallel requests) ⬜
 7. Phone notification when a long job on the computer finishes ⬜
 8. Small fixes: disk space, pause, measured speed, more engines ✅

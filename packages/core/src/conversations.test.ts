@@ -250,3 +250,25 @@ test("branches: copy up to a reply, or edit an earlier message and resend it", a
     await server.close();
   }
 });
+
+test("context explorer: shows the system prompt, tools and messages with sizes", async () => {
+  const { server } = await setup();
+  const app = server.app;
+  try {
+    await app.inject({ method: "PUT", url: "/api/settings", payload: { activeModels: { chat: "fake/m" } } });
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat" } })).json() as { id: string };
+    await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "hello there" } });
+    const view = await until(async () => {
+      const v = (await app.inject({ method: "GET", url: `/api/conversations/${c.id}/context` })).json() as { windowTokens: number; system: { text: string; tokens: number }; tools: Array<{ name: string }>; messages: Array<{ role: string; text: string; tokens: number }>; totalTokens: number };
+      return v.messages.length >= 2 ? v : undefined;
+    });
+    assert.match(view.system.text, /KesherAI/);
+    assert.ok(view.tools.some((t) => t.name === "write_file"));
+    assert.deepEqual(view.messages.map((m) => m.role), ["user", "assistant"]);
+    assert.equal(view.messages[0]!.text, "hello there");
+    assert.ok(view.totalTokens > view.system.tokens && view.windowTokens > 0);
+    assert.equal((await app.inject({ method: "GET", url: "/api/conversations/nope/context" })).statusCode, 404);
+  } finally {
+    await server.close();
+  }
+});

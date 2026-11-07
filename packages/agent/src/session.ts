@@ -74,6 +74,19 @@ export interface AgentSessionOptions {
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+/** What the model reads on its next turn, for the context explorer. */
+export interface ContextView {
+  /** How much the model can read. */
+  windowTokens: number;
+  system: { tokens: number; text: string };
+  tools: Array<{ name: string; tokens: number }>;
+  messages: Array<{ role: AgentMessage["role"]; tokens: number; text: string; toolCalls?: string[]; toolName?: string; images?: number; shortened?: boolean; summarized?: boolean }>;
+  /** The summary that stands in for the oldest messages, when the conversation is too long. */
+  summary?: string;
+  /** About how much the next turn sends. */
+  totalTokens: number;
+}
+
 /** An event before it gets its `seq` and `at`. */
 type NewEvent = DistributiveOmit<AgentEvent, "seq" | "at">;
 
@@ -438,6 +451,47 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       };
     }
     return undefined;
+  }
+
+  /**
+   * What the model would read on the next turn, without calling it: the
+   * system prompt, the tools, and each message with its size, marking the
+   * ones a summary stands in for. For the context explorer.
+   *
+   * @returns Sizes in tokens (estimated, about 4 characters each).
+   */
+  contextView(): ContextView {
+    const tok = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
+    const system = this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt;
+    const tools = this.specs().map((t) => ({ name: t.name, tokens: tok(JSON.stringify(t).length) }));
+    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - 2000;
+    const msgs = shortenOldToolOutputs(this.messages);
+    let cut = 0;
+    let summary: string | undefined;
+    if (sizeOf(msgs) > budget) {
+      cut = Math.max(0, cutPoint(msgs, Math.floor(budget * 0.6)));
+      const last = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "compacted" }> => e.type === "compacted");
+      summary = last?.summary;
+    }
+    const messages = msgs.map((m, i) => ({
+      role: m.role,
+      tokens: tok(sizeOf([m])),
+      text: m.content.length > 1200 ? `${m.content.slice(0, 900)}\n…\n${m.content.slice(-250)}` : m.content,
+      ...(m.toolCalls?.length ? { toolCalls: m.toolCalls.map((c) => c.name) } : {}),
+      ...(m.toolName ? { toolName: m.toolName } : {}),
+      ...(m.images?.length ? { images: m.images.length } : {}),
+      ...(m.content.length !== (this.messages[i]?.content.length ?? 0) ? { shortened: true } : {}),
+      ...(i < cut ? { summarized: true } : {}),
+    }));
+    const sent = messages.filter((m) => !m.summarized).reduce((n, m) => n + m.tokens, 0);
+    return {
+      windowTokens: this.contextTokens,
+      system: { tokens: tok(system.length + (cut && summary ? summary.length : 0)), text: system },
+      tools,
+      messages,
+      ...(cut && summary ? { summary } : {}),
+      totalTokens: tok(system.length + (cut && summary ? summary.length : 0)) + tools.reduce((n, t) => n + t.tokens, 0) + sent,
+    };
   }
 
   /**
