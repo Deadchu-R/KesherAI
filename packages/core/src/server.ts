@@ -32,6 +32,8 @@ import { SkillStore } from "./skill-store.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
 import { Pipelines } from "./pipelines.js";
+import { ComfyManager } from "./comfy-manager.js";
+import { comfyRoutes } from "./routes/comfy.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
 import { transcribeWith } from "./speech-tools.js";
 import { notificationRoutes } from "./routes/notifications.js";
@@ -301,6 +303,19 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     notify: async (title, body) => void (await notifier.send({ title, body, path: "#/pipelines", tags: ["gear"] })),
   });
+  const comfy = new ComfyManager(join(paths.engines, "comfyui"), {
+    downloads,
+    runtimes,
+    modelsDir: () => paths.models,
+    port: () => config.comfyui.port,
+    folder: () => config.comfyui.folder,
+    nvidia: async () => (await nvidiaGpus()).length > 0,
+    onReady: (url) => {
+      // ComfyUI's checkpoints become image models.
+      if (!registry.get("comfyui")) registry.add({ id: "comfyui", type: "comfyui", name: "ComfyUI (KesherAI)", location: "local", baseUrl: url });
+    },
+  });
+  if (config.comfyui.autoStart) void comfy.start().catch(() => undefined);
   const services: KesherServices = {
     config,
     paths,
@@ -357,6 +372,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     personas,
     skills,
     pipelines,
+    comfy,
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,
@@ -405,6 +421,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await skillRoutes(app, services);
   await libraryStoreRoutes(app, services);
   await pipelineRoutes(app, services);
+  await comfyRoutes(app, services);
   await notificationRoutes(app, services);
   await mcpServerRoutes(app, services);
   await githubRoutes(app, services);
@@ -451,6 +468,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       journal.close();
       knowledge.close();
       notifier.close();
+      void comfy.stop();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();

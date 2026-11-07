@@ -125,7 +125,7 @@ Working on now, in this order:
 11. Anthropic-style API and separate access keys per app (LM Studio permission tokens) ✅ (`/v1/messages`, `kai-` keys in Settings)
 12. Community store for skills and prompts too (Msty Discover Hub) ✅ (Community → Prompts and personas, Skills; `use_skill`)
 13. Control the computer from the phone: watch and approve ✅ ("Watch and approve" page, live screen, approvals pill)
-14. Pipelines with loops and conditions (Msty Turnstiles), and managed ComfyUI ⬜
+14. Pipelines with loops and conditions (Msty Turnstiles), and managed ComfyUI ✅ (Pipelines page; ComfyUI installed and run from the Models page)
 
 Later (priority to be decided):
 

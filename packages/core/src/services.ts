@@ -26,6 +26,7 @@ import type { Prompts } from "./prompts.js";
 import type { Notifier } from "./notify.js";
 import type { SkillStore } from "./skill-store.js";
 import type { Pipelines } from "./pipelines.js";
+import type { ComfyManager } from "./comfy-manager.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -83,6 +84,8 @@ export interface KesherServices {
   skills: SkillStore;
   /** Pipelines: chains of steps with conditions and loops. */
   pipelines: Pipelines;
+  /** KesherAI's managed ComfyUI. */
+  comfy: ComfyManager;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

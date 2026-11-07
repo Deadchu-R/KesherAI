@@ -1,3 +1,4 @@
+import { ComfySection } from "../ComfySection";
 import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
 import { api } from "../api";
@@ -268,6 +269,7 @@ export function ModelsPage() {
 
       {tab === "chat" && <StartHere onChange={refreshLocal} />}
       {tab === "image" && <ImageStartHere />}
+      {tab === "image" && <ComfySection />}
       {current.engine === "soon" && <p className="card muted">{t("engineSoon", { category: current.label })}</p>}
 
       {tab !== "storage" && (

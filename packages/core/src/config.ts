@@ -30,6 +30,12 @@ export const KesherConfigSchema = z.object({
     .object({
       /** ComfyUI's `models` folder. When set, image downloads go to its sub-folders. */
       modelsDir: z.string().optional(),
+      /** The user's own ComfyUI folder for KesherAI to start (empty: KesherAI's own copy). */
+      folder: z.string().optional(),
+      /** Port KesherAI starts ComfyUI on. */
+      port: z.number().int().default(8188),
+      /** Start ComfyUI when KesherAI starts. */
+      autoStart: z.boolean().default(false),
     })
     .default({}),
   engines: z
