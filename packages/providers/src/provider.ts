@@ -1,0 +1,130 @@
+import type { CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation } from "@kesher/shared";
+
+/**
+ * Settings for one provider instance, as stored in the user's config file.
+ * The same `type` can appear many times with different settings — e.g. two
+ * `openai-compatible` providers, one for LM Studio and one for OpenRouter.
+ */
+export interface ProviderConfig {
+  /** Unique, URL-safe id, used as the first half of model ids. No slashes. */
+  id: string;
+  /** Which {@link ProviderFactory} builds it, e.g. `openai-compatible`. */
+  type: string;
+  /** Display name. Defaults to the id. */
+  name?: string;
+  /** Base URL of the server or API. */
+  baseUrl?: string;
+  /** API key, if the server needs one. */
+  apiKey?: string;
+  /** Where its models run. Shown as a badge in the UI. */
+  location?: ModelLocation;
+  /** Adapter-specific options. Each adapter documents its own keys. */
+  options?: Record<string, unknown>;
+}
+
+/** What a provider can do. Each `true` entry means the matching method exists. */
+export interface ProviderCapabilities {
+  /** Streams chat completions through {@link Provider.chat}. */
+  chat?: boolean;
+  /** Generates images through {@link Provider.generateImage}. */
+  image?: boolean;
+}
+
+/** Input to {@link Provider.chat}. The model is the provider's own id. */
+export interface ProviderChatRequest {
+  /** The provider's own model id (the second half of a global model id). */
+  providerModelId: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+}
+
+/** Input to {@link Provider.generateImage}. */
+export interface ProviderImageRequest {
+  /** The provider's own model id. */
+  providerModelId: string;
+  prompt: string;
+  negativePrompt?: string;
+  width: number;
+  height: number;
+  steps: number;
+  seed: number;
+}
+
+/** A file a provider produced, before the core server stores it as an Asset. */
+export interface GeneratedFile {
+  data: Uint8Array;
+  mimeType: string;
+  /** Anything worth keeping with the file: prompt, seed, timings. */
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * A source of models.
+ *
+ * Implement this to connect a new engine, server or API. Only `listModels`
+ * and `checkHealth` are required; implement the generation methods that
+ * match the categories your models belong to, and set
+ * {@link Provider.capabilities} accordingly.
+ *
+ * Every method receives an `AbortSignal`. Pass it to `fetch` so the user can
+ * cancel a long generation from the UI.
+ *
+ * @example A minimal provider
+ * ```ts
+ * class EchoProvider implements Provider {
+ *   readonly id = "echo"; readonly name = "Echo"; readonly location = "local";
+ *   readonly capabilities = { chat: true };
+ *   async checkHealth() { return true; }
+ *   async listModels() {
+ *     return [{ id: "echo/echo", providerId: "echo", providerModelId: "echo",
+ *               name: "Echo", category: "chat", location: "local" }];
+ *   }
+ *   async *chat(req) {
+ *     yield { type: "delta", text: req.messages.at(-1)?.content ?? "" };
+ *     yield { type: "done" };
+ *   }
+ * }
+ * ```
+ */
+export interface Provider {
+  /** Same as {@link ProviderConfig.id}. */
+  readonly id: string;
+  /** Display name. */
+  readonly name: string;
+  /** Where its models run. */
+  readonly location: ModelLocation;
+  /** Which optional methods this provider implements. */
+  readonly capabilities: ProviderCapabilities;
+
+  /** Returns `true` if the server or API answers. Must not throw. */
+  checkHealth(signal?: AbortSignal): Promise<boolean>;
+
+  /** Lists the models this provider can serve right now. */
+  listModels(signal?: AbortSignal): Promise<ModelInfo[]>;
+
+  /**
+   * Streams a chat completion. Yield `delta` events as text arrives and
+   * finish with exactly one `done` (or `error`) event.
+   */
+  chat?(request: ProviderChatRequest, signal?: AbortSignal): AsyncIterable<ChatStreamEvent>;
+
+  /** Generates one or more images. */
+  generateImage?(request: ProviderImageRequest, signal?: AbortSignal): Promise<GeneratedFile[]>;
+}
+
+/**
+ * Builds providers of one `type` from their config. Register factories with
+ * `ProviderRegistry.registerFactory`; plugins do this through
+ * `PluginContext.registerProviderFactory`.
+ */
+export interface ProviderFactory {
+  /** The `type` this factory handles, e.g. `openai-compatible`. */
+  type: string;
+  /** Human-readable name for the "Add connection" dialog. */
+  displayName: string;
+  /** Categories its models usually belong to, to filter the dialog. */
+  categories: CategoryId[];
+  /** Builds a provider. Should not do network I/O; `checkHealth` does that. */
+  create(config: ProviderConfig): Provider;
+}

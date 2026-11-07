@@ -1,0 +1,20 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "Kesher API reference",
+  "entryPointStrategy": "packages",
+  "entryPoints": [
+    "packages/shared",
+    "packages/providers",
+    "packages/downloads",
+    "packages/plugin-sdk",
+    "packages/skills",
+    "packages/core"
+  ],
+  "packageOptions": {
+    "entryPoints": ["src/index.ts"],
+    "excludeNotDocumented": false
+  },
+  "projectDocuments": ["docs/ARCHITECTURE.md", "docs/PLUGINS.md", "docs/PROVIDERS.md", "docs/API.md", "docs/FORKING.md"],
+  "out": "docs/api",
+  "readme": "README.md"
+}

@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest something Kesher should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What do you suggest?
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Could this be a plugin instead of a core change?
+      options: ["Not sure", "Yes", "No — it needs a core change"]

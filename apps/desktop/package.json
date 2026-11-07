@@ -1,0 +1,39 @@
+{
+  "name": "@kesher/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json && cross-env KESHER_DEV_URL=http://localhost:5173 electron .",
+    "start": "electron .",
+    "dist": "pnpm build && electron-builder"
+  },
+  "dependencies": {
+    "@kesher/core": "workspace:*",
+    "@kesher/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0",
+    "typescript": "^5.7.0"
+  },
+  "build": {
+    "appId": "dev.kesher.app",
+    "productName": "Kesher",
+    "directories": { "output": "out" },
+    "files": ["dist/**", "package.json"],
+    "extraResources": [
+      { "from": "../web/dist", "to": "web" },
+      { "from": "../../plugins", "to": "plugins", "filter": ["*/kesher-plugin.json", "*/dist/**"] }
+    ],
+    "mac": { "category": "public.app-category.developer-tools" },
+    "win": { "target": "nsis" },
+    "linux": { "target": ["AppImage", "deb"], "category": "Development" }
+  }
+}

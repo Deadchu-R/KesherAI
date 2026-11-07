@@ -1,0 +1,32 @@
+name: Bug report
+description: Something does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open Connections\n2. Add …\n3. …"
+  - type: input
+    id: version
+    attributes:
+      label: Kesher version
+      placeholder: "0.1.0 (from Connections, or GET /api/health)"
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and GPU
+      placeholder: "Windows 11, RTX 4070 Ti"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of the core server, if any. Remove API keys and tokens.
+      render: text
