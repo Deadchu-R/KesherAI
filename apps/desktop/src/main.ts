@@ -25,7 +25,13 @@ function resourcesDir(): string {
 async function runningCore(port: number): Promise<string | undefined> {
   const url = `http://127.0.0.1:${port}`;
   const health = (await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1500) }).then((r) => r.json()).catch(() => null)) as { productName?: string } | null;
-  return health?.productName === branding.productName ? url : undefined;
+  if (health?.productName !== branding.productName) return undefined;
+  // A developer copy (`pnpm dev`) may run without the built interface.
+  const page = await fetch(url, { signal: AbortSignal.timeout(1500) }).catch(() => undefined);
+  if (!page?.ok || !page.headers.get("content-type")?.includes("text/html")) {
+    throw new Error(`Another ${branding.productName} is already running on port ${port} without its interface (probably the developer version in a command window). Close that window, or restart the computer, and open ${branding.productName} again.`);
+  }
+  return url;
 }
 
 async function startCore(): Promise<string> {

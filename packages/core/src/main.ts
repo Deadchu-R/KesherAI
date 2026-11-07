@@ -7,6 +7,7 @@
  * and running KesherAI on a home server.
  */
 import { parseArgs } from "node:util";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { branding } from "@kesher/shared";
 import { createKesherServer } from "./server.js";
@@ -22,9 +23,13 @@ const { values } = parseArgs({
   },
 });
 
+// Serve the built interface from the repo when it exists, so http://127.0.0.1:7420 always shows KesherAI.
+const repoWeb = resolve(import.meta.dirname, "../../../apps/web/dist");
+const webDir = values.web ? resolve(values.web) : existsSync(resolve(repoWeb, "index.html")) ? repoWeb : undefined;
+
 const server = await createKesherServer({
   ...(values.port ? { port: Number(values.port) } : {}),
-  ...(values.web ? { webDir: resolve(values.web) } : {}),
+  ...(webDir ? { webDir } : {}),
   ...(values["data-dir"] ? { dataDir: resolve(values["data-dir"]) } : {}),
   pluginRoots: (values.plugins ?? [resolve(import.meta.dirname, "../../../plugins")]).map((p) => resolve(p)),
   ...(values["no-autodetect"] ? { autodetect: false } : {}),
