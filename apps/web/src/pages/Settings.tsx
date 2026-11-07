@@ -1,3 +1,4 @@
+import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { useEffect, useState } from "react";
@@ -399,6 +400,7 @@ export function SettingsPage() {
       <h1>{t("settings")}</h1>
       <ActiveModels />
       <GpuSection />
+      <SpeechSection />
       <ComputerSection />
       <PermissionsSection />
       <GoogleDriveSection />

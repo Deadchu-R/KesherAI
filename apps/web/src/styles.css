@@ -663,3 +663,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .queue-x { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); flex: none; }
 .queue-x:hover { background: var(--panel-2); color: var(--text); }
 .send.queue-send { background: var(--raised); color: var(--text); border: 1px dashed var(--border-strong); margin-inline-end: 6px; }
+
+/* ---------- microphone ---------- */
+.chip.mic { width: auto; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border-radius: 999px; }
+.chip.mic.recording { background: #3a1d1d; border-color: #7a3434; color: #ffb4b4; box-shadow: 0 0 0 calc(var(--lvl, 0) * 6px) rgb(255 107 107 / 0.25); transition: box-shadow .08s; }
+.mic-time { font-size: 12px; font-variant-numeric: tabular-nums; }
+a.btn { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: var(--radius-sm); text-decoration: none; }
+a.btn.primary { background: var(--accent); color: var(--accent-ink); }

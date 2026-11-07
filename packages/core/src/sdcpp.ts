@@ -130,7 +130,12 @@ export function pickSdAssets(names: string[], target: { platform: string; arch: 
   return e ? { engine: e } : undefined;
 }
 
-async function findFile(dir: string, name: string): Promise<string | undefined> {
+/**
+ * @param dir - Folder to search (recursively).
+ * @param name - File name, any case.
+ * @returns The first match, or `undefined`.
+ */
+export async function findFile(dir: string, name: string): Promise<string | undefined> {
   for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
     const full = join(dir, e.name);
     if (e.isFile() && e.name.toLowerCase() === name.toLowerCase()) return full;

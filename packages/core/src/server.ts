@@ -20,6 +20,8 @@ import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
+import { WhisperEngine } from "./whisper.js";
+import { speechRoutes } from "./routes/speech.js";
 import { computerRoutes } from "./routes/computer.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
@@ -182,6 +184,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     }),
     coach,
     computer,
+    whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
+      const nv = await nvidiaGpus();
+      return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
+    }),
     updater: new Updater(),
     google,
     driveSync,
@@ -212,6 +218,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await coachRoutes(app, services);
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
+  await speechRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);

@@ -13,6 +13,7 @@ import type { Tunnel } from "./tunnel.js";
 import type { SdEngine } from "./sdcpp.js";
 import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
+import type { WhisperEngine } from "./whisper.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -40,6 +41,8 @@ export interface KesherServices {
   driveSync: DriveSync;
   /** The built-in image engine (stable-diffusion.cpp). */
   sd: SdEngine;
+  /** Speech to text (whisper.cpp). */
+  whisper: WhisperEngine;
   /** Computer control (screen, mouse, keyboard) with its app approvals, stop switch and log. */
   computer: ComputerControl;
   /** Suggests better prompts, tools and models from how conversations went; learns the user's habits. */

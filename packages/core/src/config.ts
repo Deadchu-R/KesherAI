@@ -103,6 +103,15 @@ export const KesherConfigSchema = z.object({
       anywhere: z.boolean().default(false),
     })
     .default({}),
+  /** Speech: how the microphone button turns speech into text. */
+  speech: z
+    .object({
+      /** `auto`: this computer when it can, else a connected cloud service; `local`; or `cloud:<connection id>` (Groq, OpenAI). */
+      stt: z.string().default("auto"),
+      /** Spoken language, or `auto`. */
+      language: z.string().default("auto"),
+    })
+    .default({}),
   /** Computer control: models with vision see the screen and click and type (off until the user turns it on). */
   computer: z.object({ enabled: z.boolean().default(false) }).default({}),
   /** The coach (prompt and usage advice). */

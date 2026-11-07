@@ -1,5 +1,6 @@
 import { AppBar } from "./AppBar";
 import { WebToggle, useWebSearch } from "./WebToggle";
+import { Mic } from "./Mic";
 import { ComputerBanner } from "./ComputerSection";
 import { UsagePage } from "./pages/Usage";
 import { PluginsPage } from "./pages/Plugins";
@@ -82,6 +83,7 @@ function Home() {
           />
           <div className="box-bar">
             <WebToggle on={web} onChange={setWeb} />
+            <Mic onText={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
             <select className="model-chip" value={modelId} onChange={(e) => setModelId(e.target.value)} aria-label={t("pickModel")}>
               {!modelId && <option value="">{t("pickModel")}</option>}
               {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
