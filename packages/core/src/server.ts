@@ -63,6 +63,8 @@ export interface KesherServerOptions {
   logger?: boolean;
   /** Google endpoints (tests point these at a fake server). */
   googleEndpoints?: GoogleEndpoints;
+  /** The project's Google OAuth client (defaults to branding.config.ts; builds pass the one from repository secrets). */
+  googleClient?: { clientId: string; clientSecret: string };
 }
 
 /** What {@link createKesherServer} returns. */
@@ -180,7 +182,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void journal.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
-  const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, branding.google);
+  const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
 
   const services: KesherServices = {

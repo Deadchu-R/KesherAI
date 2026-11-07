@@ -4,7 +4,7 @@
 
 Google requires every app that signs users in to have its own **OAuth client**. You create it once:
 
-- **As the KesherAI maintainer or a fork:** create the client and put its id and secret in `packages/shared/src/branding.config.ts` → `google`. Every user then just clicks **Connect Google Drive**.
+- **As the KesherAI maintainer or a fork:** create the client and add its id and secret as repository secrets `KESHER_GOOGLE_CLIENT_ID` and `KESHER_GOOGLE_CLIENT_SECRET` (GitHub → Settings → Secrets and variables → Actions). The release workflow puts them into the app; they never appear in the source (GitHub's push protection blocks them there). Every user of a release then just clicks **Connect**. When running from source, set the same two environment variables.
 - **As a user of a build without a client:** create your own and paste it in Settings → Google Drive. It is used only on your computer.
 
 It takes about five minutes and is free.

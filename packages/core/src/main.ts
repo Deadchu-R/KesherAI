@@ -34,6 +34,8 @@ const server = await createKesherServer({
   pluginRoots: (values.plugins ?? [resolve(import.meta.dirname, "../../../plugins")]).map((p) => resolve(p)),
   ...(values["no-autodetect"] ? { autodetect: false } : {}),
   logger: !!values.verbose,
+  // The project's Google sign-in client, for builds that have it (never stored in the source).
+  ...(process.env.KESHER_GOOGLE_CLIENT_ID ? { googleClient: { clientId: process.env.KESHER_GOOGLE_CLIENT_ID, clientSecret: process.env.KESHER_GOOGLE_CLIENT_SECRET ?? "" } } : {}),
 });
 
 const url = await server.listen();

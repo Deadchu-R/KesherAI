@@ -12,9 +12,25 @@
  */
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer } from "electron";
 import { join, resolve } from "node:path";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
+
+/**
+ * The project's Google sign-in client. Release builds get it from the
+ * repository's secrets (written next to main.js at build time, never in the
+ * source); developers can set KESHER_GOOGLE_CLIENT_ID / _SECRET instead.
+ */
+async function googleClient(): Promise<{ googleClient?: { clientId: string; clientSecret: string } }> {
+  const env = { clientId: process.env.KESHER_GOOGLE_CLIENT_ID ?? "", clientSecret: process.env.KESHER_GOOGLE_CLIENT_SECRET ?? "" };
+  if (env.clientId) return { googleClient: env };
+  try {
+    const j = JSON.parse(await readFile(join(import.meta.dirname, "google-client.json"), "utf8")) as { clientId?: string; clientSecret?: string };
+    return j.clientId ? { googleClient: { clientId: j.clientId, clientSecret: j.clientSecret ?? "" } } : {};
+  } catch {
+    return {};
+  }
+}
 
 let server: KesherServer | undefined;
 
@@ -43,6 +59,7 @@ async function startCore(): Promise<string> {
   const s = await createKesherServer({
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
     pluginRoots: [join(root, "plugins")],
+    ...(await googleClient()),
   });
   try {
     const url = await s.listen();

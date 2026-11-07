@@ -22,6 +22,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # The Google sign-in client comes from the repository's secrets, so it is in the app but never in the source.
+      - name: Add the Google sign-in client
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.KESHER_GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.KESHER_GOOGLE_CLIENT_SECRET }}
+        run: node -e "if(process.env.GOOGLE_CLIENT_ID){require('fs').writeFileSync('apps/desktop/dist/google-client.json', JSON.stringify({clientId:process.env.GOOGLE_CLIENT_ID,clientSecret:process.env.GOOGLE_CLIENT_SECRET||''}))}"
       - run: pnpm --filter @kesher/desktop exec electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
