@@ -778,3 +778,11 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .obs-time { direction: ltr; unicode-bidi: isolate; }
 .mcp-preset.card-like { border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); }
 .mcp-preset.card-like button { margin-top: 6px; align-self: flex-start; }
+.meeting-rec { display: inline-flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border: 1px solid rgb(240 106 106 / .4); border-radius: 999px; background: rgb(240 106 106 / .08); }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #f06a6a; animation: rec-pulse 1.6s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+.meeting-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.meeting-card p { margin: 0; line-height: 1.6; }
+.meeting-card h4 { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.transcript { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow: auto; font-size: 14px; line-height: 1.55; }

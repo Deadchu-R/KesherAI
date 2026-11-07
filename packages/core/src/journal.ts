@@ -97,6 +97,21 @@ export interface DayInsights {
   error?: string;
 }
 
+/** A recorded meeting: what was said, and the write-up. */
+export interface Meeting {
+  id: string;
+  title: string;
+  t0: number;
+  t1?: number;
+  /** What was said, in order (each piece is about half a minute). */
+  segments: Array<{ t: number; text: string }>;
+  summary?: string;
+  decisions?: string[];
+  /** Ids of the action items it added to the day. */
+  actionIds?: string[];
+  error?: string;
+}
+
 /** Time per app and focus figures for a day. */
 export interface DayStats {
   activeMinutes: number;
@@ -220,6 +235,27 @@ export function parseInsights(text: string): {
   }
 }
 
+/**
+ * Reads the model's meeting write-up.
+ *
+ * @param text - The model's answer.
+ * @returns Summary, decisions and actions.
+ */
+export function parseMeeting(text: string): { summary: string; decisions: string[]; actions: Array<{ text: string; who?: string }> } {
+  const a = text.indexOf("{");
+  const b = text.lastIndexOf("}");
+  try {
+    const j = JSON.parse(text.slice(a, b + 1)) as { summary?: unknown; decisions?: unknown; actions?: unknown };
+    return {
+      summary: typeof j.summary === "string" ? j.summary.slice(0, 3000) : "",
+      decisions: Array.isArray(j.decisions) ? j.decisions.filter((d): d is string => typeof d === "string").slice(0, 30) : [],
+      actions: Array.isArray(j.actions) ? (j.actions as Array<{ text?: unknown; who?: unknown }>).filter((x) => typeof x?.text === "string").map((x) => ({ text: String(x.text), ...(typeof x.who === "string" && x.who ? { who: x.who } : {}) })) : [],
+    };
+  } catch {
+    return { summary: text.trim().slice(0, 3000), decisions: [], actions: [] };
+  }
+}
+
 function run(cmd: string, args: string[], timeout = 45_000): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -307,6 +343,10 @@ function dotnetPattern(apps: string[]): string {
   const names = ["1password", "bitwarden", "keepass", "keepassxc", "lastpass", "dashlane", "nordpass", "enpass", "keeper", "lockapp", "logonui", "consent", "credentialuibroker", ...apps.map((a) => a.replace(/\.exe$/i, ""))].filter(Boolean).map(esc);
   return `^(${names.join("|")})$|${PRIVATE_WINDOW.source}|(password|passcode|sign[ -]?in|log[ -]?in|2fa|two-factor|verification code|bank|payment|checkout|credit card|paypal|wallet|סיסמ|התחבר|כניסה לחשבון|תשלום|כרטיס אשראי|בנק)`;
 }
+
+const MEETING_PROMPT = `You get the transcript of a meeting recorded on the user's computer (their microphone and the call's audio, transcribed in pieces, so words may be cut or misheard). Answer with JSON only:
+{"summary":"3-6 plain sentences: what the meeting was about and what was agreed","decisions":["each decision, one line"],"actions":[{"text":"a concrete follow-up, in the imperative","who":"who owns it, if said"}]}
+Never invent names, numbers or decisions that are not in the transcript. Write in the language most of the meeting was in.`;
 
 const SUMMARY_PROMPT = `You read a log of what was on a person's computer screen (app, window title, and the text on screen) and write their private journal. Answer with JSON only:
 {"observations":[{"from":"HH:MM","to":"HH:MM","kind":"meeting|focus|communication|research|break|other","text":"one or two plain sentences about what they did"}],
@@ -494,6 +534,7 @@ export class Journal {
     return {
       day,
       captures: caps.map((c) => ({ ...c, ...(c.text ? { text: c.text.slice(0, 400) } : {}) })),
+      meetings: await this.meetings(day),
       insights: await this.insights(day),
       stats: dayStats(caps, this.settings.intervalSec),
       entities: this.entities.filter((e) => !e.hidden && e.days.includes(day)).map((e) => ({ id: e.id, name: e.name, kind: e.kind })),
@@ -659,7 +700,7 @@ export class Journal {
    * @param limit - Most results.
    * @returns Matches, newest first.
    */
-  async search(q: string, limit = 60): Promise<Array<{ kind: "screen" | "observation" | "entity" | "action"; day: string; t: number; title: string; snippet: string; frame?: string }>> {
+  async search(q: string, limit = 60): Promise<Array<{ kind: "screen" | "observation" | "entity" | "action" | "meeting"; day: string; t: number; title: string; snippet: string; frame?: string }>> {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
     const hit = (s: string) => {
@@ -677,6 +718,10 @@ export class Journal {
       const ins = await this.insights(day);
       for (const o of ins.observations) if (hit(o.text)) out.push({ kind: "observation", day, t: o.t0, title: o.kind ?? "", snippet: snip(o.text) });
       for (const a of ins.actions) if (hit(a.text)) out.push({ kind: "action", day, t: a.t, title: a.who ?? "", snippet: a.text });
+      for (const m of await this.meetings(day)) {
+        const seg = m.segments.find((x) => hit(x.text));
+        if (seg || hit(`${m.title} ${m.summary ?? ""}`)) out.push({ kind: "meeting", day, t: seg?.t ?? m.t0, title: m.title, snippet: snip(seg?.text ?? m.summary ?? m.title) });
+      }
       let lastKey = "";
       for (const c of await this.captures(day)) {
         const body = `${c.title}\n${c.text ?? ""}`;
@@ -728,6 +773,113 @@ export class Journal {
       if (age > this.settings.keepTextDays) await rm(join(this.dir, day), { recursive: true, force: true });
       else if (age > this.settings.keepFramesDays) await rm(join(this.dir, day, "frames"), { recursive: true, force: true });
     }
+  }
+
+  // ---------- meetings: recorded and transcribed in the app, written up by the model ----------
+
+  private meetingPath(day: string, id: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^[a-f0-9-]{36}$/.test(id)) throw new Error("No such meeting.");
+    return join(this.dir, day, "meetings", `${id}.json`);
+  }
+
+  private async saveMeeting(day: string, m: Meeting) {
+    await mkdir(join(this.dir, day, "meetings"), { recursive: true });
+    await writeFile(this.meetingPath(day, m.id), JSON.stringify(m, null, 2));
+  }
+
+  /** Reads one meeting. */
+  async meeting(day: string, id: string): Promise<Meeting | undefined> {
+    try {
+      return JSON.parse(await readFile(this.meetingPath(day, id), "utf8")) as Meeting;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** @returns A day's recorded meetings, in order. */
+  async meetings(day: string): Promise<Meeting[]> {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return [];
+    const files = await readdir(join(this.dir, day, "meetings")).catch(() => [] as string[]);
+    const out: Meeting[] = [];
+    for (const f of files) {
+      const m = await this.meeting(day, f.replace(/\.json$/, ""));
+      if (m) out.push(m);
+    }
+    return out.sort((a, b) => a.t0 - b.t0);
+  }
+
+  /**
+   * Starts a meeting record.
+   *
+   * @param title - What to call it (usually the call window's title).
+   * @returns The day and the meeting.
+   */
+  async startMeeting(title: string): Promise<{ day: string; meeting: Meeting }> {
+    const t0 = Date.now();
+    const day = dayKey(t0);
+    const m: Meeting = { id: randomUUID(), title: title.trim().slice(0, 120) || "Meeting", t0, segments: [] };
+    await this.saveMeeting(day, m);
+    return { day, meeting: m };
+  }
+
+  /** Adds what was said in one piece of the recording. */
+  async addSegment(day: string, id: string, t: number, text: string): Promise<Meeting> {
+    const m = await this.meeting(day, id);
+    if (!m) throw new Error("No such meeting.");
+    const clean = text.trim();
+    if (clean) m.segments.push({ t: Number.isFinite(t) ? t : Date.now(), text: clean.slice(0, 8000) });
+    m.segments.sort((a, b) => a.t - b.t);
+    await this.saveMeeting(day, m);
+    return m;
+  }
+
+  /**
+   * Ends a meeting and writes it up: summary, decisions, and action items
+   * (added to the day's actions).
+   *
+   * @param day - The meeting's day.
+   * @param id - The meeting.
+   * @returns The meeting.
+   */
+  async finishMeeting(day: string, id: string): Promise<Meeting> {
+    const m = await this.meeting(day, id);
+    if (!m) throw new Error("No such meeting.");
+    m.t1 ??= Date.now();
+    delete m.error;
+    const transcript = m.segments.map((x) => `[${new Date(x.t).toTimeString().slice(0, 5)}] ${x.text}`).join("\n");
+    if (transcript.length < 40) {
+      m.error = "Too little was said to write it up.";
+      await this.saveMeeting(day, m);
+      return m;
+    }
+    const model = this.model(this.settings.modelId);
+    if (!model) m.error = "Choose a chat model so the meeting can be written up.";
+    else if (!model.local && !this.settings.allowCloud) m.error = `${model.id} runs in the cloud. Choose a model on this computer, or allow cloud models in My day's settings.`;
+    else {
+      try {
+        const r = await model.turn({ messages: [{ role: "system", content: MEETING_PROMPT }, { role: "user", content: `Meeting: ${m.title}\n\n${transcript.slice(-60_000)}` }], tools: [] }, AbortSignal.timeout(600_000), () => undefined);
+        const j = parseMeeting(r.text);
+        m.summary = j.summary;
+        m.decisions = j.decisions;
+        if (j.actions.length) {
+          const ins = await this.insights(day);
+          const added = j.actions.map((a) => ({ id: randomUUID(), t: m.t1!, text: a.text.slice(0, 300), ...(a.who ? { who: a.who.slice(0, 80) } : {}), state: "open" as const }));
+          ins.actions.push(...added);
+          ins.observations.push({ id: randomUUID(), t0: m.t0, t1: m.t1!, kind: "meeting", text: `${m.title}: ${j.summary}`.slice(0, 600) });
+          await this.saveInsights(day, ins);
+          m.actionIds = added.map((a) => a.id);
+        }
+      } catch (e) {
+        m.error = (e as Error).message;
+      }
+    }
+    await this.saveMeeting(day, m);
+    return m;
+  }
+
+  /** Deletes a meeting record. */
+  async deleteMeeting(day: string, id: string): Promise<void> {
+    await rm(this.meetingPath(day, id), { force: true });
   }
 
   /** Stops capturing. */

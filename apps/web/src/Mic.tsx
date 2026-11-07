@@ -11,7 +11,7 @@ interface SttInfo {
 }
 
 /** Encodes mono float samples as a 16-bit PCM WAV file. */
-function encodeWav(chunks: Float32Array[], rate: number): Blob {
+export function encodeWav(chunks: Float32Array[], rate: number): Blob {
   const n = chunks.reduce((a, c) => a + c.length, 0);
   const buf = new ArrayBuffer(44 + n * 2);
   const v = new DataView(buf);

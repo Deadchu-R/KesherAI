@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
+import { MeetingRecorder } from "../MeetingRecorder";
 
 /** Hebrew or English, for this page's own words. */
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -12,9 +13,10 @@ interface Capture { t: number; app: string; title: string; text?: string; frame?
 interface Observation { id: string; t0: number; t1: number; text: string; kind?: string }
 interface Action { id: string; t: number; text: string; who?: string; state: "open" | "done" | "dismissed"; day?: string }
 interface Stats { activeMinutes: number; apps: Array<{ app: string; minutes: number }>; switches: number; longestFocus: { app: string; minutes: number }; meetings: Array<{ t0: number; t1: number; title: string }>; hours: number[] }
-interface DayData { day: string; captures: Capture[]; insights: { observations: Observation[]; actions: Action[]; summarizedTo: number; error?: string }; stats: Stats; entities: Array<{ id: string; name: string; kind: string }> }
+interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string }>; summary?: string; decisions?: string[]; error?: string }
+interface DayData { day: string; captures: Capture[]; meetings: Meeting[]; insights: { observations: Observation[]; actions: Action[]; summarizedTo: number; error?: string }; stats: Stats; entities: Array<{ id: string; name: string; kind: string }> }
 interface Entity { id: string; name: string; kind: "person" | "project" | "company" | "concept"; summary?: string; aliases: string[]; parent?: string; hidden?: boolean; days: string[]; lastSeen: number }
-interface SearchHit { kind: "screen" | "observation" | "entity" | "action"; day: string; t: number; title: string; snippet: string; frame?: string }
+interface SearchHit { kind: "screen" | "observation" | "entity" | "action" | "meeting"; day: string; t: number; title: string; snippet: string; frame?: string }
 
 type Tab = "day" | "replay" | "reflect" | "entities" | "actions" | "search";
 
@@ -29,6 +31,7 @@ const shift = (day: string, n: number) => {
 };
 const hhmm = (t: number) => new Date(t).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined, { hour: "2-digit", minute: "2-digit" });
 const mins = (m: number) => (m >= 60 ? L(`${Math.floor(m / 60)} ש׳ ${Math.round(m % 60)} ד׳`, `${Math.floor(m / 60)}h ${Math.round(m % 60)}m`) : L(`${Math.round(m)} ד׳`, `${Math.round(m)}m`));
+const MEETING_WINDOW = /(zoom meeting|zoom workplace|microsoft teams|meet\.google|google meet|webex|skype|discord|huddle)/i;
 const KINDS: Record<string, [string, string]> = { meeting: ["פגישה", "Meeting"], focus: ["ריכוז", "Focus"], communication: ["תקשורת", "Communication"], research: ["מחקר", "Research"], break: ["הפסקה", "Break"], other: ["אחר", "Other"] };
 const kindName = (k: string) => (KINDS[k] ? L(...KINDS[k]) : k);
 const frameUrl = (day: string, f: string) => withToken(`/api/journal/frame/${day}/${f}`);
@@ -96,6 +99,7 @@ export function DayPage() {
           {s.enabled ? (paused ? L(`מושהה עד ${hhmm(s.pausedUntil!)}`, `Paused until ${hhmm(s.pausedUntil!)}`) : L("מתעד את היום", "Recording your day")) : L("כבוי", "Off")}
         </span>
         <span className="grow" />
+        <MeetingRecorder suggestedTitle={MEETING_WINDOW.test(`${info.status.last?.app ?? ""} ${info.status.last?.title ?? ""}`) ? info.status.last?.title : undefined} onDone={(d) => { setDay(d); void loadDay(); }} />
         {s.enabled && (paused ? <button type="button" onClick={() => void save({ pausedUntil: 0 })}>{L("המשך", "Resume")}</button> : <button type="button" onClick={() => void api("/api/journal/pause", { method: "POST", body: { minutes: 30 } }).then(loadInfo)}>{L("השהה ל-30 דקות", "Pause 30 min")}</button>)}
         {s.enabled && (
           <button
@@ -207,7 +211,7 @@ function DayView({ data, reload, onReplay }: { data: DayData; reload: () => void
     setBusy(false);
     reload();
   };
-  if (!data.captures.length) return <p className="muted day-empty">{L("אין עדיין כלום מהיום הזה.", "Nothing from this day yet.")}</p>;
+  if (!data.captures.length && !data.meetings.length) return <p className="muted day-empty">{L("אין עדיין כלום מהיום הזה.", "Nothing from this day yet.")}</p>;
   return (
     <div className="day-grid">
       <section className="day-story">
@@ -225,6 +229,12 @@ function DayView({ data, reload, onReplay }: { data: DayData; reload: () => void
             </li>
           ))}
         </ol>
+        {data.meetings.length > 0 && (
+          <>
+            <h3>{L("פגישות שהוקלטו", "Recorded meetings")}</h3>
+            {data.meetings.map((m) => <MeetingCard key={m.id} day={data.day} m={m} reload={reload} />)}
+          </>
+        )}
         {data.stats.meetings.length > 0 && (
           <>
             <h3>{L("פגישות", "Meetings")}</h3>
@@ -261,6 +271,37 @@ function DayView({ data, reload, onReplay }: { data: DayData; reload: () => void
         </ol>
       </section>
     </div>
+  );
+}
+
+function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <article className="meeting-card">
+      <header className="row">
+        <strong className="grow">{m.title}</strong>
+        <span className="muted small" dir="ltr">{hhmm(m.t0)}{m.t1 ? `–${hhmm(m.t1)}` : ""}</span>
+      </header>
+      {m.summary && <p>{m.summary}</p>}
+      {!!m.decisions?.length && (
+        <>
+          <h4>{L("החלטות", "Decisions")}</h4>
+          <ul className="plain">{m.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul>
+        </>
+      )}
+      {m.error && <p className="error small">{m.error}</p>}
+      <div className="row small">
+        <button type="button" className="link-btn" onClick={() => setOpen(!open)}>{open ? L("הסתר תמלול", "Hide transcript") : L(`תמלול (${m.segments.length})`, `Transcript (${m.segments.length})`)}</button>
+        {(m.error || !m.summary) && <button type="button" className="link-btn" disabled={busy} onClick={() => { setBusy(true); void api(`/api/journal/meetings/${day}/${m.id}/finish`, { method: "POST", body: {} }).then(reload).finally(() => setBusy(false)); }}>{busy ? L("כותב…", "Writing…") : L("סכם שוב", "Write up again")}</button>}
+        <button type="button" className="link-btn" onClick={() => void api(`/api/journal/meetings/${day}/${m.id}`, { method: "DELETE" }).then(reload)}>{L("מחק", "Delete")}</button>
+      </div>
+      {open && (
+        <ol className="transcript">
+          {m.segments.map((x) => <li key={x.t}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.text}</li>)}
+        </ol>
+      )}
+    </article>
   );
 }
 
@@ -428,7 +469,7 @@ function Search({ onOpen }: { onOpen: (day: string, t: number) => void }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState<{ journal: SearchHit[]; conversations: Array<{ id: string; title: string; snippet: string }> } | null>(null);
   const run = (v: string) => (v.trim() ? api<typeof res>(`/api/journal/search?q=${encodeURIComponent(v)}`).then(setRes, () => undefined) : setRes(null));
-  const label: Record<SearchHit["kind"], string> = { screen: L("על המסך", "On screen"), observation: L("בסיכום", "In the summary"), entity: L("אדם/פרויקט", "Person/project"), action: L("משימה", "Action") };
+  const label: Record<SearchHit["kind"], string> = { meeting: L("בפגישה", "In a meeting"), screen: L("על המסך", "On screen"), observation: L("בסיכום", "In the summary"), entity: L("אדם/פרויקט", "Person/project"), action: L("משימה", "Action") };
   return (
     <div className="stack">
       <form onSubmit={(e) => { e.preventDefault(); void run(q); }} className="row">

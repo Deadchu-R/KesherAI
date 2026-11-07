@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer } from "electron";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import { createKesherServer, type KesherServer } from "@kesher/core";
@@ -74,6 +74,16 @@ async function createWindow(url: string): Promise<void> {
       nodeIntegration: false,
       preload: join(import.meta.dirname, "preload.cjs"),
     },
+  });
+
+  // Recording a meeting: KesherAI's own page asks for the screen's sound ("loopback": what the call
+  // plays) without a picker; the page keeps only the audio. Only for KesherAI's own address.
+  win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+    if (!request.securityOrigin || !url.startsWith(new URL(request.securityOrigin).origin)) return callback({});
+    void desktopCapturer.getSources({ types: ["screen"] }).then((sources) => {
+      const screen = sources[0];
+      callback(screen ? { video: screen, audio: "loopback" } : {});
+    }, () => callback({}));
   });
 
   // Links to other sites open in the user's browser, never inside the app.

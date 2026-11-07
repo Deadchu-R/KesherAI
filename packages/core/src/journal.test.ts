@@ -106,3 +106,35 @@ test("a cloud model needs permission to read the screen", async () => {
   j.close();
   assert.match((await j.summarize(dayKey(Date.now()))).error ?? "", /cloud/);
 });
+
+test("meetings: transcript pieces, write-up, actions join the day, search", async () => {
+  const { parseMeeting } = await import("./journal.js");
+  const dir = await mkdtemp(join(tmpdir(), "kesher-journal-"));
+  let sent = "";
+  const j = new Journal(dir, () => ({
+    id: "local/m",
+    local: true,
+    turn: async (req) => {
+      sent = String(req.messages[1]!.content);
+      return { text: '{"summary":"Agreed to ship on Thursday.","decisions":["Ship Thursday"],"actions":[{"text":"Update the release notes","who":"Roee"}]}', toolCalls: [] };
+    },
+  }));
+  const { day, meeting } = await j.startMeeting("Weekly sync | Microsoft Teams");
+  await j.addSegment(day, meeting.id, Date.now() + 2, "and then we ship on Thursday, right?");
+  await j.addSegment(day, meeting.id, Date.now() + 1, "Let's talk about the release date.");
+  await j.addSegment(day, meeting.id, Date.now(), "   ");
+  const m = await j.finishMeeting(day, meeting.id);
+  assert.match(sent, /release date[\s\S]*Thursday/);
+  assert.equal(m.summary, "Agreed to ship on Thursday.");
+  assert.deepEqual(m.decisions, ["Ship Thursday"]);
+  assert.equal(m.segments.length, 2);
+  const ins = await j.insights(day);
+  assert.equal(ins.actions[0]!.who, "Roee");
+  assert.equal(ins.observations[0]!.kind, "meeting");
+  assert.ok((await j.search("thursday")).some((h) => h.kind === "meeting"));
+  assert.equal((await j.meetings(day)).length, 1);
+  await j.deleteMeeting(day, meeting.id);
+  assert.equal((await j.meetings(day)).length, 0);
+  await assert.rejects(j.addSegment(day, "../../etc", 0, "x"));
+  assert.equal(parseMeeting("just text").summary, "just text");
+});

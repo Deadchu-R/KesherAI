@@ -39,6 +39,30 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
     return reply.type(png ? "image/png" : "image/jpeg").header("cache-control", "private, max-age=86400").send(img);
   });
 
+  // Meetings: the app records the call (microphone + the call's sound), sends each half-minute piece to
+  // /api/speech/transcribe, and adds the text here; at the end the model writes it up.
+  app.post<{ Body: { title?: string } }>("/api/journal/meetings", opts, async (req) => s.journal.startMeeting(String(req.body?.title ?? "")));
+  app.get<{ Params: { day: string } }>("/api/journal/meetings/:day", opts, async (req) => s.journal.meetings(req.params.day));
+  app.post<{ Params: { day: string; id: string }; Body: { t?: number; text?: string } }>("/api/journal/meetings/:day/:id/segment", opts, async (req, reply) => {
+    try {
+      const m = await s.journal.addSegment(req.params.day, req.params.id, Number(req.body?.t ?? Date.now()), String(req.body?.text ?? ""));
+      return { segments: m.segments.length };
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+  });
+  app.post<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id/finish", opts, async (req, reply) => {
+    try {
+      return await s.journal.finishMeeting(req.params.day, req.params.id);
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+  });
+  app.delete<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id", opts, async (req) => {
+    await s.journal.deleteMeeting(req.params.day, req.params.id).catch(() => undefined);
+    return { ok: true };
+  });
+
   app.get("/api/journal/actions", opts, async () => s.journal.openActions());
   app.patch<{ Params: { day: string; id: string }; Body: { state: ActionItem["state"] } }>("/api/journal/actions/:day/:id", opts, async (req, reply) => {
     if (!["open", "done", "dismissed"].includes(req.body?.state)) return reply.code(400).send({ error: "state must be open, done or dismissed" });

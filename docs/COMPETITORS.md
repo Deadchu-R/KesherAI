@@ -63,7 +63,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Document chat with cited sources (Off Grid, AnythingLLM) | — | Same, using the active embedding model | ⬜ |
 | Search across all conversations | — | Full-text search over conversations and the day journal (My day → Search) | ✅ |
 | Second brain: Day, Replay, Reflect, Entities, Actions (Off Grid) | macOS-first; Search still "coming" | My day: opt-in screen journal kept on this computer (Windows OCR built in, no download), local model by default, skips password managers, private windows and sign-in/bank pages, delete the last 15 minutes or any day, unified search with conversations | ✅ Windows · 🟡 macOS/Linux (no OCR without tesseract) |
-| Meeting notes (Off Grid) | — | Meetings found from the window title in My day; recording and transcribing the call next | 🟡 |
+| Meeting notes (Off Grid) | — | Record a meeting in My day: microphone plus the call's sound (desktop loopback), transcribed every half minute by the speech engine, then summary, decisions and action items; the audio is not kept | ✅ |
 
 ### Media
 
