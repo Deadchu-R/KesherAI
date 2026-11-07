@@ -110,7 +110,7 @@
     for (let i = 0; i < 20 && !cancelled; i++) {
       await new Promise((r) => setTimeout(r, 3000));
       const ok = await fetch(`${url.origin}/api/health`, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(2500) }).then((r) => r.ok).catch(() => false);
-      if (ok) { location.href = url.href; return; }
+      if (ok) { connect(url.href); return; }
       if (i % 3 === 2) await plugin.wake({ mac, broadcast }).catch(() => undefined);
     }
     if (!cancelled) { $("status").textContent = tr.noWake[lang]; $("status").className = "error"; }
@@ -209,7 +209,9 @@
       if (token) await rememberComputer(url, token);
       // Coming back here with the Back button shows this screen instead of connecting again.
       sessionStorage.setItem("kesherai-connected", "1");
-      location.href = url.href; // the interface stores the token and removes it from the address
+      const open = new URL(url.href);
+      open.searchParams.set("app", location.origin + "/");
+      location.href = open.href; // the interface stores the token and removes it from the address
     } catch {
       if (cancelled) return;
       $("status").textContent = tr.fail[lang];
@@ -325,7 +327,8 @@
     if ((await checkForUpdate(true)) && !launch) return;
     const saved = launch || localStorage.getItem(KEY);
     if (saved) $("url").value = saved;
-    const cameBack = sessionStorage.getItem("kesherai-connected") === "1";
+    // "Switch computer" in the interface comes back here with ?switch=1: show the list, do not reconnect.
+    const cameBack = sessionStorage.getItem("kesherai-connected") === "1" || new URLSearchParams(location.search).has("switch");
     const recent = loadComputers().sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || ""))[0];
     if (launch) connect(launch);
     else if (!cameBack && recent) connectComputer(recent);

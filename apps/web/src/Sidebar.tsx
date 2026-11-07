@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
-import { api } from "./api";
+import { api, appHome } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
 
@@ -212,6 +212,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         >
           {t("language")}
         </button>
+        {appHome() && (
+          // Inside the Android app: back to its list of computers, without reconnecting.
+          <button type="button" onClick={() => (location.href = `${appHome()!.replace(/\/$/, "")}/?switch=1`)}>
+            {t("switchComputer")}
+          </button>
+        )}
       </div>
       {dialog && <NewDialog kind={dialog} onClose={() => setDialog(null)} />}
     </nav>

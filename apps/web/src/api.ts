@@ -9,14 +9,38 @@ import type { ChatMessage, ChatStreamEvent, ModelInfo, Asset } from "@kesher/sha
 
 const TOKEN_KEY = "kesher-token";
 
+/** Where the Android app's own connect screen lives, when this page was opened from the app. */
+const APP_HOME_KEY = "kesher-app-home";
+
+/** @returns The Android app's connect screen, if this page runs inside the app. */
+export function appHome(): string | null {
+  try {
+    return localStorage.getItem(APP_HOME_KEY);
+  } catch {
+    return null;
+  }
+}
+
 (() => {
-  const fromUrl = new URLSearchParams(location.search).get("token");
+  const params = new URLSearchParams(location.search);
+  // The Android app opens this page with ?app=<its own address>, so the menu can offer "Switch computer".
+  const app = params.get("app");
+  if (app && /^https?:\/\/localhost(:\d+)?\/?$/.test(app)) {
+    try {
+      localStorage.setItem(APP_HOME_KEY, app);
+    } catch {
+      // ignore
+    }
+  }
+  const fromUrl = params.get("token");
   if (fromUrl) {
     try {
       localStorage.setItem(TOKEN_KEY, fromUrl);
     } catch {
       // ignore
     }
+    history.replaceState(null, "", location.pathname + location.hash);
+  } else if (app) {
     history.replaceState(null, "", location.pathname + location.hash);
   }
 })();
