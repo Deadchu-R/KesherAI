@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { PIPELINE_TEMPLATES, type Pipeline } from "../pipelines.js";
+import type { Routine } from "../routines.js";
 
 /**
  * Pipelines: list (with templates), save, delete, run, follow a run, stop
@@ -33,6 +34,25 @@ export async function pipelineRoutes(app: FastifyInstance, s: KesherServices): P
       return reply.code(400).send({ error: (e as Error).message });
     }
   });
+  // Routines: pipelines and prompts on a schedule.
+  app.get("/api/routines", async () => s.routines.list());
+  app.post<{ Body: Partial<Routine> }>("/api/routines", async (req, reply) => {
+    const b = req.body ?? {};
+    try {
+      return await s.routines.save({ ...b, name: b.name ?? "", schedule: b.schedule ?? { kind: "daily", time: "08:00" }, action: b.action ?? { type: "prompt", prompt: "" } });
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/routines/:id", async (req) => {
+    await s.routines.remove(req.params.id);
+    return { ok: true };
+  });
+  app.post<{ Params: { id: string } }>("/api/routines/:id/run", async (req) => {
+    void s.routines.runNow(req.params.id);
+    return { ok: true };
+  });
+
   app.get("/api/pipelines/runs", async () => s.pipelines.recent().map(({ vars: _v, log, ...r }) => ({ ...r, last: log.at(-1)?.text ?? "" })));
   app.get<{ Params: { run: string } }>("/api/pipelines/runs/:run", async (req, reply) => s.pipelines.run(req.params.run) ?? reply.code(404).send({ error: "No such run (runs are kept until KesherAI restarts)." }));
   app.post<{ Params: { run: string } }>("/api/pipelines/runs/:run/stop", async (req) => {

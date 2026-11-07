@@ -26,6 +26,7 @@ import type { Prompts } from "./prompts.js";
 import type { Notifier } from "./notify.js";
 import type { SkillStore } from "./skill-store.js";
 import type { Pipelines } from "./pipelines.js";
+import type { Routines } from "./routines.js";
 import type { ComfyManager } from "./comfy-manager.js";
 import type { ConversationSearch } from "./conversation-search.js";
 import type { Semantic } from "./semantic.js";
@@ -86,6 +87,8 @@ export interface KesherServices {
   skills: SkillStore;
   /** Pipelines: chains of steps with conditions and loops. */
   pipelines: Pipelines;
+  /** Pipelines and prompts on a schedule. */
+  routines: Routines;
   /** KesherAI's managed ComfyUI. */
   comfy: ComfyManager;
   /** Search across conversations. */

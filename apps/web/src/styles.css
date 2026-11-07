@@ -912,3 +912,5 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .conv-hit:hover { background: var(--raised); }
 .conv-hit-title { font-size: 13px; font-weight: 600; }
 .conv-hit .small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rt-days button { height: 32px; min-width: 36px; padding: 0 8px; }
+.rt-days button.on { border-color: var(--accent); color: var(--text); background: var(--raised); }

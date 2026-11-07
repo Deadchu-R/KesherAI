@@ -3,6 +3,7 @@ import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { usePersonas } from "../Personas";
+import { RoutinesSection } from "../Routines";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -291,6 +292,7 @@ export function PipelinesPage() {
       </div>
       <div className="row"><button type="button" className="primary" onClick={() => setEdit({ name: "", inputs: [], steps: [] })}>{L("+ צינור חדש", "+ New pipeline")}</button></div>
       {runId && <RunView runId={runId} onClose={() => { setRunId(null); load(); }} />}
+      <RoutinesSection pipelines={list} />
       {list.map((p) => (
         <section key={p.id} className="card persona-card">
           <div className="row">

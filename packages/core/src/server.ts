@@ -35,6 +35,7 @@ import { SkillStore } from "./skill-store.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
 import { Pipelines } from "./pipelines.js";
+import { Routines } from "./routines.js";
 import { ComfyManager } from "./comfy-manager.js";
 import { ConversationSearch } from "./conversation-search.js";
 import { comfyRoutes } from "./routes/comfy.js";
@@ -342,6 +343,32 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     changed: () => void knowledge.reindexAll(),
   });
   void semantic.resume().catch(() => undefined);
+  // Routines: pipelines and prompts on a schedule.
+  const routines = new Routines(join(paths.root, "routines.json"), {
+    runPipeline: async (id, inputs) => {
+      const run = await pipelines.start(id, inputs);
+      const done = await pipelines.wait(run.id);
+      const files = done?.files.length ? ` Files: ${done.files.join(", ")}.` : "";
+      return { ok: done?.status === "done", message: done?.status === "done" ? `Finished.${files}` : done?.error ?? "Stopped.", link: "#/pipelines" };
+    },
+    runPrompt: async (name, prompt, modelId, personaId) => {
+      const c = await services.conversations.create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString()}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
+      await services.conversations.send(c.id, prompt);
+      const end = Date.now() + 30 * 60_000;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const opened = await services.conversations.open(c.id);
+        const st = opened?.session.info().status;
+        if (st === "waiting") return { ok: true, message: "Waiting for your approval.", link: "#/watch" };
+        if (st !== "running" || Date.now() > end) {
+          const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");
+          return { ok: st !== "error" && !!last, message: last && last.type === "assistant" ? last.text.replace(/\s+/g, " ").slice(0, 300) : "No answer.", link: `#/c/${c.id}` };
+        }
+      }
+    },
+    notify: async (title, body, path) => void (await notifier.send({ title, body: config.notifications.includeText ? body : body.length > 80 ? "Done — open KesherAI to read it." : body, path, tags: ["alarm_clock"] })),
+  });
+  void routines.start();
   const services: KesherServices = {
     config,
     paths,
@@ -398,6 +425,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     personas,
     skills,
     pipelines,
+    routines,
     comfy,
     semantic: semantic!,
     conversationSearch: new ConversationSearch(library),
@@ -497,6 +525,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       knowledge.close();
       notifier.close();
       void comfy.stop();
+      routines.close();
       void semantic?.stop();
       await services.conversations.closeAll();
       await app.close();
