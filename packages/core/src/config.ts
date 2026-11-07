@@ -90,6 +90,15 @@ export const KesherConfigSchema = z.object({
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
     .default({}),
+  /** "Connect with GitHub" (device sign-in). */
+  github: z
+    .object({
+      token: z.string().optional(),
+      login: z.string().optional(),
+      scopes: z.string().optional(),
+      clientId: z.string().optional(),
+    })
+    .default({}),
   /** A cloud-synced folder (Google Drive for desktop, OneDrive, Dropbox) to mirror projects and conversations to. */
   syncFolder: z.string().optional(),
   remote: z

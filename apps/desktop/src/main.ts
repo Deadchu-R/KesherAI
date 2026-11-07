@@ -18,19 +18,20 @@ import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
 
 /**
- * The project's Google sign-in client. Release builds get it from the
+ * The project's Google and GitHub sign-in clients. Release builds get it from the
  * repository's secrets (written next to main.js at build time, never in the
  * source); developers can set KESHER_GOOGLE_CLIENT_ID / _SECRET instead.
  */
-async function googleClient(): Promise<{ googleClient?: { clientId: string; clientSecret: string } }> {
-  const env = { clientId: process.env.KESHER_GOOGLE_CLIENT_ID ?? "", clientSecret: process.env.KESHER_GOOGLE_CLIENT_SECRET ?? "" };
-  if (env.clientId) return { googleClient: env };
+async function googleClient(): Promise<{ googleClient?: { clientId: string; clientSecret: string }; githubClientId?: string }> {
+  let j: { clientId?: string; clientSecret?: string; githubClientId?: string } = {};
   try {
-    const j = JSON.parse(await readFile(join(import.meta.dirname, "google-client.json"), "utf8")) as { clientId?: string; clientSecret?: string };
-    return j.clientId ? { googleClient: { clientId: j.clientId, clientSecret: j.clientSecret ?? "" } } : {};
+    j = JSON.parse(await readFile(join(import.meta.dirname, "google-client.json"), "utf8")) as typeof j;
   } catch {
-    return {};
+    // not a release build
   }
+  const google = process.env.KESHER_GOOGLE_CLIENT_ID ? { clientId: process.env.KESHER_GOOGLE_CLIENT_ID, clientSecret: process.env.KESHER_GOOGLE_CLIENT_SECRET ?? "" } : j.clientId ? { clientId: j.clientId, clientSecret: j.clientSecret ?? "" } : undefined;
+  const github = process.env.KESHER_GITHUB_CLIENT_ID || j.githubClientId;
+  return { ...(google ? { googleClient: google } : {}), ...(github ? { githubClientId: github } : {}) };
 }
 
 let server: KesherServer | undefined;

@@ -25,6 +25,9 @@ export function McpSection() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [adding, setAdding] = useState<Preset | "custom" | "import" | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [gh, setGh] = useState<{ configured: boolean; connected: boolean; login: string | null } | null>(null);
+  const [ghDialog, setGhDialog] = useState(false);
+  useEffect(() => void api<{ configured: boolean; connected: boolean; login: string | null }>("/api/github").then(setGh, () => undefined), []);
   const load = () => api<{ servers: Server[]; presets: Preset[] }>("/api/mcp").then((r) => { setServers(r.servers); setPresets(r.presets); }, () => undefined);
   useEffect(() => {
     void load();
@@ -97,7 +100,7 @@ export function McpSection() {
       {unused.length > 0 && (
         <div className="mcp-presets">
           {unused.map((p) => (
-            <button key={p.id} type="button" className="mcp-preset" onClick={() => setAdding(p)} title={getLocale() === "he" ? p.he : p.en}>
+            <button key={p.id} type="button" className="mcp-preset" onClick={() => (p.id === "github" && gh?.configured ? setGhDialog(true) : setAdding(p))} title={getLocale() === "he" ? p.he : p.en}>
               <strong>{p.name}</strong>
               <span className="muted small">{getLocale() === "he" ? p.he : p.en}</span>
             </button>
@@ -110,6 +113,18 @@ export function McpSection() {
       </div>
       <GoogleApps />
 
+      {ghDialog && (
+        <GitHubDialog
+          onClose={() => setGhDialog(false)}
+          onDone={async () => {
+            setGhDialog(false);
+            const preset = presets.find((x) => x.id === "github");
+            if (preset) await api("/api/mcp/servers", { method: "PUT", body: { id: "github", name: "GitHub", preset: "github", transport: "http", url: preset.url, headers: {}, enabled: true } }).catch((e: Error) => toast(e.message));
+            setGh(await api("/api/github"));
+            await load();
+          }}
+        />
+      )}
       {adding && <AddDialog what={adding} onClose={() => setAdding(null)} onDone={async (id, signInNow) => { setAdding(null); await load(); if (signInNow) void signIn(id); }} />}
     </section>
   );
@@ -257,6 +272,58 @@ function GoogleApps() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** "Connect with GitHub": shows the code to approve on github.com and waits for it. */
+function GitHubDialog({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> }) {
+  const [code, setCode] = useState<{ userCode: string; verificationUri: string } | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let stop = false;
+    void api<{ userCode: string; verificationUri: string }>("/api/github/connect", { method: "POST" }).then(
+      (c) => {
+        setCode(c);
+        const tick = async () => {
+          if (stop) return;
+          const st = await api<{ connected: boolean; pending: { state: string; error?: string } | null }>("/api/github").catch(() => null);
+          if (st?.connected && st.pending?.state === "done") return void onDone();
+          if (st?.pending && st.pending.state !== "waiting") return setError(st.pending.state === "expired" ? t("ghExpired") : (st.pending.error ?? t("ghDenied")));
+          setTimeout(() => void tick(), 2500);
+        };
+        void tick();
+      },
+      (e: Error) => setError(e.message),
+    );
+    return () => {
+      stop = true;
+    };
+  }, []);
+  const openGitHub = async () => {
+    if (!code) return;
+    await navigator.clipboard?.writeText(code.userCode).catch(() => undefined);
+    window.open(code.verificationUri, "_blank", "noopener");
+  };
+  return (
+    <div className="dialog-backdrop" role="presentation" onClick={() => { void api("/api/github/cancel", { method: "POST" }); onClose(); }}>
+      <div className="dialog card stack" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <strong>{t("ghTitle")}</strong>
+        <p className="muted small">{t("ghIntro")}</p>
+        {code ? (
+          <>
+            <p className="gh-code" dir="ltr">{code.userCode}</p>
+            <button type="button" className="primary" onClick={() => void openGitHub()}>{t("ghOpen")}</button>
+            <p className="muted small">{t("ghWaiting")}</p>
+          </>
+        ) : !error ? (
+          <p className="muted small">…</p>
+        ) : null}
+        {error && <p className="error small">{error}</p>}
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button type="button" onClick={() => { void api("/api/github/cancel", { method: "POST" }); onClose(); }}>{t("cancel")}</button>
+        </div>
+      </div>
     </div>
   );
 }

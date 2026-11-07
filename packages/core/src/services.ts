@@ -15,6 +15,7 @@ import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
 import type { WhisperEngine } from "./whisper.js";
 import type { McpManager } from "./mcp.js";
+import type { GitHubAuth } from "./github.js";
 import type { Journal } from "./journal.js";
 
 /**
@@ -51,6 +52,8 @@ export interface KesherServices {
   coach: Coach;
   /** MCP servers and their tools. */
   mcp: McpManager;
+  /** "Connect with GitHub". */
+  github: GitHubAuth;
   /** "My day": the opt-in journal of the screen. */
   journal: Journal;
   /** "Access from anywhere" (Cloudflare tunnel). */

@@ -366,6 +366,8 @@ export class McpManager {
   constructor(
     private readonly file: string,
     private readonly authFile: string,
+    /** A sign-in KesherAI already has for a well-known server (e.g. "Connect with GitHub"). */
+    private readonly presetToken: (cfg: McpServerConfig) => string | undefined = () => undefined,
   ) {}
 
   /** Loads the saved list and connects the enabled servers in the background. */
@@ -486,7 +488,7 @@ export class McpManager {
           ? new StdioTransport(cfg, (why) => {
               if (this.live.get(id)?.t === t) this.setStatus(id, { state: "error", error: why, tools: [] });
             })
-          : new HttpTransport(cfg, () => this.tokenFor(id), () => this.refreshToken(id));
+          : new HttpTransport(cfg, async () => (await this.tokenFor(id)) ?? (cfg.headers?.Authorization || cfg.headers?.authorization ? undefined : this.presetToken(cfg)), () => this.refreshToken(id));
       this.setStatus(id, { state: "connecting", tools: [] }, t);
       try {
         const hello = (await t.request("initialize", { protocolVersion: PROTOCOL, capabilities: { roots: { listChanged: false } }, clientInfo: CLIENT })) as { serverInfo?: { name?: string; version?: string } };
