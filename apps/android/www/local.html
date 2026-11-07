@@ -21,6 +21,16 @@
     .model p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
     .model .row { display: flex; gap: 8px; }
     .model .row button { flex: 1; min-height: 42px; font-size: 15px; }
+    .api { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .api h2 { margin: 0; font-size: 16px; font-weight: 500; }
+    .api-form { display: flex; flex-wrap: wrap; gap: 8px; }
+    .api-form select, .api-form input { flex: 1 1 140px; min-width: 0; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); padding: 0 10px; color: var(--text); }
+    .api-conn { border: 1px solid var(--border); background: var(--panel); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .api-conn .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .api-models { display: flex; flex-wrap: wrap; gap: 6px; }
+    .api-models button { min-height: 34px; padding: 0 12px; border-radius: 999px; font-size: 13px; }
+    .api-conn .del { min-height: 32px; padding: 0 10px; font-size: 13px; background: transparent; }
+    .small { font-size: 12.5px; }
     .rating { font-size: 12.5px; font-weight: 500; }
     .model.dim { opacity: .62; }
     .rating.good { color: #6fd3a5; }
@@ -69,6 +79,18 @@
     <p class="intro" data-he="מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום." data-en="Small models that run on the phone itself, with no computer and no internet (after the download). They are slower and less capable than models on your computer, but work anywhere.">מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום.</p>
     <p class="intro" id="memNote"></p>
     <div id="modelList"></div>
+    <section class="api" id="apiSection">
+      <h2 data-he="מודלים דרך האינטרנט (API)" data-en="Models over the internet (API)">מודלים דרך האינטרנט (API)</h2>
+      <p class="intro" data-he="חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב." data-en="Connect Claude, Gemini, OpenAI and more with an API key. Connections sync with your computer: what you connected there shows here, and what you add here goes there.">חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב.</p>
+      <p class="intro small" id="syncState"></p>
+      <div id="apiList"></div>
+      <form id="apiForm" class="api-form">
+        <select id="apiProvider"></select>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="API key" dir="ltr" />
+        <button class="primary" type="submit" data-he="חבר" data-en="Connect">חבר</button>
+      </form>
+      <button type="button" id="syncNow" data-he="סנכרן עם המחשב" data-en="Sync with my computer">סנכרן עם המחשב</button>
+    </section>
   </main>
 
   <main id="chatView" hidden>
@@ -303,6 +325,168 @@
     }
   }
 
+  // ---------- models over the internet (API keys), synced with the computer ----------
+  const PRESETS = [
+    { id: "anthropic", name: "Anthropic (Claude)", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
+    { id: "gemini", name: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai" },
+    { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+    { id: "openrouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+    { id: "groq", name: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
+    { id: "mistral", name: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
+    { id: "deepseek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1" },
+    { id: "xai", name: "xAI (Grok)", baseUrl: "https://api.x.ai/v1" },
+  ];
+  const PKEY = "kesherai-phone-providers";
+  const providers = () => { try { return JSON.parse(localStorage.getItem(PKEY) || "[]"); } catch { return []; } };
+  const saveProviders = (list) => localStorage.setItem(PKEY, JSON.stringify(list));
+  const http = () => window.Capacitor?.Plugins?.CapacitorHttp;
+  const headersFor = (p) => (p.type === "anthropic"
+    ? { "x-api-key": p.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true", Authorization: `Bearer ${p.apiKey}` }
+    : { Authorization: `Bearer ${p.apiKey}` });
+  const baseOf = (p) => (p.baseUrl || PRESETS.find((x) => x.id === p.id)?.baseUrl || "").replace(/\/$/, "");
+
+  /** GET JSON through native HTTP (no CORS limits), falling back to fetch in a browser. */
+  async function getJson(url, headers) {
+    const h = http();
+    if (h) {
+      const r = await h.get({ url, headers });
+      if (r.status >= 400) throw new Error(`${r.status} ${typeof r.data === "string" ? r.data.slice(0, 160) : JSON.stringify(r.data).slice(0, 160)}`);
+      return typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+    }
+    const r = await fetch(url, { headers });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 160)}`);
+    return r.json();
+  }
+
+  async function listModels(p) {
+    const j = await getJson(`${baseOf(p)}/models`, headersFor(p));
+    const ids = (j.data ?? j.models ?? []).map((m) => String(m.id ?? m.name ?? "").replace(/^models\//, "")).filter(Boolean);
+    const chatLike = ids.filter((id) => !/embed|whisper|tts|dall-e|image|moderation|audio|transcri|realtime|search-preview|aqa|imagen|veo/i.test(id));
+    return chatLike.slice(0, 40);
+  }
+
+  /** The computer this phone is paired with, from the saved connection link. */
+  function computer() {
+    const saved = localStorage.getItem("kesherai-server");
+    if (!saved) return null;
+    try {
+      const u = new URL(saved);
+      return { base: `${u.protocol}//${u.host}`, token: u.searchParams.get("token") || "" };
+    } catch { return null; }
+  }
+
+  /** Two-way: adds the computer's cloud connections here, and this phone's to the computer. */
+  async function syncWithComputer(quiet) {
+    const c = computer();
+    if (!c) { if (!quiet) $("syncState").textContent = T("אין מחשב מחובר. התחבר פעם אחת למחשב כדי לסנכרן.", "No computer paired yet. Connect to your computer once to sync."); return; }
+    $("syncState").textContent = T("מסנכרן עם המחשב…", "Syncing with the computer…");
+    try {
+      const headers = { Authorization: `Bearer ${c.token}`, "Content-Type": "application/json" };
+      const remote = await getJson(`${c.base}/api/providers/sync`, headers);
+      const mine = providers();
+      let gotHere = 0;
+      for (const r of remote) if (!mine.some((m) => m.id === r.id)) { mine.push(r); gotHere++; }
+      saveProviders(mine);
+      const send = mine.filter((m) => !remote.some((r) => r.id === m.id));
+      let sentThere = 0;
+      if (send.length) {
+        const h = http();
+        const body = { providers: send };
+        const r = h ? await h.put({ url: `${c.base}/api/providers/sync`, headers, data: body }) : await fetch(`${c.base}/api/providers/sync`, { method: "PUT", headers, body: JSON.stringify(body) }).then(async (x) => ({ status: x.status, data: await x.json() }));
+        if (r.status >= 400) throw new Error(String(r.data?.error ?? r.status));
+        sentThere = (typeof r.data === "string" ? JSON.parse(r.data) : r.data).added?.length ?? 0;
+      }
+      $("syncState").textContent = T(`מסונכרן עם המחשב · ${gotHere} נוספו מהמחשב · ${sentThere} נשלחו למחשב`, `Synced with the computer · ${gotHere} added from it · ${sentThere} sent to it`);
+      renderApi();
+    } catch (e) {
+      $("syncState").textContent = (quiet ? "" : T("הסנכרון נכשל: ", "Sync failed: ") + (e.message || e)) || T("המחשב לא זמין כרגע; הסנכרון יקרה בפעם הבאה.", "The computer is not reachable now; it will sync next time.");
+    }
+  }
+
+  async function renderApi() {
+    const list = $("apiList");
+    list.replaceChildren();
+    for (const p of providers()) {
+      const card = document.createElement("div");
+      card.className = "api-conn";
+      card.innerHTML = `<div class="top"><strong></strong><button type="button" class="del"></button></div><div class="api-models muted small"></div>`;
+      card.querySelector("strong").textContent = p.name || p.id;
+      const del = card.querySelector(".del");
+      del.textContent = T("הסר", "Remove");
+      del.onclick = () => { saveProviders(providers().filter((x) => x.id !== p.id)); renderApi(); };
+      list.append(card);
+      const box = card.querySelector(".api-models");
+      box.textContent = T("טוען מודלים…", "Loading models…");
+      listModels(p).then((ids) => {
+        box.replaceChildren(...ids.map((id) => {
+          const b = Object.assign(document.createElement("button"), { type: "button", textContent: id });
+          b.onclick = () => openChat({ name: `${id} · ${p.name || p.id}`, api: { provider: p.id, model: id } }, `api:${p.id}/${id}`);
+          return b;
+        }));
+        if (!ids.length) box.textContent = T("לא נמצאו מודלי צ'אט", "No chat models found");
+      }, (e) => { box.textContent = T("המפתח לא עובד או שאין אינטרנט: ", "The key does not work, or no internet: ") + (e.message || e); });
+    }
+  }
+
+  const sel = $("apiProvider");
+  sel.replaceChildren(...PRESETS.map((p) => Object.assign(document.createElement("option"), { value: p.id, textContent: p.name })));
+  $("apiForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const key = $("apiKey").value.trim();
+    if (!key) return;
+    const preset = PRESETS.find((p) => p.id === sel.value);
+    const p = { id: preset.id, name: preset.name, baseUrl: preset.baseUrl, apiKey: key, ...(preset.type ? { type: preset.type } : {}) };
+    $("syncState").textContent = T("בודק את המפתח…", "Checking the key…");
+    try {
+      await listModels(p);
+      saveProviders([...providers().filter((x) => x.id !== p.id), p]);
+      $("apiKey").value = "";
+      renderApi();
+      syncWithComputer(true);
+    } catch (err) {
+      $("syncState").textContent = T("המפתח לא עבד: ", "The key did not work: ") + (err.message || err);
+    }
+  };
+  $("syncNow").onclick = () => syncWithComputer(false);
+  renderApi();
+  syncWithComputer(true);
+
+  /** Streams an answer from a model over the internet (OpenAI-compatible chat completions). */
+  async function apiAnswer(api, msgs, signal, onText) {
+    const p = providers().find((x) => x.id === api.provider);
+    if (!p) throw new Error(T("החיבור הוסר", "The connection was removed"));
+    const url = `${baseOf(p)}/chat/completions`;
+    const body = { model: api.model, messages: msgs, stream: true, max_tokens: 2048 };
+    try {
+      const res = await fetch(url, { method: "POST", headers: { ...headersFor(p), "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+      if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") return;
+          try { const d = JSON.parse(data).choices?.[0]?.delta?.content; if (d) onText(d); } catch { /* partial */ }
+        }
+      }
+    } catch (err) {
+      if (signal.aborted || !(err instanceof TypeError) || !http()) throw err;
+      // The site does not allow browser requests (CORS): ask through native HTTP, without streaming.
+      const r = await http().post({ url, headers: { ...headersFor(p), "Content-Type": "application/json" }, data: { ...body, stream: false } });
+      if (r.status >= 400) throw new Error(`${r.status} ${JSON.stringify(r.data).slice(0, 200)}`);
+      const j = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+      onText(j.choices?.[0]?.message?.content ?? "");
+    }
+  }
+
   // ---------- chat ----------
   let messages = [];
   let current = null; // { item, url }
@@ -333,6 +517,7 @@
     $("msgs").replaceChildren();
     for (const m of messages) addMsg(m.role, m.content);
     show("chat");
+    if (item.api) { $("status").textContent = T("מודל דרך האינטרנט", "A model over the internet"); return; }
     if (!wllama.isModelLoaded() || wllama.__url !== url) {
       $("status").textContent = T("טוען את המודל לזיכרון…", "Loading the model into memory…");
       $("send").disabled = true;
@@ -509,7 +694,7 @@
     }
     const text = typed || queue.shift() || "";
     if (typed === "" && text) paintQueue();
-    if (!text || !wllama.isModelLoaded()) return;
+    if (!text || (!current?.item.api && !wllama.isModelLoaded())) return;
     $("input").value = "";
     autosize();
     messages.push({ role: "user", content: text });
@@ -536,6 +721,15 @@
         $("status").textContent = T("חושב…", "Thinking…");
       }
       const system = { role: "system", content: T("אתה עוזר מועיל. ענה בקצרה ובשפה שבה המשתמש כתב.", "You are a helpful assistant. Answer briefly, in the user's language.") + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
+      const onText = (d) => {
+        reply += d;
+        tokens++;
+        out.textContent = reply.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trimStart();
+        $("chatView").scrollTop = $("chatView").scrollHeight;
+      };
+      if (current.item.api) {
+        await apiAnswer(current.item.api, [system, ...recent], abort.signal, onText);
+      } else {
       const stream = await wllama.createChatCompletion({ messages: [system, ...recent], stream: true, max_tokens: 768, temperature: 0.7, temp: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, penalty_last_n: 128, abortSignal: abort.signal });
       for await (const chunk of stream) {
         const d = chunk.choices?.[0]?.delta?.content ?? "";
@@ -546,6 +740,7 @@
         $("chatView").scrollTop = $("chatView").scrollHeight;
         $("status").textContent = `${(tokens / ((performance.now() - started) / 1000)).toFixed(1)} ${T("מילים לשנייה בערך", "tokens/s")}`;
       }
+      }
     } catch (err) {
       if (abort?.signal.aborted) { reply += T(" (נעצר)", " (stopped)"); stoppedByUser = true; }
       else addMsg("note", T("שגיאה: ", "Error: ") + (err.message || err));
@@ -555,7 +750,7 @@
       bg("answer");
     }
     const seconds = (performance.now() - started) / 1000;
-    if (tokens > 8) rememberSpeed(current.url, tokens / seconds);
+    if (tokens > 8 && !current.item.api) rememberSpeed(current.url, tokens / seconds);
     const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
@@ -577,6 +772,10 @@
       // From the side menu ("Chat on this phone"): go straight back into the last chat.
       if (!new URLSearchParams(location.search).has("chat")) return;
       const url = localStorage.getItem("kesherai-phone-model");
+      if (url?.startsWith("api:")) {
+        const [provider, ...rest] = url.slice(4).split("/");
+        return openChat({ name: `${rest.join("/")} · ${provider}`, api: { provider, model: rest.join("/") } }, url);
+      }
       const item = CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
       if (item && downloaded.some((m) => m.url === url && m.size > 0)) await openChat(item, url);
     })

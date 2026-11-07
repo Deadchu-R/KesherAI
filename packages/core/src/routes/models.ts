@@ -146,6 +146,36 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     return mask(config);
   });
 
+  /**
+   * Cloud connections (API keys) shared between the computer and the phone
+   * app. GET gives them with their keys, so only paired devices (holding the
+   * remote token) and this computer can call it; PUT adds the phone's ones
+   * the computer does not have yet (existing ones are kept).
+   */
+  app.get("/api/providers/sync", async () =>
+    s.config.providers
+      .filter((p) => (p.location ?? s.registry.list().find((r) => r.config.id === p.id)?.provider.location) === "cloud" && p.apiKey)
+      .map(({ id, type, name, baseUrl, apiKey }) => ({ id, type, name: name ?? id, ...(baseUrl ? { baseUrl } : {}), apiKey })),
+  );
+  app.put<{ Body: { providers?: Array<{ id: string; type?: string; name?: string; baseUrl?: string; apiKey?: string }> } }>("/api/providers/sync", async (req, reply) => {
+    const incoming = req.body?.providers ?? [];
+    const added: string[] = [];
+    for (const p of incoming) {
+      if (!p?.id || !/^[a-z0-9-]+$/.test(p.id) || !p.apiKey) continue;
+      if (s.config.providers.some((x) => x.id === p.id)) continue;
+      const config: ProviderConfig = { id: p.id, type: p.type === "anthropic" ? "anthropic" : "openai-compatible", name: p.name ?? p.id, ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}), apiKey: p.apiKey, location: "cloud" };
+      try {
+        s.registry.add(config);
+        s.config.providers.push(config);
+        added.push(p.id);
+      } catch (err) {
+        return reply.code(400).send({ error: `${p.id}: ${(err as Error).message}` });
+      }
+    }
+    if (added.length) await s.saveConfig();
+    return { added };
+  });
+
   app.delete<{ Params: { id: string } }>("/api/providers/:id", async (req) => {
     s.registry.remove(req.params.id);
     s.config.providers = s.config.providers.filter((p) => p.id !== req.params.id);
