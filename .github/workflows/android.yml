@@ -97,7 +97,7 @@ jobs:
       - name: Describe this build for the app's update button
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          node apps/android/scripts/version-info.cjs "${{ github.run_number }}" "$VERSION" "${{ github.repository }}" android-version.json
+          node apps/android/scripts/version-info.mjs "${{ github.run_number }}" "$VERSION" "${{ github.repository }}" android-version.json
           cat android-version.json
       - uses: actions/upload-artifact@v4
         with:

@@ -2,9 +2,10 @@
 // the APK link, and what changed in the phone app (apps/android only),
 // newest first, with dates. A commit can say it in Hebrew too, with a line
 // "Phone-he: …" in its message.
-// Usage: node version-info.cjs <run number> <version> <owner/repo> <out file>
-/* global require, process */
-const { execSync } = require("node:child_process");
+// Usage: node version-info.mjs <run number> <version> <owner/repo> <out file>
+/* global process */
+import { execSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 const [run, version, repo, out = "android-version.json"] = process.argv.slice(2);
 const log = execSync("git log -60 --format=%H%x1f%ct%x1f%s%x1f%b%x1e -- apps/android", { encoding: "utf8" })
   .split("\x1e")
@@ -15,7 +16,7 @@ const changes = log.map((l) => {
   const he = /^Phone-he:\s*(.+)$/m.exec(body)?.[1]?.trim();
   return { sha, t: Number(t), subject: subject.replace(/^Phone( app)?:\s*/i, ""), ...(he ? { he } : {}) };
 });
-require("node:fs").writeFileSync(
+writeFileSync(
   out,
   JSON.stringify({
     versionCode: Number(run),
