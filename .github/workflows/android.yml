@@ -1,8 +1,10 @@
 name: Android APK
 
 # Builds the Android app (apps/android) into an installable APK.
-# Every push to main uploads it as a workflow artifact; a version tag
-# (git tag v0.2.0 && git push --tags) also attaches it to the GitHub release.
+# Every push to main publishes it to the "android-latest" release, so the
+# newest APK is always at
+#   https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/KesherAI-android.apk
+# A version tag (git tag v0.4.0 && git push --tags) also attaches it to that version's release.
 
 on:
   push:
@@ -52,3 +54,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "$GITHUB_REF_NAME" KesherAI-android.apk --title "$GITHUB_REF_NAME" --generate-notes || gh release upload "$GITHUB_REF_NAME" KesherAI-android.apk --clobber
+      - if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes="The newest Android app, rebuilt on every change. Open this page on your phone, tap KesherAI-android.apk, and allow installing from this source. Then paste the link from KesherAI → Settings → Phone."
+          gh release upload android-latest KesherAI-android.apk --clobber \
+            || gh release create android-latest KesherAI-android.apk --prerelease --title "Android app (latest)" --notes "$notes"
