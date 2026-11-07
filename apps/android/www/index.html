@@ -20,6 +20,11 @@
     .error { color: var(--bad); }
     .update { border: 1px solid var(--accent); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
     .update[hidden] { display: none; }
+    .up-progress { display: flex; flex-direction: column; gap: 6px; }
+    .up-progress[hidden] { display: none; }
+    .up-progress p { margin: 0; }
+    .up-bar { height: 6px; border-radius: 3px; background: rgb(255 255 255 / 0.08); overflow: hidden; }
+    .up-bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
     .changes { display: flex; flex-direction: column; gap: 6px; }
     .changes[hidden] { display: none; }
     .changes ul { margin: 0; padding-inline-start: 18px; max-height: 40vh; overflow-y: auto; font-size: 13.5px; line-height: 1.5; color: var(--text); display: flex; flex-direction: column; gap: 4px; }
@@ -49,6 +54,10 @@
     <div class="row">
       <button id="updateNow" class="primary" type="button" data-he="עדכן עכשיו" data-en="Update now">עדכן עכשיו</button>
       <button id="updateLater" type="button" data-he="אחר כך" data-en="Later">אחר כך</button>
+    </div>
+    <div id="updateProgress" class="up-progress" hidden>
+      <div class="up-bar"><span id="updateBar"></span></div>
+      <p id="updateMsg" class="small"></p>
     </div>
   </div>
   <h1><img src="icon.svg" width="34" height="34" alt="" /> KesherAI</h1>
@@ -336,16 +345,29 @@
   $("updateLater").onclick = () => { $("update").hidden = true; const saved = localStorage.getItem(KEY); if (saved) connect(saved); };
   $("updateNow").onclick = async () => {
     if (!latest?.apkUrl) return;
-    $("status").className = "";
-    $("status").textContent = tr.downloading[lang];
-    const sub = await Updater.addListener("progress", (p) => { if (p.percent >= 0) $("status").textContent = tr.downloading[lang] + p.percent + "%"; });
+    // Progress shows inside the update box, next to what is being installed.
+    const msgEl = $("updateMsg");
+    $("updateProgress").hidden = false;
+    $("updateNow").disabled = true;
+    msgEl.className = "small";
+    msgEl.textContent = tr.downloading[lang];
+    $("updateBar").style.width = "0%";
+    const sub = await Updater.addListener("progress", (p) => {
+      if (p.percent >= 0) {
+        msgEl.textContent = tr.downloading[lang] + p.percent + "%";
+        $("updateBar").style.width = p.percent + "%";
+      }
+    });
     try {
       await Updater.install({ url: latest.apkUrl });
-      $("status").textContent = "";
+      $("updateBar").style.width = "100%";
+      msgEl.textContent = "";
     } catch (e) {
       const msg = e?.message || String(e);
-      $("status").textContent = msg === "needs-permission" ? tr.allowInstall[lang] : tr.updateFailed[lang] + msg;
+      msgEl.className = "small error";
+      msgEl.textContent = msg === "needs-permission" ? tr.allowInstall[lang] : tr.updateFailed[lang] + msg;
     } finally {
+      $("updateNow").disabled = false;
       sub?.remove?.();
     }
   };
