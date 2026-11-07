@@ -129,6 +129,6 @@ Working on now, in this order:
 
 Later (priority to be decided):
 
-- Built-in TLS for remote access; signed installers (needs a code-signing certificate)
-- OneDrive backup
+- Built-in TLS for remote access ✅ (HTTPS through Tailscale); signed installers (needs a code-signing certificate) ⬜
+- OneDrive backup ✅ (one-click cloud folders: OneDrive, Google Drive, Dropbox, iCloud)
 - A command line (`kesher chat`) and a window-less server mode (LM Studio llmster) ✅ (docs/CLI.md)

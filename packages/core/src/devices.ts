@@ -129,6 +129,8 @@ export class Devices {
       google: GoogleDrive;
       mcp: McpManager;
       tunnelUrl: () => string | undefined;
+      /** The HTTPS address through Tailscale, when it is on. */
+      httpsUrl?: () => Promise<string | undefined>;
       startTunnel: () => Promise<string | undefined>;
       gpu: () => Promise<string | undefined>;
       version: () => Promise<string>;
@@ -217,7 +219,8 @@ export class Devices {
       let devices = file.devices.filter((x) => x.id !== this.id && Date.now() - Date.parse(x.updatedAt) < 30 * 86_400_000);
       if (this.d.config.share && this.d.remote.token) {
         const tunnel = this.d.tunnelUrl() ?? (this.d.remote.anywhere ? await this.d.startTunnel().catch(() => undefined) : undefined);
-        const urls = [...(tunnel ? [tunnel] : []), ...this.lanUrls()];
+        const https = await this.d.httpsUrl?.().catch(() => undefined);
+        const urls = [...(https ? [https] : []), ...(tunnel ? [tunnel] : []), ...this.lanUrls()];
         const gpu = await this.d.gpu().catch(() => undefined);
         devices = [...devices, { id: this.id, name: hostname(), platform: process.platform, urls, token: this.d.remote.token, ...(gpu ? { gpu } : {}), version: await this.d.version(), updatedAt: new Date().toISOString() }];
       }

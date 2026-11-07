@@ -21,6 +21,7 @@ import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js
 import { googleTools } from "./google-tools.js";
 import { Knowledge, knowledgeTools } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
+import { Tailscale } from "./tailscale.js";
 import { ensureEngine } from "./routes/engine.js";
 import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
@@ -273,6 +274,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     google,
     mcp,
     tunnelUrl: () => tunnel.status().url,
+    httpsUrl: async () => {
+      const h = await new Tailscale().status(config.port).catch(() => undefined);
+      return h?.on ? h.url : undefined;
+    },
     startTunnel: () => tunnel.start(config.port),
     gpu: async () => {
       const nv = await nvidiaGpus();

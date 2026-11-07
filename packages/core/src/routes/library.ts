@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { cloudFolders } from "../cloud-folders.js";
+import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
@@ -290,6 +292,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     remote: { enabled: s.config.remote.enabled, keepAwake: s.config.remote.keepAwake },
   }));
 
+  /** Cloud folders found on this computer (OneDrive, Google Drive, Dropbox, iCloud), to back up to with one click. */
+  app.get("/api/sync/suggestions", async () => cloudFolders());
+
   app.put<{ Body: { activeModels?: Record<string, string>; syncFolder?: string | null; remote?: { enabled?: boolean; keepAwake?: boolean } } }>("/api/settings", async (req, reply) => {
     const b = req.body ?? {};
     if (b.remote && !isLocalRequest(req)) return reply.code(403).send({ error: "Remote access can only be changed on this computer." });
@@ -307,6 +312,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (b.syncFolder !== undefined) {
       if (b.syncFolder) {
         try {
+          // A cloud folder's KesherAI sub-folder is made the first time.
+          const cloud = cloudFolders().some((c) => c.folder === b.syncFolder);
+          if (cloud) await mkdir(b.syncFolder, { recursive: true });
           await assertWritableFolder(b.syncFolder);
         } catch (err) {
           return reply.code(400).send({ error: (err as Error).message });

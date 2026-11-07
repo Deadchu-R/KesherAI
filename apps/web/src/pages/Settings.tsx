@@ -71,8 +71,10 @@ function Sync() {
   const [current, setCurrent] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const [clouds, setClouds] = useState<Array<{ service: string; folder: string }>>([]);
   useEffect(() => {
     void api<Settings>("/api/settings").then((s) => { setCurrent(s.syncFolder); setFolder(s.syncFolder ?? ""); });
+    void api<Array<{ service: string; folder: string }>>("/api/sync/suggestions").then(setClouds, () => undefined);
   }, []);
   const save = async (value: string | null) => {
     setError("");
@@ -89,6 +91,16 @@ function Sync() {
     <section className="card stack">
       <h2>{t("sync")}</h2>
       <p className="muted">{t("syncHint")}</p>
+      {clouds.length > 0 && (
+        <div className="row">
+          <span className="muted small">{t("syncFound")}</span>
+          {clouds.map((c) => (
+            <button key={c.folder} type="button" className={current === c.folder ? "primary" : ""} title={c.folder} onClick={() => { setFolder(c.folder); void save(c.folder); }}>
+              {current === c.folder ? "✓ " : ""}{c.service}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="row">
         <input className="grow" dir="ltr" value={folder} placeholder="G:\My Drive" onChange={(e) => setFolder(e.target.value)} aria-label={t("syncFolder")} />
         {desktop() && <button type="button" onClick={() => void desktop()!.pickFolder().then((f) => f && setFolder(f))}>{t("browse")}</button>}
@@ -352,6 +364,7 @@ function Phone() {
         {t("keepAwake")}
       </label>
       <StartupToggle />
+      <HttpsCard />
       {note && <p className="error">{note}</p>}
       <div className="card stack anywhere">
         <label className="check">
@@ -433,6 +446,44 @@ function StartupToggle() {
       <input type="checkbox" checked={on} onChange={(e) => void desktop()!.startup!(e.target.checked).then(setOn)} />
       {t("startWithComputer")}
     </label>
+  );
+}
+
+interface Https { installed: boolean; running: boolean; url?: string; on: boolean; hint?: string }
+
+/** HTTPS for remote access through Tailscale: a real certificate at the computer's tailnet name. */
+function HttpsCard() {
+  const [h, setH] = useState<Https | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api<Https>("/api/remote/https").then(setH, () => undefined);
+  }, []);
+  if (!h) return null;
+  const he = getLocale() === "he";
+  const set = async (on: boolean) => {
+    setBusy(true);
+    try {
+      setH(await api<Https>("/api/remote/https", { method: "POST", body: { on } }));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card stack">
+      <label className="check">
+        <input type="checkbox" checked={h.on} disabled={busy || !h.running} onChange={(e) => void set(e.target.checked)} />
+        <strong>{he ? "HTTPS מוצפן דרך Tailscale" : "Encrypted HTTPS through Tailscale"}</strong>
+      </label>
+      <p className="muted">
+        {!h.installed
+          ? he ? "התקינו את Tailscale (חינמי) במחשב ובטלפון, ואז אפשר לקבל כתובת HTTPS עם תעודה אמיתית." : "Install Tailscale (free) on this computer and the phone; then you get an HTTPS address with a real certificate."
+          : !h.running
+            ? he ? "Tailscale מותקן אבל לא מחובר. התחברו אליו במחשב." : "Tailscale is installed but not connected. Sign in to it on this computer."
+            : he ? "כתובת עם תעודה אמיתית לרשת הפרטית שלכם ב-Tailscale. רק המכשירים שלכם מגיעים אליה, ועדיין צריך את הטוקן." : "An address with a real certificate in your own Tailscale network. Only your devices reach it, and it still needs the token."}
+      </p>
+      {h.on && h.url && <code dir="ltr">{h.url}</code>}
+      {h.hint && <p className="small" dir="auto">{h.hint.split(/(https:\/\/\S+)/).map((part, i) => (/^https:\/\//.test(part) ? <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a> : part))}</p>}
+    </div>
   );
 }
 

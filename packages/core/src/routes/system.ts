@@ -4,10 +4,14 @@ import { detectHardware } from "@kesher/downloads";
 import { resolve, sep } from "node:path";
 import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
+import { Tailscale } from "../tailscale.js";
 import { isLocalRequest } from "../auth.js";
 
 /** Version of the core server API. */
 export const CORE_VERSION = "0.4.0";
+
+/** HTTPS through Tailscale, for remote access. */
+const tailscale = new Tailscale();
 
 /**
  * Health, app info, categories, hardware, skills, plugins and plugin tools.
@@ -87,7 +91,24 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
         .filter((a): a is NonNullable<typeof a> => !!a && a.family === "IPv4" && !a.internal)
         .map((a) => ({ url: `http://${a.address}:${s.config.port}`, kind: /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) ? "tailscale" : "home", mac: a.mac, broadcast: broadcastOf(a.address, a.netmask) }));
       const tunnel = s.tunnel.status().url;
-      return { name: hostname(), links: [...lan, ...(tunnel ? [{ url: tunnel, kind: "anywhere" }] : [])] };
+      const https = await tailscale.status(s.config.port).catch(() => undefined);
+      return { name: hostname(), links: [...(https?.on && https.url ? [{ url: https.url, kind: "https" }] : []), ...lan, ...(tunnel ? [{ url: tunnel, kind: "anywhere" }] : [])] };
+    });
+
+    /** HTTPS through Tailscale (a real certificate for this computer's tailnet name). */
+    app.get("/api/remote/https", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      return tailscale.status(s.config.port);
+    });
+    app.post<{ Body: { on?: boolean } }>("/api/remote/https", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      if (req.body?.on === false) return tailscale.disable(s.config.port);
+      if (!s.config.remote.enabled) return reply.code(409).send({ error: "Turn on remote access first (above)." });
+      const ts = Object.values(networkInterfaces())
+        .flat()
+        .find((a) => !!a && a.family === "IPv4" && /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address));
+      if (!ts) return reply.code(409).send({ error: "This computer has no Tailscale address. Is Tailscale connected?" });
+      return tailscale.enable(s.config.port, ts.address);
     });
 
     /**

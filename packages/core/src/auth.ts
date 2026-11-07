@@ -12,7 +12,7 @@ export function isLoopback(ip: string): boolean {
 }
 
 /** Headers a tunnel or proxy adds. A request carrying one came from outside, even if it reached us over 127.0.0.1. */
-const FORWARDED = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip"];
+const FORWARDED = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-proto", "tailscale-user-login", "tailscale-headers-info"];
 
 /**
  * Whether a request really comes from this computer: from a loopback
