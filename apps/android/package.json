@@ -18,6 +18,7 @@
     "@wllama/wllama": "3.8.1",
     "capacitor-kesher-background": "file:./plugins/background",
     "capacitor-kesher-llm": "file:./plugins/llm",
+    "capacitor-kesher-screen": "file:./plugins/screen",
     "capacitor-kesher-speech": "file:./plugins/speech",
     "capacitor-kesher-updater": "file:./plugins/updater",
     "capacitor-kesher-wake-on-lan": "file:./plugins/wake-on-lan"

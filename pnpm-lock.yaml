@@ -62,6 +62,9 @@ importers:
       capacitor-kesher-llm:
         specifier: file:./plugins/llm
         version: file:apps/android/plugins/llm(@capacitor/core@8.6.0)
+      capacitor-kesher-screen:
+        specifier: file:./plugins/screen
+        version: file:apps/android/plugins/screen(@capacitor/core@8.6.0)
       capacitor-kesher-speech:
         specifier: file:./plugins/speech
         version: file:apps/android/plugins/speech(@capacitor/core@8.6.0)
@@ -1610,6 +1613,11 @@ packages:
 
   capacitor-kesher-llm@file:apps/android/plugins/llm:
     resolution: {directory: apps/android/plugins/llm, type: directory}
+    peerDependencies:
+      '@capacitor/core': ^8.0.0
+
+  capacitor-kesher-screen@file:apps/android/plugins/screen:
+    resolution: {directory: apps/android/plugins/screen, type: directory}
     peerDependencies:
       '@capacitor/core': ^8.0.0
 
@@ -5060,6 +5068,10 @@ snapshots:
       '@capacitor/core': 8.6.0
 
   capacitor-kesher-llm@file:apps/android/plugins/llm(@capacitor/core@8.6.0):
+    dependencies:
+      '@capacitor/core': 8.6.0
+
+  capacitor-kesher-screen@file:apps/android/plugins/screen(@capacitor/core@8.6.0):
     dependencies:
       '@capacitor/core': 8.6.0
 

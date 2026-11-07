@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-screen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Share the phone's screen with the model in live mode (Android MediaProjection), with the system's consent and a visible notification while sharing.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

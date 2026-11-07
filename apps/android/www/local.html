@@ -142,6 +142,7 @@
     <p class="live-said" id="liveSaid" dir="auto"></p>
     <div class="live-bar">
       <button type="button" id="liveCamBtn" aria-label="Camera">📷</button>
+      <button type="button" id="liveScreenBtn" aria-label="Share screen" hidden>📱</button>
       <button type="button" id="liveMute" aria-label="Pause">⏸</button>
       <button type="button" id="liveEnd" class="end" aria-label="End">✕</button>
     </div>
@@ -1042,8 +1043,12 @@
       if (!live || live.ended) break;
       if (!said.trim()) continue;
       $("liveSaid").textContent = said;
-      // With the camera on, what it sees goes with the words.
-      if (live.cam) {
+      // Sharing the screen: the newest picture of it goes with the words (works from other apps too).
+      if (live.screen && SCREEN) {
+        const f = await SCREEN.frame().catch(() => null);
+        if (f?.data) attachments = [{ kind: "image", url: `data:image/jpeg;base64,${f.data}` }];
+        if (f && !f.sharing) { live.screen = false; $("liveScreenBtn").classList.remove("on"); }
+      } else if (live.cam) {
         const v = $("liveCam");
         const k = Math.min(1, 960 / Math.max(v.videoWidth || 1, v.videoHeight || 1));
         const c = Object.assign(document.createElement("canvas"), { width: Math.round(v.videoWidth * k), height: Math.round(v.videoHeight * k) });
@@ -1067,7 +1072,7 @@
     if (!SPEECH) { addMsg("note", T("שיחה חיה זמינה באפליקציה.", "Live conversation works in the app.")); return; }
     live = { ended: false, paused: false, cam: null };
     $("live").hidden = false;
-    $("liveSaid").textContent = T("דבר אליי. אפשר להדליק מצלמה ולהראות לי דברים.", "Talk to me. You can turn on the camera and show me things.");
+    $("liveSaid").textContent = SCREEN ? T("דבר אליי. אפשר להדליק מצלמה 📷 או לשתף את המסך 📱 ולהראות לי דברים.", "Talk to me. Turn on the camera 📷 or share your screen 📱 to show me things.") : T("דבר אליי. אפשר להדליק מצלמה ולהראות לי דברים.", "Talk to me. You can turn on the camera and show me things.");
     void liveLoop();
   };
   $("liveEnd").onclick = () => {
@@ -1076,6 +1081,7 @@
     live.resume?.();
     SPEECH?.stop(); SPEECH?.stopSpeaking();
     live.cam?.getTracks().forEach((t) => t.stop());
+    if (live.screen) { SCREEN?.stop().catch(() => undefined); $("liveScreenBtn").classList.remove("on"); }
     $("liveCam").hidden = true;
     $("live").hidden = true;
     live = null;
@@ -1085,6 +1091,25 @@
     live.paused = !live.paused;
     $("liveMute").textContent = live.paused ? "▶" : "⏸";
     if (live.paused) { SPEECH?.stop(); SPEECH?.stopSpeaking(); } else live.resume?.();
+  };
+  const SCREEN = window.Capacitor?.Plugins?.KesherScreen;
+  if (SCREEN) $("liveScreenBtn").hidden = false;
+  $("liveScreenBtn").onclick = async () => {
+    if (!live) return;
+    if (live.screen) {
+      await SCREEN.stop().catch(() => undefined);
+      live.screen = false;
+      $("liveScreenBtn").classList.remove("on");
+      return;
+    }
+    try {
+      await SCREEN.start();
+      live.screen = true;
+      $("liveScreenBtn").classList.add("on");
+      $("liveSaid").textContent = T("אני רואה את המסך. אפשר לעבור לאפליקציה אחרת ולהמשיך לדבר איתי.", "I can see your screen. You can switch to another app and keep talking to me.");
+    } catch (e) {
+      addMsg("note", T("שיתוף המסך לא אושר.", "Screen sharing was not allowed.") + (e?.message ? ` (${e.message})` : ""));
+    }
   };
   $("liveCamBtn").onclick = async () => {
     if (!live) return;
