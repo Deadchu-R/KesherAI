@@ -351,6 +351,7 @@ function Phone() {
         <input type="checkbox" checked={remote.keepAwake} disabled={!remote.enabled} onChange={(e) => void setRemote2({ keepAwake: e.target.checked })} />
         {t("keepAwake")}
       </label>
+      <StartupToggle />
       {note && <p className="error">{note}</p>}
       <div className="card stack anywhere">
         <label className="check">
@@ -420,6 +421,21 @@ export function SettingsPage() {
 interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string }
 
 /** Approvals the user gave for good: what runs without asking, and where. */
+/** Desktop app: start with the computer, in the background (no window), so the phone and other computers can always reach it. */
+function StartupToggle() {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    void desktop()?.startup?.().then(setOn, () => undefined);
+  }, []);
+  if (on === null || !desktop()?.startup) return null;
+  return (
+    <label className="check">
+      <input type="checkbox" checked={on} onChange={(e) => void desktop()!.startup!(e.target.checked).then(setOn)} />
+      {t("startWithComputer")}
+    </label>
+  );
+}
+
 export function PermissionsSection() {
   const [rules, setRules] = useState<Rule[] | null>(null);
   const { conversations } = useLibrary();

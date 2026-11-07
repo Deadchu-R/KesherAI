@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.4.27",
+  "version": "0.4.28",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",
@@ -49,6 +49,18 @@
       {
         "from": "resources/mcp-bridge.cjs",
         "to": "mcp-bridge.cjs"
+      },
+      {
+        "from": "../../packages/core/dist/cli.js",
+        "to": "kesher-cli.mjs"
+      },
+      {
+        "from": "resources/kesher.cmd",
+        "to": "kesher.cmd"
+      },
+      {
+        "from": "resources/kesher",
+        "to": "kesher"
       }
     ],
     "mac": {

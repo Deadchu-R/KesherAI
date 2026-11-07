@@ -48,6 +48,8 @@ interface DesktopBridge {
   pickFiles?(): Promise<string[]>;
   /** The path of a file dropped on the window. Missing before 0.3.3. */
   pathOf?(file: File): string;
+  /** Start with the computer in the background (no window). Missing before 0.4.28. */
+  startup?(on?: boolean): Promise<boolean>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

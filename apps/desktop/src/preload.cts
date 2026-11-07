@@ -11,6 +11,8 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 contextBridge.exposeInMainWorld("kesherDesktop", {
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("kesher:pick-folder"),
+  /** Start with the computer in the background; pass nothing to read it. */
+  startup: (on?: boolean): Promise<boolean> => ipcRenderer.invoke("kesher:startup", on),
   /** Closes and reopens the app, e.g. after an update. */
   restart: (): Promise<void> => ipcRenderer.invoke("kesher:restart"),
   /** Opens a folder in Explorer / Finder. */

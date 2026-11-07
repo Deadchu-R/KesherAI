@@ -131,4 +131,4 @@ Later (priority to be decided):
 
 - Built-in TLS for remote access; signed installers (needs a code-signing certificate)
 - OneDrive backup
-- A command line (`kesher chat`) and a window-less server mode (LM Studio llmster)
+- A command line (`kesher chat`) and a window-less server mode (LM Studio llmster) ✅ (docs/CLI.md)

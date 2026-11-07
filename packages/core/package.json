@@ -1,13 +1,14 @@
 {
   "name": "@kesher/core",
-  "version": "0.4.27",
+  "version": "0.4.28",
   "description": "The local KesherAI server: model registry, chat and image routes, downloads, plugins, skills, remote access and an OpenAI-compatible API.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "kesher-core": "./dist/main.js"
+    "kesher-core": "./dist/main.js",
+    "kesher": "./dist/cli.js"
   },
   "exports": {
     ".": {

@@ -1,0 +1,6 @@
+#!/bin/sh
+# KesherAI's command line: kesher chat "hello", kesher models, kesher run <pipeline> …
+# It talks to the KesherAI app running on this computer (start it, or run the app with --headless).
+here="$(cd "$(dirname "$0")" && pwd)"
+app="$(ls "$here"/../kesherai "$here"/../KesherAI "$here"/../MacOS/KesherAI 2>/dev/null | head -n1)"
+ELECTRON_RUN_AS_NODE=1 exec "$app" "$here/kesher-cli.mjs" "$@"

@@ -170,6 +170,9 @@ function autoUpdate(): void {
 
 // One window: opening KesherAI again focuses the existing window.
 if (!app.requestSingleInstanceLock()) app.quit();
+/** `--headless` (or `--server`): run KesherAI without a window, as a server for the phone and other computers (the tray icon opens the window). */
+const headless = process.argv.includes("--headless") || process.argv.includes("--server");
+
 app.on("second-instance", () => showWindow());
 
 async function createWindow(url: string): Promise<void> {
@@ -231,7 +234,11 @@ let tray: Tray | undefined;
 /** Shows the window again (from the tray, a notification, or a second launch). */
 function showWindow(): void {
   const win = BrowserWindow.getAllWindows()[0];
-  if (!win) return;
+  if (!win) {
+    // Started without a window (--headless): make it now.
+    void createWindow(process.env.KESHER_DEV_URL ?? `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}`);
+    return;
+  }
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -334,6 +341,12 @@ ipcMain.handle("kesher:run-file", async (_event, path: unknown) => {
 });
 
 // After an update: start the app again with the new code.
+/** Start with the computer, in the background (no window): `{ on }`, or read it. */
+ipcMain.handle("kesher:startup", (_event, on: unknown) => {
+  if (typeof on === "boolean") app.setLoginItemSettings({ openAtLogin: on, args: ["--headless"] });
+  return app.getLoginItemSettings({ args: ["--headless"] }).openAtLogin;
+});
+
 ipcMain.handle("kesher:restart", () => {
   app.relaunch();
   app.quit();
@@ -355,7 +368,7 @@ setInterval(() => {
 app.whenReady().then(async () => {
   try {
     const coreUrl = await startCore();
-    await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);
+    if (!headless) await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);
     setupTray(coreUrl);
     // Stops computer control from anywhere, even when another app is in front.
     const stopKey = process.platform === "darwin" ? "Command+Shift+Escape" : "Control+Alt+Escape";
