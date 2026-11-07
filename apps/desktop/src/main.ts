@@ -103,6 +103,12 @@ ipcMain.handle("kesher:pick-folder", async (event) => {
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
 
+// After an update: start the app again with the new code.
+ipcMain.handle("kesher:restart", () => {
+  app.relaunch();
+  app.quit();
+});
+
 // "Keep this computer awake while remote access is on" (Settings → Phone).
 // Checked every few seconds so the setting applies without a restart.
 let awakeBlocker: number | undefined;

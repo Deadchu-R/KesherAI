@@ -7,7 +7,7 @@ import { getLocale, t } from "../i18n";
 
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[] }
-interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; finishedAt?: string }
+interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; fromSource?: boolean; finishedAt?: string }
 interface Remote {
   enabled: boolean; keepAwake: boolean; token: string; port: number;
   addresses: Array<{ address: string; tailscale: boolean; mac: string; broadcast: string }>;
@@ -183,9 +183,35 @@ function Updates() {
   }, []);
   useEffect(() => {
     if (!progress?.running) return;
-    const timer = setInterval(() => void api<UpdateProgress>("/api/updates/progress").then(setProgress), 1000);
+    // The server may restart during the update; keep polling through the gap.
+    const timer = setInterval(() => void api<UpdateProgress>("/api/updates/progress").then(setProgress).catch(() => undefined), 1000);
     return () => clearInterval(timer);
   }, [progress?.running]);
+
+  // When the update is done, open the new version by itself.
+  const finished = !!progress && !progress.running && progress.step === "Done" && !progress.error;
+  useEffect(() => {
+    if (!finished || !progress) return;
+    if (progress.restartRequired && desktop()?.restart) {
+      void desktop()!.restart!();
+      return;
+    }
+    if (progress.restartRequired) return; // started from the command line: the user restarts it
+    // From source the server restarts itself; reload once it answers with the new commit.
+    const before = version?.commit;
+    const timer = setInterval(() => {
+      void api<{ commit?: string }>("/api/version")
+        .then((v) => {
+          if (v.commit && v.commit !== before) location.reload();
+        })
+        .catch(() => undefined);
+    }, 1500);
+    const fallback = setTimeout(() => location.reload(), 20_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(fallback);
+    };
+  }, [finished]);
 
   const doCheck = async () => {
     setError("");
@@ -229,7 +255,8 @@ function Updates() {
       )}
       {progress && (
         <>
-          <p>{progress.running ? `${t("updating")} ${progress.step ?? ""}` : progress.error ? "" : progress.restartRequired ? t("updateRestart") : t("updateDone")}</p>
+          <p>{progress.running ? `${t("updating")} ${progress.step ?? ""}` : progress.error ? "" : progress.restartRequired && !desktop()?.restart ? t("updateRestart") : t("updateDone")}</p>
+          {finished && progress.restartRequired && desktop()?.restart && <button type="button" className="primary" onClick={() => void desktop()!.restart!()}>{t("restartNow")}</button>}
           {progress.error && <p className="error">{progress.error}</p>}
           <details><summary>{t("output")}</summary><pre className="code" dir="ltr">{progress.log.join("\n")}</pre></details>
         </>

@@ -1,5 +1,7 @@
 import { execFile, spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -34,6 +36,8 @@ export interface UpdateProgress {
   error?: string;
   /** Finished, and the app must be restarted to use the new version. */
   restartRequired?: boolean;
+  /** This copy runs from source (`pnpm dev`): the server restarts itself, the page only needs a reload. */
+  fromSource?: boolean;
   finishedAt?: string;
 }
 
@@ -44,8 +48,6 @@ export interface UpdateProgress {
  * Packaged installers will update through their own updater instead.
  */
 export class Updater {
-  private progress: UpdateProgress = { running: false, log: [] };
-
   /** @param root - The repository folder (defaults to three levels above this file). */
   constructor(private readonly root = resolve(import.meta.dirname, "../../..")) {}
 
@@ -85,57 +87,50 @@ export class Updater {
     } catch {
       latestVersion = undefined;
     }
-    const status = await this.git("status", "--porcelain");
+    // Untracked files (like a stray download) never block `git pull --ff-only`.
+    const status = await this.git("status", "--porcelain", "--untracked-files=no");
     const localChanges = status ? status.split("\n").map((l) => l.slice(3)) : [];
     return { ...info, newCommits, ...(latestVersion ? { latestVersion } : {}), localChanges, checkedAt: new Date().toISOString() };
   }
 
-  /** @returns The progress of the current or last update. */
-  status(): UpdateProgress {
-    return { ...this.progress, log: this.progress.log.slice(-200) };
+  /** Where the detached update script writes its progress (survives server restarts). */
+  private get statusFile(): string {
+    return join(tmpdir(), `kesher-update-${createHash("sha1").update(this.root).digest("hex").slice(0, 10)}.json`);
   }
 
-  private step(name: string, cmd: string, args: string[]): Promise<void> {
-    this.progress.step = name;
-    this.progress.log.push(`$ ${cmd} ${args.join(" ")}`);
-    return new Promise((resolvePromise, reject) => {
-      const child = spawn(cmd, args, { cwd: this.root, shell: true, windowsHide: true, env: { ...process.env, CI: "1" } });
-      const onData = (b: Buffer) => this.progress.log.push(...b.toString().split(/\r?\n/).filter(Boolean));
-      child.stdout?.on("data", onData);
-      child.stderr?.on("data", onData);
-      child.on("error", reject);
-      child.on("close", (code) => (code === 0 ? resolvePromise() : reject(new Error(`${name} failed (exit code ${code})`))));
-    });
+  /** @returns The progress of the current or last update. */
+  status(): UpdateProgress {
+    const fromSource = import.meta.url.endsWith(".ts");
+    try {
+      const p = JSON.parse(readFileSync(this.statusFile, "utf8")) as UpdateProgress;
+      const done = !p.running && !p.error && p.step === "Done";
+      return { ...p, log: p.log.slice(-200), fromSource, ...(done ? { restartRequired: !fromSource } : {}) };
+    } catch {
+      return { running: false, log: [], fromSource };
+    }
   }
 
   /**
-   * Starts updating in the background. Poll {@link status} for progress.
+   * Starts updating in the background, in a separate process so it keeps
+   * going if the server restarts. Poll {@link status} for progress.
    *
    * @returns The initial progress.
    * @throws Error if an update is already running or this is not a git checkout.
    */
   async apply(): Promise<UpdateProgress> {
-    if (this.progress.running) throw new Error("An update is already running.");
+    if (this.status().running) throw new Error("An update is already running.");
     const info = await this.version();
     if (info.install !== "git") throw new Error("This copy cannot update itself.");
-    this.progress = { running: true, log: [] };
-    void (async () => {
-      try {
-        await this.step("Downloading the update", "git", ["pull", "--ff-only"]);
-        await this.step("Installing dependencies", "pnpm", ["install"]);
-        await this.step("Building", "pnpm", ["build:packages"]);
-        await this.step("Building the interface", "pnpm", ["--filter", "@kesher/web", "build"]);
-        await this.step("Building the desktop app", "pnpm", ["--filter", "@kesher/desktop", "build"]);
-        // From source (`pnpm dev`) the server and UI reload themselves; a built copy needs a restart.
-        this.progress.restartRequired = !import.meta.url.endsWith(".ts");
-        this.progress.step = "Done";
-      } catch (err) {
-        this.progress.error = err instanceof Error ? err.message : String(err);
-      } finally {
-        this.progress.running = false;
-        this.progress.finishedAt = new Date().toISOString();
-      }
-    })();
+    writeFileSync(this.statusFile, JSON.stringify({ running: true, step: "Starting", log: [] }));
+    const child = spawn(process.execPath, [join(this.root, "scripts", "update.mjs"), this.statusFile], {
+      cwd: this.root,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      // Electron's own binary runs as plain Node with this set.
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    });
+    child.unref();
     return this.status();
   }
 }

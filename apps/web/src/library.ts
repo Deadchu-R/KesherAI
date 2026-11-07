@@ -38,6 +38,8 @@ export function useLibrary() {
 /** Desktop-only helpers the Electron preload script exposes. */
 interface DesktopBridge {
   pickFolder(): Promise<string | null>;
+  /** Missing in desktop apps older than 0.3.2. */
+  restart?(): Promise<void>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */
