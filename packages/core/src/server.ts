@@ -17,6 +17,8 @@ import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
+import { SdEngine, sdProvider } from "./sdcpp.js";
+import { detectHardwareCached } from "@kesher/downloads";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
@@ -83,7 +85,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (options.port !== undefined) config.port = options.port;
 
   const registry = new ProviderRegistry();
+  const downloads = new DownloadManager();
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
+  // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
+  const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => ({ nvidia: (await detectHardwareCached()).gpus.some((g) => /nvidia|geforce|rtx|gtx/i.test(g.name)) }));
+  registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });
+  registry.add({ id: "sdcpp", type: "sdcpp", name: "KesherAI image engine", location: "local" });
 
   const plugins = new PluginHost(registry, config, paths.root);
   if (features.plugins) await plugins.loadAll([paths.plugins, ...(options.pluginRoots ?? [])]);
@@ -129,7 +136,6 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
 
-  const downloads = new DownloadManager();
   const services: KesherServices = {
     config,
     paths,

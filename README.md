@@ -24,7 +24,7 @@ Running AI locally today means juggling LM Studio for chat, ComfyUI for images, 
 
 | | Today | Next |
 | --- | --- | --- |
-| Local engine | Built-in llama.cpp: downloaded automatically for your GPU (CUDA on NVIDIA, Vulkan otherwise, Metal on Mac). No LM Studio or Ollama needed | Managed ComfyUI for images and video |
+| Local engine | Built-in llama.cpp for chat and stable-diffusion.cpp for images (Qwen-Image, Flux, SDXL, SD 1.5 — extra files download by themselves): downloaded automatically for your GPU (CUDA on NVIDIA, Vulkan otherwise, Metal on Mac). No LM Studio or Ollama needed | Managed ComfyUI for images and video |
 | Models | "Set it up for me" (conservative / balanced / extreme) picks models for your computer; one-click models; Hugging Face search and downloads with SHA-256 checks; every model rated good / OK / slow / too big for your hardware, with expected times | Measured speed instead of estimates |
 | Coding agent | Works in a project folder: lists, reads, searches, edits, runs commands. Three permission modes, dangerous commands always ask, diffs, undo, asks you questions | Plan mode, git checkpoints, LSP |
 | Conversations | Projects with folders and instructions, conversation history, switch models mid-conversation | Search, document chat |

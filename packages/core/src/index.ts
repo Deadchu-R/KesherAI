@@ -21,3 +21,4 @@ export { CORE_VERSION } from "./routes/system.js";
 export * from "./model-scan.js";
 export * from "./tunnel.js";
 export { allowThroughFirewall, type FirewallResult } from "./firewall.js";
+export * from "./sdcpp.js";

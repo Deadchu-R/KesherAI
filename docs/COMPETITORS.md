@@ -67,7 +67,8 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 
 | Idea (who) | Their weak spot | KesherAI upgrade | Status |
 | --- | --- | --- | --- |
-| Managed ComfyUI (Locally Uncensored) | — | Install ComfyUI as a separate program (it is GPL-3.0), download the PyTorch GPU build only on first image request | ⬜ |
+| Built-in image engine (Off Grid, Locally Uncensored via ComfyUI) | A big Python/PyTorch install | stable-diffusion.cpp downloaded for your GPU on first use (no Python); Qwen-Image and Flux get their VAE and text encoders automatically; works from the chat | ✅ |
+| Managed ComfyUI (Locally Uncensored) | — | Optional, for node workflows; install ComfyUI as a separate program (GPL-3.0) | ⬜ |
 | Chat model calls the image model | Separate screens in most apps | Active model per category; the chat model gets `generate_image` automatically | ✅ image · ⬜ video, speech, music |
 | Whisper and TTS (Off Grid) | — | Same, as active models with tools (`transcribe`, `speak`) | ⬜ |
 | Pipelines between models | Only ComfyUI, and only inside ComfyUI | Node editor across all categories; save a pipeline as a tool | ⬜ |

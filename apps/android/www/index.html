@@ -323,6 +323,8 @@
 
   (async () => {
     const launch = fromDeepLink((await App?.getLaunchUrl?.().catch(() => null))?.url ?? "");
+    // "Check for app updates" in the interface's menu comes back here with ?update=1.
+    if (new URLSearchParams(location.search).has("update")) { await checkForUpdate(false); return; }
     // A newer app waits for the user's choice before connecting; a scanned code connects anyway.
     if ((await checkForUpdate(true)) && !launch) return;
     const saved = launch || localStorage.getItem(KEY);

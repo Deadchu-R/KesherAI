@@ -218,6 +218,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
             {t("switchComputer")}
           </button>
         )}
+        {appHome() && (
+          // The app's own update check lives on its home screen.
+          <button type="button" onClick={() => (location.href = `${appHome()!.replace(/\/$/, "")}/?switch=1&update=1`)}>
+            {t("appUpdates")}
+          </button>
+        )}
       </div>
       {dialog && <NewDialog kind={dialog} onClose={() => setDialog(null)} />}
     </nav>

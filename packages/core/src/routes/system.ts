@@ -8,7 +8,7 @@ import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 
 /** Version of the core server API. */
-export const CORE_VERSION = "0.3.2";
+export const CORE_VERSION = "0.4.0";
 
 /**
  * Health, app info, categories, hardware, skills, plugins and plugin tools.
