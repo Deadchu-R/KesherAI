@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
-import { stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import { mkdir, stat } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, type AgentTool, type ModelTurn } from "@kesher/agent";
 import { branding, type Conversation, type ConversationKind, type PermissionMode } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
@@ -75,6 +75,8 @@ export class ConversationManager {
       assets: AssetStore;
       plugins: PluginHost;
       config: KesherConfig;
+      /** Folder for the files chats make (one sub-folder per conversation). */
+      outputsDir: string;
     },
   ) {}
 
@@ -150,24 +152,33 @@ export class ConversationManager {
 
   private toolsFor(kind: ConversationKind): { tools: AgentTool[]; notes: string[] } {
     const media = this.mediaTools();
-    return { tools: [...(kind === "code" ? CODE_TOOLS : []), ...media.tools, ...this.pluginTools()], notes: media.notes };
+    // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
+    void kind;
+    return { tools: [...CODE_TOOLS, ...media.tools, ...this.pluginTools()], notes: media.notes };
   }
 
   private defaultChatModel(): string | undefined {
     return this.deps.config.activeModels.chat;
   }
 
-  private workspaceOf(c: Pick<Conversation, "kind" | "workspace" | "projectId">): string | undefined {
-    if (c.kind !== "code") return undefined;
+  /**
+   * The folder a conversation works in: the project folder for code
+   * sessions, and a private outputs folder for chats.
+   *
+   * @param c - Conversation.
+   * @returns Absolute folder.
+   */
+  workspaceOf(c: Pick<Conversation, "id" | "kind" | "workspace" | "projectId">): string | undefined {
+    if (c.kind !== "code") return join(this.deps.outputsDir, c.id);
     return c.workspace ?? (c.projectId ? this.deps.library.getProject(c.projectId)?.workspace : undefined);
   }
 
-  private async promptFor(c: Pick<Conversation, "kind" | "workspace" | "projectId">, notes: string[]): Promise<string> {
+  private async promptFor(c: Pick<Conversation, "id" | "kind" | "workspace" | "projectId">, notes: string[]): Promise<string> {
     const project = c.projectId ? this.deps.library.getProject(c.projectId) : undefined;
     const workspace = this.workspaceOf(c);
     return buildSystemPrompt({
       productName: branding.productName,
-      ...(workspace ? { workspace } : {}),
+      ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
       toolNotes: notes,
     });
@@ -197,7 +208,8 @@ export class ConversationManager {
       title: opts.title ?? (opts.kind === "code" ? "New code session" : "New chat"),
       kind: opts.kind,
       modelId,
-      mode: opts.mode ?? "ask",
+      // A chat writes only into its own outputs folder, so file edits need no approval there; commands still ask.
+      mode: opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit"),
       ...(opts.workspace ? { workspace: opts.workspace } : {}),
       messages: [],
       events: [],
@@ -219,6 +231,7 @@ export class ConversationManager {
     if (live) return { session: live, conversation };
     const { tools, notes } = this.toolsFor(conversation.kind);
     const workspace = this.workspaceOf(conversation);
+    if (workspace && conversation.kind !== "code") await mkdir(workspace, { recursive: true });
     const session = new AgentSession({
       id,
       modelId: conversation.modelId,

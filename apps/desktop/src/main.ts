@@ -12,6 +12,7 @@
  */
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker } from "electron";
 import { join, resolve } from "node:path";
+import { stat } from "node:fs/promises";
 import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
 
@@ -101,6 +102,13 @@ ipcMain.handle("kesher:pick-folder", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const result = win ? await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] }) : await dialog.showOpenDialog({ properties: ["openDirectory"] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
+});
+
+// "Open folder" in a conversation's Files panel. Only folders, never files, so nothing is run.
+ipcMain.handle("kesher:open-path", async (_event, path: unknown) => {
+  if (typeof path !== "string") return;
+  const st = await stat(path).catch(() => undefined);
+  if (st?.isDirectory()) await shell.openPath(path);
 });
 
 // After an update: start the app again with the new code.

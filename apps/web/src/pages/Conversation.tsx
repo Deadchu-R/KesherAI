@@ -3,6 +3,7 @@ import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, Perm
 import { api, withToken } from "../api";
 import { refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
+import { FilesPanel } from "../FilesPanel";
 import { t } from "../i18n";
 
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[] };
@@ -131,6 +132,8 @@ export function ConversationPage({ id }: { id: string }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [fileCount, setFileCount] = useState(0);
   const { models } = useModels("chat");
   const { conversations } = useLibrary();
   const bottom = useRef<HTMLDivElement>(null);
@@ -185,6 +188,15 @@ export function ConversationPage({ id }: { id: string }) {
     return m;
   }, [events]);
   const approvalResults = useMemo(() => new Map(events.filter((e): e is Ev<"approval_result"> => e.type === "approval_result").map((e) => [e.requestId, e])), [events]);
+  // Every finished tool may have changed files: refresh the Files count, and open the panel when a program was built.
+  const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result").length, [events]);
+  const lastBuild = useMemo(() => [...events].reverse().find((e): e is Ev<"tool_result"> => e.type === "tool_result" && e.name === "build_executable" && e.ok), [events]);
+  useEffect(() => {
+    void api<{ files: unknown[] }>(`/api/conversations/${id}/files`).then((d) => setFileCount(d.files.length)).catch(() => undefined);
+  }, [id, toolResults]);
+  useEffect(() => {
+    if (lastBuild) setFilesOpen(true);
+  }, [lastBuild?.seq]);
   const answers = useMemo(() => new Map(events.filter((e): e is Ev<"answer"> => e.type === "answer").map((e) => [e.questionId, e])), [events]);
 
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;
@@ -248,9 +260,13 @@ export function ConversationPage({ id }: { id: string }) {
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
         )}
+        <button type="button" className={filesOpen ? "on" : ""} aria-pressed={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
+          {t("files")}{fileCount ? ` (${fileCount})` : ""}
+        </button>
         <button type="button" onClick={() => void remove()} aria-label={t("delete")}>{t("delete")}</button>
       </div>
-      {info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
+      {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
+      {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
 
       <div className="chat">
         <div className="messages" aria-live="polite">

@@ -1,9 +1,10 @@
-import { spawn } from "node:child_process";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import type { ToolRisk, ToolSpec } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveInWorkspace } from "./workspace.js";
+import { buildExecutableTool } from "./build.js";
+import { MAX_OUTPUT, runShell } from "./shell.js";
 
 /** What a tool returns. */
 export interface ToolOutput {
@@ -45,7 +46,6 @@ export interface AgentTool {
   run(input: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutput>;
 }
 
-const MAX_OUTPUT = 30_000;
 const MAX_READ_LINES = 2000;
 
 /**
@@ -318,39 +318,8 @@ const runCommandTool: AgentTool = {
     const cwd = workspaceOf(ctx);
     const command = str(input, "command");
     const timeoutMs = Math.min(600, Math.max(1, Number(input.timeout_seconds ?? 120))) * 1000;
-    return new Promise<ToolOutput>((resolvePromise) => {
-      const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, CI: "1", FORCE_COLOR: "0" } });
-      let out = "";
-      const onData = (b: Buffer) => {
-        out += b.toString();
-        if (out.length > MAX_OUTPUT * 4) out = out.slice(-MAX_OUTPUT * 2);
-      };
-      child.stdout?.on("data", onData);
-      child.stderr?.on("data", onData);
-      let timedOut = false;
-      const kill = () => {
-        if (process.platform === "win32" && child.pid) spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
-        else child.kill("SIGKILL");
-      };
-      const timer = setTimeout(() => {
-        timedOut = true;
-        kill();
-      }, timeoutMs);
-      const onAbort = () => kill();
-      ctx.signal.addEventListener("abort", onAbort, { once: true });
-      const finish = (code: number | null, error?: Error) => {
-        clearTimeout(timer);
-        ctx.signal.removeEventListener("abort", onAbort);
-        const status = error
-          ? `Could not start: ${error.message}`
-          : timedOut
-            ? `Stopped after ${timeoutMs / 1000} s (timeout).`
-            : `Exit code ${code ?? "unknown"}.`;
-        resolvePromise({ output: truncate(`${out.trim() || "(no output)"}\n\n${status}`) });
-      };
-      child.on("error", (err) => finish(null, err));
-      child.on("close", (code) => finish(code));
-    });
+    const r = await runShell(command, cwd, timeoutMs, ctx.signal);
+    return { output: truncate(`${r.output.trim() || "(no output)"}\n\n${r.status}`) };
   },
 };
 
@@ -373,4 +342,4 @@ export const askUserSpec: ToolSpec = {
 };
 
 /** The file and terminal tools of a code conversation. */
-export const CODE_TOOLS: readonly AgentTool[] = [listFiles, readFileTool, searchTool, writeFileTool, editFileTool, runCommandTool];
+export const CODE_TOOLS: readonly AgentTool[] = [listFiles, readFileTool, searchTool, writeFileTool, editFileTool, runCommandTool, buildExecutableTool];

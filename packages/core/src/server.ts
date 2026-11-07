@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
@@ -23,6 +24,7 @@ import { generateRoutes } from "./routes/generate.js";
 import { downloadRoutes } from "./routes/downloads.js";
 import { openAIRoutes } from "./routes/openai.js";
 import { libraryRoutes } from "./routes/library.js";
+import { fileRoutes } from "./routes/files.js";
 import { googleRoutes } from "./routes/google.js";
 import { loadModel } from "./routes/engine.js";
 
@@ -135,7 +137,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     plugins,
     engine,
     library,
-    conversations: new ConversationManager({ registry, library, assets, plugins, config }),
+    conversations: new ConversationManager({ registry, library, assets, plugins, config, outputsDir: join(paths.root, "outputs") }),
     updater: new Updater(),
     google,
     driveSync,
@@ -159,6 +161,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (features.downloads) await downloadRoutes(app, services);
   if (features.openaiCompatibleApi) await openAIRoutes(app, services);
   await libraryRoutes(app, services);
+  await fileRoutes(app, services);
   await googleRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {

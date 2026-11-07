@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("kesher:pick-folder"),
   /** Closes and reopens the app, e.g. after an update. */
   restart: (): Promise<void> => ipcRenderer.invoke("kesher:restart"),
+  /** Opens a folder in Explorer / Finder. */
+  openPath: (path: string): Promise<void> => ipcRenderer.invoke("kesher:open-path", path),
 });

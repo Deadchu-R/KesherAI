@@ -8,6 +8,8 @@ export interface PromptOptions {
   productName: string;
   /** Project folder, for code conversations. */
   workspace?: string;
+  /** A chat's private folder for files it makes for the user. */
+  outputsFolder?: string;
   /** The project's own instructions, if any. */
   projectInstructions?: string;
   /** Lines describing extra tools (e.g. which model generate_image uses). */
@@ -51,12 +53,25 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
         "- Prefer edit_file for small changes; copy old_text exactly from read_file, without line numbers.",
         "- After changing code, run the project's build or tests with run_command when they exist, and fix what fails.",
         "- Keep changes focused on the request. Do not reformat unrelated code.",
+        "- If the user wants a program they can run or install (for example a .exe), build it: for Python use build_executable; otherwise use the project's own build or packaging command.",
         "- Some actions need the user's approval. If one is denied, do not repeat it unchanged: adjust, or ask.",
         "- Finish with a short summary of what you changed and anything left to do.",
       ].join("\n"),
     );
     const guide = await readProjectGuide(opts.workspace);
     if (guide) parts.push(`Project instructions from AGENTS.md:\n${guide}`);
+  }
+  if (opts.outputsFolder) {
+    parts.push(
+      [
+        `You have a private folder for files you make for the user: ${opts.outputsFolder}`,
+        "When the user asks you to make something (a program, script, website, document, data file), make real files there with write_file; do not only paste code into the chat.",
+        "- Test what you made with run_command when it can run (for example: python calculator.py --help, or a quick check script).",
+        "- When the user wants a program they can run or install, such as a .exe, write it in Python (tkinter for windows and buttons, no extra libraries unless needed) and call build_executable. Then say it is ready to download in the Files panel.",
+        "- Everything in this folder appears in the conversation's Files panel, where the user can download each file or all of them as a ZIP.",
+        "- Commands need the user's approval; writing files in this folder does not.",
+      ].join("\n"),
+    );
   }
   if (opts.toolNotes?.length) parts.push(opts.toolNotes.join("\n"));
   if (opts.projectInstructions) parts.push(`Instructions for this project:\n${opts.projectInstructions}`);

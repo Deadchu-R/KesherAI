@@ -40,6 +40,8 @@ interface DesktopBridge {
   pickFolder(): Promise<string | null>;
   /** Missing in desktop apps older than 0.3.2. */
   restart?(): Promise<void>;
+  /** Opens a folder in Explorer / Finder. Missing before 0.3.3. */
+  openPath?(path: string): Promise<void>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */
