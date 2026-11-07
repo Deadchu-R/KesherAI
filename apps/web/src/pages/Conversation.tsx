@@ -413,6 +413,8 @@ export function ConversationPage({ id }: { id: string }) {
                 return <QuestionCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingQuestions.includes(e.questionId)} answer={answers.get(e.questionId)} />;
               case "note":
                 return <p key={e.seq} className="muted note">{e.text}</p>;
+              case "compacted":
+                return <p key={e.seq} className="muted note">{t("compactedNote")}</p>;
               case "access":
                 return <p key={e.seq} className="muted note" dir="auto">{t("accessGiven")} <span className="mono" dir="ltr">{e.path}</span></p>;
               case "undo":

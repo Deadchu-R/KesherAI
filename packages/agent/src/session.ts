@@ -12,6 +12,7 @@ import type {
   ToolSpec,
 } from "@kesher/shared";
 import { decide } from "./permissions.js";
+import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
 import { ASK_USER_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
 import { stat } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
@@ -49,6 +50,8 @@ export interface AgentSessionOptions {
    * Dangerous commands still always ask.
    */
   isAlwaysAllowed?(tool: string, modelId: string): boolean;
+  /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
+  contextTokens?: number;
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -89,6 +92,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly questions = new Map<string, (text: string) => void>();
   private readonly alwaysAllowed = new Set<string>();
   private readonly isAlwaysAllowed?: (tool: string, modelId: string) => boolean;
+  /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
+  contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
 
@@ -105,6 +110,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.maxSteps = opts.maxSteps ?? 60;
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
+    this.contextTokens = opts.contextTokens ?? 12_000;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
     this.turn = this.events.reduce((n, e) => (e.type === "assistant" ? Math.max(n, e.turn) : n), 0);
@@ -317,6 +323,40 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     return undefined;
   }
 
+  /**
+   * The messages to send this turn: everything, or — when it is too long for
+   * the model — a summary of the oldest part plus the recent turns in full.
+   * The stored conversation is never changed.
+   */
+  private async fitContext(signal: AbortSignal): Promise<AgentMessage[]> {
+    const system: AgentMessage = { role: "system", content: this.systemPrompt };
+    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - 2000;
+    const msgs = shortenOldToolOutputs(this.messages);
+    if (sizeOf(msgs) <= budget) return [system, ...msgs];
+    const cut = cutPoint(msgs, Math.floor(budget * 0.6));
+    if (cut <= 0) return [system, ...msgs];
+    const last = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "compacted" }> => e.type === "compacted");
+    let summary = last && last.upTo === cut ? last.summary : undefined;
+    if (!summary) {
+      // Summarise what is new since the last summary, together with that summary.
+      const from = last && last.upTo < cut ? last.upTo : 0;
+      const earlier = last && last.upTo < cut ? `Earlier summary:\n${last.summary}\n\nThen:\n` : "";
+      try {
+        const r = await this.model(
+          { messages: [{ role: "system", content: SUMMARY_PROMPT }, { role: "user", content: earlier + transcript(msgs.slice(from, cut), Math.floor(budget * 0.8)) }], tools: [] },
+          signal,
+          () => undefined,
+        );
+        summary = r.text.trim();
+      } catch {
+        summary = undefined;
+      }
+      if (!summary) return [system, ...msgs.slice(cut)];
+      this.push({ type: "compacted", upTo: cut, summary });
+    }
+    return [{ role: "system", content: `${this.systemPrompt}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...msgs.slice(cut)];
+  }
+
   private specs(): ToolSpec[] {
     if (this.toolsUnsupported) return [];
     return [askUserSpec, requestAccessSpec, ...[...this.tools.values()].map((t) => t.spec)];
@@ -331,7 +371,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       for (let step = 0; step < this.maxSteps; step++) {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
-        const conversation: AgentMessage[] = [{ role: "system", content: this.systemPrompt }, ...this.messages];
+        const conversation = await this.fitContext(abort.signal);
         let result: { text: string; toolCalls: ToolCall[] };
         try {
           result = await this.model({ messages: conversation, tools: this.specs() }, abort.signal, (text) =>

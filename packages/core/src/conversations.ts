@@ -176,6 +176,14 @@ export class ConversationManager {
     return { tools: [...CODE_TOOLS, ...media.tools, ...this.pluginTools()], notes: media.notes };
   }
 
+  private contextFor(modelId: string): number {
+    try {
+      return this.deps.registry.resolve(modelId).provider.location === "cloud" ? 100_000 : 12_000;
+    } catch {
+      return 12_000;
+    }
+  }
+
   private defaultChatModel(): string | undefined {
     return this.deps.config.activeModels.chat;
   }
@@ -262,6 +270,8 @@ export class ConversationManager {
       messages: conversation.messages,
       events: conversation.events,
       onChange: () => this.scheduleSave(id),
+      // Cloud models read far more than a 16k-context local model.
+      contextTokens: this.contextFor(conversation.modelId),
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(
           (r) =>

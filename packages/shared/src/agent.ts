@@ -100,6 +100,11 @@ export type AgentEvent = EventBase &
         /** For `access`: the path the agent suggested. */
         path?: string;
       }
+    /**
+     * Older messages (before index `upTo` of the model messages) were too long
+     * for the model and are sent as this summary instead. Nothing is deleted.
+     */
+    | { type: "compacted"; upTo: number; summary: string }
     /** The session may now read and change files under `path` (given by the user, or approved when the agent asked). */
     | { type: "access"; path: string }
     | { type: "answer"; questionId: string; text: string }

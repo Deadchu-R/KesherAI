@@ -253,3 +253,34 @@ test("an agent that stops before building the requested .exe is sent back once",
   assert.ok(session.events.some((e) => e.type === "note" && /finish/.test(e.text)));
   assert.equal(session.events.filter((e) => e.type === "assistant").at(-1)?.type === "assistant" && (session.events.filter((e) => e.type === "assistant").at(-1) as { text: string }).text, "Done: dist/calc.exe");
 });
+
+test("a long conversation is summarised for the model, and nothing is deleted", async () => {
+  const { AgentSession } = await import("./index.js");
+  const { SUMMARY_PROMPT } = await import("./context.js");
+  const history = [];
+  for (let i = 0; i < 40; i++) {
+    history.push({ role: "user" as const, content: `Question ${i}: ${"x".repeat(400)}` });
+    history.push({ role: "assistant" as const, content: `Answer ${i}: ${"y".repeat(400)}` });
+  }
+  const sent: Array<{ system: string; count: number }> = [];
+  const session = new AgentSession({
+    id: "long",
+    modelId: "m",
+    mode: "ask",
+    tools: [],
+    systemPrompt: "You are helpful.",
+    contextTokens: 3000,
+    messages: history,
+    model: async ({ messages }) => {
+      if (messages[0]!.content === SUMMARY_PROMPT) return { text: "- The user asked 40 questions about x.", toolCalls: [] };
+      sent.push({ system: messages[0]!.content, count: messages.length });
+      return { text: "ok", toolCalls: [] };
+    },
+  });
+  session.send("And now?");
+  await new Promise<void>((resolve) => session.on("event", (e) => e.type === "status" && e.status === "idle" && resolve()));
+  assert.match(sent[0]!.system, /Summary of the earlier part[\s\S]*40 questions/);
+  assert.ok(sent[0]!.count < 30, `sent ${sent[0]!.count} messages`);
+  assert.equal(session.messages.length, 82, "the stored conversation keeps every message");
+  assert.equal(session.events.filter((e) => e.type === "compacted").length, 1);
+});

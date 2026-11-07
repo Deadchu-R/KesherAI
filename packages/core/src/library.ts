@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Conversation, ConversationSummary, Project } from "@kesher/shared";
@@ -13,15 +14,22 @@ export type LibraryListener = (change: { kind: Kind; id: string; deleted: boolea
 /** Name of the folder KesherAI creates inside the user's sync folder. */
 export const SYNC_SUBFOLDER = "KesherAI";
 
+/** Files above this size are stored gzip-compressed (losslessly); JSON text shrinks 5–10×. */
+const COMPRESS_ABOVE = 64 * 1024;
+
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   const tmp = `${path}.${randomUUID()}.tmp`;
-  await writeFile(tmp, JSON.stringify(value), "utf8");
+  const text = JSON.stringify(value);
+  await writeFile(tmp, text.length > COMPRESS_ABOVE ? gzipSync(text, { level: 6 }) : text);
   await rename(tmp, path);
 }
 
+/** Reads a library file, plain or gzip-compressed (recognised by its first two bytes). */
 async function readJson<T>(path: string): Promise<T | undefined> {
   try {
-    return JSON.parse(await readFile(path, "utf8")) as T;
+    const buf = await readFile(path);
+    const text = buf[0] === 0x1f && buf[1] === 0x8b ? gunzipSync(buf).toString("utf8") : buf.toString("utf8");
+    return JSON.parse(text) as T;
   } catch {
     return undefined;
   }

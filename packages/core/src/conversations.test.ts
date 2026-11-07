@@ -194,3 +194,21 @@ test("an approval given for good holds in the chosen scope and survives a restar
     await s.close();
   }
 });
+
+test("large conversations are stored compressed and read back unchanged", async () => {
+  const { mkdtemp: mk, readFile: rf } = await import("node:fs/promises");
+  const { tmpdir: td } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { Library } = await import("./library.js");
+  const dir = await mk(j(td(), "kesher-gz-"));
+  const lib = new Library(dir, () => undefined);
+  await lib.load();
+  const now = new Date().toISOString();
+  const big = { id: "c1", projectId: null, title: "Big", kind: "chat" as const, modelId: "m", mode: "ask" as const, messages: Array.from({ length: 300 }, (_, i) => ({ role: "user" as const, content: `message ${i} ${"lorem ipsum ".repeat(30)}` })), events: [], createdAt: now, updatedAt: now };
+  await lib.saveConversation(big);
+  const raw = await rf(j(dir, "conversations", "c1.json"));
+  assert.equal(raw[0], 0x1f, "gzip");
+  assert.ok(raw.length < JSON.stringify(big).length / 5, `${raw.length} bytes`);
+  const back = await lib.getConversation("c1");
+  assert.deepEqual(back?.messages, big.messages);
+});
