@@ -56,6 +56,26 @@ export function HubBrowser({ onDownloaded, fixedCategory }: { onDownloaded?: () 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  const [onlyRuns, setOnlyRuns] = useState(() => {
+    try {
+      return localStorage.getItem("kesher-only-runs") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [hw, setHw] = useState<Hw | null>(null);
+  useEffect(() => {
+    void api<Hw>("/api/hardware").then(setHw).catch(() => undefined);
+  }, []);
+  const toggleOnlyRuns = (v: boolean) => {
+    setOnlyRuns(v);
+    try {
+      localStorage.setItem("kesher-only-runs", v ? "1" : "0");
+    } catch {
+      // only a convenience
+    }
+  };
+  const shown = results && onlyRuns && hw ? results.filter((m) => runsHere(m, hw, category)) : results;
 
   const label = (id: string) => {
     const c = BUILT_IN_CATEGORIES.find((x) => x.id === id);
@@ -100,20 +120,24 @@ export function HubBrowser({ onDownloaded, fixedCategory }: { onDownloaded?: () 
         </select>
         <button type="submit" className="primary">{t("search")}</button>
       </form>
+      <label className="check small">
+        <input type="checkbox" checked={onlyRuns} onChange={(e) => toggleOnlyRuns(e.target.checked)} />
+        {t("onlyRuns")}
+      </label>
       {format === "gguf" && <p className="muted small">{t("ggufHint")}</p>}
       {error && <p className="error">{error}</p>}
       {loading && !results && <p className="muted">{t("loading")}</p>}
-      {results && results.length === 0 && <p className="muted">{t("noResults")}</p>}
+      {shown && shown.length === 0 && <p className="muted">{results?.length ? t("noneRunHere", { n: results.length }) : t("noResults")}</p>}
       <div className="hub-list">
-        {results?.map((m) => (
-          <HubRow key={m.repo} m={m} open={open === m.repo} onToggle={() => setOpen(open === m.repo ? null : m.repo)} label={label} {...(onDownloaded ? { onDownloaded } : {})} />
+        {shown?.map((m) => (
+          <HubRow key={m.repo} m={m} open={open === m.repo} onlyRuns={onlyRuns} onToggle={() => setOpen(open === m.repo ? null : m.repo)} label={label} {...(onDownloaded ? { onDownloaded } : {})} />
         ))}
       </div>
     </section>
   );
 }
 
-function HubRow({ m, open, onToggle, label, onDownloaded }: { m: HubModel; open: boolean; onToggle: () => void; label: (id: string) => string; onDownloaded?: () => void }) {
+function HubRow({ m, open, onToggle, label, onDownloaded, onlyRuns }: { m: HubModel; open: boolean; onToggle: () => void; label: (id: string) => string; onDownloaded?: () => void; onlyRuns: boolean }) {
   const [summary, setSummary] = useState<string | null>(null);
   const [files, setFiles] = useState<HubFile[] | null>(null);
   const [error, setError] = useState("");
@@ -179,7 +203,10 @@ function HubRow({ m, open, onToggle, label, onDownloaded }: { m: HubModel; open:
           {files === null && !error && <p className="muted">{t("loading")}</p>}
           {files?.length === 0 && <p className="muted">{t("noWeightFiles")}</p>}
           <div className="list">
-            {files?.map((f) => (
+            {onlyRuns && files && files.some((f) => !fileRuns(m, f)) && (
+              <p className="muted small">{t("hiddenFiles", { n: files.filter((f) => !fileRuns(m, f)).length })}</p>
+            )}
+            {files?.filter((f) => !onlyRuns || fileRuns(m, f)).map((f) => (
               <div key={f.path} className="row hub-file">
                 <span className="mono grow" dir="ltr">{f.path}</span>
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
@@ -240,4 +267,37 @@ function PlanBox({ plan, onCancel, onConfirm }: { plan?: Plan; onCancel: () => v
       </div>
     </div>
   );
+}
+
+interface Hw { platform: string; ramTotal: number; gpus: Array<{ vramTotal: number }>; unifiedMemory: boolean }
+
+const MLX = /(^|[-_./ ])mlx([-_./ ]|$)/i;
+
+/**
+ * Whether a Hugging Face model can run on this computer, judged from its
+ * name and tags: not an Apple-only MLX build elsewhere, in a format the
+ * built-in engines run, and small enough for the memory (a 4-bit file is
+ * about 0.6 GB per billion parameters).
+ */
+function runsHere(m: HubModel, hw: Hw, category: string): boolean {
+  const mac = hw.platform === "darwin";
+  if (!mac && (MLX.test(m.repo) || m.library === "mlx" || m.tags.includes("mlx"))) return false;
+  if (category === "chat" && !m.tags.includes("gguf") && m.library !== "gguf") return false;
+  const p = /^(\d+(?:\.\d+)?)([BM])$/.exec(m.parameters ?? "");
+  if (p) {
+    const billions = Number(p[1]) / (p[2] === "M" ? 1000 : 1);
+    const needGb = billions * 0.6 + 0.5;
+    const vram = Math.max(0, ...hw.gpus.map((g) => g.vramTotal)) / 1024 ** 3;
+    const ram = hw.ramTotal / 1024 ** 3;
+    // The engines can spill from the GPU into system memory, more slowly.
+    if (needGb > (hw.unifiedMemory ? ram * 0.75 : vram + ram * 0.6)) return false;
+  }
+  return true;
+}
+
+/** Whether one file of a model runs here: not too big, not MLX, not a pickle-only format. */
+function fileRuns(m: HubModel, f: HubFile): boolean {
+  if (MLX.test(`${m.repo}/${f.path}`)) return false;
+  if (f.estimate?.rating === "too-big") return false;
+  return /\.(gguf|safetensors)$/i.test(f.path);
 }
