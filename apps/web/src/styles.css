@@ -882,3 +882,24 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .danger-btn { border-color: #b4232a; color: #fca5a5; }
 .approvals-pill { position: fixed; inset-block-end: 18px; inset-inline-start: 50%; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none; box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
 [dir="rtl"] .approvals-pill { transform: translateX(50%); }
+
+/* Pipelines */
+.pl-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pl-steps.depth-0 > .pl-step { border-inline-start: 3px solid var(--accent); }
+.pl-step { padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); display: flex; flex-direction: column; gap: 8px; }
+.pl-step.t-if, .pl-step.t-loop { border-inline-start: 3px solid hsl(190 55% 55%); }
+.pl-step-head code { font-size: 12px; color: var(--muted); }
+.pl-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); flex: 1; min-width: 160px; }
+.pl-out { flex: 0 0 140px; min-width: 120px; }
+.pl-branch { padding-inline-start: 14px; border-inline-start: 1px dashed var(--border-strong); display: flex; flex-direction: column; gap: 6px; }
+.pl-test > * { flex: 1; min-width: 120px; }
+.pl-add select { width: auto; }
+.pl-json { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; }
+.pl-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.pl-log li { padding: 6px 8px; border-radius: 8px; background: var(--raised); }
+.pl-log li.bad { color: #fca5a5; }
+.pl-log-text { white-space: pre-wrap; font-size: 13px; margin-top: 2px; }
+.pl-files { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pl-files img { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; }
+.pl-inputs { margin-top: 10px; }
+.pill.bad { border-color: #b4232a; color: #fca5a5; }

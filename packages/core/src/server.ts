@@ -1,6 +1,6 @@
 import type { AgentTool } from "@kesher/agent";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile as readFileFs } from "node:fs/promises";
+import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
@@ -31,6 +31,9 @@ import { ApiKeys } from "./api-keys.js";
 import { SkillStore } from "./skill-store.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
+import { Pipelines } from "./pipelines.js";
+import { pipelineRoutes } from "./routes/pipelines.js";
+import { transcribeWith } from "./speech-tools.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
@@ -269,6 +272,35 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     version: async () => (await updater.version()).version,
     save: persist,
   });
+  // Pipelines: chains of model calls and tools, with conditions and loops.
+  const pipelines = new Pipelines(join(paths.root, "pipelines"), join(paths.root, "outputs", "pipelines"), {
+    ask: async ({ prompt, system, model, persona }, signal) => {
+      await personas.load();
+      const p = persona ? (await personas.list()).find((x) => x.id === persona || x.name.toLowerCase() === persona.toLowerCase()) : undefined;
+      const id = model || p?.modelId || config.activeModels.chat;
+      if (!id) throw new Error("No chat model is active. Pick one on the Models page.");
+      const sys = [p?.instructions, system].filter(Boolean).join("\n\n");
+      const r = await modelTurnFor(registry, id)({ messages: [...(sys ? [{ role: "system" as const, content: sys }] : []), { role: "user" as const, content: prompt }], tools: [] }, signal, () => undefined);
+      return r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+    },
+    knowledge: async (query, base) => {
+      const hits = await knowledge.search(query, base);
+      return hits.map((h) => `[${h.source}${/^https?:/.test(h.source) ? "" : `, p. ${h.page}`}] ${h.text}`).join("\n\n") || "(nothing found)";
+    },
+    image: async ({ prompt, width, height }, signal) => {
+      const id = config.activeModels.image;
+      if (!id) throw new Error("No image model is active. Pick one on the Models page.");
+      const { provider, providerModelId } = registry.resolve(id);
+      if (!provider.generateImage) throw new Error(`${id} does not make images.`);
+      return provider.generateImage({ providerModelId, prompt, width: width ?? 1024, height: height ?? 1024, steps: 20, seed: Math.floor(Math.random() * 2 ** 31) }, signal);
+    },
+    transcribe: async (path) => {
+      const ext = extname(path);
+      const r = await transcribeWith({ whisper, speech: () => config.speech, providers: () => config.providers }, await readFileFs(path), /^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext : ".wav", config.speech.language);
+      return r.text;
+    },
+    notify: async (title, body) => void (await notifier.send({ title, body, path: "#/pipelines", tags: ["gear"] })),
+  });
   const services: KesherServices = {
     config,
     paths,
@@ -324,6 +356,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     knowledge,
     personas,
     skills,
+    pipelines,
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,
@@ -371,6 +404,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await promptRoutes(app, services);
   await skillRoutes(app, services);
   await libraryStoreRoutes(app, services);
+  await pipelineRoutes(app, services);
   await notificationRoutes(app, services);
   await mcpServerRoutes(app, services);
   await githubRoutes(app, services);

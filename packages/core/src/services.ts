@@ -25,6 +25,7 @@ import type { Personas } from "./personas.js";
 import type { Prompts } from "./prompts.js";
 import type { Notifier } from "./notify.js";
 import type { SkillStore } from "./skill-store.js";
+import type { Pipelines } from "./pipelines.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -80,6 +81,8 @@ export interface KesherServices {
   notifier: Notifier;
   /** SKILL.md skills. */
   skills: SkillStore;
+  /** Pipelines: chains of steps with conditions and loops. */
+  pipelines: Pipelines;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */
