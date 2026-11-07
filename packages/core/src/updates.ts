@@ -146,8 +146,10 @@ export class Updater {
     if (!this.packaged) throw new Error("This copy was not installed with git, so it cannot update itself here.");
     const res = await fetch(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases/latest`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
     if (res.status === 404) return { ...info, newCommits: [], localChanges: [], checkedAt: new Date().toISOString() };
-    if (!res.ok) throw new Error(`GitHub answered ${res.status} while looking for a new version.`);
-    const rel = (await res.json()) as { tag_name: string; name?: string; body?: string; assets: Array<{ name: string; browser_download_url: string; size: number }> };
+    let rel: { tag_name: string; name?: string; body?: string; assets: Array<{ name: string; browser_download_url: string; size: number }> };
+    if (res.ok) rel = (await res.json()) as typeof rel;
+    else if (res.status === 403 || res.status === 429) rel = await this.releaseFromFeed();
+    else throw new Error(`GitHub answered ${res.status} while looking for a new version.`);
     const latestVersion = rel.tag_name.replace(/^v/, "");
     const newer = compareVersions(latestVersion, info.version) > 0;
     const file = installerFor(rel.assets.map((a) => a.name));
@@ -157,6 +159,23 @@ export class Updater {
     const notes = (rel.body ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.replace(/^[-*] /, "").replace(/\*\*/g, "")).slice(0, 12);
     const newCommits = newer ? (notes.length ? notes : [rel.name ?? `v${latestVersion}`]).map((subject, i) => ({ hash: i === 0 ? `v${latestVersion}` : "", subject })) : [];
     return { ...info, newCommits, latestVersion, localChanges: [], checkedAt: new Date().toISOString() };
+  }
+
+  /**
+   * When GitHub's API limit is reached (403), reads the update feed the
+   * installer build publishes next to the files (latest.yml), which is not limited.
+   */
+  private async releaseFromFeed(): Promise<{ tag_name: string; name?: string; body?: string; assets: Array<{ name: string; browser_download_url: string; size: number }> }> {
+    const feed = process.platform === "darwin" ? "latest-mac.yml" : process.platform === "linux" ? "latest-linux.yml" : "latest.yml";
+    const base = `https://github.com/${this.packaged!.repo}/releases/latest/download`;
+    const res = await fetch(`${base}/${feed}`, { headers: { "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) throw new Error(`GitHub is busy right now (${res.status}). Try again in a few minutes.`);
+    const yml = await res.text();
+    const version = /^version:\s*['"]?([^'"\s]+)/m.exec(yml)?.[1];
+    if (!version) throw new Error("The update feed could not be read.");
+    const files = [...yml.matchAll(/^\s*-?\s*url:\s*['"]?([^'"\s]+)/gm)].map((m) => m[1]!);
+    const sizes = [...yml.matchAll(/^\s*size:\s*(\d+)/gm)].map((m) => Number(m[1]));
+    return { tag_name: `v${version}`, name: `KesherAI ${version}`, assets: [...new Set(files)].map((name, i) => ({ name, size: sizes[i] ?? 0, browser_download_url: `${base}/${name}` })) };
   }
 
   /** Installed copies: downloads the installer with progress, then runs it. */
