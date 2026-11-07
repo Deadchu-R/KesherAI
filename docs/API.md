@@ -160,6 +160,21 @@ See [GOOGLE_DRIVE.md](GOOGLE_DRIVE.md) for setup.
 | `POST /api/google/sync` | `{ downloaded, uploaded }` |
 | `POST /api/google/disconnect` | Revokes access and forgets the token |
 
+## MCP servers
+
+Tools from MCP servers (Notion, GitHub, Linear, Jira, Unity, any server) join every chat and agent as `mcp_<server>_<tool>`. Read-only tools run without asking; the rest ask for approval. Servers are saved in `mcp.json`, sign-ins in `mcp-auth.json` (both in the data folder). Adding, changing and removing servers is allowed only from this computer, because program servers run commands here.
+
+| Method & path | Description |
+| --- | --- |
+| `GET /api/mcp` | `{ servers, presets }`; each server has `status { state, tools, error }` and `signedIn`; secrets come back as `••••` |
+| `PUT /api/mcp/servers` | Add or replace `{ id, name, transport: "stdio" \| "http", command, args, env, url, headers, enabled, disabledTools }`; `••••` keeps the saved secret |
+| `POST /api/mcp/import` | `{ json }`: a Claude Desktop / Cursor `mcpServers` config. Returns `{ added }` |
+| `DELETE /api/mcp/servers/:id` | Removes the server and its sign-in |
+| `POST /api/mcp/servers/:id/reconnect` | Returns its status |
+| `POST /api/mcp/servers/:id/sign-in` | Only from this computer. Returns `{ url }`, the service's consent page (MCP OAuth with PKCE and dynamic registration) |
+| `POST /api/mcp/servers/:id/sign-out` | Forgets the sign-in |
+| `GET /api/mcp/callback` | Where the service sends the browser back |
+
 ## Conversation files
 
 Chats keep their files in `~/.kesher/outputs/<conversation id>`; code sessions use their project folder.

@@ -23,6 +23,8 @@ import { ComputerControl } from "./computer.js";
 import { WhisperEngine } from "./whisper.js";
 import { speechRoutes } from "./routes/speech.js";
 import { computerRoutes } from "./routes/computer.js";
+import { mcpRoutes } from "./routes/mcp.js";
+import { McpManager, mcpResultText } from "./mcp.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
@@ -157,6 +159,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
   });
   const assets = new AssetStore(paths.assets);
+  // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.
+  const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"));
+  void mcp.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, branding.google);
@@ -180,6 +185,19 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       outputsDir: join(paths.root, "outputs"),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
       computerTools: (id) => computer.tools(id),
+      mcpTools: () =>
+        mcp.tools().map(({ server, tool, spec }) => ({
+          spec,
+          // Tools that only read run without asking; the rest ask, like any command.
+          risk: tool.annotations?.readOnlyHint && !tool.annotations.destructiveHint ? ("read" as const) : ("exec" as const),
+          preview: async (input) => `${server.name} → ${tool.annotations?.title ?? tool.name}\n${JSON.stringify(input, null, 2)}`,
+          run: async (input, ctx) => {
+            const r = await mcp.call(server.id, tool.name, input, ctx.signal);
+            const { text, images } = mcpResultText(r);
+            if (r.isError) throw new Error(text);
+            return { output: text, ...(images.length ? { images } : {}) };
+          },
+        })),
       video: {
         ensure: () => ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
         generate: (path, req) => sd.generateVideo(path, req),
@@ -188,6 +206,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     }),
     coach,
     computer,
+    mcp,
     whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
       const nv = await nvidiaGpus();
       return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
@@ -223,6 +242,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
   await speechRoutes(app, services);
+  await mcpRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);
@@ -258,6 +278,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     async close() {
       services.tunnel.stop();
+      mcp.close();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();

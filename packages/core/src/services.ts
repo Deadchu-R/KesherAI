@@ -14,6 +14,7 @@ import type { SdEngine } from "./sdcpp.js";
 import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
 import type { WhisperEngine } from "./whisper.js";
+import type { McpManager } from "./mcp.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -47,6 +48,8 @@ export interface KesherServices {
   computer: ComputerControl;
   /** Suggests better prompts, tools and models from how conversations went; learns the user's habits. */
   coach: Coach;
+  /** MCP servers and their tools. */
+  mcp: McpManager;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

@@ -120,6 +120,8 @@ export class ConversationManager {
       };
       /** Computer-control tools for a conversation (empty when the user has not turned it on). */
       computerTools?(conversationId: string): AgentTool[];
+      /** Tools from the connected MCP servers. */
+      mcpTools?(): AgentTool[];
       /** Notes the coach learned about how the user works, added to every system prompt. */
       userNotes?(): Promise<string[]>;
     },
@@ -256,7 +258,7 @@ export class ConversationManager {
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
-    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools()], notes: media.notes };
+    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools(), ...(this.deps.mcpTools?.() ?? [])], notes: media.notes };
   }
 
   private teamCache = new Map<string, Teammate[]>();
