@@ -211,7 +211,8 @@ Today plugins run **inside the core server's process**, with the same access as 
 ## Publishing
 
 - Put it on GitHub with `kesher-plugin.json` at the root (and a built `dist/` if it has code).
-- **Add the topic `kesherai-plugin` to the repository.** It then appears under **Plugins & mods → From the community**, where users install it with one click.
+- **Add the topic `kesherai-plugin` to the repository.** It then appears in the app under **Community → From the community** (with a warning that community items are not checked). Add `kesherai-theme`, `kesherai-mod`, `kesherai-tool`, `kesherai-model`, `kesherai-integration` or `kesherai-program` to put it in a category.
+- **Official** items are made and checked by the KesherAI project and listed in [`community/official.json`](../community/official.json).
 - Users can also install any repository by its address (`owner/repo` or an `https://` Git URL) on that screen, or copy the folder into `~/.kesher/plugins/`.
 - Choose an open-source licence for your plugin. KesherAI's Apache-2.0 licence does not require any particular licence for plugins.
 

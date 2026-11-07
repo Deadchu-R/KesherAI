@@ -2,6 +2,7 @@ import { AppBar } from "./AppBar";
 import { ComputerBanner } from "./ComputerSection";
 import { UsagePage } from "./pages/Usage";
 import { PluginsPage } from "./pages/Plugins";
+import { CommunityPage } from "./pages/Community";
 import { PluginPage } from "./pages/PluginPage";
 import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
@@ -136,6 +137,7 @@ export function App() {
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;
   else if (hash === "#/usage") page = <UsagePage />;
   else if (hash === "#/plugins") page = <PluginsPage />;
+  else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;
   else page = <Home />;
 

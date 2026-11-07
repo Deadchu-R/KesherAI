@@ -95,18 +95,50 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { ok: true };
   });
 
-  /** Public plugins: GitHub repositories with the topic `kesherai-plugin`, most starred first. */
+  /**
+   * The community store. `official`: plugins the KesherAI project publishes
+   * and checks (listed in community/official.json in the main repository);
+   * `community`: public GitHub repositories with the topic `kesherai-plugin`,
+   * made by anyone and not checked.
+   */
   app.get("/api/plugins/catalog", async (_req, reply) => {
-    try {
-      const res = await fetch("https://api.github.com/search/repositories?q=topic:kesherai-plugin&sort=stars&per_page=50", {
-        headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-      const j = (await res.json()) as { items?: Array<{ full_name: string; description: string | null; stargazers_count: number; html_url: string; updated_at: string }> };
-      return (j.items ?? []).map((r) => ({ repo: r.full_name, description: r.description ?? "", stars: r.stargazers_count, url: r.html_url, updatedAt: r.updated_at }));
-    } catch (err) {
-      return reply.code(502).send({ error: `Could not load the catalog: ${(err as Error).message}` });
-    }
+    const gh = { accept: "application/vnd.github+json", "user-agent": "KesherAI" };
+    type Repo = { full_name: string; description: string | null; stargazers_count: number; html_url: string; updated_at: string; topics?: string[]; owner?: { login: string; avatar_url: string } };
+    const shape = (r: Repo, official: boolean) => ({
+      repo: r.full_name,
+      description: r.description ?? "",
+      stars: r.stargazers_count,
+      url: r.html_url,
+      updatedAt: r.updated_at,
+      topics: (r.topics ?? []).filter((t) => t !== "kesherai-plugin"),
+      author: r.owner?.login ?? r.full_name.split("/")[0],
+      official,
+    });
+    const [officialList, search] = await Promise.all([
+      fetch("https://raw.githubusercontent.com/Deadchu-R/KesherAI/main/community/official.json", { signal: AbortSignal.timeout(8000) })
+        .then((r) => (r.ok ? (r.json() as Promise<{ plugins?: string[] }>) : { plugins: [] }))
+        .catch(() => ({ plugins: [] as string[] })),
+      fetch("https://api.github.com/search/repositories?q=topic:kesherai-plugin&sort=stars&per_page=60", { headers: gh, signal: AbortSignal.timeout(10_000) })
+        .then(async (r) => {
+          if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
+          return ((await r.json()) as { items?: Repo[] }).items ?? [];
+        })
+        .catch((err: Error) => err),
+    ]);
+    const officialRepos = new Set((officialList.plugins ?? []).map((x) => x.toLowerCase()));
+    if (search instanceof Error && officialRepos.size === 0) return reply.code(502).send({ error: `Could not load the store: ${search.message}` });
+    const items = search instanceof Error ? [] : search;
+    const official = await Promise.all(
+      [...officialRepos].map(async (full) => {
+        const found = items.find((r) => r.full_name.toLowerCase() === full);
+        if (found) return shape(found, true);
+        const r = await fetch(`https://api.github.com/repos/${full}`, { headers: gh, signal: AbortSignal.timeout(8000) }).then((x) => (x.ok ? (x.json() as Promise<Repo>) : undefined)).catch(() => undefined);
+        return r ? shape(r, true) : undefined;
+      }),
+    );
+    return {
+      official: official.filter((x) => !!x),
+      community: items.filter((r) => !officialRepos.has(r.full_name.toLowerCase())).map((r) => shape(r, false)),
+    };
   });
 }

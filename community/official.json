@@ -1,0 +1,4 @@
+{
+  "$comment": "Plugins and mods the KesherAI project publishes and checks. They show under Community → Official in the app. Add a GitHub repository as \"owner/repo\".",
+  "plugins": []
+}

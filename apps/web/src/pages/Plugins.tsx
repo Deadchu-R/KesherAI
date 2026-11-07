@@ -37,7 +37,7 @@ export function PluginsPage() {
   const load = () => api<Installed[]>("/api/plugins").then(setList, () => undefined);
   useEffect(() => {
     void load();
-    api<CatalogItem[]>("/api/plugins/catalog").then(setCatalog, (e: Error) => setCatalogError(e.message));
+    api<{ official: CatalogItem[]; community: CatalogItem[] }>("/api/plugins/catalog").then((c) => setCatalog([...c.official, ...c.community]), (e: Error) => setCatalogError(e.message));
   }, []);
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
