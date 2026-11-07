@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { t } from "./i18n";
+import { VoicePicker } from "./Speak";
 
 interface Info {
   choice: string;
   language: string;
   local: { engine: boolean; model?: string; recommended: { label: string; sizeGb: number }; busy?: string; error?: string; localPossible: boolean };
   clouds: Array<{ id: string; label: string }>;
+  ttsClouds?: string[];
 }
 
 /** Settings → Speech: which engine turns speech into text, the language, and the local engine's state. */
@@ -53,6 +55,8 @@ export function SpeechSection() {
         </p>
       )}
       {info.local.error && <p className="error small">{info.local.error}</p>}
+      <h3 className="sp-sub">{t("ttsTitle")}</h3>
+      <VoicePicker clouds={info.ttsClouds ?? []} />
     </section>
   );
 }

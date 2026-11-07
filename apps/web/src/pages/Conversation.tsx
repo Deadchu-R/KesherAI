@@ -9,6 +9,7 @@ import { ModelMenu } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
 import { Mic } from "../Mic";
+import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
@@ -318,6 +319,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
+  const [openedAt] = useState(() => Date.now());
   const [coachOpen, setCoachOpen] = useState(false);
   const [web, setWeb] = useWebSearch();
   const [openPanel, setOpenPanel] = useState("");
@@ -373,6 +375,8 @@ export function ConversationPage({ id }: { id: string }) {
             return;
           }
           if (e.type === "assistant") setStreaming((s) => { const n = { ...s }; delete n[e.turn]; return n; });
+          // "Read answers aloud": only answers that arrive now, not old ones replayed on opening.
+          if (e.type === "assistant" && autoSpeak() && Date.parse(e.at) > openedAt) void speak(e.text);
           if (e.type === "status" && e.status === "error") setError(e.message ?? "Error");
           setEvents((prev) => (prev.some((p) => p.seq === e.seq) ? prev : [...prev, e]));
         };
@@ -549,7 +553,7 @@ export function ConversationPage({ id }: { id: string }) {
               case "user":
                 return <div key={e.seq} className="msg user">{e.text}</div>;
               case "assistant":
-                return <div key={e.seq} className="msg"><RichText text={e.text} /></div>;
+                return <div key={e.seq} className="msg"><RichText text={e.text} /><SpeakButton text={e.text} /></div>;
               case "approval_request":
                 return <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
               case "question":

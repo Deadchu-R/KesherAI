@@ -27,7 +27,24 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     language: s.config.speech.language,
     local: await s.whisper.status(),
     clouds: clouds(),
+    ttsClouds: s.config.providers.filter((p) => p.id === "openai" && p.apiKey).map((p) => p.id),
   }));
+
+  /** Reads text aloud with a cloud voice (OpenAI): `{ text, voice }` → MP3. */
+  app.post<{ Body: { text?: string; provider?: string; voice?: string } }>("/api/speech/tts", async (req, reply) => {
+    const text = String(req.body?.text ?? "").slice(0, 4000);
+    if (!text) return reply.code(400).send({ error: "No text" });
+    const p = s.config.providers.find((x) => x.id === (req.body?.provider ?? "openai"));
+    if (!p?.apiKey) return reply.code(400).send({ error: "Connect OpenAI to use its voices." });
+    const res = await fetch(`${(p.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "")}/audio/speech`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${p.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: req.body?.voice ?? "nova", input: text, format: "mp3" }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) return reply.code(502).send({ error: `OpenAI answered ${res.status}: ${(await res.text()).slice(0, 200)}` });
+    return reply.type("audio/mpeg").send(Buffer.from(await res.arrayBuffer()));
+  });
 
   /** Settings: `{ stt?, language? }`. */
   app.put<{ Body: { stt?: string; language?: string } }>("/api/speech/stt", async (req) => {

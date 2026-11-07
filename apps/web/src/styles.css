@@ -670,3 +670,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .mic-time { font-size: 12px; font-variant-numeric: tabular-nums; }
 a.btn { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: var(--radius-sm); text-decoration: none; }
 a.btn.primary { background: var(--accent); color: var(--accent-ink); }
+
+.say-btn { height: 28px; min-width: 28px; padding: 0 8px; margin-top: 4px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 13px; opacity: .55; }
+.msg:hover .say-btn, .say-btn.on, .say-btn:focus-visible { opacity: 1; border-color: var(--border-strong); }
+.sp-sub { font-size: 14px; font-weight: 500; margin: 8px 0 0; }
+.tts-auto { flex-direction: row; align-items: center; gap: 8px; }
