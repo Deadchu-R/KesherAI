@@ -298,6 +298,48 @@ export class GoogleDrive {
     return id;
   }
 
+  /**
+   * Reads a named JSON file from the KesherAI folder (device list, settings).
+   *
+   * @param name - File name, e.g. `devices.json`.
+   * @returns Its content, or undefined when it does not exist yet.
+   */
+  async readJson<T>(name: string): Promise<T | undefined> {
+    const folder = await this.folder();
+    const q = encodeURIComponent(`name='${name}' and '${folder}' in parents and trashed=false`);
+    const found = await this.call<{ files: Array<{ id: string }> }>(`${this.endpoints.api}/files?q=${q}&fields=files(id)`);
+    const id = found.files[0]?.id;
+    if (!id) return undefined;
+    this.fileIds.set(name, id);
+    return this.call<T>(`${this.endpoints.api}/files/${id}?alt=media`);
+  }
+
+  /**
+   * Writes a named JSON file in the KesherAI folder (created the first time).
+   *
+   * @param name - File name.
+   * @param value - The content.
+   */
+  async writeJson(name: string, value: unknown): Promise<void> {
+    const folder = await this.folder();
+    if (!this.fileIds.has(name)) {
+      const q = encodeURIComponent(`name='${name}' and '${folder}' in parents and trashed=false`);
+      const found = await this.call<{ files: Array<{ id: string }> }>(`${this.endpoints.api}/files?q=${q}&fields=files(id)`);
+      if (found.files[0]) this.fileIds.set(name, found.files[0].id);
+    }
+    const existing = this.fileIds.get(name);
+    const metadata = { name, ...(existing ? {} : { parents: [folder], mimeType: "application/json" }) };
+    const boundary = `kesher${randomBytes(8).toString("hex")}`;
+    const body =
+      `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\ncontent-type: application/json\r\n\r\n${JSON.stringify(value)}\r\n--${boundary}--`;
+    const res = await this.call<{ id: string }>(
+      existing ? `${this.endpoints.upload}/files/${existing}?uploadType=multipart&fields=id` : `${this.endpoints.upload}/files?uploadType=multipart&fields=id`,
+      { method: existing ? "PATCH" : "POST", headers: { "content-type": `multipart/related; boundary=${boundary}` }, body },
+    );
+    this.fileIds.set(name, res.id);
+  }
+
   /** @returns Every item in the KesherAI folder. */
   async list(): Promise<RemoteItem[]> {
     const folder = await this.folder();

@@ -126,6 +126,7 @@ interface Transport {
  */
 export function presetHelp(cfg: McpServerConfig, error: string): string | undefined {
   if (cfg.preset === "unreal" && /fetch failed|ECONNREFUSED|Could not reach/i.test(error)) return "Unreal is not answering on 127.0.0.1:8000. Open your project in Unreal Engine 5.8 or newer, enable the Unreal MCP plugin and All Toolsets (Edit → Plugins), and turn on Auto Start Server (Editor Preferences → General → Model Context Protocol). Then press Reconnect.";
+  if (cfg.preset === "unity-mcp" && /Unity|connect|refused|bridge/i.test(error) && !/not recognized as an internal|ENOENT|command not found/i.test(error)) return "MCP for Unity is not reaching the editor. Open your project in Unity with the MCP for Unity package installed (Window → MCP for Unity shows it connected), then press Reconnect.";
   if (cfg.preset === "unity" && /ENOENT|not recognized|not found|No such file/i.test(error)) return "Unity's MCP relay is not installed yet. In your Unity project add the AI Assistant package (com.unity.ai.assistant), open the editor and check Edit → Project Settings → AI → Unity MCP Server shows Running. Then press Reconnect, and accept KesherAI under Pending Connections.";
   return undefined;
 }
@@ -737,6 +738,12 @@ export class McpManager {
     return added;
   }
 
+  /** @returns The servers with their secrets (for syncing between the user's own computers). */
+  async exportRaw(): Promise<McpServerConfig[]> {
+    await this.load();
+    return this.servers.map((x) => ({ ...x }));
+  }
+
   /** Reconnects every enabled server that is in error (e.g. after installing Node.js). */
   async retryFailed(): Promise<void> {
     await Promise.all(this.servers.filter((s) => s.enabled && this.live.get(s.id)?.status.state === "error").map((s) => this.connect(s.id).catch(() => undefined)));
@@ -805,7 +812,8 @@ export const MCP_PRESETS: McpPreset[] = [
   { id: "github", name: "GitHub", he: "מאגרים, Issues ו-Pull Requests. צריך טוקן אישי (PAT).", en: "Repositories, issues and pull requests. Needs a personal access token.", transport: "http", url: "https://api.githubcopilot.com/mcp/", fields: [{ key: "token", label: "GitHub token", secret: true, target: "header:Authorization", prefix: "Bearer ", help: "https://github.com/settings/personal-access-tokens" }], link: "https://github.com/github/github-mcp-server" },
   { id: "vercel", name: "Vercel", he: "פרויקטים, פריסות ולוגים ב-Vercel.", en: "Projects, deployments and logs on Vercel.", transport: "http", url: "https://mcp.vercel.com", signIn: true, link: "https://vercel.com/docs/mcp/vercel-mcp" },
   { id: "sentry", name: "Sentry", he: "שגיאות ותקלות מהאפליקציות שלך.", en: "Errors and issues from your apps.", transport: "http", url: "https://mcp.sentry.dev/mcp", signIn: true, link: "https://docs.sentry.io/product/sentry-mcp/" },
-  { id: "unity", name: "Unity", he: "שליטה בעורך Unity (סצנות, אובייקטים, סקריפטים, הקונסול) דרך השרת הרשמי של Unity. צריך בפרויקט את החבילה AI Assistant ‏(com.unity.ai.assistant), והעורך פתוח.", en: "Control the Unity Editor (scenes, objects, scripts, console) through Unity's official server. Needs the AI Assistant package (com.unity.ai.assistant) in your project, with the editor open.", transport: "stdio", command: unityRelay(), args: ["--mcp"], link: "https://docs.unity3d.com/Packages/com.unity.ai.assistant@latest/index.html?subfolder=/manual/integration/unity-mcp-get-started.html" },
+  { id: "unity-mcp", name: "Unity · MCP for Unity", he: "מומלץ: השרת הפופולרי ביותר של הקהילה (קוד פתוח, MIT). עובד מ-Unity 2021.3 ומעלה: סצנות, אובייקטים, סקריפטים, חומרים, קונסול ובדיקות. מתקינים בפרויקט חבילה מ-Git URL: ‏https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main", en: "Recommended: the community's most used server (open source, MIT). Works from Unity 2021.3: scenes, objects, scripts, materials, console and tests. In your project add the package from Git URL: https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main", transport: "stdio", command: "uvx", args: ["--from", "mcpforunityserver", "mcp-for-unity", "--transport", "stdio"], needs: "uv", link: "https://coplaydev.github.io/unity-mcp/getting-started/install" },
+  { id: "unity", name: "Unity · official", he: "שליטה בעורך Unity (סצנות, אובייקטים, סקריפטים, הקונסול) דרך השרת הרשמי של Unity. צריך בפרויקט את החבילה AI Assistant ‏(com.unity.ai.assistant), והעורך פתוח.", en: "Control the Unity Editor (scenes, objects, scripts, console) through Unity's official server. Needs the AI Assistant package (com.unity.ai.assistant) in your project, with the editor open.", transport: "stdio", command: unityRelay(), args: ["--mcp"], link: "https://docs.unity3d.com/Packages/com.unity.ai.assistant@latest/index.html?subfolder=/manual/integration/unity-mcp-get-started.html" },
   { id: "unreal", name: "Unreal Engine", he: "שליטה בעורך Unreal דרך שרת ה-MCP המובנה של Unreal Engine 5.8: מפעילים את הפלאגין Unreal MCP ואת All Toolsets, ואת Auto Start Server.", en: "Control the Unreal Editor through Unreal Engine 5.8's built-in MCP server: enable the Unreal MCP plugin and All Toolsets, and Auto Start Server.", transport: "http", url: "http://127.0.0.1:8000/mcp", link: "https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor" },
   { id: "filesystem", name: "Files", he: "גישה לתיקייה שתבחר במחשב.", en: "Access to a folder you choose on this computer.", transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem"], needs: "node", fields: [{ key: "folder", label: "Folder", target: "arg" }] },
   { id: "memory", name: "Memory graph", he: "זיכרון ארוך-טווח למודלים (גרף של עובדות).", en: "Long-term memory for models (a graph of facts).", transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"], needs: "node" },

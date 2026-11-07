@@ -90,6 +90,15 @@ export const KesherConfigSchema = z.object({
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
     .default({}),
+  /** "My devices": the user's computers find each other through their Google account. */
+  devices: z
+    .object({
+      id: z.string().optional(),
+      share: z.boolean().default(false),
+      syncSettings: z.boolean().default(true),
+      stamps: z.record(z.string(), z.object({ hash: z.string(), at: z.number() })).default({}),
+    })
+    .default({}),
   /** "Connect with GitHub" (device sign-in). */
   github: z
     .object({

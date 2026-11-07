@@ -787,3 +787,10 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .meeting-card h4 { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .transcript { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow: auto; font-size: 14px; line-height: 1.55; }
 .gh-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 30px; letter-spacing: .18em; text-align: center; margin: 4px 0; padding: 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border-strong); user-select: all; }
+.devices label.row { flex-direction: row; align-items: flex-start; gap: 10px; }
+.devices input[type="checkbox"] { width: auto; margin: 3px 0 0; }
+.block { display: block; }
+.device-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.device-list li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); }
+.device-list .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-top: 6px; flex-shrink: 0; }
+.device-list .dot.on { background: #6fd3a5; box-shadow: 0 0 0 3px rgb(111 211 165 / .18); }

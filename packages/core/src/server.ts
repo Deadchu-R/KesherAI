@@ -31,7 +31,9 @@ import { journalRoutes } from "./routes/journal.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
 import { Runtimes } from "./runtimes.js";
-import { Journal } from "./journal.js";
+import { Devices } from "./devices.js";
+import { deviceRoutes } from "./routes/devices.js";
+import { Journal, type ScreenSource } from "./journal.js";
 import { McpManager, mcpResultText } from "./mcp.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
@@ -71,6 +73,8 @@ export interface KesherServerOptions {
   googleClient?: { clientId: string; clientSecret: string };
   /** Installed copies: update from GitHub releases (the desktop app passes its version and how to run an installer). */
   updates?: PackagedUpdates;
+  /** The desktop app's screen capture for "My day" (no PowerShell, which antivirus programs block). */
+  screen?: ScreenSource;
   /** The project's GitHub OAuth App client id, for "Connect with GitHub" (builds pass it from repository secrets). */
   githubClientId?: string;
 }
@@ -189,13 +193,39 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     } catch {
       return undefined;
     }
-  });
+  }, undefined, options.screen);
   void journal.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
 
+  const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads);
+  const updater = new Updater(undefined, options.updates);
+  const devices = new Devices({
+    config: config.devices,
+    remote: config.remote,
+    port: () => config.port,
+    providers: () => config.providers,
+    addProvider: async (p, persist) => {
+      registry.add(p);
+      if (persist) {
+        autodetected.delete(p.id);
+        config.providers = [...config.providers.filter((x) => x.id !== p.id), p];
+      }
+    },
+    registry,
+    google,
+    mcp,
+    tunnelUrl: () => tunnel.status().url,
+    startTunnel: () => tunnel.start(config.port),
+    gpu: async () => {
+      const nv = await nvidiaGpus();
+      return nv.length ? nv.map((g) => g.name).join(" + ") : undefined;
+    },
+    version: async () => (await updater.version()).version,
+    save: persist,
+  });
   const services: KesherServices = {
     config,
     paths,
@@ -245,11 +275,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       const nv = await nvidiaGpus();
       return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
     }),
-    updater: new Updater(undefined, options.updates),
+    updater,
     google,
     driveSync,
     sd,
-    tunnel: new Tunnel(join(paths.engines, "cloudflared"), downloads),
+    tunnel,
+    devices,
     autodetected,
     saveConfig: persist,
     registerEngineProvider: () => {
@@ -279,6 +310,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await mcpRoutes(app, services);
   await journalRoutes(app, services);
   await githubRoutes(app, services);
+  await deviceRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);
@@ -294,6 +326,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // Bring this computer's library up to date with Google Drive, in the background.
   if (google.connected) void driveSync.syncNow().catch(() => undefined);
+  // Find the user's other computers (same Google account) and keep their connections in step.
+  devices.start();
 
   // Bring back the model that was loaded last time, without delaying start-up.
   const last = config.engines.lastModel;
@@ -315,6 +349,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     async close() {
       services.tunnel.stop();
       mcp.close();
+      devices.close();
       journal.close();
       await services.conversations.closeAll();
       await app.close();

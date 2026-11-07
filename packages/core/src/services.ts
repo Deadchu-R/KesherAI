@@ -17,6 +17,7 @@ import type { WhisperEngine } from "./whisper.js";
 import type { McpManager } from "./mcp.js";
 import type { GitHubAuth } from "./github.js";
 import type { Runtimes } from "./runtimes.js";
+import type { Devices } from "./devices.js";
 import type { Journal } from "./journal.js";
 
 /**
@@ -55,6 +56,8 @@ export interface KesherServices {
   mcp: McpManager;
   /** Node.js and uv for MCP servers, installed by KesherAI on request. */
   runtimes: Runtimes;
+  /** "My devices": the user's other computers, through their Google account. */
+  devices: Devices;
   /** "Connect with GitHub". */
   github: GitHubAuth;
   /** "My day": the opt-in journal of the screen. */

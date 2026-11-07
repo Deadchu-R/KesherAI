@@ -135,7 +135,7 @@ export function DayPage() {
   );
 }
 
-function Intro({ info, onOn }: { info: Info; onOn: () => void }) {
+function Intro({ onOn }: { info: Info; onOn: () => void }) {
   return (
     <div className="page day-page">
       <section className="day-intro">
@@ -146,7 +146,7 @@ function Intro({ info, onOn }: { info: Info; onOn: () => void }) {
           <li>{L("לא מצלם מנהלי סיסמאות, חלונות גלישה בסתר, דפי התחברות, בנק ותשלום, ואת המסך הנעול.", "It never captures password managers, private browsing windows, sign-in, bank and payment pages, or the locked screen.")}</li>
           <li>{L("את הסיכום כותב מודל שרץ במחשב הזה, אלא אם תרשה אחרת.", "The write-up is done by a model on this computer, unless you allow otherwise.")}</li>
           <li>{L("תמונות נמחקות אחרי שבוע וטקסט אחרי 3 חודשים. אפשר להשהות, למחוק את 15 הדקות האחרונות או יום שלם.", "Pictures are deleted after a week and text after 3 months. You can pause, delete the last 15 minutes, or a whole day.")}</li>
-          {info.platform === "win32" ? <li>{L("קריאת הטקסט שעל המסך משתמשת ב-OCR של Windows עצמו, בלי הורדה.", "Reading the text on screen uses Windows' own OCR; nothing to download.")}</li> : <li>{L("במחשב הזה נשמרים רק התמונה ושם החלון. לקריאת טקסט התקן tesseract.", "On this computer only the picture and window name are kept; install tesseract to read the text.")}</li>}
+          <li>{L("קריאת הטקסט שעל המסך נעשית במחשב הזה עם Tesseract (קוד פתוח). נתוני השפות, עברית ואנגלית, יורדים פעם אחת (בערך 15MB).", "The text on screen is read on this computer with Tesseract (open source); the Hebrew and English language data downloads once (about 15 MB).")}</li>
         </ul>
         <button type="button" className="primary big" onClick={onOn}>{L("התחל לתעד את היום", "Start recording my day")}</button>
       </section>

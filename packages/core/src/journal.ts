@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelTurn } from "@kesher/agent";
 import { isSensitiveWindow, screenBackend } from "./computer.js";
@@ -265,83 +264,57 @@ function run(cmd: string, args: string[], timeout = 45_000): Promise<string> {
   });
 }
 
-/** One capture on Windows: idle time, window, picture and OCR, in a single PowerShell run. */
-async function windowsCapture(frame: string, idleSec: number, excludePattern: string): Promise<Capture & { hash?: string }> {
-  const out = join(tmpdir(), `kesher-journal-${randomUUID()}.json`);
-  const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
-  const script = `
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing, System.Runtime.WindowsRuntime
-Add-Type @'
+/** What the desktop app provides for the journal: the screen (Electron's own capture) and idle time. */
+export interface ScreenSource {
+  /** Seconds since the last keyboard or mouse input. */
+  idleSec(): number;
+  /** The whole screen: full-size PNG (for reading text), a small JPEG (to keep) and a tiny grey bitmap (to notice when nothing changed). */
+  shot(): Promise<{ png: Buffer; jpeg: Buffer; tiny: Buffer }>;
+}
+
+/** The app and window in front, with a short, plain PowerShell call on Windows (no screen access). */
+async function foregroundWindow(): Promise<{ app: string; title: string }> {
+  if (process.platform !== "win32") return screenBackend().foreground();
+  const script = `Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Text;
-public static class J {
-  [StructLayout(LayoutKind.Sequential)] public struct LII { public uint cbSize; public uint dwTime; }
-  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LII p);
-  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+public static class W {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);
-  public static uint Idle() { var l = new LII(); l.cbSize = (uint)Marshal.SizeOf(l); GetLastInputInfo(ref l); return ((uint)Environment.TickCount - l.dwTime) / 1000; }
 }
 '@
-[J]::SetProcessDPIAware() | Out-Null
-$r = @{}
-$r.idle = [J]::Idle()
-$h = [J]::GetForegroundWindow(); $sb = New-Object System.Text.StringBuilder 512; [J]::GetWindowText($h, $sb, 512) | Out-Null
-$p = 0; [J]::GetWindowThreadProcessId($h, [ref]$p) | Out-Null
-$r.app = [string](Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName
-$r.title = $sb.ToString()
-$skip = ($r.app -match ${q(excludePattern)}) -or ($r.title -match ${q(excludePattern)})
-if ($r.idle -lt ${idleSec} -and -not $skip) {
-  $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-  $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-  $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size); $g.Dispose()
-  # A tiny grey version to notice when nothing changed.
-  $tiny = New-Object System.Drawing.Bitmap $bmp, 32, 18
-  $px = New-Object System.Text.StringBuilder
-  for ($y = 0; $y -lt 18; $y++) { for ($x = 0; $x -lt 32; $x++) { $c = $tiny.GetPixel($x, $y); [void]$px.Append([char](65 + [int](($c.R + $c.G + $c.B) / 48))) } }
-  $r.hash = $px.ToString()
-  $scale = [Math]::Min(1.0, 1280 / $b.Width)
-  $small = New-Object System.Drawing.Bitmap $bmp, ([int]($b.Width * $scale)), ([int]($b.Height * $scale))
-  $enc = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
-  $ep = New-Object System.Drawing.Imaging.EncoderParameters 1
-  $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ([long]55)
-  $small.Save(${q(frame)}, $enc, $ep)
-  # Text on screen, with Windows' own OCR (the user's languages).
-  try {
-    $png = [IO.Path]::ChangeExtension(${q(frame)}, '.ocr.png')
-    $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
-    $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' })[0]
-    function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
-    [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime] | Out-Null
-    [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime] | Out-Null
-    [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics, ContentType = WindowsRuntime] | Out-Null
-    $file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($png)) ([Windows.Storage.StorageFile])
-    $stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
-    $dec = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
-    $sbmp = Await ($dec.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
-    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
-    if ($engine) { $res = Await ($engine.RecognizeAsync($sbmp)) ([Windows.Media.Ocr.OcrResult]); $r.text = ($res.Lines | ForEach-Object { $_.Text }) -join "\`n" }
-    $stream.Dispose()
-  } catch { $r.ocrError = $_.Exception.Message }
-  finally { if ($png) { Remove-Item -LiteralPath $png -ErrorAction SilentlyContinue } }
-  $r.frame = $true
-} elseif ($skip) { $r.skipped = 'rule' }
-[IO.File]::WriteAllText(${q(out)}, (ConvertTo-Json $r -Compress), (New-Object System.Text.UTF8Encoding $false))`;
-  try {
-    await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
-    const j = JSON.parse(await readFile(out, "utf8")) as { idle: number; app: string; title: string; hash?: string; text?: string; frame?: boolean; skipped?: string };
-    return { t: Date.now(), app: j.app ?? "", title: j.title ?? "", ...(j.idle >= idleSec ? { idle: true } : {}), ...(j.text ? { text: j.text } : {}), ...(j.frame ? { frame: "" } : {}), ...(j.hash ? { hash: j.hash } : {}), ...(j.skipped ? { skipped: j.skipped } : {}) };
-  } finally {
-    await rm(out, { force: true });
-  }
+$h = [W]::GetForegroundWindow(); $sb = New-Object System.Text.StringBuilder 512; [W]::GetWindowText($h, $sb, 512) | Out-Null
+$p = 0; [W]::GetWindowThreadProcessId($h, [ref]$p) | Out-Null
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Write-Output ([string](Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName); Write-Output $sb.ToString()`;
+  const out = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], 20_000);
+  const [app = "", ...title] = out.split(/\r?\n/);
+  return { app: app.trim(), title: title.join(" ").trim() };
 }
 
-/** Converts a JS regex source into a .NET-safe, case-insensitive pattern for PowerShell's -match. */
-function dotnetPattern(apps: string[]): string {
-  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const names = ["1password", "bitwarden", "keepass", "keepassxc", "lastpass", "dashlane", "nordpass", "enpass", "keeper", "lockapp", "logonui", "consent", "credentialuibroker", ...apps.map((a) => a.replace(/\.exe$/i, ""))].filter(Boolean).map(esc);
-  return `^(${names.join("|")})$|${PRIVATE_WINDOW.source}|(password|passcode|sign[ -]?in|log[ -]?in|2fa|two-factor|verification code|bank|payment|checkout|credit card|paypal|wallet|סיסמ|התחבר|כניסה לחשבון|תשלום|כרטיס אשראי|בנק)`;
+/** Reads text on the screen with Tesseract (open source, runs here; the language data downloads once). */
+class TextReader {
+  private worker?: Promise<{ recognize(img: Buffer): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> }>;
+  /** @param cache - Where the language data is kept. */
+  constructor(private readonly cache: string) {}
+  async read(png: Buffer): Promise<string | undefined> {
+    try {
+      this.worker ??= (async () => {
+        const { createWorker } = await import("tesseract.js");
+        await mkdir(this.cache, { recursive: true });
+        return (await createWorker(["eng", "heb"], 1, { cachePath: this.cache })) as never;
+      })();
+      const w = await this.worker;
+      return (await w.recognize(png)).data.text.trim();
+    } catch {
+      this.worker = undefined;
+      return undefined;
+    }
+  }
+  async close() {
+    const w = await this.worker?.catch(() => undefined);
+    await w?.terminate().catch(() => undefined);
+  }
 }
 
 const MEETING_PROMPT = `You get the transcript of a meeting recorded on the user's computer (their microphone and the call's audio, transcribed in pieces, so words may be cut or misheard). Answer with JSON only:
@@ -374,7 +347,28 @@ export class Journal {
     private readonly dir: string,
     private readonly model: (modelId?: string) => { turn: ModelTurn; local: boolean; id: string } | undefined,
     private readonly capture?: (frame: string, s: JournalSettings) => Promise<Capture & { hash?: string }>,
-  ) {}
+    /** The desktop app's screen capture (no PowerShell, which antivirus programs block for this). */
+    private readonly screen?: ScreenSource,
+  ) {
+    this.reader = new TextReader(join(dir, "ocr-data"));
+  }
+
+  private readonly reader: TextReader;
+
+  /** One capture: idle check, window, picture, text. */
+  private async captureWithScreen(frame: string, s: JournalSettings): Promise<Capture & { hash?: string }> {
+    const src = this.screen!;
+    const t = Date.now();
+    if (src.idleSec() >= 120) return { t, app: "", title: "", idle: true };
+    const fg = await foregroundWindow().catch(() => ({ app: "", title: "" }));
+    if (skipReason(fg.app, fg.title, s.excludeApps)) return { t, app: fg.app, title: "", skipped: "rule" };
+    const shot = await src.shot();
+    await writeFile(frame, shot.jpeg);
+    // A tiny grey version of the screen tells when nothing changed (then no new picture or reading).
+    const tinyHash = createHash("sha1").update(Buffer.from([...shot.tiny].filter((_, i) => i % 4 !== 3).map((v) => v >> 4))).digest("hex");
+    const text = tinyHash === this.lastHash ? undefined : await this.reader.read(shot.png);
+    return { t, app: fg.app, title: fg.title, frame: "", hash: tinyHash, ...(text ? { text } : {}) };
+  }
 
   /** Loads the settings and starts capturing if it was on. */
   load(): Promise<void> {
@@ -468,7 +462,7 @@ export class Journal {
     const framePath = join(folder, "frames", name);
     let cap: Capture & { hash?: string };
     try {
-      cap = await (this.capture ?? defaultCapture)(framePath, this.settings);
+      cap = await (this.capture ?? (this.screen ? (f: string, st: JournalSettings) => this.captureWithScreen(f, st) : defaultCapture))(framePath, this.settings);
       this.state.error = undefined;
     } catch (e) {
       this.state.error = (e as Error).message;
@@ -885,13 +879,13 @@ export class Journal {
   /** Stops capturing. */
   close(): void {
     clearTimeout(this.timer);
+    void this.reader.close();
   }
 }
 
 /** Takes one capture with the platform's tools. */
 async function defaultCapture(frame: string, s: JournalSettings): Promise<Capture & { hash?: string }> {
-  if (process.platform === "win32") return windowsCapture(frame, 120, dotnetPattern(s.excludeApps));
-  // macOS and Linux: picture and window title; screen text where tesseract is installed.
+  // Without the desktop app (the server on its own): picture and window title; screen text where the tesseract program is installed.
   const be = screenBackend();
   const fg = await be.foreground();
   if (skipReason(fg.app, fg.title, s.excludeApps)) return { t: Date.now(), app: fg.app, title: fg.title, skipped: "rule" };

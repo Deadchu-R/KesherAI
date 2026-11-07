@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, screen as displays } from "electron";
 import { join, resolve } from "node:path";
 import { chmod, readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -63,6 +63,19 @@ async function startCore(): Promise<string> {
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
     pluginRoots: [join(root, "plugins")],
     ...(await googleClient()),
+    // "My day" takes its pictures with Electron's own screen capture (antivirus programs block a script doing it).
+    screen: {
+      idleSec: () => powerMonitor.getSystemIdleTime(),
+      shot: async () => {
+        const d = displays.getPrimaryDisplay();
+        const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
+        const [src] = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: size });
+        if (!src) throw new Error("The screen could not be captured.");
+        const img = src.thumbnail;
+        const small = img.resize({ width: Math.min(1280, size.width) });
+        return { png: img.toPNG(), jpeg: small.toJPEG(55), tiny: img.resize({ width: 32, height: 18 }).toBitmap() };
+      },
+    },
     // An installed copy updates from the project's GitHub releases: download the installer, run it, quit.
     ...(app.isPackaged
       ? {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
 import { McpSection } from "../McpSection";
+import { DevicesSection } from "../DevicesSection";
 
 interface ProviderRow {
   id: string; type: string; name?: string; baseUrl?: string; location?: string;
@@ -99,6 +100,8 @@ export function ConnectionsPage() {
           <div style={{ alignSelf: "end" }}><button type="submit" className="primary">{t("add")}</button></div>
         </form>
       </section>
+
+      <DevicesSection />
 
       <McpSection />
 
