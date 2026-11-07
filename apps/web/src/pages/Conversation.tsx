@@ -304,18 +304,6 @@ export function ConversationPage({ id }: { id: string }) {
             {conv.kind === "code" ? "</> " : ""}{title}
           </button>
         )}
-        <select value={conv.modelId} onChange={(e) => void patch({ modelId: e.target.value })} aria-label={t("pickModel")}>
-          {modelOptions.map((m) => (
-            <option key={m.id} value={m.id}>{m.name} · {m.providerId || "?"}</option>
-          ))}
-        </select>
-        {conv.kind === "code" && (
-          <select value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
-            <option value="ask">{t("modeAsk")}</option>
-            <option value="auto-edit">{t("modeAutoEdit")}</option>
-            <option value="auto">{t("modeAuto")}</option>
-          </select>
-        )}
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
         )}
@@ -389,9 +377,6 @@ export function ConversationPage({ id }: { id: string }) {
           }}
         >
           <div className="box">
-            {desktop()?.pickFiles && (
-              <button type="button" className="attach" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>📎</button>
-            )}
             <textarea
               rows={2}
               value={input}
@@ -405,11 +390,27 @@ export function ConversationPage({ id }: { id: string }) {
                 }
               }}
             />
-            {busy ? (
-              <button type="button" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })}>{t("stop")}</button>
-            ) : (
-              <button type="submit" className="primary" disabled={!input.trim()}>{t("send")}</button>
-            )}
+            <div className="box-bar">
+              {desktop()?.pickFiles && (
+                <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>
+              )}
+              <select className="model-chip" value={conv.modelId} onChange={(e) => void patch({ modelId: e.target.value })} aria-label={t("pickModel")}>
+                {modelOptions.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} · {m.providerId || "?"}</option>
+                ))}
+              </select>
+              <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
+                <option value="ask">{t("modeAsk")}</option>
+                <option value="auto-edit">{t("modeAutoEdit")}</option>
+                <option value="auto">{t("modeAuto")}</option>
+              </select>
+              <span className="grow" />
+              {busy ? (
+                <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })} aria-label={t("stop")}>■</button>
+              ) : (
+                <button type="submit" className="primary send" disabled={!input.trim()} aria-label={t("send")}>↑</button>
+              )}
+            </div>
           </div>
         </form>
       </div>

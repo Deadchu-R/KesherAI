@@ -145,12 +145,17 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         {branding.productName}
       </div>
       <div className="sidebar-actions">
-        <button type="button" className="primary" onClick={() => void createConversation({ kind: "chat" }).catch((e: Error) => toast(e.message))}>
-          {t("newChat")}
+        <a className="nav-link new-chat" href="#/" aria-current={hash === "#/" ? "page" : undefined}>
+          <span className="plus" aria-hidden>+</span> {t("newChat")}
+        </a>
+        <button type="button" className="nav-link as-link" onClick={() => setDialog("code")}>
+          <span className="plus" aria-hidden>{"</>"}</span> {t("newCode")}
         </button>
-        <button type="button" onClick={() => setDialog("code")}>
-          {t("newCode")}
-        </button>
+        {nav.map(([h, label]) => (
+          <a key={h} href={h} className="nav-link" aria-current={hash === h ? "page" : undefined}>
+            {t(label)}
+          </a>
+        ))}
       </div>
 
       <div className="sidebar-scroll">
@@ -187,7 +192,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         })}
 
         <div className="section-head">
-          <span>{t("chats")}</span>
+          <span>{t("recents")}</span>
         </div>
         {loose.length === 0 && <p className="muted" style={{ padding: "0 12px" }}>{t("noConversations")}</p>}
         {loose.map((c) => (
@@ -195,13 +200,6 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         ))}
       </div>
 
-      <div className="sidebar-nav">
-        {nav.map(([h, label]) => (
-          <a key={h} href={h} className="nav-link" aria-current={hash === h ? "page" : undefined}>
-            {t(label)}
-          </a>
-        ))}
-      </div>
       <div className="sidebar-foot">
         <span>
           <span style={{ color: online ? "var(--good)" : "var(--bad)" }}>●</span> {location.host} · {version}

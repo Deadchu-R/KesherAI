@@ -3,6 +3,8 @@ import { join, normalize, sep } from "node:path";
 import { statfs } from "node:fs/promises";
 import { detectHardwareCached, estimatePerformance, listHubFiles, modelSummary, searchHub, type DownloadJob, type HubSort } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
+import { RECOMMENDED_IMAGE_MODELS, isMlx } from "../sdcpp.js";
+import { existsSync } from "node:fs";
 import { startSSE } from "../sse.js";
 
 /** Body of `POST /api/downloads`. */
@@ -117,6 +119,18 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     );
   });
 
+  /** Image models that run in the built-in engine, with whether each is downloaded. */
+  app.get("/api/models/recommended-images", async () => {
+    const hw = await detectHardwareCached();
+    return Promise.all(
+      RECOMMENDED_IMAGE_MODELS.map(async (m) => {
+        const dest = join(s.paths.models, "image", m.repo, m.file);
+        const req = await s.sd.requirements(m.file);
+        return { ...m, downloaded: existsSync(dest), extras: req.extras, engineInstalled: req.engineInstalled, vramGb: Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3)) };
+      }),
+    );
+  });
+
   /** Free space on the drive models are saved to. */
   app.get("/api/disk", async () => diskInfo(s.paths.models));
 
@@ -147,8 +161,10 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     const totalGb = items.filter((i) => !i.have).reduce((n, i) => n + i.sizeGb, 0);
     const disk = await diskInfo(s.paths.models);
     const hw = await detectHardwareCached();
+    const mlx = isMlx(`${repo}/${path}`) && process.platform !== "darwin";
     return {
       items,
+      ...(mlx ? { warning: "mlx" } : {}),
       totalGb,
       freeGb: disk.freeGb,
       fitsDisk: disk.freeGb === undefined || disk.freeGb > totalGb + 1,

@@ -253,6 +253,7 @@ export function ModelsPage() {
       {error && <p className="error">{error}</p>}
 
       {tab === "chat" && <StartHere onChange={refreshLocal} />}
+      {tab === "image" && <ImageStartHere />}
       {current.engine === "soon" && <p className="card muted">{t("engineSoon", { category: current.label })}</p>}
 
       {tab !== "storage" && (
@@ -406,5 +407,64 @@ function ModelFolders({ onChange }: { onChange: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+interface RecImage {
+  id: string; name: string; repo: string; file: string; note: { en: string; he?: string };
+  downloaded: boolean; engineInstalled: boolean; vramGb: number;
+  extras: Array<{ name: string; sizeGb: number; have: boolean }>;
+}
+
+/** Image models that run in the built-in engine on this computer: download, then use from any chat. */
+function ImageStartHere() {
+  const [list, setList] = useState<RecImage[]>([]);
+  const [active, setActive] = useState("");
+  const [msg, setMsg] = useState("");
+  const downloads = useDownloads();
+  const done = downloads.filter((j) => j.status === "done").length;
+  useEffect(() => {
+    void api<RecImage[]>("/api/models/recommended-images").then(setList).catch(() => undefined);
+    void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setActive(s.activeModels.image ?? "")).catch(() => undefined);
+  }, [done]);
+  const idOf = (m: RecImage) => `sdcpp/${m.repo}/${m.file}`;
+  const download = async (m: RecImage) => {
+    setMsg("");
+    try {
+      await api("/api/downloads", { method: "POST", body: { repo: m.repo, path: m.file, category: "image" } });
+      setMsg(t("imageDownloading"));
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+  const use = async (m: RecImage) => {
+    const s = await api<{ activeModels: Record<string, string> }>("/api/settings");
+    await api("/api/settings", { method: "PUT", body: { activeModels: { ...s.activeModels, image: idOf(m) } } });
+    setActive(idOf(m));
+  };
+  if (!list.length) return null;
+  return (
+    <section className="card stack">
+      <h2>{t("imageStartHere")}</h2>
+      <p className="muted">{t("imageStartHint")}</p>
+      <div className="rec-grid">
+        {list.map((m) => {
+          const missing = m.extras.filter((e) => !e.have);
+          return (
+            <div key={m.id} className="card rec">
+              <strong>{m.name}</strong>
+              <p className="muted">{m.note[getLocale() as "he"] ?? m.note.en}</p>
+              {missing.length > 0 && <p className="muted small">{t("imageExtras", { gb: missing.reduce((n, e) => n + e.sizeGb, 0).toFixed(1) })}</p>}
+              {m.downloaded ? (
+                active === idOf(m) ? <span className="pill good" style={{ alignSelf: "flex-start" }}>{t("imageActive")}</span> : <button type="button" className="primary" onClick={() => void use(m)}>{t("imageUse")}</button>
+              ) : (
+                <button type="button" className="primary" onClick={() => void download(m)}>{t("download")}</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {msg && <p className="muted">{msg}</p>}
+    </section>
   );
 }

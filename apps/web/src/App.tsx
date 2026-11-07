@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { t } from "./i18n";
 import { Sidebar } from "./Sidebar";
-import { createConversation, toast, useLibrary, useToast } from "./library";
+import { createConversation, refreshLibrary, toast, useToast } from "./library";
+import { useModels } from "./useModels";
 import { ConversationPage } from "./pages/Conversation";
 import { ImagesPage } from "./pages/Images";
 import { ModelsPage } from "./pages/Models";
@@ -21,20 +22,67 @@ function useHash(): string {
   return hash;
 }
 
-/** The start screen: open the latest conversation, or offer to start one. */
+/**
+ * The start screen, like Claude's: a greeting and one big message box in
+ * the middle. Writing there starts a new chat with the chosen model.
+ */
 function Home() {
-  const { conversations } = useLibrary();
+  const { models } = useModels("chat");
+  const [text, setText] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (conversations[0]) location.replace(`#/c/${conversations[0].id}`);
-  }, [conversations]);
+    void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setModelId((m) => m || s.activeModels.chat || "")).catch(() => undefined);
+  }, []);
+  const hour = new Date().getHours();
+  const greeting = t(hour < 5 ? "greetNight" : hour < 12 ? "greetMorning" : hour < 18 ? "greetDay" : "greetEvening");
+  const start = async () => {
+    const value = text.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    try {
+      const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}) });
+      if (!id) return;
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value } });
+      void refreshLibrary().catch(() => undefined);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const ideas = [t("ideaExe"), t("ideaImage"), t("ideaCode"), t("ideaExplain")];
   return (
-    <div className="page home">
-      <p className="muted">{t("noConversations")}</p>
-      <div className="row">
-        <button type="button" className="primary" onClick={() => void createConversation({ kind: "chat" }).catch((e: Error) => toast(e.message))}>
-          {t("newChat")}
-        </button>
-        <a className="btn" href="#/models">{t("models")}</a>
+    <div className="home">
+      <h1 className="greeting">{greeting}</h1>
+      <form className="composer home-composer" onSubmit={(e) => { e.preventDefault(); void start(); }}>
+        <div className="box">
+          <textarea
+            rows={3}
+            autoFocus
+            value={text}
+            placeholder={t("homePlaceholder")}
+            aria-label={t("messagePlaceholder")}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void start();
+              }
+            }}
+          />
+          <div className="box-bar">
+            <select className="model-chip" value={modelId} onChange={(e) => setModelId(e.target.value)} aria-label={t("pickModel")}>
+              {!modelId && <option value="">{t("pickModel")}</option>}
+              {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <span className="grow" />
+            <button type="submit" className="primary send" disabled={!text.trim() || busy} aria-label={t("send")}>↑</button>
+          </div>
+        </div>
+      </form>
+      <div className="ideas">
+        {ideas.map((i) => <button key={i} type="button" onClick={() => setText(i)}>{i}</button>)}
       </div>
     </div>
   );

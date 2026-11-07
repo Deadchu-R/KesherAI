@@ -287,3 +287,26 @@ button.on { border-color: var(--accent); }
 .plan-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .plan-items li { display: flex; gap: 12px; font-size: 14px; }
 .plan-items li.have { color: var(--muted); }
+
+/* Claude-like layout: home message box, composer bar, sidebar on top */
+.composer .box { flex-direction: column; align-items: stretch; gap: 6px; padding: 12px 14px 10px; }
+.composer textarea { min-height: 28px; max-height: 40vh; font-size: 15px; }
+.box-bar { display: flex; align-items: center; gap: 6px; }
+.model-chip { height: 32px; border: 0; background: transparent; color: var(--muted); font-size: 13px; padding: 0 8px; border-radius: 8px; max-width: 46%; }
+.model-chip:hover, .model-chip:focus { background: var(--panel-2); color: var(--text); }
+.chip { height: 32px; width: 32px; padding: 0; border-radius: 8px; border: 1px solid var(--border-strong); background: transparent; font-size: 18px; color: var(--muted); }
+.send { width: 34px; height: 34px; padding: 0; border-radius: 10px; font-size: 17px; font-weight: 700; }
+.send.stop { background: var(--raised); color: var(--text); }
+.home { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 40px 20px 15vh; }
+.greeting { font-size: 34px; font-weight: 500; letter-spacing: -0.02em; text-align: center; }
+.home-composer { position: static; width: min(720px, 100%); padding: 0; background: none; }
+.home-composer textarea { min-height: 72px; }
+.ideas { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: min(720px, 100%); }
+.ideas button { height: 34px; border-radius: 999px; font-size: 13px; color: var(--text-2); background: transparent; }
+.sidebar-actions { display: flex; flex-direction: column; gap: 2px; padding: 0 0 8px; }
+.nav-link.as-link { text-align: start; height: auto; width: 100%; border: 0; background: none; font-size: 14px; }
+.nav-link .plus { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; margin-inline-end: 6px; font-size: 14px; }
+.nav-link.as-link .plus { background: var(--raised); color: var(--text-2); font-size: 9px; }
+.topbar { padding: 10px 24px; border-bottom: 0; }
+.title-btn { font-weight: 500; }
+.composer textarea { resize: none; }

@@ -142,6 +142,22 @@ async function findFile(dir: string, name: string): Promise<string | undefined> 
   return undefined;
 }
 
+/**
+ * Whether a file is in Apple's MLX format (runs only on Apple Silicon Macs, not in stable-diffusion.cpp or llama.cpp).
+ *
+ * @param path - File path or repo and file name.
+ * @returns True for MLX.
+ */
+export function isMlx(path: string): boolean {
+  return /(^|[-_./ ])mlx([-_./ ]|$)/i.test(path);
+}
+
+/** Image models that run in the built-in engine, offered under Models → Images. */
+export const RECOMMENDED_IMAGE_MODELS = [
+  { id: "qwen-image-2512", name: "Qwen-Image 2512", repo: "unsloth/Qwen-Image-2512-GGUF", file: "qwen-image-2512-Q4_K_M.gguf", note: { en: "The best quality, and good at text inside images. Needs a strong GPU (12 GB+ is comfortable).", he: "האיכות הגבוהה ביותר, וטוב בטקסט בתוך תמונות. צריך כרטיס חזק (12 GB ומעלה בנוח)." } },
+  { id: "flux-schnell", name: "FLUX.1 schnell", repo: "second-state/FLUX.1-schnell-GGUF", file: "flux1-schnell-Q4_0.gguf", note: { en: "Fast: a good image in 4 steps. Works well on 8 GB GPUs.", he: "מהיר: תמונה טובה ב-4 צעדים. עובד טוב על כרטיסים של 8 GB." } },
+] as const;
+
 /** Thrown when the engine or a model's extra files are still downloading. */
 export class PreparingError extends Error {}
 
@@ -301,6 +317,11 @@ export class SdEngine {
    * @throws PreparingError while the engine or the model's extra files download.
    */
   async generate(modelFile: string, req: Omit<ProviderImageRequest, "providerModelId">, signal?: AbortSignal): Promise<GeneratedFile> {
+    if (isMlx(modelFile)) {
+      throw new Error(
+        `${basename(modelFile)} is in Apple's MLX format, which runs only on Mac computers. Download a GGUF version of the model instead (Models → Images shows ones that run on this computer).`,
+      );
+    }
     if (!(await this.ready(modelFile))) {
       const gb = this.prepare(modelFile);
       throw new PreparingError(
@@ -376,7 +397,7 @@ export function sdProvider(engine: SdEngine): Provider {
       return true;
     },
     async listModels(): Promise<ModelInfo[]> {
-      return (await engine.models()).map((m) => ({
+      return (await engine.models()).filter((m) => process.platform === "darwin" || !isMlx(m.rel)).map((m) => ({
         id: `sdcpp/${m.rel}`,
         providerId: "sdcpp",
         providerModelId: m.rel,

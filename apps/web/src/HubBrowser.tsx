@@ -185,6 +185,7 @@ function HubRow({ m, open, onToggle, label, onDownloaded }: { m: HubModel; open:
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                 {f.estimate && <RatingBadge e={f.estimate} />}
                 {/\.(ckpt|bin|pt|pth)$/i.test(f.path) && <span className="pill bad" title={t("pickleWarning")}>pickle</span>}
+                {/(^|[-_./ ])mlx([-_./ ]|$)/i.test(`${m.repo}/${f.path}`) && <span className="pill bad" title={t("planMlx")}>{t("macOnly")}</span>}
                 <button type="button" className={started.includes(f.path) ? "" : "primary"} disabled={started.includes(f.path)} onClick={() => void askDownload(f)}>
                   {started.includes(f.path) ? t("dl-queued") : t("download")}
                 </button>
@@ -201,6 +202,8 @@ function HubRow({ m, open, onToggle, label, onDownloaded }: { m: HubModel; open:
 interface Plan {
   items: Array<{ name: string; sizeGb: number; have: boolean; why: "model" | "extra" | "engine" }>;
   totalGb: number;
+  /** `mlx`: the file runs only on Mac computers. */
+  warning?: "mlx";
   freeGb?: number;
   fitsDisk: boolean;
   estimate?: Estimate;
@@ -228,6 +231,7 @@ function PlanBox({ plan, onCancel, onConfirm }: { plan?: Plan; onCancel: () => v
         <strong className="grow">{t("planTotal", { size: size(plan.totalGb) })}</strong>
         {plan.freeGb !== undefined && <span className={plan.fitsDisk ? "muted" : "error"}>{t("diskFree", { gb: plan.freeGb.toFixed(0) })}</span>}
       </div>
+      {plan.warning === "mlx" && <p className="error">{t("planMlx")}</p>}
       {plan.estimate && plan.estimate.rating === "too-big" && <p className="error">{t("planTooBig")}</p>}
       {!plan.fitsDisk && <p className="error">{t("planNoSpace")}</p>}
       <div className="row">
