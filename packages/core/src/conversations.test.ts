@@ -293,3 +293,29 @@ test("approvals waiting in any conversation are listed and can be answered (watc
     await server.close();
   }
 });
+
+test("conversation search finds words in messages and answers, Hebrew prefixes too", async () => {
+  const { server } = await setup();
+  const app = server.app;
+  try {
+    await app.inject({ method: "PUT", url: "/api/settings", payload: { activeModels: { chat: "fake/m" } } });
+    const ids: string[] = [];
+    for (const text of ["איך מגדירים את הקמרה ב-Unity?", "a recipe for pancakes"]) {
+      const c = (await app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat" } })).json() as { id: string };
+      ids.push(c.id);
+      await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text } });
+      await until(async () => {
+        const v = (await app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { events: Array<{ type: string }>; session: { status: string } };
+        return v.session.status === "idle" && v.events.some((e) => e.type === "assistant") ? true : undefined;
+      });
+    }
+    const hits = (await app.inject({ method: "GET", url: `/api/conversations/search?q=${encodeURIComponent("והקמרה")}` })).json() as Array<{ id: string; snippet: string }>;
+    assert.equal(hits[0]?.id, ids[0]);
+    assert.match(hits[0]!.snippet, /קמרה/);
+    const p = (await app.inject({ method: "GET", url: "/api/conversations/search?q=pancakes" })).json() as Array<{ id: string }>;
+    assert.deepEqual(p.map((h) => h.id), [ids[1]]);
+    assert.deepEqual((await app.inject({ method: "GET", url: "/api/conversations/search?q=" })).json(), []);
+  } finally {
+    await server.close();
+  }
+});

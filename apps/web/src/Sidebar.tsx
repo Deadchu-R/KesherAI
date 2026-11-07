@@ -120,6 +120,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const { projects, conversations } = useLibrary();
   const [dialog, setDialog] = useState<"code" | "project" | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const searching = useSearching();
   const [version, setVersion] = useState("");
   const activeId = hash.startsWith("#/c/") ? hash.slice(4) : "";
   const pluginPages = usePluginUi().pages;
@@ -156,7 +157,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
       <QuickMenu />
-      <div className="sidebar-actions">
+      <ConversationSearch />
+      {!searching && <div className="sidebar-actions">
         <a className="nav-link new-chat" href="#/" aria-current={hash === "#/" ? "page" : undefined}>
           <span className="plus" aria-hidden>+</span> {t("newChat")}
         </a>
@@ -177,9 +179,10 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
             </a>
           );
         })}
-      </div>
+      </div>}
 
       <div className="sidebar-scroll">
+        {!searching && (<>
         <div className="section-head">
           <span>{t("projects")}</span>
           <button type="button" className="icon-btn" aria-label={t("newProject")} onClick={() => setDialog("project")}>
@@ -219,6 +222,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         {loose.map((c) => (
           <ConversationLink key={c.id} c={c} active={c.id === activeId} />
         ))}
+        </>)}
       </div>
 
       <div className="sidebar-foot">
@@ -263,5 +267,48 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       </div>
       {dialog && <NewDialog kind={dialog} onClose={() => setDialog(null)} />}
     </nav>
+  );
+}
+
+let searchQuery = "";
+const searchListeners = new Set<(q: string) => void>();
+/** @returns Whether the sidebar's search box has text (then it shows results instead of lists). */
+function useSearching(): boolean {
+  const [q, setQ] = useState(searchQuery);
+  useEffect(() => {
+    searchListeners.add(setQ);
+    return () => void searchListeners.delete(setQ);
+  }, []);
+  return !!q.trim();
+}
+
+interface Hit { id: string; title: string; updatedAt: string; kind: string; snippet: string; role: string }
+
+/** Search every conversation, from the sidebar. */
+function ConversationSearch() {
+  const [q, setQ] = useState(searchQuery);
+  const [hits, setHits] = useState<Hit[] | null>(null);
+  useEffect(() => {
+    searchQuery = q;
+    for (const l of searchListeners) l(q);
+    if (!q.trim()) return setHits(null);
+    const id = setTimeout(() => void api<Hit[]>(`/api/conversations/search?q=${encodeURIComponent(q)}`).then(setHits, () => setHits([])), 250);
+    return () => clearTimeout(id);
+  }, [q]);
+  return (
+    <div className="conv-search">
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("searchChats")} aria-label={t("searchChats")} onKeyDown={(e) => e.key === "Escape" && setQ("")} />
+      {hits && (
+        <div className="conv-hits">
+          {hits.length === 0 && <p className="muted small">{t("searchNone")}</p>}
+          {hits.map((h) => (
+            <a key={h.id} className="conv-hit" href={`#/c/${h.id}`}>
+              <span className="conv-hit-title" dir="auto">{h.kind === "code" ? "</> " : ""}{h.title}</span>
+              <span className="muted small" dir="auto">{h.snippet}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

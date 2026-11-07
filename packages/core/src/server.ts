@@ -33,6 +33,7 @@ import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
 import { Pipelines } from "./pipelines.js";
 import { ComfyManager } from "./comfy-manager.js";
+import { ConversationSearch } from "./conversation-search.js";
 import { comfyRoutes } from "./routes/comfy.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
 import { transcribeWith } from "./speech-tools.js";
@@ -373,6 +374,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     skills,
     pipelines,
     comfy,
+    conversationSearch: new ConversationSearch(library),
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,

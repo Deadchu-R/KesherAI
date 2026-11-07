@@ -67,6 +67,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.library.listConversations(q === undefined ? undefined : q === "none" ? null : q);
   });
 
+  /** Search every conversation: `?q=words` → the best matches with a passage. */
+  app.get<{ Querystring: { q?: string; limit?: string } }>("/api/conversations/search", async (req) => s.conversationSearch.search(String(req.query.q ?? ""), Math.min(50, Math.max(1, Number(req.query.limit) || 20))));
+
   /** Which conversations are working right now (`running`) or waiting for an answer (`waiting`). */
   app.get("/api/conversations/activity", async () => s.conversations.activity());
 
