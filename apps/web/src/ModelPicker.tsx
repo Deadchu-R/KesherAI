@@ -33,11 +33,18 @@ export function pickModel(category: string): Promise<string | null> {
 export function ModelPickerHost() {
   const [req, setReq] = useState<Request | null>(null);
   const [models, setModels] = useState<ModelInfo[] | null>(null);
+  const [choice, setChoice] = useState("");
   useEffect(() => {
     show = (r) => {
       setReq(r);
       setModels(null);
-      void api<{ models: ModelInfo[] }>("/api/models").then((l) => setModels(l.models)).catch(() => setModels([]));
+      setChoice("");
+      void api<{ models: ModelInfo[] }>("/api/models")
+        .then((l) => {
+          setModels(l.models);
+          setChoice(l.models.find((m) => m.category === r.category)?.id ?? "");
+        })
+        .catch(() => setModels([]));
     };
     return () => {
       show = undefined;
@@ -70,23 +77,26 @@ export function ModelPickerHost() {
         {models === null && <p className="muted">{t("loading")}</p>}
         {models !== null && list.length > 0 && (
           <>
+            <label className="stack">
+              {t("model")}
+              <select autoFocus value={choice} onChange={(e) => setChoice(e.target.value)} dir="ltr">
+                {[...new Set(list.map((m) => m.providerId))].map((p) => (
+                  <optgroup key={p} label={p}>
+                    {list.filter((m) => m.providerId === p).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
             <p className="muted">{t("pickModelHint")}</p>
-            <div className="list pick-list">
-              {list.map((m) => (
-                <button key={m.id} type="button" className="pick-row" onClick={() => void choose(m.id)}>
-                  <strong dir="ltr">{m.name}</strong>
-                  <span className="muted mono" dir="ltr">{m.providerId}</span>
-                </button>
-              ))}
-            </div>
           </>
         )}
         {models !== null && list.length === 0 && <p>{t("pickModelNone", { category: label })}</p>}
         <div className="row">
-          <button type="button" className={list.length ? "" : "primary"} onClick={() => go("#/models")}>{t("pickModelDownload")}</button>
+          <button type="button" onClick={() => go("#/models")}>{t("pickModelDownload")}</button>
           <button type="button" onClick={() => go("#/connections")}>{t("pickModelConnect")}</button>
           <span className="grow" />
           <button type="button" onClick={() => close(null)}>{t("cancel")}</button>
+          {list.length > 0 && <button type="button" className="primary" disabled={!choice} onClick={() => void choose(choice)}>{t("useModel")}</button>}
         </div>
       </div>
     </div>

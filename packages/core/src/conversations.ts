@@ -49,12 +49,6 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string): Model
   };
 }
 
-/**
- * Owns the live agent sessions behind conversations: creates them, loads
- * saved ones on first use, gives them the right tools (file and terminal
- * tools in code conversations, a tool per active media model, plugin
- * tools) and saves them as they change.
- */
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
   /** @param category - The category that needs a model, e.g. `chat`. */
@@ -63,6 +57,12 @@ export class NoModelError extends Error {
   }
 }
 
+/**
+ * Owns the live agent sessions behind conversations: creates them, loads
+ * saved ones on first use, gives them the right tools (file and terminal
+ * tools in code conversations, a tool per active media model, plugin
+ * tools) and saves them as they change.
+ */
 export class ConversationManager {
   private readonly sessions = new Map<string, AgentSession>();
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
