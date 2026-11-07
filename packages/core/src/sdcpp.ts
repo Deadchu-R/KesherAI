@@ -619,6 +619,13 @@ export async function ensureVideoModel(d: { sd: SdEngine; downloads: DownloadMan
   return { message: `There was no video model yet, so KesherAI started downloading ${m.name} (about ${(f.size / 1024 ** 3 + extraGb).toFixed(1)} GB with its text encoder and VAE). Tell the user it is downloading (they can follow it in the downloads circle) and to ask again when it is done.` };
 }
 
+/**
+ * Finds an image model that runs on this computer, or starts downloading one
+ * that fits (Qwen-Image with 12 GB of graphics memory or more, else Flux).
+ *
+ * @param d - Engine, downloads, config and models folder.
+ * @returns The model id, or a message to tell the user.
+ */
 export async function ensureImageModel(d: {
   sd: SdEngine;
   downloads: DownloadManager;
