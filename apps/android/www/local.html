@@ -112,6 +112,11 @@
   <main id="modelsView">
     <p class="intro" data-he="מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום." data-en="Small models that run on the phone itself, with no computer and no internet (after the download). They are slower and less capable than models on your computer, but work anywhere.">מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום.</p>
     <p class="intro" id="memNote"></p>
+    <section class="api fast" id="fastSection" hidden>
+      <h2 data-he="מהיר במיוחד: המנוע של Google לטלפונים" data-en="Extra fast: Google's engine for phones">מהיר במיוחד: המנוע של Google לטלפונים</h2>
+      <p class="intro" data-he="מודלים שהוכנו לטלפונים ורצים על הכרטיס הגרפי (Adreno ב-Snapdragon) עם המנוע של Google, ‏LiteRT. מהירים בהרבה מהמודלים שלמטה." data-en="Models prepared for phones that run on the graphics chip (Adreno on Snapdragon) with Google's LiteRT engine. Much faster than the models below.">מודלים שהוכנו לטלפונים ורצים על הכרטיס הגרפי (Adreno ב-Snapdragon) עם המנוע של Google, ‏LiteRT. מהירים בהרבה מהמודלים שלמטה.</p>
+      <div id="fastList"></div>
+    </section>
     <div id="modelList"></div>
     <section class="api" id="apiSection">
       <h2 data-he="מודלים דרך האינטרנט (API)" data-en="Models over the internet (API)">מודלים דרך האינטרנט (API)</h2>
@@ -397,6 +402,108 @@
     }
   }
 
+  // ---------- extra fast: Google's on-device runtime (native plugin), on the graphics chip ----------
+  const LLM = window.Capacitor?.Plugins?.KesherLlm;
+  const FAST = [
+    { repo: "litert-community/Qwen2.5-1.5B-Instruct", name: "Qwen 2.5 · 1.5B", family: "chatml", he: "מומלץ: מהיר מאוד, עברית סבירה.", en: "Recommended: very fast, fair Hebrew." },
+    { repo: "litert-community/Qwen2.5-0.5B-Instruct", name: "Qwen 2.5 · 0.5B", family: "chatml", he: "הכי מהיר, לשאלות קצרות.", en: "Fastest, for short questions." },
+    { repo: "litert-community/Qwen2.5-3B-Instruct", name: "Qwen 2.5 · 3B", family: "chatml", he: "חכם יותר, עדיין מהיר בטלפון חזק.", en: "Smarter, still fast on a strong phone." },
+    { repo: "litert-community/DeepSeek-R1-Distill-Qwen-1.5B", name: "DeepSeek R1 · 1.5B", family: "deepseek", he: "חושב לפני שעונה (הגיון ומתמטיקה).", en: "Thinks before answering (reasoning, maths)." },
+    { repo: "litert-community/Phi-4-mini-instruct", name: "Phi-4 mini · 3.8B", family: "phi", he: "של Microsoft, חזק באנגלית ובהגיון.", en: "From Microsoft, strong in English and reasoning." },
+  ];
+  /** Puts the chat in the model's own format (these files expect the raw prompt). */
+  function promptFor(family, msgs) {
+    const text = (m) => (typeof m.content === "string" ? m.content : m.content.map((p) => p.text ?? "").join(" "));
+    if (family === "phi") return msgs.map((m) => `<|${m.role}|>${text(m)}<|end|>`).join("") + "<|assistant|>";
+    if (family === "gemma") return msgs.filter((m) => m.role !== "system").map((m, i) => `<start_of_turn>${m.role === "assistant" ? "model" : "user"}\n${i === 0 && msgs[0].role === "system" ? msgs[0].content + "\n\n" : ""}${text(m)}<end_of_turn>\n`).join("") + "<start_of_turn>model\n";
+    if (family === "deepseek") return msgs.map((m) => (m.role === "user" ? `<｜User｜>${text(m)}` : m.role === "assistant" ? `<｜Assistant｜>${text(m)}<｜end▁of▁sentence｜>` : text(m))).join("") + "<｜Assistant｜>";
+    return msgs.map((m) => `<|im_start|>${m.role}\n${text(m)}<|im_end|>\n`).join("") + "<|im_start|>assistant\n";
+  }
+  async function fastFile(item) {
+    const key = "kesherai-phone-fast:" + item.repo;
+    const c = localStorage.getItem(key);
+    if (c) return JSON.parse(c);
+    const files = await getJson(`https://huggingface.co/api/models/${item.repo}/tree/main`, {});
+    const tasks = files.filter((f) => /\.task$/i.test(f.path)).map((f) => ({ path: f.path, size: f.size ?? f.lfs?.size ?? 0 }));
+    // Prefer the 4096-token context, 8-bit, multi-prefill builds (they run on the graphics chip).
+    const score = (p) => (/ekv4096/i.test(p) ? 4 : /ekv2048/i.test(p) ? 3 : /ekv1280/i.test(p) ? 2 : 1) + (/q8/i.test(p) ? 0.5 : 0) + (/multi-prefill/i.test(p) ? 0.3 : 0) - (/web|cpu/i.test(p) ? 3 : 0);
+    const pick = tasks.sort((a, b) => score(b.path) - score(a.path))[0];
+    if (!pick) throw new Error(T("אין גרסה לטלפון", "No phone build"));
+    const f = { ...pick, name: pick.path.split("/").pop() };
+    localStorage.setItem(key, JSON.stringify(f));
+    return f;
+  }
+  async function renderFast() {
+    if (!LLM) return;
+    $("fastSection").hidden = false;
+    const list = $("fastList");
+    const have = ((await LLM.list().catch(() => ({ models: [] }))).models ?? []).map((m) => m.name);
+    list.replaceChildren();
+    for (const item of FAST) {
+      const card = document.createElement("div");
+      card.className = "model";
+      card.innerHTML = `<div class="top"><strong></strong><span class="size"></span></div><span class="rating"></span><p></p><div class="bar" hidden><span></span></div><div class="row"></div>`;
+      card.querySelector("strong").textContent = item.name;
+      card.querySelector("p").textContent = item[lang];
+      list.append(card);
+      const row = card.querySelector(".row");
+      let f;
+      try { f = await fastFile(item); } catch (e) { row.textContent = String(e.message || e); continue; }
+      card.querySelector(".size").textContent = gb(f.size);
+      const url = `native:${f.name}`;
+      const sp = measured(url);
+      const badge = card.querySelector(".rating");
+      badge.textContent = sp ? `${T("נמדד", "Measured")}: ${sp.toFixed(1)} ${T("טוקנים/שנייה", "tokens/s")}${localStorage.getItem("kesherai-phone-backend:" + f.name) === "cpu" ? T(" · מעבד", " · processor") : T(" · כרטיס גרפי", " · graphics chip")}` : T("רץ על הכרטיס הגרפי", "Runs on the graphics chip");
+      badge.className = "rating good";
+      const btn = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
+      const it = { name: `${item.name} ⚡`, native: { file: f.name, family: item.family } };
+      if (have.includes(f.name)) {
+        btn(T("פתח צ'אט", "Open chat"), "primary", () => openChat(it, url));
+        btn(T("מחק", "Delete"), "", async () => { await LLM.remove({ name: f.name }); renderFast(); });
+      } else {
+        const dl = btn(T("הורד", "Download") + ` (${gb(f.size)})`, "primary", async () => {
+          dl.disabled = true;
+          const bar = card.querySelector(".bar");
+          bar.hidden = false;
+          const sub = await LLM.addListener("progress", (e) => {
+            if (e.name !== f.name) return;
+            const pct = e.total ? Math.round((e.received / e.total) * 100) : 0;
+            bar.firstElementChild.style.width = pct + "%";
+            dl.textContent = `${T("מוריד", "Downloading")} ${pct}%`;
+            bg(`dl:${f.name}`, { title: T(`מוריד את ${item.name}`, `Downloading ${item.name}`), text: `${pct}% · ${gb(e.received)} / ${gb(e.total)}`, progress: pct });
+          });
+          try {
+            await LLM.download({ url: `https://huggingface.co/${item.repo}/resolve/main/${f.path}`, name: f.name });
+            doneNotice(T("ההורדה הסתיימה", "Download finished"), item.name);
+            renderFast();
+          } catch (e) {
+            dl.disabled = false;
+            dl.textContent = T("נסה שוב", "Try again");
+            card.querySelector("p").textContent = T("ההורדה נכשלה: ", "Download failed: ") + (e.message || e);
+          } finally {
+            sub.remove?.();
+            bg(`dl:${f.name}`);
+          }
+        });
+      }
+    }
+  }
+
+  /** Streams an answer from the native runtime. */
+  async function nativeAnswer(native, msgs, signal, onText) {
+    const sub = await LLM.addListener("token", (e) => onText(e.text));
+    const stop = () => LLM.stop();
+    signal.addEventListener("abort", stop, { once: true });
+    try {
+      const r = await LLM.generate({ prompt: promptFor(native.family, msgs) });
+      if (r.tokens > 8 && r.ms > 0) rememberSpeed(`native:${native.file}`, r.tokens / (r.ms / 1000));
+      if (signal.aborted) throw new DOMException("stopped", "AbortError");
+    } finally {
+      sub.remove?.();
+      signal.removeEventListener("abort", stop);
+    }
+  }
+
   // ---------- models over the internet (API keys), synced with the computer ----------
   const PRESETS = [
     { id: "anthropic", name: "Anthropic (Claude)", baseUrl: "https://api.anthropic.com/v1", type: "anthropic" },
@@ -522,6 +629,7 @@
   $("syncNow").onclick = () => syncWithComputer(false);
   renderApi();
   syncWithComputer(true);
+  renderFast();
 
   /** Streams an answer from a model over the internet (OpenAI-compatible chat completions). */
   async function apiAnswer(api, msgs, signal, onText) {
@@ -641,6 +749,21 @@
     }
     show("chat");
     if (item.api) { $("status").textContent = T("מודל דרך האינטרנט", "A model over the internet"); return; }
+    if (item.native) {
+      $("status").textContent = T("טוען את המודל לכרטיס הגרפי…", "Loading the model on the graphics chip…");
+      $("send").disabled = true;
+      try {
+        if (wllama.isModelLoaded()) { await wllama.exit(); wllama.__url = ""; }
+        const r = await LLM.load({ name: item.native.file, backend: localStorage.getItem("kesherai-phone-backend:" + item.native.file) === "cpu" ? "cpu" : "gpu", maxTokens: 2048 });
+        localStorage.setItem("kesherai-phone-backend:" + item.native.file, r.backend);
+        $("status").textContent = r.backend === "gpu" ? T("רץ על הכרטיס הגרפי ⚡", "Running on the graphics chip ⚡") : T("הכרטיס הגרפי לא זמין למודל הזה; רץ על המעבד", "The graphics chip cannot run this model; using the processor");
+      } catch (e) {
+        $("status").textContent = T("לא הצלחתי לטעון: ", "Could not load: ") + (e.message || e);
+      } finally {
+        $("send").disabled = false;
+      }
+      return;
+    }
     if (!wllama.isModelLoaded() || wllama.__url !== url) {
       $("status").textContent = T("טוען את המודל לזיכרון…", "Loading the model into memory…");
       $("send").disabled = true;
@@ -987,7 +1110,7 @@
     }
     const text = typed || queue.shift() || (attachments.length ? T("מה רואים כאן?", "What is in this?") : "");
     if (typed === "" && text) paintQueue();
-    if (!text || (!current?.item.api && !wllama.isModelLoaded())) return;
+    if (!text || (!current?.item.api && !current?.item.native && !wllama.isModelLoaded())) return;
     $("input").value = "";
     autosize();
     const images = attachments.filter((a) => a.kind === "image").map((a) => a.url);
@@ -1028,6 +1151,9 @@
       };
       if (current.item.api) {
         await apiAnswer(current.item.api, [system, ...recent], abort.signal, onText);
+      } else if (current.item.native) {
+        await nativeAnswer(current.item.native, [system, ...recent], abort.signal, onText);
+        $("status").textContent = `${(measured(current.url) ?? 0).toFixed(1)} ${T("טוקנים לשנייה", "tokens/s")} ⚡`;
       } else {
       const stream = await wllama.createChatCompletion({ messages: [system, ...recent], stream: true, max_tokens: 768, temperature: 0.7, temp: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, penalty_last_n: 128, abortSignal: abort.signal });
       for await (const chunk of stream) {
@@ -1049,7 +1175,7 @@
       bg("answer");
     }
     const seconds = (performance.now() - started) / 1000;
-    if (tokens > 8 && !current.item.api) rememberSpeed(current.url, tokens / seconds);
+    if (tokens > 8 && !current.item.api && !current.item.native) rememberSpeed(current.url, tokens / seconds);
     const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
@@ -1090,6 +1216,14 @@
       const url = urlOf(it.repo, f.path);
       if (have.some((m) => m.url === url && m.size > 0)) phone.push({ item: it, url, sub: tuned(url) ? `~${tuned(url).tps.toFixed(1)} ${T("טוקנים/שנייה", "tokens/s")}` : T("בטלפון", "on the phone") });
     }
+    if (LLM) {
+      const haveFast = ((await LLM.list().catch(() => ({ models: [] }))).models ?? []).map((m) => m.name);
+      const fast = FAST.flatMap((x) => {
+        const f = JSON.parse(localStorage.getItem("kesherai-phone-fast:" + x.repo) || "null");
+        return f && haveFast.includes(f.name) ? [{ item: { name: `${x.name} ⚡`, native: { file: f.name, family: x.family } }, url: `native:${f.name}`, sub: T("מהיר, בטלפון", "fast, on the phone") }] : [];
+      });
+      groups.push([T("מהיר במיוחד (בלי אינטרנט)", "Extra fast (offline)"), fast]);
+    }
     groups.push([T("בטלפון (בלי אינטרנט)", "On the phone (offline)"), phone]);
     // Models over the internet.
     for (const p of providers()) {
@@ -1119,6 +1253,11 @@
     .then(async () => {
       const q = new URLSearchParams(location.search);
       const itemFor = (url) => {
+        if (url?.startsWith("native:")) {
+          const file = url.slice(7);
+          const fam = FAST.find((x) => JSON.parse(localStorage.getItem("kesherai-phone-fast:" + x.repo) || "{}").name === file);
+          return fam ? { name: `${fam.name} ⚡`, native: { file, family: fam.family } } : undefined;
+        }
         if (url?.startsWith("api:")) {
           const [provider, ...rest] = url.slice(4).split("/");
           return { name: `${rest.join("/")} · ${provider}`, api: { provider, model: rest.join("/") } };
