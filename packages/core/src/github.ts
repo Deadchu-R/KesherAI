@@ -85,7 +85,11 @@ export class GitHubAuth {
     const clientId = this.clientId;
     if (!clientId) throw new Error("GitHub sign-in is not set up in this build. See docs/GITHUB.md.");
     const j = await this.post<{ device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; error?: string; error_description?: string }>("/login/device/code", { client_id: clientId, scope: GITHUB_SCOPES });
-    if (j.error || !j.device_code || !j.user_code) throw new Error(j.error === "device_flow_disabled" ? "Device sign-in is turned off for this GitHub app: enable Device Flow in its settings." : (j.error_description ?? j.error ?? "GitHub did not start the sign-in."));
+    if (j.error || !j.device_code || !j.user_code) {
+      if (j.error === "device_flow_disabled") throw new Error("Device sign-in is turned off for this GitHub app: tick Enable Device Flow in its settings on GitHub.");
+      if (/not found/i.test(j.error ?? "")) throw new Error(`GitHub does not know this app's Client ID (${clientId.slice(0, 8)}…). Use the Client ID from the OAuth App's page on GitHub (it starts with Ov23 or Iv1), not its secret.`);
+      throw new Error(j.error_description ?? j.error ?? "GitHub did not start the sign-in.");
+    }
     const interval = Math.max(this.minInterval, j.interval ?? 5);
     this.pending = { deviceCode: j.device_code, interval, until: Date.now() + (j.expires_in ?? 900) * 1000, state: "waiting" };
     void this.poll(clientId);

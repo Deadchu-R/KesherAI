@@ -280,8 +280,12 @@ function GoogleApps() {
 function GitHubDialog({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> }) {
   const [code, setCode] = useState<{ userCode: string; verificationUri: string } | null>(null);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const [clientId, setClientId] = useState("");
   useEffect(() => {
     let stop = false;
+    setError("");
+    setCode(null);
     void api<{ userCode: string; verificationUri: string }>("/api/github/connect", { method: "POST" }).then(
       (c) => {
         setCode(c);
@@ -299,7 +303,7 @@ function GitHubDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
     return () => {
       stop = true;
     };
-  }, []);
+  }, [attempt]);
   const openGitHub = async () => {
     if (!code) return;
     await navigator.clipboard?.writeText(code.userCode).catch(() => undefined);
@@ -320,6 +324,12 @@ function GitHubDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
           <p className="muted small">…</p>
         ) : null}
         {error && <p className="error small">{error}</p>}
+        {error && (
+          <form className="stack" onSubmit={(e) => { e.preventDefault(); void api("/api/github/client", { method: "PUT", body: { clientId } }).then(() => setAttempt((n) => n + 1)); }}>
+            <label className="stack"><span className="small">{t("ghClientId")}</span><input dir="ltr" placeholder="Ov23li…" value={clientId} onChange={(e) => setClientId(e.target.value)} /></label>
+            <button type="submit" className="primary" disabled={!clientId.trim()} style={{ alignSelf: "flex-start" }}>{t("ghRetry")}</button>
+          </form>
+        )}
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <button type="button" onClick={() => { void api("/api/github/cancel", { method: "POST" }); onClose(); }}>{t("cancel")}</button>
         </div>
