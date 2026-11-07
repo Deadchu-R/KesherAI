@@ -363,6 +363,22 @@ export class ConversationManager {
     });
   }
 
+  /**
+   * What every live session is doing, so the sidebar can show which chats
+   * are working or waiting for the user. Sessions run independently, so
+   * many conversations (each with its own model) can work at once.
+   *
+   * @returns Conversation id → status, for sessions that are not idle.
+   */
+  activity(): Record<string, "running" | "waiting"> {
+    const out: Record<string, "running" | "waiting"> = {};
+    for (const [id, s] of this.sessions) {
+      const st = s.info().status;
+      if (st === "running" || st === "waiting") out[id] = st;
+    }
+    return out;
+  }
+
   /** Saves every session and stops running ones; call on shutdown. */
   async closeAll(): Promise<void> {
     for (const [id, s] of this.sessions) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { api, appHome } from "./api";
-import { createConversation, desktop, refreshLibrary, toast, useLibrary } from "./library";
+import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
 
@@ -101,12 +101,14 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
 }
 
 function ConversationLink({ c, active }: { c: ConversationSummary; active: boolean }) {
+  const state = useActivity()[c.id];
   return (
     <a href={`#/c/${c.id}`} className="nav-link conv-link" aria-current={active ? "page" : undefined} title={c.title}>
       <span className="conv-kind" aria-hidden="true">
         {c.kind === "code" ? "</>" : "•"}
       </span>
       <span className="conv-title">{c.title}</span>
+      {state && <span className={`conv-live ${state}`} title={state === "running" ? t("convRunning") : t("convWaiting")} aria-label={state === "running" ? t("convRunning") : t("convWaiting")} />}
     </a>
   );
 }

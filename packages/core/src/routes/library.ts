@@ -67,6 +67,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.library.listConversations(q === undefined ? undefined : q === "none" ? null : q);
   });
 
+  /** Which conversations are working right now (`running`) or waiting for an answer (`waiting`). */
+  app.get("/api/conversations/activity", async () => s.conversations.activity());
+
   app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string } }>(
     "/api/conversations",
     async (req, reply) => {

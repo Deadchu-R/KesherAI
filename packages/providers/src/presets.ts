@@ -55,6 +55,27 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     needsApiKey: true,
   },
   {
+    // Gemini's OpenAI-compatible endpoint: chat, streaming, tools and model list.
+    config: { id: "gemini", type: "openai-compatible", name: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", location: "cloud" },
+    description: "Gemini models through Google AI Studio (free API keys at aistudio.google.com).",
+    needsApiKey: true,
+  },
+  {
+    config: { id: "mistral", type: "openai-compatible", name: "Mistral", baseUrl: "https://api.mistral.ai/v1", location: "cloud" },
+    description: "Mistral and Codestral models through the Mistral API.",
+    needsApiKey: true,
+  },
+  {
+    config: { id: "deepseek", type: "openai-compatible", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", location: "cloud" },
+    description: "DeepSeek chat and reasoning models.",
+    needsApiKey: true,
+  },
+  {
+    config: { id: "xai", type: "openai-compatible", name: "xAI (Grok)", baseUrl: "https://api.x.ai/v1", location: "cloud" },
+    description: "Grok models through the xAI API.",
+    needsApiKey: true,
+  },
+  {
     config: { id: "openrouter", type: "openai-compatible", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", location: "cloud" },
     description: "Hundreds of models from many labs behind one key.",
     needsApiKey: true,

@@ -5,6 +5,7 @@ import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
+import { ModelMenu } from "../ModelMenu";
 import { FilesPanel } from "../FilesPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
@@ -532,11 +533,7 @@ export function ConversationPage({ id }: { id: string }) {
               {desktop()?.pickFiles && (
                 <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>
               )}
-              <select className="model-chip" value={conv.modelId} onChange={(e) => void patch({ modelId: e.target.value })} aria-label={t("pickModel")}>
-                {modelOptions.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name} · {m.providerId || "?"}</option>
-                ))}
-              </select>
+              <ModelMenu models={modelOptions} value={conv.modelId} onChange={(id) => void patch({ modelId: id })} />
               <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
                 <option value="ask">{t("modeAsk")}</option>
                 <option value="auto-edit">{t("modeAutoEdit")}</option>

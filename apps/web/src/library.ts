@@ -112,3 +112,38 @@ export function useToast(): string {
   }, []);
   return msg;
 }
+
+let activity: Record<string, "running" | "waiting"> = {};
+const activityListeners = new Set<() => void>();
+let activityTimer: ReturnType<typeof setInterval> | undefined;
+async function pollActivity(): Promise<void> {
+  const next = await api<Record<string, "running" | "waiting">>("/api/conversations/activity").catch(() => activity);
+  if (JSON.stringify(next) !== JSON.stringify(activity)) {
+    activity = next;
+    activityListeners.forEach((l) => l());
+  }
+}
+
+/**
+ * @returns Which conversations are working or waiting for you right now
+ * (several can run at once, each with its own model); polled every 2 s.
+ */
+export function useActivity(): Record<string, "running" | "waiting"> {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const l = () => setTick((n) => n + 1);
+    activityListeners.add(l);
+    if (!activityTimer) {
+      void pollActivity();
+      activityTimer = setInterval(() => void pollActivity(), 2000);
+    }
+    return () => {
+      activityListeners.delete(l);
+      if (activityListeners.size === 0 && activityTimer) {
+        clearInterval(activityTimer);
+        activityTimer = undefined;
+      }
+    };
+  }, []);
+  return activity;
+}

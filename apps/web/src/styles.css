@@ -418,3 +418,31 @@ html, body { overflow-x: hidden; }
   .appbar-start .hist { display: none; }
   .bar-seg { margin-inline-start: 6px; }
 }
+
+/* A chat that is working (pulsing) or waiting for you (amber), shown in the sidebar. */
+.conv-link { display: flex; align-items: center; gap: 6px; }
+.conv-link .conv-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-live { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.conv-live.running { background: var(--accent); animation: live-pulse 1.2s ease-in-out infinite; }
+.conv-live.waiting { background: var(--live); }
+@keyframes live-pulse { 50% { opacity: .35; } }
+
+/* ---------- composer model menu: grouped by provider, searchable ---------- */
+.model-menu { position: relative; min-width: 0; }
+.model-menu .model-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; }
+.model-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; }
+.where-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.where-dot.cloud { background: var(--accent); }
+.where-dot.server { background: var(--live); }
+.model-pop { position: absolute; bottom: calc(100% + 8px); inset-inline-start: 0; z-index: 30; width: min(340px, 86vw); max-height: min(440px, 60vh); display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 16px 40px rgb(0 0 0 / .5); }
+.model-pop > input { height: 36px; }
+.model-pop-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.model-group { display: flex; flex-direction: column; gap: 1px; }
+.model-group-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; font-size: 12px; color: var(--muted); }
+.where-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--raised); }
+.where-tag.cloud { color: var(--accent); }
+.where-tag.server { color: var(--live); }
+.where-tag.local { color: var(--good); }
+.model-group button { display: flex; justify-content: space-between; align-items: center; height: auto; padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; font-size: 13.5px; text-align: start; }
+.model-group button:hover, .model-group button.on { background: var(--raised); }
+.model-pop-foot { font-size: 12.5px; padding: 6px 8px 2px; color: var(--accent); text-decoration: none; border-top: 1px solid var(--border); }
