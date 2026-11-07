@@ -45,6 +45,15 @@ export const KesherConfigSchema = z.object({
       /** The GGUF file loaded last, loaded again on start-up when `autoLoadLast` is on. */
       lastModel: z.string().optional(),
       autoLoadLast: z.boolean().default(true),
+      /** How models use the graphics cards (see gpus.ts). */
+      gpus: z
+        .object({
+          mode: z.enum(["auto", "fastest", "all"]).default("auto"),
+          use: z.array(z.number().int().min(0)).optional(),
+          split: z.array(z.number().positive()).optional(),
+          main: z.number().int().min(0).optional(),
+        })
+        .default({}),
     })
     .default({}),
   /** Where KesherAI downloads models. Defaults to `models` in the data folder. */

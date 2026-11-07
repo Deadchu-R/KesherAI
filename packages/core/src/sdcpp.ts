@@ -206,6 +206,8 @@ export class SdEngine {
   private preparing = new Map<string, Promise<void>>();
   private queue: Promise<unknown> = Promise.resolve();
   private current?: ImageProgress;
+  /** The card the next run uses (the fastest allowed one). */
+  private lastCard?: number;
 
   /** @returns What the engine is doing now, or `undefined` when idle. */
   progress(): ImageProgress | undefined {
@@ -226,7 +228,8 @@ export class SdEngine {
    */
   private async memoryArgs(modelFile: string, family: ModelFamily): Promise<string[]> {
     const args = ["--vae-tiling"];
-    const { nvidia, vramGb } = await this.gpu().catch(() => ({ nvidia: false, vramGb: undefined }));
+    const { nvidia, vramGb, cudaIndex } = await this.gpu().catch(() => ({ nvidia: false, vramGb: undefined, cudaIndex: undefined }));
+    this.lastCard = cudaIndex;
     if (!nvidia || !vramGb) return args;
     const sizes = await Promise.all([modelFile, ...family.companions.map((c) => this.companionPath(c))].map((f) => stat(f).then((x) => x.size, () => 0)));
     const totalGb = sizes.reduce((a, b) => a + b, 0) / 1024 ** 3;
@@ -254,7 +257,7 @@ export class SdEngine {
     private readonly dir: string,
     private readonly modelsDir: () => string,
     private readonly downloads: DownloadManager,
-    private readonly gpu: () => Promise<{ nvidia: boolean; vramGb?: number }>,
+    private readonly gpu: () => Promise<{ nvidia: boolean; vramGb?: number; cudaIndex?: number }>,
   ) {}
 
   private get imageDir(): string {
@@ -432,7 +435,8 @@ export class SdEngine {
     let full = `${new Date().toISOString()}\n${exe} ${args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" ")}\n\n`;
     const saveLog = () => writeFile(this.logFile, full.slice(-400_000)).catch(() => undefined);
     const log = await new Promise<string>((resolve, reject) => {
-      const child = spawn(exe, args, { windowsHide: true, cwd: this.dir });
+      const card = this.lastCard;
+      const child = spawn(exe, args, { windowsHide: true, cwd: this.dir, ...(card !== undefined ? { env: { ...process.env, CUDA_DEVICE_ORDER: "PCI_BUS_ID", CUDA_VISIBLE_DEVICES: String(card) } } : {}) });
       let text = "";
       const onData = (b: Buffer) => {
         const chunk = b.toString();

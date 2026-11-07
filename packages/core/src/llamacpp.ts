@@ -3,6 +3,7 @@ import { chmod, mkdir, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
+import { userChoseGpus, type GpuPlan } from "./gpus.js";
 
 /** Platform facts that decide which llama.cpp build to download. */
 export interface PlatformInfo {
@@ -183,6 +184,8 @@ export interface EngineStatus {
   job?: { phase: "installing" | "downloading-model" | "loading"; message: string } | { phase: "error"; message: string };
   /** Last lines of llama-server's output. */
   log: string[];
+  /** How the graphics cards are used for the loaded model. */
+  gpus?: string;
 }
 
 /**
@@ -205,7 +208,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[] },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
   ) {}
 
   /** @returns The engine's state. */
@@ -219,6 +222,7 @@ export class LlamaEngine {
       ...(this.modelPath ? { modelPath: this.modelPath } : {}),
       ...(this.job ? { job: this.job } : {}),
       log: this.log.slice(-60),
+      ...(this.gpuSummary ? { gpus: this.gpuSummary } : {}),
     };
   }
 
@@ -316,24 +320,31 @@ export class LlamaEngine {
   async load(modelPath: string, timeoutMs = 300_000): Promise<void> {
     const binary = this.opts.binaryPath;
     if (!binary || !existsSync(binary)) throw new Error("The llama.cpp engine is not installed yet. Install it from the Models screen.");
-    await this.track("loading", `Loading ${basename(modelPath)}…`, async () => {
+    const plan = userChoseGpus(this.opts.args) ? undefined : await this.opts.gpuPlan?.(modelPath).catch(() => undefined);
+    this.gpuSummary = plan?.summary ?? "";
+    const gpuArgs = plan?.args ?? [];
+    await this.track("loading", `Loading ${basename(modelPath)}…${plan?.summary ? ` ${plan.summary}.` : ""}`, async () => {
       try {
-        await this.start(binary, modelPath, LlamaEngine.serverArgs(this.opts.args, true), timeoutMs);
+        await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, true), ...gpuArgs], timeoutMs, plan?.env);
       } catch (err) {
         // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
         if (!/jinja/i.test(this.log.join("\n"))) throw err;
-        await this.start(binary, modelPath, LlamaEngine.serverArgs(this.opts.args, false), timeoutMs);
+        await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, false), ...gpuArgs], timeoutMs, plan?.env);
       }
     });
   }
 
-  private async start(binary: string, modelPath: string, args: string[], timeoutMs: number): Promise<void> {
+  /** How the cards are used for the loaded model, e.g. "Split across … ; … leads". */
+  gpuSummary = "";
+
+  private async start(binary: string, modelPath: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<void> {
     await this.stop();
     this.log.length = 0;
     const alias = basename(modelPath).replace(/\.gguf$/i, "");
     const proc = spawn(binary, ["-m", modelPath, "--host", "127.0.0.1", "--port", String(this.opts.port), "--alias", alias, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      ...(env ? { env: { ...process.env, ...env } } : {}),
     });
     this.proc = proc;
     this.modelPath = modelPath;

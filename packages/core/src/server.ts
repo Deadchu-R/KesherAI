@@ -19,6 +19,7 @@ import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
 import { Coach } from "./coach.js";
+import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { detectHardwareCached } from "@kesher/downloads";
@@ -94,9 +95,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
   const coach = new Coach(paths.root);
+  /** NVIDIA cards with their PCI-order index. */
+  const nvidiaGpus = async (): Promise<Gpu[]> =>
+    (await detectHardwareCached()).gpus
+      .filter((g) => /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name))
+      .map((g, i) => ({ index: g.index ?? i, name: g.name, vramTotal: g.vramTotal, vramFree: g.vramFree, ...(g.computeCap ? { computeCap: g.computeCap } : {}) }));
   const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => {
-    const nv = (await detectHardwareCached()).gpus.filter((g) => /nvidia|geforce|rtx|gtx/i.test(g.name));
-    return { nvidia: nv.length > 0, vramGb: nv.length ? Math.max(...nv.map((g) => g.vramTotal)) / 1024 ** 3 : undefined };
+    const nv = await nvidiaGpus();
+    // The image engine uses one card: the fastest allowed one (or the chosen leader).
+    const pool = nv.filter((g) => !config.engines.gpus.use || config.engines.gpus.use.includes(g.index));
+    const card = pool.find((g) => g.index === config.engines.gpus.main) ?? bySpeed(pool)[0];
+    return { nvidia: nv.length > 0, ...(card ? { vramGb: card.vramFree / 1024 ** 3, cudaIndex: card.index } : {}) };
   });
   registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });
   registry.add({ id: "sdcpp", type: "sdcpp", name: "KesherAI image engine", location: "local" });
@@ -138,6 +147,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}),
     port: config.engines.llamaServerPort,
     args: config.engines.llamaServerArgs,
+    gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
   });
   const assets = new AssetStore(paths.assets);
   const persist = () => saveConfig(paths, config);
@@ -234,4 +244,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       await plugins.deactivateAll();
     },
   };
+}
+
+/**
+ * @param modelPath - A GGUF file (the first part of a split model).
+ * @returns Its size in bytes, adding the other parts of a split model.
+ */
+async function modelSize(modelPath: string): Promise<number> {
+  const { stat, readdir } = await import("node:fs/promises");
+  const { basename, dirname, join } = await import("node:path");
+  const split = /^(.*)-00001-of-(\d{5})\.gguf$/i.exec(basename(modelPath));
+  if (!split) return (await stat(modelPath).catch(() => ({ size: 0 }))).size;
+  const files = (await readdir(dirname(modelPath)).catch(() => [])).filter((f) => f.startsWith(`${split[1]}-`) && f.endsWith(`-of-${split[2]}.gguf`));
+  const sizes = await Promise.all(files.map((f) => stat(join(dirname(modelPath), f)).then((x) => x.size, () => 0)));
+  return sizes.reduce((a, b) => a + b, 0);
 }

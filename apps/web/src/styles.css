@@ -524,3 +524,16 @@ html, body { overflow-x: hidden; }
 .pl-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
 .switch { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 .plugin-nav { font-size: 13.5px; }
+
+/* ---------- graphics cards ---------- */
+.gpu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gpu-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); flex-wrap: wrap; }
+.gpu-list li.off { opacity: .6; }
+.gpu-use { display: flex; gap: 10px; align-items: center; flex: 1; min-width: 0; }
+.gpu-lead { display: inline-flex; gap: 6px; align-items: center; }
+.gpu-split { display: flex; height: 22px; border-radius: 8px; overflow: hidden; gap: 2px; font-size: 11.5px; }
+.gpu-split > span { display: grid; place-items: center; background: var(--accent-soft); color: var(--text); min-width: 36px; }
+.gpu-split > span:first-child { background: var(--accent); color: var(--accent-ink); }
+.gpu-split-name { width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gpu-examples ul { margin: 4px 0 0; padding-inline-start: 18px; }
+.gpus .gpu-use, .gpus .gpu-lead, .gpus label.row { flex-direction: row; align-items: center; }

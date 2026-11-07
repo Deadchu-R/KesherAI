@@ -7,6 +7,7 @@ import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles
 import type { KesherServices } from "../services.js";
 import { waitForDownload } from "../llamacpp.js";
 import { insideAny, looksLikeGguf } from "../model-scan.js";
+import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -60,6 +61,41 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
  */
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   app.get("/api/engines/llamacpp", async () => s.engine.status());
+
+  /**
+   * The graphics cards and how models use them: each card (PCI order, memory,
+   * compute capability, fastest first marked), the user's choice, and what
+   * that choice does for a model of a given size (`?modelGb=`).
+   */
+  app.get<{ Querystring: { modelGb?: string } }>("/api/engines/gpus", async (req) => {
+    const hw = await detectHardwareCached();
+    const gpus: Gpu[] = hw.gpus
+      .filter((g) => /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name))
+      .map((g, i) => ({ index: g.index ?? i, name: g.name, vramTotal: g.vramTotal, vramFree: g.vramFree, ...(g.computeCap ? { computeCap: g.computeCap } : {}) }));
+    const fastest = bySpeed(gpus)[0]?.index;
+    const gb = Number(req.query.modelGb ?? 0);
+    const examples = [...new Set([gb || 8, 30, 70])].map((size) => {
+      const plan = planGpus(gpus, s.config.engines.gpus, size * 1024 ** 3);
+      return { modelGb: size, leader: plan.cards[0] ?? null, parts: plan.parts };
+    });
+    return { gpus: gpus.map((g) => ({ ...g, fastest: g.index === fastest })), prefs: s.config.engines.gpus, examples, current: s.engine.status().gpus ?? null };
+  });
+
+  /** Sets how models use the cards: `{ mode, use?, split?, main? }`. Applies the next time a model loads. */
+  app.put<{ Body: { mode?: "auto" | "fastest" | "all"; use?: number[] | null; split?: number[] | null; main?: number | null } }>("/api/engines/gpus", async (req, reply) => {
+    const b = req.body ?? {};
+    const g = s.config.engines.gpus;
+    if (b.mode) {
+      if (!["auto", "fastest", "all"].includes(b.mode)) return reply.code(400).send({ error: "mode is auto, fastest or all" });
+      g.mode = b.mode;
+    }
+    for (const key of ["use", "split", "main"] as const) {
+      if (b[key] === null) delete g[key];
+      else if (b[key] !== undefined) (g as Record<string, unknown>)[key] = b[key];
+    }
+    await s.saveConfig();
+    return { ok: true, prefs: g };
+  });
 
   /** What the image engine is doing (phase, step x of y, seconds per step), or `{}` when idle. */
   app.get("/api/engines/image/progress", async () => s.sd.progress() ?? {});

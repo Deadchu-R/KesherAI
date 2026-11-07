@@ -1,3 +1,4 @@
+import { GpuSection } from "../GpuSection";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
@@ -396,6 +397,7 @@ export function SettingsPage() {
     <div className="page">
       <h1>{t("settings")}</h1>
       <ActiveModels />
+      <GpuSection />
       <PermissionsSection />
       <GoogleDriveSection />
       <Sync />

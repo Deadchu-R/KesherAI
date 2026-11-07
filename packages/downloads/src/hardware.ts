@@ -12,8 +12,13 @@ export interface HardwareInfo {
   ramTotal: number;
   /** Free system RAM in bytes. */
   ramFree: number;
-  /** One entry per NVIDIA GPU found through `nvidia-smi`; empty otherwise. */
-  gpus: Array<{ name: string; vramTotal: number; vramFree: number }>;
+  /**
+   * One entry per NVIDIA GPU found through `nvidia-smi`, in PCI bus order
+   * (the order CUDA uses when `CUDA_DEVICE_ORDER=PCI_BUS_ID`); empty otherwise.
+   * `computeCap` is the CUDA compute capability (8.6 = RTX 30, 8.9 = RTX 40,
+   * 12.0 = RTX 50); newer drivers report it.
+   */
+  gpus: Array<{ name: string; vramTotal: number; vramFree: number; index?: number; computeCap?: number }>;
   /**
    * On Apple Silicon, GPU and CPU share memory, so RAM is also the model budget.
    */
@@ -30,18 +35,25 @@ export interface HardwareInfo {
  */
 export async function detectHardware(): Promise<HardwareInfo> {
   const gpus: HardwareInfo["gpus"] = [];
-  try {
-    const { stdout } = await run(
-      "nvidia-smi",
-      ["--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
-      { timeout: 3000 },
-    );
-    for (const line of stdout.trim().split("\n")) {
-      const [name, total, free] = line.split(",").map((s) => s.trim());
-      if (name && total && free) gpus.push({ name, vramTotal: Number(total) * 1024 ** 2, vramFree: Number(free) * 1024 ** 2 });
+  for (const fields of ["index,name,memory.total,memory.free,compute_cap", "index,name,memory.total,memory.free"]) {
+    try {
+      const { stdout } = await run("nvidia-smi", [`--query-gpu=${fields}`, "--format=csv,noheader,nounits"], { timeout: 3000 });
+      for (const line of stdout.trim().split("\n")) {
+        const [index, name, total, free, cap] = line.split(",").map((s) => s.trim());
+        if (name && total && free) {
+          gpus.push({
+            name,
+            vramTotal: Number(total) * 1024 ** 2,
+            vramFree: Number(free) * 1024 ** 2,
+            ...(index && /^\d+$/.test(index) ? { index: Number(index) } : {}),
+            ...(cap && !Number.isNaN(Number(cap)) ? { computeCap: Number(cap) } : {}),
+          });
+        }
+      }
+      break;
+    } catch {
+      // Older drivers do not know compute_cap: try without it. No driver at all: no GPUs.
     }
-  } catch {
-    // No NVIDIA driver, or nvidia-smi not on PATH.
   }
   const cpu = cpus()[0]?.model ?? "unknown";
   return {
