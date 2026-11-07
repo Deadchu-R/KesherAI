@@ -7,6 +7,7 @@ import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
+import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
@@ -315,6 +316,8 @@ export function ConversationPage({ id }: { id: string }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState("");
+  const pluginUi = usePluginUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => setSlot(document.getElementById("appbar-title")), []);
   useEffect(() => {
@@ -494,6 +497,10 @@ export function ConversationPage({ id }: { id: string }) {
       )}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
         <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />
+        {pluginUi.panels.map((x) => {
+          const key = `${x.pluginId}/${x.id}`;
+          return <button key={key} type="button" className={openPanel === key ? "on" : ""} aria-pressed={openPanel === key} onClick={() => setOpenPanel(openPanel === key ? "" : key)}>{x.title}</button>;
+        })}
         <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
         <span className="grow" />
         {info?.canUndo && !busy && (
@@ -508,6 +515,10 @@ export function ConversationPage({ id }: { id: string }) {
       </div>
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
+      {openPanel && (() => {
+        const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);
+        return panel ? <div className="plugin-panel"><PluginFrame pluginId={panel.pluginId} file={panel.file} title={panel.title} conversationId={id} onInsertPrompt={setInput} /></div> : null;
+      })()}
       {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
 
       <div className={`conv-split ${showIde ? "with-ide" : ""}`}>
@@ -600,6 +611,13 @@ export function ConversationPage({ id }: { id: string }) {
                 }
               }}
             />
+            {pluginUi.composerActions.length > 0 && (
+              <div className="composer-actions">
+                {pluginUi.composerActions.map((a) => (
+                  <button key={`${a.pluginId}/${a.id}`} type="button" className="chip-text" onClick={() => setInput(a.prompt)} title={a.prompt}>{a.label}</button>
+                ))}
+              </div>
+            )}
             <div className="box-bar">
               {desktop()?.pickFiles && (
                 <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>

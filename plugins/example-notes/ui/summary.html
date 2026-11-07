@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><link rel="stylesheet" href="style.css" /><style>body { padding: 14px; }</style></head>
+<body>
+  <div class="row" style="margin-top:0">
+    <button class="primary" id="go">Summarize this conversation</button>
+    <button id="ask">Ask a follow-up</button>
+  </div>
+  <div id="out" class="muted" style="white-space:pre-wrap;margin-top:12px"></div>
+  <script src="kesher.js"></script>
+  <script>
+    const out = document.getElementById("out");
+    kesher.call("info").then((i) => { if (i.locale === "he") document.dir = "rtl"; });
+    document.getElementById("go").onclick = async () => {
+      out.textContent = "Reading…";
+      try {
+        const c = await kesher.call("conversation");
+        const transcript = c.messages.map((m) => `${m.role}: ${m.content}`).join("\n\n").slice(-20000);
+        out.textContent = await kesher.call("chat", { messages: [{ role: "system", content: "Summarize this conversation in at most 6 bullet points, in its own language." }, { role: "user", content: transcript }] });
+      } catch (e) { out.textContent = e.message; }
+    };
+    document.getElementById("ask").onclick = () => kesher.call("insertPrompt", { text: "Based on everything so far, what should I do next?" });
+  </script>
+</body>
+</html>

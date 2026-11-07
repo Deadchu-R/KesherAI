@@ -505,3 +505,22 @@ html, body { overflow-x: hidden; }
 .appbar-slot { display: contents; }
 .usage label.row { flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; font-size: 14px; }
 .usage label.row input { width: 18px; height: 18px; }
+
+/* ---------- plugins and mods ---------- */
+.plugin-frame { width: 100%; height: 100%; border: 0; background: var(--bg); display: block; }
+.plugin-page { flex: 1; min-height: calc(100vh - var(--bar-h)); display: flex; }
+.plugin-panel { margin: 0 24px 8px; height: 42vh; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.composer-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 6px; }
+.chip-text { height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12.5px; background: transparent; color: var(--text-2); border: 1px solid var(--border-strong); }
+.plugins h2 { font-size: 16px; font-weight: 500; margin: 0 0 8px; }
+.plugins .card { display: flex; flex-direction: column; gap: 10px; }
+.plugin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plugin-list li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); }
+.plugin-list li.disabled { opacity: .65; }
+.plugin-list li.error { border-color: rgba(240, 138, 138, 0.35); }
+.pl-main { min-width: 0; display: grid; gap: 4px; }
+.pl-main p { margin: 0; }
+.pl-perms { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pl-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.switch { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.plugin-nav { font-size: 13.5px; }

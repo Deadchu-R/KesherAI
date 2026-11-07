@@ -1,5 +1,8 @@
 import { AppBar } from "./AppBar";
 import { UsagePage } from "./pages/Usage";
+import { PluginsPage } from "./pages/Plugins";
+import { PluginPage } from "./pages/PluginPage";
+import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
 import { useEffect, useState } from "react";
@@ -131,6 +134,8 @@ export function App() {
   else if (hash === "#/connections") page = <ConnectionsPage />;
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;
   else if (hash === "#/usage") page = <UsagePage />;
+  else if (hash === "#/plugins") page = <PluginsPage />;
+  else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;
   else page = <Home />;
 
   return (
@@ -143,6 +148,7 @@ export function App() {
       </main>
       {message && <div className="toast" role="status">{message}</div>}
       <ModelPickerHost />
+      <PluginStyles />
       <DownloadsButton />
     </div>
   );

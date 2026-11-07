@@ -128,12 +128,61 @@ ctx.registerTool({
 
 Tools are listed at `GET /api/tools` and run with `POST /api/tools/<name>`. The code agent, chat tool-calling and Pipelines all use the same registry. Write the `description` for a model, not a human: say what the tool does and when to use it. Honour `signal` in long operations.
 
+### 4. Interface: pages, panels, themes, composer buttons (mods)
+
+A plugin can change the interface with **no code to build**: declare it in the manifest's `ui` section and ship plain HTML/CSS. A plugin that has only `ui` (and no `main`) is a *mod*. [`plugins/example-notes`](../plugins/example-notes) is a complete one to copy.
+
+```json
+"ui": {
+  "pages":   [{ "id": "notes", "title": "Notes", "icon": "✎", "file": "ui/notes.html" }],
+  "panels":  [{ "id": "summary", "title": "Summary", "file": "ui/summary.html" }],
+  "styles":  ["ui/theme.css"],
+  "composerActions": [{ "id": "shorter", "label": "Make it shorter", "prompt": "Rewrite your last answer in half the length." }]
+}
+```
+
+- **pages** appear in the sidebar and open full size at `#/p/<plugin>/<page>`.
+- **panels** get a button in every conversation's top bar and open above the chat.
+- **styles** are added to the whole app. Override its CSS variables (`--bg`, `--panel`, `--accent`, `--text`, `--radius`, …) to make a theme, or restyle any part.
+- **composerActions** are buttons that put a ready prompt into the message box.
+
+Pages and panels run in a **sandboxed frame**: their scripts run, but they cannot read the app, its token or its storage, and they cannot fetch on their own. They ask the app through `postMessage`. Copy [`ui/kesher.js`](../plugins/example-notes/ui/kesher.js) (25 lines) and call:
+
+| Method | Params | Returns |
+|---|---|---|
+| `info` | – | `{ pluginId, locale, conversationId }` |
+| `models` | – | the connected models `[{ id, name, category, location }]` |
+| `chat` | `{ messages, model?, temperature? }` | the answer text (default: the user's chat model) |
+| `runTool` | `{ name, input }` | the result of any registered tool |
+| `storage.get` / `storage.set` | `{ key }` / `{ key, value }` | your plugin's saved JSON (1 MB per key) |
+| `newChat` | `{ prompt? }` | opens a new conversation and sends the prompt |
+| `conversation` | – | panels only: `{ title, messages }` of the open conversation |
+| `insertPrompt` | `{ text }` | panels only: puts text in the message box |
+| `toast` | `{ text }` | shows a short message |
+
+```js
+const answer = await kesher.call("chat", { messages: [{ role: "user", content: "Hi" }] });
+```
+
+### 5. Programs the models can start
+
+Declare programs (a game engine, Blender, a converter, your own script) and each becomes a tool the models can call. It **always asks the user first**, runs without a shell, and needs the `shell` permission:
+
+```json
+"permissions": ["shell"],
+"programs": [{
+  "id": "render", "name": "Blender", "description": "Render a .blend file to PNG frames.",
+  "command": "blender", "args": ["--background"], "extraArgs": true, "timeoutSeconds": 600
+}]
+```
+
+`timeoutSeconds: 0` starts an app with a window and does not wait for it. The tool is named `<plugin_id>_<program_id>` (dashes become `_`) and takes `{ args?: string[], cwd?: string }`.
+
 ### Planned extension points
 
-These are on the roadmap; the API will be added to `PluginContext` without breaking existing plugins:
+These are on the roadmap; the API will be added without breaking existing plugins:
 
 - `registerPipelineNode` — a node for the Pipelines editor.
-- `registerScreen` — a UI screen, loaded from a URL the plugin serves.
 - `registerMcpServer` / `registerSkill` — package MCP servers and skills with a plugin.
 
 ## Lifecycle
@@ -141,8 +190,9 @@ These are on the roadmap; the API will be added to `PluginContext` without break
 1. On start-up, the core scans `~/.kesher/plugins/*` and the folders passed with `--plugins`.
 2. For each folder with a `kesher-plugin.json`, it validates the manifest and checks `apiVersion`.
 3. If the plugin is enabled (`config.json` → `plugins.<id>.enabled`, default `true`), it imports `main` and calls `activate`.
-4. A plugin that throws is marked `error` with its message, visible in **Connections → Plugins**. Other plugins keep loading.
-5. On quit, `deactivate` is called.
+4. A plugin that throws is marked `error` with its message, visible in **Plugins & mods**. Other plugins keep loading.
+5. Turning a plugin on or off, installing or removing one reloads all plugins at once; no restart.
+6. On quit, `deactivate` is called.
 
 ## Settings
 
@@ -160,8 +210,9 @@ Today plugins run **inside the core server's process**, with the same access as 
 
 ## Publishing
 
-- Put it on GitHub with `kesher-plugin.json` at the root and a built `dist/`, or publish to npm as `kesher-plugin-<id>`.
-- Users install it by copying the folder into `~/.kesher/plugins/`. An in-app plugin browser is planned.
+- Put it on GitHub with `kesher-plugin.json` at the root (and a built `dist/` if it has code).
+- **Add the topic `kesherai-plugin` to the repository.** It then appears under **Plugins & mods → From the community**, where users install it with one click.
+- Users can also install any repository by its address (`owner/repo` or an `https://` Git URL) on that screen, or copy the folder into `~/.kesher/plugins/`.
 - Choose an open-source licence for your plugin. KesherAI's Apache-2.0 licence does not require any particular licence for plugins.
 
 ## Testing

@@ -1,0 +1,13 @@
+{
+  "id": "example-notes",
+  "name": "Notes (example mod)",
+  "version": "0.1.0",
+  "description": "A mod with no build step: a Notes page saved by KesherAI, a panel that summarizes the open conversation, and a composer button. Copy it to start your own.",
+  "author": "KesherAI contributors",
+  "kesher": { "apiVersion": 1 },
+  "ui": {
+    "pages": [{ "id": "notes", "title": "Notes", "icon": "✎", "file": "ui/notes.html" }],
+    "panels": [{ "id": "summary", "title": "Summary", "file": "ui/summary.html" }],
+    "composerActions": [{ "id": "shorter", "label": "Make it shorter", "prompt": "Rewrite your last answer in half the length, keeping every fact." }]
+  }
+}

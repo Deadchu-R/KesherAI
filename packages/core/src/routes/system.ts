@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
 import { discoverSkills, loadSkillBody } from "@kesher/skills";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -31,7 +31,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get("/api/hardware", async () => detectHardware());
 
   app.get("/api/plugins", async () =>
-    s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir })),
+    s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir, removable: resolve(p.dir).startsWith(resolve(s.paths.plugins) + sep) })),
   );
 
   app.get("/api/tools", async () =>

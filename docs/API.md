@@ -23,6 +23,19 @@ Requests that arrive through a tunnel or proxy (they carry `cf-connecting-ip`, `
 | `GET /api/remote` | Only from this computer (never through a tunnel). Also returns `anywhere` and `tunnel`. `{ enabled, keepAwake, token, port, addresses: [{ address, tailscale, mac, broadcast }] }` for pairing a device. `mac` and `broadcast` let the phone wake this computer ([WAKE_ON_LAN.md](WAKE_ON_LAN.md)) |
 | `GET /api/plugins` | Plugins found, with `status` (`active`, `disabled`, `error`) and `error` |
 | `GET /api/tools` | Tools registered by plugins: `{ name, description, inputSchema, pluginId }[]` |
+| `GET /api/plugins/ui` | What active plugins add: `{ pages, panels, styles, composerActions }` |
+| `GET /api/plugin-files/:token/:id/*` | A plugin's own file (pages, scripts, styles); the token is in the path for sandboxed frames |
+| `POST /api/plugins/install` | Install from Git: `{ source: "owner/repo" \| "https://…" }` → `{ id }` |
+| `PUT /api/plugins/:id` | `{ enabled }`; reloads plugins |
+| `DELETE /api/plugins/:id` | Remove a plugin the user installed |
+| `GET/PUT /api/plugins/:id/storage/:key` | A plugin page's saved JSON `{ value }` |
+| `GET /api/plugins/catalog` | Public plugins (GitHub topic `kesherai-plugin`) |
+| `GET /api/usage` | Tokens across conversations: totals, `byModel`, `byDay`, costliest requests |
+| `GET /api/conversations/:id/usage` | Per request: tokens, calls, wasted tokens, failed steps, nudges, reworks, tools |
+| `POST /api/conversations/:id/coach` | The coach's suggestions `{ suggestions, learned, stats }`; body `{ modelId? }` |
+| `GET/DELETE /api/coach/profile`, `PUT /api/coach/settings` | What the coach learned about the user; `{ learn, modelId }` |
+| `GET /api/conversations/activity` | Which conversations are `running` or `waiting` now |
+| `GET /api/engines/image/progress`, `GET /api/engines/image/log` | The image engine's live progress, and its last run's full output |
 | `POST /api/tools/:name` | Runs a tool. Body: the tool's input. Returns `{ result }` |
 | `GET /api/skills` | Installed skills: `{ name, description, dir }[]` |
 | `GET /api/skills/:name` | One skill with its `body` (the SKILL.md instructions) |

@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><link rel="stylesheet" href="style.css" /></head>
+<body>
+  <h1>Notes</h1>
+  <textarea id="text" placeholder="Write anything. It is saved in KesherAI."></textarea>
+  <div class="row">
+    <button class="primary" id="tidy">Tidy with AI</button>
+    <button id="chat">Discuss in a new chat</button>
+    <span class="muted" id="status"></span>
+  </div>
+  <script src="kesher.js"></script>
+  <script>
+    const text = document.getElementById("text");
+    const status = document.getElementById("status");
+    kesher.call("info").then((i) => { if (i.locale === "he") document.dir = "rtl"; });
+    kesher.call("storage.get", { key: "notes" }).then((v) => { text.value = v || ""; });
+    let timer;
+    text.oninput = () => { clearTimeout(timer); timer = setTimeout(() => kesher.call("storage.set", { key: "notes", value: text.value }).then(() => (status.textContent = "Saved")), 500); };
+    document.getElementById("tidy").onclick = async () => {
+      status.textContent = "Thinking…";
+      try {
+        text.value = await kesher.call("chat", { messages: [{ role: "system", content: "Tidy these notes: fix typos, group related lines under short headings. Keep the language. Reply with the notes only." }, { role: "user", content: text.value }] });
+        await kesher.call("storage.set", { key: "notes", value: text.value });
+        status.textContent = "Done";
+      } catch (e) { status.textContent = e.message; }
+    };
+    document.getElementById("chat").onclick = () => kesher.call("newChat", { prompt: "Here are my notes. Help me turn them into a plan:\n\n" + text.value });
+  </script>
+</body>
+</html>

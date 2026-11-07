@@ -66,7 +66,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
     };
   }, [menu]);
 
-  const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/connections" ? t("connections") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : "";
+  const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/connections" ? t("connections") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : hash === "#/plugins" ? t("pluginsNav") : "";
   const inCode = hash.startsWith("#/c/") && document.querySelector("[data-conv-kind='code']") !== null;
   const status = online === null ? t("barChecking") : online ? t("computerOn", { name: host || location.hostname }) : t("serverOffline");
 
@@ -86,6 +86,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
               <a role="menuitem" href="#/images">{t("images")}</a>
               <a role="menuitem" href="#/connections">{t("connections")}</a>
               <a role="menuitem" href="#/usage">{t("usageNav")}</a>
+              <a role="menuitem" href="#/plugins">{t("pluginsNav")}</a>
               <a role="menuitem" href="#/settings">{t("settings")}</a>
               <hr />
               <button type="button" role="menuitem" onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); setMenu(false); onLocale(); }}>{t("language")}</button>

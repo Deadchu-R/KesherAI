@@ -4,6 +4,7 @@ import { api, appHome } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
+import { usePluginUi } from "./plugins";
 
 /** A dialog for a new code session or a new project. */
 function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () => void }) {
@@ -120,6 +121,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [version, setVersion] = useState("");
   const activeId = hash.startsWith("#/c/") ? hash.slice(4) : "";
+  const pluginPages = usePluginUi().pages;
 
   useEffect(() => {
     const open = () => setDialog("code");
@@ -139,6 +141,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
     ["#/models", "models"],
     ["#/connections", "connections"],
     ["#/usage", "usageNav"],
+    ["#/plugins", "pluginsNav"],
     ["#/settings", "settings"],
   ];
 
@@ -156,6 +159,15 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
             {t(label)}
           </a>
         ))}
+        {pluginPages.map((p) => {
+          const h = `#/p/${p.pluginId}/${p.id}`;
+          return (
+            <a key={h} href={h} className="nav-link plugin-nav" aria-current={hash === h ? "page" : undefined}>
+              {p.icon && <span aria-hidden="true">{p.icon} </span>}
+              {p.title}
+            </a>
+          );
+        })}
       </div>
 
       <div className="sidebar-scroll">

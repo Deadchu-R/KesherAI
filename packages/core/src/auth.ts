@@ -63,7 +63,10 @@ export function registerRemoteAuth(app: FastifyInstance, getToken: () => string 
     const token = getToken();
     const header = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     const query = (request.query as Record<string, string | undefined> | undefined)?.token;
-    const given = header ?? query;
+    // Plugin pages run in a sandboxed frame that cannot add headers or cookies, so their files
+    // are served under /api/plugin-files/<token>/…, and relative links keep the token.
+    const inPath = /^\/api\/plugin-files\/([^/]+)\//.exec(path)?.[1];
+    const given = header ?? query ?? inPath;
     const who = clientAddress(request);
     const f = failures.get(who);
     if (f && Date.now() - f.since < WINDOW_MS && f.count >= MAX_FAILURES) {

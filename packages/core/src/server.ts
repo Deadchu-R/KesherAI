@@ -20,6 +20,7 @@ import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
 import { Coach } from "./coach.js";
 import { coachRoutes } from "./routes/coach.js";
+import { pluginRoutes } from "./routes/plugins.js";
 import { detectHardwareCached } from "@kesher/downloads";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
@@ -191,6 +192,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await app.register(websocket);
   await terminalRoutes(app, services);
   await coachRoutes(app, services);
+  await pluginRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);
