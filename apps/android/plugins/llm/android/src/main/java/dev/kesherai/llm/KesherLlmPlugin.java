@@ -7,6 +7,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.mediapipe.tasks.genai.llminference.LlmInference;
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -175,13 +176,25 @@ public class KesherLlmPlugin extends Plugin {
     public void generate(PluginCall call) {
         String prompt = call.getString("prompt", "");
         if (llm == null) { call.reject("No model is loaded."); return; }
+        final int topK = call.getInt("topK", 40);
+        final float topP = call.getFloat("topP", 0.9f);
+        final float temperature = call.getFloat("temperature", 0.6f);
         stopRequested = false;
         final long started = System.currentTimeMillis();
         final StringBuilder all = new StringBuilder();
         final int[] chunks = { 0 };
         work.execute(() -> {
+            LlmInferenceSession s = null;
             try {
-                llm.generateResponseAsync(prompt, (partial, isDone) -> {
+                // A fresh session per answer, with sampling that keeps small models from rambling.
+                s = LlmInferenceSession.createFromOptions(llm, LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                    .setTopK(topK)
+                    .setTopP(topP)
+                    .setTemperature(temperature)
+                    .build());
+                session = s;
+                s.addQueryChunk(prompt);
+                s.generateResponseAsync((partial, isDone) -> {
                     if (partial != null && !partial.isEmpty() && !stopRequested) {
                         all.append(partial);
                         chunks[0]++;
@@ -189,32 +202,36 @@ public class KesherLlmPlugin extends Plugin {
                         e.put("text", partial);
                         notifyListeners("token", e);
                     }
-                    if (isDone) {
-                        JSObject r = new JSObject();
-                        r.put("text", all.toString());
-                        r.put("tokens", chunks[0]);
-                        r.put("ms", System.currentTimeMillis() - started);
-                        r.put("stopped", stopRequested);
-                        call.resolve(r);
-                    }
                 }).get();
+                finish(call, all, chunks[0], started, stopRequested);
             } catch (Exception e) {
-                if (stopRequested) {
-                    JSObject r = new JSObject();
-                    r.put("text", all.toString());
-                    r.put("tokens", chunks[0]);
-                    r.put("ms", System.currentTimeMillis() - started);
-                    r.put("stopped", true);
-                    call.resolve(r);
-                } else call.reject(e.getMessage() == null ? e.toString() : e.getMessage());
+                if (stopRequested) finish(call, all, chunks[0], started, true);
+                else call.reject(e.getMessage() == null ? e.toString() : e.getMessage());
+            } finally {
+                session = null;
+                if (s != null) try { s.close(); } catch (Exception ignored) { }
             }
         });
+    }
+
+    private volatile LlmInferenceSession session;
+
+    private void finish(PluginCall call, StringBuilder all, int tokens, long started, boolean stopped) {
+        JSObject r = new JSObject();
+        r.put("text", all.toString());
+        r.put("tokens", tokens);
+        r.put("ms", System.currentTimeMillis() - started);
+        r.put("stopped", stopped);
+        call.resolve(r);
     }
 
     /** Stops showing the answer (the runtime finishes the current one in the background). */
     @PluginMethod
     public void stop(PluginCall call) {
         stopRequested = true;
+        // Really stop the runtime when this version can (cancelGenerateResponseAsync), so the next answer starts at once.
+        LlmInferenceSession s = session;
+        if (s != null) try { s.getClass().getMethod("cancelGenerateResponseAsync").invoke(s); } catch (Exception ignored) { }
         call.resolve();
     }
 

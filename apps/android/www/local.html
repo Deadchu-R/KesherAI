@@ -407,9 +407,9 @@
   const FAST = [
     { repo: "litert-community/Qwen2.5-1.5B-Instruct", name: "Qwen 2.5 · 1.5B", family: "chatml", he: "מומלץ: מהיר מאוד, עברית סבירה.", en: "Recommended: very fast, fair Hebrew." },
     { repo: "litert-community/Qwen2.5-0.5B-Instruct", name: "Qwen 2.5 · 0.5B", family: "chatml", he: "הכי מהיר, לשאלות קצרות.", en: "Fastest, for short questions." },
-    { repo: "litert-community/Qwen2.5-3B-Instruct", name: "Qwen 2.5 · 3B", family: "chatml", he: "חכם יותר, עדיין מהיר בטלפון חזק.", en: "Smarter, still fast on a strong phone." },
-    { repo: "litert-community/DeepSeek-R1-Distill-Qwen-1.5B", name: "DeepSeek R1 · 1.5B", family: "deepseek", he: "חושב לפני שעונה (הגיון ומתמטיקה).", en: "Thinks before answering (reasoning, maths)." },
-    { repo: "litert-community/Phi-4-mini-instruct", name: "Phi-4 mini · 3.8B", family: "phi", he: "של Microsoft, חזק באנגלית ובהגיון.", en: "From Microsoft, strong in English and reasoning." },
+    { repo: "litert-community/Qwen2.5-3B-Instruct", name: "Qwen 2.5 · 3B", family: "chatml", he: "הכי טוב בעברית מבין אלה; עדיין מהיר בטלפון חזק.", en: "Best Hebrew of these; still fast on a strong phone." },
+    { repo: "litert-community/DeepSeek-R1-Distill-Qwen-1.5B", name: "DeepSeek R1 · 1.5B", family: "deepseek", he: "חושב לפני שעונה; טוב במתמטיקה, חלש בעברית (עונה בעיקר באנגלית).", en: "Thinks before answering; good at maths, weak in Hebrew." },
+    { repo: "litert-community/Phi-4-mini-instruct", name: "Phi-4 mini · 3.8B", family: "phi", he: "של Microsoft, חזק באנגלית ובהגיון; עברית חלשה.", en: "From Microsoft, strong in English and reasoning; weak Hebrew." },
   ];
   /** Puts the chat in the model's own format (these files expect the raw prompt). */
   function promptFor(family, msgs) {
@@ -490,14 +490,32 @@
   }
 
   /** Streams an answer from the native runtime. */
+  /** True when the end of the text repeats itself (small models can get stuck in a loop). */
+  function looping(text) {
+    if (text.length < 160) return false;
+    const tail = text.slice(-40);
+    let n = 0, i = -1;
+    while ((i = text.indexOf(tail, i + 1)) !== -1 && n < 4) n++;
+    if (n >= 3) return true;
+    // Short phrase repeated many times in a row.
+    return /(.{8,80}?)\1{3,}$/s.test(text.slice(-500));
+  }
   async function nativeAnswer(native, msgs, signal, onText) {
-    const sub = await LLM.addListener("token", (e) => onText(e.text));
+    let sofar = "";
+    let cut = false;
+    const sub = await LLM.addListener("token", (e) => {
+      if (cut) return;
+      sofar += e.text;
+      onText(e.text);
+      if (looping(sofar)) { cut = true; LLM.stop(); }
+    });
     const stop = () => LLM.stop();
     signal.addEventListener("abort", stop, { once: true });
     try {
       const r = await LLM.generate({ prompt: promptFor(native.family, msgs) });
       if (r.tokens > 8 && r.ms > 0) rememberSpeed(`native:${native.file}`, r.tokens / (r.ms / 1000));
       if (signal.aborted) throw new DOMException("stopped", "AbortError");
+      return { looped: cut };
     } finally {
       sub.remove?.();
       signal.removeEventListener("abort", stop);
@@ -754,7 +772,7 @@
       $("send").disabled = true;
       try {
         if (wllama.isModelLoaded()) { await wllama.exit(); wllama.__url = ""; }
-        const r = await LLM.load({ name: item.native.file, backend: localStorage.getItem("kesherai-phone-backend:" + item.native.file) === "cpu" ? "cpu" : "gpu", maxTokens: 2048 });
+        const r = await LLM.load({ name: item.native.file, backend: localStorage.getItem("kesherai-phone-backend:" + item.native.file) === "cpu" ? "cpu" : "gpu", maxTokens: 4096 });
         localStorage.setItem("kesherai-phone-backend:" + item.native.file, r.backend);
         $("status").textContent = r.backend === "gpu" ? T("רץ על הכרטיס הגרפי ⚡", "Running on the graphics chip ⚡") : T("הכרטיס הגרפי לא זמין למודל הזה; רץ על המעבד", "The graphics chip cannot run this model; using the processor");
       } catch (e) {
@@ -1137,22 +1155,35 @@
         $("status").textContent = T("מחפש באינטרנט…", "Searching the web…");
         const results = await webSearch(text).catch((err) => { addMsg("note", T("החיפוש נכשל: ", "Search failed: ") + (err.message || err)); return []; });
         if (results.length) {
-          found = results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.snippet}`).join("\n");
+          found = results.slice(0, current.item.native || !current.item.api ? 3 : 6).map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.snippet.slice(0, 300)}`).join("\n");
           addMsg("note", T(`חיפשתי באינטרנט: ${results.length} תוצאות`, `Searched the web: ${results.length} results`));
         }
         $("status").textContent = T("חושב…", "Thinking…");
       }
-      const system = { role: "system", content: T("אתה עוזר מועיל. ענה בקצרה ובשפה שבה המשתמש כתב.", "You are a helpful assistant. Answer briefly, in the user's language.") + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
+      const hebrew = /[\u0590-\u05FF]/.test(text);
+      const system = { role: "system", content: (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
+      // Reasoning models think first; show only the answer (DeepSeek's format starts thinking without an opening tag).
+      const thinks = current.item.native?.family === "deepseek";
+      const visible = (r) => {
+        if (r.includes("</think>")) r = r.slice(r.lastIndexOf("</think>") + 8);
+        else if (thinks || /^\s*<think>/.test(r)) return "";
+        return r.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trimStart();
+      };
       const onText = (d) => {
         reply += d;
         tokens++;
-        out.textContent = reply.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trimStart();
+        const v = visible(reply);
+        out.textContent = v;
+        if (!v && reply.trim()) $("status").textContent = T("חושב לפני שעונה…", "Thinking before answering…");
         $("chatView").scrollTop = $("chatView").scrollHeight;
       };
       if (current.item.api) {
         await apiAnswer(current.item.api, [system, ...recent], abort.signal, onText);
       } else if (current.item.native) {
-        await nativeAnswer(current.item.native, [system, ...recent], abort.signal, onText);
+        // Small phone models: a short context works much better than a long one.
+        const short = [{ role: "system", content: system.content.slice(0, 2500) }, ...recent.slice(-6)];
+        const r = await nativeAnswer(current.item.native, short, abort.signal, onText);
+        if (r?.looped) addMsg("note", T("המודל התחיל לחזור על עצמו, אז עצרתי אותו. מודל גדול יותר (Qwen 3B) עונה טוב יותר.", "The model started repeating itself, so I stopped it. A bigger model (Qwen 3B) answers better."));
         $("status").textContent = `${(measured(current.url) ?? 0).toFixed(1)} ${T("טוקנים לשנייה", "tokens/s")} ⚡`;
       } else {
       const stream = await wllama.createChatCompletion({ messages: [system, ...recent], stream: true, max_tokens: 768, temperature: 0.7, temp: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, penalty_last_n: 128, abortSignal: abort.signal });
@@ -1176,7 +1207,9 @@
     }
     const seconds = (performance.now() - started) / 1000;
     if (tokens > 8 && !current.item.api && !current.item.native) rememberSpeed(current.url, tokens / seconds);
-    const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    let clean = reply.includes("</think>") ? reply.slice(reply.lastIndexOf("</think>") + 8) : reply;
+    clean = clean.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+    if (!clean && reply.trim()) clean = T("(המודל חשב ולא הספיק לענות. נסה שאלה קצרה יותר.)", "(The model thought but did not get to an answer. Try a shorter question.)");
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
     if (live?.onAnswer) { live.onAnswer(clean); live.onAnswer = null; }
