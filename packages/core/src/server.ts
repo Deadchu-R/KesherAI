@@ -23,6 +23,7 @@ import { Knowledge, knowledgeTools } from "./knowledge.js";
 import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
 import { Notifier, type Note } from "./notify.js";
+import { speechTools } from "./speech-tools.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
@@ -221,6 +222,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
   const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads);
+  const whisper = new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
+    const nv = await nvidiaGpus();
+    return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
+  });
   const updater = new Updater(undefined, options.updates);
   if (!config.notifications.ntfy.topic) {
     config.notifications.ntfy.topic = Notifier.newTopic();
@@ -279,6 +284,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       mcpTools: () => [
         ...googleTools(google),
         ...knowledgeTools(knowledge),
+        ...speechTools({ whisper, speech: () => config.speech, providers: () => config.providers }),
         ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
           spec,
           // Tools that only read run without asking; the rest ask, like any command.
@@ -309,10 +315,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     personas,
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
-    whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
-      const nv = await nvidiaGpus();
-      return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
-    }),
+    whisper,
     updater,
     google,
     driveSync,

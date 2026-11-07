@@ -100,6 +100,25 @@ export function cleanTranscript(out: string): string {
     .trim();
 }
 
+/**
+ * Keeps whisper's times as short `[m:ss]` marks, one line per segment.
+ *
+ * @param out - What whisper-cli printed with timestamps.
+ * @returns Lines like `[1:05] and then we…`.
+ */
+export function timedTranscript(out: string): string {
+  return out
+    .split(/\r?\n/)
+    .flatMap((l) => {
+      const m = /^\[(\d+):(\d+):(\d+)[.,]\d+ --> [\d:.,]+\]\s*(.*)$/.exec(l.trim());
+      if (!m || !m[4] || /^\[(BLANK_AUDIO|MUSIC|NOISE|SILENCE)\]$/i.test(m[4])) return [];
+      const h = Number(m[1]);
+      const mm = Number(m[2]) + h * 60;
+      return [`[${mm}:${m[3]}] ${m[4].trim()}`];
+    })
+    .join("\n");
+}
+
 /** Runs whisper.cpp and owns its files. */
 export class WhisperEngine {
   private installing?: Promise<string>;
@@ -238,22 +257,24 @@ export class WhisperEngine {
    *
    * @param wav - A WAV file (16 kHz mono is best; the app records that).
    * @param language - `auto`, or a code like `he` or `en`.
+   * @param ext - The file type: .wav, .mp3, .flac or .ogg.
+   * @param timestamps - Keep whisper's [00:00:01.000 --> …] times.
    * @returns The text.
    */
-  async transcribe(wav: Buffer, language = "auto"): Promise<string> {
+  async transcribe(wav: Buffer, language = "auto", ext = ".wav", timestamps = false): Promise<string> {
     const st = await this.status();
     if (!st.engine || !st.model) throw new Error("The speech engine is not ready yet.");
     const exe = (await this.binary())!;
-    const file = join(tmpdir(), `kesher-stt-${randomUUID()}.wav`);
+    const file = join(tmpdir(), `kesher-stt-${randomUUID()}${/^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext.toLowerCase() : ".wav"}`);
     await writeFile(file, wav);
     try {
       const out = await new Promise<string>((resolve, reject) => {
-        execFile(exe, ["-m", st.model!, "-f", file, "-l", /^[a-z]{2,3}$|^auto$/.test(language) ? language : "auto", "-nt", "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: 300_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+        execFile(exe, ["-m", st.model!, "-f", file, "-l", /^[a-z]{2,3}$|^auto$/.test(language) ? language : "auto", ...(timestamps ? [] : ["-nt"]), "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: Math.max(300_000, wav.length / 20), windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
           if (err) reject(new Error(`The speech engine failed: ${(stderr || err.message).toString().trim().split("\n").slice(-3).join(" ")}`));
           else resolve(stdout.toString());
         });
       });
-      return cleanTranscript(out);
+      return timestamps ? timedTranscript(out) : cleanTranscript(out);
     } finally {
       await rm(file, { force: true });
     }
