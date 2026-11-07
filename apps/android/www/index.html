@@ -164,6 +164,18 @@
         if (l.kind === "home" && l.mac && !c.wake) { c.wake = l.mac; c.bcast = l.broadcast; }
       }
     } catch { /* older KesherAI: keep what we have */ }
+    // "My devices": the user's other computers (same Google account) appear here by themselves.
+    try {
+      const peers = await fetch(`${base}/api/devices/peers`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) }).then((r) => (r.ok ? r.json() : []));
+      for (const p of peers ?? []) {
+        if (!p?.token || !p.urls?.length) continue;
+        let other = list.find((x) => x.token === p.token);
+        if (!other) { other = { token: p.token, name: p.name, links: [] }; list.push(other); }
+        other.name = p.name || other.name;
+        if (p.gpu) other.gpu = p.gpu;
+        for (const u of p.urls) if (!other.links.includes(u)) other.links.push(u);
+      }
+    } catch { /* this computer does not know other devices */ }
     saveComputers(list);
   }
 

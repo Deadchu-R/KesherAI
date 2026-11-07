@@ -110,6 +110,7 @@ export function mergeSynced<T>(local: Record<string, T>, remote: Record<string, 
 export class Devices {
   private timer?: NodeJS.Timeout;
   private views: DeviceView[] = [];
+  private entries: DeviceEntry[] = [];
   private lastError?: string;
   private lastRun?: string;
   private running?: Promise<void>;
@@ -157,6 +158,19 @@ export class Devices {
   /** @returns The settings page's view. */
   status() {
     return { connected: this.d.google.connected, share: this.d.config.share, syncSettings: this.d.config.syncSettings, me: { id: this.id, name: hostname() }, devices: this.views, lastRun: this.lastRun ?? null, error: this.lastError ?? null };
+  }
+
+  /**
+   * The user's other shared computers, with their addresses and tokens, for
+   * the phone app (which already holds this computer's token) to add them.
+   */
+  peers(): Array<{ name: string; urls: string[]; token: string; gpu?: string; online: boolean }> {
+    return this.entries
+      .filter((e) => e.id !== this.id)
+      .map((e) => {
+        const v = this.views.find((x) => x.id === e.id);
+        return { name: e.name, urls: v?.url ? [v.url, ...e.urls.filter((u) => u !== v.url)] : e.urls, token: e.token, ...(e.gpu ? { gpu: e.gpu } : {}), online: !!v?.online };
+      });
   }
 
   /**
@@ -208,6 +222,7 @@ export class Devices {
         devices = [...devices, { id: this.id, name: hostname(), platform: process.platform, urls, token: this.d.remote.token, ...(gpu ? { gpu } : {}), version: await this.d.version(), updatedAt: new Date().toISOString() }];
       }
       await this.d.google.writeJson("devices.json", { devices });
+      this.entries = devices;
       this.views = await Promise.all(devices.map((x) => this.useDevice(x)));
       if (this.d.config.syncSettings) await this.syncSettings();
       this.lastError = undefined;

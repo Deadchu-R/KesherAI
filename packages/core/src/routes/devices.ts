@@ -20,6 +20,9 @@ export async function deviceRoutes(app: FastifyInstance, s: KesherServices): Pro
     return s.devices.status();
   });
 
+  /** For the phone app (it holds this computer's token): the user's other computers, to add them. */
+  app.get("/api/devices/peers", async () => s.devices.peers());
+
   app.post("/api/devices/sync", async () => {
     await s.devices.sync();
     return s.devices.status();
