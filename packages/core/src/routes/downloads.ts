@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
-import { detectHardwareCached, estimatePerformance, listHubFiles, searchHub, type DownloadJob } from "@kesher/downloads";
+import { detectHardwareCached, estimatePerformance, listHubFiles, modelSummary, searchHub, type DownloadJob, type HubSort } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 
@@ -41,6 +41,16 @@ export function destinationFor(s: Pick<KesherServices, "paths" | "config">, body
   return normalized;
 }
 
+/** A clear message for network failures, which Node reports only as "fetch failed". */
+function hubError(err: unknown): string {
+  const e = err as Error & { cause?: { code?: string; message?: string } };
+  const code = e.cause?.code;
+  if (e.message === "fetch failed" || code) {
+    return `Could not reach Hugging Face (${code ?? e.cause?.message ?? "network error"}). Check the internet connection, a VPN or a firewall, then try again.`;
+  }
+  return e.message;
+}
+
 /**
  * Hugging Face search and the download queue.
  *
@@ -50,13 +60,41 @@ export function destinationFor(s: Pick<KesherServices, "paths" | "config">, body
 export async function downloadRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const token = () => s.config.huggingFaceToken;
 
-  app.get<{ Querystring: { q?: string; pipelineTag?: string; filter?: string } }>("/api/hub/search", async (req) =>
-    searchHub({ search: req.query.q, pipelineTag: req.query.pipelineTag, filter: req.query.filter, token: token() }),
-  );
+  app.get<{ Querystring: { q?: string; pipelineTag?: string; filter?: string; sort?: string; limit?: string } }>("/api/hub/search", async (req, reply) => {
+    const sorts: HubSort[] = ["downloads", "likes", "trending", "created", "modified"];
+    const sort = sorts.find((x) => x === req.query.sort) ?? "downloads";
+    try {
+      return await searchHub({
+        ...(req.query.q ? { search: req.query.q } : {}),
+        ...(req.query.pipelineTag ? { pipelineTag: req.query.pipelineTag } : {}),
+        ...(req.query.filter ? { filter: req.query.filter } : {}),
+        sort,
+        limit: Math.min(100, Number(req.query.limit ?? 40) || 40),
+        ...(token() ? { token: token() } : {}),
+      });
+    } catch (err) {
+      return reply.code(502).send({ error: hubError(err) });
+    }
+  });
+
+  /** A short description from the model card. */
+  app.get<{ Querystring: { repo: string } }>("/api/hub/summary", async (req, reply) => {
+    try {
+      return { summary: await modelSummary(req.query.repo, { ...(token() ? { token: token() } : {}) }) };
+    } catch (err) {
+      return reply.code(502).send({ error: hubError(err) });
+    }
+  });
 
   /** A repo's files; model weights carry a performance estimate for this computer. */
-  app.get<{ Querystring: { repo: string } }>("/api/hub/files", async (req) => {
-    const [files, hw] = await Promise.all([listHubFiles(req.query.repo, { token: token() }), detectHardwareCached()]);
+  app.get<{ Querystring: { repo: string } }>("/api/hub/files", async (req, reply) => {
+    let files: Awaited<ReturnType<typeof listHubFiles>>;
+    try {
+      files = await listHubFiles(req.query.repo, { ...(token() ? { token: token() } : {}) });
+    } catch (err) {
+      return reply.code(502).send({ error: hubError(err) });
+    }
+    const hw = await detectHardwareCached();
     // Mixture-of-experts repos usually say so in the name ("A3B" = 3B active parameters).
     const moe = /-A(\d+(?:\.\d+)?)B/i.exec(req.query.repo);
     const total = /(\d+(?:\.\d+)?)B/i.exec(req.query.repo.replace(/-A\d+(?:\.\d+)?B/i, ""));
@@ -84,11 +122,19 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
         label: `${req.body.repo} · ${req.body.path}`,
       });
     } catch (err) {
-      return reply.code(400).send({ error: (err as Error).message });
+      return reply.code(400).send({ error: hubError(err) });
     }
   });
 
-  app.delete<{ Params: { id: string } }>("/api/downloads/:id", async (req) => ({ ok: s.downloads.cancel(req.params.id) }));
+  /** Starts a failed or cancelled download again (it resumes where it stopped). */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/retry", async (req, reply) => {
+    const job = s.downloads.list().find((j) => j.id === req.params.id);
+    if (!job) return reply.code(404).send({ error: "Download not found" });
+    return s.downloads.retry(req.params.id);
+  });
+
+  /** Cancels a running download, or removes a finished one from the list. */
+  app.delete<{ Params: { id: string } }>("/api/downloads/:id", async (req) => ({ ok: s.downloads.cancel(req.params.id) || s.downloads.dismiss(req.params.id) }));
 
   /** Live download progress as Server-Sent Events, one `DownloadJob` per event. */
   app.get("/api/downloads/events", async (req, reply) => {

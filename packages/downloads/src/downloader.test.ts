@@ -100,3 +100,16 @@ test("performance estimates rank models sensibly on a 12 GB RTX 4070 Ti", async 
   assert.equal(huge.tasks.length, 0);
   assert.deepEqual(small.tasks.map((t) => t.task), ["short-answer", "long-answer", "read-file", "load"]);
 });
+
+test("summarizeCard keeps the first real paragraphs of a model card", async () => {
+  const { summarizeCard, parametersFromName } = await import("./huggingface.js");
+  const card = `---\nlicense: apache-2.0\n---\n# Qwen3-8B\n\n<img src="x.png">\n\n[![badge](b.svg)](https://x)\n\n**Qwen3** is the latest generation of [large language models](https://qwen.ai) in the Qwen series, with dense and MoE models.\n\n| a | b |\n|---|---|\n\nIt supports thinking and non-thinking modes in one model, switching seamlessly.`;
+  assert.equal(
+    summarizeCard(card),
+    "Qwen3 is the latest generation of large language models in the Qwen series, with dense and MoE models.\n\nIt supports thinking and non-thinking modes in one model, switching seamlessly.",
+  );
+  assert.equal(parametersFromName("Qwen/Qwen3-8B-GGUF"), "8B");
+  assert.equal(parametersFromName("unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF"), "30B");
+  assert.equal(parametersFromName("HuggingFaceTB/SmolLM2-135M-Instruct"), "135M");
+  assert.equal(parametersFromName("black-forest-labs/FLUX.1-dev"), undefined);
+});

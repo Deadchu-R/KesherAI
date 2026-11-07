@@ -143,14 +143,26 @@ See [GOOGLE_DRIVE.md](GOOGLE_DRIVE.md) for setup.
 | `POST /api/google/sync` | `{ downloaded, uploaded }` |
 | `POST /api/google/disconnect` | Revokes access and forgets the token |
 
+## Conversation files
+
+Chats keep their files in `~/.kesher/outputs/<conversation id>`; code sessions use their project folder.
+
+| Method & path | Description |
+| --- | --- |
+| `GET /api/conversations/:id/files` | `{ folder, files: { path, size, modifiedAt }[] }`, newest first (skips `node_modules`, `.git`, `build`) |
+| `GET /api/conversations/:id/files/download?path=` | One file, as a download |
+| `GET /api/conversations/:id/files/zip` | Everything as a ZIP |
+
 ## Downloads
 
 | Method & path | Description |
 | --- | --- |
-| `GET /api/hub/search?q=&pipelineTag=&filter=` | Hugging Face search: `{ repo, category, downloads, likes, gated, tags }[]` |
+| `GET /api/hub/search?q=&pipelineTag=&filter=&sort=&limit=` | Hugging Face search. `sort`: `trending`, `downloads`, `likes`, `created`, `modified`. Returns `{ repo, author, category, downloads, likes, gated, tags, createdAt, lastModified, library, license, baseModel, parameters }[]` |
+| `GET /api/hub/summary?repo=` | `{ summary }`: the first paragraphs of the model card, as plain text |
 | `GET /api/hub/files?repo=` | Files in a repo: `{ path, size, sha256, url }[]` |
 | `POST /api/downloads` | `{ repo, path, category }` — queues a download. Returns a `DownloadJob` |
 | `GET /api/downloads` | All jobs |
+| `POST /api/downloads/:id/retry` | Starts a failed or stopped download again, resuming where it stopped |
 | `DELETE /api/downloads/:id` | Cancels (the partial file is kept for resuming) |
 | `GET /api/downloads/events` | SSE stream of `DownloadJob` updates |
 

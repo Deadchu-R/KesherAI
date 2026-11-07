@@ -108,6 +108,36 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     return true;
   }
 
+  /**
+   * Starts a failed or cancelled job again. It resumes from the `.part` file.
+   *
+   * @param id - Job id.
+   * @returns The job, or `undefined` if it does not exist.
+   */
+  retry(id: string): DownloadJob | undefined {
+    const entry = this.jobs.get(id);
+    if (!entry) return undefined;
+    if (entry.job.status === "failed" || entry.job.status === "cancelled") {
+      delete entry.job.error;
+      this.update(entry.job, { status: "queued", speed: 0 });
+      this.pump();
+    }
+    return { ...entry.job };
+  }
+
+  /**
+   * Removes a finished, failed or cancelled job from the list.
+   *
+   * @param id - Job id.
+   * @returns `true` if it was removed.
+   */
+  dismiss(id: string): boolean {
+    const entry = this.jobs.get(id);
+    if (!entry || entry.job.status === "downloading" || entry.job.status === "verifying" || entry.job.status === "queued") return false;
+    this.jobs.delete(id);
+    return true;
+  }
+
   private update(job: DownloadJob, patch: Partial<DownloadJob>): void {
     Object.assign(job, patch);
     this.emit("update", { ...job });
@@ -172,7 +202,10 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       this.update(job, { status: "done", speed: 0, received: job.total ?? job.received });
     } catch (err) {
       if (job.status === "cancelled") return;
-      this.update(job, { status: "failed", speed: 0, error: err instanceof Error ? err.message : String(err) });
+      // Node reports network problems as "fetch failed" with the real reason in `cause`.
+      const e = err as Error & { cause?: { code?: string; message?: string } };
+      const reason = e.message === "fetch failed" || e.message === "terminated" ? `${e.message}: ${e.cause?.code ?? e.cause?.message ?? "network error"}` : (e.message ?? String(err));
+      this.update(job, { status: "failed", speed: 0, error: reason });
     }
   }
 }

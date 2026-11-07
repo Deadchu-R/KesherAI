@@ -1,3 +1,4 @@
+import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
 import { useEffect, useState } from "react";
 import { api } from "./api";
@@ -77,6 +78,7 @@ export function App() {
       </main>
       {message && <div className="toast" role="status">{message}</div>}
       <ModelPickerHost />
+      <DownloadsButton />
     </div>
   );
 }
