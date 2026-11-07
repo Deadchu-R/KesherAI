@@ -1,0 +1,1 @@
+// Native-only plugin: window.Capacitor.Plugins.KesherLlm.download({ url, name }) (event "progress"), .list(), .remove({ name }), .load({ name, backend: "gpu"|"cpu", maxTokens }), .generate({ prompt }) (event "token" { text }) → { text, tokens, ms }, .stop(), .unload().

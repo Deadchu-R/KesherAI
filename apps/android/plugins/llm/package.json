@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-llm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fast on-device language models for the KesherAI Android app, with Google's LiteRT/MediaPipe LLM runtime (GPU and CPU).",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}
