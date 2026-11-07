@@ -116,7 +116,14 @@ public class KesherUpdaterPlugin extends Plugin {
                 File dir = new File(getContext().getCacheDir(), "updates");
                 dir.mkdirs();
                 File apk = new File(dir, "KesherAI-update.apk");
+                // While a new build is being published, GitHub briefly has no file there (404): wait and try again.
                 HttpURLConnection c = open(url);
+                for (int attempt = 0; c.getResponseCode() == 404 && attempt < 6; attempt++) {
+                    c.disconnect();
+                    Thread.sleep(10000);
+                    c = open(url);
+                }
+                if (c.getResponseCode() == 404) throw new Exception("GitHub is publishing a new build right now. Try again in a minute.");
                 if (c.getResponseCode() != 200) throw new Exception("GitHub answered " + c.getResponseCode());
                 long total = c.getContentLengthLong();
                 long done = 0;
