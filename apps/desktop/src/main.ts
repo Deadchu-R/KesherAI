@@ -12,7 +12,8 @@
  */
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer } from "electron";
 import { join, resolve } from "node:path";
-import { readFile, stat } from "node:fs/promises";
+import { chmod, readFile, stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
 
@@ -60,6 +61,28 @@ async function startCore(): Promise<string> {
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
     pluginRoots: [join(root, "plugins")],
     ...(await googleClient()),
+    // An installed copy updates from the project's GitHub releases: download the installer, run it, quit.
+    ...(app.isPackaged
+      ? {
+          updates: {
+            version: app.getVersion(),
+            repo: "Deadchu-R/KesherAI",
+            install: async (file: string) => {
+              if (process.platform === "darwin") {
+                // A disk image: open it so the new app can be dragged to Applications.
+                await shell.openPath(file);
+                return;
+              }
+              if (process.platform === "linux") await chmod(file, 0o755);
+              spawn(file, [], { detached: true, stdio: "ignore" }).unref();
+              setTimeout(() => {
+                quitting = true;
+                app.quit();
+              }, 1500);
+            },
+          },
+        }
+      : {}),
   });
   try {
     const url = await s.listen();

@@ -19,7 +19,24 @@ import { findFile } from "./sdcpp.js";
  * the user picks it, or when the local engine cannot run here.
  */
 
-const RELEASES = "https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest";
+const RELEASES = "https://api.github.com/repos/ggml-org/whisper.cpp/releases?per_page=8";
+
+/**
+ * Picks the Windows download of a whisper.cpp release: the CUDA build when
+ * there is an NVIDIA card, else the plain (or BLAS) 64-bit build.
+ *
+ * @param assets - The release's files.
+ * @param nvidia - Whether there is an NVIDIA card.
+ * @returns The file, if the release has one for this computer.
+ */
+export function pickWhisperAsset<T extends { name: string }>(assets: T[], nvidia: boolean): T | undefined {
+  return (
+    (nvidia ? (assets.find((a) => /whisper-cublas-12.*bin-x64\.zip$/i.test(a.name)) ?? assets.find((a) => /cublas.*bin-x64\.zip$/i.test(a.name))) : undefined) ??
+    assets.find((a) => /^whisper-bin-x64\.zip$/i.test(a.name)) ??
+    assets.find((a) => /^whisper-blas-bin-x64\.zip$/i.test(a.name)) ??
+    assets.find((a) => /bin-x64\.zip$/i.test(a.name) && !/cublas|cuda/i.test(a.name))
+  );
+}
 const MODELS = {
   turbo: { file: "ggml-large-v3-turbo-q5_0.bin", sizeGb: 0.55, label: "Whisper large-v3 turbo" },
   small: { file: "ggml-small-q5_1.bin", sizeGb: 0.19, label: "Whisper small" },
@@ -155,15 +172,21 @@ export class WhisperEngine {
       }
       if (process.platform !== "win32") throw new Error("There is no ready-made whisper.cpp for Linux. Use a cloud speech service (Groq or OpenAI) under Settings → Speech.");
       this.state = { busy: "installing" };
+      // The newest release can be published before its files are uploaded: look through the last few.
       const res = await fetch(RELEASES, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" } });
       if (!res.ok) throw new Error(`GitHub answered ${res.status} while looking for the speech engine.`);
-      const release = (await res.json()) as { tag_name: string; assets: Array<{ name: string; browser_download_url: string; size: number }> };
+      const releases = (await res.json()) as Array<{ tag_name: string; draft?: boolean; assets: Array<{ name: string; browser_download_url: string; size: number }> }>;
       const { nvidia } = await this.gpu().catch(() => ({ nvidia: false }));
-      const asset =
-        (nvidia ? release.assets.find((a) => /whisper-cublas-12.*bin-x64\.zip$/i.test(a.name)) : undefined) ??
-        release.assets.find((a) => /^whisper-bin-x64\.zip$/i.test(a.name)) ??
-        release.assets.find((a) => /bin-x64\.zip$/i.test(a.name));
-      if (!asset) throw new Error("whisper.cpp has no download for this computer.");
+      let release: (typeof releases)[number] | undefined;
+      let asset: (typeof releases)[number]["assets"][number] | undefined;
+      for (const r of releases.filter((x) => !x.draft)) {
+        asset = pickWhisperAsset(r.assets, nvidia);
+        if (asset) {
+          release = r;
+          break;
+        }
+      }
+      if (!asset || !release) throw new Error("whisper.cpp has no download for this computer right now. Try again later, or use a cloud speech service under Settings → Speech.");
       await mkdir(this.dir, { recursive: true });
       const archive = join(this.dir, asset.name);
       const job = this.downloads.enqueue({ url: asset.browser_download_url, dest: archive, size: asset.size, label: `Speech engine · ${asset.name}` });

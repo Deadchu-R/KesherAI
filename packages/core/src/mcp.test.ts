@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { McpManager, mcpResultText, mcpToolName, rpcFromSse } from "./mcp.js";
+import { McpManager, mcpResultText, mcpToolName, missingTool, rpcFromSse } from "./mcp.js";
 
 const FAKE_STDIO = `
 let buf = "";
@@ -117,4 +117,10 @@ test("names and SSE parsing", () => {
   assert.equal(mcpToolName("notion", "notion-search.pages"), "mcp_notion_notion-search_pages");
   assert.ok(mcpToolName("a", "x".repeat(100)).length <= 64);
   assert.deepEqual(rpcFromSse(`data: {"jsonrpc":"2.0","method":"note"}\n\ndata: {"jsonrpc":"2.0","id":3,"result":{"ok":1}}\n\n`, 3)?.result, { ok: 1 });
+});
+
+test("says what to install when a program is missing", () => {
+  assert.match(missingTool("npx", "'npx' is not recognized as an internal or external command,")!, /Node\.js/);
+  assert.match(missingTool("uvx", "spawn uvx ENOENT")!, /uv/);
+  assert.equal(missingTool("npx", "some other failure"), undefined);
 });

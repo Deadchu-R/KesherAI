@@ -15,6 +15,7 @@ import { LlamaEngine } from "./llamacpp.js";
 import { Library } from "./library.js";
 import { ConversationManager, modelTurnFor } from "./conversations.js";
 import { Updater } from "./updates.js";
+import type { PackagedUpdates } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { googleTools } from "./google-tools.js";
 import { DriveSync } from "./drive-sync.js";
@@ -65,6 +66,8 @@ export interface KesherServerOptions {
   googleEndpoints?: GoogleEndpoints;
   /** The project's Google OAuth client (defaults to branding.config.ts; builds pass the one from repository secrets). */
   googleClient?: { clientId: string; clientSecret: string };
+  /** Installed copies: update from GitHub releases (the desktop app passes its version and how to run an installer). */
+  updates?: PackagedUpdates;
 }
 
 /** What {@link createKesherServer} returns. */
@@ -232,7 +235,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       const nv = await nvidiaGpus();
       return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
     }),
-    updater: new Updater(),
+    updater: new Updater(undefined, options.updates),
     google,
     driveSync,
     sd,

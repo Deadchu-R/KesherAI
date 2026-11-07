@@ -116,6 +116,24 @@ interface Transport {
   close(): void;
 }
 
+/**
+ * Says plainly what to install when a server's program is missing
+ * (e.g. `npx` without Node.js on Windows: "is not recognized").
+ *
+ * @param command - The program the server runs.
+ * @param error - What the system said.
+ * @returns The message, or undefined when something else went wrong.
+ */
+export function missingTool(command: string, error: string): string | undefined {
+  if (!/not recognized as an internal or external command|ENOENT|command not found|No such file or directory/i.test(error)) return undefined;
+  const c = command.replace(/\.(cmd|exe)$/i, "").split(/[\\/]/).pop()!.toLowerCase();
+  if (["npx", "npm", "node"].includes(c)) return "This server needs Node.js, which is not installed on this computer. Install the LTS version from nodejs.org, then press Reconnect.";
+  if (["uvx", "uv"].includes(c)) return "This server needs uv, which is not installed on this computer. Install it from docs.astral.sh/uv, then press Reconnect.";
+  if (["python", "python3", "py"].includes(c)) return "This server needs Python, which is not installed on this computer. Install it from python.org, then press Reconnect.";
+  if (c === "docker") return "This server needs Docker, which is not installed or not running on this computer.";
+  return `The program "${command}" was not found on this computer. Install it, then press Reconnect.`;
+}
+
 /** Talks JSON-RPC to a program over stdin/stdout. */
 class StdioTransport implements Transport {
   private proc: ChildProcess;
@@ -160,8 +178,8 @@ class StdioTransport implements Transport {
       this.waiting.clear();
       onExit(why);
     };
-    this.proc.on("error", (e) => end(`Could not start ${cfg.command}: ${e.message}`));
-    this.proc.on("exit", (code) => end(`The program stopped (code ${code}). ${this.stderr.trim().split("\n").slice(-3).join(" ")}`.trim()));
+    this.proc.on("error", (e) => end(missingTool(cfg.command!, e.message) ?? `Could not start ${cfg.command}: ${e.message}`));
+    this.proc.on("exit", (code) => end(missingTool(cfg.command!, this.stderr) ?? `The program stopped (code ${code}). ${this.stderr.trim().split("\n").slice(-3).join(" ")}`.trim()));
   }
 
   private onMessage(msg: RpcReply) {
