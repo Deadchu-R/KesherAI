@@ -237,6 +237,7 @@ function GoogleApps() {
   const apps = [
     { id: "gmail", name: "Gmail", text: t("mcpGmail") },
     { id: "calendar", name: "Google Calendar", text: t("mcpCalendar") },
+    { id: "drive", name: "Google Drive", text: t("mcpDrive") },
   ];
   return (
     <div className="mcp-presets">

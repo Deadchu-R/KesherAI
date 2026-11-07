@@ -29,7 +29,7 @@ export interface GoogleConfig {
 }
 
 /** Google services besides Drive that KesherAI can connect. */
-export type GoogleService = "gmail" | "calendar";
+export type GoogleService = "gmail" | "calendar" | "drive";
 
 /**
  * The permissions each service asks for. Gmail can read and write drafts,
@@ -38,6 +38,8 @@ export type GoogleService = "gmail" | "calendar";
 export const SERVICE_SCOPES: Record<GoogleService, string[]> = {
   gmail: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose"],
   calendar: ["https://www.googleapis.com/auth/calendar.events"],
+  // Read every file in the user's Drive (search and read); new documents are created with drive.file.
+  drive: ["https://www.googleapis.com/auth/drive.readonly"],
 };
 
 /** Endpoints, overridable for tests. */
@@ -245,8 +247,26 @@ export class GoogleDrive {
     return this.connected && !!this.config.services?.includes(service);
   }
 
+  /** @returns The upload API base (Drive). */
+  uploadBase(): string {
+    return this.endpoints.upload;
+  }
+
+  /**
+   * Calls a Google API and returns the raw response (for file contents).
+   *
+   * @param url - The full URL.
+   * @returns The response.
+   */
+  async raw(url: string): Promise<Response> {
+    const res = await fetch(url, { headers: { authorization: `Bearer ${await this.token()}` } });
+    if (!res.ok) throw new Error(`Google answered ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+    return res;
+  }
+
   /** @returns The API base for a service. */
   base(service: GoogleService): string {
+    if (service === "drive") return this.endpoints.api;
     return (service === "gmail" ? this.endpoints.gmail : this.endpoints.calendar) ?? GOOGLE_ENDPOINTS[service]!;
   }
 

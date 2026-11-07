@@ -162,5 +162,68 @@ export function googleTools(g: GoogleDrive): AgentTool[] {
       },
     );
   }
+  if (g.has("drive")) {
+    const api = g.base("drive");
+    const FOLDER = "application/vnd.google-apps.folder";
+    // Google's own formats are exported as text; other text files are read as they are.
+    const EXPORT: Record<string, string> = {
+      "application/vnd.google-apps.document": "text/plain",
+      "application/vnd.google-apps.spreadsheet": "text/csv",
+      "application/vnd.google-apps.presentation": "text/plain",
+    };
+    tools.push(
+      {
+        risk: "read",
+        spec: {
+          name: "drive_search",
+          description: "Search the user's Google Drive by words in the file name or contents. Returns id, name, type, last change, owner and link. Optional `type`: doc, sheet, slides, pdf, folder.",
+          inputSchema: { type: "object", properties: { query: { type: "string" }, type: { type: "string" }, max: { type: "number" } }, required: ["query"] },
+        },
+        run: async (input) => {
+          const q = str(input.query).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+          const types: Record<string, string> = { doc: "application/vnd.google-apps.document", sheet: "application/vnd.google-apps.spreadsheet", slides: "application/vnd.google-apps.presentation", pdf: "application/pdf", folder: FOLDER };
+          const t = types[str(input.type).toLowerCase()];
+          const filter = `(name contains '${q}' or fullText contains '${q}') and trashed=false${t ? ` and mimeType='${t}'` : ""}`;
+          const max = Math.min(30, Math.max(1, Number(input.max) || 15));
+          const r = await g.api<{ files?: Array<{ id: string; name: string; mimeType: string; modifiedTime?: string; webViewLink?: string; owners?: Array<{ displayName?: string }> }> }>(
+            `${api}/files?q=${encodeURIComponent(filter)}&pageSize=${max}&orderBy=modifiedTime desc&fields=files(id,name,mimeType,modifiedTime,webViewLink,owners(displayName))&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+          );
+          if (!r.files?.length) return { output: "No files found." };
+          return { output: r.files.map((f) => `id: ${f.id}\nname: ${f.name}\ntype: ${f.mimeType}\nchanged: ${f.modifiedTime ?? ""}${f.owners?.[0]?.displayName ? `\nowner: ${f.owners[0].displayName}` : ""}\nlink: ${f.webViewLink ?? ""}`).join("\n\n") };
+        },
+      },
+      {
+        risk: "read",
+        spec: { name: "drive_read", description: "Read a Google Drive file (from drive_search): Docs and Slides as text, Sheets as CSV, text files as they are. For a folder, lists what is inside.", inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
+        run: async (input) => {
+          const id = encodeURIComponent(str(input.id));
+          const meta = await g.api<{ name: string; mimeType: string; size?: string; webViewLink?: string }>(`${api}/files/${id}?fields=name,mimeType,size,webViewLink&supportsAllDrives=true`);
+          if (meta.mimeType === FOLDER) {
+            const r = await g.api<{ files?: Array<{ id: string; name: string; mimeType: string }> }>(`${api}/files?q=${encodeURIComponent(`'${str(input.id)}' in parents and trashed=false`)}&pageSize=100&fields=files(id,name,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+            return { output: `Folder ${meta.name}:\n${(r.files ?? []).map((f) => `- ${f.name} (${f.mimeType}) id: ${f.id}`).join("\n") || "(empty)"}` };
+          }
+          const exportAs = EXPORT[meta.mimeType];
+          let text: string;
+          if (exportAs) text = await (await g.raw(`${api}/files/${id}/export?mimeType=${encodeURIComponent(exportAs)}`)).text();
+          else if (/^text\/|json|xml|csv|markdown|javascript|yaml/.test(meta.mimeType)) {
+            if (Number(meta.size ?? 0) > 5_000_000) return { output: `${meta.name} is too big to read here (${meta.size} bytes). Link: ${meta.webViewLink ?? ""}` };
+            text = await (await g.raw(`${api}/files/${id}?alt=media&supportsAllDrives=true`)).text();
+          } else return { output: `${meta.name} is a ${meta.mimeType} file, which cannot be read as text here. Link: ${meta.webViewLink ?? ""}` };
+          return { output: `${meta.name}\n${meta.webViewLink ?? ""}\n\n${text.slice(0, 40_000)}${text.length > 40_000 ? "\n…(cut)" : ""}` };
+        },
+      },
+      {
+        risk: "exec",
+        spec: { name: "drive_create_doc", description: "Create a new Google Doc in the user's Drive with the given title and text (Markdown-style headings and lists are fine). Returns its link.", inputSchema: { type: "object", properties: { title: { type: "string" }, content: { type: "string" } }, required: ["title", "content"] } },
+        preview: async (input) => `Create a Google Doc in your Drive: "${str(input.title)}"\n\n${str(input.content).slice(0, 1500)}`,
+        run: async (input) => {
+          const boundary = `kesher${Date.now().toString(16)}`;
+          const body = [`--${boundary}`, "Content-Type: application/json; charset=UTF-8", "", JSON.stringify({ name: str(input.title) || "Untitled", mimeType: "application/vnd.google-apps.document" }), `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "", str(input.content), `--${boundary}--`].join("\r\n");
+          const f = await g.api<{ id: string; webViewLink?: string }>(`${g.uploadBase()}/files?uploadType=multipart&fields=id,webViewLink`, { method: "POST", headers: { "content-type": `multipart/related; boundary=${boundary}` }, body });
+          return { output: `Created the Google Doc. ${f.webViewLink ?? `https://docs.google.com/document/d/${f.id}`}` };
+        },
+      },
+    );
+  }
   return tools;
 }

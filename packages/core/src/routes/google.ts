@@ -49,7 +49,7 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post<{ Body: { services?: string[] } }>("/api/google/connect", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Connect Google from the computer that runs KesherAI." });
     try {
-      const services = (req.body?.services ?? []).filter((x): x is "gmail" | "calendar" => x === "gmail" || x === "calendar");
+      const services = (req.body?.services ?? []).filter((x): x is "gmail" | "calendar" | "drive" => x === "gmail" || x === "calendar" || x === "drive");
       return { url: s.google.authUrl(`http://127.0.0.1:${s.config.port}/api/google/callback`, services) };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
@@ -65,7 +65,7 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
     try {
       const email = await s.google.finish(req.query.code, req.query.state);
       void s.driveSync.syncNow().catch(() => undefined);
-      const extra = (s.config.google.services ?? []).map((x) => (x === "gmail" ? "Gmail" : "Google Calendar"));
+      const extra = (s.config.google.services ?? []).map((x) => (x === "gmail" ? "Gmail" : x === "drive" ? "your Google Drive files" : "Google Calendar"));
       return page(`${branding.productName} is connected to Google`, `${email ? `${email}. ` : ""}Projects and conversations are saved in the KesherAI folder in your Drive.${extra.length ? ` ${extra.join(" and ")} can now be used in your chats.` : ""} You can close this window.`);
     } catch (err) {
       return page("Google Drive was not connected", (err as Error).message);

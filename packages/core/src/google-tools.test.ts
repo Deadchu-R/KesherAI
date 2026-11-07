@@ -99,3 +99,34 @@ test("email helpers", () => {
   const raw = Buffer.from(rawEmail({ to: "a@b.c", subject: "שלום", body: "x" }), "base64url").toString();
   assert.match(raw, /Subject: =\?UTF-8\?B\?/);
 });
+
+test("Drive tools: search, read a Doc as text, list a folder, create a Doc", async () => {
+  const calls: string[] = [];
+  const srv = createServer(async (req, res) => {
+    const url = new URL(req.url!, "http://x");
+    const body = await read(req);
+    calls.push(`${req.method} ${url.pathname}${url.search}${body ? ` ${body.slice(0, 200)}` : ""}`);
+    const json = (v: unknown) => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(v)); };
+    if (url.pathname === "/token") return json({ access_token: "at", expires_in: 3600 });
+    if (url.pathname === "/api/files" && url.searchParams.get("q")?.includes("in parents")) return json({ files: [{ id: "d1", name: "Plan", mimeType: "application/vnd.google-apps.document" }] });
+    if (url.pathname === "/api/files") return json({ files: [{ id: "d1", name: "Plan", mimeType: "application/vnd.google-apps.document", modifiedTime: "2026-11-01", webViewLink: "https://docs/d1" }] });
+    if (url.pathname === "/api/files/d1" ) return json({ name: "Plan", mimeType: "application/vnd.google-apps.document", webViewLink: "https://docs/d1" });
+    if (url.pathname === "/api/files/f1") return json({ name: "Work", mimeType: "application/vnd.google-apps.folder" });
+    if (url.pathname === "/api/files/d1/export") { res.writeHead(200, { "content-type": "text/plain" }); return res.end("תוכנית העבודה"); }
+    if (url.pathname === "/upload/files") return json({ id: "n1", webViewLink: "https://docs/n1" });
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+  const g = new GoogleDrive({ clientId: "c", refreshToken: "rt", services: ["drive"] }, async () => undefined, { auth: "", token: `${base}/token`, revoke: "", api: `${base}/api`, upload: `${base}/upload` });
+  const tools = Object.fromEntries(googleTools(g).map((t) => [t.spec.name, t]));
+  const ctx = {} as never;
+  assert.match((await tools.drive_search!.run({ query: "Roee's plan", type: "doc" }, ctx)).output, /Plan[\s\S]*docs\/d1/);
+  assert.ok(calls.some((c) => decodeURIComponent(c).includes("name contains 'Roee\\'s plan'")));
+  assert.match((await tools.drive_read!.run({ id: "d1" }, ctx)).output, /תוכנית העבודה/);
+  assert.match((await tools.drive_read!.run({ id: "f1" }, ctx)).output, /Folder Work:[\s\S]*Plan/);
+  assert.equal(tools.drive_create_doc!.risk, "exec");
+  assert.match((await tools.drive_create_doc!.run({ title: "Notes", content: "hello" }, ctx)).output, /docs\/n1/);
+  srv.closeAllConnections();
+  srv.close();
+});
