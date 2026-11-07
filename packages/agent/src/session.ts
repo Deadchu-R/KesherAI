@@ -650,6 +650,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         output,
         ...(out.diff ? { diff: out.diff } : {}),
         ...(out.assetIds?.length ? { assetIds: out.assetIds } : {}),
+        ...(out.videoIds?.length ? { videoIds: out.videoIds } : {}),
         ...(out.files?.length ? { files: out.files } : {}),
       });
       return output;

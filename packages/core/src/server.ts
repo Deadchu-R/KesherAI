@@ -17,7 +17,7 @@ import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
-import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
+import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
 import { WhisperEngine } from "./whisper.js";
@@ -180,6 +180,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       outputsDir: join(paths.root, "outputs"),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
       computerTools: (id) => computer.tools(id),
+      video: {
+        ensure: () => ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
+        generate: (path, req) => sd.generateVideo(path, req),
+      },
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
     }),
     coach,

@@ -80,6 +80,7 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   const images = steps.flatMap((s) => s.result?.assetIds ?? []);
+  const videos = steps.flatMap((s) => s.result?.videoIds ?? []);
   // Older builds only said "Built dist/x.exe." in their output.
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
@@ -104,8 +105,18 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
           {stepLabel(current)}
         </p>
       )}
-      {current && !current.result && current.call.name === "generate_image" && <ImageProgressLine />}
+      {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
+      {videos.length > 0 && (
+        <div className="activity-images">
+          {videos.map((id) => (
+            <div key={id} className="video-card">
+              <video src={withToken(`/api/assets/${id}`)} controls loop autoPlay muted playsInline className="asset" />
+              <a href={withToken(`/api/assets/${id}`)} download={`kesher-video-${id.slice(0, 8)}.webm`}>{t("download")}</a>
+            </div>
+          ))}
+        </div>
+      )}
       {images.length > 0 && (
         <div className="activity-images">
           {images.map((id) => <img key={id} src={withToken(`/api/assets/${id}`)} alt="" className="asset" />)}

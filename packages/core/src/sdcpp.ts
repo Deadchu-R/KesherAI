@@ -45,6 +45,8 @@ export interface ModelFamily {
   args: string[];
   steps: number;
   cfg: number;
+  /** Video models (Wan): frames per clip and frame rate. */
+  video?: { frames: number; fps: number; width: number; height: number };
 }
 
 /**
@@ -52,6 +54,21 @@ export interface ModelFamily {
  * stable-diffusion.cpp and Unsloth guides use.
  */
 export const FAMILIES: ModelFamily[] = [
+  {
+    // Wan 2.1 text-to-video (1.3B: fast, ~8 GB of graphics memory at 480p).
+    id: "wan",
+    name: "Wan video",
+    match: /wan2[._]?[12]/i,
+    modelFlag: "--diffusion-model",
+    companions: [
+      { flag: "--vae", repo: "Comfy-Org/Wan_2.1_ComfyUI_repackaged", path: "split_files/vae/wan_2.1_vae.safetensors", sizeGb: 0.25 },
+      { flag: "--t5xxl", repo: "city96/umt5-xxl-encoder-gguf", path: "umt5-xxl-encoder-Q5_K_M.gguf", sizeGb: 4.15 },
+    ],
+    args: ["--sampling-method", "euler", "--flow-shift", "3.0", "--diffusion-fa"],
+    steps: 30,
+    cfg: 6,
+    video: { frames: 33, fps: 16, width: 832, height: 480 },
+  },
   {
     id: "qwen-image",
     name: "Qwen-Image",
@@ -393,6 +410,28 @@ export class SdEngine {
   }
 
   /**
+   * Generates a short video clip (Wan): about 2 seconds at 16 frames a
+   * second by default, as WebM.
+   *
+   * @param modelFile - The Wan diffusion model.
+   * @param req - Prompt, optional negative prompt, seconds (1–5), seed.
+   * @param signal - Abort to stop.
+   * @returns The video.
+   */
+  async generateVideo(modelFile: string, req: { prompt: string; negativePrompt?: string; seconds?: number; seed: number }, signal?: AbortSignal): Promise<GeneratedFile> {
+    const v = familyFor(modelFile).video;
+    if (!v) throw new Error(`${basename(modelFile)} is not a video model.`);
+    if (!(await this.ready(modelFile))) {
+      const gb = this.prepare(modelFile);
+      throw new PreparingError(`The video engine is getting ready${gb ? `: downloading ${gb.toFixed(1)} GB of files this model needs` : ""}. Follow it in the downloads circle, then try again.`);
+    }
+    const frames = Math.round(Math.min(5, Math.max(1, req.seconds ?? 2)) * v.fps) + 1;
+    const run = this.queue.then(() => this.runOnce(modelFile, { prompt: req.prompt, ...(req.negativePrompt ? { negativePrompt: req.negativePrompt } : {}), width: v.width, height: v.height, steps: 0, seed: req.seed, frames }, signal));
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
    * Generates one image.
    *
    * @param modelFile - Absolute model path.
@@ -418,11 +457,14 @@ export class SdEngine {
     return run;
   }
 
-  private async runOnce(modelFile: string, req: Omit<ProviderImageRequest, "providerModelId">, signal?: AbortSignal): Promise<GeneratedFile> {
+  private async runOnce(modelFile: string, req: Omit<ProviderImageRequest, "providerModelId"> & { frames?: number }, signal?: AbortSignal): Promise<GeneratedFile> {
     const exe = (await this.install())!;
     const family = familyFor(modelFile);
-    const out = join(tmpdir(), `kesher-image-${randomUUID()}.png`);
+    const video = family.video;
+    const out = join(tmpdir(), `kesher-${video ? "video" : "image"}-${randomUUID()}.${video ? "webm" : "png"}`);
+    const frames = video ? Math.max(5, Math.round(((req.frames ?? video.frames) - 1) / 4) * 4 + 1) : 0;
     const args = [
+      ...(video ? ["-M", "vid_gen", "--video-frames", String(frames), "--fps", String(video.fps)] : []),
       family.modelFlag, modelFile,
       ...family.companions.flatMap((c) => [c.flag, this.companionPath(c)]),
       ...family.args,
@@ -469,13 +511,13 @@ export class SdEngine {
       });
     });
     const data = await readFile(out).catch(() => {
-      throw new Error(`The image engine finished without an image:\n${log.split("\n").slice(-12).join("\n")}`);
+      throw new Error(`The image engine finished without ${video ? "a video" : "an image"}:\n${log.split("\n").slice(-12).join("\n")}`);
     });
     await rm(out, { force: true });
     return {
       data,
-      mimeType: "image/png",
-      meta: { prompt: req.prompt, seed: req.seed, width: req.width, height: req.height, family: family.id, seconds: Math.round((Date.now() - started) / 1000) },
+      mimeType: video ? "video/webm" : "image/png",
+      meta: { prompt: req.prompt, seed: req.seed, width: req.width, height: req.height, family: family.id, seconds: Math.round((Date.now() - started) / 1000), ...(video ? { frames, fps: video.fps } : {}) },
     };
   }
 }
@@ -528,6 +570,55 @@ let pendingImageDownload: string | undefined;
  * @param d - Engine, downloads, config and where models go.
  * @returns The model id to use now, or a message saying what is downloading.
  */
+/** The video model KesherAI downloads when none is chosen: Wan 2.1 text-to-video 1.3B. */
+export const RECOMMENDED_VIDEO_MODEL = {
+  id: "wan2.1-t2v-1.3b",
+  name: "Wan 2.1 text-to-video 1.3B",
+  repo: "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+  file: "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
+};
+let pendingVideoDownload: string | undefined;
+
+/**
+ * Finds the video model, or starts downloading one (with its encoder and
+ * VAE) the way {@link ensureImageModel} does for pictures.
+ *
+ * @param d - Engine, downloads, config and models folder.
+ * @returns The model's path, or a message to tell the user.
+ */
+export async function ensureVideoModel(d: { sd: SdEngine; downloads: DownloadManager; config: { activeModels: Record<string, string> }; modelsDir: () => string; save: () => Promise<void> }): Promise<{ path?: string; message?: string }> {
+  const m = RECOMMENDED_VIDEO_MODEL;
+  const dest = join(d.modelsDir(), "video", m.repo, m.file);
+  const chosen = d.config.activeModels.video;
+  if (chosen && existsSync(chosen)) return { path: chosen };
+  if (existsSync(dest)) {
+    if (!(await d.sd.ready(dest))) {
+      const gb = d.sd.prepare(dest);
+      return { message: `The video model's extra files are downloading (about ${gb.toFixed(1)} GB). Tell the user to follow them in the downloads circle and ask again when they are done.` };
+    }
+    d.config.activeModels.video = dest;
+    await d.save();
+    return { path: dest };
+  }
+  if (pendingVideoDownload) return { message: `${m.name} is still downloading. Tell the user to follow it in the downloads circle and ask again when it is done.` };
+  const files = await listHubFiles(m.repo);
+  const f = files.find((x) => x.path === m.file);
+  if (!f) return { message: `Could not find ${m.file} on Hugging Face.` };
+  pendingVideoDownload = m.id;
+  const job = d.downloads.enqueue({ url: f.url, dest, size: f.size, ...(f.sha256 ? { sha256: f.sha256 } : {}), label: `${m.name} · ${basename(m.file)}` });
+  const extraGb = d.sd.prepare(dest);
+  void waitForDownload(d.downloads, job.id)
+    .then(async () => {
+      d.config.activeModels.video = dest;
+      await d.save();
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      pendingVideoDownload = undefined;
+    });
+  return { message: `There was no video model yet, so KesherAI started downloading ${m.name} (about ${(f.size / 1024 ** 3 + extraGb).toFixed(1)} GB with its text encoder and VAE). Tell the user it is downloading (they can follow it in the downloads circle) and to ask again when it is done.` };
+}
+
 export async function ensureImageModel(d: {
   sd: SdEngine;
   downloads: DownloadManager;

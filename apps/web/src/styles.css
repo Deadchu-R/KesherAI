@@ -675,3 +675,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .msg:hover .say-btn, .say-btn.on, .say-btn:focus-visible { opacity: 1; border-color: var(--border-strong); }
 .sp-sub { font-size: 14px; font-weight: 500; margin: 8px 0 0; }
 .tts-auto { flex-direction: row; align-items: center; gap: 8px; }
+.video-card { display: grid; gap: 6px; }
+.video-card video { max-width: min(560px, 100%); border-radius: 12px; }
+.video-card a { font-size: 13px; color: var(--accent); }

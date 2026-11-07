@@ -15,6 +15,8 @@ export interface ToolOutput {
   diff?: string;
   /** Assets the tool produced, shown in the conversation. */
   assetIds?: string[];
+  /** Video assets the tool produced, shown as players. */
+  videoIds?: string[];
   /** Files the tool made for the user (paths relative to the workspace), shown as cards with Download. */
   files?: string[];
   /** Pictures for the model to look at (vision models), e.g. a screenshot. Only the latest ones are kept in the conversation. */

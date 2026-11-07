@@ -113,6 +113,11 @@ export class ConversationManager {
        * active: uses a downloaded one, or starts downloading the best fit.
        */
       ensureImageModel?(): Promise<{ modelId?: string; message?: string }>;
+      /** Video generation (Wan on stable-diffusion.cpp): finds or downloads the model, and makes a clip. */
+      video?: {
+        ensure(): Promise<{ path?: string; message?: string }>;
+        generate(path: string, req: { prompt: string; negativePrompt?: string; seconds?: number; seed: number }): Promise<{ data: Uint8Array; mimeType: string; meta?: Record<string, unknown> }>;
+      };
       /** Computer-control tools for a conversation (empty when the user has not turned it on). */
       computerTools?(conversationId: string): AgentTool[];
       /** Notes the coach learned about how the user works, added to every system prompt. */
@@ -190,6 +195,38 @@ export class ConversationManager {
             files.map((f) => this.deps.assets.save(f.data, f.mimeType, { sourceModelId: imageModel, ...(f.meta ? { meta: f.meta } : {}) })),
           );
           return { output: `Generated ${assets.length} image(s); the user can see them.${switched}`, assetIds: assets.map((a) => a.id) };
+        },
+      });
+    }
+    if (this.deps.video) {
+      const video = this.deps.video;
+      notes.push("generate_video makes a short video clip (about 2 seconds) from an English description with the built-in video engine; it takes a few minutes. If the model is still downloading, tell the user and stop.");
+      tools.push({
+        risk: "safe",
+        spec: {
+          name: "generate_video",
+          description: "Generate a short video clip (1–5 seconds) from a text description. The video is shown to the user. Slow (minutes). If no video model is ready, one is downloaded and the result says so.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              prompt: { type: "string", description: "Detailed description of the scene and the motion, in English." },
+              negative_prompt: { type: "string" },
+              seconds: { type: "number", description: "Length, 1–5 (default 2)." },
+            },
+            required: ["prompt"],
+          },
+        },
+        run: async (input) => {
+          const r = await video.ensure();
+          if (!r.path) return { output: `${r.message ?? "No video model is available."} ${WAIT_NOTE}` };
+          const file = await video
+            .generate(r.path, { prompt: String(input.prompt ?? ""), ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}), seconds: Number(input.seconds ?? 2), seed: randomInt(2 ** 31) })
+            .catch((err: Error) => {
+              if (/getting ready|still downloading/i.test(err.message)) throw new Error(`${err.message} ${WAIT_NOTE}`);
+              throw err;
+            });
+          const asset = await this.deps.assets.save(file.data, file.mimeType, { sourceModelId: "sdcpp-video", ...(file.meta ? { meta: file.meta } : {}) });
+          return { output: "Generated a video; the user can watch it.", videoIds: [asset.id] };
         },
       });
     }
