@@ -58,12 +58,37 @@ jobs:
           sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"$VERSION (${{ github.run_number }})\"/" android/app/build.gradle
           grep -E "versionCode|versionName" android/app/build.gradle
           npx cap sync android
-      - name: Use the project's fixed signing key (apps/android/signing/README.md)
-        run: mkdir -p ~/.android && cp apps/android/signing/debug.keystore ~/.android/debug.keystore
+      - name: Sign every build with the project's fixed key (apps/android/signing/README.md)
+        working-directory: apps/android/android
+        run: |
+          # Point the debug build at the committed key explicitly; Android Studio's default key location
+          # differs between machines, and a different key makes updates fail with "package conflicts".
+          cat >> app/build.gradle <<'GRADLE'
+
+          android {
+              signingConfigs {
+                  kesher {
+                      storeFile file("../../signing/debug.keystore")
+                      storePassword "android"
+                      keyAlias "androiddebugkey"
+                      keyPassword "android"
+                  }
+              }
+              buildTypes {
+                  debug { signingConfig signingConfigs.kesher }
+              }
+          }
+          GRADLE
       - name: Build the APK
         working-directory: apps/android/android
         run: ./gradlew assembleDebug --no-daemon
       - run: cp apps/android/android/app/build/outputs/apk/debug/app-debug.apk KesherAI-android.apk
+      - name: Check the APK is signed with the project's key
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs KesherAI-android.apk | tee certs.txt
+          grep -qi "SHA-256 digest: d2415a1e4f3ebc53b70e065edf2393c2e2134331f1da229815a3a1f4aa3648d3" certs.txt \
+            || { echo "::error::The APK is not signed with apps/android/signing/debug.keystore, so it would not update the installed app."; exit 1; }
       - name: Describe this build for the app's update button
         run: |
           VERSION=$(node -p "require('./package.json').version")
