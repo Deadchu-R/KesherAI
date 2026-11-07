@@ -7,7 +7,7 @@ import { networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 
 /** Version of the core server API. */
-export const CORE_VERSION = "0.2.0";
+export const CORE_VERSION = "0.3.0";
 
 /**
  * Health, app info, categories, hardware, skills, plugins and plugin tools.
