@@ -11,6 +11,10 @@ on:
     branches: [release]
   workflow_dispatch:
 
+# Creating the draft release and uploading the installers needs write access to the repository's releases.
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:

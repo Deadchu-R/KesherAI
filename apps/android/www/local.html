@@ -1190,7 +1190,16 @@
         await apiAnswer(current.item.api, [system, ...recent], abort.signal, onText);
       } else if (current.item.native) {
         // Small phone models: a short context works much better than a long one.
-        const short = [{ role: "system", content: system.content.slice(0, 2500) }, ...recent.slice(-6)];
+        // Small models follow the user's turn far better than the system part, so search results go there.
+        const baseSystem = hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.";
+        const turns = recent.slice(-6);
+        if (found && turns.length) {
+          const last = turns[turns.length - 1];
+          const ask = typeof last.content === "string" ? last.content : last.content.map((p) => p.text ?? "").join(" ");
+          const withResults = `I searched the web just now (today is ${new Date().toLocaleDateString("en-GB")}). Results:\n${found.slice(0, 2500)}\n\nUsing these results, answer my question and give the links you used. Do not say you cannot search the web: the results are above.\n\nMy question: ${ask}`;
+          turns[turns.length - 1] = { ...last, content: typeof last.content === "string" ? withResults : [{ type: "text", text: withResults }, ...last.content.filter((p) => p.type !== "text")] };
+        }
+        const short = [{ role: "system", content: baseSystem }, ...turns];
         const r = await nativeAnswer(current.item.native, short, abort.signal, onText);
         if (r?.looped) addMsg("note", T("המודל התחיל לחזור על עצמו, אז עצרתי אותו. Gemma 4 עונה טוב יותר.", "The model started repeating itself, so I stopped it. Gemma 4 answers better."));
         $("status").textContent = `${(measured(current.url) ?? 0).toFixed(1)} ${T("טוקנים לשנייה", "tokens/s")} ⚡`;
