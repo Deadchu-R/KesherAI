@@ -301,7 +301,11 @@ function Phone() {
   const setRemote2 = async (patch: { enabled?: boolean; keepAwake?: boolean }) => {
     await api("/api/settings", { method: "PUT", body: { remote: patch } });
     setRemote({ ...remote, ...patch });
-    if (patch.enabled !== undefined) setRestart(true);
+    if (patch.enabled !== undefined) {
+      // The server only starts listening for other devices after a restart; the desktop app does it right away.
+      if (desktop()?.restart) void desktop()!.restart!();
+      else setRestart(true);
+    }
   };
   return (
     <section className="card stack">
@@ -329,6 +333,7 @@ function Phone() {
         ))}
       </div>
       {qr.length > 0 && <p className="muted">{t("phoneApp")}</p>}
+      {qr.length > 0 && <p className="muted">{t("firewallHint")}</p>}
       {qr.length > 0 && apkQr && (
         <figure className="qr">
           <img src={apkQr} alt={t("installApp")} width={140} height={140} />

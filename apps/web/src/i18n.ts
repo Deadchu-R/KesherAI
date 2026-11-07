@@ -183,6 +183,7 @@ const en = {
   copied: "Copied",
   phoneApp: "Scan the code with the phone camera: it opens the KesherAI Android app and connects. No app yet? Install it with the small code below, or copy the link into the phone's browser. Outside your home network, use the Tailscale address.",
   installApp: "Install the Android app",
+  firewallHint: "Phone cannot connect? On Windows, run scripts\\windows\\allow-phone.cmd from the KesherAI folder once: it checks KesherAI is listening and allows it through the firewall on your home network.",
   downloadApk: "Download the APK",
   saved: "Saved",
 } as const;
@@ -365,6 +366,7 @@ const he: Record<StringKey, string> = {
   copied: "הועתק",
   phoneApp: "סרוק את הקוד במצלמת הטלפון: הוא פותח את אפליקציית KesherAI ומתחבר. עוד אין לך את האפליקציה? התקן אותה עם הקוד הקטן למטה, או העתק את הקישור לדפדפן בטלפון. מחוץ לבית השתמש בכתובת של Tailscale.",
   installApp: "התקן את אפליקציית האנדרואיד",
+  firewallHint: "הטלפון לא מצליח להתחבר? ב-Windows הפעל פעם אחת את scripts\\windows\\allow-phone.cmd מתיקיית KesherAI: הוא בודק ש-KesherAI מאזין ומאשר אותו בחומת האש ברשת הביתית.",
   downloadApk: "הורד APK",
   saved: "נשמר",
 };

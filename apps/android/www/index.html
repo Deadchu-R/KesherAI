@@ -59,7 +59,7 @@
   const $ = (id) => document.getElementById(id);
   let lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const tr = { checking: { he: "מתחבר…", en: "Connecting…" }, cancel: { he: "ביטול", en: "Cancel" },
-    fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale.", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale." },
+    fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale. בפעם הראשונה ב-Windows: הפעל במחשב את scripts\\windows\\allow-phone.cmd מתיקיית KesherAI (פותח את חומת האש).", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale. First time on Windows: on the computer, run scripts\\windows\\allow-phone.cmd from the KesherAI folder (it opens the firewall)." },
     bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." },
     wake: { he: "הער את המחשב", en: "Wake the computer" },
     newVersion: { he: "גרסה חדשה של האפליקציה זמינה: ", en: "A new version of the app is available: " },
