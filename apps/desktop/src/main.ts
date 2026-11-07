@@ -22,14 +22,42 @@ function resourcesDir(): string {
   return app.isPackaged ? process.resourcesPath : resolve(import.meta.dirname, "../../..");
 }
 
+async function runningCore(port: number): Promise<string | undefined> {
+  const url = `http://127.0.0.1:${port}`;
+  const health = (await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1500) }).then((r) => r.json()).catch(() => null)) as { productName?: string } | null;
+  return health?.productName === branding.productName ? url : undefined;
+}
+
 async function startCore(): Promise<string> {
+  // KesherAI is already running (e.g. `pnpm dev` or the browser version): show that one.
+  const existing = await runningCore(branding.defaultPort);
+  if (existing) return existing;
   const root = resourcesDir();
-  server = await createKesherServer({
+  const s = await createKesherServer({
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
     pluginRoots: [join(root, "plugins")],
   });
-  return server.listen();
+  try {
+    const url = await s.listen();
+    server = s;
+    return url;
+  } catch (err) {
+    await s.close().catch(() => undefined);
+    const other = (err as NodeJS.ErrnoException).code === "EADDRINUSE" ? await runningCore(s.services.config.port) : undefined;
+    if (other) return other;
+    throw err;
+  }
 }
+
+// One window: opening KesherAI again focuses the existing window.
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on("second-instance", () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+});
 
 async function createWindow(url: string): Promise<void> {
   const win = new BrowserWindow({
@@ -91,8 +119,8 @@ app.whenReady().then(async () => {
     app.quit();
   }
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0 && server) {
-      void createWindow(process.env.KESHER_DEV_URL ?? `http://127.0.0.1:${server.services.config.port}`);
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void createWindow(process.env.KESHER_DEV_URL ?? `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}`);
     }
   });
 });

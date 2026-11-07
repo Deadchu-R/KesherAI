@@ -26,7 +26,7 @@ rem Electron's own unzip step sometimes stops after the first file on new Node.j
 rem versions. Unzip the downloaded copy with Windows' own tool instead.
 if not exist apps\desktop\node_modules\electron\dist\electron.exe (
   echo [..] Unpacking Electron...
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $v=(Get-Content apps\desktop\node_modules\electron\package.json | ConvertFrom-Json).version; $zip=Get-ChildItem -Recurse -Filter ('electron-v'+$v+'-win32-x64.zip') (Join-Path $env:LOCALAPPDATA 'electron\Cache') | Select-Object -First 1; if (-not $zip) { throw 'The Electron download was not found' }; $d='apps\desktop\node_modules\electron\dist'; Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; Expand-Archive -Force $zip.FullName $d; Set-Content -NoNewline apps\desktop\node_modules\electron\path.txt 'electron.exe'"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $v=(Get-Content apps\desktop\node_modules\electron\package.json | ConvertFrom-Json).version; $zip=Get-ChildItem -Recurse -Filter ('electron-v'+$v+'-win32-x64.zip') (Join-Path $env:LOCALAPPDATA 'electron\Cache') | Select-Object -First 1; if (-not $zip) { throw 'The Electron download was not found' }; $d='apps\desktop\node_modules\electron\dist'; Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; Expand-Archive -Force $zip.FullName $d; Set-Content -NoNewline -Path 'apps\desktop\node_modules\electron\path.txt' -Value 'electron.exe'"
   if not exist apps\desktop\node_modules\electron\dist\electron.exe goto :fail
 )
 if not exist "%USERPROFILE%\Desktop\KesherAI.lnk" (
