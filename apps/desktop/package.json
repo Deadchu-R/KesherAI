@@ -26,14 +26,51 @@
   "build": {
     "appId": "dev.kesherai.app",
     "productName": "KesherAI",
-    "directories": { "output": "out" },
-    "files": ["dist/**", "package.json"],
-    "extraResources": [
-      { "from": "../web/dist", "to": "web" },
-      { "from": "../../plugins", "to": "plugins", "filter": ["*/kesher-plugin.json", "*/dist/**"] }
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/**",
+      "package.json"
     ],
-    "mac": { "category": "public.app-category.developer-tools" },
-    "win": { "target": "nsis" },
-    "linux": { "target": ["AppImage", "deb"], "category": "Development" }
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web"
+      },
+      {
+        "from": "../../plugins",
+        "to": "plugins",
+        "filter": [
+          "*/kesher-plugin.json",
+          "*/dist/**"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Deadchu-R",
+        "repo": "KesherAI",
+        "releaseType": "draft"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Deadchu-R/KesherAI.git"
   }
 }
