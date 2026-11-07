@@ -728,12 +728,26 @@ export class ConversationManager {
   }
 
   /**
-   * What every live session is doing, so the sidebar can show which chats
-   * are working or waiting for the user. Sessions run independently, so
-   * many conversations (each with its own model) can work at once.
+   * Everything waiting for the user's approval, in every open conversation
+   * (the phone's "watch and approve" view).
    *
-   * @returns Conversation id → status, for sessions that are not idle.
+   * @returns Oldest first.
    */
+  pendingApprovals(): Array<{ conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }> {
+    const out: Array<{ conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }> = [];
+    const titles = new Map(this.deps.library.listConversations().map((c) => [c.id, c.title]));
+    for (const [id, s] of this.sessions) {
+      const pending = new Set(s.info().pendingApprovals);
+      if (!pending.size) continue;
+      for (const e of s.events) {
+        if (e.type !== "approval_request" || !pending.has(e.requestId)) continue;
+        out.push({ conversationId: id, title: titles.get(id) ?? "", requestId: e.requestId, tool: e.name, preview: e.preview.slice(0, 4000), reason: e.reason, ...(e.purpose ? { purpose: e.purpose } : {}), at: e.at });
+      }
+    }
+    return out.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  /** @returns Which conversations are working or waiting. */
   activity(): Record<string, "running" | "waiting"> {
     const out: Record<string, "running" | "waiting"> = {};
     for (const [id, s] of this.sessions) {

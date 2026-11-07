@@ -9,6 +9,7 @@ import { PersonasPage } from "./pages/PersonasPage";
 import { PersonaChip } from "./Personas";
 import { PromptTextarea, expandSlash } from "./SlashMenu";
 import { PromptsPage } from "./pages/PromptsPage";
+import { WatchPage, usePending } from "./pages/WatchPage";
 import { PluginsPage } from "./pages/Plugins";
 import { CommunityPage } from "./pages/Community";
 import { PluginPage } from "./pages/PluginPage";
@@ -108,6 +109,13 @@ function Home() {
   );
 }
 
+/** A pill when agents wait for approval somewhere, linking to "Watch and approve". */
+function ApprovalsPill({ hidden }: { hidden: boolean }) {
+  const pending = usePending();
+  if (hidden || !pending.length) return null;
+  return <a className="approvals-pill" href="#/watch">✋ {t("approvalsWaiting", { n: pending.length })}</a>;
+}
+
 /** Routes by URL hash: `#/c/<id>`, `#/images`, `#/models`, `#/connections`, `#/settings`. */
 export function App() {
   const hash = useHash();
@@ -153,6 +161,7 @@ export function App() {
   else if (hash === "#/knowledge") page = <KnowledgePage />;
   else if (hash === "#/personas") page = <PersonasPage />;
   else if (hash === "#/prompts") page = <PromptsPage />;
+  else if (hash === "#/watch") page = <WatchPage />;
   else if (hash === "#/plugins") page = <PluginsPage />;
   else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;
@@ -168,6 +177,7 @@ export function App() {
       </main>
       {message && <div className="toast" role="status">{message}</div>}
       <ComputerBanner />
+      <ApprovalsPill hidden={hash === "#/watch" || hash.startsWith("#/c/")} />
       <ModelPickerHost />
       <PluginStyles />
       <DownloadsButton />

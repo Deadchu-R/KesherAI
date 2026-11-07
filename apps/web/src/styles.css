@@ -872,3 +872,13 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .key-fresh { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 12px; }
 .key-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .key-list li { padding: 8px 10px; border-radius: 10px; background: var(--raised); }
+
+/* Watch and approve */
+.watch-item { display: flex; flex-direction: column; gap: 8px; }
+.watch-item p { margin: 0; }
+.watch-screen { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border); background: #000; }
+.watch-log { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 2px; }
+.watch-log li.bad { color: var(--danger, #f87171); }
+.danger-btn { border-color: #b4232a; color: #fca5a5; }
+.approvals-pill { position: fixed; inset-block-end: 18px; inset-inline-start: 50%; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none; box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
+[dir="rtl"] .approvals-pill { transform: translateX(50%); }

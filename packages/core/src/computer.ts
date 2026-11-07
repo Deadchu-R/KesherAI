@@ -295,6 +295,24 @@ export class ComputerControl {
     return { enabled: this.enabled(), active: Date.now() - this.lastActionAt < 15_000, app: this.lastApp, log: this.log.slice(-30) };
   }
 
+  /**
+   * A picture of the screen for the user to watch (from the phone, say),
+   * only while computer control is on.
+   *
+   * @param maxWidth - Width at most.
+   * @returns PNG bytes.
+   */
+  async watch(maxWidth = 960): Promise<Buffer> {
+    if (!this.enabled()) throw new Error("Computer control is off.");
+    if (Date.now() - this.lastWatch < 400) return this.lastShot ?? (await this.be.screenshot(maxWidth)).png;
+    this.lastWatch = Date.now();
+    this.lastShot = (await this.be.screenshot(Math.min(1600, Math.max(320, maxWidth)))).png;
+    return this.lastShot;
+  }
+
+  private lastWatch = 0;
+  private lastShot?: Buffer;
+
   /** Stops every conversation that controls the computer, and refuses actions for 10 seconds. */
   stop(): void {
     this.stoppedAt = Date.now();

@@ -73,6 +73,7 @@ export function ComputerBanner() {
     <div className="cc-banner" role="status">
       <span className="dot" aria-hidden />
       <span dir="auto">{t("ccActive", { app: s.app || "?" })}{last ? ` · ${last.action}` : ""}</span>
+      <a href="#/watch">{t("watchNav")}</a>
       <button type="button" onClick={() => void api("/api/computer/stop", { method: "POST" }).then(() => setS({ ...s, active: false }))}>{t("ccStop")}</button>
     </div>
   );

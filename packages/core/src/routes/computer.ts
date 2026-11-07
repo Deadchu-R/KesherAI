@@ -13,6 +13,19 @@ export async function computerRoutes(app: FastifyInstance, s: KesherServices): P
   /** `{ enabled, active, app, log }`: `active` means it acted in the last 15 seconds. */
   app.get("/api/computer/status", async () => s.computer.status());
 
+  /** The screen now, as PNG, for watching the agent work (only while computer control is on). */
+  app.get<{ Querystring: { w?: string } }>("/api/computer/screen", async (req, reply) => {
+    try {
+      const png = await s.computer.watch(Number(req.query.w) || 960);
+      return reply.type("image/png").header("cache-control", "no-store").send(png);
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message });
+    }
+  });
+
+  /** Everything waiting for the user's approval, in every conversation. */
+  app.get("/api/approvals", async () => s.conversations.pendingApprovals());
+
   /** Stops every conversation that is controlling the computer. */
   app.post("/api/computer/stop", async () => {
     s.computer.stop();

@@ -129,7 +129,7 @@ export class Notifier {
         void this.send({
           title: `Waiting for you: ${title()}`,
           body: e.type === "question" ? "The agent asked you a question." : "The agent needs your approval to go on.",
-          path: `#/c/${convId}`,
+          path: e.type === "question" ? `#/c/${convId}` : "#/watch",
           tags: ["raised_hand"],
           priority: 4,
         }).catch(() => undefined);

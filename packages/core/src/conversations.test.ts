@@ -272,3 +272,24 @@ test("context explorer: shows the system prompt, tools and messages with sizes",
     await server.close();
   }
 });
+
+test("approvals waiting in any conversation are listed and can be answered (watch and approve)", async () => {
+  const { server } = await setup();
+  const app = server.app;
+  try {
+    await app.inject({ method: "PUT", url: "/api/settings", payload: { activeModels: { chat: "fake/m" } } });
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", mode: "ask" } })).json() as { id: string };
+    await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "make a file" } });
+    const pending = await until(async () => {
+      const list = (await app.inject({ method: "GET", url: "/api/approvals" })).json() as Array<{ conversationId: string; requestId: string; tool: string; preview: string }>;
+      return list.length ? list : undefined;
+    });
+    assert.equal(pending[0]!.conversationId, c.id);
+    assert.equal(pending[0]!.tool, "write_file");
+    const r = await app.inject({ method: "POST", url: `/api/conversations/${c.id}/approvals/${pending[0]!.requestId}`, payload: { decision: "allow" } });
+    assert.equal(r.statusCode, 200);
+    await until(async () => (((await app.inject({ method: "GET", url: "/api/approvals" })).json() as unknown[]).length === 0 ? true : undefined));
+  } finally {
+    await server.close();
+  }
+});

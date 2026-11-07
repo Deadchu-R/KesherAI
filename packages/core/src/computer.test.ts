@@ -64,3 +64,12 @@ test("helpers", () => {
   assert.equal(sendKeysCombo("alt+f4"), "%{F4}");
   assert.equal(sendKeysText("a+b{c}\n"), "a{+}b{{}c{}}{ENTER}");
 });
+
+test("watching the screen: only while computer control is on", async () => {
+  let on = false;
+  const f = fake({ app: "notepad", title: "x" });
+  const cc = new ComputerControl(() => on, () => undefined, f.be);
+  await assert.rejects(cc.watch(), /off/);
+  on = true;
+  assert.equal((await cc.watch(800)).toString(), "png");
+});
