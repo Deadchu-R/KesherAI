@@ -27,7 +27,8 @@
     .rating.slow { color: var(--live); }
     .rating.bad { color: var(--bad); }
     .gpu-opt { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); line-height: 1.5; padding: 4px 2px 8px; }
-    .gpu-opt input { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+    .gpu-opt { flex-wrap: wrap; align-items: center; }
+    .gpu-opt select { flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); padding: 0 8px; font-size: 13.5px; }
     .tag { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--raised); color: var(--accent); }
     .bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
     .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
@@ -115,7 +116,11 @@
   // ---------- how well each model runs on this phone ----------
   const cores = navigator.hardwareConcurrency || 4;
   const SPEED = (url) => "kesherai-phone-speed:" + url;
-  const useGpu = () => localStorage.getItem("kesherai-phone-gpu") === "1";
+  const runMode = () => (navigator.gpu ? localStorage.getItem("kesherai-phone-mode") || "auto" : "cpu");
+  const TUNE = (url) => "kesherai-phone-tune:" + url;
+  /** The tuned setup for a model on this phone: graphics-chip layers (0 = processor only), of how many, and its speed. */
+  const tuned = (url) => { try { return JSON.parse(localStorage.getItem(TUNE(url)) || "null"); } catch { return null; } };
+  const useGpu = () => runMode() !== "cpu";
   /** Measured tokens/s for a model on this phone (average of recent answers), or undefined. */
   const measured = (url) => { const v = Number(localStorage.getItem(SPEED(url))); return v > 0 ? v : undefined; };
   function rememberSpeed(url, tps) {
@@ -127,7 +132,8 @@
   function rate(sizeBytes, url) {
     const sizeGb = sizeBytes / 1024 ** 3;
     // The app runs llama.cpp in WebAssembly on one processor core (Android web views cannot share memory between threads).
-    const est = (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * (useGpu() ? 2 : 1);
+    const t = tuned(url);
+    const est = t?.tps ?? (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * (useGpu() ? 2 : 1);
     const real = measured(url);
     const tps = real ?? est;
     const tooBig = sizeGb * 1.6 > deviceGb * 0.5;
@@ -139,13 +145,13 @@
       bad: T("גדול מדי לטלפון הזה", "Too big for this phone"),
     }[level];
     const speed = tooBig ? "" : ` · ${real ? "" : "~"}${tps.toFixed(tps < 10 ? 1 : 0)} ${T("טוקנים/שנייה", "tokens/s")} ${real ? T("(נמדד)", "(measured)") : T("(הערכה)", "(estimate)")}`;
-    return { level, text: text + speed, tps, tooBig };
+    const how = t && runMode() === "auto" ? ` · ${t.layers === 0 ? T("מעבד", "processor") : t.layers >= t.total ? T("כרטיס גרפי", "graphics chip") : T(`מעבד + כרטיס גרפי (${t.layers}/${t.total} שכבות)`, `processor + graphics chip (${t.layers}/${t.total} layers)`)}` : "";
+    return { level, text: text + speed + how, tps, tooBig };
   }
 
   // Chats from the first version were often garbled (graphics chip), so start them fresh once.
   if (localStorage.getItem("kesherai-phone-v") !== "2") {
     for (const k of Object.keys(localStorage)) if (k.startsWith("kesherai-phone-chat:")) localStorage.removeItem(k);
-    localStorage.setItem("kesherai-phone-gpu", "0");
     localStorage.setItem("kesherai-phone-v", "2");
   }
 
@@ -155,13 +161,19 @@
     downloaded = await mm.getModels().catch(() => []);
     const list = $("modelList");
     list.replaceChildren();
-    // Settings: the phone's graphics chip is faster but gives broken text on many phones.
-    const gpuRow = document.createElement("label");
-    gpuRow.className = "gpu-opt";
-    gpuRow.innerHTML = `<input type="checkbox" ${useGpu() ? "checked" : ""} /><span></span>`;
-    gpuRow.querySelector("span").textContent = T("להשתמש בכרטיס הגרפי של הטלפון (מהיר יותר, אבל בחלק מהטלפונים יוצא טקסט שבור; אם כך, כבה)", "Use the phone's graphics chip (faster, but on some phones the text comes out broken; if so, turn this off)");
-    gpuRow.querySelector("input").onchange = (e) => { localStorage.setItem("kesherai-phone-gpu", e.target.checked ? "1" : "0"); if (wllama.isModelLoaded()) { wllama.exit(); wllama.__url = ""; } renderList(); };
-    list.append(gpuRow);
+    // How models use the phone: tuned automatically (processor + graphics chip, checked for correct output), or forced.
+    const modeRow = document.createElement("label");
+    modeRow.className = "gpu-opt";
+    modeRow.innerHTML = `<span></span><select><option value="auto"></option><option value="cpu"></option><option value="gpu"></option></select>`;
+    modeRow.querySelector("span").textContent = T("איך להריץ:", "How to run:");
+    const sel = modeRow.querySelector("select");
+    sel.options[0].textContent = T("אוטומטי: מעבד + כרטיס גרפי, נבדק שאין תקלות (מומלץ)", "Automatic: processor + graphics chip, checked for mistakes (recommended)");
+    sel.options[1].textContent = T("רק מעבד (הכי בטוח)", "Processor only (safest)");
+    sel.options[2].textContent = T("הכול על הכרטיס הגרפי (בלי בדיקה)", "All on the graphics chip (no check)");
+    sel.value = runMode();
+    sel.onchange = () => { localStorage.setItem("kesherai-phone-mode", sel.value); if (wllama.isModelLoaded()) { wllama.exit(); wllama.__url = ""; } renderList(); };
+    if (!navigator.gpu) { sel.value = "cpu"; sel.disabled = true; modeRow.append(Object.assign(document.createElement("small"), { textContent: T(" (הטלפון לא מאפשר גישה לכרטיס הגרפי כאן)", " (this phone does not offer its graphics chip here)") })); }
+    list.append(modeRow);
 
     const rows = await Promise.all(CATALOG.map(async (item) => {
       try { return { item, file: await fileFor(item) }; } catch (e) { return { item, error: e }; }
@@ -199,6 +211,7 @@
       const btn = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
       if (have) {
         btn(T("פתח צ'אט", "Open chat"), "primary", () => openChat(item, url));
+        if (runMode() === "auto" && tuned(url)) btn(T("כוונן שוב", "Retune"), "", () => { localStorage.removeItem(TUNE(url)); renderList(); });
         btn(T("מחק", "Delete"), "", async () => { await have.remove(); if (activeUrl === url) { activeUrl = ""; localStorage.removeItem("kesherai-phone-model"); } renderList(); });
       } else {
         const dl = btn(T("הורד", "Download") + (file.size ? ` (${gb(file.size)})` : ""), rating.tooBig ? "" : "primary", async () => {
@@ -260,14 +273,15 @@
       try {
         if (wllama.isModelLoaded()) await wllama.exit();
         const model = (await mm.getModels()).find((m) => m.url === url);
-        const load = (gpu) => wllama.loadModel(model, { n_ctx: 2048, n_threads: Math.max(1, Math.min(4, cores)), n_gpu_layers: gpu ? 99 : 0 });
-        await load(useGpu());
-        // The phone's graphics chip gives garbled text on many Android phones: check with a tiny question first.
-        if (useGpu() && !(await looksSane())) {
-          await wllama.exit();
-          localStorage.setItem("kesherai-phone-gpu", "0");
-          await load(false);
-          addMsg("note", T("הכרטיס הגרפי של הטלפון נתן טקסט שבור, אז עברתי למעבד (איטי יותר אבל נכון).", "The phone's graphics chip gave broken text, so I switched to the processor (slower, but correct)."));
+        const threads = Math.max(1, Math.min(4, cores));
+        const load = (layers, extra = {}) => wllama.loadModel(model, { n_ctx: 2048, n_threads: threads, n_gpu_layers: layers, ...extra });
+        const mode = runMode();
+        if (mode === "cpu") await load(0);
+        else if (mode === "gpu") await load(999);
+        else {
+          let t = tuned(url);
+          if (!t) t = await tune(url, load);
+          await load(t.layers, t.extra ?? {});
         }
         wllama.__url = url;
         $("status").textContent = "";
@@ -280,14 +294,70 @@
     }
   }
 
-  /** Asks for one word; garbled or empty output means this setup does not compute correctly. */
-  async function looksSane() {
+  /**
+   * Checks that the loaded setup computes correctly (two questions with
+   * known answers, no randomness) and how fast it is.
+   *
+   * @returns { ok, tps }
+   */
+  async function check() {
+    const ask = async (q) => {
+      const t0 = performance.now();
+      const r = await wllama.createChatCompletion({ messages: [{ role: "user", content: q }], max_tokens: 24, temp: 0, temperature: 0, top_k: 1 });
+      const text = r.choices?.[0]?.message?.content ?? "";
+      const n = r.usage?.completion_tokens ?? Math.max(1, Math.round(text.length / 4));
+      return { text, tps: n / ((performance.now() - t0) / 1000) };
+    };
     try {
-      const r = await wllama.createChatCompletion({ messages: [{ role: "user", content: "Reply with the single word: OK" }], max_tokens: 8, temp: 0, temperature: 0 });
-      return /\bok\b/i.test(r.choices?.[0]?.message?.content ?? "");
+      const a = await ask("Count from 1 to 8, separated by commas. Only the numbers.");
+      const b = await ask("What is the capital of France? Answer with one word.");
+      const ok = /1\D{1,3}2\D{1,3}3\D{1,3}4\D{1,3}5/.test(a.text) && /paris/i.test(b.text) && !/\uFFFD/.test(a.text + b.text);
+      return { ok, tps: (a.tps + b.tps) / 2 };
     } catch {
-      return false;
+      return { ok: false, tps: 0 };
     }
+  }
+
+  /**
+   * Finds the fastest setup that gives correct answers on this phone: the
+   * processor alone, the graphics chip alone, or a split (some layers on
+   * each), trying safer precision settings when the graphics chip makes
+   * mistakes. Saved per model, done once (Retune redoes it).
+   */
+  async function tune(url, load) {
+    const say = (msg) => ($("status").textContent = msg);
+    say(T("מכוונן לטלפון הזה (פעם אחת): בודק מעבד…", "Tuning for this phone (once): checking the processor…"));
+    await load(0);
+    const total = wllama.getLoadedContextInfo?.().n_layer ?? 28;
+    const cpu = await check();
+    let best = { layers: 0, total, tps: cpu.ok ? cpu.tps : 0.01, extra: {} };
+    const safe = { flash_attn: false, cache_type_k: "f32", cache_type_v: "f32" };
+    const tries = [
+      { layers: 999, extra: {} },
+      { layers: 999, extra: safe },
+      { layers: Math.ceil(total * 0.75), extra: safe },
+      { layers: Math.ceil(total / 2), extra: safe },
+      { layers: Math.ceil(total / 4), extra: safe },
+    ];
+    for (const [i, cfg] of tries.entries()) {
+      say(T(`מכוונן לטלפון הזה: מנסה כרטיס גרפי (${i + 1}/${tries.length})…`, `Tuning for this phone: trying the graphics chip (${i + 1}/${tries.length})…`));
+      try {
+        await wllama.exit();
+        await load(cfg.layers, cfg.extra);
+        const r = await check();
+        if (r.ok && r.tps > best.tps * 1.1) best = { layers: Math.min(cfg.layers, total), total, tps: r.tps, extra: cfg.extra };
+        // The first setup that is correct and clearly faster than the processor is kept; fewer layers will not beat it.
+        if (r.ok && best.layers > 0) break;
+      } catch {
+        // This setup does not load on this phone: try the next one.
+      }
+    }
+    await wllama.exit();
+    localStorage.setItem(TUNE(url), JSON.stringify(best));
+    addMsg("note", best.layers === 0
+      ? T(`כיוונון: הכרטיס הגרפי נתן תשובות שגויות או לא היה מהיר יותר, אז המודל ירוץ על המעבד (~${best.tps.toFixed(1)} טוקנים/שנייה).`, `Tuned: the graphics chip gave wrong answers or was not faster, so the model runs on the processor (~${best.tps.toFixed(1)} tokens/s).`)
+      : T(`כיוונון: ${best.layers >= total ? "הכול על הכרטיס הגרפי" : `${best.layers} מתוך ${total} שכבות על הכרטיס הגרפי, השאר על המעבד`}, נבדק שהתשובות נכונות (~${best.tps.toFixed(1)} טוקנים/שנייה).`, `Tuned: ${best.layers >= total ? "all on the graphics chip" : `${best.layers} of ${total} layers on the graphics chip, the rest on the processor`}, checked for correct answers (~${best.tps.toFixed(1)} tokens/s).`));
+    return best;
   }
 
   $("composer").onsubmit = async (e) => {

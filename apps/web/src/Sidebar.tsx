@@ -5,6 +5,7 @@ import { createConversation, desktop, refreshLibrary, toast, useActivity, useLib
 import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
 import { usePluginUi } from "./plugins";
+import { QuickMenu } from "./QuickMenu";
 
 /** A dialog for a new code session or a new project. */
 function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () => void }) {
@@ -148,6 +149,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
+      <QuickMenu />
       <div className="sidebar-actions">
         <a className="nav-link new-chat" href="#/" aria-current={hash === "#/" ? "page" : undefined}>
           <span className="plus" aria-hidden>+</span> {t("newChat")}
