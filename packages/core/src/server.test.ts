@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createKesherServer } from "./server.js";
@@ -75,6 +75,25 @@ test("remote requests without the token are rejected", async () => {
       method: "GET", url: "/api/health", remoteAddress: "192.168.1.20", headers: { authorization: `Bearer ${token}` },
     });
     assert.equal(ok.statusCode, 200);
+    for (const url of ["/api/models", "/v1/models", "/api/assets/x?token=wrong"]) {
+      assert.equal((await server.app.inject({ method: "GET", url, remoteAddress: "192.168.1.20" })).statusCode, 401, url);
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test("a phone loads the interface files without the token, but not the data", async () => {
+  const web = await mkdtemp(join(tmpdir(), "kesher-web-"));
+  await mkdir(join(web, "assets"));
+  await writeFile(join(web, "index.html"), "<!doctype html><script src=/assets/app.js></script>");
+  await writeFile(join(web, "assets", "app.js"), "console.log(1)");
+  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-wd-")), autodetect: false, pluginRoots: [], webDir: web });
+  try {
+    for (const url of ["/", "/assets/app.js", "/?token=abc"]) {
+      assert.equal((await server.app.inject({ method: "GET", url, remoteAddress: "192.168.1.20" })).statusCode, 200, url);
+    }
+    assert.equal((await server.app.inject({ method: "GET", url: "/api/conversations", remoteAddress: "192.168.1.20" })).statusCode, 401);
   } finally {
     await server.close();
   }

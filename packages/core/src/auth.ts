@@ -23,7 +23,9 @@ function safeEqual(a: string, b: string): boolean {
  * `<img>` tags and EventSource (which cannot set headers), as `?token=`.
  *
  * Requests from this computer are trusted: the server only listens beyond
- * localhost when the user turns remote access on.
+ * localhost when the user turns remote access on. The interface's own files
+ * (HTML, scripts, styles, icons) hold no data and load without a token, the
+ * same as any web app's; only `/api` and `/v1` need it.
  *
  * @param app - Fastify instance.
  * @param getToken - Returns the current token (it can be rotated at runtime).
@@ -31,6 +33,8 @@ function safeEqual(a: string, b: string): boolean {
 export function registerRemoteAuth(app: FastifyInstance, getToken: () => string | undefined): void {
   app.addHook("onRequest", async (request, reply) => {
     if (isLoopback(request.ip)) return;
+    const path = request.url.split("?")[0] ?? "";
+    if (!path.startsWith("/api/") && path !== "/api" && !path.startsWith("/v1/") && path !== "/v1") return;
     const token = getToken();
     const header = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     const query = (request.query as Record<string, string | undefined> | undefined)?.token;
