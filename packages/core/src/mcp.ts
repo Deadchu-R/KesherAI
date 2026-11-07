@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import type { ToolSpec } from "@kesher/shared";
 
 /**
@@ -117,6 +118,19 @@ interface Transport {
 }
 
 /**
+ * Explains the usual reason a game-engine server is not answering.
+ *
+ * @param cfg - The server.
+ * @param error - What went wrong.
+ * @returns A clearer message, when there is one.
+ */
+export function presetHelp(cfg: McpServerConfig, error: string): string | undefined {
+  if (cfg.preset === "unreal" && /fetch failed|ECONNREFUSED|Could not reach/i.test(error)) return "Unreal is not answering on 127.0.0.1:8000. Open your project in Unreal Engine 5.8 or newer, enable the Unreal MCP plugin and All Toolsets (Edit → Plugins), and turn on Auto Start Server (Editor Preferences → General → Model Context Protocol). Then press Reconnect.";
+  if (cfg.preset === "unity" && /ENOENT|not recognized|not found|No such file/i.test(error)) return "Unity's MCP relay is not installed yet. In your Unity project add the AI Assistant package (com.unity.ai.assistant), open the editor and check Edit → Project Settings → AI → Unity MCP Server shows Running. Then press Reconnect, and accept KesherAI under Pending Connections.";
+  return undefined;
+}
+
+/**
  * Says plainly what to install when a server's program is missing
  * (e.g. `npx` without Node.js on Windows: "is not recognized").
  *
@@ -148,8 +162,9 @@ class StdioTransport implements Transport {
     this.proc = spawn(cfg.command!, cfg.args ?? [], {
       env: { ...baseEnv, ...cfg.env },
       stdio: ["pipe", "pipe", "pipe"],
-      // npx, uvx and friends are .cmd files on Windows.
-      shell: win,
+      // npx, uvx and friends are .cmd files on Windows (they need the shell); a full path to an .exe
+      // (Unity's relay) runs directly, so spaces in the user's folder name are fine.
+      shell: win && !/[\\/]/.test(cfg.command!),
       windowsHide: true,
     });
     this.proc.stdout!.setEncoding("utf8");
@@ -178,8 +193,8 @@ class StdioTransport implements Transport {
       this.waiting.clear();
       onExit(why);
     };
-    this.proc.on("error", (e) => end(missingTool(cfg.command!, e.message) ?? `Could not start ${cfg.command}: ${e.message}`));
-    this.proc.on("exit", (code) => end(missingTool(cfg.command!, this.stderr) ?? `The program stopped (code ${code}). ${this.stderr.trim().split("\n").slice(-3).join(" ")}`.trim()));
+    this.proc.on("error", (e) => end(presetHelp(cfg, e.message) ?? missingTool(cfg.command!, e.message) ?? `Could not start ${cfg.command}: ${e.message}`));
+    this.proc.on("exit", (code) => end(presetHelp(cfg, this.stderr) ?? missingTool(cfg.command!, this.stderr) ?? `The program stopped (code ${code}). ${this.stderr.trim().split("\n").slice(-3).join(" ")}`.trim()));
   }
 
   private onMessage(msg: RpcReply) {
@@ -376,7 +391,7 @@ export class McpManager {
   load(): Promise<void> {
     this.loaded ??= (async () => {
       try {
-        this.servers = (JSON.parse(await readFile(this.file, "utf8")) as { servers?: McpServerConfig[] }).servers ?? [];
+        this.servers = ((JSON.parse(await readFile(this.file, "utf8")) as { servers?: McpServerConfig[] }).servers ?? []).map(migratePreset);
       } catch {
         this.servers = [];
       }
@@ -509,7 +524,7 @@ export class McpManager {
         t.close();
         if (e instanceof McpNeedsSignIn) this.setStatus(id, { state: "needs-sign-in", tools: [] }, t);
         else {
-          const msg = (e as Error).message;
+          const msg = presetHelp(cfg, (e as Error).message) ?? (e as Error).message;
           this.setStatus(id, { state: "error", error: msg === "fetch failed" ? `Could not reach ${cfg.url}. Check the address and your internet connection.` : msg, tools: [] }, t);
         }
         throw e;
@@ -733,6 +748,36 @@ export class McpManager {
   }
 }
 
+/**
+ * Where Unity's AI Assistant package installs its MCP relay on this computer.
+ *
+ * @returns The program's full path.
+ */
+export function unityRelay(platform = process.platform, arch = process.arch, home = homedir()): string {
+  if (platform === "win32") return join(home, ".unity", "relay", "relay_win.exe");
+  if (platform === "darwin") {
+    const a = arch === "arm64" ? "arm64" : "x64";
+    return join(home, ".unity", "relay", `relay_mac_${a}.app`, "Contents", "MacOS", `relay_mac_${a}`);
+  }
+  return join(home, ".unity", "relay", "relay_linux");
+}
+
+/**
+ * Updates servers added from older presets that pointed at packages which
+ * do not exist (npx mcp-unity, uvx unreal-mcp) to the official servers.
+ *
+ * @param s - A saved server.
+ * @returns The server, updated when needed.
+ */
+export function migratePreset(s: McpServerConfig): McpServerConfig {
+  const p = MCP_PRESETS.find((x) => x.id === s.preset);
+  if (!p) return s;
+  const old = (s.preset === "unity" && s.command === "npx" && s.args?.includes("mcp-unity")) || (s.preset === "unreal" && s.command === "uvx" && s.args?.includes("unreal-mcp"));
+  if (!old) return s;
+  const { command: _c, args: _a, env: _e, url: _u, headers: _h, ...rest } = s;
+  return p.transport === "http" ? { ...rest, transport: "http", url: p.url!, headers: {} } : { ...rest, transport: "stdio", command: p.command!, args: p.args ?? [], env: {} };
+}
+
 /** A ready-made server the user can add with one click. */
 export interface McpPreset {
   id: string;
@@ -760,8 +805,8 @@ export const MCP_PRESETS: McpPreset[] = [
   { id: "github", name: "GitHub", he: "מאגרים, Issues ו-Pull Requests. צריך טוקן אישי (PAT).", en: "Repositories, issues and pull requests. Needs a personal access token.", transport: "http", url: "https://api.githubcopilot.com/mcp/", fields: [{ key: "token", label: "GitHub token", secret: true, target: "header:Authorization", prefix: "Bearer ", help: "https://github.com/settings/personal-access-tokens" }], link: "https://github.com/github/github-mcp-server" },
   { id: "vercel", name: "Vercel", he: "פרויקטים, פריסות ולוגים ב-Vercel.", en: "Projects, deployments and logs on Vercel.", transport: "http", url: "https://mcp.vercel.com", signIn: true, link: "https://vercel.com/docs/mcp/vercel-mcp" },
   { id: "sentry", name: "Sentry", he: "שגיאות ותקלות מהאפליקציות שלך.", en: "Errors and issues from your apps.", transport: "http", url: "https://mcp.sentry.dev/mcp", signIn: true, link: "https://docs.sentry.io/product/sentry-mcp/" },
-  { id: "unity", name: "Unity", he: "שליטה בעורך Unity (סצנות, אובייקטים, סקריפטים). צריך להתקין בפרויקט את החבילה של mcp-unity.", en: "Control the Unity Editor (scenes, objects, scripts). Install the mcp-unity package in your project.", transport: "stdio", command: "npx", args: ["-y", "mcp-unity"], needs: "node", link: "https://github.com/CoderGamester/mcp-unity" },
-  { id: "unreal", name: "Unreal Engine", he: "שליטה בעורך Unreal דרך התוסף unreal-mcp (צריך uv).", en: "Control the Unreal Editor through the unreal-mcp plugin (needs uv).", transport: "stdio", command: "uvx", args: ["unreal-mcp"], needs: "uv", link: "https://github.com/chongdashu/unreal-mcp" },
+  { id: "unity", name: "Unity", he: "שליטה בעורך Unity (סצנות, אובייקטים, סקריפטים, הקונסול) דרך השרת הרשמי של Unity. צריך בפרויקט את החבילה AI Assistant ‏(com.unity.ai.assistant), והעורך פתוח.", en: "Control the Unity Editor (scenes, objects, scripts, console) through Unity's official server. Needs the AI Assistant package (com.unity.ai.assistant) in your project, with the editor open.", transport: "stdio", command: unityRelay(), args: ["--mcp"], link: "https://docs.unity3d.com/Packages/com.unity.ai.assistant@latest/index.html?subfolder=/manual/integration/unity-mcp-get-started.html" },
+  { id: "unreal", name: "Unreal Engine", he: "שליטה בעורך Unreal דרך שרת ה-MCP המובנה של Unreal Engine 5.8: מפעילים את הפלאגין Unreal MCP ואת All Toolsets, ואת Auto Start Server.", en: "Control the Unreal Editor through Unreal Engine 5.8's built-in MCP server: enable the Unreal MCP plugin and All Toolsets, and Auto Start Server.", transport: "http", url: "http://127.0.0.1:8000/mcp", link: "https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor" },
   { id: "filesystem", name: "Files", he: "גישה לתיקייה שתבחר במחשב.", en: "Access to a folder you choose on this computer.", transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem"], needs: "node", fields: [{ key: "folder", label: "Folder", target: "arg" }] },
   { id: "memory", name: "Memory graph", he: "זיכרון ארוך-טווח למודלים (גרף של עובדות).", en: "Long-term memory for models (a graph of facts).", transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"], needs: "node" },
 ];

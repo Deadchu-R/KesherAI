@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingMessage } from "node:http";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { sep } from "node:path";
 import { join } from "node:path";
-import { McpManager, mcpResultText, mcpToolName, missingTool, rpcFromSse } from "./mcp.js";
+import { MCP_PRESETS, McpManager, mcpResultText, mcpToolName, migratePreset, missingTool, presetHelp, rpcFromSse, unityRelay } from "./mcp.js";
 
 const FAKE_STDIO = `
 let buf = "";
@@ -123,4 +124,17 @@ test("says what to install when a program is missing", () => {
   assert.match(missingTool("npx", "'npx' is not recognized as an internal or external command,")!, /Node\.js/);
   assert.match(missingTool("uvx", "spawn uvx ENOENT")!, /uv/);
   assert.equal(missingTool("npx", "some other failure"), undefined);
+});
+
+test("Unity and Unreal use their official servers; old entries are updated", () => {
+  assert.equal(unityRelay("win32", "x64", "C:\\Users\\Roee Tal"), "C:\\Users\\Roee Tal/.unity/relay/relay_win.exe".replace(/\//g, sep));
+  assert.match(unityRelay("darwin", "arm64", "/Users/r"), /relay_mac_arm64\.app\/Contents\/MacOS\/relay_mac_arm64$/);
+  const unreal = MCP_PRESETS.find((p) => p.id === "unreal")!;
+  assert.equal(unreal.url, "http://127.0.0.1:8000/mcp");
+  const old = migratePreset({ id: "unreal", name: "Unreal", preset: "unreal", transport: "stdio", command: "uvx", args: ["unreal-mcp"], enabled: true });
+  assert.equal(old.transport, "http");
+  assert.equal(old.url, "http://127.0.0.1:8000/mcp");
+  const u = migratePreset({ id: "unity", name: "Unity", preset: "unity", transport: "stdio", command: "npx", args: ["-y", "mcp-unity"], enabled: true });
+  assert.deepEqual(u.args, ["--mcp"]);
+  assert.match(presetHelp(old, "fetch failed")!, /Unreal MCP plugin/);
 });

@@ -116,13 +116,19 @@ function updateDownloaded(file: string): void {
   readyInstaller = { file, ...(latestSeen ? { version: latestSeen } : {}) };
   refreshTrayMenu();
   if (Notification.isSupported()) {
-    const n = new Notification({ title: `${branding.productName} ${latestSeen ? `v${latestSeen} ` : ""}is ready`, body: "Click to restart and update now, or it updates the next time you quit." });
-    n.on("click", () => void runInstaller(file));
+    const whatsNew = latestNotes.slice(0, 3).map((l) => `• ${l}`).join("\n");
+    const n = new Notification({ title: `${branding.productName} ${latestSeen ? `v${latestSeen} ` : ""}is ready`, body: `${whatsNew ? `${whatsNew}\n` : ""}Click to see what's new and update.` });
+    // Show what changed first (Settings → Updates lists it, with an Update button).
+    n.on("click", () => {
+      showWindow();
+      void BrowserWindow.getAllWindows()[0]?.loadURL(`http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}/#/settings`);
+    });
     n.show();
   }
 }
 
 let latestSeen: string | undefined;
+let latestNotes: string[] = [];
 
 /** Checks GitHub for a new version now and then, and downloads it in the background. */
 function autoUpdate(): void {
@@ -134,6 +140,7 @@ function autoUpdate(): void {
       const c = await updater.check();
       if (!c.newCommits.length) return;
       latestSeen = c.latestVersion;
+      latestNotes = c.newCommits.map((x) => x.subject);
       autoUpdating = true;
       await updater.apply();
       // The download runs in the background; wait for it, then the install hook keeps it for later.

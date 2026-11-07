@@ -42,3 +42,23 @@ jobs:
       - run: pnpm --filter @kesher/desktop exec electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The "what's new" list the app shows before updating: from the commits since the last release.
+  notes:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - name: Write the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          node scripts/release-notes.mjs "$VERSION" > notes.md
+          cat notes.md
+          ID=$(gh api "repos/${{ github.repository }}/releases/tags/v$VERSION" --jq .id)
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$ID" -F body=@notes.md -f name="KesherAI $VERSION" > /dev/null
