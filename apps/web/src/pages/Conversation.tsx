@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { FilesPanel } from "../FilesPanel";
+// The editor and terminal are big; load them only when the IDE panel opens.
+const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
 import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { t } from "../i18n";
 
@@ -216,6 +218,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [ideOpen, setIdeOpen] = useState<boolean | null>(null);
   const [dragging, setDragging] = useState(false);
   const [fileCount, setFileCount] = useState(0);
   const { models } = useModels("chat");
@@ -308,6 +311,8 @@ export function ConversationPage({ id }: { id: string }) {
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;
 
   const busy = info?.status === "running" || info?.status === "waiting";
+  // Code sessions open with the IDE panel; chats can open it with the button.
+  const showIde = ideOpen ?? conv.kind === "code";
   // The server titles a conversation from its first message; the sidebar list has the latest title.
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
   const send = async () => {
@@ -367,6 +372,9 @@ export function ConversationPage({ id }: { id: string }) {
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
         )}
+        <button type="button" className={showIde ? "on" : ""} aria-pressed={showIde} onClick={() => setIdeOpen(!showIde)} title={t("workspaceHint")}>
+          {t("workspace")}
+        </button>
         <button type="button" className={filesOpen ? "on" : ""} aria-pressed={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           {t("files")}{fileCount ? ` (${fileCount})` : ""}
         </button>
@@ -375,6 +383,7 @@ export function ConversationPage({ id }: { id: string }) {
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
 
+      <div className={`conv-split ${showIde ? "with-ide" : ""}`}>
       <div className="chat">
         <div className="messages" aria-live="polite">
           {events.length === 0 && (
@@ -474,6 +483,12 @@ export function ConversationPage({ id }: { id: string }) {
             </div>
           </div>
         </form>
+      </div>
+      {showIde && (
+        <Suspense fallback={<aside className="workspace"><p className="muted ws-empty">{t("loading")}</p></aside>}>
+          <Workspace convId={id} events={events} refresh={toolResults} />
+        </Suspense>
+      )}
       </div>
     </>
   );
