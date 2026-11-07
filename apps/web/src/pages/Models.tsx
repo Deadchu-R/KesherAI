@@ -14,6 +14,8 @@ interface Recommended {
 interface EngineStatus {
   installed: boolean; version?: string; running: boolean; modelPath?: string; log: string[];
   job?: { phase: string; message: string };
+  parallel?: number;
+  runningParallel?: number;
 }
 
 /** "Start here": the built-in engine and one-click models. */
@@ -66,7 +68,19 @@ function StartHere({ onChange }: { onChange: () => void }) {
         {!engine?.installed && !busy && (
           <button type="button" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/install", { method: "POST" }).then(setEngine)}>{t("installEngine")}</button>
         )}
+        {engine?.installed && (
+          <label className="row parallel-pick" title={t("parallelHint")}>
+            <span className="muted small">{t("parallelLabel")}</span>
+            <select
+              value={engine.parallel ?? 2}
+              onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { parallel: Number(e.target.value) } }).then(setEngine, (err: Error) => setError(err.message))}
+            >
+              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        )}
       </div>
+      {engine?.running && engine.runningParallel !== undefined && engine.parallel !== undefined && engine.runningParallel < engine.parallel && <p className="muted small">{t("parallelFellBack")}</p>}
       {engine?.job && <p className={engine.job.phase === "error" ? "error" : "muted"}>{engine.job.message}</p>}
       {error && <p className="error">{error}</p>}
       <div className="rec-grid">

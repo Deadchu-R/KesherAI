@@ -48,4 +48,6 @@ test("server args always enable tool calling and a sane context", () => {
   assert.deepEqual(LlamaEngine.serverArgs(["-ngl", "99"]), ["-ngl", "99", "--jinja", "-c", "16384"]);
   assert.deepEqual(LlamaEngine.serverArgs(["-c", "8192", "--jinja"]), ["-c", "8192", "--jinja"]);
   assert.deepEqual(LlamaEngine.serverArgs([], false), ["-c", "16384"]);
+  assert.deepEqual(LlamaEngine.serverArgs(["-ngl", "99"], true, 2), ["-ngl", "99", "--jinja", "-np", "2", "-c", "28672"]);
+  assert.deepEqual(LlamaEngine.serverArgs(["-np", "4"], false, 2), ["-np", "4", "-c", "16384"]);
 });

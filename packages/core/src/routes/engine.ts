@@ -124,6 +124,18 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
   });
 
+  /** How many chats the engine answers at once. A running model is loaded again with it. */
+  app.put<{ Body: { parallel?: number } }>("/api/engines/llamacpp/settings", async (req, reply) => {
+    const n = Number(req.body?.parallel);
+    if (!Number.isInteger(n) || n < 1 || n > 8) return reply.code(400).send({ error: "Chats at once: a number from 1 to 8." });
+    s.config.engines.parallel = n;
+    s.engine.setParallel(n);
+    await s.saveConfig();
+    const st = s.engine.status();
+    if (st.running && st.modelPath && st.runningParallel !== n) void loadModel(s, st.modelPath).catch((err) => s.engine.fail(err));
+    return s.engine.status();
+  });
+
   app.post("/api/engines/llamacpp/stop", async () => {
     await s.engine.stop();
     return s.engine.status();

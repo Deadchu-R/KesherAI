@@ -186,6 +186,10 @@ export interface EngineStatus {
   log: string[];
   /** How the graphics cards are used for the loaded model. */
   gpus?: string;
+  /** Chats answered at the same time (the setting). */
+  parallel: number;
+  /** Slots the running server really has (fewer when memory was short). */
+  runningParallel?: number;
 }
 
 /**
@@ -208,7 +212,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
   ) {}
 
   /** @returns The engine's state. */
@@ -223,7 +227,21 @@ export class LlamaEngine {
       ...(this.job ? { job: this.job } : {}),
       log: this.log.slice(-60),
       ...(this.gpuSummary ? { gpus: this.gpuSummary } : {}),
+      parallel: this.opts.parallel ?? 1,
+      ...(this.runningParallel ? { runningParallel: this.runningParallel } : {}),
     };
+  }
+
+  /** Slots the running server has (fewer than asked when memory was short). */
+  private runningParallel = 0;
+
+  /**
+   * Sets how many chats are answered at once; applies the next time a model loads.
+   *
+   * @param n - 1 to 8.
+   */
+  setParallel(n: number): void {
+    this.opts.parallel = Math.min(8, Math.max(1, Math.round(n)));
   }
 
   /** @returns The OpenAI-compatible base URL of the running server. */
@@ -297,16 +315,21 @@ export class LlamaEngine {
 
   /**
    * The arguments llama-server gets: the config's, plus `--jinja` (needed
-   * for tool calling) and a 16k context unless the config sets its own.
+   * for tool calling), slots for chats answered at the same time, and a
+   * context that gives each of them room (16k for one, 12k more per extra
+   * chat) unless the config sets its own.
    *
    * @param extra - Arguments from the config.
    * @param withJinja - Whether to add `--jinja`.
+   * @param parallel - Chats answered at once.
    * @returns The full argument list besides model, host and port.
    */
-  static serverArgs(extra: string[], withJinja = true): string[] {
+  static serverArgs(extra: string[], withJinja = true, parallel = 1): string[] {
     const args = [...extra];
     if (withJinja && !args.includes("--jinja")) args.push("--jinja");
-    if (!args.some((a) => a === "-c" || a === "--ctx-size")) args.push("-c", "16384");
+    const own = args.some((a) => a === "-np" || a === "--parallel");
+    if (parallel > 1 && !own) args.push("-np", String(parallel));
+    if (!args.some((a) => a === "-c" || a === "--ctx-size")) args.push("-c", String(16384 + 12288 * (own ? 0 : parallel - 1)));
     return args;
   }
 
@@ -324,13 +347,28 @@ export class LlamaEngine {
     this.gpuSummary = plan?.summary ?? "";
     const gpuArgs = plan?.args ?? [];
     await this.track("loading", `Loading ${basename(modelPath)}…${plan?.summary ? ` ${plan.summary}.` : ""}`, async () => {
-      try {
-        await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, true), ...gpuArgs], timeoutMs, plan?.env);
-      } catch (err) {
-        // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
-        if (!/jinja/i.test(this.log.join("\n"))) throw err;
-        await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, false), ...gpuArgs], timeoutMs, plan?.env);
+      const parallel = this.opts.parallel ?? 1;
+      let failure: unknown;
+      // Several chats at once need more memory for their context; if that does not fit, one at a time may.
+      for (const p of parallel > 1 ? [parallel, 1] : [1]) {
+        try {
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, true, p), ...gpuArgs], timeoutMs, plan?.env);
+          this.runningParallel = p;
+          return;
+        } catch (err) {
+          failure = err;
+          // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
+          if (!/jinja/i.test(this.log.join("\n"))) continue;
+          try {
+            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, false, p), ...gpuArgs], timeoutMs, plan?.env);
+            this.runningParallel = p;
+            return;
+          } catch (err2) {
+            failure = err2;
+          }
+        }
       }
+      throw failure;
     });
   }
 

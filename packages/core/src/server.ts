@@ -182,6 +182,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}),
     port: config.engines.llamaServerPort,
     args: config.engines.llamaServerArgs,
+    parallel: config.engines.parallel,
     gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
   });
   const assets = new AssetStore(paths.assets);
