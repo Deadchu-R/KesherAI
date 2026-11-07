@@ -1,6 +1,6 @@
 /**
  * `@kesher/shared` — types, schemas and configuration shared by every
- * Kesher package. Start reading at `categories.ts` and `models.ts`.
+ * KesherAI package. Start reading at `categories.ts` and `models.ts`.
  *
  * @packageDocumentation
  */

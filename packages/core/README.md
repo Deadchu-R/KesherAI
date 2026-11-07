@@ -1,6 +1,6 @@
 # @kesher/core
 
-The local server at the centre of Kesher. The desktop window, the phone, the CLI and any OpenAI-compatible tool are all clients of this one process — the same split OpenCode uses.
+The local server at the centre of KesherAI. The desktop window, the phone, the CLI and any OpenAI-compatible tool are all clients of this one process — the same split OpenCode uses.
 
 ```
 src/

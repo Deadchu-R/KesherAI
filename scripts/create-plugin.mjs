@@ -34,7 +34,7 @@ pkg.name = `kesher-plugin-${id}`;
 await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
 await rm(join(target, "README.md"), { force: true });
-await writeFile(join(target, "README.md"), `# ${id}\n\nA Kesher plugin. See docs/PLUGINS.md.\n`);
+await writeFile(join(target, "README.md"), `# ${id}\n\nA KesherAI plugin. See docs/PLUGINS.md.\n`);
 
 console.log(`Created ${target}`);
 console.log("Next: edit src/index.ts, then run `pnpm install && pnpm build:packages`.");

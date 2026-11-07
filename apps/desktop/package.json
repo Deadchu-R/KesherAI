@@ -24,8 +24,8 @@
     "typescript": "^5.7.0"
   },
   "build": {
-    "appId": "dev.kesher.app",
-    "productName": "Kesher",
+    "appId": "dev.kesherai.app",
+    "productName": "KesherAI",
     "directories": { "output": "out" },
     "files": ["dist/**", "package.json"],
     "extraResources": [

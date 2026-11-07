@@ -1,13 +1,13 @@
 # Vision
 
-Kesher ("connection" in Hebrew) is an open-source desktop app that brings every kind of AI model — chat, code, images, video, audio and more — into one interface, runs them on your own computer, and lets them work together.
+KesherAI ("connection" in Hebrew) is an open-source desktop app that brings every kind of AI model — chat, code, images, video, audio and more — into one interface, runs them on your own computer, and lets them work together.
 
 ## Principles
 
 Every decision is checked against these five:
 
 1. **Local first.** Everything works without internet and without an account. Cloud is an add-on, never a requirement.
-2. **Connect, don't reinvent.** Kesher does not write its own diffusion or LLM engine. It manages and connects proven ones: llama.cpp, ComfyUI, whisper.cpp, Ollama, LM Studio and OpenCode.
+2. **Connect, don't reinvent.** KesherAI does not write its own diffusion or LLM engine. It manages and connects proven ones: llama.cpp, ComfyUI, whisper.cpp, Ollama, LM Studio and OpenCode.
 3. **Everything open to the user.** Any external server can be connected, and any model can be placed in its category — from a download, a local file, a server or an API.
 4. **One server, many clients.** The core engine runs as a local server (like OpenCode). The desktop app, the phone and the CLI are only its clients.
 5. **Accessible and usable.** Permissive open-source licence, an interface in English and Hebrew with RTL support, one-click install.
@@ -31,40 +31,40 @@ Four ways to add a model to a category:
 
 1. **Download inside the app** from Hugging Face — the category is set automatically from the repo's tags and `pipeline_tag`.
 2. **A local file** (GGUF, safetensors) — drop it in and pick a category.
-3. **An external server** — Kesher reads the server's model list (`/v1/models`, or ComfyUI's `/object_info`) and assigns categories.
+3. **An external server** — KesherAI reads the server's model list (`/v1/models`, or ComfyUI's `/object_info`) and assigns categories.
 4. **A cloud API** — an API key, and the provider's models land in their categories.
 
 New categories are declared by plugins, so the community can add model types without changing the core.
 
 ## External servers and APIs
 
-Every source of models is a **provider** with the same interface: `listModels`, `capabilities`, and per-category operations (`chat`, `generateImage`, `generateVideo`, `speak`, `transcribe`). This is how the tools that inspired Kesher plug in as servers — users never have to do everything inside Kesher.
+Every source of models is a **provider** with the same interface: `listModels`, `capabilities`, and per-category operations (`chat`, `generateImage`, `generateVideo`, `speak`, `transcribe`). This is how the tools that inspired KesherAI plug in as servers — users never have to do everything inside KesherAI.
 
 | Server or service | How it connects | What you get |
 | --- | --- | --- |
 | LM Studio | OpenAI-compatible API at `localhost:1234/v1` | Chat and embedding models already downloaded there |
 | Ollama | API at `localhost:11434` | Chat models, and `pull` to download |
 | ComfyUI | `POST /prompt` with an API-format workflow, progress over the `/ws` WebSocket, results from `/history` and `/view` (port 8188) | Image, video, audio and 3D, including custom nodes |
-| OpenCode | `opencode serve` exposes an HTTP server with OpenAPI and an SDK | Coding-agent sessions driven from Kesher |
-| LobeHub | Import skills and MCP servers from its marketplace; LobeHub can also use Kesher as an OpenAI-compatible provider | Skills, MCP and agents |
+| OpenCode | `opencode serve` exposes an HTTP server with OpenAPI and an SDK | Coding-agent sessions driven from KesherAI |
+| LobeHub | Import skills and MCP servers from its marketplace; LobeHub can also use KesherAI as an OpenAI-compatible provider | Skills, MCP and agents |
 | Flux | Through ComfyUI (local) or cloud providers such as fal and Replicate | Image generation |
 | Cloud providers | API key: OpenAI, Anthropic, Google, OpenRouter, Groq, Mistral, ElevenLabs, fal, Replicate | Every category |
 | Any OpenAI-compatible server | Base URL + optional key | vLLM, LocalAI, TGI and similar |
 
-**The reverse direction matters just as much:** Kesher exposes an OpenAI-compatible API locally, so LobeHub, OpenCode, Continue or any other tool can use the models Kesher manages.
+**The reverse direction matters just as much:** KesherAI exposes an OpenAI-compatible API locally, so LobeHub, OpenCode, Continue or any other tool can use the models KesherAI manages.
 
 ## Model downloads
 
-Like LM Studio, Kesher hosts no models — it searches and downloads directly from Hugging Face, and can `pull` through Ollama. The difference: downloads cover every category, not only LLMs.
+Like LM Studio, KesherAI hosts no models — it searches and downloads directly from Hugging Face, and can `pull` through Ollama. The difference: downloads cover every category, not only LLMs.
 
 - **Search and discovery** through the Hugging Face Hub API, filtered by category, format (GGUF, safetensors, MLX), size and quantization.
 - **"Fits my computer":** GPU, VRAM and RAM detection, and a memory estimate per file before downloading, shown as a green, yellow or red badge.
 - **Reliable downloads:** HTTP `Range` requests, resume after disconnects, SHA-256 checks against the LFS metadata, a prioritised queue.
-- **Right place automatically:** GGUF into Kesher's models folder; checkpoints, LoRAs and VAEs into the matching ComfyUI folders.
+- **Right place automatically:** GGUF into KesherAI's models folder; checkpoints, LoRAs and VAEs into the matching ComfyUI folders.
 - **Bundles:** "Flux Dev complete" downloads the UNet, text encoders, VAE and the workflow that uses them in one go.
 - **Gated models:** an optional Hugging Face token for models that require accepting a licence.
 - **Safety:** warnings for pickle files (`.ckpt`, `.bin`) and a preference for safetensors and GGUF.
-- **Licences:** each model's licence is shown before download, because the user accepts it, not Kesher.
+- **Licences:** each model's licence is shown before download, because the user accepts it, not KesherAI.
 
 ## Code agent
 
@@ -72,7 +72,7 @@ A "Code" screen gives an agent in the style of Claude Code that works on a proje
 
 - **Built-in tools:** read, write and edit files, `glob`, `grep`, run terminal commands, web search, a todo list.
 - **Permissions:** three modes — ask before every change, auto-approve edits, and fully automatic inside the folder only. Dangerous commands always need approval.
-- **Diffs and undo:** every change is shown as a diff, and Kesher takes a git checkpoint before each step.
+- **Diffs and undo:** every change is shown as a diff, and KesherAI takes a git checkpoint before each step.
 - **Project context:** reads `AGENTS.md` (and `CLAUDE.md` for compatibility) and supports `@` file mentions.
 - **Sub-agents and mixed models:** a large model plans, a small local model handles simple tasks.
 - **Alternative engine:** sessions can run through an OpenCode server, shown in the same interface.
@@ -80,11 +80,11 @@ A "Code" screen gives an agent in the style of Claude Code that works on a proje
 
 ## Skills and MCP
 
-Kesher uses the existing open formats, so skills and MCP servers from LobeHub, Claude Code and Codex work without conversion.
+KesherAI uses the existing open formats, so skills and MCP servers from LobeHub, Claude Code and Codex work without conversion.
 
 - **Skills** — a folder with a `SKILL.md` (frontmatter with `name` and `description`, then instructions and helper files). Only descriptions go into context; the full skill loads when the model picks it. Sources: `~/.kesher/skills`, the project folder, git or ZIP import, and LobeHub's skills marketplace.
 - **MCP** — a full MCP client with `stdio` for local servers and Streamable HTTP (with OAuth) for remote ones. A graphical setup instead of JSON editing, plus import of an existing `mcp.json`.
-- **Kesher as an MCP server** — the core exposes model capabilities (`generate_image`, `transcribe`…) as MCP tools, so Claude Code, OpenCode or LobeHub can use your local models.
+- **KesherAI as an MCP server** — the core exposes model capabilities (`generate_image`, `transcribe`…) as MCP tools, so Claude Code, OpenCode or LobeHub can use your local models.
 - **Security:** every MCP server and code-running skill needs approval at install, showing the command it will run.
 
 ## Models talking to each other
@@ -102,7 +102,7 @@ The phone connects to the same core server the desktop app uses, so all work —
 
 - **Client:** a PWA served by the computer itself, built for mobile. No app store, no cloud server.
 - **Pairing:** scanning a QR code on the computer creates a per-device token. Every device is listed and can be revoked.
-- **Transport:** directly on the home network; outside it, Tailscale or WireGuard (recommended), or Cloudflare Tunnel for a public address. Kesher runs no relay server of its own.
+- **Transport:** directly on the home network; outside it, Tailscale or WireGuard (recommended), or Cloudflare Tunnel for a public address. KesherAI runs no relay server of its own.
 - **Security:** listens on `127.0.0.1` only by default; remote mode is opt-in, always with a token (TLS planned). Terminal commands and file edits sent from the phone need approval according to the permission mode, and every remote action is logged.
 - **Notifications:** a message to the phone when a long job (video, download) finishes.
 
@@ -147,6 +147,6 @@ Phase 0 is the MVP: local chat that works after one install. Each phase opens on
 | 2 · Code agent, MCP & skills | Tools, permissions, diffs and checkpoints; MCP client; SKILL.md loading | The agent fixes a bug in a real repo with a local model |
 | 3 · Remote access | Phone PWA, QR pairing, TLS and tokens, completion notifications | A prompt from the phone creates an image on the computer |
 | 4 · Video, audio & Pipelines | Wan and LTX-Video, Whisper, TTS, node editor between models | — |
-| 5 · Community | Plugin marketplace, new categories, Kesher as an MCP server | — |
+| 5 · Community | Plugin marketplace, new categories, KesherAI as an MCP server | — |
 
 There are no dates: the pace depends on how many people join. Phases 3 and 4 can run in parallel if there are contributors.

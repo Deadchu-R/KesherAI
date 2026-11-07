@@ -1,5 +1,5 @@
 /**
- * `@kesher/core` — the local server every Kesher client talks to.
+ * `@kesher/core` — the local server every KesherAI client talks to.
  * Start reading at `server.ts`; each file in `routes/` is one area of the
  * HTTP API, documented in docs/API.md.
  *

@@ -1,5 +1,5 @@
 /**
- * Example plugin: the smallest useful Kesher plugin.
+ * Example plugin: the smallest useful KesherAI plugin.
  *
  * It shows the two extension points most plugins use:
  * 1. a new provider type ("echo"), which users add under Connections;

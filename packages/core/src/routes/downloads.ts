@@ -10,14 +10,14 @@ interface DownloadBody {
   repo: string;
   /** File path inside the repo. */
   path: string;
-  /** Kesher category, decides the destination folder. */
+  /** KesherAI category, decides the destination folder. */
   category?: string;
 }
 
 /**
  * Picks where a downloaded file goes. Image models go into ComfyUI's
  * `models/checkpoints` (or `loras` for LoRA files) when the user told
- * Kesher where ComfyUI lives; everything else into Kesher's own models
+ * KesherAI where ComfyUI lives; everything else into KesherAI's own models
  * folder, one sub-folder per category and repo.
  *
  * @param s - Services (for paths and config).

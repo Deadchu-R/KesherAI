@@ -47,7 +47,7 @@ export function defaultTextToImageWorkflow(req: ProviderImageRequest): ComfyWork
  *
  * Options (`ProviderConfig.options`):
  * - `workflow` (ComfyWorkflow): a custom API-format workflow to run instead
- *   of the default. Kesher writes the prompt into
+ *   of the default. KesherAI writes the prompt into
  *   `workflow[promptNodeId].inputs.text`.
  * - `promptNodeId` (string): node that receives the prompt in a custom workflow.
  * - `timeoutMs` (number, default 600000): how long to wait for a result.

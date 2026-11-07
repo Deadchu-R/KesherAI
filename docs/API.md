@@ -1,6 +1,6 @@
 # Core server API
 
-Everything the Kesher UI does goes through this HTTP API, so anything you build — a phone app, a script, a bot — can do the same.
+Everything the KesherAI UI does goes through this HTTP API, so anything you build — a phone app, a script, a bot — can do the same.
 
 - **Base URL:** `http://127.0.0.1:7420` (port from `config.json`).
 - **Format:** JSON in and out. Errors are `{ "error": "message" }` with a 4xx/5xx status.
@@ -28,7 +28,7 @@ The request and response types referenced below are exported from `@kesher/share
 | Method & path | Description |
 | --- | --- |
 | `GET /api/models` | `{ models: ModelInfo[], errors: { providerId, message }[] }` from every provider |
-| `GET /api/models/local` | Files in Kesher's models folder: `{ path, name, size }[]` |
+| `GET /api/models/local` | Files in KesherAI's models folder: `{ path, name, size }[]` |
 | `GET /api/providers` | Connections, with `healthy`, `autodetected`, `capabilities`, `hasApiKey` (keys are never returned) |
 | `GET /api/providers/presets` | Ready-made connections for the "Add" dialog |
 | `GET /api/providers/types` | Provider types available (built-in and from plugins) |
@@ -84,7 +84,7 @@ The file, with its MIME type.
 
 ## OpenAI-compatible API
 
-For tools that already speak OpenAI (LobeHub, OpenCode, Continue, the OpenAI SDKs). Model names are Kesher model ids.
+For tools that already speak OpenAI (LobeHub, OpenCode, Continue, the OpenAI SDKs). Model names are KesherAI model ids.
 
 | Method & path | Description |
 | --- | --- |

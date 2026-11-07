@@ -82,7 +82,7 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<{ Body: { modelPath: string } }>("/api/engines/llamacpp/load", async (req, reply) => {
     if (!s.llama) return reply.code(400).send({ error: "Set engines.llamaServerPath in config.json first" });
     if (!req.body.modelPath.startsWith(s.paths.models)) {
-      return reply.code(400).send({ error: "Only models inside the Kesher models folder can be loaded" });
+      return reply.code(400).send({ error: "Only models inside the KesherAI models folder can be loaded" });
     }
     await s.llama.load(req.body.modelPath);
     if (!s.registry.get("llamacpp")) {

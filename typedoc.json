@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "name": "Kesher API reference",
+  "name": "KesherAI API reference",
   "entryPointStrategy": "packages",
   "entryPoints": [
     "packages/shared",

@@ -4,7 +4,7 @@ import type { ChatMessage } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 
-/** The subset of an OpenAI chat completion request Kesher understands. */
+/** The subset of an OpenAI chat completion request KesherAI understands. */
 interface OpenAIChatBody {
   model: string;
   messages: Array<{ role: ChatMessage["role"]; content: string | Array<{ type: string; text?: string }> }>;
@@ -19,8 +19,8 @@ function textOf(content: OpenAIChatBody["messages"][number]["content"]): string 
 
 /**
  * An OpenAI-compatible API at `/v1`, so tools like LobeHub, OpenCode,
- * Continue or any OpenAI SDK can use every chat model Kesher knows —
- * local or cloud — through one endpoint. Model names are Kesher's global
+ * Continue or any OpenAI SDK can use every chat model KesherAI knows —
+ * local or cloud — through one endpoint. Model names are KesherAI's global
  * model ids (`<provider>/<model>`).
  *
  * @param app - Fastify instance.

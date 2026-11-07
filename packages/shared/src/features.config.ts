@@ -19,7 +19,7 @@ export interface Features {
   plugins: boolean;
   /** SKILL.md skills. */
   skills: boolean;
-  /** OpenAI-compatible API at `/v1`, so other tools can use Kesher's models. */
+  /** OpenAI-compatible API at `/v1`, so other tools can use KesherAI's models. */
   openaiCompatibleApi: boolean;
   /** Probe well-known local ports (LM Studio, Ollama, ComfyUI) on start-up. */
   autodetectLocalServers: boolean;

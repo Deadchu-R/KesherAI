@@ -6,7 +6,7 @@ const HF = "https://huggingface.co";
 export interface HubModel {
   /** Repo id, e.g. `city96/FLUX.1-dev-gguf`. */
   repo: string;
-  /** Kesher category derived from the repo's `pipeline_tag`, if any. */
+  /** KesherAI category derived from the repo's `pipeline_tag`, if any. */
   category?: CategoryId;
   pipelineTag?: string;
   downloads: number;

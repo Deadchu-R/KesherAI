@@ -1,6 +1,6 @@
 # Writing a plugin
 
-A plugin adds things to Kesher without changing Kesher's code: new kinds of model sources, new model categories, and tools that models can call. A working example lives in [`plugins/example-hello`](../plugins/example-hello).
+A plugin adds things to KesherAI without changing KesherAI's code: new kinds of model sources, new model categories, and tools that models can call. A working example lives in [`plugins/example-hello`](../plugins/example-hello).
 
 ## Five-minute version
 
@@ -21,7 +21,7 @@ my-plugin/
   package.json
   tsconfig.json
   src/index.ts         entry point
-  dist/index.js        built entry point (what Kesher loads)
+  dist/index.js        built entry point (what KesherAI loads)
 ```
 
 ### The manifest: `kesher-plugin.json`
@@ -42,7 +42,7 @@ my-plugin/
 | --- | --- |
 | `id` | Unique, lower-case letters, digits and `-`. Also the key of the plugin's settings. |
 | `main` | Entry module relative to the folder. Defaults to `dist/index.js`. |
-| `kesher.apiVersion` | The plugin API major version you built against. Kesher refuses plugins for another major version instead of crashing. Current: `1`. |
+| `kesher.apiVersion` | The plugin API major version you built against. KesherAI refuses plugins for another major version instead of crashing. Current: `1`. |
 | `permissions` | `network`, `filesystem`, `shell`. Shown to the user before enabling. See [Security](#security). |
 
 The full schema is `PluginManifestSchema` in `packages/plugin-sdk/src/manifest.ts`.
@@ -156,13 +156,13 @@ Read them from `ctx.settings`. Document every setting in your plugin's README.
 
 ## Security
 
-Today plugins run **inside the core server's process**, with the same access as Kesher itself. The `permissions` field is displayed but not yet enforced. Running each plugin in its own process, limited to the permissions it declared, is on the roadmap. Until then, only install plugins you trust, and as an author, declare honestly what your plugin needs — it will be enforced later.
+Today plugins run **inside the core server's process**, with the same access as KesherAI itself. The `permissions` field is displayed but not yet enforced. Running each plugin in its own process, limited to the permissions it declared, is on the roadmap. Until then, only install plugins you trust, and as an author, declare honestly what your plugin needs — it will be enforced later.
 
 ## Publishing
 
 - Put it on GitHub with `kesher-plugin.json` at the root and a built `dist/`, or publish to npm as `kesher-plugin-<id>`.
 - Users install it by copying the folder into `~/.kesher/plugins/`. An in-app plugin browser is planned.
-- Choose an open-source licence for your plugin. Kesher's Apache-2.0 licence does not require any particular licence for plugins.
+- Choose an open-source licence for your plugin. KesherAI's Apache-2.0 licence does not require any particular licence for plugins.
 
 ## Testing
 

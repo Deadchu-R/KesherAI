@@ -4,7 +4,7 @@
  *
  * The desktop app does not use this file; it imports `createKesherServer`
  * directly. This entry is for development (`pnpm dev`), headless machines
- * and running Kesher on a home server.
+ * and running KesherAI on a home server.
  */
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";

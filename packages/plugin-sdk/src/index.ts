@@ -1,5 +1,5 @@
 /**
- * `@kesher/plugin-sdk` — build Kesher plugins. Start with {@link definePlugin}
+ * `@kesher/plugin-sdk` — build KesherAI plugins. Start with {@link definePlugin}
  * and the {@link PluginContext} it receives; docs/PLUGINS.md is the guide.
  *
  * @packageDocumentation

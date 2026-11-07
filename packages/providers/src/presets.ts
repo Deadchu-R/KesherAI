@@ -37,7 +37,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
   },
   {
     config: { id: "llamacpp", type: "openai-compatible", name: "llama.cpp (managed)", baseUrl: "http://127.0.0.1:8081/v1", location: "local" },
-    description: "The llama-server Kesher starts for GGUF models you downloaded.",
+    description: "The llama-server KesherAI starts for GGUF models you downloaded.",
   },
   {
     config: { id: "openai", type: "openai-compatible", name: "OpenAI", baseUrl: "https://api.openai.com/v1", location: "cloud" },

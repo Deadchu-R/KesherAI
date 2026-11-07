@@ -1,6 +1,6 @@
 <div align="center">
 
-# Kesher
+# KesherAI
 
 **One local-first home for every kind of AI model — chat, code, images, video and audio — that run on your own computer and work together.**
 
@@ -8,14 +8,14 @@
 
 </div>
 
-> **Status: early (v0.1).** Chat, the in-app downloader, image generation through ComfyUI, the OpenAI-compatible API, remote access, skills and plugins work. The code agent, MCP, video/audio and Pipelines are on the [roadmap](#roadmap). Kesher is a working name.
+> **Status: early (v0.1).** Chat, the in-app downloader, image generation through ComfyUI, the OpenAI-compatible API, remote access, skills and plugins work. The code agent, MCP, video/audio and Pipelines are on the [roadmap](#roadmap).
 
 ## Why
 
-Running AI locally today means juggling LM Studio for chat, ComfyUI for images, another tool for speech, a CLI for coding agents — each with its own model folder, its own UI and no way to pass work between them. Kesher ("connection" in Hebrew) puts them under one roof:
+Running AI locally today means juggling LM Studio for chat, ComfyUI for images, another tool for speech, a CLI for coding agents — each with its own model folder, its own UI and no way to pass work between them. KesherAI ("connection" in Hebrew) puts them under one roof:
 
 - **Local first.** Everything works offline, with no account. Cloud APIs are optional.
-- **Connect, don't reinvent.** Kesher drives proven engines — llama.cpp, ComfyUI, Ollama, LM Studio, OpenCode — instead of rewriting them. Already use one of them? Connect it as a server and keep using it.
+- **Connect, don't reinvent.** KesherAI drives proven engines — llama.cpp, ComfyUI, Ollama, LM Studio, OpenCode — instead of rewriting them. Already use one of them? Connect it as a server and keep using it.
 - **Every model in its category.** Chat, image, video, speech-to-text, text-to-speech, music, embeddings, 3D — and plugins can add more.
 - **One server, many clients.** The core runs as a local server. The desktop window, your phone and any OpenAI-compatible tool are all clients of it.
 - **Open for everyone.** Apache-2.0, documented code, a plugin API, and a codebase designed to be forked.
@@ -28,7 +28,7 @@ Running AI locally today means juggling LM Studio for chat, ComfyUI for images, 
 | Downloads | Search Hugging Face from the app, resumable downloads with SHA-256 checks, hardware fit estimate | Bundles ("Flux Dev complete"), Ollama pull |
 | Local engines | Starts llama.cpp's `llama-server` for downloaded GGUF files | Managed ComfyUI install, whisper.cpp, TTS |
 | Images | Text-to-image through ComfyUI (default or your own exported workflow) | Cloud image APIs, inpainting |
-| Interop | OpenAI-compatible API at `/v1`, so LobeHub, OpenCode or any SDK can use Kesher's models | Kesher as an MCP server |
+| Interop | OpenAI-compatible API at `/v1`, so LobeHub, OpenCode or any SDK can use KesherAI's models | KesherAI as an MCP server |
 | Remote | Use the UI from your phone with a pairing token | QR pairing, push notifications, built-in TLS |
 | Extensibility | Plugins (providers, categories, tools), `SKILL.md` skills | MCP client, LobeHub marketplace import, Pipelines editor |
 | Code | — | Code agent in the style of Claude Code, with permissions, diffs and checkpoints |
@@ -38,8 +38,8 @@ Running AI locally today means juggling LM Studio for chat, ComfyUI for images, 
 Requirements: **Node.js 22+** and **pnpm 10+** (`corepack enable`).
 
 ```bash
-git clone https://github.com/Deadchu-R/kesher.git
-cd kesher
+git clone https://github.com/Deadchu-R/KesherAI.git
+cd KesherAI
 pnpm install
 pnpm build:packages
 pnpm dev            # core server on :7420 + UI on http://localhost:5173
@@ -52,9 +52,9 @@ pnpm --filter @kesher/web build
 pnpm dev:desktop
 ```
 
-Then open **Connections**. If LM Studio, Ollama or ComfyUI are running, Kesher has already found them. Otherwise add a cloud API, or go to **Models & downloads**, download a GGUF model and press **Load in llama.cpp** (set `engines.llamaServerPath` in `~/.kesher/config.json` to your `llama-server` binary first).
+Then open **Connections**. If LM Studio, Ollama or ComfyUI are running, KesherAI has already found them. Otherwise add a cloud API, or go to **Models & downloads**, download a GGUF model and press **Load in llama.cpp** (set `engines.llamaServerPath` in `~/.kesher/config.json` to your `llama-server` binary first).
 
-### Use Kesher from other tools
+### Use KesherAI from other tools
 
 Any OpenAI client works. Model names are `<connection>/<model>`:
 
@@ -66,7 +66,7 @@ curl http://127.0.0.1:7420/v1/chat/completions \
 
 ### Use it from your phone
 
-Set `"remote": { "enabled": true }` in `~/.kesher/config.json` and restart. Kesher then listens on your network and requires a token from other devices. Get it with `curl http://127.0.0.1:7420/api/remote` on the computer, then open `http://<computer>:7420/?token=<token>` on the phone. Outside your home network, use [Tailscale](https://tailscale.com) or WireGuard; do not expose the port to the internet. See [SECURITY.md](SECURITY.md).
+Set `"remote": { "enabled": true }` in `~/.kesher/config.json` and restart. KesherAI then listens on your network and requires a token from other devices. Get it with `curl http://127.0.0.1:7420/api/remote` on the computer, then open `http://<computer>:7420/?token=<token>` on the phone. Outside your home network, use [Tailscale](https://tailscale.com) or WireGuard; do not expose the port to the internet. See [SECURITY.md](SECURITY.md).
 
 ## Repository layout
 
@@ -92,12 +92,12 @@ Each package has its own README explaining what it owns.
 
 | Read this | If you want to |
 | --- | --- |
-| [docs/VISION.md](docs/VISION.md) | understand what Kesher is meant to become |
+| [docs/VISION.md](docs/VISION.md) | understand what KesherAI is meant to become |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | find your way around the code |
 | [docs/PLUGINS.md](docs/PLUGINS.md) | write a plugin |
 | [docs/PROVIDERS.md](docs/PROVIDERS.md) | connect a new engine, server or API |
 | [docs/API.md](docs/API.md) | build a client or script against the core server |
-| [docs/FORKING.md](docs/FORKING.md) | rebrand or trim Kesher in your own fork |
+| [docs/FORKING.md](docs/FORKING.md) | rebrand or trim KesherAI in your own fork |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | send a pull request |
 
 API reference generated from the code comments: `pnpm docs:api` (published to GitHub Pages by CI).
@@ -109,7 +109,7 @@ API reference generated from the code comments: `pnpm docs:api` (published to Gi
 2. **Code agent, MCP & skills** — tools, permissions, diffs and checkpoints; MCP client; skills in context.
 3. **Remote** — phone PWA, QR pairing, TLS, notifications.
 4. **Video, audio & Pipelines** — video models, Whisper, TTS, a node editor connecting models.
-5. **Community** — plugin marketplace, new categories, Kesher as an MCP server.
+5. **Community** — plugin marketplace, new categories, KesherAI as an MCP server.
 
 Each phase has a gate it must pass before the next opens; see [docs/VISION.md](docs/VISION.md#roadmap).
 

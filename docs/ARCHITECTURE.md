@@ -1,6 +1,6 @@
 # Architecture
 
-Kesher is one local **core server** with many **clients**. The core owns every model connection, file and setting; clients only talk to it over HTTP. This is the same split OpenCode uses, and it is what makes remote access from a phone free: the phone is just another client.
+KesherAI is one local **core server** with many **clients**. The core owns every model connection, file and setting; clients only talk to it over HTTP. This is the same split OpenCode uses, and it is what makes remote access from a phone free: the phone is just another client.
 
 ```
   Desktop window      Phone browser       Other tools (LobeHub, OpenCode, SDKs)
@@ -34,7 +34,7 @@ Kesher is one local **core server** with many **clients**. The core owns every m
 | `apps/web` | The React UI | shared (types only at runtime: categories, branding) |
 | `apps/desktop` | Electron shell: runs core in-process, opens a window | core |
 
-Dependencies only point down this table. `shared` never imports anything from Kesher; nothing imports `core` except `desktop`.
+Dependencies only point down this table. `shared` never imports anything from KesherAI; nothing imports `core` except `desktop`.
 
 ## Start-up order
 

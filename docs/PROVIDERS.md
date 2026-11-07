@@ -1,6 +1,6 @@
 # Adding a provider
 
-A provider connects Kesher to a source of models: a local engine, a server the user runs, or a cloud API. Before writing one, check whether the source speaks the OpenAI Chat Completions API — if it does, you only need a **preset** (step 0), not code.
+A provider connects KesherAI to a source of models: a local engine, a server the user runs, or a cloud API. Before writing one, check whether the source speaks the OpenAI Chat Completions API — if it does, you only need a **preset** (step 0), not code.
 
 ## 0. Is it OpenAI-compatible? Add a preset
 
@@ -91,7 +91,7 @@ export const acmeImagesFactory: ProviderFactory = {
 
 ## 3. Register it
 
-- **In Kesher itself:** export it from `packages/providers/src/index.ts` and add it to `BUILT_IN_FACTORIES`.
+- **In KesherAI itself:** export it from `packages/providers/src/index.ts` and add it to `BUILT_IN_FACTORIES`.
 - **As a plugin:** call `ctx.registerProviderFactory(acmeImagesFactory)` in your plugin's `activate`. See [PLUGINS.md](PLUGINS.md).
 
 ## 4. Test it

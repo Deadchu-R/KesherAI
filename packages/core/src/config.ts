@@ -36,7 +36,7 @@ export const KesherConfigSchema = z.object({
     .object({
       /** Path of the `llama-server` binary from llama.cpp. */
       llamaServerPath: z.string().optional(),
-      /** Port Kesher starts llama-server on. */
+      /** Port KesherAI starts llama-server on. */
       llamaServerPort: z.number().int().default(8081),
       /** Extra arguments, e.g. `["-ngl", "99", "-c", "8192"]`. */
       llamaServerArgs: z.array(z.string()).default(["-ngl", "99"]),

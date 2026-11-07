@@ -74,7 +74,7 @@ export async function loadSkillBody(skill: SkillSummary): Promise<string> {
 }
 
 /**
- * Formats skill summaries as a system-prompt section, the way Kesher tells a
+ * Formats skill summaries as a system-prompt section, the way KesherAI tells a
  * model which skills exist.
  *
  * @param skills - Summaries to list.

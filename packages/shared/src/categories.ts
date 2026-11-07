@@ -3,7 +3,7 @@
  *
  * A category decides which screen a model appears on and which tool it
  * exposes to chat models (see `toolName`). The built-in list covers what
- * Kesher ships with; plugins add more through
+ * KesherAI ships with; plugins add more through
  * `PluginContext.registerCategory` in `@kesher/plugin-sdk`.
  *
  * @packageDocumentation
@@ -41,7 +41,7 @@ export interface CategoryDefinition {
   huggingFacePipelineTags?: string[];
 }
 
-/** The categories Kesher knows about out of the box. */
+/** The categories KesherAI knows about out of the box. */
 export const BUILT_IN_CATEGORIES: readonly CategoryDefinition[] = [
   {
     id: "chat",

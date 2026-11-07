@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-/** What the machine has, as far as Kesher can tell. */
+/** What the machine has, as far as KesherAI can tell. */
 export interface HardwareInfo {
   platform: NodeJS.Platform;
   cpu: string;

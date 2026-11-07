@@ -22,12 +22,12 @@ export interface Branding {
   defaultPort: number;
 }
 
-/** The branding of upstream Kesher. Forks replace these values. */
+/** The branding of upstream KesherAI. Forks replace these values. */
 export const branding: Branding = {
-  productName: "Kesher",
+  productName: "KesherAI",
   appId: "kesher",
   accentColor: "#5EEAD4",
-  repositoryUrl: "https://github.com/Deadchu-R/kesher",
-  docsUrl: "https://deadchu-r.github.io/kesher",
+  repositoryUrl: "https://github.com/Deadchu-R/KesherAI",
+  docsUrl: "https://deadchu-r.github.io/KesherAI",
   defaultPort: 7420,
 };

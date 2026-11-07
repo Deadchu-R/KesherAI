@@ -3,7 +3,7 @@
   "name": "Hello example",
   "version": "0.1.0",
   "description": "A minimal plugin to copy: adds an 'echo' provider type and a 'reverse_text' tool.",
-  "author": "Kesher contributors",
+  "author": "KesherAI contributors",
   "main": "dist/index.js",
   "kesher": { "apiVersion": 1 },
   "permissions": []

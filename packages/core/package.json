@@ -1,7 +1,7 @@
 {
   "name": "@kesher/core",
   "version": "0.1.0",
-  "description": "The local Kesher server: model registry, chat and image routes, downloads, plugins, skills, remote access and an OpenAI-compatible API.",
+  "description": "The local KesherAI server: model registry, chat and image routes, downloads, plugins, skills, remote access and an OpenAI-compatible API.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

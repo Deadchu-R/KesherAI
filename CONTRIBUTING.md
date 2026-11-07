@@ -1,6 +1,6 @@
-# Contributing to Kesher
+# Contributing to KesherAI
 
-Thank you for helping. Kesher is meant to be built by many people, so this guide tries to answer everything you need without asking anyone. If something here is unclear, that is a bug in this file — please open an issue.
+Thank you for helping. KesherAI is meant to be built by many people, so this guide tries to answer everything you need without asking anyone. If something here is unclear, that is a bug in this file — please open an issue.
 
 ## Set up
 
@@ -13,7 +13,7 @@ pnpm lint
 pnpm dev                 # core on :7420, UI on :5173 with hot reload
 ```
 
-You do not need a GPU or a model to work on most of Kesher: the `example-hello` plugin adds an `echo` provider (add it under Connections) that answers instantly.
+You do not need a GPU or a model to work on most of KesherAI: the `example-hello` plugin adds an `echo` provider (add it under Connections) that answers instantly.
 
 ## How the code is organised
 

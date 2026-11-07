@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest something Kesher should do.
+description: Suggest something KesherAI should do.
 labels: [enhancement]
 body:
   - type: textarea
