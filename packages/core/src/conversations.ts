@@ -57,6 +57,37 @@ export class NoModelError extends Error {
   }
 }
 
+/** Told to the model when the image model is not ready, so it waits instead of improvising. */
+const WAIT_NOTE =
+  "Tell the user the image model is downloading and that they can follow it in the downloads circle, then stop. Do not try to make the image another way (no torch/diffusers installs, no drawing code).";
+
+const IMAGE_WORKAROUND = /\b(pip3?|py(thon3?)?\s+-m\s+pip)\s+install\b.*\b(torch|diffusers|stable[-_]?diffusion|xformers)\b/i;
+const DRAWING_CODE = /^\s*(import\s+turtle|from\s+turtle\s+import|from\s+PIL\s+import\s+.*ImageDraw)/m;
+
+/**
+ * In a chat that has generate_image, stops the model from making pictures
+ * the long way (installing torch/diffusers, or drawing with turtle/PIL code)
+ * and points it at the image tool. Code sessions are left alone.
+ *
+ * @param tool - A file or command tool.
+ * @returns The same tool, guarded.
+ */
+function steerImagesToEngine(tool: AgentTool): AgentTool {
+  if (tool.spec.name !== "run_command" && tool.spec.name !== "write_file") return tool;
+  const blocked = (input: Record<string, unknown>) =>
+    tool.spec.name === "run_command" ? IMAGE_WORKAROUND.test(String(input.command ?? "")) : DRAWING_CODE.test(String(input.content ?? ""));
+  const msg =
+    "Not done: in this chat, pictures are made with generate_image (KesherAI's image engine), not by installing image libraries or drawing with code. Call generate_image with an English prompt. If the user really wants code, they will say so.";
+  return {
+    ...tool,
+    ...(tool.preview ? { preview: async (input, ctx) => (blocked(input) ? "(redirected to generate_image)" : tool.preview!(input, ctx)) } : {}),
+    run: async (input, ctx) => {
+      if (blocked(input)) throw new Error(msg);
+      return tool.run(input, ctx);
+    },
+  };
+}
+
 /**
  * Owns the live agent sessions behind conversations: creates them, loads
  * saved ones on first use, gives them the right tools (file and terminal
@@ -109,6 +140,7 @@ export class ConversationManager {
         usable(active)
           ? `generate_image uses the user's active image model (${active}). Write the prompt in English.`
           : "generate_image makes pictures with KesherAI's built-in image engine; if no image model is ready it downloads one that fits this computer and says so. Write the prompt in English.",
+        "For every request for a picture, photo, drawing, illustration or image, call generate_image. Never make images another way: do not install torch, diffusers or Stable Diffusion, and do not draw with turtle, PIL, matplotlib or SVG code, unless the user explicitly asks for code. If generate_image says the model is still downloading, tell the user that and stop.",
       );
       tools.push({
         risk: "safe",
@@ -133,7 +165,7 @@ export class ConversationManager {
             const before = imageModel;
             const r = (await this.deps.ensureImageModel?.()) ?? {};
             const why = before ? `The user's image model ${before} does not run on this computer${/mlx/i.test(before) ? " (it is an Apple MLX build, for Macs only)" : ""}. ` : "";
-            if (!r.modelId) return { output: why + (r.message ?? "No image model is available. Ask the user to pick one under Models → Images.") };
+            if (!r.modelId) return { output: why + (r.message ?? "No image model is available. Ask the user to pick one under Models → Images.") + ` ${WAIT_NOTE}` };
             imageModel = r.modelId;
             if (before) switched = ` ${why}KesherAI switched to ${r.modelId}, which runs here; tell the user, and that they can change it under Models → Images.`;
           }
@@ -146,6 +178,9 @@ export class ConversationManager {
             height: Number(input.height ?? 1024),
             steps: 0, // 0 = the model family's own default (4 for FLUX schnell, 8 for turbo models)
             seed: randomInt(2 ** 31),
+          }).catch((err: Error) => {
+            if (/getting ready|still downloading/i.test(err.message)) throw new Error(`${err.message} ${WAIT_NOTE}`);
+            throw err;
           });
           const assets = await Promise.all(
             files.map((f) => this.deps.assets.save(f.data, f.mimeType, { sourceModelId: imageModel, ...(f.meta ? { meta: f.meta } : {}) })),
@@ -172,8 +207,9 @@ export class ConversationManager {
   private toolsFor(kind: ConversationKind): { tools: AgentTool[]; notes: string[] } {
     const media = this.mediaTools();
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
-    void kind;
-    return { tools: [...CODE_TOOLS, ...media.tools, ...this.pluginTools()], notes: media.notes };
+    const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
+    const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
+    return { tools: [...code, ...media.tools, ...this.pluginTools()], notes: media.notes };
   }
 
   private contextFor(modelId: string): number {

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -161,23 +161,100 @@ export const RECOMMENDED_IMAGE_MODELS = [
 /** Thrown when the engine or a model's extra files are still downloading. */
 export class PreparingError extends Error {}
 
+/** What the image engine is doing right now, for the chat's progress line. */
+export interface ImageProgress {
+  /** `loading` the model files, `encoding` the prompt, `sampling` (the steps), `decoding` the picture. */
+  phase: "loading" | "encoding" | "sampling" | "decoding";
+  step?: number;
+  steps?: number;
+  /** Seconds per step, as the engine reports it. */
+  secondsPerStep?: number;
+  startedAt: number;
+  /** Whether the engine runs on the GPU (CUDA) or fell back to the processor. */
+  device?: "gpu" | "cpu";
+}
+
+/**
+ * Reads stable-diffusion.cpp's console output into a progress update.
+ *
+ * @param text - Output so far (progress bars are redrawn with `\r`).
+ * @param prev - The previous state.
+ * @returns The new state.
+ */
+export function progressFrom(text: string, prev: ImageProgress): ImageProgress {
+  const next: ImageProgress = { ...prev };
+  if (/ggml_cuda_init|CUDA devices|using CUDA backend/i.test(text)) next.device = "gpu";
+  else if (!next.device && /using CPU backend/i.test(text)) next.device = "cpu";
+  if (/get_learned_condition|text encoder|conditioner/i.test(text) && next.phase === "loading") next.phase = "encoding";
+  if (/sampling|generating image/i.test(text) && (next.phase === "loading" || next.phase === "encoding")) next.phase = "sampling";
+  const bars = [...text.matchAll(/\|\s*(\d+)\/(\d+)\s*-\s*([\d.]+)\s*(s\/it|it\/s)/g)];
+  const last = bars.at(-1);
+  if (last) {
+    next.phase = "sampling";
+    next.step = Number(last[1]);
+    next.steps = Number(last[2]);
+    const v = Number(last[3]);
+    next.secondsPerStep = last[4] === "it/s" ? (v > 0 ? 1 / v : undefined) : v;
+  }
+  if (/decode_first_stage|decoding|vae.*(decode|tiling)/i.test(text.slice(-600)) && next.step && next.step === next.steps) next.phase = "decoding";
+  return next;
+}
+
 /** Runs stable-diffusion.cpp and owns its files. */
 export class SdEngine {
   private installing?: Promise<string>;
   private preparing = new Map<string, Promise<void>>();
   private queue: Promise<unknown> = Promise.resolve();
+  private current?: ImageProgress;
+
+  /** @returns What the engine is doing now, or `undefined` when idle. */
+  progress(): ImageProgress | undefined {
+    return this.current;
+  }
+
+  /**
+   * Flags that keep the run inside the graphics card's own memory. On
+   * Windows, a model that overflows it spills into "shared GPU memory"
+   * (normal RAM over PCIe), which makes every step many times slower
+   * instead of failing. So when the files do not fit with room to spare,
+   * the text encoder runs on the processor and the weights are swapped in
+   * per stage; the picture is always decoded in tiles.
+   *
+   * @param modelFile - Main model file.
+   * @param family - Its family.
+   * @returns Extra command-line flags.
+   */
+  private async memoryArgs(modelFile: string, family: ModelFamily): Promise<string[]> {
+    const args = ["--vae-tiling"];
+    const { nvidia, vramGb } = await this.gpu().catch(() => ({ nvidia: false, vramGb: undefined }));
+    if (!nvidia || !vramGb) return args;
+    const sizes = await Promise.all([modelFile, ...family.companions.map((c) => this.companionPath(c))].map((f) => stat(f).then((x) => x.size, () => 0)));
+    const totalGb = sizes.reduce((a, b) => a + b, 0) / 1024 ** 3;
+    const headroom = 3.5; // working memory for 1024×1024
+    if (totalGb + headroom > vramGb) {
+      const encoderGb = sizes.slice(1).reduce((a, b) => a + b, 0) / 1024 ** 3;
+      if (family.companions.length && totalGb - encoderGb + headroom <= vramGb) args.push("--clip-on-cpu");
+      else args.push("--offload-to-cpu");
+    }
+    return args;
+  }
+
+  /** Where the last run's full console output is saved (for troubleshooting). */
+  get logFile(): string {
+    return join(this.dir, "last-run.log");
+  }
 
   /**
    * @param dir - Engine folder (inside KesherAI's engines folder).
    * @param modelsDir - Returns KesherAI's models folder.
    * @param downloads - The download queue.
-   * @param gpu - Whether this computer has an NVIDIA GPU (picks the CUDA build).
+   * @param gpu - Whether this computer has an NVIDIA GPU (picks the CUDA build) and its memory.
    */
   constructor(
     private readonly dir: string,
     private readonly modelsDir: () => string,
     private readonly downloads: DownloadManager,
-    private readonly gpu: () => Promise<{ nvidia: boolean }>,
+    private readonly gpu: () => Promise<{ nvidia: boolean; vramGb?: number }>,
   ) {}
 
   private get imageDir(): string {
@@ -348,21 +425,36 @@ export class SdEngine {
       "--cfg-scale", String(family.cfg),
       "-s", String(req.seed),
       "-o", out,
+      ...(await this.memoryArgs(modelFile, family)),
     ];
     const started = Date.now();
+    this.current = { phase: "loading", startedAt: started };
+    let full = `${new Date().toISOString()}\n${exe} ${args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" ")}\n\n`;
+    const saveLog = () => writeFile(this.logFile, full.slice(-400_000)).catch(() => undefined);
     const log = await new Promise<string>((resolve, reject) => {
       const child = spawn(exe, args, { windowsHide: true, cwd: this.dir });
       let text = "";
       const onData = (b: Buffer) => {
-        text = (text + b.toString()).slice(-8000);
+        const chunk = b.toString();
+        full += chunk;
+        text = (text + chunk).slice(-8000);
+        this.current = progressFrom(text, this.current ?? { phase: "loading", startedAt: started });
       };
       child.stdout.on("data", onData);
       child.stderr.on("data", onData);
       const kill = () => child.kill();
       signal?.addEventListener("abort", kill, { once: true });
-      child.on("error", reject);
+      child.on("error", (err) => {
+        this.current = undefined;
+        full += `\n[could not start: ${err.message}]\n`;
+        void saveLog();
+        reject(err);
+      });
       child.on("close", (code) => {
         signal?.removeEventListener("abort", kill);
+        full += `\n\n[exit code ${code}, ${Math.round((Date.now() - started) / 1000)} s]\n`;
+        void saveLog();
+        this.current = undefined;
         if (code === 0) resolve(text);
         else reject(new Error(`The image engine failed (exit code ${code}):\n${text.split("\n").slice(-12).join("\n")}`));
       });

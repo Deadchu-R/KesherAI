@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -59,6 +60,15 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
  */
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   app.get("/api/engines/llamacpp", async () => s.engine.status());
+
+  /** What the image engine is doing (phase, step x of y, seconds per step), or `{}` when idle. */
+  app.get("/api/engines/image/progress", async () => s.sd.progress() ?? {});
+
+  /** The image engine's last run: the full console output, for troubleshooting slow or failed images. */
+  app.get("/api/engines/image/log", async (_req, reply) => {
+    const text = await readFile(s.sd.logFile, "utf8").catch(() => "");
+    return reply.type("text/plain; charset=utf-8").send(text || "The image engine has not run yet.");
+  });
 
   /** Starts installing in the background; poll GET /api/engines/llamacpp for progress. */
   app.post("/api/engines/llamacpp/install", async () => {

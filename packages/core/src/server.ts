@@ -90,7 +90,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const downloads = new DownloadManager();
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
-  const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => ({ nvidia: (await detectHardwareCached()).gpus.some((g) => /nvidia|geforce|rtx|gtx/i.test(g.name)) }));
+  const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => {
+    const nv = (await detectHardwareCached()).gpus.filter((g) => /nvidia|geforce|rtx|gtx/i.test(g.name));
+    return { nvidia: nv.length > 0, vramGb: nv.length ? Math.max(...nv.map((g) => g.vramTotal)) / 1024 ** 3 : undefined };
+  });
   registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });
   registry.add({ id: "sdcpp", type: "sdcpp", name: "KesherAI image engine", location: "local" });
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { desktop } from "./library";
@@ -103,12 +104,53 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
           {stepLabel(current)}
         </p>
       )}
+      {current && !current.result && current.call.name === "generate_image" && <ImageProgressLine />}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {images.length > 0 && (
         <div className="activity-images">
           {images.map((id) => <img key={id} src={withToken(`/api/assets/${id}`)} alt="" className="asset" />)}
         </div>
       )}
+    </div>
+  );
+}
+
+interface ImageProgress { phase?: "loading" | "encoding" | "sampling" | "decoding"; step?: number; steps?: number; secondsPerStep?: number; startedAt?: number; device?: "gpu" | "cpu" }
+
+/** While a picture is being made: the engine's stage, step x of y, and time left. Polls once a second. */
+function ImageProgressLine() {
+  const [p, setP] = useState<ImageProgress>({});
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    let alive = true;
+    const tick = () =>
+      api<ImageProgress>("/api/engines/image/progress").then((x) => {
+        if (alive) {
+          setP(x);
+          setNow(Date.now());
+        }
+      }, () => undefined);
+    void tick();
+    const id = setInterval(tick, 1000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  if (!p.phase) return null;
+  const elapsed = p.startedAt ? Math.round((now - p.startedAt) / 1000) : 0;
+  const left = p.step && p.steps && p.secondsPerStep ? Math.round((p.steps - p.step) * p.secondsPerStep) : undefined;
+  const pct = p.step && p.steps ? Math.round((p.step / p.steps) * 100) : undefined;
+  return (
+    <div className="image-progress" role="status">
+      <span dir="auto">
+        {t(`imgPhase_${p.phase}` as StringKey)}
+        {p.step && p.steps ? ` · ${t("imgStep", { step: p.step, steps: p.steps })}` : ""}
+        {p.secondsPerStep ? ` · ${t("imgPerStep", { s: p.secondsPerStep.toFixed(1) })}` : ""}
+        {left !== undefined ? ` · ${t("imgLeft", { s: left })}` : ` · ${t("imgElapsed", { s: elapsed })}`}
+      </span>
+      {p.device === "cpu" && <span className="pill bad">{t("imgOnCpu")}</span>}
+      {pct !== undefined && <span className="bar" aria-hidden><span style={{ width: `${pct}%` }} /></span>}
     </div>
   );
 }

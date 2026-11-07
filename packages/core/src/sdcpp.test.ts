@@ -64,3 +64,13 @@ test("downloaded image models show up under Images and generate through the buil
     await s.close();
   }
 });
+
+test("reads progress from stable-diffusion.cpp output", async () => {
+  const { progressFrom } = await import("./sdcpp.js");
+  let p = progressFrom("ggml_cuda_init: found 1 CUDA devices", { phase: "loading", startedAt: 0 });
+  assert.equal(p.device, "gpu");
+  p = progressFrom("sampling using Euler method\r  |=====>      | 5/20 - 3.21s/it", p);
+  assert.deepEqual([p.phase, p.step, p.steps, p.secondsPerStep], ["sampling", 5, 20, 3.21]);
+  p = progressFrom("  |==========| 20/20 - 2.00it/s", p);
+  assert.equal(p.secondsPerStep, 0.5);
+});
