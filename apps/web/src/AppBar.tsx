@@ -66,7 +66,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
     };
   }, [menu]);
 
-  const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/connections" ? t("connections") : hash.startsWith("#/settings") ? t("settings") : "";
+  const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/connections" ? t("connections") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : "";
   const inCode = hash.startsWith("#/c/") && document.querySelector("[data-conv-kind='code']") !== null;
   const status = online === null ? t("barChecking") : online ? t("computerOn", { name: host || location.hostname }) : t("serverOffline");
 
@@ -85,6 +85,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
               <a role="menuitem" href="#/models">{t("models")}</a>
               <a role="menuitem" href="#/images">{t("images")}</a>
               <a role="menuitem" href="#/connections">{t("connections")}</a>
+              <a role="menuitem" href="#/usage">{t("usageNav")}</a>
               <a role="menuitem" href="#/settings">{t("settings")}</a>
               <hr />
               <button type="button" role="menuitem" onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); setMenu(false); onLocale(); }}>{t("language")}</button>
@@ -104,7 +105,11 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         </div>
       </div>
       <div className="appbar-main">
-        <div id="appbar-title" className="appbar-title">{pageTitle && <span className="bar-page">{pageTitle}</span>}</div>
+        <div className="appbar-title">
+          {pageTitle && <span className="bar-page">{pageTitle}</span>}
+          {/* Pages render their own title here with a portal; React leaves this element's children to them. */}
+          <div id="appbar-title" className="appbar-slot" />
+        </div>
         <span className={`bar-status ${online ? "ok" : online === false ? "off" : ""}`} title={status} aria-label={status} role="status">
           {Icon.computer}
           <span className="dot" aria-hidden="true" />

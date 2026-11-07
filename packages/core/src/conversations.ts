@@ -113,6 +113,8 @@ export class ConversationManager {
        * active: uses a downloaded one, or starts downloading the best fit.
        */
       ensureImageModel?(): Promise<{ modelId?: string; message?: string }>;
+      /** Notes the coach learned about how the user works, added to every system prompt. */
+      userNotes?(): Promise<string[]>;
     },
   ) {}
 
@@ -260,8 +262,29 @@ export class ConversationManager {
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
-      toolNotes: notes,
+      toolNotes: [...notes, ...(await this.learnedNotes())],
     });
+  }
+
+  private async learnedNotes(): Promise<string[]> {
+    const learned = (await this.deps.userNotes?.().catch(() => [])) ?? [];
+    return learned.length ? [`About this user (learned from how they use KesherAI; follow it unless they say otherwise): ${learned.join("; ")}`] : [];
+  }
+
+  /**
+   * What a coach needs to know about a conversation's setup.
+   *
+   * @param c - The conversation.
+   * @returns Tool and plugin names, the main model and teammates.
+   */
+  setupOf(c: Conversation): { tools: string[]; plugins: string[]; mainModel: string; team: string[] } {
+    const { tools } = this.toolsFor(c.kind);
+    return {
+      tools: tools.map((t) => t.spec.name),
+      plugins: [...new Set([...this.deps.plugins.tools.values()].map((t) => t.pluginId))],
+      mainModel: c.modelId,
+      team: (c.team ?? []).map((m) => `${m.role} ${m.modelId}`),
+    };
   }
 
   /**

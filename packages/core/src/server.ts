@@ -18,6 +18,8 @@ import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
+import { Coach } from "./coach.js";
+import { coachRoutes } from "./routes/coach.js";
 import { detectHardwareCached } from "@kesher/downloads";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
@@ -90,6 +92,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const downloads = new DownloadManager();
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
+  const coach = new Coach(paths.root);
   const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => {
     const nv = (await detectHardwareCached()).gpus.filter((g) => /nvidia|geforce|rtx|gtx/i.test(g.name));
     return { nvidia: nv.length > 0, vramGb: nv.length ? Math.max(...nv.map((g) => g.vramTotal)) / 1024 ** 3 : undefined };
@@ -158,7 +161,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       config,
       outputsDir: join(paths.root, "outputs"),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
+      userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
     }),
+    coach,
     updater: new Updater(),
     google,
     driveSync,
@@ -185,6 +190,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (features.openaiCompatibleApi) await openAIRoutes(app, services);
   await app.register(websocket);
   await terminalRoutes(app, services);
+  await coachRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);

@@ -129,6 +129,17 @@ export type AgentEvent = EventBase &
     | { type: "status"; status: AgentStatus; message?: string }
     | { type: "note"; text: string }
     | {
+        /** What one model call cost, in tokens (reported by the provider, or `estimated` from the text). */
+        type: "usage";
+        modelId: string;
+        role: "main" | TeamRole;
+        input: number;
+        output: number;
+        estimated: boolean;
+        /** The tools this call asked for (its action). */
+        tools: string[];
+      }
+    | {
         /** A teammate model's contribution: a plan before the work, or a review after it. */
         type: "teammate";
         role: TeamRole;

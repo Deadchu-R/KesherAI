@@ -6,6 +6,7 @@ import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
+import { CoachPanel } from "../CoachPanel";
 import { FilesPanel } from "../FilesPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
@@ -313,6 +314,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => setSlot(document.getElementById("appbar-title")), []);
   useEffect(() => {
@@ -400,7 +402,7 @@ export function ConversationPage({ id }: { id: string }) {
         group.push({ call: e, ...(result ? { result } : {}) });
         continue;
       }
-      if (e.type === "tool_result" || e.type === "approval_result" || e.type === "answer" || (e.type === "status" && e.status !== "error")) continue;
+      if (e.type === "tool_result" || e.type === "approval_result" || e.type === "answer" || e.type === "usage" || (e.type === "status" && e.status !== "error")) continue;
       group = null;
       out.push({ kind: "event", e });
     }
@@ -492,6 +494,7 @@ export function ConversationPage({ id }: { id: string }) {
       )}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
         <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />
+        <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
         <span className="grow" />
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
@@ -505,6 +508,7 @@ export function ConversationPage({ id }: { id: string }) {
       </div>
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
+      {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
 
       <div className={`conv-split ${showIde ? "with-ide" : ""}`}>
       <div className="chat">

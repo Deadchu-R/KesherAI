@@ -94,6 +94,15 @@ export const KesherConfigSchema = z.object({
       anywhere: z.boolean().default(false),
     })
     .default({}),
+  /** The coach (prompt and usage advice). */
+  coach: z
+    .object({
+      /** Model that writes the advice; defaults to the conversation's own model. */
+      modelId: z.string().optional(),
+      /** Keep notes about how the user works and tell the models (local file `coach.json`). */
+      learn: z.boolean().default(true),
+    })
+    .default({}),
   /** Per-plugin settings, keyed by plugin id. */
   plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).default({}) })).default({}),
 });

@@ -24,7 +24,7 @@ export type ModelTurn = (
   request: { messages: AgentMessage[]; tools: ToolSpec[] },
   signal: AbortSignal,
   onText: (delta: string) => void,
-) => Promise<{ text: string; toolCalls: ToolCall[] }>;
+) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number } }>;
 
 /** A helper model, already resolved to something the session can call. */
 export interface TeamMember {
@@ -308,7 +308,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    */
   private async askTeammate(member: TeamMember, system: string, content: string, signal: AbortSignal, review = false): Promise<string | undefined> {
     try {
-      const r = await member.model({ messages: [{ role: "system", content: system }, { role: "user", content }], tools: [] }, signal, () => undefined);
+      const asked: AgentMessage[] = [{ role: "system", content: system }, { role: "user", content }];
+      const r = await member.model({ messages: asked, tools: [] }, signal, () => undefined);
+      this.recordUsage(member.modelId, member.role, asked, r);
       const text = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
       if (!text) return undefined;
       const approved = review ? /^\s*\**APPROVED/i.test(text) : undefined;
@@ -319,6 +321,22 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       this.push({ type: "note", text: `The ${member.role} (${member.modelId}) could not answer: ${(err as Error).message}` });
       return undefined;
     }
+  }
+
+  /**
+   * Records what one model call cost, as reported by the provider or
+   * estimated from the text (about 4 characters per token).
+   *
+   * @param modelId - The model called.
+   * @param role - `main`, or a teammate's role.
+   * @param sent - Messages sent.
+   * @param result - What came back.
+   */
+  private recordUsage(modelId: string, role: "main" | TeamRole, sent: AgentMessage[], result: Awaited<ReturnType<ModelTurn>>): void {
+    const reported = result.usage?.inputTokens !== undefined && result.usage?.outputTokens !== undefined;
+    const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
+    const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
+    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name) });
   }
 
   /**
@@ -449,7 +467,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
         const conversation = await this.fitContext(abort.signal);
-        let result: { text: string; toolCalls: ToolCall[] };
+        let result: Awaited<ReturnType<ModelTurn>>;
         try {
           result = await this.model({ messages: conversation, tools: this.specs() }, abort.signal, (text) =>
             this.push({ type: "assistant_delta", turn, text }, false),
@@ -464,6 +482,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             );
           } else throw err;
         }
+        this.recordUsage(this.modelId, "main", conversation, result);
         if (result.text) this.push({ type: "assistant", turn, text: result.text });
         this.lastSaid = result.text.trim();
         this.messages.push({ role: "assistant", content: result.text, ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {}) });
