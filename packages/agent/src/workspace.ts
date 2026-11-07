@@ -48,7 +48,10 @@ function assertInside(root: string, target: string, original: string): void {
  * @returns e.g. `src/app.ts`.
  */
 export function displayPath(root: string, absolute: string): string {
-  return relative(root, absolute).split(sep).join("/") || ".";
+  const rel = relative(root, absolute);
+  // Files in a granted folder outside the project are shown with their full path.
+  if (rel.startsWith("..") || isAbsolute(rel)) return absolute;
+  return rel.split(sep).join("/") || ".";
 }
 
 /** Folders that are never listed or searched: they are huge and rarely relevant. */
@@ -80,4 +83,36 @@ export function globToRegExp(glob: string): RegExp {
     else re += c.replace(/[.+^$()|[\]\\]/g, "\\$&");
   }
   return new RegExp(`^${re}$`, "i");
+}
+
+/**
+ * Resolves a path for a file tool: inside the workspace, or inside one of
+ * the folders (or files) the user granted access to in this conversation.
+ *
+ * @param workspace - Absolute workspace folder, if any.
+ * @param extraRoots - Granted folders or files.
+ * @param path - Path from the model.
+ * @returns The absolute path.
+ * @throws Error if the path is in none of them.
+ */
+export async function resolveForTool(workspace: string | undefined, extraRoots: readonly string[], path: string): Promise<string> {
+  let firstError: Error | undefined;
+  if (workspace) {
+    try {
+      return await resolveInWorkspace(workspace, path);
+    } catch (err) {
+      firstError = err as Error;
+    }
+  }
+  if (isAbsolute(path)) {
+    for (const root of extraRoots) {
+      try {
+        return await resolveInWorkspace(root, path);
+      } catch {
+        // try the next one
+      }
+    }
+  }
+  const granted = extraRoots.length ? ` Folders you were given: ${extraRoots.join(", ")}.` : "";
+  throw new Error(`${firstError?.message ?? `"${path}" is outside the folders you can use.`}${granted} To use another folder, call request_access.`);
 }

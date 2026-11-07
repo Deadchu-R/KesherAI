@@ -2,8 +2,9 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import type { ToolRisk, ToolSpec } from "@kesher/shared";
-import { IGNORED_DIRS, displayPath, globToRegExp, resolveInWorkspace } from "./workspace.js";
+import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
 import { buildExecutableTool } from "./build.js";
+import { SYSTEM_TOOLS } from "./system-tools.js";
 import { MAX_OUTPUT, runShell } from "./shell.js";
 
 /** What a tool returns. */
@@ -20,6 +21,8 @@ export interface ToolOutput {
 export interface ToolContext {
   /** Absolute workspace folder; absent in plain chats. */
   workspace?: string;
+  /** Folders or files the user gave access to in this conversation, outside the workspace. */
+  extraRoots?: readonly string[];
   /** Aborted when the user presses Stop. */
   signal: AbortSignal;
   /**
@@ -126,7 +129,7 @@ const listFiles: AgentTool = {
   },
   async run(input, ctx) {
     const root = workspaceOf(ctx);
-    const dir = await resolveInWorkspace(root, str(input, "path", false) || ".");
+    const dir = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path", false) || ".");
     const re = str(input, "glob", false) ? globToRegExp(str(input, "glob")) : undefined;
     const files: string[] = [];
     for await (const f of walk(root, dir)) {
@@ -155,8 +158,7 @@ const readFileTool: AgentTool = {
     },
   },
   async run(input, ctx) {
-    const root = workspaceOf(ctx);
-    const path = await resolveInWorkspace(root, str(input, "path"));
+    const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
     const info = await stat(path).catch(() => undefined);
     if (!info) throw new Error(`${str(input, "path")} does not exist.`);
     if (info.isDirectory()) throw new Error(`${str(input, "path")} is a folder. Use list_files.`);
@@ -230,12 +232,12 @@ const writeFileTool: AgentTool = {
   },
   async preview(input, ctx) {
     const root = workspaceOf(ctx);
-    const path = await resolveInWorkspace(root, str(input, "path"));
+    const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
     return makeDiff(displayPath(root, path), await readText(path), str(input, "content"));
   },
   async run(input, ctx) {
     const root = workspaceOf(ctx);
-    const path = await resolveInWorkspace(root, str(input, "path"));
+    const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
     const before = await readText(path);
     const content = str(input, "content");
     await mkdir(dirname(path), { recursive: true });
@@ -246,8 +248,9 @@ const writeFileTool: AgentTool = {
   },
 };
 
-async function applyEdit(root: string, input: Record<string, unknown>) {
-  const path = await resolveInWorkspace(root, str(input, "path"));
+async function applyEdit(ctx: ToolContext, input: Record<string, unknown>) {
+  const root = workspaceOf(ctx);
+  const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
   const before = await readText(path);
   if (before === null) throw new Error(`${str(input, "path")} does not exist. Use write_file to create it.`);
   const oldText = str(input, "old_text");
@@ -284,11 +287,11 @@ const editFileTool: AgentTool = {
     },
   },
   async preview(input, ctx) {
-    const e = await applyEdit(workspaceOf(ctx), input);
+    const e = await applyEdit(ctx, input);
     return makeDiff(e.rel, e.before, e.after);
   },
   async run(input, ctx) {
-    const e = await applyEdit(workspaceOf(ctx), input);
+    const e = await applyEdit(ctx, input);
     ctx.recordChange(e.path, e.before);
     await writeFile(e.path, e.after, "utf8");
     return { output: `Edited ${e.rel}.`, diff: makeDiff(e.rel, e.before, e.after) };
@@ -341,5 +344,23 @@ export const askUserSpec: ToolSpec = {
   },
 };
 
+/** Name of the special tool through which the agent asks for a folder or file outside its own. */
+export const REQUEST_ACCESS_TOOL = "request_access";
+
+/** Spec of request_access; the session handles it itself. */
+export const requestAccessSpec: ToolSpec = {
+  name: REQUEST_ACCESS_TOOL,
+  description:
+    "Ask the user for access to a folder or file outside your project folder (for example their Documents, a game project, or a file they mentioned). The user approves, picks another place, or refuses. After approval, the file tools accept absolute paths inside it. Do not use it for the project folder itself.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "The absolute folder or file you need, if you know it. Leave empty to let the user choose." },
+      reason: { type: "string", description: "One sentence: what you will do there." },
+    },
+    required: ["reason"],
+  },
+};
+
 /** The file and terminal tools of a code conversation. */
-export const CODE_TOOLS: readonly AgentTool[] = [listFiles, readFileTool, searchTool, writeFileTool, editFileTool, runCommandTool, buildExecutableTool];
+export const CODE_TOOLS: readonly AgentTool[] = [listFiles, readFileTool, searchTool, writeFileTool, editFileTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];

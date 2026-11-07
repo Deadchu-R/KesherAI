@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode } from "@kesher/shared";
 import { api, withToken } from "../api";
-import { refreshLibrary, useLibrary } from "../library";
+import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { FilesPanel } from "../FilesPanel";
 import { t } from "../i18n";
@@ -97,8 +97,30 @@ function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<
 }
 
 function QuestionCard({ convId, ev, pending, answer }: { convId: string; ev: Ev<"question">; pending: boolean; answer?: Ev<"answer"> }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(ev.path ?? "");
   const send = (value: string) => void api(`/api/conversations/${convId}/answers/${ev.questionId}`, { method: "POST", body: { text: value } }).catch(() => undefined);
+  if (ev.kind === "access") {
+    // The agent asks for a folder or file outside its own: allow it, pick another, or refuse.
+    return (
+      <div className={`card question access ${pending ? "" : "done"}`}>
+        <strong>{t("accessRequest")}</strong>
+        <p>{ev.question}</p>
+        {pending ? (
+          <>
+            <input className="mono" dir="ltr" value={text} onChange={(e) => setText(e.target.value)} placeholder="C:\Users\…" aria-label={t("accessPath")} />
+            <div className="row">
+              <button type="button" className="primary" disabled={!text.trim()} onClick={() => send(text.trim())}>{t("allowAccess")}</button>
+              {desktop() && <button type="button" onClick={() => void desktop()!.pickFolder().then((f) => f && send(f))}>{t("chooseFolder")}</button>}
+              {desktop()?.pickFiles && <button type="button" onClick={() => void desktop()!.pickFiles!().then((f) => f[0] && send(f[0]))}>{t("chooseFile")}</button>}
+              <button type="button" onClick={() => send("")}>{t("refuse")}</button>
+            </div>
+          </>
+        ) : (
+          <p className="muted mono" dir="ltr">{answer?.text ? `✓ ${answer.text}` : t("refused")}</p>
+        )}
+      </div>
+    );
+  }
   return (
     <div className={`card question ${pending ? "" : "done"}`}>
       <strong>{ev.question}</strong>
@@ -133,6 +155,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [fileCount, setFileCount] = useState(0);
   const { models } = useModels("chat");
   const { conversations } = useLibrary();
@@ -217,6 +240,19 @@ export function ConversationPage({ id }: { id: string }) {
       setInput(text);
     }
   };
+  /** Gives the agent access to files the user attached, and names them in the message. */
+  const attach = async (paths: string[]) => {
+    const added: string[] = [];
+    for (const p of paths) {
+      try {
+        const r = await api<{ path: string }>(`/api/conversations/${id}/access`, { method: "POST", body: { path: p } });
+        added.push(r.path);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    }
+    if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
+  };
   const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
     setConv({ ...conv, ...body });
@@ -287,6 +323,8 @@ export function ConversationPage({ id }: { id: string }) {
                 return <QuestionCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingQuestions.includes(e.questionId)} answer={answers.get(e.questionId)} />;
               case "note":
                 return <p key={e.seq} className="muted note">{e.text}</p>;
+              case "access":
+                return <p key={e.seq} className="muted note" dir="auto">{t("accessGiven")} <span className="mono" dir="ltr">{e.path}</span></p>;
               case "undo":
                 return <p key={e.seq} className="muted note">{t("undone", { path: e.path })}</p>;
               case "status":
@@ -304,8 +342,24 @@ export function ConversationPage({ id }: { id: string }) {
           {error && <p className="error">{error}</p>}
           <div ref={bottom} />
         </div>
-        <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        <form
+          className={`composer ${dragging ? "dragging" : ""}`}
+          onSubmit={(e) => { e.preventDefault(); void send(); }}
+          onDragOver={(e) => { if (desktop()?.pathOf) { e.preventDefault(); setDragging(true); } }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            const bridge = desktop();
+            if (!bridge?.pathOf) return;
+            e.preventDefault();
+            setDragging(false);
+            const paths = [...e.dataTransfer.files].map((f) => bridge.pathOf!(f)).filter(Boolean);
+            void attach(paths);
+          }}
+        >
           <div className="box">
+            {desktop()?.pickFiles && (
+              <button type="button" className="attach" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>📎</button>
+            )}
             <textarea
               rows={2}
               value={input}

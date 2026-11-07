@@ -12,7 +12,9 @@ import type {
   ToolSpec,
 } from "@kesher/shared";
 import { decide } from "./permissions.js";
-import { ASK_USER_TOOL, askUserSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+import { ASK_USER_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+import { stat } from "node:fs/promises";
+import { resolve as resolvePath } from "node:path";
 import { displayPath } from "./workspace.js";
 
 /** One model turn: give it the conversation and tools, get text and tool calls back. */
@@ -112,7 +114,30 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       pendingApprovals: [...this.approvals.keys()],
       pendingQuestions: [...this.questions.keys()],
       canUndo: this.changes.length > 0,
+      grants: this.grants,
     };
+  }
+
+  /** @returns Folders and files this conversation was given access to (from its `access` events). */
+  get grants(): string[] {
+    return [...new Set(this.events.filter((e): e is Extract<AgentEvent, { type: "access" }> => e.type === "access").map((e) => e.path))];
+  }
+
+  /**
+   * Gives the agent access to a folder or file outside its workspace, for
+   * the rest of this conversation. The user does this by attaching a file
+   * or approving a request.
+   *
+   * @param path - Absolute path that exists.
+   * @throws Error if the path does not exist.
+   */
+  async grant(path: string): Promise<string> {
+    const abs = resolvePath(path);
+    await stat(abs).catch(() => {
+      throw new Error(`${path} does not exist.`);
+    });
+    if (!this.grants.includes(abs)) this.push({ type: "access", path: abs });
+    return abs;
   }
 
   /** @returns `true` while the agent is working or waiting for the user. */
@@ -240,7 +265,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private specs(): ToolSpec[] {
     if (this.toolsUnsupported) return [];
-    return [askUserSpec, ...[...this.tools.values()].map((t) => t.spec)];
+    return [askUserSpec, requestAccessSpec, ...[...this.tools.values()].map((t) => t.spec)];
   }
 
   private async run(): Promise<void> {
@@ -319,11 +344,37 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       return answer;
     }
 
+    if (call.name === REQUEST_ACCESS_TOOL) {
+      const reason = typeof call.arguments.reason === "string" ? call.arguments.reason : "";
+      const path = typeof call.arguments.path === "string" && call.arguments.path.trim() ? call.arguments.path.trim() : undefined;
+      const questionId = randomUUID();
+      const answer = await new Promise<string>((resolve) => {
+        this.questions.set(questionId, resolve);
+        this.push({ type: "question", questionId, question: reason || "The agent asks for access to a folder.", kind: "access", ...(path ? { path } : {}) });
+        this.setStatus("waiting");
+      });
+      this.push({ type: "answer", questionId, text: answer });
+      this.setStatus("running");
+      const chosen = answer.trim();
+      if (!chosen || chosen.startsWith("(")) {
+        this.push({ type: "tool_result", callId: call.id, name: call.name, ok: false, output: "Refused." });
+        return "The user did not give access. Do not ask again for the same place; continue without it or ask what they prefer.";
+      }
+      try {
+        const granted = await this.grant(chosen);
+        this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output: granted });
+        return `Access granted to ${granted}. Use absolute paths inside it with the file tools.`;
+      } catch (err) {
+        return fail((err as Error).message);
+      }
+    }
+
     const tool = this.tools.get(call.name);
     if (!tool) return fail(`There is no tool called "${call.name}".`);
 
     const ctx: ToolContext = {
       ...(this.workspace ? { workspace: this.workspace } : {}),
+      extraRoots: this.grants,
       signal,
       recordChange: (path, before) => this.changes.push({ path, before }),
     };

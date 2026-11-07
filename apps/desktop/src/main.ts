@@ -104,6 +104,14 @@ ipcMain.handle("kesher:pick-folder", async (event) => {
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
 
+// The paper-clip button in a conversation: attach files for the agent to use.
+ipcMain.handle("kesher:pick-files", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const opts = { properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections"> };
+  const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return result.canceled ? [] : result.filePaths;
+});
+
 // "Open folder" in a conversation's Files panel. Only folders, never files, so nothing is run.
 ipcMain.handle("kesher:open-path", async (_event, path: unknown) => {
   if (typeof path !== "string") return;

@@ -90,7 +90,18 @@ export type AgentEvent = EventBase &
         reason: string;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
-    | { type: "question"; questionId: string; question: string; options?: string[] }
+    | {
+        type: "question";
+        questionId: string;
+        question: string;
+        options?: string[];
+        /** `access`: the agent asks for a folder or file outside its own; the answer is a path, or empty to refuse. */
+        kind?: "access";
+        /** For `access`: the path the agent suggested. */
+        path?: string;
+      }
+    /** The session may now read and change files under `path` (given by the user, or approved when the agent asked). */
+    | { type: "access"; path: string }
     | { type: "answer"; questionId: string; text: string }
     | {
         type: "tool_result";
@@ -122,4 +133,6 @@ export interface AgentSessionInfo {
   pendingQuestions: string[];
   /** Whether there is a file change that `undo` can revert. */
   canUndo: boolean;
+  /** Folders or files outside the workspace this conversation was given access to. */
+  grants: string[];
 }

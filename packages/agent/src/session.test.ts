@@ -176,3 +176,42 @@ test("globs", () => {
   assert.equal(globToRegExp("*.ts").test("src/a.ts"), false);
 });
 
+
+test("request_access grants a folder outside the workspace, and the file tools can use it", async () => {
+  const { mkdtemp: mk, writeFile: wf } = await import("node:fs/promises");
+  const { tmpdir: td } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { AgentSession, CODE_TOOLS } = await import("./index.js");
+  const ws = await mk(j(td(), "kesher-ws-"));
+  const outside = await mk(j(td(), "kesher-out-"));
+  await wf(j(outside, "notes.txt"), "secret plan");
+  let step = 0;
+  const session = new AgentSession({
+    id: "s",
+    modelId: "m",
+    mode: "ask",
+    workspace: ws,
+    tools: [...CODE_TOOLS],
+    systemPrompt: "",
+    model: async () => {
+      step++;
+      if (step === 1) return { text: "", toolCalls: [{ id: "a", name: "read_file", arguments: { path: j(outside, "notes.txt") } }] };
+      if (step === 2) return { text: "", toolCalls: [{ id: "b", name: "request_access", arguments: { path: outside, reason: "Read your notes" } }] };
+      if (step === 3) return { text: "", toolCalls: [{ id: "c", name: "read_file", arguments: { path: j(outside, "notes.txt") } }] };
+      return { text: "done", toolCalls: [] };
+    },
+  });
+  session.send("read my notes");
+  await new Promise<void>((resolve) => {
+    session.on("event", (e) => {
+      if (e.type === "question" && e.kind === "access") session.answer(e.questionId, e.path ?? "");
+      if (e.type === "assistant" && e.text === "done") resolve();
+    });
+  });
+  const results = session.events.filter((e) => e.type === "tool_result");
+  assert.equal(results[0]?.ok, false, "outside the workspace before access");
+  assert.equal(results[1]?.ok, true);
+  assert.equal(results[2]?.ok, true);
+  assert.match((results[2] as { output: string }).output, /secret plan/);
+  assert.deepEqual(session.info().grants, [outside]);
+});

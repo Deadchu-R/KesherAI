@@ -6,7 +6,7 @@
  * Written as CommonJS (.cts) because sandboxed preload scripts cannot be
  * ES modules.
  */
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("kesherDesktop", {
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */
@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   restart: (): Promise<void> => ipcRenderer.invoke("kesher:restart"),
   /** Opens a folder in Explorer / Finder. */
   openPath: (path: string): Promise<void> => ipcRenderer.invoke("kesher:open-path", path),
+  /** Opens the system file picker (several files allowed). */
+  pickFiles: (): Promise<string[]> => ipcRenderer.invoke("kesher:pick-files"),
+  /** The full path of a file dropped on the window. */
+  pathOf: (file: File): string => webUtils.getPathForFile(file),
 });

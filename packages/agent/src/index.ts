@@ -11,3 +11,6 @@ export { CODE_TOOLS, ASK_USER_TOOL, askUserSpec, makeDiff, truncate, type AgentT
 export { decide, dangerReason, type PermissionVerdict } from "./permissions.js";
 export { resolveInWorkspace, displayPath, globToRegExp, IGNORED_DIRS } from "./workspace.js";
 export { buildSystemPrompt, readProjectGuide, type PromptOptions } from "./prompt.js";
+export * from "./system-tools.js";
+export { REQUEST_ACCESS_TOOL, requestAccessSpec } from "./tools.js";
+export { resolveForTool } from "./workspace.js";

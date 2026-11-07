@@ -169,6 +169,18 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
+  /** Gives the conversation access to a folder or file outside its own (the paper clip, or drag and drop). */
+  app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/access", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Files can only be attached on this computer." });
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    try {
+      return { path: await opened.session.grant(req.body?.path ?? "") };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/conversations/:id/stop", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });

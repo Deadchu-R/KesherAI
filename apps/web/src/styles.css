@@ -223,3 +223,7 @@ button.on { border-color: var(--accent); }
 @media (max-width: 760px) { .hub-head { grid-template-areas: "name" "stats" "facts"; grid-template-columns: 1fr; } }
 
 .anywhere { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+
+.composer.dragging .box { outline: 2px dashed var(--accent); }
+.attach { width: 40px; padding: 0; font-size: 18px; }
+.question.access { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }

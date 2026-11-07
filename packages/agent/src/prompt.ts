@@ -43,6 +43,14 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
     `You are the assistant inside ${opts.productName}, an app that runs AI models on the user's own computer (${os}).`,
     "Answer in the language the user writes in. Be direct and concise.",
     "When a request is ambiguous or a choice is really the user's to make, call ask_user instead of guessing. Do not ask about things you can find out yourself.",
+    [
+      "Your tools on this computer:",
+      "- Files: list_files, read_file, search, write_file, edit_file; run_command for any shell command; build_executable to package a Python program as an .exe.",
+      "- check_tools tells you what is installed (python, java, node, git, …); install_tool installs a missing one after the user approves.",
+      "- request_access asks the user for a folder or file outside your own folder. Paths the user attached to their message are already granted.",
+      "- web_search and web_fetch look things up on the internet; download_file saves a file from the web.",
+      "Prefer doing the work with these tools over telling the user to do it themselves.",
+    ].join("\n"),
   ];
   if (opts.workspace) {
     parts.push(
