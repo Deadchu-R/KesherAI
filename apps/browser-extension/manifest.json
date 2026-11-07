@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "KesherAI",
+  "version": "0.1.0",
+  "description": "Lets the KesherAI app on this computer use your browser for tasks you ask it to do, where you are already signed in.",
+  "permissions": ["tabs", "scripting", "storage", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "KesherAI" },
+  "icons": { "128": "icon128.png" }
+}

@@ -11,6 +11,7 @@ import type { GoogleDrive } from "./google.js";
 import type { DriveSync } from "./drive-sync.js";
 import type { Tunnel } from "./tunnel.js";
 import type { SdEngine } from "./sdcpp.js";
+import type { BrowserBridge } from "./browser-bridge.js";
 import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
 import type { WhisperEngine } from "./whisper.js";
@@ -57,6 +58,8 @@ export interface KesherServices {
   driveSync: DriveSync;
   /** The built-in image engine (stable-diffusion.cpp). */
   sd: SdEngine;
+  /** The link to the KesherAI browser extension. */
+  browser: BrowserBridge;
   /** Speech to text (whisper.cpp). */
   whisper: WhisperEngine;
   /** Computer control (screen, mouse, keyboard) with its app approvals, stop switch and log. */

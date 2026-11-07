@@ -14,6 +14,7 @@ export default tseslint.config(
   js.configs.recommended,
   { files: ["scripts/**", "apps/desktop/**"], languageOptions: { globals: globals.node } },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
+  { files: ["apps/browser-extension/**"], languageOptions: { globals: { ...globals.browser, ...globals.serviceworker, chrome: "readonly" } } },
   ...tseslint.configs.recommended,
   {
     rules: {

@@ -161,6 +161,8 @@ export const KesherConfigSchema = z.object({
   apiAuth: z.object({ requireKeyLocally: z.boolean().default(false) }).default({}),
   /** Download speed limit in megabytes per second (0: none). */
   downloadLimitMBps: z.number().min(0).default(0),
+  /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
+  browserKey: z.string().optional(),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z.object({ enabled: z.boolean().default(true) }).default({}),
   /** Notifications when long work ends or KesherAI waits for an answer. */
@@ -233,8 +235,9 @@ export async function loadConfig(paths: DataPaths): Promise<KesherConfig> {
   }
   const raw = await readFile(paths.config, "utf8").catch(() => "{}");
   const config = KesherConfigSchema.parse(JSON.parse(raw));
-  if (!config.remote.token) {
-    config.remote.token = randomBytes(24).toString("base64url");
+  if (!config.remote.token || !config.browserKey) {
+    config.remote.token ||= randomBytes(24).toString("base64url");
+    config.browserKey ||= randomBytes(12).toString("base64url");
     await saveConfig(paths, config);
   }
   return config;

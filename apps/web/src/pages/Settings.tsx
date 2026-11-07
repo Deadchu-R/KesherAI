@@ -3,6 +3,7 @@ import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
+import { BrowserSection } from "../BrowserSection";
 import { ApiKeysSection } from "../ApiKeysSection";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
@@ -419,6 +420,7 @@ export function SettingsPage() {
       <GpuSection />
       <NotificationsSection />
       <McpServerSection />
+      <BrowserSection />
       <ApiKeysSection />
       <SpeechSection />
       <ComputerSection />

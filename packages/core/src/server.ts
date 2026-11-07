@@ -48,6 +48,8 @@ import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
+import { BrowserBridge, browserTools } from "./browser-bridge.js";
+import { browserRoutes } from "./routes/browser.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
 import { WhisperEngine } from "./whisper.js";
@@ -159,6 +161,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     (await detectHardwareCached()).gpus
       .filter((g) => /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name))
       .map((g, i) => ({ index: g.index ?? i, name: g.name, vramTotal: g.vramTotal, vramFree: g.vramFree, ...(g.computeCap ? { computeCap: g.computeCap } : {}) }));
+  const browser = new BrowserBridge();
   const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => {
     const nv = await nvidiaGpus();
     // The image engine uses one card: the fastest allowed one (or the chosen leader).
@@ -383,6 +386,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   void routines.start();
   const services: KesherServices = {
+    browser,
     config,
     paths,
     registry,
@@ -407,6 +411,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       mcpTools: () => [
         ...googleTools(google),
         ...knowledgeTools(knowledge),
+        ...browserTools(browser),
         ...speechTools({ whisper, speech: () => config.speech, providers: () => config.providers }),
         ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
           spec,
@@ -513,6 +518,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);
+  await browserRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, { root: options.webDir });
