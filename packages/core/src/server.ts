@@ -8,7 +8,10 @@ import { features } from "@kesher/shared";
 import { dataPaths, loadConfig, saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
-import { LlamaServerManager } from "./llamacpp.js";
+import { LlamaEngine } from "./llamacpp.js";
+import { Library } from "./library.js";
+import { ConversationManager } from "./conversations.js";
+import { Updater } from "./updates.js";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
@@ -16,6 +19,8 @@ import { modelRoutes } from "./routes/models.js";
 import { generateRoutes } from "./routes/generate.js";
 import { downloadRoutes } from "./routes/downloads.js";
 import { openAIRoutes } from "./routes/openai.js";
+import { libraryRoutes } from "./routes/library.js";
+import { loadModel } from "./routes/engine.js";
 
 /** Options for {@link createKesherServer}. All optional. */
 export interface KesherServerOptions {
@@ -52,7 +57,9 @@ export interface KesherServer {
  * 3. Load plugins (they may add provider types, categories and tools).
  * 4. Create the providers from the config file (now every type exists).
  * 5. Auto-detect local servers that are not configured yet.
- * 6. Register routes, remote auth and the static web UI.
+ * 6. Load the library (pulling newer files from the sync folder first).
+ * 7. Register routes, remote auth and the static web UI.
+ * 8. In the background: load the last model in the built-in engine.
  *
  * @param options - See {@link KesherServerOptions}.
  * @returns The server, not yet listening.
@@ -87,18 +94,42 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     );
   }
 
+  const library = new Library(paths.library, () => config.syncFolder);
+  try {
+    const pulled = await library.importFromSync();
+    if (pulled) console.log(`[library] imported ${pulled} file(s) from the sync folder`);
+  } catch (err) {
+    console.warn(`[library] sync folder unavailable: ${(err as Error).message}`);
+  }
+  await library.load();
+
+  const engine = new LlamaEngine({
+    dir: paths.engines,
+    ...(config.engines.llamaServerPath ? { binaryPath: config.engines.llamaServerPath } : {}),
+    ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}),
+    port: config.engines.llamaServerPort,
+    args: config.engines.llamaServerArgs,
+  });
+  const assets = new AssetStore(paths.assets);
+
   const services: KesherServices = {
     config,
     paths,
     registry,
-    assets: new AssetStore(paths.assets),
+    assets,
     downloads: new DownloadManager(),
     plugins,
-    ...(config.engines.llamaServerPath
-      ? { llama: new LlamaServerManager(config.engines.llamaServerPath, config.engines.llamaServerPort, config.engines.llamaServerArgs) }
-      : {}),
+    engine,
+    library,
+    conversations: new ConversationManager({ registry, library, assets, plugins, config }),
+    updater: new Updater(),
     autodetected,
     saveConfig: () => saveConfig(paths, config),
+    registerEngineProvider: () => {
+      if (!registry.get("llamacpp")) {
+        registry.add({ id: "llamacpp", type: "openai-compatible", name: "KesherAI engine (llama.cpp)", location: "local", baseUrl: engine.baseUrl });
+      }
+    },
   };
 
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
@@ -111,6 +142,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await generateRoutes(app, services);
   if (features.downloads) await downloadRoutes(app, services);
   if (features.openaiCompatibleApi) await openAIRoutes(app, services);
+  await libraryRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, { root: options.webDir });
@@ -119,6 +151,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         ? reply.code(404).send({ error: "Not found" })
         : reply.sendFile("index.html"),
     );
+  }
+
+  // Bring back the model that was loaded last time, without delaying start-up.
+  const last = config.engines.lastModel;
+  if (config.engines.autoLoadLast && last && existsSync(last) && engine.status().installed) {
+    void loadModel(services, last).catch((err) => engine.fail(err));
   }
 
   return {
@@ -130,8 +168,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${config.port}`;
     },
     async close() {
+      await services.conversations.closeAll();
       await app.close();
-      await services.llama?.stop();
+      await engine.stop();
       await plugins.deactivateAll();
     },
   };

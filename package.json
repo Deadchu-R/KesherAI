@@ -1,7 +1,7 @@
 {
   "name": "kesher",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first, open-source desktop app that runs every kind of AI model — chat, image, video, audio — in one place.",
   "license": "Apache-2.0",
   "type": "module",
@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel --filter @kesher/core --filter @kesher/web dev",
     "dev:desktop": "pnpm build:packages && pnpm --filter @kesher/desktop dev",
-    "build:packages": "tsc -b packages/shared packages/providers packages/downloads packages/plugin-sdk packages/skills packages/core plugins/example-hello",
+    "build:packages": "tsc -b packages/shared packages/providers packages/downloads packages/plugin-sdk packages/skills packages/agent packages/core plugins/example-hello",
     "build": "pnpm build:packages && pnpm --filter @kesher/web build && pnpm --filter @kesher/desktop build",
     "typecheck": "pnpm build:packages && pnpm --filter @kesher/web typecheck && pnpm --filter @kesher/desktop typecheck",
     "lint": "eslint .",

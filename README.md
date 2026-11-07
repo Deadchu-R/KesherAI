@@ -8,7 +8,7 @@
 
 </div>
 
-> **Status: early (v0.1).** Chat, the in-app downloader, image generation through ComfyUI, the OpenAI-compatible API, remote access, skills and plugins work. The code agent, MCP, video/audio and Pipelines are on the [roadmap](#roadmap).
+> **Status: v0.2.** Runs local models with no other app installed, a coding agent with approvals, projects and conversations with cloud-folder backup, active models per category, the phone app, in-app updates. MCP, video/audio and Pipelines are on the [roadmap](#roadmap).
 
 ## Why
 
@@ -24,14 +24,18 @@ Running AI locally today means juggling LM Studio for chat, ComfyUI for images, 
 
 | | Today | Next |
 | --- | --- | --- |
-| Chat | Streaming chat with any OpenAI-compatible server (llama.cpp, LM Studio, Ollama, vLLM, OpenAI, OpenRouter, Groq…) and Anthropic | Tool calling between models |
-| Downloads | Search Hugging Face from the app, resumable downloads with SHA-256 checks, hardware fit estimate | Bundles ("Flux Dev complete"), Ollama pull |
-| Local engines | Starts llama.cpp's `llama-server` for downloaded GGUF files | Managed ComfyUI install, whisper.cpp, TTS |
-| Images | Text-to-image through ComfyUI (default or your own exported workflow) | Cloud image APIs, inpainting |
-| Interop | OpenAI-compatible API at `/v1`, so LobeHub, OpenCode or any SDK can use KesherAI's models | KesherAI as an MCP server |
-| Remote | Use the UI from your phone with a pairing token | QR pairing, push notifications, built-in TLS |
-| Extensibility | Plugins (providers, categories, tools), `SKILL.md` skills | MCP client, LobeHub marketplace import, Pipelines editor |
-| Code | — | Code agent in the style of Claude Code, with permissions, diffs and checkpoints |
+| Local engine | Built-in llama.cpp: downloaded automatically for your GPU (CUDA on NVIDIA, Vulkan otherwise, Metal on Mac). No LM Studio or Ollama needed | Managed ComfyUI for images and video |
+| Models | "Start here" one-click models; Hugging Face search and downloads with SHA-256 checks; every model rated good / OK / slow / too big for your hardware, with expected times | Measured speed instead of estimates |
+| Coding agent | Works in a project folder: lists, reads, searches, edits, runs commands. Three permission modes, dangerous commands always ask, diffs, undo, asks you questions | Plan mode, git checkpoints, LSP |
+| Conversations | Projects with folders and instructions, conversation history, switch models mid-conversation | Search, document chat |
+| Active models | Pick a model per category; the chat model calls the image model as a tool | Video, speech and music tools |
+| Connections | LM Studio, Ollama, ComfyUI (auto-detected), any OpenAI-compatible server, OpenAI, Anthropic, OpenRouter, Groq | Jan, KoboldCpp, vLLM, LM Studio Bionic |
+| Cloud backup | Mirror projects and conversations to a folder Google Drive, OneDrive or Dropbox syncs | Native Drive API |
+| Phone | Android app (APK built by CI) and installable web app; QR pairing; approve agent actions from the phone | Push notifications, built-in TLS |
+| Updates | Version shown in the app; check and install updates from Settings | Signed installers |
+| Extensibility | Plugins (providers, categories, tools), `SKILL.md` skills, OpenAI-compatible API at `/v1` | MCP client and server, Pipelines |
+
+See [docs/COMPETITORS.md](docs/COMPETITORS.md) for how this compares with other apps and the order we build in.
 
 ## Quick start
 
@@ -54,7 +58,7 @@ pnpm --filter @kesher/web build
 pnpm dev:desktop
 ```
 
-Then open **Connections**. If LM Studio, Ollama or ComfyUI are running, KesherAI has already found them. Otherwise add a cloud API, or go to **Models & downloads**, download a GGUF model and press **Load in llama.cpp** (set `engines.llamaServerPath` in `~/.kesher/config.json` to your `llama-server` binary first).
+Then open **Models & downloads** and press **Download & run** on a model under "Start here": KesherAI installs its llama.cpp engine for your GPU, downloads the model and loads it. If LM Studio, Ollama or ComfyUI are running, KesherAI also finds them by itself under **Connections**.
 
 ### Use KesherAI from other tools
 
@@ -68,20 +72,22 @@ curl http://127.0.0.1:7420/v1/chat/completions \
 
 ### Use it from your phone
 
-Set `"remote": { "enabled": true }` in `~/.kesher/config.json` and restart. KesherAI then listens on your network and requires a token from other devices. Get it with `curl http://127.0.0.1:7420/api/remote` on the computer, then open `http://<computer>:7420/?token=<token>` on the phone. Outside your home network, use [Tailscale](https://tailscale.com) or WireGuard; do not expose the port to the internet. See [SECURITY.md](SECURITY.md).
+Set `"remote": { "enabled": true }` in `~/.kesher/config.json` and restart. KesherAI then listens on your network and requires a token from other devices. Open **Settings → Phone** on the computer: scan the QR code with the phone, or copy the link into the [Android app](apps/android/README.md). Outside your home network, use [Tailscale](https://tailscale.com); do not expose the port to the internet. See [SECURITY.md](SECURITY.md).
 
 ## Repository layout
 
 ```
 apps/
   desktop/        Electron shell: starts the core and shows the UI
-  web/            React UI, used by the desktop window and by phones
+  web/            React UI, used by the desktop window and by phones (installable PWA)
+  android/        Android app (Capacitor) that connects to your computer
 packages/
   shared/         types, schemas, branding.config.ts, features.config.ts
   providers/      the Provider interface + adapters (OpenAI-compatible, Anthropic, ComfyUI)
   downloads/      Hugging Face search, download queue, hardware detection
   plugin-sdk/     what plugins import
   skills/         SKILL.md loader
+  agent/          the agent loop, code tools, permissions
   core/           the local HTTP server everything talks to
 plugins/
   example-hello/  a plugin to copy
@@ -100,20 +106,22 @@ Each package has its own README explaining what it owns.
 | [docs/PROVIDERS.md](docs/PROVIDERS.md) | connect a new engine, server or API |
 | [docs/API.md](docs/API.md) | build a client or script against the core server |
 | [docs/FORKING.md](docs/FORKING.md) | rebrand or trim KesherAI in your own fork |
+| [docs/COMPETITORS.md](docs/COMPETITORS.md) | see what other apps do and what we build next |
+| [docs/LEGAL.md](docs/LEGAL.md) | know which licences apply |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | send a pull request |
 
 API reference generated from the code comments: `pnpm docs:api` (published to GitHub Pages by CI).
 
 ## Roadmap
 
-0. **Foundations** — monorepo, core server, local chat, cloud APIs, OpenAI-compatible API. *(this release)*
-1. **Downloads & images** — Hugging Face downloader, ComfyUI managed and external, Flux and SDXL.
-2. **Code agent, MCP & skills** — tools, permissions, diffs and checkpoints; MCP client; skills in context.
-3. **Remote** — phone PWA, QR pairing, TLS, notifications.
+0. **Foundations** — monorepo, core server, local chat, cloud APIs, OpenAI-compatible API. ✅
+1. **Run without other apps** — built-in llama.cpp engine, one-click models, hardware ratings. ✅ (images: managed ComfyUI next)
+2. **Code agent, conversations, projects** — tools, permissions, approvals, questions, undo, cloud-folder backup. ✅ (MCP next)
+3. **Phone** — Android app, QR pairing, approvals from the phone. ✅ (notifications, TLS next)
 4. **Video, audio & Pipelines** — video models, Whisper, TTS, a node editor connecting models.
 5. **Community** — plugin marketplace, new categories, KesherAI as an MCP server.
 
-Each phase has a gate it must pass before the next opens; see [docs/VISION.md](docs/VISION.md#roadmap).
+The detailed, prioritised list is in [docs/COMPETITORS.md](docs/COMPETITORS.md#next-up-in-order).
 
 ## License
 

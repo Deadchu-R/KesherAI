@@ -79,3 +79,24 @@ test("estimateFit grades against VRAM and RAM", () => {
   assert.equal(estimateFit(23 * GB, hw), "tight");
   assert.equal(estimateFit(80 * GB, hw), "too-big");
 });
+
+test("performance estimates rank models sensibly on a 12 GB RTX 4070 Ti", async () => {
+  const { estimatePerformance } = await import("./hardware.js");
+  const GB = 1024 ** 3;
+  const hw: HardwareInfo = {
+    platform: "win32", cpu: "AMD Ryzen 7", ramTotal: 64 * GB, ramFree: 40 * GB, unifiedMemory: false,
+    gpus: [{ name: "NVIDIA GeForce RTX 4070 Ti", vramTotal: 12 * GB, vramFree: 11 * GB }],
+  };
+  const small = estimatePerformance(2.5 * GB, hw);
+  const mid = estimatePerformance(9 * GB, hw);
+  const moe = estimatePerformance(18.6 * GB, hw, { activeFraction: 0.11 });
+  const dense30 = estimatePerformance(18.6 * GB, hw);
+  const huge = estimatePerformance(120 * GB, hw);
+  assert.equal(small.rating, "good");
+  assert.ok(small.tokensPerSecond > mid.tokensPerSecond);
+  assert.ok(moe.tokensPerSecond > dense30.tokensPerSecond * 3, "MoE models read only their active experts");
+  assert.equal(dense30.rating, "slow");
+  assert.equal(huge.rating, "too-big");
+  assert.equal(huge.tasks.length, 0);
+  assert.deepEqual(small.tasks.map((t) => t.task), ["short-answer", "long-answer", "read-file", "load"]);
+});

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0E1014" />
+  <title>KesherAI</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0e1014; --panel: #151922; --border: #2c3240; --text: #e7e9ee; --muted: #a3aab7; --accent: #5eead4; --bad: #fca5a5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    main { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 16px; }
+    h1 { margin: 0; font-size: 26px; display: flex; gap: 10px; align-items: center; }
+    p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 15px; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+    input { height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 0 12px; font-size: 15px; direction: ltr; }
+    button { height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 16px; }
+    button.primary { background: var(--accent); color: var(--bg); border: none; font-weight: 600; }
+    .error { color: var(--bad); }
+    ol { margin: 0; padding-inline-start: 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+<main>
+  <h1><img src="icon.svg" width="34" height="34" alt="" /> KesherAI</h1>
+  <p data-he="התחבר ל-KesherAI שרץ במחשב שלך. כל העבודה רצה במחשב; הטלפון רק שולח ומציג." data-en="Connect to KesherAI running on your computer. All the work runs there; the phone only sends and shows.">התחבר ל-KesherAI שרץ במחשב שלך. כל העבודה רצה במחשב; הטלפון רק שולח ומציג.</p>
+  <ol>
+    <li data-he="במחשב: הגדרות ← טלפון. העתק את קישור החיבור." data-en="On the computer: Settings → Phone. Copy the connection link.">במחשב: הגדרות ← טלפון. העתק את קישור החיבור.</li>
+    <li data-he="הדבק אותו כאן. הוא נשמר, ובפעם הבאה האפליקציה תתחבר מעצמה." data-en="Paste it here. It is saved, and next time the app connects by itself.">הדבק אותו כאן. הוא נשמר, ובפעם הבאה האפליקציה תתחבר מעצמה.</li>
+  </ol>
+  <form id="form">
+    <label><span data-he="קישור החיבור" data-en="Connection link">קישור החיבור</span>
+      <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="http://100.x.x.x:7420/?token=…" required />
+    </label>
+  </form>
+  <button class="primary" type="submit" form="form" data-he="התחבר" data-en="Connect">התחבר</button>
+  <p id="status"></p>
+  <button id="lang" type="button">English</button>
+</main>
+<script>
+  // The whole app: remember the link, check it answers, then open the
+  // KesherAI interface the computer serves. "Change server" is reached by
+  // opening the app while it is trying to connect (tap Cancel).
+  const KEY = "kesherai-server";
+  const $ = (id) => document.getElementById(id);
+  let lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
+  const tr = { checking: { he: "מתחבר…", en: "Connecting…" }, cancel: { he: "ביטול", en: "Cancel" },
+    fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale.", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale." },
+    bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." } };
+  function applyLang() {
+    document.documentElement.lang = lang; document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
+    document.querySelectorAll("[data-he]").forEach((el) => (el.textContent = el.dataset[lang]));
+    $("lang").textContent = lang === "he" ? "English" : "עברית";
+  }
+  $("lang").onclick = () => { lang = lang === "he" ? "en" : "he"; localStorage.setItem("lang", lang); applyLang(); };
+  applyLang();
+
+  let cancelled = false;
+  async function connect(link) {
+    let url;
+    try { url = new URL(link.trim()); } catch { $("status").textContent = tr.bad[lang]; $("status").className = "error"; return; }
+    if (!/^https?:$/.test(url.protocol)) { $("status").textContent = tr.bad[lang]; return; }
+    cancelled = false;
+    $("status").className = "";
+    $("status").innerHTML = `${tr.checking[lang]} <button type="button" id="cancel">${tr.cancel[lang]}</button>`;
+    $("cancel").onclick = () => { cancelled = true; $("status").textContent = ""; };
+    const token = url.searchParams.get("token");
+    try {
+      const res = await fetch(`${url.origin}/api/health`, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(String(res.status));
+      if (cancelled) return;
+      localStorage.setItem(KEY, url.href);
+      location.href = url.href; // the interface stores the token and removes it from the address
+    } catch {
+      if (!cancelled) { $("status").textContent = tr.fail[lang]; $("status").className = "error"; }
+    }
+  }
+  $("form").onsubmit = (e) => { e.preventDefault(); connect($("url").value); };
+  const saved = localStorage.getItem(KEY);
+  if (saved) { $("url").value = saved; connect(saved); }
+</script>
+</body>
+</html>

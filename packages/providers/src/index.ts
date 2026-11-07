@@ -14,8 +14,9 @@ export * from "./provider.js";
 export * from "./registry.js";
 export * from "./presets.js";
 export * from "./sse.js";
-export { OpenAICompatibleProvider, openAICompatibleFactory } from "./openai-compatible.js";
-export { AnthropicProvider, anthropicFactory } from "./anthropic.js";
+export { OpenAICompatibleProvider, openAICompatibleFactory, toOpenAIMessages } from "./openai-compatible.js";
+export { AnthropicProvider, anthropicFactory, toAnthropicMessages } from "./anthropic.js";
+export { parseToolArguments } from "./tool-args.js";
 export { ComfyUIProvider, comfyUIFactory, defaultTextToImageWorkflow, type ComfyWorkflow } from "./comfyui.js";
 
 /** The factories the core server registers before loading plugins. */

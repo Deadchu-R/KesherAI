@@ -1,0 +1,130 @@
+import type { FastifyInstance } from "fastify";
+import { existsSync } from "node:fs";
+import { basename, join, normalize, sep } from "node:path";
+import { RECOMMENDED_MODELS } from "@kesher/shared";
+import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
+import type { KesherServices } from "../services.js";
+import { waitForDownload } from "../llamacpp.js";
+
+/**
+ * Installs the llama.cpp engine if it is missing. Shared by the install
+ * route and the one-click "run this model" route.
+ *
+ * @param s - Services.
+ */
+export async function ensureEngine(s: KesherServices): Promise<void> {
+  if (s.engine.status().installed) return;
+  const hw = await detectHardware();
+  const { binaryPath, version } = await s.engine.install(s.downloads, {
+    platform: process.platform,
+    arch: process.arch,
+    nvidia: hw.gpus.length > 0,
+  });
+  s.config.engines.llamaServerPath = binaryPath;
+  s.config.engines.llamaVersion = version;
+  await s.saveConfig();
+}
+
+/**
+ * Loads a GGUF file in the engine, registers the `llamacpp` provider,
+ * remembers it for the next start, and makes it the active chat model if
+ * none is set.
+ *
+ * @param s - Services.
+ * @param modelPath - Absolute path inside the models folder.
+ * @returns The model id, e.g. `llamacpp/Qwen3-8B-Q4_K_M`.
+ */
+export async function loadModel(s: KesherServices, modelPath: string): Promise<string> {
+  await s.engine.load(modelPath);
+  s.registerEngineProvider();
+  const modelId = `llamacpp/${basename(modelPath).replace(/\.gguf$/i, "")}`;
+  s.config.engines.lastModel = modelPath;
+  if (!s.config.activeModels.chat || s.config.activeModels.chat.startsWith("llamacpp/")) s.config.activeModels.chat = modelId;
+  await s.saveConfig();
+  return modelId;
+}
+
+function insideModels(s: KesherServices, path: string): boolean {
+  const n = normalize(path);
+  return n.startsWith(normalize(s.paths.models) + sep);
+}
+
+/**
+ * The built-in engine: install llama.cpp, load and stop models, and the
+ * one-click "Start here" models.
+ *
+ * @param app - Fastify instance.
+ * @param s - Services.
+ */
+export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
+  app.get("/api/engines/llamacpp", async () => s.engine.status());
+
+  /** Starts installing in the background; poll GET /api/engines/llamacpp for progress. */
+  app.post("/api/engines/llamacpp/install", async () => {
+    void ensureEngine(s).catch((err) => s.engine.fail(err));
+    return s.engine.status();
+  });
+
+  app.post<{ Body: { modelPath: string } }>("/api/engines/llamacpp/load", async (req, reply) => {
+    const path = req.body?.modelPath ?? "";
+    if (!insideModels(s, path)) return reply.code(400).send({ error: "Only models inside the KesherAI models folder can be loaded" });
+    if (!path.toLowerCase().endsWith(".gguf")) return reply.code(400).send({ error: "llama.cpp loads .gguf files" });
+    try {
+      const modelId = await loadModel(s, path);
+      return { ...s.engine.status(), modelId };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/engines/llamacpp/stop", async () => {
+    await s.engine.stop();
+    return s.engine.status();
+  });
+
+  /** The "Start here" list, with whether each model is already downloaded. */
+  app.get("/api/models/recommended", async () => {
+    const hw = await detectHardwareCached();
+    return RECOMMENDED_MODELS.map((m) => ({
+      ...m,
+      downloaded: existsSync(join(s.paths.models, "chat", m.repo)),
+      estimate: estimatePerformance(m.sizeGb * 1024 ** 3, hw, { ...(m.activeFraction ? { activeFraction: m.activeFraction } : {}) }),
+    }));
+  });
+
+  /**
+   * One click: install the engine if needed, download the model if needed,
+   * load it. Runs in the background; progress is in GET /api/engines/llamacpp
+   * and the download list.
+   */
+  app.post<{ Params: { id: string } }>("/api/models/recommended/:id/run", async (req, reply) => {
+    const model = RECOMMENDED_MODELS.find((m) => m.id === req.params.id);
+    if (!model) return reply.code(404).send({ error: "Unknown model" });
+    if (s.engine.status().job && s.engine.status().job?.phase !== "error") {
+      return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
+    }
+    void (async () => {
+      await ensureEngine(s);
+      const files = await s.engine.track("downloading-model", `Finding ${model.name}…`, () =>
+        listHubFiles(model.repo, { ...(s.config.huggingFaceToken ? { token: s.config.huggingFaceToken } : {}) }),
+      );
+      const file = files.find((f) => new RegExp(model.filePattern, "i").test(f.path));
+      if (!file) throw new Error(`No file matching ${model.filePattern} in ${model.repo}`);
+      const dest = join(s.paths.models, "chat", model.repo, file.path);
+      if (!existsSync(dest)) {
+        await s.engine.track("downloading-model", `Downloading ${model.name} (${model.sizeGb} GB)…`, async () => {
+          const job = s.downloads.enqueue({
+            url: file.url,
+            dest,
+            size: file.size,
+            ...(file.sha256 ? { sha256: file.sha256 } : {}),
+            label: `${model.name} · ${file.path}`,
+          });
+          await waitForDownload(s.downloads, job.id);
+        });
+      }
+      await loadModel(s, dest);
+    })().catch((err) => s.engine.fail(err));
+    return reply.code(202).send(s.engine.status());
+  });
+}

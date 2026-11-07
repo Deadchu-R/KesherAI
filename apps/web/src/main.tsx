@@ -11,3 +11,9 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>,
 );
+
+// Installable on phones: register the service worker (not during development,
+// where it would fight Vite's hot reload).
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  addEventListener("load", () => void navigator.serviceWorker.register("./sw.js").catch(() => undefined));
+}

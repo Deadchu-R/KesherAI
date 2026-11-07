@@ -8,13 +8,14 @@
     "packages/downloads",
     "packages/plugin-sdk",
     "packages/skills",
+    "packages/agent",
     "packages/core"
   ],
   "packageOptions": {
     "entryPoints": ["src/index.ts"],
     "excludeNotDocumented": false
   },
-  "projectDocuments": ["docs/ARCHITECTURE.md", "docs/PLUGINS.md", "docs/PROVIDERS.md", "docs/API.md", "docs/FORKING.md"],
+  "projectDocuments": ["docs/ARCHITECTURE.md", "docs/PLUGINS.md", "docs/PROVIDERS.md", "docs/API.md", "docs/FORKING.md", "docs/COMPETITORS.md"],
   "out": "docs/api",
   "readme": "README.md"
 }

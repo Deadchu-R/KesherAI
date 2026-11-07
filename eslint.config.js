@@ -16,6 +16,12 @@ export default tseslint.config(
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
   ...tseslint.configs.recommended,
   {
+    rules: {
+      // `_name` marks a value that is unused on purpose (e.g. dropping fields with a rest pattern).
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" }],
+    },
+  },
+  {
     files: ["packages/*/src/**/*.ts", "plugins/*/src/**/*.ts"],
     ignores: ["**/*.test.ts"],
     plugins: { jsdoc },

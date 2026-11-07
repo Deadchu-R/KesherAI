@@ -1,5 +1,13 @@
-import { makeModelId, type ChatStreamEvent, type ModelInfo, type ModelLocation } from "@kesher/shared";
-import type { Provider, ProviderChatRequest, ProviderConfig, ProviderFactory } from "./provider.js";
+import { makeModelId, type AgentMessage, type ChatStreamEvent, type ModelInfo, type ModelLocation, type ToolCall } from "@kesher/shared";
+import type {
+  Provider,
+  ProviderChatRequest,
+  ProviderConfig,
+  ProviderFactory,
+  ProviderToolChatRequest,
+  ProviderToolChatResult,
+} from "./provider.js";
+import { parseToolArguments } from "./tool-args.js";
 import { fetchOk, readSSE } from "./sse.js";
 
 /**
@@ -14,12 +22,15 @@ import { fetchOk, readSSE } from "./sse.js";
  *
  * Models whose id contains `embed` are listed in the `embedding` category;
  * everything else in `chat`.
+ *
+ * Tool calling uses the standard `tools` / `tool_calls` fields. llama.cpp
+ * needs `--jinja` for it (Kesher's managed llama-server always sets it).
  */
 export class OpenAICompatibleProvider implements Provider {
   readonly id: string;
   readonly name: string;
   readonly location: ModelLocation;
-  readonly capabilities = { chat: true };
+  readonly capabilities = { chat: true, tools: true };
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
 
@@ -99,6 +110,97 @@ export class OpenAICompatibleProvider implements Provider {
     }
     yield { type: "done", ...(usage ? { usage } : {}) };
   }
+
+  /** @inheritDoc */
+  async chatWithTools(
+    request: ProviderToolChatRequest,
+    signal?: AbortSignal,
+    onText?: (delta: string) => void,
+  ): Promise<ProviderToolChatResult> {
+    const res = await fetchOk(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: this.headers,
+      signal,
+      body: JSON.stringify({
+        model: request.providerModelId,
+        messages: toOpenAIMessages(request.messages),
+        ...(request.tools.length > 0
+          ? {
+              tools: request.tools.map((t) => ({
+                type: "function",
+                function: { name: t.name, description: t.description, parameters: t.inputSchema },
+              })),
+            }
+          : {}),
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+        stream: true,
+        stream_options: { include_usage: true },
+      }),
+    });
+    if (!res.body) throw new Error("Empty response body");
+
+    let text = "";
+    const calls = new Map<number, { id: string; name: string; args: string }>();
+    let usage: ProviderToolChatResult["usage"];
+    for await (const data of readSSE(res.body)) {
+      if (data === "[DONE]") break;
+      const chunk = JSON.parse(data) as {
+        choices?: Array<{
+          delta?: {
+            content?: string | null;
+            tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>;
+          };
+        }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+        error?: { message?: string };
+      };
+      if (chunk.error) throw new Error(chunk.error.message ?? "Model server error");
+      const delta = chunk.choices?.[0]?.delta;
+      if (delta?.content) {
+        text += delta.content;
+        onText?.(delta.content);
+      }
+      for (const tc of delta?.tool_calls ?? []) {
+        const index = tc.index ?? calls.size;
+        const entry = calls.get(index) ?? { id: "", name: "", args: "" };
+        if (tc.id) entry.id = tc.id;
+        if (tc.function?.name) entry.name += tc.function.name;
+        if (tc.function?.arguments) entry.args += tc.function.arguments;
+        calls.set(index, entry);
+      }
+      if (chunk.usage) usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
+    }
+    const toolCalls: ToolCall[] = [...calls.entries()]
+      .sort(([a], [b]) => a - b)
+      .filter(([, c]) => c.name)
+      .map(([i, c]) => ({ id: c.id || `call_${i}`, name: c.name, arguments: parseToolArguments(c.args) }));
+    return { text, toolCalls, ...(usage ? { usage } : {}) };
+  }
+}
+
+/**
+ * Converts provider-neutral messages to the OpenAI chat format.
+ *
+ * @param messages - Agent messages.
+ * @returns Messages for `/chat/completions`.
+ */
+export function toOpenAIMessages(messages: AgentMessage[]): Array<Record<string, unknown>> {
+  return messages.map((m) => {
+    if (m.role === "tool") return { role: "tool", tool_call_id: m.toolCallId, content: m.content };
+    if (m.role === "assistant" && m.toolCalls?.length) {
+      return {
+        role: "assistant",
+        content: m.content || null,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+        })),
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
 }
 
 /** Factory for {@link OpenAICompatibleProvider}. */

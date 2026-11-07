@@ -16,7 +16,7 @@ The request and response types referenced below are exported from `@kesher/share
 | `GET /api/health` | `{ ok, version, productName, features, remote: { enabled } }` |
 | `GET /api/categories` | All categories (built-in and from plugins): `CategoryDefinition[]` |
 | `GET /api/hardware` | `{ platform, cpu, ramTotal, ramFree, gpus[], unifiedMemory }` |
-| `GET /api/remote` | Only from this computer. `{ enabled, token, port }` for pairing a device |
+| `GET /api/remote` | Only from this computer. `{ enabled, token, port, addresses: [{ address, tailscale }] }` for pairing a device |
 | `GET /api/plugins` | Plugins found, with `status` (`active`, `disabled`, `error`) and `error` |
 | `GET /api/tools` | Tools registered by plugins: `{ name, description, inputSchema, pluginId }[]` |
 | `POST /api/tools/:name` | Runs a tool. Body: the tool's input. Returns `{ result }` |
@@ -34,9 +34,29 @@ The request and response types referenced below are exported from `@kesher/share
 | `GET /api/providers/types` | Provider types available (built-in and from plugins) |
 | `POST /api/providers` | Adds or replaces a connection and saves it. Body: `ProviderConfig` |
 | `DELETE /api/providers/:id` | Removes a connection |
-| `GET /api/engines/llamacpp` | Managed llama-server status and recent log |
-| `POST /api/engines/llamacpp/load` | `{ modelPath }` — starts llama-server with a GGUF from the models folder; its model appears under provider `llamacpp` |
-| `POST /api/engines/llamacpp/stop` | Stops it |
+| `GET /api/models/recommended` | The "Start here" models, each with `downloaded` and a performance `estimate` for this computer |
+| `POST /api/models/recommended/:id/run` | One click: installs the engine if needed, downloads the model if needed, loads it. Returns 202; follow progress in the engine status |
+
+## Built-in engine (llama.cpp)
+
+| Method & path | Description |
+| --- | --- |
+| `GET /api/engines/llamacpp` | `{ installed, version, running, modelPath, job?: { phase, message }, log[] }`. `job.phase` is `installing`, `downloading-model`, `loading` or `error` |
+| `POST /api/engines/llamacpp/install` | Downloads the right llama.cpp build for this computer (CUDA on NVIDIA, Vulkan otherwise, Metal on Mac) in the background |
+| `POST /api/engines/llamacpp/load` | `{ modelPath }` — loads a GGUF from the models folder; it appears as `llamacpp/<file name>` and becomes the active chat model if none is set |
+| `POST /api/engines/llamacpp/stop` | Stops the running model |
+
+## Performance estimates
+
+`/api/models/recommended`, `/api/hub/files` (model weights) and `/api/models/local` include an `estimate` for this computer:
+
+```json
+{ "rating": "good", "fit": "fits", "tokensPerSecond": 42.1, "wordsPerSecond": 31.6, "gpuShare": 1,
+  "tasks": [{ "task": "short-answer", "seconds": 3.6 }, { "task": "long-answer", "seconds": 23.8 },
+            { "task": "read-file", "seconds": 1.8 }, { "task": "load", "seconds": 6.2 }] }
+```
+
+`rating` is `good` (≥ 20 tokens/s), `ok` (≥ 7), `slow` or `too-big`. Estimates come from GPU memory bandwidth and model size and are usually within a factor of two.
 
 ## Generation
 
@@ -68,6 +88,43 @@ Response: `{ assets: Asset[] }`. Each image is at `GET /api/assets/<id>`.
 ### `GET /api/assets/:id`
 
 The file, with its MIME type.
+
+## Projects and conversations
+
+Every conversation is an agent session. A `chat` conversation has the media tools of the active models; a `code` conversation also has file and terminal tools inside its folder.
+
+| Method & path | Description |
+| --- | --- |
+| `GET /api/projects` | Projects: `{ id, name, workspace?, instructions?, createdAt, updatedAt }[]` |
+| `POST /api/projects` | `{ name, workspace?, instructions? }` |
+| `PATCH /api/projects/:id` | Change name, folder or instructions |
+| `DELETE /api/projects/:id` | Deletes the project; its conversations are kept, outside any project |
+| `GET /api/conversations?projectId=` | Summaries, newest first. `projectId=none` for conversations outside projects |
+| `POST /api/conversations` | `{ kind: "chat" \| "code", projectId?, modelId?, mode?, workspace? }`. `modelId` defaults to the active chat model; `workspace` to the project's folder |
+| `GET /api/conversations/:id` | Summary + `session` (`AgentSessionInfo`: status, mode, pending approvals and questions, `canUndo`) + `events` |
+| `PATCH /api/conversations/:id` | `{ title?, modelId?, mode?, projectId? }` |
+| `DELETE /api/conversations/:id` | Deletes it |
+| `GET /api/conversations/:id/events?after=<seq>` | SSE: saved events after `seq`, then live ones. Text streams as `assistant_delta` (seq 0); after each change an `{ "type": "info", ...AgentSessionInfo }` event |
+| `POST /api/conversations/:id/messages` | `{ text }` — starts work; 409 while the agent is busy |
+| `POST /api/conversations/:id/approvals/:requestId` | `{ decision: "allow" \| "always" \| "deny", feedback? }` |
+| `POST /api/conversations/:id/answers/:questionId` | `{ text }` — answers an `ask_user` question |
+| `POST /api/conversations/:id/stop` | Stops the agent; open approvals are denied |
+| `POST /api/conversations/:id/undo` | Reverts the agent's last file change |
+
+Events (`AgentEvent` in `@kesher/shared`): `user`, `assistant_delta`, `assistant`, `tool_call`, `approval_request` (with `preview`: a diff or the command), `approval_result`, `question`, `answer`, `tool_result` (with `diff`, `assetIds`), `undo`, `status`, `note`.
+
+Permission modes: `ask` (every change and command asks), `auto-edit` (file changes run, commands ask), `auto` (both run). Dangerous commands — recursive deletes, `git push`, piping downloads into a shell, admin rights — always ask.
+
+## Settings, version and updates
+
+| Method & path | Description |
+| --- | --- |
+| `GET /api/settings` | `{ activeModels: { [category]: modelId }, syncFolder }` |
+| `PUT /api/settings` | `{ activeModels?, syncFolder? }`. Setting a sync folder imports newer files from it, then copies the whole library there. `null` turns sync off |
+| `GET /api/version` | `{ version, commit?, install: "git" \| "package" }` |
+| `GET /api/updates` | Fetches from GitHub: `{ newCommits[], latestVersion, localChanges[] }` |
+| `POST /api/updates/apply` | `git pull`, `pnpm install`, build — in the background |
+| `GET /api/updates/progress` | `{ running, step, log[], error?, restartRequired? }` |
 
 ## Downloads
 

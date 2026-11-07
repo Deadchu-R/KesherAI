@@ -1,0 +1,94 @@
+import { useEffect, useState } from "react";
+import type { ConversationSummary, Project } from "@kesher/shared";
+import { api } from "./api";
+
+/**
+ * The sidebar's data: projects and conversation summaries, shared by every
+ * screen. Call {@link refreshLibrary} after creating, renaming or deleting
+ * something and every subscriber updates.
+ */
+let state: { projects: Project[]; conversations: ConversationSummary[] } = { projects: [], conversations: [] };
+const listeners = new Set<() => void>();
+
+/** Reloads projects and conversations from the server. */
+export async function refreshLibrary(): Promise<void> {
+  const [projects, conversations] = await Promise.all([
+    api<Project[]>("/api/projects"),
+    api<ConversationSummary[]>("/api/conversations"),
+  ]);
+  state = { projects, conversations };
+  listeners.forEach((l) => l());
+}
+
+/** @returns The current projects and conversations; re-renders when they change. */
+export function useLibrary() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const l = () => setTick((n) => n + 1);
+    listeners.add(l);
+    if (state.projects.length === 0 && state.conversations.length === 0) void refreshLibrary().catch(() => undefined);
+    return () => {
+      listeners.delete(l);
+    };
+  }, []);
+  return state;
+}
+
+/** Desktop-only helpers the Electron preload script exposes. */
+interface DesktopBridge {
+  pickFolder(): Promise<string | null>;
+}
+
+/** @returns The desktop bridge when running in the desktop app, else `undefined`. */
+export function desktop(): DesktopBridge | undefined {
+  return (window as unknown as { kesherDesktop?: DesktopBridge }).kesherDesktop;
+}
+
+/**
+ * Creates a conversation and opens it.
+ *
+ * @param body - Kind, project, folder, model.
+ * @returns The new conversation's id.
+ */
+export async function createConversation(body: {
+  kind: "chat" | "code";
+  projectId?: string | null;
+  workspace?: string;
+  modelId?: string;
+}): Promise<string> {
+  const c = await api<{ id: string }>("/api/conversations", { method: "POST", body });
+  await refreshLibrary();
+  location.hash = `#/c/${c.id}`;
+  return c.id;
+}
+
+const toastListeners = new Set<(msg: string) => void>();
+
+/**
+ * Shows a short message at the bottom of the screen (errors that have no
+ * better place, like a failed "New chat").
+ *
+ * @param message - Text to show.
+ */
+export function toast(message: string): void {
+  toastListeners.forEach((l) => l(message));
+}
+
+/** @returns The current toast message, cleared after a few seconds. */
+export function useToast(): string {
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const l = (m: string) => {
+      setMsg(m);
+      clearTimeout(timer);
+      timer = setTimeout(() => setMsg(""), 6000);
+    };
+    toastListeners.add(l);
+    return () => {
+      toastListeners.delete(l);
+      clearTimeout(timer);
+    };
+  }, []);
+  return msg;
+}

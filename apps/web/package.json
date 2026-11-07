@@ -1,6 +1,6 @@
 {
   "name": "@kesher/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "The KesherAI interface. The desktop app shows it in a window; phones open it from the core server.",
   "license": "Apache-2.0",
@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "@kesher/shared": "workspace:*",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

@@ -3,10 +3,11 @@ import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
 import { discoverSkills, loadSkillBody } from "@kesher/skills";
 import { join } from "node:path";
+import { networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 
 /** Version of the core server API. */
-export const CORE_VERSION = "0.1.0";
+export const CORE_VERSION = "0.2.0";
 
 /**
  * Health, app info, categories, hardware, skills, plugins and plugin tools.
@@ -18,6 +19,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get("/api/health", async () => ({
     ok: true,
     version: CORE_VERSION,
+    build: await s.updater.version(),
     productName: branding.productName,
     features,
     remote: { enabled: s.config.remote.enabled },
@@ -61,7 +63,12 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
       if (req.ip !== "127.0.0.1" && req.ip !== "::1" && req.ip !== "::ffff:127.0.0.1") {
         return reply.code(403).send({ error: "Only available on this computer" });
       }
-      return { enabled: s.config.remote.enabled, token: s.config.remote.token, port: s.config.port };
+      // Addresses other devices can use: the home network, and Tailscale (100.64.0.0/10) if installed.
+      const addresses = Object.values(networkInterfaces())
+        .flat()
+        .filter((a): a is NonNullable<typeof a> => !!a && a.family === "IPv4" && !a.internal)
+        .map((a) => ({ address: a.address, tailscale: /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) }));
+      return { enabled: s.config.remote.enabled, token: s.config.remote.token, port: s.config.port, addresses };
     });
   }
 }

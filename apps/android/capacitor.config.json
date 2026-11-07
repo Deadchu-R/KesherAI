@@ -1,0 +1,13 @@
+{
+  "appId": "dev.kesherai.app",
+  "appName": "KesherAI",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true,
+    "allowNavigation": ["*"]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

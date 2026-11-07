@@ -150,3 +150,5 @@ Phase 0 is the MVP: local chat that works after one install. Each phase opens on
 | 5 · Community | Plugin marketplace, new categories, KesherAI as an MCP server | — |
 
 There are no dates: the pace depends on how many people join. Phases 3 and 4 can run in parallel if there are contributors.
+
+**Status (v0.2):** phases 0–3 are in, except MCP, git checkpoints and managed ComfyUI. The prioritised list of what comes next, drawn from what other apps do, is in [COMPETITORS.md](COMPETITORS.md#next-up-in-order).

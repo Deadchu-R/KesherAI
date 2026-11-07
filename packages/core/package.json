@@ -1,6 +1,6 @@
 {
   "name": "@kesher/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The local KesherAI server: model registry, chat and image routes, downloads, plugins, skills, remote access and an OpenAI-compatible API.",
   "license": "Apache-2.0",
   "type": "module",
@@ -16,7 +16,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch --conditions=source src/main.ts",
     "start": "node dist/main.js"
@@ -30,6 +32,7 @@
     "@kesher/shared": "workspace:*",
     "@kesher/skills": "workspace:*",
     "fastify": "^5.2.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "@kesher/agent": "workspace:*"
   }
 }

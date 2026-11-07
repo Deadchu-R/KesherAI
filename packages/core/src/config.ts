@@ -38,10 +38,19 @@ export const KesherConfigSchema = z.object({
       llamaServerPath: z.string().optional(),
       /** Port KesherAI starts llama-server on. */
       llamaServerPort: z.number().int().default(8081),
-      /** Extra arguments, e.g. `["-ngl", "99", "-c", "8192"]`. */
+      /** Extra arguments, e.g. `["-ngl", "99", "-c", "8192"]`. `--jinja` (tool calling) is always added. */
       llamaServerArgs: z.array(z.string()).default(["-ngl", "99"]),
+      /** llama.cpp release tag KesherAI installed, e.g. `b6500`. */
+      llamaVersion: z.string().optional(),
+      /** The GGUF file loaded last, loaded again on start-up when `autoLoadLast` is on. */
+      lastModel: z.string().optional(),
+      autoLoadLast: z.boolean().default(true),
     })
     .default({}),
+  /** Active model per category id, e.g. `{ "chat": "llamacpp/Qwen3-8B-Q4_K_M", "image": "comfyui/flux1-dev.safetensors" }`. */
+  activeModels: z.record(z.string(), z.string()).default({}),
+  /** A cloud-synced folder (Google Drive for desktop, OneDrive, Dropbox) to mirror projects and conversations to. */
+  syncFolder: z.string().optional(),
   remote: z
     .object({
       /** Listen on all interfaces and accept other devices that present the token. */
@@ -66,6 +75,10 @@ export interface DataPaths {
   assets: string;
   plugins: string;
   skills: string;
+  /** Saved projects and conversations. */
+  library: string;
+  /** Engines KesherAI installs itself, e.g. llama.cpp. */
+  engines: string;
 }
 
 /**
@@ -83,6 +96,8 @@ export function dataPaths(root = process.env.KESHER_DATA_DIR ?? join(homedir(), 
     assets: join(root, "assets"),
     plugins: join(root, "plugins"),
     skills: join(root, "skills"),
+    library: join(root, "library"),
+    engines: join(root, "engines"),
   };
 }
 
@@ -94,7 +109,7 @@ export function dataPaths(root = process.env.KESHER_DATA_DIR ?? join(homedir(), 
  * @returns The parsed config.
  */
 export async function loadConfig(paths: DataPaths): Promise<KesherConfig> {
-  for (const dir of [paths.root, paths.models, paths.assets, paths.plugins, paths.skills]) {
+  for (const dir of [paths.root, paths.models, paths.assets, paths.plugins, paths.skills, paths.library, paths.engines]) {
     await mkdir(dir, { recursive: true });
   }
   const raw = await readFile(paths.config, "utf8").catch(() => "{}");

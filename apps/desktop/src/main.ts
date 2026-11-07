@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain } from "electron";
 import { join, resolve } from "node:path";
 import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
@@ -43,6 +43,7 @@ async function createWindow(url: string): Promise<void> {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      preload: join(import.meta.dirname, "preload.cjs"),
     },
   });
 
@@ -60,6 +61,13 @@ async function createWindow(url: string): Promise<void> {
 
   await win.loadURL(url);
 }
+
+// The folder picker for "New code session" and the sync folder setting.
+ipcMain.handle("kesher:pick-folder", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = win ? await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] }) : await dialog.showOpenDialog({ properties: ["openDirectory"] });
+  return result.canceled ? null : (result.filePaths[0] ?? null);
+});
 
 app.whenReady().then(async () => {
   try {

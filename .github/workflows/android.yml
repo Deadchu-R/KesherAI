@@ -1,0 +1,54 @@
+name: Android APK
+
+# Builds the Android app (apps/android) into an installable APK.
+# Every push to main uploads it as a workflow artifact; a version tag
+# (git tag v0.2.0 && git push --tags) also attaches it to the GitHub release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - name: Generate the Android project
+        working-directory: apps/android
+        run: |
+          npx cap add android
+          # The computer serves KesherAI over plain HTTP on the home network or Tailscale.
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+          npx cap sync android
+      - name: Build the APK
+        working-directory: apps/android/android
+        run: ./gradlew assembleDebug --no-daemon
+      - run: cp apps/android/android/app/build/outputs/apk/debug/app-debug.apk KesherAI-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KesherAI-android
+          path: KesherAI-android.apk
+      - if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" KesherAI-android.apk --title "$GITHUB_REF_NAME" --generate-notes || gh release upload "$GITHUB_REF_NAME" KesherAI-android.apk --clobber

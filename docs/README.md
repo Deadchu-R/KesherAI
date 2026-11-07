@@ -9,6 +9,7 @@
 | [API.md](API.md) | build a client or script against the core server |
 | [FORKING.md](FORKING.md) | rebrand or trim KesherAI in your own fork |
 | [LEGAL.md](LEGAL.md) | know which licences apply and what may be copied |
+| [COMPETITORS.md](COMPETITORS.md) | see what other apps do, where they fall short, and what we build next |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | send a pull request |
 
 The API reference, generated from the TSDoc comments in the code, is built with `pnpm docs:api` into `docs/api/` and published to GitHub Pages by CI.

@@ -1,4 +1,4 @@
-import type { CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation } from "@kesher/shared";
+import type { AgentMessage, CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation, ToolCall, ToolSpec } from "@kesher/shared";
 
 /**
  * Settings for one provider instance, as stored in the user's config file.
@@ -28,6 +28,27 @@ export interface ProviderCapabilities {
   chat?: boolean;
   /** Generates images through {@link Provider.generateImage}. */
   image?: boolean;
+  /** Runs tool-calling turns through {@link Provider.chatWithTools}. */
+  tools?: boolean;
+}
+
+/** Input to {@link Provider.chatWithTools}. */
+export interface ProviderToolChatRequest {
+  /** The provider's own model id. */
+  providerModelId: string;
+  /** The whole conversation, including earlier tool calls and results. */
+  messages: AgentMessage[];
+  /** Tools the model may call. May be empty. */
+  tools: ToolSpec[];
+  temperature?: number;
+  maxTokens?: number;
+}
+
+/** One finished model turn: its text and the tools it wants to call. */
+export interface ProviderToolChatResult {
+  text: string;
+  toolCalls: ToolCall[];
+  usage?: { inputTokens?: number; outputTokens?: number };
 }
 
 /** Input to {@link Provider.chat}. The model is the provider's own id. */
@@ -108,6 +129,17 @@ export interface Provider {
    * finish with exactly one `done` (or `error`) event.
    */
   chat?(request: ProviderChatRequest, signal?: AbortSignal): AsyncIterable<ChatStreamEvent>;
+
+  /**
+   * Runs one model turn that may call tools. Streams text through `onText`
+   * as it arrives and resolves with the full turn. The caller runs the tools
+   * and calls again with their results — see `@kesher/agent`.
+   */
+  chatWithTools?(
+    request: ProviderToolChatRequest,
+    signal?: AbortSignal,
+    onText?: (delta: string) => void,
+  ): Promise<ProviderToolChatResult>;
 
   /** Generates one or more images. */
   generateImage?(request: ProviderImageRequest, signal?: AbortSignal): Promise<GeneratedFile[]>;

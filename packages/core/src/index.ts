@@ -9,7 +9,10 @@ export { createKesherServer, type KesherServer, type KesherServerOptions } from 
 export { dataPaths, loadConfig, saveConfig, KesherConfigSchema, type KesherConfig, type DataPaths } from "./config.js";
 export { AssetStore } from "./assets.js";
 export { PluginHost, type LoadedPlugin } from "./plugins.js";
-export { LlamaServerManager, type LlamaServerStatus } from "./llamacpp.js";
+export { LlamaEngine, pickLlamaAssets, findLlamaRelease, extractArchive, type EngineStatus, type LlamaAssets, type PlatformInfo } from "./llamacpp.js";
+export { Library, SYNC_SUBFOLDER } from "./library.js";
+export { ConversationManager, modelTurnFor, type NewConversation } from "./conversations.js";
+export { Updater, type VersionInfo, type UpdateCheck, type UpdateProgress } from "./updates.js";
 export { isLoopback } from "./auth.js";
 export type { KesherServices } from "./services.js";
 export { CORE_VERSION } from "./routes/system.js";

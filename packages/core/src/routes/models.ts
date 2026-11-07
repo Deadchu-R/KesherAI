@@ -2,7 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
+import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
+import { engineRoutes } from "./engine.js";
 
 function mask(config: ProviderConfig): ProviderConfig & { hasApiKey: boolean } {
   const { apiKey, ...rest } = config;
@@ -32,9 +34,12 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
 
   /** Model files downloaded into the data folder (e.g. GGUF files to load in llama.cpp). */
   app.get("/api/models/local", async () => {
-    const files = await listFilesRecursive(s.paths.models);
+    const [files, hw] = await Promise.all([listFilesRecursive(s.paths.models), detectHardwareCached()]);
     return Promise.all(
-      files.map(async (path) => ({ path, name: relative(s.paths.models, path), size: (await stat(path)).size })),
+      files.map(async (path) => {
+        const size = (await stat(path)).size;
+        return { path, name: relative(s.paths.models, path), size, estimate: estimatePerformance(size, hw) };
+      }),
     );
   });
 
@@ -76,26 +81,5 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
 
-  /** Managed llama.cpp: load a downloaded GGUF and chat with it as provider `llamacpp`. */
-  app.get("/api/engines/llamacpp", async () => s.llama?.status() ?? { running: false, configured: false, log: [] });
-
-  app.post<{ Body: { modelPath: string } }>("/api/engines/llamacpp/load", async (req, reply) => {
-    if (!s.llama) return reply.code(400).send({ error: "Set engines.llamaServerPath in config.json first" });
-    if (!req.body.modelPath.startsWith(s.paths.models)) {
-      return reply.code(400).send({ error: "Only models inside the KesherAI models folder can be loaded" });
-    }
-    await s.llama.load(req.body.modelPath);
-    if (!s.registry.get("llamacpp")) {
-      s.registry.add({
-        id: "llamacpp", type: "openai-compatible", name: "llama.cpp (managed)", location: "local",
-        baseUrl: `http://127.0.0.1:${s.config.engines.llamaServerPort}/v1`,
-      });
-    }
-    return s.llama.status();
-  });
-
-  app.post("/api/engines/llamacpp/stop", async () => {
-    await s.llama?.stop();
-    return { ok: true };
-  });
+  await engineRoutes(app, s);
 }

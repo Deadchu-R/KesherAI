@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
-import { listHubFiles, searchHub, type DownloadJob } from "@kesher/downloads";
+import { detectHardwareCached, estimatePerformance, listHubFiles, searchHub, type DownloadJob } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 
@@ -54,7 +54,19 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     searchHub({ search: req.query.q, pipelineTag: req.query.pipelineTag, filter: req.query.filter, token: token() }),
   );
 
-  app.get<{ Querystring: { repo: string } }>("/api/hub/files", async (req) => listHubFiles(req.query.repo, { token: token() }));
+  /** A repo's files; model weights carry a performance estimate for this computer. */
+  app.get<{ Querystring: { repo: string } }>("/api/hub/files", async (req) => {
+    const [files, hw] = await Promise.all([listHubFiles(req.query.repo, { token: token() }), detectHardwareCached()]);
+    // Mixture-of-experts repos usually say so in the name ("A3B" = 3B active parameters).
+    const moe = /-A(\d+(?:\.\d+)?)B/i.exec(req.query.repo);
+    const total = /(\d+(?:\.\d+)?)B/i.exec(req.query.repo.replace(/-A\d+(?:\.\d+)?B/i, ""));
+    const activeFraction = moe && total ? Number(moe[1]) / Number(total[1]) : undefined;
+    return files.map((f) =>
+      /\.(gguf|safetensors)$/i.test(f.path)
+        ? { ...f, estimate: estimatePerformance(f.size, hw, activeFraction ? { activeFraction } : {}) }
+        : f,
+    );
+  });
 
   app.get("/api/downloads", async () => s.downloads.list());
 

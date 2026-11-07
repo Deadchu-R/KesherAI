@@ -2,11 +2,93 @@ import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, t } from "../i18n";
+import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
+
+interface Recommended {
+  id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
+  note: Record<string, string> & { en: string }; estimate: Estimate;
+}
+interface EngineStatus {
+  installed: boolean; version?: string; running: boolean; modelPath?: string; log: string[];
+  job?: { phase: string; message: string };
+}
+
+/** "Start here": the built-in engine and one-click models. */
+function StartHere({ onChange }: { onChange: () => void }) {
+  const [models, setModels] = useState<Recommended[]>([]);
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const [error, setError] = useState("");
+  const load = () => {
+    void api<Recommended[]>("/api/models/recommended").then(setModels).catch(() => undefined);
+    void api<EngineStatus>("/api/engines/llamacpp").then(setEngine).catch(() => undefined);
+  };
+  useEffect(load, []);
+  const busy = !!engine?.job && engine.job.phase !== "error";
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => {
+      void api<EngineStatus>("/api/engines/llamacpp").then((s) => {
+        setEngine(s);
+        if (!s.job || s.job.phase === "error") {
+          load();
+          onChange();
+        }
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
+
+  const run = async (id: string) => {
+    setError("");
+    try {
+      setEngine(await api<EngineStatus>(`/api/models/recommended/${id}/run`, { method: "POST" }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const modelName = engine?.modelPath?.split(/[\\/]/).pop();
+
+  return (
+    <section className="card stack">
+      <h2>{t("startHere")}</h2>
+      <div className="row engine-row">
+        <strong>{t("engine")}</strong>
+        <span className="muted">{engine?.installed ? t("engineInstalled", { version: engine.version ?? "" }) : t("engineNotInstalled")}</span>
+        {engine?.running && modelName && <span className="pill good">{t("running", { model: modelName })}</span>}
+        {engine?.running && (
+          <button type="button" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine)}>{t("stopEngine")}</button>
+        )}
+        {!engine?.installed && !busy && (
+          <button type="button" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/install", { method: "POST" }).then(setEngine)}>{t("installEngine")}</button>
+        )}
+      </div>
+      {engine?.job && <p className={engine.job.phase === "error" ? "error" : "muted"}>{engine.job.message}</p>}
+      {error && <p className="error">{error}</p>}
+      <div className="rec-grid">
+        {models.map((m) => (
+          <div key={m.id} className="card rec">
+            <div className="row">
+              <strong className="grow">{m.name}</strong>
+              <span className="muted mono" dir="ltr">{m.sizeGb} GB</span>
+            </div>
+            <p className="muted">{m.note[getLocale()] ?? m.note.en}</p>
+            <div className="row">{m.goodForCode && <span className="pill">{t("goodForCode")}</span>}</div>
+            <EstimateDetails e={m.estimate} />
+            <button type="button" className={m.estimate.rating === "too-big" ? "" : "primary"} disabled={busy} onClick={() => void run(m.id)}>
+              {m.downloaded ? t("run") : t("downloadAndRun")}
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="muted">{t("estimateNote")}</p>
+    </section>
+  );
+}
 
 interface HubModel { repo: string; category?: string; downloads: number; likes: number; gated: boolean | string }
-interface HubFile { path: string; size: number; sha256?: string }
+interface HubFile { path: string; size: number; sha256?: string; estimate?: Estimate }
 interface Job { id: string; label: string; status: string; received: number; total?: number; speed: number; error?: string }
-interface LocalFile { path: string; name: string; size: number }
+interface LocalFile { path: string; name: string; size: number; estimate?: Estimate }
 interface Hardware { ramTotal: number; gpus: Array<{ name: string; vramTotal: number }>; unifiedMemory: boolean }
 
 const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
@@ -64,6 +146,7 @@ export function ModelsPage() {
 
   async function loadInLlama(path: string) {
     try {
+      setError("");
       await api("/api/engines/llamacpp/load", { method: "POST", body: { modelPath: path } });
     } catch (e) {
       setError((e as Error).message);
@@ -78,6 +161,7 @@ export function ModelsPage() {
   return (
     <div className="page">
       <h1>{t("models")}</h1>
+      <StartHere onChange={refreshLocal} />
       {hw && (
         <div className="card row muted">
           <strong style={{ color: "var(--text)" }}>{t("yourHardware")}</strong>
@@ -115,7 +199,8 @@ export function ModelsPage() {
             {open.files.map((f) => (
               <div key={f.path} className="row">
                 <span className="mono grow" dir="ltr">{f.path}</span>
-                <span className="muted mono">{gb(f.size)}</span>
+                <span className="muted mono" dir="ltr">{gb(f.size)}</span>
+                {f.estimate && <RatingBadge e={f.estimate} />}
                 {/\.(ckpt|bin|pt|pth)$/i.test(f.path) && <span className="pill bad" title="Pickle format can run code">pickle</span>}
                 <button type="button" onClick={() => void download(f)}>{t("download")}</button>
               </div>
@@ -144,8 +229,9 @@ export function ModelsPage() {
           {local.map((f) => (
             <div key={f.path} className="row">
               <span className="mono grow" dir="ltr">{f.name}</span>
-              <span className="muted mono">{gb(f.size)}</span>
-              {f.name.endsWith(".gguf") && <button type="button" onClick={() => void loadInLlama(f.path)}>{t("loadInLlama")}</button>}
+              <span className="muted mono" dir="ltr">{gb(f.size)}</span>
+              {f.estimate && f.name.endsWith(".gguf") && <RatingBadge e={f.estimate} />}
+              {f.name.endsWith(".gguf") && <button type="button" onClick={() => void loadInLlama(f.path)}>{t("load")}</button>}
             </div>
           ))}
         </div>

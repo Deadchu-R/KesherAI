@@ -89,3 +89,86 @@ label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: c
   .nav-link { white-space: nowrap; }
   .page, .topbar { padding: 16px; }
 }
+
+/* ---------- sidebar: projects and conversations ---------- */
+.sidebar { flex: 0 0 264px; gap: 8px; height: 100vh; position: sticky; top: 0; }
+.sidebar-actions { display: grid; gap: 6px; padding: 0 4px 6px; }
+.sidebar-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.sidebar-nav { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.icon-btn { height: 28px; width: 28px; padding: 0; font-size: 16px; line-height: 1; }
+.project-btn { width: 100%; text-align: start; background: none; border: none; height: 36px; color: var(--text); padding: 0 10px; }
+.project-btn:hover { background: #1a1e27; }
+.project-items { padding-inline-start: 14px; display: flex; flex-direction: column; gap: 2px; }
+.link-btn { background: none; border: none; color: var(--accent); height: 32px; text-align: start; font-size: 13px; padding: 0 12px; }
+.conv-link { display: flex; gap: 8px; align-items: center; padding: 8px 12px; }
+.conv-kind { color: var(--muted); font-size: 11px; font-family: "JetBrains Mono", monospace; flex: 0 0 auto; }
+.conv-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.btn { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* ---------- dialogs and toast ---------- */
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.dialog { width: min(520px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.toast { position: fixed; bottom: 20px; inset-inline: 0; margin: 0 auto; width: max-content; max-width: calc(100% - 32px); background: #3a1717; color: var(--bad); padding: 10px 16px; border-radius: 10px; z-index: 30; }
+
+/* ---------- conversation ---------- */
+.title-btn { background: none; border: none; font-size: 16px; font-weight: 600; text-align: start; padding: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-bar { font-size: 12px; color: var(--muted); padding: 6px 28px; border-bottom: 1px solid var(--border); text-align: start; }
+.msg-text { white-space: pre-wrap; }
+.msg.streaming { opacity: 0.9; }
+.code { background: #0b0d11; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; white-space: pre; text-align: left; margin: 8px 0; max-height: 420px; }
+.diff .add { color: #6ee7a8; background: rgba(110, 231, 168, 0.08); }
+.diff .del { color: var(--bad); background: rgba(252, 165, 165, 0.08); }
+.diff .hunk { color: #93c5fd; }
+.tool { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 8px 12px; }
+.tool summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.tool summary .muted { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+.tool-state { margin-inline-start: auto; }
+.tool.ok .tool-state { color: var(--good); }
+.tool.fail .tool-state { color: var(--bad); }
+.asset { max-width: min(420px, 100%); border-radius: 10px; margin-top: 8px; display: block; }
+.approval { border-color: var(--warn); background: #1e1910; display: flex; flex-direction: column; gap: 10px; }
+.question { border-color: var(--accent); display: flex; flex-direction: column; gap: 10px; }
+.question.done { border-color: var(--border); }
+.approval-done, .note { font-size: 12.5px; }
+.status-line { font-size: 13px; }
+.empty { text-align: center; margin-top: 15vh; }
+
+/* ---------- settings and models ---------- */
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.grid-2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.commits { margin: 0; padding-inline-start: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.qr { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.qr img { border-radius: 8px; background: #fff; }
+.rec-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.rec { display: flex; flex-direction: column; gap: 8px; }
+.rec p { margin: 0; font-size: 13px; }
+.rec button { margin-top: auto; }
+.estimate { display: flex; flex-direction: column; gap: 6px; }
+.tasks { list-style: none; margin: 0; padding: 0; font-size: 12.5px; display: grid; gap: 2px; }
+.tasks li { display: flex; justify-content: space-between; gap: 8px; }
+.pill.warn { color: var(--warn); border-color: #5a4a1f; }
+.engine-row { gap: 12px; }
+.home { align-items: flex-start; margin-top: 10vh; }
+
+@media (max-width: 760px) {
+  .sidebar { position: static; height: auto; flex-direction: column; overflow: visible; }
+  .sidebar-scroll { max-height: 30vh; }
+  .sidebar-nav { flex-direction: row; overflow-x: auto; }
+  .workspace-bar { padding: 6px 16px; }
+}
+
+/* ---------- phone layout: the sidebar becomes a full-screen menu ---------- */
+.mobile-bar { display: none; }
+@media (max-width: 760px) {
+  .mobile-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 15; }
+  .mobile-bar button { width: 44px; height: 44px; padding: 0; font-size: 20px; }
+  .sidebar { display: none; }
+  .sidebar.open { display: flex; position: fixed; inset: 61px 0 0 0; height: auto; z-index: 14; overflow-y: auto; flex-direction: column; }
+  .sidebar.open .sidebar-scroll { max-height: none; }
+  .sidebar.open .sidebar-nav { flex-direction: column; }
+  .sidebar.open .sidebar-foot { display: flex; }
+  .topbar select { flex: 1 1 140px; min-width: 0; }
+  .topbar .title-btn { flex: 1 1 100%; }
+  .composer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
