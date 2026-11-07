@@ -4,6 +4,7 @@ import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { FilesPanel } from "../FilesPanel";
+import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { t } from "../i18n";
 
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[] };
@@ -43,10 +44,10 @@ function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<"tool_r
   if (call.name === "ask_user") return null;
   const state = !result ? "pending" : result.ok ? "ok" : "fail";
   return (
-    <details className={`tool ${state}`} open={!!result?.diff || !!result?.assetIds?.length}>
+    <details className={`tool ${state}`}>
       <summary>
-        <span className="mono">{call.name}</span> <span className="mono muted" dir="ltr">{summary(call.name, call.input)}</span>
-        <span className="tool-state">{state === "pending" ? "…" : state === "ok" ? "✓" : "✕"}</span>
+        <span className="tool-state" aria-hidden>{state === "pending" ? "…" : state === "ok" ? "✓" : "✕"}</span>
+        <span className="tool-label" dir="auto">{stepLabel({ call, ...(result ? { result } : {}) })}</span>
       </summary>
       {result?.diff && <Diff diff={result.diff} />}
       {result?.assetIds?.map((id) => (
@@ -211,6 +212,28 @@ export function ConversationPage({ id }: { id: string }) {
     return m;
   }, [events]);
   const approvalResults = useMemo(() => new Map(events.filter((e): e is Ev<"approval_result"> => e.type === "approval_result").map((e) => [e.requestId, e])), [events]);
+  // The agent's tool calls between two messages are folded into one "activity" line, like Claude's.
+  const blocks = useMemo(() => {
+    const out: Array<{ kind: "event"; e: AgentEvent } | { kind: "group"; key: number; steps: Step[] }> = [];
+    let group: Step[] | null = null;
+    for (const e of events) {
+      if (e.type === "tool_call") {
+        if (e.name === "ask_user" || e.name === "request_access") continue; // their question card shows instead
+        if (!group) {
+          group = [];
+          out.push({ kind: "group", key: e.seq, steps: group });
+        }
+        const result = byCall.get(e.callId);
+        group.push({ call: e, ...(result ? { result } : {}) });
+        continue;
+      }
+      if (e.type === "tool_result" || e.type === "approval_result" || e.type === "answer" || (e.type === "status" && e.status !== "error")) continue;
+      group = null;
+      out.push({ kind: "event", e });
+    }
+    return out;
+  }, [events, byCall]);
+
   // Every finished tool may have changed files: refresh the Files count, and open the panel when a program was built.
   const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result").length, [events]);
   const lastBuild = useMemo(() => [...events].reverse().find((e): e is Ev<"tool_result"> => e.type === "tool_result" && e.name === "build_executable" && e.ok), [events]);
@@ -309,14 +332,23 @@ export function ConversationPage({ id }: { id: string }) {
           {events.length === 0 && (
             <p className="muted empty">{conv.kind === "code" ? t("emptyCode", { folder: info?.workspace ?? "" }) : t("emptyChat")}</p>
           )}
-          {events.map((e) => {
+          {blocks.map((b, bi) => {
+            if (b.kind === "group") {
+              return (
+                <ActivityGroup
+                  key={`g${b.key}`}
+                  steps={b.steps}
+                  live={busy && bi === blocks.length - 1}
+                  renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} />}
+                />
+              );
+            }
+            const e = b.e;
             switch (e.type) {
               case "user":
                 return <div key={e.seq} className="msg user">{e.text}</div>;
               case "assistant":
                 return <div key={e.seq} className="msg"><RichText text={e.text} /></div>;
-              case "tool_call":
-                return <ToolCard key={e.seq} call={e} result={byCall.get(e.callId)} />;
               case "approval_request":
                 return <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
               case "question":

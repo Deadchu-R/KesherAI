@@ -229,3 +229,23 @@ button.on { border-color: var(--accent); }
 .question.access { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 
 .file-line { display: flex; gap: 8px; align-items: center; }
+
+/* Activity: the agent's steps folded into one line */
+.activity { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+.activity > details > summary { list-style: none; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); font-size: 14px; padding: 4px 2px; border-radius: 6px; }
+.activity > details > summary::-webkit-details-marker { display: none; }
+.activity > details > summary:hover { color: var(--text); }
+.activity > details[open] .chev { transform: rotate(180deg); }
+.chev { font-size: 11px; transition: transform .15s; }
+.steps { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.steps > li { border-bottom: 1px solid var(--border); }
+.steps > li:last-child { border-bottom: 0; }
+.steps .tool { border: 0; border-radius: 0; margin: 0; background: transparent; }
+.steps .tool > summary { display: flex; gap: 10px; align-items: center; padding: 9px 12px; font-size: 14px; }
+.tool-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.steps li.fail .tool-state { color: #f87171; }
+.steps li.ok .tool-state { color: var(--accent); }
+.activity-now { margin: 0; font-size: 13px; color: var(--muted); padding-inline-start: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-images { display: flex; flex-wrap: wrap; gap: 8px; }
+.spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
