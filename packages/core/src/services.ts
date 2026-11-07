@@ -95,6 +95,8 @@ export interface KesherServices {
   conversationSearch: ConversationSearch;
   /** When the model APIs last answered another app or device (ms), for staying awake while serving. */
   lastServed?: () => number;
+  /** Brings the desktop app's window to the front (after signing in in the browser). */
+  focusApp?: () => void;
   /** Search by meaning (embeddings). */
   semantic: Semantic;
   /** "Access from anywhere" (Cloudflare tunnel). */

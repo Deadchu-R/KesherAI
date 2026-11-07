@@ -7,7 +7,8 @@ function page(title: string, text: string): string {
   const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title>
 <body style="font-family:system-ui;background:#0e1014;color:#e7e9ee;display:grid;place-items:center;min-height:100vh;margin:0">
-<main style="max-width:420px;text-align:center"><h1 style="font-size:22px">${esc(title)}</h1><p style="color:#a3aab7">${esc(text)}</p></main>`;
+<main style="max-width:420px;text-align:center"><h1 style="font-size:22px">${esc(title)}</h1><p style="color:#a3aab7">${esc(text)}</p></main>
+<script>setTimeout(function(){window.close()},1500)</script>`;
 }
 
 /**
@@ -67,8 +68,10 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
     try {
       const email = await s.google.finish(req.query.code, req.query.state);
       void s.driveSync.syncNow().catch(() => undefined);
+      // The desktop app comes back to the front, so there is nothing to do in the browser.
+      s.focusApp?.();
       const extra = (s.config.google.services ?? []).map((x) => (x === "gmail" ? "Gmail" : x === "drive" ? "your Google Drive files" : "Google Calendar"));
-      return page(`${branding.productName} is connected to Google`, `${email ? `${email}. ` : ""}Projects and conversations are saved in the KesherAI folder in your Drive.${extra.length ? ` ${extra.join(" and ")} can now be used in your chats.` : ""} You can close this window.`);
+      return page(`${branding.productName} is connected to Google`, `${email ? `${email}. ` : ""}Projects and conversations are saved in the KesherAI folder in your Drive.${extra.length ? ` ${extra.join(" and ")} can now be used in your chats.` : ""} You can go back to ${branding.productName}.`);
     } catch (err) {
       return page("Google Drive was not connected", (err as Error).message);
     }

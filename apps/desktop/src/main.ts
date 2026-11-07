@@ -64,6 +64,7 @@ async function startCore(): Promise<string> {
     pluginRoots: [join(root, "plugins")],
     ...(await googleClient()),
     // "My day" takes its pictures with Electron's own screen capture (antivirus programs block a script doing it).
+    focusApp: () => showWindow(),
     screen: {
       idleSec: () => powerMonitor.getSystemIdleTime(),
       shot: async () => {
