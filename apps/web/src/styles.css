@@ -869,3 +869,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .snippet { position: relative; }
 .snippet pre { margin: 0; padding: 12px 14px; padding-inline-end: 80px; border-radius: 10px; background: var(--raised); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
 .snippet button { position: absolute; top: 8px; right: 8px; height: 30px; padding: 0 10px; font-size: 12px; }
+.key-fresh { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 12px; }
+.key-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.key-list li { padding: 8px 10px; border-radius: 10px; background: var(--raised); }

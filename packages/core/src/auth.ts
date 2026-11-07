@@ -50,18 +50,31 @@ function safeEqual(a: string, b: string): boolean {
  * Requests from this computer are trusted: the server only listens beyond
  * localhost when the user turns remote access on. The interface's own files
  * (HTML, scripts, styles, icons) hold no data and load without a token, the
- * same as any web app's; only `/api` and `/v1` need it.
+ * same as any web app's; only `/api`, `/v1` and `/mcp` need it. The model
+ * APIs (`/v1`, `/mcp`) also take an app's own access key, as a Bearer token
+ * or `x-api-key` (Anthropic SDKs), and can ask for one on this computer too.
  *
  * @param app - Fastify instance.
  * @param getToken - Returns the current token (it can be rotated at runtime).
+ * @param keys - Checks app access keys, and whether this computer needs one too.
+ * @param keys.verify - Returns something for a valid key.
+ * @param keys.requireLocally - Whether apps on this computer need a key.
  */
-export function registerRemoteAuth(app: FastifyInstance, getToken: () => string | undefined): void {
+export function registerRemoteAuth(
+  app: FastifyInstance,
+  getToken: () => string | undefined,
+  keys: { verify?: (key: string | undefined) => unknown; requireLocally?: () => boolean } = {},
+): void {
   app.addHook("onRequest", async (request, reply) => {
-    if (isLocalRequest(request)) return;
     const path = request.url.split("?")[0] ?? "";
-    if (!path.startsWith("/api/") && path !== "/api" && !path.startsWith("/v1/") && path !== "/v1" && path !== "/mcp") return;
+    // The model APIs: apps may use their own access key instead of the remote token.
+    const apiPath = path.startsWith("/v1/") || path === "/v1" || path === "/mcp";
+    if (isLocalRequest(request) && !(apiPath && keys.requireLocally?.())) return;
+    if (!path.startsWith("/api/") && path !== "/api" && !apiPath) return;
     const token = getToken();
-    const header = request.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const xKey = request.headers["x-api-key"];
+    const header = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? (typeof xKey === "string" ? xKey : undefined);
+    if (apiPath && keys.verify?.(header)) return;
     const query = (request.query as Record<string, string | undefined> | undefined)?.token;
     // Plugin pages run in a sandboxed frame that cannot add headers or cookies, so their files
     // are served under /api/plugin-files/<token>/…, and relative links keep the token.

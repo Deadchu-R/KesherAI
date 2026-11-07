@@ -27,8 +27,13 @@ function textOf(content: OpenAIChatBody["messages"][number]["content"]): string 
  * @param s - Services.
  */
 export async function openAIRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
-  app.get("/v1/models", async () => {
+  app.get("/v1/models", async (req) => {
     const { models } = await s.registry.listAllModels();
+    // Anthropic SDKs send anthropic-version and read their own list format.
+    if (req.headers["anthropic-version"]) {
+      const data = models.filter((m) => m.category === "chat").map((m) => ({ type: "model", id: m.id, display_name: m.name, created_at: "2025-01-01T00:00:00Z" }));
+      return { data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
+    }
     return {
       object: "list",
       data: models.filter((m) => m.category === "chat").map((m) => ({ id: m.id, object: "model", created: 0, owned_by: m.providerId })),

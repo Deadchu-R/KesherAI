@@ -238,3 +238,18 @@ Requests from this computer need nothing; from other devices they need the remot
 - Claude Code: `claude mcp add --transport http kesherai http://127.0.0.1:7420/mcp`
 - Cursor / VS Code: an `http` server with that URL.
 - Apps that only start programs (Claude Desktop): the bundled stdio bridge `mcp-bridge.cjs` (in the app's resources folder). Settings shows the exact entry for `claude_desktop_config.json`.
+
+## Anthropic-style Messages API
+
+`POST /v1/messages` (and `/v1/messages/count_tokens`) speaks Anthropic's Messages API: system prompts, text and image blocks, tools (`tool_use` / `tool_result`) and streaming events. Model names are KesherAI ids (`<provider>/<model>`); a name KesherAI does not know (such as `claude-sonnet-…` from Claude Code) goes to the active chat model. `GET /v1/models` answers in Anthropic's format when the request has an `anthropic-version` header.
+
+```python
+from anthropic import Anthropic
+client = Anthropic(base_url="http://127.0.0.1:7420", api_key="kai-…")
+```
+
+Claude Code: `ANTHROPIC_BASE_URL=http://127.0.0.1:7420 ANTHROPIC_AUTH_TOKEN=kai-… claude`.
+
+## App access keys
+
+Settings → "API and app access keys" makes a key per app (`kai-…`, shown once; only its hash is kept), with when it was last used, and revokes it. The model APIs (`/v1`, `/mcp`) take a key as `Authorization: Bearer` or `x-api-key`; keys do not open the rest of `/api`. Other devices need a key or the remote access token; apps on this computer need one only when "ask apps on this computer for a key too" is on.

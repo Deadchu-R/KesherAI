@@ -3,6 +3,7 @@ import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
+import { ApiKeysSection } from "../ApiKeysSection";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
@@ -404,6 +405,7 @@ export function SettingsPage() {
       <GpuSection />
       <NotificationsSection />
       <McpServerSection />
+      <ApiKeysSection />
       <SpeechSection />
       <ComputerSection />
       <PermissionsSection />

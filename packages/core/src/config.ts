@@ -144,6 +144,10 @@ export const KesherConfigSchema = z.object({
       learn: z.boolean().default(true),
     })
     .default({}),
+  /** Keys for apps that use the APIs (/v1 and /mcp), one per app; only hashes are kept. */
+  apiKeys: z.array(z.object({ id: z.string(), name: z.string(), hash: z.string(), prefix: z.string(), createdAt: z.string(), lastUsedAt: z.string().optional(), uses: z.number().optional() })).default([]),
+  /** Ask apps on this computer for a key too (by default only other devices need one). */
+  apiAuth: z.object({ requireKeyLocally: z.boolean().default(false) }).default({}),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z.object({ enabled: z.boolean().default(true) }).default({}),
   /** Notifications when long work ends or KesherAI waits for an answer. */

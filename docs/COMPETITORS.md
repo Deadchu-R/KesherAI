@@ -122,7 +122,7 @@ Working on now, in this order:
 8. Small fixes: disk space, pause, measured speed, more engines ✅
 9. Speech as agent tools: transcribe and speak ✅ (`transcribe_audio`, `speak_text`)
 10. KesherAI as an MCP server for other apps ✅ (`/mcp`, stdio bridge, Settings snippets)
-11. Anthropic-style API and separate access keys per app (LM Studio permission tokens) ⬜
+11. Anthropic-style API and separate access keys per app (LM Studio permission tokens) ✅ (`/v1/messages`, `kai-` keys in Settings)
 12. Community store for skills and prompts too (Msty Discover Hub) ⬜
 13. Control the computer from the phone: watch and approve ⬜
 14. Pipelines with loops and conditions (Msty Turnstiles), and managed ComfyUI ⬜

@@ -25,6 +25,9 @@ import { Prompts } from "./prompts.js";
 import { Notifier, type Note } from "./notify.js";
 import { speechTools } from "./speech-tools.js";
 import { mcpServerRoutes } from "./routes/mcp-server.js";
+import { anthropicRoutes } from "./routes/anthropic.js";
+import { apiKeyRoutes } from "./routes/api-keys.js";
+import { ApiKeys } from "./api-keys.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
@@ -336,13 +339,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
   // The desktop window and the Vite dev server are separate origins.
   await app.register(cors, { origin: true });
-  if (features.remote) registerRemoteAuth(app, () => config.remote.token);
+  const apiKeys = new ApiKeys(() => config.apiKeys, persist);
+  if (features.remote) registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally });
 
   await systemRoutes(app, services);
   await modelRoutes(app, services);
   await generateRoutes(app, services);
   if (features.downloads) await downloadRoutes(app, services);
-  if (features.openaiCompatibleApi) await openAIRoutes(app, services);
+  if (features.openaiCompatibleApi) {
+    await openAIRoutes(app, services);
+    await anthropicRoutes(app, services);
+  }
+  await apiKeyRoutes(app, services, apiKeys);
   await app.register(websocket);
   await terminalRoutes(app, services);
   await coachRoutes(app, services);
