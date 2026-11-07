@@ -20,5 +20,7 @@ repositories {
 
 dependencies {
     implementation project(':capacitor-android')
+    // ActivityResult, for the system's "start sharing your screen?" question.
+    implementation "androidx.activity:activity:1.9.3"
     implementation "androidx.core:core:${project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.15.0'}"
 }
