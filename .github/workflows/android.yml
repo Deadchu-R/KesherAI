@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 60 # the update button lists what changed since the installed build
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -57,6 +59,9 @@ jobs:
           VERSION=$(node -p "require('../../package.json').version")
           sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"$VERSION (${{ github.run_number }})\"/" android/app/build.gradle
           grep -E "versionCode|versionName" android/app/build.gradle
+          # The app knows which commit it was built from, to list what changed in a newer build.
+          node scripts/vendor.mjs
+          echo "{\"commit\": \"$(git rev-parse HEAD)\"}" > www/build.json
           npx cap sync android
       - name: Sign every build with the project's fixed key (apps/android/signing/README.md)
         working-directory: apps/android/android
@@ -92,7 +97,14 @@ jobs:
       - name: Describe this build for the app's update button
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          echo "{\"versionCode\": ${{ github.run_number }}, \"versionName\": \"$VERSION (${{ github.run_number }})\", \"apkUrl\": \"https://github.com/${{ github.repository }}/releases/download/android-latest/KesherAI-android.apk\"}" > android-version.json
+          node -e '
+            const { execSync } = require("node:child_process");
+            const log = execSync("git log -50 --format=%H%x09%s", { encoding: "utf8" }).trim().split("\n");
+            const changes = log.map((l) => { const [sha, ...rest] = l.split("\t"); return { sha, subject: rest.join("\t") }; });
+            require("node:fs").writeFileSync("android-version.json", JSON.stringify({
+              versionCode: Number(process.argv[1]), versionName: `${process.argv[2]} (${process.argv[1]})`,
+              apkUrl: `https://github.com/${process.argv[3]}/releases/download/android-latest/KesherAI-android.apk`, changes }));
+          ' "${{ github.run_number }}" "$VERSION" "${{ github.repository }}"
           cat android-version.json
       - uses: actions/upload-artifact@v4
         with:

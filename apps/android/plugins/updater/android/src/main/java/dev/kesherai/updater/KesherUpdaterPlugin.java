@@ -14,6 +14,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -86,6 +87,8 @@ public class KesherUpdaterPlugin extends Plugin {
                 ret.put("latestName", latest.optString("versionName"));
                 ret.put("apkUrl", latest.optString("apkUrl"));
                 ret.put("available", latest.optLong("versionCode") > current);
+                JSONArray changes = latest.optJSONArray("changes");
+                if (changes != null) ret.put("changes", changes);
                 call.resolve(ret);
             } catch (Exception e) {
                 call.reject(e.getMessage());
