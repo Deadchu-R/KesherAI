@@ -4,7 +4,7 @@
 // Open it with ☰, or swipe in from the right edge. Like Apple's menus you can
 // also press ☰ and keep your finger down, slide to an item (it lights up) and
 // let go to open it.
-/* global window, document, localStorage, location, navigator, addEventListener, removeEventListener, innerWidth, URL */
+/* global window, document, localStorage, location, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event */
 (() => {
   const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const he = lang === "he";
