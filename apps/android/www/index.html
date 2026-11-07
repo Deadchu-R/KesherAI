@@ -66,6 +66,8 @@
     <strong data-he="המחשבים שלך" data-en="Your computers">המחשבים שלך</strong>
     <div id="computerList" class="computers"></div>
   </div>
+  <button id="google" type="button" class="primary google" hidden data-he="התחבר עם חשבון Google" data-en="Sign in with Google">התחבר עם חשבון Google</button>
+  <p id="googleNote" class="small" hidden data-he="המחשבים שלך נמצאים לבד: אלה שמחוברים לאותו חשבון Google ושבהם מסומן ב-KesherAI ‎„לאפשר למכשירים האחרים שלי להשתמש במחשב הזה”." data-en="Finds your computers by itself: the ones signed in to the same Google account with “Let my other devices use this computer” on in KesherAI.">המחשבים שלך נמצאים לבד: אלה שמחוברים לאותו חשבון Google ושבהם מסומן ב-KesherAI ‎„לאפשר למכשירים האחרים שלי להשתמש במחשב הזה”.</p>
   <ol>
     <li data-he="במחשב: הגדרות ← טלפון. העתק את קישור החיבור." data-en="On the computer: Settings → Phone. Copy the connection link.">במחשב: הגדרות ← טלפון. העתק את קישור החיבור.</li>
     <li data-he="הדבק אותו כאן. הוא נשמר, ובפעם הבאה האפליקציה תתחבר מעצמה." data-en="Paste it here. It is saved, and next time the app connects by itself.">הדבק אותו כאן. הוא נשמר, ובפעם הבאה האפליקציה תתחבר מעצמה.</li>
@@ -225,6 +227,100 @@
     }
   }
   renderComputers();
+
+  // ---------- Sign in with Google: find my computers ----------
+  // The computers that share themselves list their addresses and tokens in a small
+  // file in the user's own KesherAI folder in Drive; signing in here reads it.
+  const GKEY = "kesherai-google";
+  const Google = window.Capacitor?.Plugins?.KesherGoogle;
+  const gtr = {
+    signing: { he: "נפתח דפדפן להתחברות עם Google…", en: "Opening the browser to sign in with Google…" },
+    looking: { he: "מחפש את המחשבים שלך…", en: "Looking for your computers…" },
+    found: { he: (n) => (n === 1 ? "נמצא מחשב אחד. בחר אותו מהרשימה." : `נמצאו ${n} מחשבים. בחר מחשב מהרשימה.`), en: (n) => `Found ${n} computer(s). Pick one from the list.` },
+    none: { he: "לא נמצאו מחשבים. במחשב: KesherAI ← חיבורים ← המכשירים שלי, התחבר עם אותו חשבון Google וסמן „לאפשר למכשירים האחרים שלי להשתמש במחשב הזה”.", en: "No computers found. On the computer: KesherAI → Connections → My devices, sign in with the same Google account and turn on “Let my other devices use this computer”." },
+    signedIn: { he: (e) => `מחובר כ-${e} · רענון רשימת המחשבים`, en: (e) => `Signed in as ${e} · refresh my computers` },
+  };
+  let gclient = null;
+  const googleClient = async () => (gclient ??= await fetch("google-client.json").then((r) => (r.ok ? r.json() : null)).catch(() => null));
+  const loadG = () => { try { return JSON.parse(localStorage.getItem(GKEY) || "null"); } catch { return null; } };
+  const emailOf = (idToken) => { try { return JSON.parse(atob(idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || ""; } catch { return ""; } };
+  async function googleToken() {
+    const g = loadG();
+    const c = await googleClient();
+    if (!g?.refreshToken || !c?.clientId) return null;
+    if (g.accessToken && g.expires > Date.now() + 60_000) return g.accessToken;
+    const r = await Google.refresh({ clientId: c.clientId, clientSecret: c.clientSecret, refreshToken: g.refreshToken });
+    localStorage.setItem(GKEY, JSON.stringify({ ...g, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000 }));
+    return r.accessToken;
+  }
+  async function driveJson(token, q) {
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`, { headers: { authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(`Google Drive: ${r.status}`);
+    return (await r.json()).files || [];
+  }
+  /** Reads devices.json from the KesherAI folder and adds those computers to the list. */
+  async function syncGoogleComputers(quiet) {
+    const token = await googleToken();
+    if (!token) return -1;
+    const folders = await driveJson(token, "name='KesherAI' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+    let devices = [];
+    for (const f of folders) {
+      const files = await driveJson(token, `name='devices.json' and '${f.id}' in parents and trashed=false`);
+      for (const file of files) {
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers: { authorization: `Bearer ${token}` } });
+        if (r.ok) devices = devices.concat((await r.json()).devices || []);
+      }
+    }
+    const list = loadComputers();
+    let n = 0;
+    for (const d of devices) {
+      if (!d?.token || !d.urls?.length) continue;
+      n++;
+      let c = list.find((x) => x.token === d.token || (d.id && x.deviceId === d.id));
+      if (!c) { c = { token: d.token, name: d.name, links: [] }; list.push(c); }
+      c.token = d.token;
+      c.deviceId = d.id;
+      c.name = d.name || c.name;
+      c.google = true;
+      if (d.gpu) c.gpu = d.gpu;
+      // Drive has the newest addresses (the "anywhere" link changes when the tunnel restarts).
+      c.links = [...d.urls, ...c.links.filter((l) => !d.urls.includes(l))];
+    }
+    saveComputers(list);
+    renderComputers();
+    if (!quiet) { $("status").className = n ? "" : "error"; $("status").textContent = n ? gtr.found[lang](n) : gtr.none[lang]; }
+    return n;
+  }
+  async function showGoogle() {
+    const c = await googleClient();
+    if (!Google || !c?.clientId) return;
+    const g = loadG();
+    $("google").hidden = false;
+    $("googleNote").hidden = !!g;
+    if (g?.email) $("google").textContent = gtr.signedIn[lang](g.email);
+  }
+  $("google").onclick = async () => {
+    try {
+      if (!loadG()) {
+        const c = await googleClient();
+        $("status").className = "";
+        $("status").textContent = gtr.signing[lang];
+        const r = await Google.signIn({ clientId: c.clientId, clientSecret: c.clientSecret, scope: "openid email https://www.googleapis.com/auth/drive.file" });
+        if (!r.refreshToken) throw new Error("Google did not return a refresh token.");
+        localStorage.setItem(GKEY, JSON.stringify({ refreshToken: r.refreshToken, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, email: emailOf(r.idToken) }));
+        await showGoogle();
+      }
+      $("status").className = "";
+      $("status").textContent = gtr.looking[lang];
+      await syncGoogleComputers(false);
+    } catch (e) {
+      $("status").className = "error";
+      $("status").textContent = String(e?.message || e);
+    }
+  };
+  void showGoogle();
+  // Keep the addresses fresh in the background.
+  void syncGoogleComputers(true).catch(() => undefined);
 
   async function connect(link) {
     let url;

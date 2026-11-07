@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-google",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sign in with Google from the KesherAI Android app (browser + loopback + PKCE), to find the user's computers.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

@@ -69,3 +69,7 @@ To offer them, also do this once in the same Google Cloud project:
 - Deleting a conversation moves its Drive file to the Drive trash (recoverable for 30 days).
 - **Disconnect** revokes KesherAI's access at Google and forgets the token. Files already in Drive stay there.
 - The sign-in token is stored in `~/.kesher/config.json` (readable only by you). Sign-in can only be started from the computer that runs KesherAI, because Google sends the browser back to `127.0.0.1`.
+
+## The phone: "Sign in with Google"
+
+The Android app can find your computers by itself: tap **Sign in with Google**, approve in the browser, and it reads `devices.json` from your KesherAI folder in Drive — the computers signed in to the same account with "Let my other devices use this computer" on, with their addresses and access tokens. The sign-in is the installed-app flow (browser → `127.0.0.1` on the phone → PKCE), with the same Desktop OAuth client as the desktop app (the APK workflow writes `www/google-client.json` from the repository secrets `KESHER_GOOGLE_CLIENT_ID` and `KESHER_GOOGLE_CLIENT_SECRET`). The only Drive scope is `drive.file`. The list refreshes each time the app opens, so a changed "anywhere" address is picked up.

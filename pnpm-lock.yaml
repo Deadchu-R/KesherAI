@@ -59,6 +59,9 @@ importers:
       capacitor-kesher-background:
         specifier: file:./plugins/background
         version: file:apps/android/plugins/background(@capacitor/core@8.6.0)
+      capacitor-kesher-google:
+        specifier: file:./plugins/google
+        version: file:apps/android/plugins/google(@capacitor/core@8.6.0)
       capacitor-kesher-llm:
         specifier: file:./plugins/llm
         version: file:apps/android/plugins/llm(@capacitor/core@8.6.0)
@@ -1608,6 +1611,11 @@ packages:
 
   capacitor-kesher-background@file:apps/android/plugins/background:
     resolution: {directory: apps/android/plugins/background, type: directory}
+    peerDependencies:
+      '@capacitor/core': ^8.0.0
+
+  capacitor-kesher-google@file:apps/android/plugins/google:
+    resolution: {directory: apps/android/plugins/google, type: directory}
     peerDependencies:
       '@capacitor/core': ^8.0.0
 
@@ -5064,6 +5072,10 @@ snapshots:
   caniuse-lite@1.0.30001823: {}
 
   capacitor-kesher-background@file:apps/android/plugins/background(@capacitor/core@8.6.0):
+    dependencies:
+      '@capacitor/core': 8.6.0
+
+  capacitor-kesher-google@file:apps/android/plugins/google(@capacitor/core@8.6.0):
     dependencies:
       '@capacitor/core': 8.6.0
 

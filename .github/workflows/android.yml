@@ -39,6 +39,9 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - name: Generate the Android project
         working-directory: apps/android
+        env:
+          GID: ${{ secrets.KESHER_GOOGLE_CLIENT_ID }}
+          GSECRET: ${{ secrets.KESHER_GOOGLE_CLIENT_SECRET }}
         run: |
           npx cap add android
           # The computer serves KesherAI over plain HTTP on the home network or Tailscale.
@@ -62,6 +65,8 @@ jobs:
           # The app knows which commit it was built from, to list what changed in a newer build.
           node scripts/vendor.mjs
           echo "{\"commit\": \"$(git rev-parse HEAD)\", \"date\": $(git log -1 --format=%ct)}" > www/build.json
+          # "Sign in with Google" finds the user's computers; the same Desktop OAuth client as the desktop app.
+          node -e 'require("fs").writeFileSync("www/google-client.json", JSON.stringify({ clientId: process.env.GID || "", clientSecret: process.env.GSECRET || "" }))'
           npx cap sync android
       - name: Sign every build with the project's fixed key (apps/android/signing/README.md)
         working-directory: apps/android/android

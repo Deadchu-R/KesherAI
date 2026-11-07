@@ -9,3 +9,4 @@ docs/api/
 coverage/
 apps/android/android/
 .kesher-update.json
+apps/android/www/google-client.json
