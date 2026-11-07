@@ -30,6 +30,7 @@ import { mcpRoutes } from "./routes/mcp.js";
 import { journalRoutes } from "./routes/journal.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
+import { Runtimes } from "./runtimes.js";
 import { Journal } from "./journal.js";
 import { McpManager, mcpResultText } from "./mcp.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
@@ -174,8 +175,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const assets = new AssetStore(paths.assets);
   // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.
   const persistEarly = () => saveConfig(paths, config);
-  const github = new GitHubAuth(config.github, persistEarly, options.githubClientId ?? process.env.KESHER_GITHUB_CLIENT_ID);
-  const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"), (cfg) => (cfg.preset === "github" || /api\.githubcopilot\.com/.test(cfg.url ?? "") ? github.token() : undefined));
+  const github = new GitHubAuth(config.github, persistEarly, options.githubClientId ?? process.env.KESHER_GITHUB_CLIENT_ID ?? (branding.github.clientId || undefined));
+  const runtimes = new Runtimes(join(paths.engines, "runtimes"), downloads);
+  const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"), (cfg) => (cfg.preset === "github" || /api\.githubcopilot\.com/.test(cfg.url ?? "") ? github.token() : undefined), (env) => runtimes.env(env));
   void mcp.load();
   // "My day": off until the user turns it on; never leaves this computer.
   const journal = new Journal(join(paths.root, "journal"), (modelId) => {
@@ -236,6 +238,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     coach,
     computer,
     mcp,
+    runtimes,
     github,
     journal,
     whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {

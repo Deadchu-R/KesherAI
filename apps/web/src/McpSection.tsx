@@ -66,6 +66,7 @@ export function McpSection() {
               </div>
               <span className="mono muted small" dir="ltr">{s.transport === "http" ? s.url : [s.command, ...(s.args ?? [])].join(" ")}</span>
               {s.status.error && <p className="error small">{s.status.error}</p>}
+              {s.status.error && /needs (Node\.js|uv)/.test(s.status.error) && <InstallRuntime tool={/needs uv/.test(s.status.error) ? "uv" : "node"} onDone={load} />}
               <div className="row wrap">
                 {s.status.state === "needs-sign-in" && <button type="button" className="primary" onClick={() => void signIn(s.id)}>{t("mcpSignIn")}</button>}
                 <label className="row small"><input type="checkbox" checked={s.enabled} onChange={(e) => void save({ ...s, enabled: e.target.checked })} />{t("mcpOn")}</label>
@@ -334,6 +335,31 @@ function GitHubDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
           <button type="button" onClick={() => { void api("/api/github/cancel", { method: "POST" }); onClose(); }}>{t("cancel")}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Installs Node.js or uv into KesherAI's own folder (no admin rights), then the servers reconnect. */
+function InstallRuntime({ tool, onDone }: { tool: "node" | "uv"; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const name = tool === "node" ? "Node.js" : "uv";
+  useEffect(() => {
+    if (!busy) return;
+    const id = setInterval(() => void api<Record<string, { installed: boolean; busy: boolean; error?: string }>>("/api/runtimes").then((st) => {
+      const r = st[tool];
+      if (r?.error) { setBusy(false); setError(r.error); }
+      else if (r?.installed && !r.busy) { setBusy(false); onDone(); }
+    }), 2000);
+    return () => clearInterval(id);
+  }, [busy]);
+  return (
+    <div className="row small">
+      <button type="button" className="primary" disabled={busy} onClick={() => { setError(""); setBusy(true); void api(`/api/runtimes/${tool}/install`, { method: "POST" }).catch((e: Error) => { setBusy(false); setError(e.message); }); }}>
+        {busy ? t("rtInstalling", { name }) : t("rtInstall", { name })}
+      </button>
+      <span className="muted">{t("rtNote")}</span>
+      {error && <span className="error">{error}</span>}
     </div>
   );
 }

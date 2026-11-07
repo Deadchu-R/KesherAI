@@ -127,8 +127,8 @@ interface Transport {
 export function missingTool(command: string, error: string): string | undefined {
   if (!/not recognized as an internal or external command|ENOENT|command not found|No such file or directory/i.test(error)) return undefined;
   const c = command.replace(/\.(cmd|exe)$/i, "").split(/[\\/]/).pop()!.toLowerCase();
-  if (["npx", "npm", "node"].includes(c)) return "This server needs Node.js, which is not installed on this computer. Install the LTS version from nodejs.org, then press Reconnect.";
-  if (["uvx", "uv"].includes(c)) return "This server needs uv, which is not installed on this computer. Install it from docs.astral.sh/uv, then press Reconnect.";
+  if (["npx", "npm", "node"].includes(c)) return "This server needs Node.js, which is not installed on this computer. Press Install Node.js and KesherAI sets it up in its own folder.";
+  if (["uvx", "uv"].includes(c)) return "This server needs uv, which is not installed on this computer. Press Install uv and KesherAI sets it up in its own folder.";
   if (["python", "python3", "py"].includes(c)) return "This server needs Python, which is not installed on this computer. Install it from python.org, then press Reconnect.";
   if (c === "docker") return "This server needs Docker, which is not installed or not running on this computer.";
   return `The program "${command}" was not found on this computer. Install it, then press Reconnect.`;
@@ -143,10 +143,10 @@ class StdioTransport implements Transport {
   private stderr = "";
   private closed = false;
 
-  constructor(cfg: McpServerConfig, onExit: (why: string) => void) {
+  constructor(cfg: McpServerConfig, onExit: (why: string) => void, baseEnv: NodeJS.ProcessEnv = process.env) {
     const win = process.platform === "win32";
     this.proc = spawn(cfg.command!, cfg.args ?? [], {
-      env: { ...process.env, ...cfg.env },
+      env: { ...baseEnv, ...cfg.env },
       stdio: ["pipe", "pipe", "pipe"],
       // npx, uvx and friends are .cmd files on Windows.
       shell: win,
@@ -368,6 +368,8 @@ export class McpManager {
     private readonly authFile: string,
     /** A sign-in KesherAI already has for a well-known server (e.g. "Connect with GitHub"). */
     private readonly presetToken: (cfg: McpServerConfig) => string | undefined = () => undefined,
+    /** The environment for server programs (adds KesherAI's own Node.js and uv to PATH). */
+    private readonly spawnEnv: (env: NodeJS.ProcessEnv) => Promise<NodeJS.ProcessEnv> = async (env) => env,
   ) {}
 
   /** Loads the saved list and connects the enabled servers in the background. */
@@ -483,11 +485,12 @@ export class McpManager {
       if (!cfg) throw new Error("No such server.");
       this.live.get(id)?.t.close();
       this.setStatus(id, { state: "connecting", tools: [] });
+      const baseEnv = cfg.transport === "stdio" ? await this.spawnEnv(process.env) : process.env;
       const t: Transport =
         cfg.transport === "stdio"
           ? new StdioTransport(cfg, (why) => {
               if (this.live.get(id)?.t === t) this.setStatus(id, { state: "error", error: why, tools: [] });
-            })
+            }, baseEnv)
           : new HttpTransport(cfg, async () => (await this.tokenFor(id)) ?? (cfg.headers?.Authorization || cfg.headers?.authorization ? undefined : this.presetToken(cfg)), () => this.refreshToken(id));
       this.setStatus(id, { state: "connecting", tools: [] }, t);
       try {
@@ -717,6 +720,11 @@ export class McpManager {
       added.push(id);
     }
     return added;
+  }
+
+  /** Reconnects every enabled server that is in error (e.g. after installing Node.js). */
+  async retryFailed(): Promise<void> {
+    await Promise.all(this.servers.filter((s) => s.enabled && this.live.get(s.id)?.status.state === "error").map((s) => this.connect(s.id).catch(() => undefined)));
   }
 
   /** Stops every server program. */

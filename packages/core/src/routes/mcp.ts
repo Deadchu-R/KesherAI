@@ -75,6 +75,17 @@ export async function mcpRoutes(app: FastifyInstance, s: KesherServices): Promis
     return { ok: true };
   });
 
+  /** Node.js and uv for program servers: installed by KesherAI into its own folder. */
+  app.get("/api/runtimes", async () => s.runtimes.status());
+  app.post<{ Params: { tool: string } }>("/api/runtimes/:tool/install", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: localOnly });
+    const tool = req.params.tool;
+    if (tool !== "node" && tool !== "uv") return reply.code(400).send({ error: "node or uv" });
+    // Runs in the background (see the downloads circle); servers that failed reconnect when it is done.
+    void s.runtimes.install(tool).then(() => s.mcp.retryFailed(), () => undefined);
+    return reply.code(202).send({ ok: true });
+  });
+
   /** Where the service sends the browser back after consent. */
   app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>("/api/mcp/callback", async (req, reply) => {
     reply.type("text/html; charset=utf-8");

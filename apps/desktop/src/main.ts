@@ -30,7 +30,8 @@ async function googleClient(): Promise<{ googleClient?: { clientId: string; clie
     // not a release build
   }
   const google = process.env.KESHER_GOOGLE_CLIENT_ID ? { clientId: process.env.KESHER_GOOGLE_CLIENT_ID, clientSecret: process.env.KESHER_GOOGLE_CLIENT_SECRET ?? "" } : j.clientId ? { clientId: j.clientId, clientSecret: j.clientSecret ?? "" } : undefined;
-  const github = process.env.KESHER_GITHUB_CLIENT_ID || j.githubClientId;
+  // The project's id is built in (branding); a developer's env var still wins.
+  const github = process.env.KESHER_GITHUB_CLIENT_ID || branding.github.clientId || j.githubClientId;
   return { ...(google ? { googleClient: google } : {}), ...(github ? { githubClientId: github } : {}) };
 }
 

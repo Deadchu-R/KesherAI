@@ -27,6 +27,8 @@ export interface Branding {
    * Google documents that it ships inside the app.
    */
   google: { clientId: string; clientSecret: string };
+  /** GitHub OAuth App client id for "Connect with GitHub" (device flow; public, no secret). */
+  github: { clientId: string };
 }
 
 /** The branding of upstream KesherAI. Forks replace these values. */
@@ -38,4 +40,5 @@ export const branding: Branding = {
   docsUrl: "https://deadchu-r.github.io/KesherAI",
   defaultPort: 7420,
   google: { clientId: "", clientSecret: "" },
+  github: { clientId: "Ov23linxLSbmmhp313Rd" },
 };
