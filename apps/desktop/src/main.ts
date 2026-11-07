@@ -69,17 +69,9 @@ async function startCore(): Promise<string> {
             version: app.getVersion(),
             repo: "Deadchu-R/KesherAI",
             install: async (file: string) => {
-              if (process.platform === "darwin") {
-                // A disk image: open it so the new app can be dragged to Applications.
-                await shell.openPath(file);
-                return;
-              }
-              if (process.platform === "linux") await chmod(file, 0o755);
-              spawn(file, [], { detached: true, stdio: "ignore" }).unref();
-              setTimeout(() => {
-                quitting = true;
-                app.quit();
-              }, 1500);
+              // Found by the automatic check: install when the user restarts or quits, not in the middle of their work.
+              if (autoUpdating) return updateDownloaded(file);
+              await runInstaller(file);
             },
           },
         }
@@ -88,6 +80,7 @@ async function startCore(): Promise<string> {
   try {
     const url = await s.listen();
     server = s;
+    autoUpdate();
     return url;
   } catch (err) {
     await s.close().catch(() => undefined);
@@ -95,6 +88,63 @@ async function startCore(): Promise<string> {
     if (other) return other;
     throw err;
   }
+}
+
+// ---------- automatic updates for installed copies ----------
+let autoUpdating = false;
+let readyInstaller: { file: string; version?: string } | undefined;
+let refreshTrayMenu: () => void = () => undefined;
+
+/** Runs a downloaded installer: silently on Windows (then the app starts again), opened on a Mac. */
+async function runInstaller(file: string): Promise<void> {
+  if (process.platform === "darwin") {
+    // A disk image: open it so the new app can be dragged to Applications.
+    await shell.openPath(file);
+    return;
+  }
+  if (process.platform === "linux") await chmod(file, 0o755);
+  // NSIS: /S installs without questions, --force-run opens the new version when done.
+  spawn(file, process.platform === "win32" ? ["/S", "--force-run"] : [], { detached: true, stdio: "ignore" }).unref();
+  setTimeout(() => {
+    quitting = true;
+    app.quit();
+  }, 1500);
+}
+
+function updateDownloaded(file: string): void {
+  readyInstaller = { file, ...(latestSeen ? { version: latestSeen } : {}) };
+  refreshTrayMenu();
+  if (Notification.isSupported()) {
+    const n = new Notification({ title: `${branding.productName} ${latestSeen ? `v${latestSeen} ` : ""}is ready`, body: "Click to restart and update now, or it updates the next time you quit." });
+    n.on("click", () => void runInstaller(file));
+    n.show();
+  }
+}
+
+let latestSeen: string | undefined;
+
+/** Checks GitHub for a new version now and then, and downloads it in the background. */
+function autoUpdate(): void {
+  if (!app.isPackaged || process.env.KESHER_NO_AUTO_UPDATE) return;
+  const run = async () => {
+    const updater = server?.services.updater;
+    if (!updater || readyInstaller || updater.status().running) return;
+    try {
+      const c = await updater.check();
+      if (!c.newCommits.length) return;
+      latestSeen = c.latestVersion;
+      autoUpdating = true;
+      await updater.apply();
+      // The download runs in the background; wait for it, then the install hook keeps it for later.
+      while (updater.status().running) await new Promise((r) => setTimeout(r, 2000));
+    } catch {
+      // offline or GitHub busy: try again later
+    } finally {
+      autoUpdating = false;
+    }
+  };
+  setTimeout(() => void run(), 60_000);
+  setInterval(() => void run(), 4 * 60 * 60_000);
 }
 
 // One window: opening KesherAI again focuses the existing window.
@@ -182,11 +232,13 @@ function setupTray(coreUrl: string): void {
     Menu.buildFromTemplate([
       { label: `Open ${branding.productName}`, click: showWindow },
       ...(status ? [{ label: status, enabled: false }] : []),
+      ...(readyInstaller ? [{ label: `Restart and update${readyInstaller.version ? ` to v${readyInstaller.version}` : ""}`, click: () => void runInstaller(readyInstaller!.file) }] : []),
       { type: "separator" },
       { label: "Quit (stops chats and downloads)", click: () => { quitting = true; app.quit(); } },
     ]);
   tray.setContextMenu(menu());
   tray.on("click", showWindow);
+  refreshTrayMenu = () => tray?.setContextMenu(menu());
 
   let running: Record<string, string> = {};
   let downloading = new Set<string>();
@@ -310,6 +362,12 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", (event) => {
   quitting = true;
+  // A downloaded update installs as the app closes (silently on Windows).
+  if (readyInstaller && process.platform !== "darwin") {
+    const { file } = readyInstaller;
+    readyInstaller = undefined;
+    spawn(file, process.platform === "win32" ? ["/S"] : [], { detached: true, stdio: "ignore" }).unref();
+  }
   if (!server) return;
   event.preventDefault();
   const s = server;
