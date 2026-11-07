@@ -59,6 +59,9 @@ importers:
       capacitor-kesher-background:
         specifier: file:./plugins/background
         version: file:apps/android/plugins/background(@capacitor/core@8.6.0)
+      capacitor-kesher-speech:
+        specifier: file:./plugins/speech
+        version: file:apps/android/plugins/speech(@capacitor/core@8.6.0)
       capacitor-kesher-updater:
         specifier: file:./plugins/updater
         version: file:apps/android/plugins/updater(@capacitor/core@8.6.0)
@@ -1580,6 +1583,11 @@ packages:
 
   capacitor-kesher-background@file:apps/android/plugins/background:
     resolution: {directory: apps/android/plugins/background, type: directory}
+    peerDependencies:
+      '@capacitor/core': ^8.0.0
+
+  capacitor-kesher-speech@file:apps/android/plugins/speech:
+    resolution: {directory: apps/android/plugins/speech, type: directory}
     peerDependencies:
       '@capacitor/core': ^8.0.0
 
@@ -4919,6 +4927,10 @@ snapshots:
   caniuse-lite@1.0.30001823: {}
 
   capacitor-kesher-background@file:apps/android/plugins/background(@capacitor/core@8.6.0):
+    dependencies:
+      '@capacitor/core': 8.6.0
+
+  capacitor-kesher-speech@file:apps/android/plugins/speech(@capacitor/core@8.6.0):
     dependencies:
       '@capacitor/core': 8.6.0
 

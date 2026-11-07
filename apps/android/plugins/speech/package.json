@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-speech",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The phone's own speech recognition (speech to text) and voice (text to speech) for the KesherAI Android app.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

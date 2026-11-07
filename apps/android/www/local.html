@@ -72,6 +72,27 @@
     .sheet-list button { min-height: 50px; text-align: start; display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 0; border-radius: 12px; background: transparent; font-size: 15px; }
     .sheet-list button.on { background: var(--raised); }
     .sheet-list button small { color: var(--muted); font-size: 12px; }
+    .attach-row { display: flex; gap: 6px; overflow-x: auto; margin: 0 2px 8px; }
+    .attach-row .chip { position: relative; flex: none; height: 56px; min-width: 56px; border-radius: 12px; background: var(--raised); display: grid; place-items: center; font-size: 12px; padding: 0 8px; overflow: hidden; }
+    .attach-row .chip img { width: 56px; height: 56px; object-fit: cover; }
+    .attach-row .chip button { position: absolute; top: 2px; right: 2px; min-height: 20px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / .6); font-size: 11px; }
+    .plus-menu { display: flex; flex-direction: column; gap: 2px; margin: 0 2px 8px; padding: 6px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--border); }
+    .plus-menu button { min-height: 46px; text-align: start; border: 0; background: transparent; border-radius: 10px; font-size: 15px; }
+    .msg .say { min-height: 30px; padding: 0 10px; margin-top: 6px; font-size: 13px; border-radius: 999px; background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .msg img.att { display: block; max-width: 200px; border-radius: 12px; margin-top: 6px; }
+    .live { position: fixed; inset: 0; z-index: 70; background: radial-gradient(120% 80% at 50% 100%, #1d2140 0%, var(--bg) 60%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; }
+    .live video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; }
+    .live-orb { position: relative; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #c7ceff, var(--accent) 45%, #5b62c9 100%); box-shadow: 0 0 calc(30px + var(--lvl, 0) * 70px) rgb(152 163 255 / .55); transform: scale(calc(1 + var(--lvl, 0) * .18)); transition: transform .1s, box-shadow .1s; }
+    .live.thinking .live-orb { animation: orb-think 1.4s ease-in-out infinite; }
+    .live.speaking .live-orb { animation: orb-speak .9s ease-in-out infinite; }
+    @keyframes orb-think { 50% { transform: scale(.9); opacity: .75; } }
+    @keyframes orb-speak { 50% { transform: scale(1.1); } }
+    .live-state { position: relative; margin: 0; color: var(--muted); font-size: 14px; }
+    .live-said { position: relative; margin: 0; max-width: 90%; text-align: center; font-size: 18px; line-height: 1.5; min-height: 3em; }
+    .live-bar { position: absolute; bottom: max(28px, env(safe-area-inset-bottom)); display: flex; gap: 18px; }
+    .live-bar button { width: 64px; height: 64px; min-height: 64px; border-radius: 50%; font-size: 22px; background: rgb(255 255 255 / .1); border: 1px solid rgb(255 255 255 / .14); }
+    .live-bar .end { background: #d9534f; border-color: #d9534f; }
+    .live-bar button.on { background: var(--accent); color: var(--accent-ink); }
     .tune-bar { height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; margin: 0 4px 6px; }
     .tune-bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
     .status { font-size: 12.5px; color: var(--muted); margin: 0 4px 6px; min-height: 1em; }
@@ -109,6 +130,17 @@
   <main id="chatView" hidden>
     <div class="msgs" id="msgs"></div>
   </main>
+  <div class="live" id="live" hidden>
+    <video id="liveCam" playsinline muted hidden></video>
+    <div class="live-orb" id="liveOrb"></div>
+    <p class="live-state" id="liveState"></p>
+    <p class="live-said" id="liveSaid" dir="auto"></p>
+    <div class="live-bar">
+      <button type="button" id="liveCamBtn" aria-label="Camera">📷</button>
+      <button type="button" id="liveMute" aria-label="Pause">⏸</button>
+      <button type="button" id="liveEnd" class="end" aria-label="End">✕</button>
+    </div>
+  </div>
   <div class="sheet-scrim" id="sheetScrim" hidden></div>
   <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true">
     <div class="sheet-grip" aria-hidden="true"></div>
@@ -119,9 +151,21 @@
     <div class="tune-bar" id="tuneBar" hidden><span></span></div>
     <p class="status" id="status"></p>
     <div class="queue" id="queue" hidden></div>
+    <div class="attach-row" id="attachRow" hidden></div>
+    <div class="plus-menu" id="plusMenu" hidden>
+      <button type="button" id="addPhoto">📷 <span data-he="צלם תמונה" data-en="Take a photo">צלם תמונה</span></button>
+      <button type="button" id="addVideo">🎥 <span data-he="צלם וידאו קצר" data-en="Record a short video">צלם וידאו קצר</span></button>
+      <button type="button" id="addFile">📎 <span data-he="קובץ או תמונה מהטלפון" data-en="A file or picture from the phone">קובץ או תמונה מהטלפון</span></button>
+      <button type="button" id="goLive">◉ <span data-he="שיחה חיה (קול ומצלמה)" data-en="Live conversation (voice and camera)">שיחה חיה (קול ומצלמה)</span></button>
+    </div>
+    <input type="file" id="filePick" multiple accept="image/*,video/*,text/*,.md,.json,.csv,.txt,.js,.ts,.py,.html,.css" hidden />
+    <input type="file" id="photoPick" accept="image/*" capture="environment" hidden />
+    <input type="file" id="videoPick" accept="video/*" capture="environment" hidden />
     <form class="composer" id="composer">
+      <button type="button" id="plus" class="web" aria-label="Add">＋</button>
       <button type="button" id="web" class="web" aria-pressed="false" title="Search the web">🌐</button>
       <textarea id="input" rows="1" data-ph-he="כתוב הודעה…" data-ph-en="Write a message…" placeholder="כתוב הודעה…"></textarea>
+      <button type="button" id="mic" class="web" aria-label="Talk">🎤</button>
       <button class="primary" id="send" type="submit" aria-label="Send">↑</button>
     </form>
   </footer>
@@ -153,6 +197,11 @@
     { repo: "unsloth/Qwen3-4B-GGUF", name: "Qwen 3 · 4B", ram: 7, big: true, he: "חושב לפני שעונה, חזק בהיגיון ובקוד. דחוס יותר כדי להיכנס.", en: "Thinks before answering, strong at reasoning and code. Compressed more to fit." },
   ];
   const deviceGb = navigator.deviceMemory || 4; // Android reports up to 8
+  const cores = navigator.hardwareConcurrency || 4;
+  // With the app's pages cross-origin isolated (native plugin), llama.cpp can use several cores; otherwise one.
+  const multi = !!window.crossOriginIsolated;
+  const threads = multi ? Math.max(2, Math.min(cores - 2, 6)) : 1;
+  const cpuGain = multi ? Math.min(4, threads * 0.7) : 1;
   /** The graphics chip, and whether it is strong enough for 3–4B models (recent Adreno, Immortalis, Xclipse). */
   let gpu = { name: "", strong: false };
   try {
@@ -163,7 +212,7 @@
   } catch {
     // no WebGPU here
   }
-  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון ו-${navigator.hardwareConcurrency || "?"} ליבות${gpu.name ? `, כרטיס גרפי: ${gpu.name}${gpu.strong ? " (חזק: גם מודלים של 3–4B יכולים לרוץ מהר אחרי כיוונון)" : ""}` : ""}. ליד כל מודל כתוב כמה טוב הוא ירוץ כאן; אחרי שיחה זה מתעדכן לפי המהירות שנמדדה.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory and ${navigator.hardwareConcurrency || "?"} cores${gpu.name ? `, graphics: ${gpu.name}${gpu.strong ? " (strong: 3–4B models can run fast once tuned)" : ""}` : ""}. Each model says how well it will run here; after you chat, it updates with the measured speed.`);
+  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון ו-${navigator.hardwareConcurrency || "?"} ליבות (המנוע משתמש ב-${threads}${multi ? "" : " בלבד; עדכן את האפליקציה כדי לנצל את כולן"})${gpu.name ? `, כרטיס גרפי: ${gpu.name}${gpu.strong ? " (חזק: גם מודלים של 3–4B יכולים לרוץ מהר אחרי כיוונון)" : ""}` : ""}. ליד כל מודל כתוב כמה טוב הוא ירוץ כאן; אחרי שיחה זה מתעדכן לפי המהירות שנמדדה.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory and ${navigator.hardwareConcurrency || "?"} cores (the engine uses ${threads}${multi ? "" : " only; update the app to use them all"})${gpu.name ? `, graphics: ${gpu.name}${gpu.strong ? " (strong: 3–4B models can run fast once tuned)" : ""}` : ""}. Each model says how well it will run here; after you chat, it updates with the measured speed.`);
 
   // ---------- keep working in the background (Android foreground service with a notification) ----------
   const BG = window.Capacitor?.Plugins?.KesherBackground;
@@ -210,7 +259,6 @@
   }
 
   // ---------- how well each model runs on this phone ----------
-  const cores = navigator.hardwareConcurrency || 4;
   const SPEED = (url) => "kesherai-phone-speed:" + url;
   const runMode = () => (navigator.gpu ? localStorage.getItem("kesherai-phone-mode") || "auto" : "cpu");
   const TUNE = (url) => "kesherai-phone-tune:" + url;
@@ -230,7 +278,7 @@
     // The app runs llama.cpp in WebAssembly on one processor core (Android web views cannot share memory between threads).
     const t = tuned(url);
     const gpuGain = !useGpu() || !navigator.gpu ? 1 : gpu.strong ? 4 : 2;
-    const est = t?.tps ?? (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * gpuGain;
+    const est = t?.tps ?? (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * Math.max(gpuGain, cpuGain);
     const real = measured(url);
     const tps = real ?? est;
     const tooBig = sizeGb * 1.6 > deviceGb * (deviceGb >= 8 ? 0.55 : 0.5);
@@ -246,6 +294,11 @@
     return { level, text: text + speed + how, tps, tooBig };
   }
 
+  // Tunes from before multi-core were measured on one core: tune again once.
+  if (multi && localStorage.getItem("kesherai-phone-mt") !== "1") {
+    for (const k of Object.keys(localStorage)) if (k.startsWith("kesherai-phone-tune:") || k.startsWith("kesherai-phone-speed:")) localStorage.removeItem(k);
+    localStorage.setItem("kesherai-phone-mt", "1");
+  }
   // Chats from the first version were often garbled (graphics chip), so start them fresh once.
   if (localStorage.getItem("kesherai-phone-v") !== "2") {
     for (const k of Object.keys(localStorage)) if (k.startsWith("kesherai-phone-chat:")) localStorage.removeItem(k);
@@ -523,7 +576,9 @@
     const first = messages.find((m) => m.role === "user")?.content ?? "";
     list.unshift({ id: chatId, title: first.replace(/\s+/g, " ").slice(0, 48), url: current.url, name: current.item.name, updatedAt: Date.now() });
     saveChats(list);
-    try { localStorage.setItem(MSGS(chatId), JSON.stringify(messages.slice(-80))); } catch { /* full */ }
+    // Pictures stay in the open chat only (phone storage is small); the text and file names are kept.
+    const slim = messages.slice(-80).map(({ images, ...m }) => (images?.length ? { ...m, content: `${m.content}\n[${images.length} 🖼]` } : m));
+    try { localStorage.setItem(MSGS(chatId), JSON.stringify(slim)); } catch { /* full */ }
   }
   // Move the old per-model histories into the chat list, once.
   if (!localStorage.getItem("kesherai-phone-chats-v")) {
@@ -592,7 +647,6 @@
       try {
         if (wllama.isModelLoaded()) await wllama.exit();
         const model = (await mm.getModels()).find((m) => m.url === url);
-        const threads = Math.max(1, Math.min(4, cores));
         const load = (layers, extra = {}) => wllama.loadModel(model, { n_ctx: 2048, n_threads: threads, n_gpu_layers: layers, warmup: false, ...extra });
         const mode = runMode();
         if (mode === "cpu") await load(0);
@@ -644,7 +698,7 @@
     const bar = $("tuneBar");
     bar.hidden = false;
     const started = performance.now();
-    const cpuGuess = (6.5 / Math.max(0.25, sizeBytes / 1024 ** 3)) * (cores >= 8 ? 1 : 0.7);
+    const cpuGuess = (6.5 / Math.max(0.25, sizeBytes / 1024 ** 3)) * (cores >= 8 ? 1 : 0.7) * cpuGain;
     const safe = { flash_attn: false, cache_type_k: "f32", cache_type_v: "f32" };
     let total = 0;
     const tries = [
@@ -725,6 +779,176 @@
     });
   }
 
+  // ---------- attachments: photos, short videos (as frames), files ----------
+  const SPEECH = window.Capacitor?.Plugins?.KesherSpeech;
+  let attachments = []; // { kind: "image", url } | { kind: "text", name, text }
+  const paintAttachments = () => {
+    const row = $("attachRow");
+    row.hidden = attachments.length === 0;
+    row.replaceChildren(...attachments.map((a, i) => {
+      const c = document.createElement("div");
+      c.className = "chip";
+      if (a.kind === "image") c.append(Object.assign(document.createElement("img"), { src: a.url, alt: "" }));
+      else c.append(document.createTextNode(`📄 ${a.name.slice(0, 14)}`));
+      const x = Object.assign(document.createElement("button"), { type: "button", textContent: "✕" });
+      x.onclick = () => { attachments.splice(i, 1); paintAttachments(); };
+      c.append(x);
+      return c;
+    }));
+  };
+  /** Shrinks a picture to at most 1280 px (smaller requests, faster answers). */
+  const shrink = (src) => new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const c = Object.assign(document.createElement("canvas"), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      res(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => res(src);
+    img.src = src;
+  });
+  const readAs = (file, how) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r[how](file); });
+  /** A short video becomes 4 frames, so models that see pictures can follow it. */
+  async function videoFrames(file) {
+    const url = URL.createObjectURL(file);
+    const v = Object.assign(document.createElement("video"), { src: url, muted: true, playsInline: true });
+    await new Promise((r) => (v.onloadedmetadata = r));
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      v.currentTime = (v.duration || 1) * (i + 0.5) / 4;
+      await new Promise((r) => (v.onseeked = r));
+      const k = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
+      const c = Object.assign(document.createElement("canvas"), { width: Math.round(v.videoWidth * k), height: Math.round(v.videoHeight * k) });
+      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      out.push(c.toDataURL("image/jpeg", 0.78));
+    }
+    URL.revokeObjectURL(url);
+    return out;
+  }
+  async function addFiles(files) {
+    for (const f of files) {
+      if (f.type.startsWith("image/")) attachments.push({ kind: "image", url: await shrink(await readAs(f, "readAsDataURL")) });
+      else if (f.type.startsWith("video/")) for (const u of await videoFrames(f)) attachments.push({ kind: "image", url: u });
+      else if (f.size < 400_000) attachments.push({ kind: "text", name: f.name, text: await readAs(f, "readAsText") });
+      else addMsg("note", T(`${f.name} גדול מדי (עד 400KB לקבצי טקסט).`, `${f.name} is too big (text files up to 400 KB).`));
+    }
+    paintAttachments();
+  }
+  const plusMenu = $("plusMenu");
+  $("plus").onclick = () => { plusMenu.hidden = !plusMenu.hidden; };
+  const pick = (id) => () => { plusMenu.hidden = true; $(id).value = ""; $(id).click(); };
+  $("addPhoto").onclick = pick("photoPick");
+  $("addVideo").onclick = pick("videoPick");
+  $("addFile").onclick = pick("filePick");
+  for (const id of ["photoPick", "videoPick", "filePick"]) $(id).onchange = (e) => addFiles([...e.target.files]);
+
+  /** Message content for the model: text plus attached files and pictures (pictures only for models that see). */
+  function contentFor(m, canSee) {
+    if (!m.images?.length && !m.files?.length) return m.content;
+    const text = [m.content, ...(m.files ?? []).map((f) => `\n\n--- ${f.name} ---\n${f.text}`)].join("");
+    if (!m.images?.length) return text;
+    if (!canSee) return text + T("\n(צורפו תמונות, אבל המודל הזה לא רואה תמונות.)", "\n(Pictures were attached, but this model cannot see pictures.)");
+    return [{ type: "text", text: text || T("מה רואים כאן?", "What is in this?") }, ...m.images.map((url) => ({ type: "image_url", image_url: { url } }))];
+  }
+
+  // ---------- speech: microphone (phone's recognizer) and reading answers aloud ----------
+  const speakLang = () => (he ? "he-IL" : "en-US");
+  async function listenOnce(onPartial) {
+    if (!SPEECH) throw new Error(T("דיבור זמין באפליקציה בלבד", "Speech works in the app only"));
+    const sub = onPartial ? await SPEECH.addListener("partial", (e) => onPartial(e.text)) : null;
+    try { return (await SPEECH.start({ language: speakLang() })).text || ""; } finally { sub?.remove?.(); }
+  }
+  function speak(text) {
+    if (!SPEECH || !text) return Promise.resolve();
+    const clean = text.replace(/```[\s\S]*?```/g, T(" (קוד) ", " (code) ")).replace(/[#*_`>|]/g, "").replace(/https?:\/\/\S+/g, "").slice(0, 4000);
+    return new Promise(async (res) => {
+      const sub = await SPEECH.addListener("spoken", () => { sub.remove?.(); res(); });
+      await SPEECH.speak({ text: clean, language: speakLang() }).catch(() => { sub.remove?.(); res(); });
+    });
+  }
+  $("mic").onclick = async () => {
+    if ($("mic").classList.contains("on")) { SPEECH?.stop(); return; }
+    $("mic").classList.add("on");
+    const before = $("input").value;
+    try {
+      const text = await listenOnce((p) => { $("input").value = (before ? before + " " : "") + p; autosize(); });
+      $("input").value = (before ? before + " " : "") + text;
+      autosize();
+      paintSend();
+    } catch (e) { addMsg("note", String(e.message || e)); }
+    $("mic").classList.remove("on");
+  };
+
+  // ---------- live conversation: talk, it answers aloud, show it things with the camera ----------
+  let live = null;
+  async function liveLoop() {
+    const set = (cls, msg) => { $("live").className = `live ${cls}`; $("liveState").textContent = msg; };
+    const lvl = SPEECH ? await SPEECH.addListener("level", (e) => $("liveOrb").style.setProperty("--lvl", String(e.level))) : null;
+    while (live && !live.ended) {
+      if (live.paused) { set("", T("מושהה. לחץ ▶ כדי להמשיך.", "Paused. Tap ▶ to go on.")); await new Promise((r) => (live.resume = r)); continue; }
+      set("listening", T("מקשיב…", "Listening…"));
+      let said = "";
+      try { said = await listenOnce((p) => ($("liveSaid").textContent = p)); } catch (e) { set("", String(e.message || e)); break; }
+      if (!live || live.ended) break;
+      if (!said.trim()) continue;
+      $("liveSaid").textContent = said;
+      // With the camera on, what it sees goes with the words.
+      if (live.cam) {
+        const v = $("liveCam");
+        const k = Math.min(1, 960 / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+        const c = Object.assign(document.createElement("canvas"), { width: Math.round(v.videoWidth * k), height: Math.round(v.videoHeight * k) });
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        attachments = [{ kind: "image", url: c.toDataURL("image/jpeg", 0.8) }];
+      }
+      set("thinking", T("חושב…", "Thinking…"));
+      $("input").value = said;
+      live.answer = new Promise((r) => (live.onAnswer = r));
+      $("composer").requestSubmit();
+      const reply = await live.answer;
+      if (!live || live.ended) break;
+      set("speaking", T("עונה…", "Answering…"));
+      $("liveSaid").textContent = reply.slice(0, 400);
+      await speak(reply);
+    }
+    lvl?.remove?.();
+  }
+  $("goLive").onclick = () => {
+    plusMenu.hidden = true;
+    if (!SPEECH) { addMsg("note", T("שיחה חיה זמינה באפליקציה.", "Live conversation works in the app.")); return; }
+    live = { ended: false, paused: false, cam: null };
+    $("live").hidden = false;
+    $("liveSaid").textContent = T("דבר אליי. אפשר להדליק מצלמה ולהראות לי דברים.", "Talk to me. You can turn on the camera and show me things.");
+    void liveLoop();
+  };
+  $("liveEnd").onclick = () => {
+    if (!live) return;
+    live.ended = true;
+    live.resume?.();
+    SPEECH?.stop(); SPEECH?.stopSpeaking();
+    live.cam?.getTracks().forEach((t) => t.stop());
+    $("liveCam").hidden = true;
+    $("live").hidden = true;
+    live = null;
+  };
+  $("liveMute").onclick = () => {
+    if (!live) return;
+    live.paused = !live.paused;
+    $("liveMute").textContent = live.paused ? "▶" : "⏸";
+    if (live.paused) { SPEECH?.stop(); SPEECH?.stopSpeaking(); } else live.resume?.();
+  };
+  $("liveCamBtn").onclick = async () => {
+    if (!live) return;
+    if (live.cam) { live.cam.getTracks().forEach((t) => t.stop()); live.cam = null; $("liveCam").hidden = true; $("liveCamBtn").classList.remove("on"); return; }
+    try {
+      live.cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      $("liveCam").srcObject = live.cam;
+      $("liveCam").hidden = false;
+      await $("liveCam").play();
+      $("liveCamBtn").classList.add("on");
+    } catch { addMsg("note", T("אין גישה למצלמה.", "No camera access.")); }
+  };
+
   // ---------- message queue: send more while it answers; each goes when it is free ----------
   const queue = [];
   let stoppedByUser = false;
@@ -761,13 +985,18 @@
       paintQueue();
       return;
     }
-    const text = typed || queue.shift() || "";
+    const text = typed || queue.shift() || (attachments.length ? T("מה רואים כאן?", "What is in this?") : "");
     if (typed === "" && text) paintQueue();
     if (!text || (!current?.item.api && !wllama.isModelLoaded())) return;
     $("input").value = "";
     autosize();
-    messages.push({ role: "user", content: text });
-    addMsg("user", text);
+    const images = attachments.filter((a) => a.kind === "image").map((a) => a.url);
+    const files = attachments.filter((a) => a.kind === "text").map(({ name, text: body }) => ({ name, text: body }));
+    attachments = [];
+    paintAttachments();
+    messages.push({ role: "user", content: text, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}) });
+    const bubble = addMsg("user", text + (files.length ? `\n📄 ${files.map((f) => f.name).join(", ")}` : ""));
+    for (const u of images) bubble.append(Object.assign(document.createElement("img"), { src: u, className: "att", alt: "" }));
     const out = addMsg("assistant", "");
     abort = new AbortController();
     paintSend();
@@ -778,7 +1007,8 @@
     let tokens = 0;
     try {
       // Keep the last turns that fit the phone's small context.
-      const recent = messages.slice(-12);
+      // Pictures only for models over the internet (phone models read text only).
+      const recent = messages.slice(-12).map((m, i, arr) => ({ role: m.role, content: contentFor(m, !!current.item.api && i >= arr.length - 3) }));
       let found = "";
       if (webOn()) {
         $("status").textContent = T("מחפש באינטרנט…", "Searching the web…");
@@ -823,6 +1053,12 @@
     const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
+    if (live?.onAnswer) { live.onAnswer(clean); live.onAnswer = null; }
+    if (SPEECH && clean) {
+      const say = Object.assign(document.createElement("button"), { type: "button", className: "say", textContent: T("🔊 הקרא", "🔊 Read aloud") });
+      say.onclick = () => speak(clean);
+      out.append(say);
+    }
     doneNotice(T("התשובה מוכנה", "The answer is ready"), clean.slice(0, 120));
     // Next in the queue, if any (not after Stop).
     if (queue.length && !stoppedByUser) setTimeout(() => $("composer").requestSubmit(), 50);

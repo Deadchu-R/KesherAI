@@ -25,7 +25,6 @@
   const css = document.createElement("style");
   css.textContent = `
     .kd-btn { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); right: 16px; z-index: 50; width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 18px; border: 1px solid var(--border); background: rgb(31 31 34 / 0.86); backdrop-filter: blur(14px); color: var(--text); font-size: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); touch-action: none; }
-    body.kd-has-header .kd-btn { display: none; }
     .kd-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
     .kd-panel { position: fixed; top: 0; bottom: 0; right: 0; left: auto; z-index: 61; width: min(330px, 86vw); display: flex; flex-direction: column; gap: 2px; padding: max(18px, env(safe-area-inset-top)) 10px max(18px, env(safe-area-inset-bottom)); background: rgb(24 24 26 / 0.94); backdrop-filter: blur(22px) saturate(150%); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.9,.25,1); overflow-y: auto; touch-action: pan-y; }
     .kd-open .kd-scrim { opacity: 1; pointer-events: auto; }
@@ -181,20 +180,20 @@
     button.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
   };
 
-  // Screens with their own header have a ☰ (id "menu"): put it on the right edge of the header.
+  // One ☰ on every screen, at the bottom right (thumb reach); it sits above a chat's message box.
   const own = document.getElementById("menu");
-  if (own) {
-    own.hidden = false;
-    const header = own.parentElement;
-    if (he) header.prepend(own);
-    else header.append(own);
-    pressAndSlide(own);
-  } else {
-    const b = Object.assign(document.createElement("button"), { className: "kd-btn", type: "button", textContent: "☰" });
-    b.setAttribute("aria-label", T("תפריט", "Menu"));
-    document.body.append(b);
-    pressAndSlide(b);
-  }
+  if (own) own.hidden = true;
+  const b = Object.assign(document.createElement("button"), { className: "kd-btn", type: "button", textContent: "☰" });
+  b.setAttribute("aria-label", T("תפריט", "Menu"));
+  document.body.append(b);
+  pressAndSlide(b);
+  const place = () => {
+    const foot = document.getElementById("chatFoot");
+    const h = foot && !foot.hidden ? foot.getBoundingClientRect().height : 0;
+    b.style.bottom = h ? `${h + 12}px` : "";
+  };
+  place();
+  setInterval(place, 400);
 
   // Swipe in from the right edge to open, swipe right to close.
   let sx = -1, sy = 0;
