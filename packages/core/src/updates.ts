@@ -95,18 +95,22 @@ export class Updater {
 
   /** Where the detached update script writes its progress (survives server restarts). */
   private get statusFile(): string {
-    return join(tmpdir(), `kesher-update-${createHash("sha1").update(this.root).digest("hex").slice(0, 10)}.json`);
+    // Inside the repo (git-ignored), so the file is easy to find when something goes wrong.
+    return existsSync(join(this.root, ".git")) ? join(this.root, ".kesher-update.json") : join(tmpdir(), `kesher-update-${createHash("sha1").update(this.root).digest("hex").slice(0, 10)}.json`);
   }
 
   /** @returns The progress of the current or last update. */
   status(): UpdateProgress {
     const fromSource = import.meta.url.endsWith(".ts");
     try {
-      const p = JSON.parse(readFileSync(this.statusFile, "utf8")) as UpdateProgress;
+      // The script may be writing the file at this very moment; read it again once if it is half-written.
+      let raw = readFileSync(this.statusFile, "utf8");
+      if (!raw.trim().endsWith("}")) raw = readFileSync(this.statusFile, "utf8");
+      const p = JSON.parse(raw) as UpdateProgress;
       const done = !p.running && !p.error && p.step === "Done";
       return { ...p, log: p.log.slice(-200), fromSource, ...(done ? { restartRequired: !fromSource } : {}) };
     } catch {
-      return { running: false, log: [], fromSource };
+      return { running: existsSync(this.statusFile), step: "Working", log: [], fromSource };
     }
   }
 

@@ -8,3 +8,4 @@ out/
 docs/api/
 coverage/
 apps/android/android/
+.kesher-update.json

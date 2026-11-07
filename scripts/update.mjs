@@ -8,7 +8,7 @@
  * written to a JSON file the server reads: `node scripts/update.mjs <status.json>`.
  */
 import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,7 +18,9 @@ const state = { running: true, step: "", log: [], startedAt: new Date().toISOStr
 const save = () => {
   state.log = state.log.slice(-300);
   try {
-    writeFileSync(statusFile, JSON.stringify(state));
+    // Write to a temporary file and rename it, so the server never reads half a file.
+    writeFileSync(`${statusFile}.tmp`, JSON.stringify(state));
+    renameSync(`${statusFile}.tmp`, statusFile);
   } catch {
     // the server shows nothing new until the next write
   }
