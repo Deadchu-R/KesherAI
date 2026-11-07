@@ -24,9 +24,12 @@ jobs:
       - run: pnpm test
       - run: pnpm --filter @kesher/web build
 
+  # Publishes the API reference to GitHub Pages. Off until the repository
+  # owner enables Pages (Settings → Pages → Source: GitHub Actions) and adds
+  # a repository variable PAGES_ENABLED=true (Settings → Secrets and variables → Actions → Variables).
   docs:
     name: Publish API docs
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.PAGES_ENABLED == 'true'
     needs: check
     runs-on: ubuntu-latest
     permissions:

@@ -20,6 +20,13 @@ export interface Branding {
   docsUrl: string;
   /** Default port of the local core server. */
   defaultPort: number;
+  /**
+   * Google OAuth client for "Connect Google Drive" (type: Desktop app).
+   * Fill these in once so every user can just click Connect; see
+   * docs/GOOGLE_DRIVE.md. A desktop client's secret is not confidential:
+   * Google documents that it ships inside the app.
+   */
+  google: { clientId: string; clientSecret: string };
 }
 
 /** The branding of upstream KesherAI. Forks replace these values. */
@@ -30,4 +37,5 @@ export const branding: Branding = {
   repositoryUrl: "https://github.com/Deadchu-R/KesherAI",
   docsUrl: "https://deadchu-r.github.io/KesherAI",
   defaultPort: 7420,
+  google: { clientId: "", clientSecret: "" },
 };

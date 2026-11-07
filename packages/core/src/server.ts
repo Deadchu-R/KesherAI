@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { features } from "@kesher/shared";
+import { branding, features } from "@kesher/shared";
 import { dataPaths, loadConfig, saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
@@ -12,6 +12,8 @@ import { LlamaEngine } from "./llamacpp.js";
 import { Library } from "./library.js";
 import { ConversationManager } from "./conversations.js";
 import { Updater } from "./updates.js";
+import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
+import { DriveSync } from "./drive-sync.js";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
@@ -20,6 +22,7 @@ import { generateRoutes } from "./routes/generate.js";
 import { downloadRoutes } from "./routes/downloads.js";
 import { openAIRoutes } from "./routes/openai.js";
 import { libraryRoutes } from "./routes/library.js";
+import { googleRoutes } from "./routes/google.js";
 import { loadModel } from "./routes/engine.js";
 
 /** Options for {@link createKesherServer}. All optional. */
@@ -36,6 +39,8 @@ export interface KesherServerOptions {
   autodetect?: boolean;
   /** Fastify request logging. */
   logger?: boolean;
+  /** Google endpoints (tests point these at a fake server). */
+  googleEndpoints?: GoogleEndpoints;
 }
 
 /** What {@link createKesherServer} returns. */
@@ -111,6 +116,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     args: config.engines.llamaServerArgs,
   });
   const assets = new AssetStore(paths.assets);
+  const persist = () => saveConfig(paths, config);
+  // The project's own OAuth client (branding.config.ts) is used unless the user set another.
+  const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, branding.google);
+  const driveSync = new DriveSync(google, library, config.google, persist);
 
   const services: KesherServices = {
     config,
@@ -123,8 +132,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     library,
     conversations: new ConversationManager({ registry, library, assets, plugins, config }),
     updater: new Updater(),
+    google,
+    driveSync,
     autodetected,
-    saveConfig: () => saveConfig(paths, config),
+    saveConfig: persist,
     registerEngineProvider: () => {
       if (!registry.get("llamacpp")) {
         registry.add({ id: "llamacpp", type: "openai-compatible", name: "KesherAI engine (llama.cpp)", location: "local", baseUrl: engine.baseUrl });
@@ -143,6 +154,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (features.downloads) await downloadRoutes(app, services);
   if (features.openaiCompatibleApi) await openAIRoutes(app, services);
   await libraryRoutes(app, services);
+  await googleRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, { root: options.webDir });
@@ -152,6 +164,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         : reply.sendFile("index.html"),
     );
   }
+
+  // Bring this computer's library up to date with Google Drive, in the background.
+  if (google.connected) void driveSync.syncNow().catch(() => undefined);
 
   // Bring back the model that was loaded last time, without delaying start-up.
   const last = config.engines.lastModel;

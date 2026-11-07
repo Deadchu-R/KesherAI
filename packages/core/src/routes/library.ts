@@ -5,6 +5,7 @@ import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder } from "../conversations.js";
 import { assertWritableFolder } from "../library.js";
+import { isLoopback } from "../auth.js";
 
 const MODES: PermissionMode[] = ["ask", "auto-edit", "auto"];
 
@@ -185,10 +186,17 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
 
   // ---------- Settings ----------
-  app.get("/api/settings", async () => ({ activeModels: s.config.activeModels, syncFolder: s.config.syncFolder ?? null }));
+  app.get("/api/settings", async () => ({
+    activeModels: s.config.activeModels,
+    syncFolder: s.config.syncFolder ?? null,
+    remote: { enabled: s.config.remote.enabled, keepAwake: s.config.remote.keepAwake },
+  }));
 
-  app.put<{ Body: { activeModels?: Record<string, string>; syncFolder?: string | null } }>("/api/settings", async (req, reply) => {
+  app.put<{ Body: { activeModels?: Record<string, string>; syncFolder?: string | null; remote?: { enabled?: boolean; keepAwake?: boolean } } }>("/api/settings", async (req, reply) => {
     const b = req.body ?? {};
+    if (b.remote && !isLoopback(req.ip)) return reply.code(403).send({ error: "Remote access can only be changed on this computer." });
+    if (typeof b.remote?.enabled === "boolean") s.config.remote.enabled = b.remote.enabled;
+    if (typeof b.remote?.keepAwake === "boolean") s.config.remote.keepAwake = b.remote.keepAwake;
     if (b.activeModels) {
       s.config.activeModels = Object.fromEntries(Object.entries(b.activeModels).filter(([, v]) => typeof v === "string" && v));
     }
@@ -209,7 +217,12 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       }
     }
     await s.saveConfig();
-    return { activeModels: s.config.activeModels, syncFolder: s.config.syncFolder ?? null, ...(synced !== undefined ? { synced } : {}) };
+    return {
+      activeModels: s.config.activeModels,
+      syncFolder: s.config.syncFolder ?? null,
+      remote: { enabled: s.config.remote.enabled, keepAwake: s.config.remote.keepAwake },
+      ...(synced !== undefined ? { synced } : {}),
+    };
   });
 
   // ---------- Updates ----------

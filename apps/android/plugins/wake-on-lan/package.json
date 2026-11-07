@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-wake-on-lan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sends a Wake-on-LAN magic packet from the KesherAI Android app.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

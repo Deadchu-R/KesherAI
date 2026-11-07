@@ -49,6 +49,18 @@ export const KesherConfigSchema = z.object({
     .default({}),
   /** Active model per category id, e.g. `{ "chat": "llamacpp/Qwen3-8B-Q4_K_M", "image": "comfyui/flux1-dev.safetensors" }`. */
   activeModels: z.record(z.string(), z.string()).default({}),
+  /** Google Drive sign-in. The client id defaults to the one in branding.config.ts. */
+  google: z
+    .object({
+      clientId: z.string().optional(),
+      clientSecret: z.string().optional(),
+      refreshToken: z.string().optional(),
+      email: z.string().optional(),
+      folderId: z.string().optional(),
+      lastSync: z.string().optional(),
+      lastError: z.string().optional(),
+    })
+    .default({}),
   /** A cloud-synced folder (Google Drive for desktop, OneDrive, Dropbox) to mirror projects and conversations to. */
   syncFolder: z.string().optional(),
   remote: z
@@ -57,6 +69,8 @@ export const KesherConfigSchema = z.object({
       enabled: z.boolean().default(false),
       /** Shared secret for remote devices. Generated on first start. */
       token: z.string().optional(),
+      /** Keep the computer from sleeping while remote access is on (desktop app only). */
+      keepAwake: z.boolean().default(false),
     })
     .default({}),
   /** Per-plugin settings, keyed by plugin id. */

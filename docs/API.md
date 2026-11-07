@@ -16,7 +16,7 @@ The request and response types referenced below are exported from `@kesher/share
 | `GET /api/health` | `{ ok, version, productName, features, remote: { enabled } }` |
 | `GET /api/categories` | All categories (built-in and from plugins): `CategoryDefinition[]` |
 | `GET /api/hardware` | `{ platform, cpu, ramTotal, ramFree, gpus[], unifiedMemory }` |
-| `GET /api/remote` | Only from this computer. `{ enabled, token, port, addresses: [{ address, tailscale }] }` for pairing a device |
+| `GET /api/remote` | Only from this computer. `{ enabled, keepAwake, token, port, addresses: [{ address, tailscale, mac, broadcast }] }` for pairing a device. `mac` and `broadcast` let the phone wake this computer ([WAKE_ON_LAN.md](WAKE_ON_LAN.md)) |
 | `GET /api/plugins` | Plugins found, with `status` (`active`, `disabled`, `error`) and `error` |
 | `GET /api/tools` | Tools registered by plugins: `{ name, description, inputSchema, pluginId }[]` |
 | `POST /api/tools/:name` | Runs a tool. Body: the tool's input. Returns `{ result }` |
@@ -35,6 +35,7 @@ The request and response types referenced below are exported from `@kesher/share
 | `POST /api/providers` | Adds or replaces a connection and saves it. Body: `ProviderConfig` |
 | `DELETE /api/providers/:id` | Removes a connection |
 | `GET /api/models/recommended` | The "Start here" models, each with `downloaded` and a performance `estimate` for this computer |
+| `POST /api/models/setup` | "Set it up for me". `{ ids: string[] }` — installs the engine, downloads each model if missing, loads the first. Returns 202 |
 | `POST /api/models/recommended/:id/run` | One click: installs the engine if needed, downloads the model if needed, loads it. Returns 202; follow progress in the engine status |
 
 ## Built-in engine (llama.cpp)
@@ -119,12 +120,25 @@ Permission modes: `ask` (every change and command asks), `auto-edit` (file chang
 
 | Method & path | Description |
 | --- | --- |
-| `GET /api/settings` | `{ activeModels: { [category]: modelId }, syncFolder }` |
-| `PUT /api/settings` | `{ activeModels?, syncFolder? }`. Setting a sync folder imports newer files from it, then copies the whole library there. `null` turns sync off |
+| `GET /api/settings` | `{ activeModels: { [category]: modelId }, syncFolder, remote: { enabled, keepAwake } }` |
+| `PUT /api/settings` | `{ activeModels?, syncFolder?, remote? }`. Setting a sync folder imports newer files from it, then copies the whole library there. `null` turns sync off. `remote` can only be changed from this computer; turning remote access on or off needs a restart |
 | `GET /api/version` | `{ version, commit?, install: "git" \| "package" }` |
 | `GET /api/updates` | Fetches from GitHub: `{ newCommits[], latestVersion, localChanges[] }` |
 | `POST /api/updates/apply` | `git pull`, `pnpm install`, build — in the background |
 | `GET /api/updates/progress` | `{ running, step, log[], error?, restartRequired? }` |
+
+## Google Drive
+
+See [GOOGLE_DRIVE.md](GOOGLE_DRIVE.md) for setup.
+
+| Method & path | Description |
+| --- | --- |
+| `GET /api/google` | `{ configured, connected, email, lastSync, lastError, customClient }` |
+| `PUT /api/google/client` | `{ clientId, clientSecret }` — the user's own OAuth client |
+| `POST /api/google/connect` | Only from this computer. Returns `{ url }`, Google's consent page |
+| `GET /api/google/callback` | Where Google sends the browser back; shows a small page and starts a sync |
+| `POST /api/google/sync` | `{ downloaded, uploaded }` |
+| `POST /api/google/disconnect` | Revokes access and forgets the token |
 
 ## Downloads
 

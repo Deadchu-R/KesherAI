@@ -3,7 +3,12 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import type { Conversation, ConversationSummary, Project } from "@kesher/shared";
 
-type Kind = "projects" | "conversations";
+/** The two kinds of item the library stores. */
+export type LibraryKind = "projects" | "conversations";
+type Kind = LibraryKind;
+
+/** Called after an item is saved or deleted, e.g. to upload it to Google Drive. */
+export type LibraryListener = (change: { kind: Kind; id: string; deleted: boolean; value?: { updatedAt: string } }) => void;
 
 /** Name of the folder KesherAI creates inside the user's sync folder. */
 export const SYNC_SUBFOLDER = "KesherAI";
@@ -39,6 +44,7 @@ function summarize(c: Conversation): ConversationSummary {
 export class Library {
   private readonly projects = new Map<string, Project>();
   private readonly summaries = new Map<string, ConversationSummary>();
+  private readonly listeners = new Set<LibraryListener>();
 
   /**
    * @param dir - The library folder.
@@ -120,6 +126,52 @@ export class Library {
     return count;
   }
 
+  /**
+   * Subscribes to saves and deletions.
+   *
+   * @param listener - Called after each change.
+   * @returns A function that unsubscribes.
+   */
+  onChange(listener: LibraryListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** @returns Every item's kind, id and `updatedAt`, for syncing. */
+  items(): Array<{ kind: Kind; id: string; updatedAt: string }> {
+    return [
+      ...[...this.projects.values()].map((p) => ({ kind: "projects" as const, id: p.id, updatedAt: p.updatedAt })),
+      ...[...this.summaries.values()].map((c) => ({ kind: "conversations" as const, id: c.id, updatedAt: c.updatedAt })),
+    ];
+  }
+
+  /**
+   * Reads one item as saved on disk.
+   *
+   * @param kind - Kind.
+   * @param id - Id.
+   * @returns The item, or `undefined`.
+   */
+  async read(kind: Kind, id: string): Promise<({ updatedAt: string } & Record<string, unknown>) | undefined> {
+    return readJson(this.path(kind, id));
+  }
+
+  /**
+   * Stores an item that came from another computer (through Google Drive),
+   * keeping its `updatedAt` and without notifying listeners — so it is not
+   * uploaded straight back.
+   *
+   * @param kind - Kind.
+   * @param value - The item.
+   */
+  async applyRemote(kind: Kind, value: Project | Conversation): Promise<void> {
+    if (!value?.id) return;
+    await mkdir(join(this.dir, kind), { recursive: true });
+    await writeJsonAtomic(this.path(kind, value.id), value);
+    if (kind === "projects") this.projects.set(value.id, value as Project);
+    else this.summaries.set(value.id, summarize(value as Conversation));
+  }
+
   private async persist(kind: Kind, id: string, value: unknown): Promise<void> {
     await mkdir(join(this.dir, kind), { recursive: true });
     await writeJsonAtomic(this.path(kind, id), value);
@@ -132,12 +184,14 @@ export class Library {
         console.warn(`[library] could not write to the sync folder: ${(err as Error).message}`);
       }
     }
+    this.listeners.forEach((l) => l({ kind, id, deleted: false, value: value as { updatedAt: string } }));
   }
 
   private async remove(kind: Kind, id: string): Promise<void> {
     await rm(this.path(kind, id), { force: true });
     const root = this.syncRoot();
     if (root) await rm(this.path(kind, id, root), { force: true }).catch(() => undefined);
+    this.listeners.forEach((l) => l({ kind, id, deleted: true }));
   }
 
   /** @returns Projects, by name. */

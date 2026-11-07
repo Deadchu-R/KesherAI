@@ -26,6 +26,11 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     autodetect: true,
   },
   {
+    config: { id: "lmstudio-bionic", type: "openai-compatible", name: "LM Studio Bionic", baseUrl: "http://localhost:1235/v1", location: "server" },
+    description: "Models loaded in LM Studio Bionic. It is a separate app from LM Studio and serves on port 1235 by default.",
+    autodetect: true,
+  },
+  {
     config: { id: "ollama", type: "openai-compatible", name: "Ollama", baseUrl: "http://localhost:11434/v1", location: "server" },
     description: "Models pulled with Ollama.",
     autodetect: true,

@@ -25,13 +25,13 @@ Running AI locally today means juggling LM Studio for chat, ComfyUI for images, 
 | | Today | Next |
 | --- | --- | --- |
 | Local engine | Built-in llama.cpp: downloaded automatically for your GPU (CUDA on NVIDIA, Vulkan otherwise, Metal on Mac). No LM Studio or Ollama needed | Managed ComfyUI for images and video |
-| Models | "Start here" one-click models; Hugging Face search and downloads with SHA-256 checks; every model rated good / OK / slow / too big for your hardware, with expected times | Measured speed instead of estimates |
+| Models | "Set it up for me" (conservative / balanced / extreme) picks models for your computer; one-click models; Hugging Face search and downloads with SHA-256 checks; every model rated good / OK / slow / too big for your hardware, with expected times | Measured speed instead of estimates |
 | Coding agent | Works in a project folder: lists, reads, searches, edits, runs commands. Three permission modes, dangerous commands always ask, diffs, undo, asks you questions | Plan mode, git checkpoints, LSP |
 | Conversations | Projects with folders and instructions, conversation history, switch models mid-conversation | Search, document chat |
 | Active models | Pick a model per category; the chat model calls the image model as a tool | Video, speech and music tools |
-| Connections | LM Studio, Ollama, ComfyUI (auto-detected), any OpenAI-compatible server, OpenAI, Anthropic, OpenRouter, Groq | Jan, KoboldCpp, vLLM, LM Studio Bionic |
-| Cloud backup | Mirror projects and conversations to a folder Google Drive, OneDrive or Dropbox syncs | Native Drive API |
-| Phone | Android app (APK built by CI) and installable web app; QR pairing; approve agent actions from the phone | Push notifications, built-in TLS |
+| Connections | LM Studio, LM Studio Bionic, Ollama, ComfyUI (auto-detected), any OpenAI-compatible server, OpenAI, Anthropic, OpenRouter, Groq | Jan, KoboldCpp, vLLM |
+| Cloud backup | Sign in with Google to back up projects and conversations to Google Drive, or mirror them to any synced folder (OneDrive, Dropbox) | OneDrive sign-in |
+| Phone | Android app (APK built by CI) and installable web app; QR pairing; approve agent actions from the phone; wake the computer from sleep (Wake-on-LAN) and keep it awake | Push notifications, built-in TLS |
 | Updates | Version shown in the app; check and install updates from Settings | Signed installers |
 | Extensibility | Plugins (providers, categories, tools), `SKILL.md` skills, OpenAI-compatible API at `/v1` | MCP client and server, Pipelines |
 
@@ -106,6 +106,8 @@ Each package has its own README explaining what it owns.
 | [docs/PROVIDERS.md](docs/PROVIDERS.md) | connect a new engine, server or API |
 | [docs/API.md](docs/API.md) | build a client or script against the core server |
 | [docs/FORKING.md](docs/FORKING.md) | rebrand or trim KesherAI in your own fork |
+| [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md) | set up Google sign-in for Drive backup |
+| [docs/WAKE_ON_LAN.md](docs/WAKE_ON_LAN.md) | wake the computer from the phone |
 | [docs/COMPETITORS.md](docs/COMPETITORS.md) | see what other apps do and what we build next |
 | [docs/LEGAL.md](docs/LEGAL.md) | know which licences apply |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | send a pull request |

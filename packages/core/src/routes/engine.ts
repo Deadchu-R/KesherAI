@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, join, normalize, sep } from "node:path";
-import { RECOMMENDED_MODELS } from "@kesher/shared";
+import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { waitForDownload } from "../llamacpp.js";
@@ -100,31 +100,54 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post<{ Params: { id: string } }>("/api/models/recommended/:id/run", async (req, reply) => {
     const model = RECOMMENDED_MODELS.find((m) => m.id === req.params.id);
     if (!model) return reply.code(404).send({ error: "Unknown model" });
-    if (s.engine.status().job && s.engine.status().job?.phase !== "error") {
-      return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
-    }
-    void (async () => {
-      await ensureEngine(s);
-      const files = await s.engine.track("downloading-model", `Finding ${model.name}…`, () =>
-        listHubFiles(model.repo, { ...(s.config.huggingFaceToken ? { token: s.config.huggingFaceToken } : {}) }),
-      );
-      const file = files.find((f) => new RegExp(model.filePattern, "i").test(f.path));
-      if (!file) throw new Error(`No file matching ${model.filePattern} in ${model.repo}`);
-      const dest = join(s.paths.models, "chat", model.repo, file.path);
-      if (!existsSync(dest)) {
-        await s.engine.track("downloading-model", `Downloading ${model.name} (${model.sizeGb} GB)…`, async () => {
-          const job = s.downloads.enqueue({
-            url: file.url,
-            dest,
-            size: file.size,
-            ...(file.sha256 ? { sha256: file.sha256 } : {}),
-            label: `${model.name} · ${file.path}`,
-          });
-          await waitForDownload(s.downloads, job.id);
-        });
-      }
-      await loadModel(s, dest);
-    })().catch((err) => s.engine.fail(err));
+    if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
+    void setUp(s, [model]).catch((err) => s.engine.fail(err));
     return reply.code(202).send(s.engine.status());
   });
+
+  /**
+   * "Set it up for me": installs the engine, downloads every selected model
+   * one after another, and loads the first one. Body: `{ ids: string[] }`.
+   */
+  app.post<{ Body: { ids?: string[] } }>("/api/models/setup", async (req, reply) => {
+    const ids = req.body?.ids ?? [];
+    const models = ids.map((id) => RECOMMENDED_MODELS.find((m) => m.id === id));
+    if (!models.length || models.some((m) => !m)) return reply.code(400).send({ error: "Choose at least one known model" });
+    if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
+    void setUp(s, models as RecommendedModel[]).catch((err) => s.engine.fail(err));
+    return reply.code(202).send(s.engine.status());
+  });
+}
+
+function engineBusy(s: KesherServices): boolean {
+  const job = s.engine.status().job;
+  return !!job && job.phase !== "error";
+}
+
+/** Installs the engine, downloads each model if missing, and loads the first. */
+async function setUp(s: KesherServices, models: RecommendedModel[]): Promise<void> {
+  await ensureEngine(s);
+  const paths: string[] = [];
+  for (const model of models) {
+    const files = await s.engine.track("downloading-model", `Finding ${model.name}…`, () =>
+      listHubFiles(model.repo, { ...(s.config.huggingFaceToken ? { token: s.config.huggingFaceToken } : {}) }),
+    );
+    const file = files.find((f) => new RegExp(model.filePattern, "i").test(f.path));
+    if (!file) throw new Error(`No file matching ${model.filePattern} in ${model.repo}`);
+    const dest = join(s.paths.models, "chat", model.repo, file.path);
+    if (!existsSync(dest)) {
+      await s.engine.track("downloading-model", `Downloading ${model.name} (${model.sizeGb} GB)…`, async () => {
+        const job = s.downloads.enqueue({
+          url: file.url,
+          dest,
+          size: file.size,
+          ...(file.sha256 ? { sha256: file.sha256 } : {}),
+          label: `${model.name} · ${file.path}`,
+        });
+        await waitForDownload(s.downloads, job.id);
+      });
+    }
+    paths.push(dest);
+  }
+  await loadModel(s, paths[0]!);
 }

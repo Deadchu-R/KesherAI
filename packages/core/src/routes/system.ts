@@ -64,11 +64,30 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
         return reply.code(403).send({ error: "Only available on this computer" });
       }
       // Addresses other devices can use: the home network, and Tailscale (100.64.0.0/10) if installed.
+      // Each carries the card's MAC and broadcast address, so the phone can wake this computer (Wake-on-LAN).
       const addresses = Object.values(networkInterfaces())
         .flat()
         .filter((a): a is NonNullable<typeof a> => !!a && a.family === "IPv4" && !a.internal)
-        .map((a) => ({ address: a.address, tailscale: /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) }));
-      return { enabled: s.config.remote.enabled, token: s.config.remote.token, port: s.config.port, addresses };
+        .map((a) => ({
+          address: a.address,
+          tailscale: /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address),
+          mac: a.mac,
+          broadcast: broadcastOf(a.address, a.netmask),
+        }));
+      return { enabled: s.config.remote.enabled, keepAwake: s.config.remote.keepAwake, token: s.config.remote.token, port: s.config.port, addresses };
     });
   }
+}
+
+/**
+ * The broadcast address of a network, where Wake-on-LAN packets are sent.
+ *
+ * @param address - IPv4 address, e.g. `192.168.1.20`.
+ * @param netmask - e.g. `255.255.255.0`.
+ * @returns e.g. `192.168.1.255`.
+ */
+export function broadcastOf(address: string, netmask: string): string {
+  const a = address.split(".").map(Number);
+  const m = netmask.split(".").map(Number);
+  return a.map((octet, i) => (octet | (~(m[i] ?? 0) & 255)) & 255).join(".");
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BUILT_IN_CATEGORIES } from "@kesher/shared";
+import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, t } from "../i18n";
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
@@ -49,6 +49,8 @@ function StartHere({ onChange }: { onChange: () => void }) {
   const modelName = engine?.modelPath?.split(/[\\/]/).pop();
 
   return (
+    <>
+    <SetUpForMe models={models} busy={busy} onStarted={(s) => { setEngine(s); setError(""); }} onError={setError} />
     <section className="card stack">
       <h2>{t("startHere")}</h2>
       <div className="row engine-row">
@@ -81,6 +83,77 @@ function StartHere({ onChange }: { onChange: () => void }) {
         ))}
       </div>
       <p className="muted">{t("estimateNote")}</p>
+    </section>
+    </>
+  );
+}
+
+const LEVELS: ResourceLevel[] = ["conservative", "balanced", "extreme"];
+
+/**
+ * "Set it up for me": pick how much of the computer to use, and KesherAI
+ * chooses the models, downloads them and loads the chat one.
+ */
+function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s: EngineStatus) => void; onError: (m: string) => void }) {
+  const [level, setLevel] = useState<ResourceLevel>("balanced");
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const rated = props.models.map((m) => ({ ...m, rating: m.estimate.rating }));
+  const picks = pickSetup(rated, level);
+  useEffect(() => {
+    setChecked(new Set([picks.chat, picks.code].filter((x): x is string => !!x)));
+  }, [level, props.models.length]);
+  if (!props.models.length) return null;
+  const roles = new Map<string, string>([
+    ...(picks.chat ? [[picks.chat, t("roleChat")] as [string, string]] : []),
+    ...(picks.code ? [[picks.code, t("roleCode")] as [string, string]] : []),
+  ]);
+  const shown = props.models.filter((m) => roles.has(m.id) || checked.has(m.id));
+  const total = props.models.filter((m) => checked.has(m.id) && !m.downloaded).reduce((n, m) => n + m.sizeGb, 0);
+  const order = [picks.chat, picks.code, ...checked].filter((x, i, a): x is string => !!x && checked.has(x) && a.indexOf(x) === i);
+  const start = async () => {
+    try {
+      props.onStarted(await api<EngineStatus>("/api/models/setup", { method: "POST", body: { ids: order } }));
+    } catch (e) {
+      props.onError((e as Error).message);
+    }
+  };
+  return (
+    <section className="card stack setup">
+      <div className="row">
+        <div className="grow">
+          <h2>{t("setupTitle")}</h2>
+          <p className="muted">{t("setupHint")}</p>
+        </div>
+        <button type="button" className="primary" disabled={props.busy || !order.length} onClick={() => void start()}>{t("setupStart")}</button>
+      </div>
+      <div className="row">
+        <strong className="grow">{t("resourceUse")}</strong>
+        <div className="segmented" role="radiogroup" aria-label={t("resourceUse")}>
+          {LEVELS.map((l) => (
+            <button key={l} type="button" role="radio" aria-checked={level === l} className={level === l ? "on" : ""} onClick={() => setLevel(l)}>
+              {t(`level-${l}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted">{t(`levelHint-${level}`)}</p>
+      <div className="list">
+        {shown.map((m) => (
+          <label key={m.id} className="row check">
+            <input type="checkbox" checked={checked.has(m.id)} onChange={(e) => {
+              const next = new Set(checked);
+              if (e.target.checked) next.add(m.id); else next.delete(m.id);
+              setChecked(next);
+            }} />
+            <span className="grow"><strong>{m.name}</strong> <span className="muted">· {roles.get(m.id) ?? ""}</span></span>
+            <RatingBadge e={m.estimate} />
+            <span className="muted mono" dir="ltr">{m.downloaded ? t("downloaded") : `${m.sizeGb} GB`}</span>
+          </label>
+        ))}
+        {!shown.length && <p className="muted">{t("setupNothingFits")}</p>}
+      </div>
+      <p className="muted" dir="auto">{t("setupTotal", { gb: total.toFixed(1) })}</p>
+      <p className="muted">{t("setupLater")}</p>
     </section>
   );
 }

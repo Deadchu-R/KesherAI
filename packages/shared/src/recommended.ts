@@ -90,3 +90,38 @@ export const RECOMMENDED_MODELS: readonly RecommendedModel[] = [
     },
   },
 ];
+
+/** How much of the computer "Set it up for me" may use. */
+export type ResourceLevel = "conservative" | "balanced" | "extreme";
+
+/** The speed rating of a model on this computer (see `estimatePerformance`). */
+export type SpeedRating = "good" | "ok" | "slow" | "too-big";
+
+/**
+ * Picks models for "Set it up for me".
+ *
+ * - **conservative:** the model one size below the biggest fast one, leaving room for other apps.
+ * - **balanced:** the biggest model that is still fast ("good").
+ * - **extreme:** the biggest model that fits at all, even if it is slow.
+ *
+ * A separate coding model is suggested only when the chat pick is not good at tools.
+ *
+ * @param models - Recommended models with their rating on this computer, smallest first.
+ * @param level - Resource level.
+ * @returns Ids of the chat pick and, if different, the coding pick.
+ */
+export function pickSetup<M extends { id: string; goodForCode: boolean; rating: SpeedRating }>(
+  models: readonly M[],
+  level: ResourceLevel,
+): { chat?: string; code?: string } {
+  const pick = (list: readonly M[]): M | undefined => {
+    const good = list.filter((m) => m.rating === "good");
+    const fits = list.filter((m) => m.rating !== "too-big");
+    if (level === "extreme") return fits.at(-1);
+    if (level === "conservative") return good.length > 1 ? good.at(-2) : (good[0] ?? fits[0]);
+    return good.at(-1) ?? list.filter((m) => m.rating === "ok").at(-1) ?? fits[0];
+  };
+  const chat = pick(models);
+  const code = chat?.goodForCode ? undefined : pick(models.filter((m) => m.goodForCode));
+  return { ...(chat ? { chat: chat.id } : {}), ...(code ? { code: code.id } : {}) };
+}

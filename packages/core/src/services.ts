@@ -7,6 +7,8 @@ import type { LlamaEngine } from "./llamacpp.js";
 import type { Library } from "./library.js";
 import type { ConversationManager } from "./conversations.js";
 import type { Updater } from "./updates.js";
+import type { GoogleDrive } from "./google.js";
+import type { DriveSync } from "./drive-sync.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -28,6 +30,10 @@ export interface KesherServices {
   conversations: ConversationManager;
   /** Checks for and applies updates. */
   updater: Updater;
+  /** Google sign-in and Drive access. */
+  google: GoogleDrive;
+  /** Keeps the library in step with Google Drive. */
+  driveSync: DriveSync;
   /** Ids of providers found by auto-detection (not saved in the config file). */
   autodetected: Set<string>;
   /** Persists `config` to disk. */

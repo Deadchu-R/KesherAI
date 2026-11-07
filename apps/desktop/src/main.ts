@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker } from "electron";
 import { join, resolve } from "node:path";
 import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
@@ -68,6 +68,19 @@ ipcMain.handle("kesher:pick-folder", async (event) => {
   const result = win ? await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] }) : await dialog.showOpenDialog({ properties: ["openDirectory"] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
+
+// "Keep this computer awake while remote access is on" (Settings → Phone).
+// Checked every few seconds so the setting applies without a restart.
+let awakeBlocker: number | undefined;
+setInterval(() => {
+  const remote = server?.services.config.remote;
+  const want = !!remote?.enabled && !!remote.keepAwake;
+  if (want && awakeBlocker === undefined) awakeBlocker = powerSaveBlocker.start("prevent-app-suspension");
+  if (!want && awakeBlocker !== undefined) {
+    powerSaveBlocker.stop(awakeBlocker);
+    awakeBlocker = undefined;
+  }
+}, 5000);
 
 app.whenReady().then(async () => {
   try {

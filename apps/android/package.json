@@ -1,6 +1,6 @@
 {
   "name": "@kesher/android",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Android app: connects to KesherAI running on your computer. Built into an APK by GitHub Actions (.github/workflows/android.yml).",
   "license": "Apache-2.0",
@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
-    "@capacitor/core": "^8.6.0"
+    "@capacitor/core": "^8.6.0",
+    "capacitor-kesher-wake-on-lan": "file:./plugins/wake-on-lan"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.0"

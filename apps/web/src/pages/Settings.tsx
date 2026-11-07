@@ -8,7 +8,10 @@ import { getLocale, t } from "../i18n";
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[] }
 interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; finishedAt?: string }
-interface Remote { enabled: boolean; token: string; port: number; addresses: Array<{ address: string; tailscale: boolean }> }
+interface Remote {
+  enabled: boolean; keepAwake: boolean; token: string; port: number;
+  addresses: Array<{ address: string; tailscale: boolean; mac: string; broadcast: string }>;
+}
 
 function ActiveModels() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -91,6 +94,82 @@ function Sync() {
   );
 }
 
+interface GoogleStatus { configured: boolean; connected: boolean; email: string | null; lastSync: string | null; lastError: string | null; customClient: boolean }
+
+function GoogleDriveSection() {
+  const [g, setG] = useState<GoogleStatus | null>(null);
+  const [waiting, setWaiting] = useState(false);
+  const [client, setClient] = useState({ clientId: "", clientSecret: "" });
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const load = () => void api<GoogleStatus>("/api/google").then(setG).catch(() => setG(null));
+  useEffect(load, []);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => {
+      void api<GoogleStatus>("/api/google").then((s) => {
+        setG(s);
+        if (s.connected) setWaiting(false);
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [waiting]);
+  if (!g) return null;
+
+  const connect = async () => {
+    setError("");
+    try {
+      const { url } = await api<{ url: string }>("/api/google/connect", { method: "POST" });
+      window.open(url, "_blank", "noopener");
+      setWaiting(true);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const syncNow = async () => {
+    setError("");
+    setMsg("");
+    try {
+      const r = await api<{ downloaded: number; uploaded: number }>("/api/google/sync", { method: "POST" });
+      setMsg(t("driveSynced", { down: r.downloaded, up: r.uploaded }));
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <section className="card stack">
+      <h2>Google Drive</h2>
+      <p className="muted">{t("driveHint")}</p>
+      {g.connected ? (
+        <>
+          <p>{t("driveConnected", { email: g.email ?? "" })}{g.lastSync ? ` · ${t("driveLastSync", { time: new Date(g.lastSync).toLocaleString() })}` : ""}</p>
+          {g.lastError && <p className="error">{g.lastError}</p>}
+          <div className="row">
+            <button type="button" className="primary" onClick={() => void syncNow()}>{t("driveSyncNow")}</button>
+            <button type="button" onClick={() => void api("/api/google/disconnect", { method: "POST" }).then(load)}>{t("driveDisconnect")}</button>
+          </div>
+        </>
+      ) : g.configured ? (
+        <div className="row">
+          <button type="button" className="primary" onClick={() => void connect()}>{t("driveConnect")}</button>
+          {waiting && <span className="muted">{t("driveWaiting")}</span>}
+        </div>
+      ) : (
+        <form className="stack" onSubmit={(e) => { e.preventDefault(); void api("/api/google/client", { method: "PUT", body: client }).then(load); }}>
+          <p>{t("driveNeedsClient")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/GOOGLE_DRIVE.md" target="_blank" rel="noreferrer">docs/GOOGLE_DRIVE.md</a></p>
+          <label>Client ID<input dir="ltr" value={client.clientId} onChange={(e) => setClient({ ...client, clientId: e.target.value })} /></label>
+          <label>Client secret<input dir="ltr" type="password" value={client.clientSecret} onChange={(e) => setClient({ ...client, clientSecret: e.target.value })} /></label>
+          <button type="submit" className="primary" disabled={!client.clientId} style={{ alignSelf: "flex-start" }}>{t("save")}</button>
+        </form>
+      )}
+      {msg && <p className="pill good" style={{ alignSelf: "flex-start" }}>{msg}</p>}
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
 function Updates() {
   const [version, setVersion] = useState<{ version: string; commit?: string; install: string } | null>(null);
   const [check, setCheck] = useState<UpdateCheck | null>(null);
@@ -164,6 +243,7 @@ function Phone() {
   const [remote, setRemote] = useState<Remote | null>(null);
   const [qr, setQr] = useState<Array<{ url: string; image: string; tailscale: boolean }>>([]);
   const [copied, setCopied] = useState("");
+  const [restart, setRestart] = useState(false);
   useEffect(() => {
     api<Remote>("/api/remote")
       .then(async (r) => {
@@ -173,7 +253,9 @@ function Phone() {
         setQr(
           await Promise.all(
             sorted.map(async (a) => {
-              const url = `http://${a.address}:${r.port}/?token=${encodeURIComponent(r.token)}`;
+              // The link also carries the network card's address, so the Android app can wake this computer.
+              const wake = a.tailscale || a.mac === "00:00:00:00:00:00" ? "" : `&wake=${a.mac}&bcast=${a.broadcast}`;
+              const url = `http://${a.address}:${r.port}/?token=${encodeURIComponent(r.token)}${wake}`;
               return { url, image: await QRCode.toDataURL(url, { margin: 1, width: 220 }), tailscale: a.tailscale };
             }),
           ),
@@ -182,11 +264,25 @@ function Phone() {
       .catch(() => setRemote(null)); // not available from a phone itself
   }, []);
   if (!remote) return null;
+  const setRemote2 = async (patch: { enabled?: boolean; keepAwake?: boolean }) => {
+    await api("/api/settings", { method: "PUT", body: { remote: patch } });
+    setRemote({ ...remote, ...patch });
+    if (patch.enabled !== undefined) setRestart(true);
+  };
   return (
     <section className="card stack">
       <h2>{t("phone")}</h2>
       <p className="muted">{t("phoneHint")}</p>
-      {!remote.enabled && <p>{t("remoteOff")}</p>}
+      <label className="check">
+        <input type="checkbox" checked={remote.enabled} onChange={(e) => void setRemote2({ enabled: e.target.checked })} />
+        {t("remoteEnable")}
+      </label>
+      {restart && <p className="pill warn" style={{ alignSelf: "flex-start" }}>{t("restartToApply")}</p>}
+      <label className="check">
+        <input type="checkbox" checked={remote.keepAwake} disabled={!remote.enabled} onChange={(e) => void setRemote2({ keepAwake: e.target.checked })} />
+        {t("keepAwake")}
+      </label>
+      <p className="muted">{t("wakeHint")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/WAKE_ON_LAN.md" target="_blank" rel="noreferrer">docs/WAKE_ON_LAN.md</a></p>
       <div className="row" style={{ alignItems: "flex-start" }}>
         {qr.map((q) => (
           <figure key={q.url} className="qr">
@@ -209,6 +305,7 @@ export function SettingsPage() {
     <div className="page">
       <h1>{t("settings")}</h1>
       <ActiveModels />
+      <GoogleDriveSection />
       <Sync />
       <Updates />
       <Phone />

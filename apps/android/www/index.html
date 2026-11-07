@@ -46,7 +46,10 @@
   let lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const tr = { checking: { he: "מתחבר…", en: "Connecting…" }, cancel: { he: "ביטול", en: "Cancel" },
     fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale.", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale." },
-    bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." } };
+    bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." },
+    wake: { he: "הער את המחשב", en: "Wake the computer" },
+    waking: { he: "שולח בקשת הערה ומחכה למחשב (עד דקה)…", en: "Sent a wake-up and waiting for the computer (up to a minute)…" },
+    noWake: { he: "המחשב לא התעורר. בדוק ש-Wake-on-LAN מופעל, שהמחשב מחובר בכבל רשת, ושהטלפון באותה רשת ביתית.", en: "The computer did not wake. Check that Wake-on-LAN is on, the computer is on a network cable, and the phone is on the same home network." } };
   function applyLang() {
     document.documentElement.lang = lang; document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
     document.querySelectorAll("[data-he]").forEach((el) => (el.textContent = el.dataset[lang]));
@@ -56,6 +59,26 @@
   applyLang();
 
   let cancelled = false;
+
+  /** Sends a Wake-on-LAN packet through the native plugin, then waits for the computer. */
+  async function wake(url) {
+    const mac = url.searchParams.get("wake");
+    const broadcast = url.searchParams.get("bcast") || undefined;
+    const plugin = window.Capacitor?.Plugins?.WakeOnLan;
+    if (!mac || !plugin) return;
+    $("status").className = "";
+    $("status").textContent = tr.waking[lang];
+    try { await plugin.wake({ mac, broadcast }); } catch (e) { $("status").textContent = String(e?.message || e); return; }
+    const token = url.searchParams.get("token");
+    for (let i = 0; i < 20 && !cancelled; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const ok = await fetch(`${url.origin}/api/health`, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(2500) }).then((r) => r.ok).catch(() => false);
+      if (ok) { location.href = url.href; return; }
+      if (i % 3 === 2) await plugin.wake({ mac, broadcast }).catch(() => undefined);
+    }
+    if (!cancelled) { $("status").textContent = tr.noWake[lang]; $("status").className = "error"; }
+  }
+
   async function connect(link) {
     let url;
     try { url = new URL(link.trim()); } catch { $("status").textContent = tr.bad[lang]; $("status").className = "error"; return; }
@@ -72,7 +95,18 @@
       localStorage.setItem(KEY, url.href);
       location.href = url.href; // the interface stores the token and removes it from the address
     } catch {
-      if (!cancelled) { $("status").textContent = tr.fail[lang]; $("status").className = "error"; }
+      if (cancelled) return;
+      $("status").textContent = tr.fail[lang];
+      $("status").className = "error";
+      // The computer may be asleep: offer to wake it when the link carries its network card's address.
+      if (url.searchParams.get("wake") && window.Capacitor?.Plugins?.WakeOnLan) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "primary";
+        b.textContent = tr.wake[lang];
+        b.onclick = () => wake(url);
+        $("status").append(document.createElement("br"), b);
+      }
     }
   }
   $("form").onsubmit = (e) => { e.preventDefault(); connect($("url").value); };
