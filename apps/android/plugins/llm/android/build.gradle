@@ -5,7 +5,7 @@ buildscript {
     }
     dependencies {
         // Kotlin, for Google's LiteRT-LM API (Gemma 4 and other .litertlm models).
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.0"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0"
     }
 }
 
@@ -38,6 +38,6 @@ dependencies {
     // Google's on-device LLM runtime (LiteRT / MediaPipe): GPU (Adreno, Mali) and CPU kernels tuned for phones.
     implementation "com.google.mediapipe:tasks-genai:0.10.24"
     // Google's newer runtime for .litertlm models (Gemma 4): GPU through OpenCL, CPU fallback.
-    implementation "com.google.ai.edge.litertlm:litertlm-android:latest.release"
+    implementation "com.google.ai.edge.litertlm:litertlm-android:0.19.1"
     implementation "androidx.core:core:${project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.15.0'}"
 }
