@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { AgentTool, ToolContext } from "./tools.js";
-import { MAX_OUTPUT, runShell } from "./shell.js";
+import { MAX_OUTPUT, refreshPath, runShell } from "./shell.js";
 import { resolveForTool } from "./workspace.js";
 
 /**
@@ -95,6 +95,8 @@ export const installToolTool: AgentTool = {
     const tail = r.output.trim().split(/\r?\n/).slice(-15).join("\n");
     // winget answers "already installed" with a non-zero code.
     if (r.code !== 0 && !/already installed|No newer package/i.test(r.output)) throw new Error(`Installing ${name} failed:\n${tail}\n${r.status}`);
+    // New programs are found right away, without restarting KesherAI.
+    await refreshPath();
     const check = await runShell(INSTALLABLE[name]!.check, ctx.workspace ?? process.cwd(), 15_000, ctx.signal);
     return {
       output: `${tail}\n\n${check.code === 0 ? `Installed: ${firstLine(check.output)}` : "Installed, but this session cannot find it yet. Tell the user to restart KesherAI so the new PATH applies, or use the tool's full path."}`,

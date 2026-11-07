@@ -58,3 +58,30 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
   });
 }
 
+
+/**
+ * Reloads PATH from the system after something was installed, so new
+ * programs (Python, Java, …) are found without restarting KesherAI. On
+ * Windows it reads the machine and user PATH from the registry; elsewhere
+ * it adds the usual install folders.
+ */
+export async function refreshPath(): Promise<void> {
+  const current = process.env.PATH ?? process.env.Path ?? "";
+  let fresh: string[] = [];
+  if (process.platform === "win32") {
+    const r = await runShell(
+      `powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`,
+      process.cwd(),
+      15_000,
+      new AbortController().signal,
+    );
+    if (r.code === 0) fresh = r.output.trim().split(";");
+  } else {
+    fresh = ["/opt/homebrew/bin", "/usr/local/bin", `${process.env.HOME ?? ""}/.local/bin`, `${process.env.HOME ?? ""}/.cargo/bin`];
+  }
+  const sepChar = process.platform === "win32" ? ";" : ":";
+  const parts = [...new Set([...current.split(sepChar), ...fresh].map((p) => p.trim()).filter(Boolean))];
+  const joined = parts.join(sepChar);
+  process.env.PATH = joined;
+  if (process.platform === "win32") process.env.Path = joined;
+}

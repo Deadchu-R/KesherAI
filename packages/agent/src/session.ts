@@ -272,22 +272,33 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * @param finalText - The model's last answer.
    * @returns What to tell the model (and a note for the user), or `undefined`.
    */
-  private unfinished(finalText: string): { message: string; note: string } | undefined {
+  private unfinished(finalText: string, nudges: number): { message: string; note: string } | undefined {
     if (this.toolsUnsupported) return undefined;
-    const lastUser = [...this.events].reverse().find((e) => e.type === "user");
-    if (!lastUser || lastUser.type !== "user") return undefined;
+    const users = this.events.filter((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
+    const lastUser = users.at(-1);
+    if (!lastUser) return undefined;
     const since = this.events.filter((e) => e.seq > lastUser.seq);
-    const built = since.some((e) => e.type === "tool_result" && e.name === "build_executable" && e.ok);
-    const triedBuild = since.some((e) => e.type === "tool_call" && e.name === "build_executable");
-    const wantsProgram = /\bexe\b|\.exe|executable|installer|setup file|installable|איאקסאי|אקסה|קובץ הפעלה|קובץ הרצה|להתקנה|תוכנה שאפשר להתקין/i.test(lastUser.text);
-    if (wantsProgram && !built && !triedBuild && this.tools.has("build_executable")) {
+    const built = this.events.some((e) => e.type === "tool_result" && e.name === "build_executable" && e.ok && e.seq > (users.at(-3) ?? lastUser).seq);
+    const buildFailed = since.some((e) => e.type === "tool_result" && e.name === "build_executable" && !e.ok);
+    // The request may have been made a message or two earlier ("make it an exe" … "continue").
+    const wantsProgram = users.slice(-3).some((u) => /\bexe\b|\.exe|executable|installer|setup file|installable|איאקסאי|אקסה|קובץ הפעלה|קובץ הרצה|להתקנה|תוכנה שאפשר להתקין/i.test(u.text));
+    if (wantsProgram && !built && buildFailed && this.tools.has("build_executable")) {
+      return {
+        note: "KesherAI asked the model to fix the build and try again.",
+        message:
+          "[KesherAI] build_executable failed. Read its error, fix the cause yourself (fix the code, install what is missing with install_tool, or use run_command), then call build_executable again. Do not hand the steps to the user.",
+      };
+    }
+    if (wantsProgram && !built && this.tools.has("build_executable")) {
       return {
         note: "KesherAI asked the model to finish: build the program.",
         message:
           "[KesherAI] The user asked for a program they can run (an .exe), and you have not built it yet. Do it now yourself: make sure the .py file is saved with write_file, check Python with check_tools (install it with install_tool if missing), then call build_executable. Do not tell the user to save, install or build anything themselves.",
       };
     }
-    const handsOff = /save (the|this) (code|file)|copy (the|this) code|open (a |the )?(command prompt|terminal|cmd)|run:?\s*`?(python|node|java|npm)|install python from|שמור את הקוד|העתק את הקוד|פתח (את )?שורת הפקודה/i.test(finalText);
+    void nudges;
+    const handsOff =
+      /save (the|this) (code|file)|copy (the|this) code|open (a |the )?(command prompt|terminal|cmd|powershell)|in (a |the |your )?(terminal|command prompt|cmd)|run:?\s*`?(python|py |node|java|npm|pip|pyinstaller)|pip install|pyinstaller --|run the following|type the following|install python from|שמור את הקוד|העתק את הקוד|פתח (את )?(שורת הפקודה|הטרמינל)|בטרמינל|הקלד|הרץ את הפקודה|הרץ:/i.test(finalText);
     if (handsOff && this.tools.has("run_command")) {
       return {
         note: "KesherAI asked the model to do the steps itself instead of handing them to you.",
@@ -308,7 +319,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.abort = abort;
     this.setStatus("running");
     try {
-      let nudged = false;
+      let nudges = 0;
       for (let step = 0; step < this.maxSteps; step++) {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
@@ -331,10 +342,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         if (result.text) this.push({ type: "assistant", turn, text: result.text });
         this.messages.push({ role: "assistant", content: result.text, ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {}) });
         if (result.toolCalls.length === 0) {
-          const nudge = nudged ? undefined : this.unfinished(result.text);
+          const nudge = nudges >= 3 ? undefined : this.unfinished(result.text, nudges);
           if (nudge) {
-            // Local models often stop and tell the user to do the rest. Send them back to work, once per message.
-            nudged = true;
+            // Local models often stop and tell the user to do the rest. Send them back to work (up to three times).
+            nudges++;
             this.push({ type: "note", text: nudge.note });
             this.messages.push({ role: "user", content: nudge.message });
             continue;

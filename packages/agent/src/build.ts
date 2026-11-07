@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import type { AgentTool, ToolContext } from "./tools.js";
-import { runShell, type ShellResult } from "./shell.js";
+import { refreshPath, runShell, type ShellResult } from "./shell.js";
+import { installCommand } from "./system-tools.js";
+import { readdir } from "node:fs/promises";
 import { resolveInWorkspace } from "./workspace.js";
 
 /**
@@ -17,11 +19,36 @@ const TEN_MINUTES = 600_000;
 /** Finds a working Python 3. The Windows Store "python" stub fails `--version`, so it is skipped. */
 async function findPython(cwd: string, signal: AbortSignal): Promise<string | undefined> {
   const candidates = process.platform === "win32" ? ["py -3", "python", "python3"] : ["python3", "python"];
+  // Python installed by winget or python.org lives here even before PATH is updated.
+  if (process.platform === "win32") {
+    for (const base of [join(process.env.LOCALAPPDATA ?? "", "Programs", "Python"), process.env.ProgramFiles ?? "C:\\Program Files"]) {
+      const dirs = await readdir(base).catch(() => [] as string[]);
+      for (const d of dirs.filter((x) => /^Python3\d+/i.test(x)).sort().reverse()) candidates.push(`"${join(base, d, "python.exe")}"`);
+    }
+  }
   for (const c of candidates) {
     const r = await runShell(`${c} --version`, cwd, 15_000, signal);
     if (r.code === 0 && /Python 3\./.test(r.output)) return c;
   }
   return undefined;
+}
+
+/** Finds Python, installing it first (winget / Homebrew / apt) when it is missing. */
+async function ensurePython(cwd: string, signal: AbortSignal): Promise<string> {
+  let py = await findPython(cwd, signal);
+  if (py) return py;
+  await refreshPath();
+  py = await findPython(cwd, signal);
+  if (py) return py;
+  const cmd = installCommand("python");
+  if (cmd) {
+    const r = await runShell(cmd, cwd, 1_200_000, signal);
+    await refreshPath();
+    py = await findPython(cwd, signal);
+    if (py) return py;
+    throw new Error(`Python could not be installed automatically:\n${tail(r)}`);
+  }
+  throw new Error("Python 3 is not installed and there is no package manager to install it. Install Python from https://www.python.org/downloads/ and try again.");
 }
 
 function safeName(name: string): string {
@@ -54,7 +81,7 @@ export const buildExecutableTool: AgentTool = {
     const name = safeName(String(input.name ?? basename(String(input.entry ?? "app"), extname(String(input.entry ?? "")))));
     return [
       `Build ${name}${process.platform === "win32" ? ".exe" : ""} from ${String(input.entry ?? "")} with PyInstaller.`,
-      "If PyInstaller is missing, it is installed first for your user only (pip install --user pyinstaller).",
+      "If Python is missing, it is installed first (winget on Windows); if PyInstaller is missing, it is installed for your user only.",
       `The result goes to dist/ in the project folder.`,
     ].join("\n");
   },
@@ -70,12 +97,7 @@ export const buildExecutableTool: AgentTool = {
     const name = safeName(String(input.name ?? basename(entry, ".py")));
     const windowed = input.windowed !== false;
 
-    const py = await findPython(cwd, ctx.signal);
-    if (!py) {
-      throw new Error(
-        "Python 3 is not installed on this computer, so the program cannot be packaged. Tell the user to install Python from https://www.python.org/downloads/ (tick \"Add python.exe to PATH\"), or on Windows run: winget install Python.Python.3.12. Then try again.",
-      );
-    }
+    const py = await ensurePython(cwd, ctx.signal);
     const has = await runShell(`${py} -m PyInstaller --version`, cwd, 30_000, ctx.signal);
     if (has.code !== 0) {
       const install = await runShell(`${py} -m pip install --user --disable-pip-version-check pyinstaller`, cwd, TEN_MINUTES, ctx.signal);
