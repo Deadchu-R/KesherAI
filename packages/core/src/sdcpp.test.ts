@@ -96,3 +96,21 @@ test("LoRAs: downloads go to models/loras, are listed by name, and are not image
     await s.app.close();
   }
 });
+
+test("upscale route: asks for a PNG, and for setup before the upscaler is downloaded", async () => {
+  const data = await mkdtemp(join(tmpdir(), "kesher-up-"));
+  const s = await createKesherServer({ dataDir: data, autodetect: false, pluginRoots: [] });
+  try {
+    const status = (await s.app.inject({ method: "GET", url: "/api/images/upscale" })).json() as { ready: boolean; modelMb: number };
+    assert.equal(status.ready, false);
+    assert.ok(status.modelMb > 0);
+    const bad = await s.app.inject({ method: "POST", url: "/api/images/upscale", headers: { "content-type": "image/png" }, payload: Buffer.from("not a png at all") });
+    assert.equal(bad.statusCode, 400);
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+    const res = await s.app.inject({ method: "POST", url: "/api/images/upscale", headers: { "content-type": "image/png" }, payload: png });
+    assert.equal(res.statusCode, 409);
+    assert.equal((res.json() as { code: string }).code, "needs-setup");
+  } finally {
+    await s.app.close();
+  }
+});

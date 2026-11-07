@@ -48,6 +48,26 @@ export async function generateRoutes(app: FastifyInstance, s: KesherServices): P
       (await s.sd.removeLora(req.params.name)) ? { ok: true } : reply.code(404).send({ error: "No such LoRA" }),
     );
 
+    /** Making images larger (batch tools): status, setup, and one image at a time. */
+    app.get("/api/images/upscale", async () => s.sd.upscaleStatus());
+    app.post("/api/images/upscale/setup", async (_req, reply) => {
+      void s.sd.prepareUpscaler().catch(() => undefined);
+      return reply.code(202).send({ ok: true });
+    });
+    app.addContentTypeParser(["image/png"], { parseAs: "buffer", bodyLimit: 40 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+    app.post("/api/images/upscale", async (req, reply) => {
+      const png = req.body as Buffer;
+      if (!Buffer.isBuffer(png) || png.subarray(1, 4).toString() !== "PNG") return reply.code(400).send({ error: "Send a PNG image as image/png." });
+      if (!(await s.sd.upscaleStatus()).ready) return reply.code(409).send({ error: "needs-setup", code: "needs-setup" });
+      const ac = new AbortController();
+      reply.raw.on("close", () => !reply.raw.writableFinished && ac.abort());
+      try {
+        return reply.type("image/png").send(await s.sd.upscale(png, ac.signal));
+      } catch (err) {
+        return reply.code(500).send({ error: (err as Error).message });
+      }
+    });
+
     /** Generates images and stores them as assets. */
     app.post("/api/images", async (req, reply) => {
       const parsed = ImageRequestSchema.safeParse(req.body);

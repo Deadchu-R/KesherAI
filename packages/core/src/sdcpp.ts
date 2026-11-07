@@ -310,6 +310,74 @@ export class SdEngine {
     return true;
   }
 
+  /** The upscaler (Real-ESRGAN, BSD-3), from its author's release. */
+  private get upscalerPath(): string {
+    return join(this.supportDir, "esrgan", "RealESRGAN_x4plus_anime_6B.pth");
+  }
+
+  /** @returns Whether upscaling can run now, and the size of what it still needs. */
+  async upscaleStatus(): Promise<{ ready: boolean; engineInstalled: boolean; modelMb: number; busy: boolean }> {
+    const engineInstalled = !!(await findFile(this.dir, process.platform === "win32" ? "sd-cli.exe" : "sd-cli"));
+    const model = existsSync(this.upscalerPath);
+    return { ready: engineInstalled && model, engineInstalled, modelMb: model ? 0 : 18, busy: !!this.preparingUpscaler };
+  }
+
+  private preparingUpscaler: Promise<void> | undefined;
+
+  /** Downloads the engine and the upscaler the first time (follow it in the downloads circle). */
+  prepareUpscaler(): Promise<void> {
+    this.preparingUpscaler ??= (async () => {
+      await this.install();
+      if (existsSync(this.upscalerPath)) return;
+      const job = this.downloads.enqueue({ url: UPSCALER_URL, dest: this.upscalerPath, label: "Image upscaler · RealESRGAN_x4plus_anime_6B" });
+      await waitForDownload(this.downloads, job.id);
+    })().finally(() => {
+      this.preparingUpscaler = undefined;
+    });
+    return this.preparingUpscaler;
+  }
+
+  /**
+   * Makes an image four times larger (Real-ESRGAN), in turn with generation.
+   *
+   * @param png - The image, as PNG.
+   * @param signal - Abort to stop.
+   * @returns The larger PNG.
+   */
+  async upscale(png: Buffer, signal?: AbortSignal): Promise<Buffer> {
+    if (!(await this.upscaleStatus()).ready) throw new PreparingError("The upscaler is not set up yet.");
+    const run = this.queue.then(async () => {
+      const exe = (await this.install())!;
+      const id = randomUUID();
+      const input = join(tmpdir(), `kesher-up-in-${id}.png`);
+      const out = join(tmpdir(), `kesher-up-out-${id}.png`);
+      await writeFile(input, png);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn(exe, ["-M", "upscale", "--init-img", input, "--upscale-model", this.upscalerPath, "-o", out], { windowsHide: true, cwd: this.dir });
+          let text = "";
+          const onData = (b: Buffer) => (text = (text + b.toString()).slice(-4000));
+          child.stdout.on("data", onData);
+          child.stderr.on("data", onData);
+          const kill = () => child.kill();
+          signal?.addEventListener("abort", kill, { once: true });
+          child.on("error", reject);
+          child.on("close", (code) => {
+            signal?.removeEventListener("abort", kill);
+            if (code === 0) resolve();
+            else reject(new Error(`The upscaler failed (exit code ${code}):\n${text.split("\n").slice(-8).join("\n")}`));
+          });
+        });
+        return await readFile(out);
+      } finally {
+        await rm(input, { force: true });
+        await rm(out, { force: true });
+      }
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
   /** Where the extra files of model families go. */
   private get supportDir(): string {
     return join(this.modelsDir(), "image-support");
@@ -546,6 +614,9 @@ export class SdEngine {
     };
   }
 }
+
+/** Real-ESRGAN's anime 6B model (the one stable-diffusion.cpp supports), from its author's GitHub release. */
+const UPSCALER_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth";
 
 /**
  * The provider that shows the built-in image engine's models under

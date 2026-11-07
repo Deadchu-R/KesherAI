@@ -961,3 +961,10 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .api-log td.bad { color: #fca5a5; }
 .lora-chip { display: inline-flex; align-items: center; gap: 6px; }
 .lora-chip.on { border-color: var(--accent, #5b8def); }
+.batch-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin-top: 12px; min-height: 140px; border: 1px dashed var(--border, #333); border-radius: 12px; padding: 12px; }
+.batch-drop { grid-column: 1 / -1; align-self: center; text-align: center; }
+.batch-item { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.batch-item img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 8px; background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.batch-item.working img { opacity: .6; }
+.batch-item.failed img { outline: 2px solid #c44; }
+.batch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

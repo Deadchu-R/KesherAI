@@ -148,6 +148,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
     ["#/pipelines", "pipelinesNav"],
     ["#/watch", "watchNav"],
     ["#/images", "images"],
+    ["#/batch", "batchNav"],
     ["#/models", "models"],
     ["#/connections", "connections"],
     ["#/usage", "usageNav"],
