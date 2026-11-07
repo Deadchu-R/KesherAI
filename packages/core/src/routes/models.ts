@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { mkdir, readdir, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import { basename, join, relative } from "node:path";
 import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
@@ -25,6 +27,33 @@ async function listFilesRecursive(dir: string): Promise<string[]> {
   return out;
 }
 
+/** The largest single model file the phone app can load (llama.cpp in WebAssembly). */
+export const PHONE_MAX_BYTES = 1.95 * 1024 ** 3;
+
+/**
+ * Chat models on this computer small enough for the phone: GGUF files under
+ * 2 GB, without vision projectors or embedding models. Each has a short id
+ * (a hash of its path), so paths are not shown to the phone.
+ *
+ * @param s - Services (paths and model folders).
+ * @returns The models, smallest first.
+ */
+export async function phoneModels(s: Pick<KesherServices, "paths" | "config">): Promise<Array<{ id: string; name: string; size: number; path: string }>> {
+  const own = (await listFilesRecursive(s.paths.models)).map((path) => ({ path, name: basename(path) }));
+  const extra = (await Promise.all(s.config.modelFolders.map((f) => scanFolder(f).catch(() => [])))).flat().map((m) => ({ path: m.path, name: basename(m.path) }));
+  const out: Array<{ id: string; name: string; size: number; path: string }> = [];
+  const seen = new Set<string>();
+  for (const m of [...own, ...extra]) {
+    if (seen.has(m.path) || !/\.gguf$/i.test(m.name) || /mmproj|embed|whisper|vae|clip|t5xxl|-\d{5}-of-\d{5}|qwen[-_ ]?image|flux|sdxl|stable[-_]?diffusion|wan2|z[-_]?image|umt5/i.test(m.name)) continue;
+    seen.add(m.path);
+    if (/[\\/](image|image-support|video|loras)[\\/]/i.test(relative(s.paths.models, m.path).replace(/^/, "/"))) continue;
+    const size = (await stat(m.path).catch(() => undefined))?.size ?? 0;
+    if (size < 50 * 1024 ** 2 || size > PHONE_MAX_BYTES) continue;
+    out.push({ id: createHash("sha256").update(m.path).digest("hex").slice(0, 16), name: m.name.replace(/\.gguf$/i, ""), size, path: m.path });
+  }
+  return out.sort((a, b) => a.size - b.size);
+}
+
 /**
  * Models, providers (connections) and local model files.
  *
@@ -34,6 +63,25 @@ async function listFilesRecursive(dir: string): Promise<string[]> {
 export async function modelRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   /** Every model from every provider, plus providers that failed to answer. */
   app.get("/api/models", async () => s.registry.listAllModels());
+
+  /** Send a model to the phone: the computer's chat models that fit one, and each file (with resume). */
+  app.get("/api/models/phone", async () => (await phoneModels(s)).map(({ path: _p, ...m }) => m));
+  app.get<{ Params: { id: string } }>("/api/models/phone/:id", async (req, reply) => {
+    const m = (await phoneModels(s)).find((x) => x.id === req.params.id);
+    if (!m) return reply.code(404).send({ error: "No such model" });
+    const range = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    const start = range ? Number(range[1]) : 0;
+    const end = range && range[2] ? Math.min(Number(range[2]), m.size - 1) : m.size - 1;
+    if (start >= m.size) return reply.code(416).header("content-range", `bytes */${m.size}`).send();
+    reply
+      .header("accept-ranges", "bytes")
+      .header("content-length", String(end - start + 1))
+      .header("etag", `"${m.id}-${m.size}"`)
+      .header("content-disposition", `attachment; filename="${encodeURIComponent(m.name)}.gguf"`)
+      .type("application/octet-stream");
+    if (range) reply.code(206).header("content-range", `bytes ${start}-${end}/${m.size}`);
+    return reply.send(createReadStream(m.path, { start, end }));
+  });
 
   /**
    * Model files KesherAI can use: those it downloaded, plus those in the

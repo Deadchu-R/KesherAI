@@ -114,3 +114,32 @@ test("upscale route: asks for a PNG, and for setup before the upscaler is downlo
     await s.app.close();
   }
 });
+
+test("send a model to the phone: lists chat GGUFs that fit, serves them with resume", async () => {
+  const data = await mkdtemp(join(tmpdir(), "kesher-phone-"));
+  const s = await createKesherServer({ dataDir: data, autodetect: false, pluginRoots: [] });
+  try {
+    const make = async (p: string, mb: number) => {
+      const full = join(data, "models", p);
+      await mkdir(join(full, ".."), { recursive: true });
+      const fh = await open(full, "w");
+      await fh.truncate(mb * 1024 ** 2);
+      await fh.write(Buffer.from("GGUF"), 0, 4, 0);
+      await fh.close();
+    };
+    await make("chat/Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf", 60);
+    await make("chat/Qwen/Qwen2.5-0.5B-Instruct-GGUF/mmproj-f16.gguf", 60);
+    await make("other/x/Qwen-Image-Q2.gguf", 60);
+    await make("chat/big/huge.gguf", 2100);
+    const list = (await s.app.inject({ method: "GET", url: "/api/models/phone" })).json() as Array<{ id: string; name: string; size: number; path?: string }>;
+    assert.deepEqual(list.map((m) => m.name), ["qwen2.5-0.5b-instruct-q4_k_m"]);
+    assert.equal(list[0]!.path, undefined);
+    const part = await s.app.inject({ method: "GET", url: `/api/models/phone/${list[0]!.id}`, headers: { range: "bytes=0-3" } });
+    assert.equal(part.statusCode, 206);
+    assert.equal(part.body, "GGUF");
+    const head = await s.app.inject({ method: "HEAD", url: `/api/models/phone/${list[0]!.id}` });
+    assert.equal(head.headers["content-length"], String(60 * 1024 ** 2));
+  } finally {
+    await s.app.close();
+  }
+});

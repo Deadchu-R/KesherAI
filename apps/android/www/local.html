@@ -7,6 +7,7 @@
   <title>KesherAI · On this phone</title>
   <link rel="stylesheet" href="theme.css" />
   <style>
+    h3.from-pc { margin: 18px 0 4px; font-size: 15px; }
     body { height: 100dvh; display: flex; flex-direction: column; }
     header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--border); background: var(--panel); }
     header h1 { flex: 1; margin: 0; font-size: 17px; font-weight: 500; }
@@ -400,6 +401,84 @@
           }
         });
       }
+    }
+    await renderFromComputer(list);
+  }
+
+  // ---------- models sent from the computer (over the home network, no internet needed) ----------
+  const FROM_PC = "/api/models/phone/";
+  const pcName = (url) => localStorage.getItem("kesherai-pc-model:" + url.split("?")[0]) || "";
+  async function renderFromComputer(list) {
+    const head = document.createElement("h3");
+    head.className = "from-pc";
+    head.textContent = T("מהמחשב שלך", "From your computer");
+    const note = Object.assign(document.createElement("p"), { className: "intro" });
+    list.append(head, note);
+    const card = (name, size) => {
+      const el = document.createElement("div");
+      el.className = "model";
+      el.innerHTML = `<div class="top"><strong></strong><span class="size"></span></div><span class="rating"></span><p></p><div class="bar" hidden><span></span></div><div class="row"></div>`;
+      el.querySelector("strong").textContent = name;
+      el.querySelector(".size").textContent = size ? gb(size) : "";
+      list.append(el);
+      return el;
+    };
+    const btn = (row, label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
+    // Already here: they work without the computer.
+    const here = downloaded.filter((m) => m.url.includes(FROM_PC) && m.size > 0);
+    for (const m of here) {
+      const el = card(pcName(m.url) || T("מודל מהמחשב", "A model from the computer"), m.size);
+      const r = rate(m.size, m.url);
+      el.querySelector(".rating").textContent = r.text;
+      el.querySelector(".rating").className = `rating ${r.level}`;
+      el.querySelector("p").textContent = T("הועבר מהמחשב; עובד גם בלי המחשב ובלי אינטרנט.", "Sent from the computer; works without it and without the internet.");
+      const row = el.querySelector(".row");
+      const it = { name: pcName(m.url) || "PC model" };
+      btn(row, T("פתח צ'אט", "Open chat"), "primary", () => openChat(it, m.url));
+      btn(row, T("מחק", "Delete"), "", async () => { await m.remove(); if (activeUrl === m.url) { activeUrl = ""; localStorage.removeItem("kesherai-phone-model"); } renderList(); });
+    }
+    const c = computer();
+    if (!c) { note.textContent = T("התחבר פעם אחת למחשב, ותוכל להעביר ממנו מודלים לטלפון ברשת הביתית.", "Connect to your computer once, and you can send its models to the phone over your home network."); return; }
+    note.textContent = T("מודלים שכבר יש במחשב ונכנסים לטלפון (עד 2GB). ההעברה עוברת ברשת, בלי אינטרנט.", "Models already on your computer that fit a phone (up to 2 GB). They come over your network, not the internet.");
+    let models;
+    try { models = await getJson(`${c.base}/api/models/phone`, { Authorization: `Bearer ${c.token}` }); }
+    catch { note.textContent += " " + T("המחשב לא זמין כרגע.", "The computer is not reachable now."); return; }
+    const haveIds = new Set(here.map((m) => m.url.split(FROM_PC)[1]?.split("?")[0]));
+    const fresh = models.filter((m) => !haveIds.has(m.id));
+    if (!fresh.length && !here.length) { note.textContent += " " + T("אין במחשב מודל צ'אט קטן מספיק.", "The computer has no chat model small enough."); return; }
+    for (const m of fresh) {
+      // The token goes in the address: the download is a plain request the web view can resume.
+      const url = `${c.base}${FROM_PC}${m.id}?token=${encodeURIComponent(c.token)}`;
+      const el = card(m.name, m.size);
+      const r = rate(m.size, url);
+      el.querySelector(".rating").textContent = r.text;
+      el.querySelector(".rating").className = `rating ${r.level}`;
+      el.querySelector("p").textContent = T("נמצא במחשב.", "On your computer.");
+      const row = el.querySelector(".row");
+      const dl = btn(row, T("העבר לטלפון", "Send to the phone") + ` (${gb(m.size)})`, r.tooBig ? "" : "primary", async () => {
+        dl.disabled = true;
+        const bar = el.querySelector(".bar");
+        bar.hidden = false;
+        localStorage.setItem("kesherai-pc-model:" + url.split("?")[0], m.name);
+        try {
+          await mm.downloadModel(url, {
+            progressCallback: ({ loaded, total }) => {
+              const pct = total ? Math.round((loaded / total) * 100) : 0;
+              bar.firstElementChild.style.width = `${pct}%`;
+              dl.textContent = `${T("מעביר", "Sending")} ${pct}%`;
+              bg(`dl:${url}`, { title: T(`מעביר את ${m.name}`, `Sending ${m.name}`), text: `${pct}% · ${gb(loaded)} / ${gb(total || m.size)}`, progress: pct });
+            },
+          });
+          doneNotice(T("ההעברה הסתיימה", "Transfer finished"), m.name);
+          renderList();
+        } catch (e) {
+          dl.disabled = false;
+          dl.textContent = T("נסה שוב", "Try again");
+          el.querySelector("p").textContent = T("ההעברה נכשלה: ", "Transfer failed: ") + (e.message || e);
+        } finally {
+          bg(`dl:${url}`);
+        }
+      });
     }
   }
 
@@ -1338,6 +1417,7 @@
           const [provider, ...rest] = url.slice(4).split("/");
           return { name: `${rest.join("/")} · ${provider}`, api: { provider, model: rest.join("/") } };
         }
+        if (url?.includes(FROM_PC)) return { name: pcName(url) || "PC model" };
         return CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
       };
       // A chat from the side menu.
@@ -1360,7 +1440,7 @@
         const [provider, ...rest] = url.slice(4).split("/");
         return openChat({ name: `${rest.join("/")} · ${provider}`, api: { provider, model: rest.join("/") } }, url);
       }
-      const item = CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
+      const item = url?.includes(FROM_PC) ? { name: pcName(url) || "PC model" } : CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
       if (item && downloaded.some((m) => m.url === url && m.size > 0)) await openChat(item, url);
     })
     .catch((e) => { $("modelList").textContent = String(e.message || e); });
