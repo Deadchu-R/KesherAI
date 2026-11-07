@@ -46,6 +46,7 @@
     </label>
   </form>
   <button class="primary" type="submit" form="form" data-he="התחבר" data-en="Connect">התחבר</button>
+  <button id="scan" type="button" data-he="סרוק קוד QR" data-en="Scan QR code">סרוק קוד QR</button>
   <p id="status"></p>
   <button id="checkUpdate" type="button" data-he="בדוק עדכונים לאפליקציה" data-en="Check for app updates">בדוק עדכונים לאפליקציה</button>
   <button id="lang" type="button">English</button>
@@ -62,6 +63,9 @@
     fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale. בפעם הראשונה ב-Windows: הפעל במחשב את scripts\\windows\\allow-phone.cmd מתיקיית KesherAI (פותח את חומת האש).", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale. First time on Windows: on the computer, run scripts\\windows\\allow-phone.cmd from the KesherAI folder (it opens the firewall)." },
     bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." },
     wake: { he: "הער את המחשב", en: "Wake the computer" },
+    installingScanner: { he: "מכין את הסורק (פעם ראשונה בלבד)…", en: "Preparing the scanner (first time only)…" },
+    notKesher: { he: "זה לא קוד של KesherAI. סרוק את הקוד שבמחשב: הגדרות ← טלפון.", en: "That is not a KesherAI code. Scan the code on the computer: Settings → Phone." },
+    scanFailed: { he: "הסריקה לא הצליחה: ", en: "Scanning did not work: " },
     newVersion: { he: "גרסה חדשה של האפליקציה זמינה: ", en: "A new version of the app is available: " },
     upToDate: { he: "האפליקציה מעודכנת.", en: "The app is up to date." },
     checkingUpdate: { he: "בודק עדכונים…", en: "Checking for updates…" },
@@ -113,6 +117,8 @@
       if (!res.ok) throw new Error(String(res.status));
       if (cancelled) return;
       localStorage.setItem(KEY, url.href);
+      // Coming back here with the Back button shows this screen instead of connecting again.
+      sessionStorage.setItem("kesherai-connected", "1");
       location.href = url.href; // the interface stores the token and removes it from the address
     } catch {
       if (cancelled) return;
@@ -148,6 +154,38 @@
     const server = fromDeepLink(e.url);
     if (server) { $("url").value = server; connect(server); }
   });
+  // ---------- Scan the QR code from Settings → Phone on the computer ----------
+  const Scanner = window.Capacitor?.Plugins?.BarcodeScanner;
+  if (!Scanner) $("scan").hidden = true;
+  $("scan").onclick = async () => {
+    cancelled = true;
+    $("status").className = "";
+    $("status").textContent = "";
+    try {
+      // Google's scanner needs no camera permission; it is downloaded by Play services the first time.
+      const { available } = await Scanner.isGoogleBarcodeScannerModuleAvailable();
+      if (!available) {
+        $("status").textContent = tr.installingScanner[lang];
+        await new Promise((resolve) => {
+          Scanner.addListener("googleBarcodeScannerModuleInstallProgress", (e) => { if (e.state === 4 || e.state === 5) resolve(); });
+          Scanner.installGoogleBarcodeScannerModule().catch(resolve);
+          setTimeout(resolve, 30000);
+        });
+        $("status").textContent = "";
+      }
+      const { barcodes } = await Scanner.scan({ formats: ["QR_CODE"] });
+      const value = barcodes?.[0]?.rawValue ?? "";
+      if (!value) return;
+      const server = fromDeepLink(value) || (/^https?:\/\/.+token=/.test(value) ? value : null);
+      if (!server) { $("status").textContent = tr.notKesher[lang]; $("status").className = "error"; return; }
+      $("url").value = server;
+      connect(server);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      if (!/cancel/i.test(msg)) { $("status").textContent = tr.scanFailed[lang] + msg; $("status").className = "error"; }
+    }
+  };
+
   // ---------- App updates (published by .github/workflows/android.yml) ----------
   const Updater = window.Capacitor?.Plugins?.KesherUpdater;
   const VERSION_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
@@ -196,7 +234,9 @@
     // A newer app waits for the user's choice before connecting; a scanned code connects anyway.
     if ((await checkForUpdate(true)) && !launch) return;
     const saved = launch || localStorage.getItem(KEY);
-    if (saved) { $("url").value = saved; connect(saved); }
+    if (saved) $("url").value = saved;
+    const cameBack = sessionStorage.getItem("kesherai-connected") === "1";
+    if (launch || (saved && !cameBack)) connect(saved);
   })();
 </script>
 </body>

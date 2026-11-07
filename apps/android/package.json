@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor/android": "^8.6.0",
     "@capacitor/app": "^8.1.2",
+    "@capacitor-mlkit/barcode-scanning": "^8.2.2",
     "@capacitor/core": "^8.6.0",
     "capacitor-kesher-updater": "file:./plugins/updater",
     "capacitor-kesher-wake-on-lan": "file:./plugins/wake-on-lan"
