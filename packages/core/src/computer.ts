@@ -251,6 +251,11 @@ const linux: Backend = {
   },
 };
 
+/** The screen backend for this platform (also used by the journal). */
+export function screenBackend(): Pick<Backend, "screenshot" | "foreground"> {
+  return backend();
+}
+
 function backend(): Backend {
   return process.platform === "win32" ? windows : process.platform === "darwin" ? mac : linux;
 }

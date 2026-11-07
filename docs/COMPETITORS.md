@@ -61,7 +61,9 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Cloud backup | Usually needs the vendor's cloud and an account | Any synced folder (Google Drive for desktop, OneDrive, Dropbox), no account | ✅ |
 | Google sign-in backup (Claude-style connector) | — | `drive.file` only: KesherAI sees just its own folder, never the rest of your Drive | ✅ Google · ⬜ OneDrive |
 | Document chat with cited sources (Off Grid, AnythingLLM) | — | Same, using the active embedding model | ⬜ |
-| Search across all conversations | — | Full-text search in the sidebar | ⬜ |
+| Search across all conversations | — | Full-text search over conversations and the day journal (My day → Search) | ✅ |
+| Second brain: Day, Replay, Reflect, Entities, Actions (Off Grid) | macOS-first; Search still "coming" | My day: opt-in screen journal kept on this computer (Windows OCR built in, no download), local model by default, skips password managers, private windows and sign-in/bank pages, delete the last 15 minutes or any day, unified search with conversations | ✅ Windows · 🟡 macOS/Linux (no OCR without tesseract) |
+| Meeting notes (Off Grid) | — | Meetings found from the window title in My day; recording and transcribing the call next | 🟡 |
 
 ### Media
 

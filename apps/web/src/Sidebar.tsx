@@ -138,6 +138,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
 
   const loose = conversations.filter((c) => !c.projectId);
   const nav: Array<[string, Parameters<typeof t>[0]]> = [
+    ["#/day", "dayNav"],
     ["#/images", "images"],
     ["#/models", "models"],
     ["#/connections", "connections"],

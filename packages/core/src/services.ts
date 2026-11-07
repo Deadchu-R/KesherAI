@@ -15,6 +15,7 @@ import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
 import type { WhisperEngine } from "./whisper.js";
 import type { McpManager } from "./mcp.js";
+import type { Journal } from "./journal.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -50,6 +51,8 @@ export interface KesherServices {
   coach: Coach;
   /** MCP servers and their tools. */
   mcp: McpManager;
+  /** "My day": the opt-in journal of the screen. */
+  journal: Journal;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

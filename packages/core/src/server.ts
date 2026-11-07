@@ -12,7 +12,7 @@ import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
 import { LlamaEngine } from "./llamacpp.js";
 import { Library } from "./library.js";
-import { ConversationManager } from "./conversations.js";
+import { ConversationManager, modelTurnFor } from "./conversations.js";
 import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { DriveSync } from "./drive-sync.js";
@@ -24,6 +24,8 @@ import { WhisperEngine } from "./whisper.js";
 import { speechRoutes } from "./routes/speech.js";
 import { computerRoutes } from "./routes/computer.js";
 import { mcpRoutes } from "./routes/mcp.js";
+import { journalRoutes } from "./routes/journal.js";
+import { Journal } from "./journal.js";
 import { McpManager, mcpResultText } from "./mcp.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
@@ -162,6 +164,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.
   const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"));
   void mcp.load();
+  // "My day": off until the user turns it on; never leaves this computer.
+  const journal = new Journal(join(paths.root, "journal"), (modelId) => {
+    const id = modelId ?? config.activeModels.chat;
+    if (!id) return undefined;
+    try {
+      const { provider } = registry.resolve(id);
+      return { id, local: (provider as { location?: string }).location !== "cloud", turn: modelTurnFor(registry, id) };
+    } catch {
+      return undefined;
+    }
+  });
+  void journal.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, branding.google);
@@ -207,6 +221,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     coach,
     computer,
     mcp,
+    journal,
     whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
       const nv = await nvidiaGpus();
       return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
@@ -243,6 +258,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await computerRoutes(app, services);
   await speechRoutes(app, services);
   await mcpRoutes(app, services);
+  await journalRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);
@@ -279,6 +295,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     async close() {
       services.tunnel.stop();
       mcp.close();
+      journal.close();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();
