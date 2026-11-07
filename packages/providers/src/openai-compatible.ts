@@ -77,6 +77,20 @@ export class OpenAICompatibleProvider implements Provider {
   }
 
   /** @inheritDoc */
+  async embed(request: { providerModelId: string; input: string[] }, signal?: AbortSignal): Promise<number[][]> {
+    const res = await fetchOk(`${this.baseUrl}/embeddings`, {
+      method: "POST",
+      headers: this.headers,
+      signal,
+      body: JSON.stringify({ model: request.providerModelId, input: request.input }),
+    });
+    const json = (await res.json()) as { data?: Array<{ index?: number; embedding: number[] }> };
+    const data = [...(json.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    if (data.length !== request.input.length) throw new Error(`The embedding model returned ${data.length} vectors for ${request.input.length} texts.`);
+    return data.map((d) => d.embedding);
+  }
+
+  /** @inheritDoc */
   async *chat(request: ProviderChatRequest, signal?: AbortSignal): AsyncIterable<ChatStreamEvent> {
     const res = await fetchOk(`${this.baseUrl}/chat/completions`, {
       method: "POST",

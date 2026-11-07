@@ -49,3 +49,21 @@ test("a folder is indexed, searched with sources, and updated when files change"
   await k.remove(base.id);
   assert.equal(knowledgeTools(k).length, 0);
 });
+
+test("search by meaning finds a passage that shares no words with the question", async () => {
+  const data = await mkdtemp(join(tmpdir(), "kesher-kbv-"));
+  const docs = await mkdtemp(join(tmpdir(), "kesher-docsv-"));
+  await writeFile(join(docs, "refunds.md"), "Customers may request a reimbursement within fourteen days.");
+  await writeFile(join(docs, "office.md"), "The office opens at nine in the morning.");
+  // A toy "model": one dimension per idea.
+  const ideas = [/reimburse|money back|refund/i, /office|morning|open/i];
+  const calls: string[] = [];
+  const k = new Knowledge(data, () => ({ id: "toy", embed: async (texts, kind) => (calls.push(kind), texts.map((t) => ideas.map((re) => (re.test(t) ? 1 : 0)))) }));
+  const b = await k.save({ name: "Docs", folders: [docs] });
+  await k.reindex(b.id);
+  assert.equal((await k.list())[0]?.embedded, 2);
+  const hits = await k.search("how do I get my money back?");
+  assert.equal(hits[0]?.source, "refunds.md");
+  assert.ok(calls.includes("doc") && calls.includes("query"));
+  k.close();
+});

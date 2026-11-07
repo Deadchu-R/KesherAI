@@ -82,7 +82,14 @@ function StartHere({ onChange }: { onChange: () => void }) {
         )}
       </div>
       {engine?.running && engine.runningParallel !== undefined && engine.parallel !== undefined && engine.runningParallel < engine.parallel && <p className="muted small">{t("parallelFellBack")}</p>}
-      {engine?.job && <p className={engine.job.phase === "error" ? "error" : "muted"}>{engine.job.message}</p>}
+      {engine?.job && (
+        <p className={engine.job.phase === "error" ? "error" : "muted"}>
+          {engine.job.message}
+          {engine.job.phase === "downloading-model" && /^Downloading/.test(engine.job.message) && (
+            <> <button type="button" className="as-link" onClick={() => void api<EngineStatus>("/api/models/setup/skip", { method: "POST" }).then(setEngine, (e: Error) => setError(e.message))}>{t("skipForNow")}</button></>
+          )}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="rec-grid">
         {models.map((m) => (
@@ -115,6 +122,7 @@ const LEVELS: ResourceLevel[] = ["conservative", "balanced", "extreme"];
 function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s: EngineStatus) => void; onError: (m: string) => void }) {
   const [level, setLevel] = useState<ResourceLevel>("balanced");
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [extras, setExtras] = useState<{ speech: boolean; meaning: boolean }>({ speech: false, meaning: false });
   const rated = props.models.map((m) => ({ ...m, rating: m.estimate.rating }));
   const picks = pickSetup(rated, level);
   useEffect(() => {
@@ -130,7 +138,10 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
   const order = [picks.chat, picks.code, ...checked].filter((x, i, a): x is string => !!x && checked.has(x) && a.indexOf(x) === i);
   const start = async () => {
     try {
-      props.onStarted(await api<EngineStatus>("/api/models/setup", { method: "POST", body: { ids: order } }));
+      // Speech to text and search by meaning download in the background too (see the downloads circle).
+      if (extras.speech) await api("/api/speech/stt/setup", { method: "POST" });
+      if (extras.meaning) await api("/api/knowledge/semantic/setup", { method: "POST" });
+      if (order.length) props.onStarted(await api<EngineStatus>("/api/models/setup", { method: "POST", body: { ids: order } }));
     } catch (e) {
       props.onError((e as Error).message);
     }
@@ -142,7 +153,7 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
           <h2>{t("setupTitle")}</h2>
           <p className="muted">{t("setupHint")}</p>
         </div>
-        <button type="button" className="primary" disabled={props.busy || !order.length} onClick={() => void start()}>{t("setupStart")}</button>
+        <button type="button" className="primary" disabled={props.busy || (!order.length && !extras.speech && !extras.meaning)} onClick={() => void start()}>{t("setupStart")}</button>
       </div>
       <div className="row">
         <strong className="grow">{t("resourceUse")}</strong>
@@ -169,6 +180,15 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
           </label>
         ))}
         {!shown.length && <p className="muted">{t("setupNothingFits")}</p>}
+        <label className="row check">
+          <input type="checkbox" checked={extras.speech} onChange={(e) => setExtras({ ...extras, speech: e.target.checked })} />
+          <span className="grow"><strong>{t("setupSpeech")}</strong> <span className="muted">· {t("setupSpeechHint")}</span></span>
+        </label>
+        <label className="row check">
+          <input type="checkbox" checked={extras.meaning} onChange={(e) => setExtras({ ...extras, meaning: e.target.checked })} />
+          <span className="grow"><strong>{t("setupMeaning")}</strong> <span className="muted">· {t("setupMeaningHint")}</span></span>
+          <span className="muted mono" dir="ltr">0.64 GB</span>
+        </label>
       </div>
       <p className="muted" dir="auto">{t("setupTotal", { gb: total.toFixed(1) })}</p>
       <p className="muted">{t("setupLater")}</p>

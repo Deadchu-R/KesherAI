@@ -16,7 +16,17 @@ export async function knowledgeRoutes(app: FastifyInstance, s: KesherServices): 
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Knowledge bases can be changed only on the computer they are on." });
   };
 
-  app.get("/api/knowledge", async () => ({ bases: await s.knowledge.list() }));
+  app.get("/api/knowledge", async () => ({ bases: await s.knowledge.list(), semantic: s.semantic.status() }));
+  /** Turns on search by meaning: downloads and starts KesherAI's embedding model (the user presses the button). */
+  app.post("/api/knowledge/semantic/setup", { preHandler: local }, async () => {
+    void s.semantic.setup().catch(() => undefined);
+    return s.semantic.status();
+  });
+  /** Re-indexes every base (after choosing another embedding model). */
+  app.post("/api/knowledge/reindex", { preHandler: local }, async () => {
+    void s.knowledge.reindexAll();
+    return { ok: true };
+  });
   app.post<{ Body: { query?: string; base?: string; limit?: number } }>("/api/knowledge/search", async (req, reply) => {
     const q = String(req.body?.query ?? "").trim();
     if (!q) return reply.code(400).send({ error: "Type something to search for." });

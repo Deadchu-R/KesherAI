@@ -5,7 +5,8 @@ import { desktop, toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Base { id: string; name: string; description?: string; folders: string[]; urls: string[]; files: number; passages: number; indexing: boolean; indexedAt: string | null; error: string | null }
+interface Semantic { active: string | null; usable: boolean; builtIn: boolean; phase?: string; message?: string; model: { name: string; sizeGb: number } }
+interface Base { id: string; name: string; description?: string; folders: string[]; urls: string[]; files: number; passages: number; embedded?: number; indexing: boolean; indexedAt: string | null; error: string | null }
 interface Hit { base: string; source: string; page: number; text: string; score: number }
 
 const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
@@ -60,10 +61,11 @@ function BaseForm({ base, onDone }: { base?: Base; onDone: () => void }) {
  */
 export function KnowledgePage() {
   const [bases, setBases] = useState<Base[] | null>(null);
+  const [sem, setSem] = useState<Semantic | null>(null);
   const [editing, setEditing] = useState<Base | "new" | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
-  const load = () => api<{ bases: Base[] }>("/api/knowledge").then((r) => setBases(r.bases), (e: Error) => toast(e.message));
+  const load = () => api<{ bases: Base[]; semantic: Semantic }>("/api/knowledge").then((r) => { setBases(r.bases); setSem(r.semantic); }, (e: Error) => toast(e.message));
   useEffect(() => {
     void load();
     const t = setInterval(() => void load(), 4000);
@@ -92,6 +94,21 @@ export function KnowledgePage() {
         <h1>{L("ידע", "Knowledge")}</h1>
         <p className="muted">{L("תיקיות ודפי אינטרנט שכל צ׳אט וסוכן יכולים לחפש בהם ולענות מהם, עם מקור לכל עובדה. האינדקס מתעדכן לבד כשקבצים משתנים.", "Folders and web pages every chat and agent can search and answer from, citing the source of each fact. The index updates itself when files change.")}</p>
       </div>
+      {sem && (
+        <section className="card kb-sem">
+          <div className="row">
+            <strong className="grow">{L("חיפוש לפי משמעות", "Search by meaning")}</strong>
+            {sem.usable ? <span className="pill good">{L("פעיל", "On")}</span> : null}
+          </div>
+          <p className="muted small">
+            {sem.usable
+              ? L(`המודל ${sem.active?.split("/").pop()} מבין שאלות גם כשאין בהן אותן מילים כמו במסמך ("איך מקבלים את הכסף בחזרה" ימצא את מדיניות ההחזרים).`, `${sem.active?.split("/").pop()} understands questions even without the document's exact words ("how do I get my money back" finds the refund policy).`)
+              : L(`כרגע החיפוש לפי מילים. מודל Embeddings קטן (${sem.model.name}, ${sem.model.sizeGb} GB, מבין גם עברית) ירוץ במחשב ויחפש לפי משמעות.`, `Search is by words now. A small embedding model (${sem.model.name}, ${sem.model.sizeGb} GB, Hebrew too) runs on this computer and searches by meaning.`)}
+          </p>
+          {!sem.usable && !sem.phase && <div className="row"><button type="button" className="primary" onClick={() => void api<Semantic>("/api/knowledge/semantic/setup", { method: "POST" }).then(setSem, (e: Error) => toast(e.message))}>{L("הפעלת חיפוש לפי משמעות", "Turn on search by meaning")}</button></div>}
+          {sem.message && <p className={sem.phase === "error" ? "error small" : "muted small"}>{sem.message}</p>}
+        </section>
+      )}
       {editing ? (
         <BaseForm base={editing === "new" ? undefined : editing} onDone={() => { setEditing(null); void load(); }} />
       ) : (
@@ -103,7 +120,7 @@ export function KnowledgePage() {
           <div className="row">
             <strong>{b.name}</strong>
             <span className="muted small">
-              {b.indexing ? L("מאנדקס…", "Indexing…") : L(`${b.files === 1 ? "קובץ אחד" : `${b.files} קבצים`} · ${b.passages} קטעים`, `${b.files} files · ${b.passages} passages`)}
+              {b.indexing ? L("מאנדקס…", "Indexing…") : L(`${b.files === 1 ? "קובץ אחד" : `${b.files} קבצים`} · ${b.passages} קטעים${b.embedded ? ` · ${b.embedded} לפי משמעות` : ""}`, `${b.files} files · ${b.passages} passages${b.embedded ? ` · ${b.embedded} by meaning` : ""}`)}
               {b.indexedAt && !b.indexing ? ` · ${new Date(b.indexedAt).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined, { hour: "2-digit", minute: "2-digit" })}` : ""}
             </span>
             <span className="grow" />

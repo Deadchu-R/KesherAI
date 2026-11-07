@@ -143,6 +143,9 @@ export interface Provider {
 
   /** Generates one or more images. */
   generateImage?(request: ProviderImageRequest, signal?: AbortSignal): Promise<GeneratedFile[]>;
+
+  /** Turns texts into vectors (embedding models), in the same order. */
+  embed?(request: { providerModelId: string; input: string[] }, signal?: AbortSignal): Promise<number[][]>;
 }
 
 /**

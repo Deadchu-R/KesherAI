@@ -51,6 +51,8 @@ export const KesherConfigSchema = z.object({
       /** The GGUF file loaded last, loaded again on start-up when `autoLoadLast` is on. */
       lastModel: z.string().optional(),
       autoLoadLast: z.boolean().default(true),
+      /** The embedding model file the built-in engine runs for search by meaning. */
+      embedModel: z.string().optional(),
       /** How many chats the built-in engine answers at the same time (llama-server slots). */
       parallel: z.number().int().min(1).max(8).default(2),
       /** How models use the graphics cards (see gpus.ts). */

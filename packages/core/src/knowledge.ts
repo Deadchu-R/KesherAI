@@ -31,6 +31,8 @@ interface Passage {
   /** Page (PDF) or part number. */
   page: number;
   text: string;
+  /** Its meaning as a vector, from the embedding model in `Index.vecModel`. */
+  vec?: number[];
 }
 
 interface FileEntry {
@@ -41,6 +43,8 @@ interface FileEntry {
 
 interface Index {
   files: Record<string, FileEntry>;
+  /** The embedding model the vectors come from. */
+  vecModel?: string;
   indexedAt?: string;
   error?: string;
 }
@@ -157,6 +161,25 @@ function htmlToText(html: string): string {
     .replace(/&#39;/g, "'");
 }
 
+/** An embedding model for search by meaning. */
+export interface Embedder {
+  /** The model's id (vectors are made again when it changes). */
+  id: string;
+  /** Vectors for texts; `query` for a question, `doc` for a passage (some models word them differently). */
+  embed(texts: string[], kind: "query" | "doc"): Promise<number[][]>;
+}
+
+function normalize(v: number[]): number[] {
+  const n = Math.sqrt(v.reduce((a, x) => a + x * x, 0)) || 1;
+  return v.map((x) => x / n);
+}
+
+function dot(a: number[], b: number[]): number {
+  let s = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i]! * b[i]!;
+  return s;
+}
+
 /** Keeps the knowledge bases and their indexes. */
 export class Knowledge {
   private bases: KnowledgeBase[] = [];
@@ -167,7 +190,10 @@ export class Knowledge {
   private loaded?: Promise<void>;
 
   /** @param dir - The knowledge folder in KesherAI's data. */
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly embedder: () => Embedder | undefined = () => undefined,
+  ) {}
 
   /** Reads the bases and starts keeping them up to date (once). */
   load(): Promise<void> {
@@ -202,7 +228,9 @@ export class Knowledge {
       const ix = this.indexes.get(b.id) ?? { files: {} };
       const files = Object.keys(ix.files).length;
       const passages = Object.values(ix.files).reduce((n, f) => n + f.passages.length, 0);
-      return { ...b, files, passages, indexing: this.indexing.has(b.id), indexedAt: ix.indexedAt ?? null, error: ix.error ?? null };
+      const e = this.embedder();
+      const embedded = e && ix.vecModel === e.id ? Object.values(ix.files).reduce((n, f) => n + f.passages.filter((p) => p.vec).length, 0) : 0;
+      return { ...b, files, passages, embedded, indexing: this.indexing.has(b.id), indexedAt: ix.indexedAt ?? null, error: ix.error ?? null };
     });
   }
 
@@ -315,6 +343,20 @@ export class Knowledge {
           }
         }
         for (const key of Object.keys(ix.files)) if (!seen.has(key)) delete ix.files[key];
+        // Search by meaning: vectors for passages that have none yet (all of them when the model changed).
+        const e = this.embedder();
+        if (e) {
+          if (ix.vecModel !== e.id) for (const f of Object.values(ix.files)) for (const p of f.passages) delete p.vec;
+          ix.vecModel = e.id;
+          const todo = Object.values(ix.files).flatMap((f) => f.passages.filter((p) => !p.vec));
+          for (let i = 0; i < todo.length; i += 16) {
+            const batch = todo.slice(i, i + 16);
+            const vecs = await e.embed(batch.map((p) => p.text), "doc");
+            batch.forEach((p, j) => (p.vec = normalize(vecs[j] ?? []).map((x) => Math.round(x * 1e4) / 1e4)));
+            // Save as it goes, so a long first run is not lost.
+            if (i % 320 === 0) await writeFile(join(this.dir, `${id}.json`), JSON.stringify(ix)).catch(() => undefined);
+          }
+        }
         ix.indexedAt = new Date().toISOString();
         delete ix.error;
       } catch (e) {
@@ -342,12 +384,42 @@ export class Knowledge {
     const bases = pick ? this.bases.filter((b) => b.id === pick || b.name.toLowerCase() === pick || b.name.toLowerCase().includes(pick)) : this.bases;
     const all: Array<Passage & { base: string }> = [];
     for (const b of bases) for (const f of Object.values(this.indexes.get(b.id)?.files ?? {})) for (const p of f.passages) all.push({ ...p, base: b.name });
-    return rank(all, query, k).map(({ base, source, page, text, score }) => ({ base, source, page, text, score: Math.round(score * 100) / 100 }));
+    const words = rank(all, query, Math.max(k * 4, 30));
+    const e = this.embedder();
+    const withVec = e ? all.filter((p) => p.vec?.length) : [];
+    if (!e || !withVec.length) return words.slice(0, k).map(({ base, source, page, text, score }) => ({ base, source, page, text, score: Math.round(score * 100) / 100 }));
+    // Both ways: by words (BM25) and by meaning (vectors), joined by rank (reciprocal rank fusion).
+    let qv: number[];
+    try {
+      qv = normalize((await e.embed([query], "query"))[0] ?? []);
+    } catch {
+      return words.slice(0, k).map(({ base, source, page, text, score }) => ({ base, source, page, text, score: Math.round(score * 100) / 100 }));
+    }
+    const meaning = withVec
+      .map((p) => ({ p, s: dot(qv, p.vec!) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, Math.max(k * 4, 30));
+    const fused = new Map<Passage & { base: string }, number>();
+    words.forEach((w, i) => {
+      const orig = all.find((p) => p.text === w.text && p.source === w.source && p.page === w.page)!;
+      fused.set(orig, (fused.get(orig) ?? 0) + 1 / (60 + i));
+    });
+    meaning.forEach((m, i) => fused.set(m.p, (fused.get(m.p) ?? 0) + 1 / (60 + i)));
+    return [...fused.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, k)
+      .map(([p, sc]) => ({ base: p.base, source: p.source, page: p.page, text: p.text, score: Math.round(sc * 10_000) / 100 }));
   }
 
   /** @returns The bases as loaded now (empty before `load()`). */
   current(): KnowledgeBase[] {
     return this.bases;
+  }
+
+  /** Indexes every base again (e.g. for new vectors after the embedding model changed). */
+  async reindexAll(): Promise<void> {
+    await this.load();
+    for (const b of this.bases) await this.reindex(b.id).catch(() => undefined);
   }
 
   /** Stops watching folders. */

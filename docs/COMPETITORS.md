@@ -26,7 +26,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Bundled llama.cpp engine (Off Grid, Locally Uncensored) | One big GPU pack up front (Locally Uncensored downloads 7.5 GB for all GPU engines at once) | Download each engine only when first needed: chat on NVIDIA is ~680 MB (CUDA build + runtime), other GPUs ~38 MB (Vulkan) | ✅ |
 | One-click model download (LM Studio) | Chat models only | Every category; "Start here" list that installs the engine, downloads and loads in one click | ✅ chat · ⬜ others |
 | "Fits my hardware" badge (LM Studio, Locally Uncensored) | Yes/no only | Good / OK / slow / too big, plus expected time for a short answer, a long answer, reading a file and loading the model | ✅ |
-| Guided first-run setup with a resource level (Off Grid: Conservative / Balanced / Extreme, models per category, total download) | — | Same levels, picked from our own speed estimate for this computer, separate coding-agent pick when the chat model is weak at tools; nothing downloads before you press the button | ✅ chat and code · ⬜ speech, read-aloud, embeddings, video |
+| Guided first-run setup with a resource level (Off Grid: Conservative / Balanced / Extreme, models per category, total download) | — | Same levels, picked from our own speed estimate for this computer, separate coding-agent pick when the chat model is weak at tools; nothing downloads before you press the button | ✅ chat, code, speech to text, embeddings · ⬜ video |
 | Disk-space check before a download (Locally Uncensored) | — | Same, and show it per file | ✅ |
 | Pause / resume / "skip for now" on big downloads (Locally Uncensored) | — | Pause and resume in the downloads circle (resumes from the part file) | ✅ |
 | Use the app while a big download runs (Locally Uncensored) | — | Already true: downloads run in the background queue | ✅ |
@@ -100,13 +100,13 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 
 0. Category tabs on the Models screen, conversation search, integrations (MCP), and computer use with local vision models.
 
-1. Managed ComfyUI with on-demand GPU download → images without any other app.
-2. Measured speed replacing estimates; disk-space check; pause and skip on first-run downloads.
-3. Plan mode and git checkpoints for the coding agent.
-4. Whisper, TTS and embeddings as active models with tools, added to "Set it up for me".
-5. More engine auto-detection (Jan, KoboldCpp, vLLM).
-6. Conversation search and document chat.
-7. Push notifications and built-in TLS for the phone.
+1. Managed ComfyUI with on-demand GPU download → images without any other app. ✅
+2. Measured speed replacing estimates; disk-space check; pause and skip on first-run downloads. ✅
+3. Plan mode and git checkpoints for the coding agent. ✅
+4. Whisper, TTS and embeddings as active models with tools, added to "Set it up for me". ✅
+5. More engine auto-detection (Jan, KoboldCpp, vLLM). ✅
+6. Conversation search and document chat. ✅
+7. Push notifications and built-in TLS for the phone. ✅ notifications · ⬜ TLS (future list)
 
 ## From the November 2026 review (Msty, LM Studio, AnythingLLM, Open WebUI)
 

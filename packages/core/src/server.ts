@@ -20,6 +20,8 @@ import type { PackagedUpdates } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { googleTools } from "./google-tools.js";
 import { Knowledge, knowledgeTools } from "./knowledge.js";
+import { Semantic } from "./semantic.js";
+import { ensureEngine } from "./routes/engine.js";
 import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
 import { Notifier, type Note } from "./notify.js";
@@ -223,7 +225,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   }, undefined, options.screen);
   void journal.load();
   // Knowledge bases: the user's folders and web pages, searchable by the models, with sources.
-  const knowledge = new Knowledge(join(paths.root, "knowledge"));
+  // Search by meaning: an embedding model (KesherAI's own in a second llama.cpp server, or one the user made active).
+  // Assigned below, once the engine exists; the knowledge bases ask for it when they search.
+  // eslint-disable-next-line prefer-const
+  let semantic: Semantic | undefined;
+  const knowledge = new Knowledge(join(paths.root, "knowledge"), () => semantic?.embedder());
   void knowledge.load();
   const personas = new Personas(join(paths.root, "personas.json"));
   const skills = new SkillStore(paths.skills);
@@ -317,6 +323,20 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
   });
   if (config.comfyui.autoStart) void comfy.start().catch(() => undefined);
+  semantic = new Semantic({
+    config,
+    registry,
+    downloads,
+    modelsDir: () => paths.models,
+    enginesDir: paths.engines,
+    binary: async () => {
+      if (!engine.status().installed) await ensureEngine(services);
+      return engine.status().binaryPath!;
+    },
+    save: persist,
+    changed: () => void knowledge.reindexAll(),
+  });
+  void semantic.resume().catch(() => undefined);
   const services: KesherServices = {
     config,
     paths,
@@ -374,6 +394,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     skills,
     pipelines,
     comfy,
+    semantic: semantic!,
     conversationSearch: new ConversationSearch(library),
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
@@ -471,6 +492,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       knowledge.close();
       notifier.close();
       void comfy.stop();
+      void semantic?.stop();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();

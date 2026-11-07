@@ -28,6 +28,7 @@ import type { SkillStore } from "./skill-store.js";
 import type { Pipelines } from "./pipelines.js";
 import type { ComfyManager } from "./comfy-manager.js";
 import type { ConversationSearch } from "./conversation-search.js";
+import type { Semantic } from "./semantic.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -89,6 +90,8 @@ export interface KesherServices {
   comfy: ComfyManager;
   /** Search across conversations. */
   conversationSearch: ConversationSearch;
+  /** Search by meaning (embeddings). */
+  semantic: Semantic;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

@@ -141,6 +141,9 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     return s.engine.status();
   });
 
+  /** "Skip for now" during "Set it up for me": skips the model being downloaded and goes on. */
+  app.post("/api/models/setup/skip", async (_req, reply) => (skipSetupDownload(s) ? s.engine.status() : reply.code(409).send({ error: "Nothing is downloading for setup." })));
+
   /** The "Start here" list, with whether each model is already downloaded. */
   app.get("/api/models/recommended", async () => {
     const hw = await detectHardwareCached();
@@ -178,35 +181,62 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 }
 
+/**
+ * Skips the model "Set it up for me" is downloading now.
+ *
+ * @param s - Services.
+ * @returns Whether there was one.
+ */
+export function skipSetupDownload(s: KesherServices): boolean {
+  if (!setupJob) return false;
+  setupJob.skipped = true;
+  return s.downloads.cancel(setupJob.id);
+}
+
 function engineBusy(s: KesherServices): boolean {
   const job = s.engine.status().job;
   return !!job && job.phase !== "error";
 }
 
-/** Installs the engine, downloads each model if missing, and loads the first. */
+/** The setup download running now, so "Skip for now" can skip it. */
+let setupJob: { id: string; skipped: boolean } | undefined;
+
+/** Installs the engine, downloads each model if missing (skipping any the user skips), and loads the first one there is. */
 async function setUp(s: KesherServices, models: RecommendedModel[]): Promise<void> {
   await ensureEngine(s);
   const paths: string[] = [];
   for (const model of models) {
-    const files = await s.engine.track("downloading-model", `Finding ${model.name}…`, () =>
-      listHubFiles(model.repo, { ...(s.config.huggingFaceToken ? { token: s.config.huggingFaceToken } : {}) }),
-    );
-    const file = files.find((f) => new RegExp(model.filePattern, "i").test(f.path));
-    if (!file) throw new Error(`No file matching ${model.filePattern} in ${model.repo}`);
-    const dest = join(s.paths.models, "chat", model.repo, file.path);
-    if (!existsSync(dest)) {
-      await s.engine.track("downloading-model", `Downloading ${model.name} (${model.sizeGb} GB)…`, async () => {
-        const job = s.downloads.enqueue({
-          url: file.url,
-          dest,
-          size: file.size,
-          ...(file.sha256 ? { sha256: file.sha256 } : {}),
-          label: `${model.name} · ${file.path}`,
+    try {
+      const files = await s.engine.track("downloading-model", `Finding ${model.name}…`, () =>
+        listHubFiles(model.repo, { ...(s.config.huggingFaceToken ? { token: s.config.huggingFaceToken } : {}) }),
+      );
+      const file = files.find((f) => new RegExp(model.filePattern, "i").test(f.path));
+      if (!file) throw new Error(`No file matching ${model.filePattern} in ${model.repo}`);
+      const dest = join(s.paths.models, "chat", model.repo, file.path);
+      if (!existsSync(dest)) {
+        await s.engine.track("downloading-model", `Downloading ${model.name} (${model.sizeGb} GB)…`, async () => {
+          const job = s.downloads.enqueue({
+            url: file.url,
+            dest,
+            size: file.size,
+            ...(file.sha256 ? { sha256: file.sha256 } : {}),
+            label: `${model.name} · ${file.path}`,
+          });
+          setupJob = { id: job.id, skipped: false };
+          await waitForDownload(s.downloads, job.id);
         });
-        await waitForDownload(s.downloads, job.id);
-      });
+      }
+      paths.push(dest);
+    } catch (err) {
+      // "Skip for now": go on with the next model; the skipped one can be downloaded later.
+      if (!setupJob?.skipped) throw err;
+    } finally {
+      setupJob = undefined;
     }
-    paths.push(dest);
+  }
+  if (!paths.length) {
+    s.engine.fail(new Error("Setup skipped. You can download a model any time from this page."));
+    return;
   }
   await loadModel(s, paths[0]!);
 }
