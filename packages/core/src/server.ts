@@ -149,6 +149,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     updater: new Updater(),
     google,
     driveSync,
+    sd,
     tunnel: new Tunnel(join(paths.engines, "cloudflared"), downloads),
     autodetected,
     saveConfig: persist,

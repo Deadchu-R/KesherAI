@@ -10,6 +10,7 @@ import type { Updater } from "./updates.js";
 import type { GoogleDrive } from "./google.js";
 import type { DriveSync } from "./drive-sync.js";
 import type { Tunnel } from "./tunnel.js";
+import type { SdEngine } from "./sdcpp.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -35,6 +36,8 @@ export interface KesherServices {
   google: GoogleDrive;
   /** Keeps the library in step with Google Drive. */
   driveSync: DriveSync;
+  /** The built-in image engine (stable-diffusion.cpp). */
+  sd: SdEngine;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

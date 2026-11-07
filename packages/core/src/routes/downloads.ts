@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
+import { statfs } from "node:fs/promises";
 import { detectHardwareCached, estimatePerformance, listHubFiles, modelSummary, searchHub, type DownloadJob, type HubSort } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
@@ -39,6 +40,16 @@ export function destinationFor(s: Pick<KesherServices, "paths" | "config">, body
   const normalized = normalize(dest);
   if (!normalized.startsWith(normalize(base) + sep)) throw new Error("Invalid file path");
   return normalized;
+}
+
+/** Free and total space of the drive holding `dir`. */
+async function diskInfo(dir: string): Promise<{ freeGb?: number; totalGb?: number }> {
+  try {
+    const st = await statfs(dir);
+    return { freeGb: (st.bavail * st.bsize) / 1024 ** 3, totalGb: (st.blocks * st.bsize) / 1024 ** 3 };
+  } catch {
+    return {};
+  }
 }
 
 /** A clear message for network failures, which Node reports only as "fetch failed". */
@@ -106,6 +117,45 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     );
   });
 
+  /** Free space on the drive models are saved to. */
+  app.get("/api/disk", async () => diskInfo(s.paths.models));
+
+  /**
+   * Everything a download involves, shown before it starts: the file, the
+   * extra files and engine it needs to run, the total, the free disk space,
+   * and whether it fits this computer's memory.
+   */
+  app.get<{ Querystring: { repo: string; path: string; category?: string; size?: string } }>("/api/downloads/plan", async (req, reply) => {
+    const { repo, path, category } = req.query;
+    let size = Number(req.query.size);
+    if (!Number.isFinite(size) || size <= 0) {
+      try {
+        size = (await listHubFiles(repo, { ...(token() ? { token: token() } : {}) })).find((f) => f.path === path)?.size ?? 0;
+      } catch (err) {
+        return reply.code(502).send({ error: hubError(err) });
+      }
+    }
+    const items: Array<{ name: string; sizeGb: number; have: boolean; why: string }> = [{ name: path.split("/").pop() ?? path, sizeGb: size / 1024 ** 3, have: false, why: "model" }];
+    const isImage = category === "image" || /qwen[-_ ]?image|flux|sdxl|stable[-_]?diffusion/i.test(repo + path);
+    if (isImage && /\.(gguf|safetensors|ckpt)$/i.test(path)) {
+      const r = await s.sd.requirements(path);
+      for (const e of r.extras) items.push({ name: e.name, sizeGb: e.sizeGb, have: e.have, why: "extra" });
+      if (!r.engineInstalled) items.push({ name: "stable-diffusion.cpp", sizeGb: process.platform === "win32" ? 0.4 : 0.05, have: false, why: "engine" });
+    } else if (/\.gguf$/i.test(path) && !s.engine.status().installed) {
+      items.push({ name: "llama.cpp", sizeGb: process.platform === "win32" ? 0.68 : 0.04, have: false, why: "engine" });
+    }
+    const totalGb = items.filter((i) => !i.have).reduce((n, i) => n + i.sizeGb, 0);
+    const disk = await diskInfo(s.paths.models);
+    const hw = await detectHardwareCached();
+    return {
+      items,
+      totalGb,
+      freeGb: disk.freeGb,
+      fitsDisk: disk.freeGb === undefined || disk.freeGb > totalGb + 1,
+      estimate: estimatePerformance(size, hw),
+    };
+  });
+
   app.get("/api/downloads", async () => s.downloads.list());
 
   app.post<{ Body: DownloadBody }>("/api/downloads", async (req, reply) => {
@@ -113,6 +163,10 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
       const files = await listHubFiles(req.body.repo, { token: token() });
       const file = files.find((f) => f.path === req.body.path);
       if (!file) return reply.code(404).send({ error: "File not found in repo" });
+      const disk = await diskInfo(s.paths.models);
+      if (disk.freeGb !== undefined && disk.freeGb < file.size / 1024 ** 3 + 1) {
+        return reply.code(507).send({ error: `Not enough disk space: the file needs ${(file.size / 1024 ** 3).toFixed(1)} GB and ${disk.freeGb.toFixed(1)} GB is free. Free some space or choose another models folder.` });
+      }
       return s.downloads.enqueue({
         url: file.url,
         dest: destinationFor(s, req.body),

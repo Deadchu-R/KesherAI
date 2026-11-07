@@ -2,6 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { getLocale, setLocale } from "./i18n";
+import "@fontsource/rubik/400.css";
+import "@fontsource/rubik/500.css";
+import "@fontsource/rubik/600.css";
+import "@fontsource/ibm-plex-mono/400.css";
 import "./styles.css";
 
 setLocale(getLocale());

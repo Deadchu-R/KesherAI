@@ -268,6 +268,23 @@ export class SdEngine {
     return missing.reduce((n, c) => n + c.sizeGb, 0);
   }
 
+  /**
+   * What a model still needs before it can run: its extra files and the
+   * engine itself, with sizes, for the download confirmation.
+   *
+   * @param modelFile - Model file name.
+   * @returns The family and each extra file, with whether it is already here.
+   */
+  async requirements(modelFile: string): Promise<{ family: string; engineInstalled: boolean; extras: Array<{ name: string; repo: string; sizeGb: number; have: boolean }> }> {
+    const family = familyFor(modelFile);
+    const engineInstalled = !!(await findFile(this.dir, process.platform === "win32" ? "sd-cli.exe" : "sd-cli"));
+    return {
+      family: family.name,
+      engineInstalled,
+      extras: family.companions.map((c) => ({ name: basename(c.path), repo: c.repo, sizeGb: c.sizeGb, have: existsSync(this.companionPath(c)) })),
+    };
+  }
+
   /** @returns Whether the engine and a model's extra files are all on disk. */
   async ready(modelFile: string): Promise<boolean> {
     const exe = await findFile(this.dir, process.platform === "win32" ? "sd-cli.exe" : "sd-cli");

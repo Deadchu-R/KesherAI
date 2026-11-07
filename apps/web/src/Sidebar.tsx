@@ -135,9 +135,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
       <div className="brand">
-        <svg width="24" height="24" viewBox="0 0 26 26" aria-hidden="true">
-          <circle cx="8" cy="13" r="5" fill="none" stroke="var(--accent)" strokeWidth="2" />
-          <circle cx="18" cy="13" r="5" fill="none" stroke="var(--accent)" strokeWidth="2" />
+        {/* The knot: two rings linked, one passing over the other. */}
+        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="knot">
+          <circle cx="10" cy="14" r="6" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
+          <circle cx="18" cy="14" r="6" fill="none" stroke="var(--text)" strokeWidth="2.4" />
+          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--panel)" strokeWidth="5" />
+          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
         {branding.productName}
       </div>

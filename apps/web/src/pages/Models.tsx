@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { pickSetup, type ResourceLevel } from "@kesher/shared";
+import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, t } from "../i18n";
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
@@ -192,39 +192,116 @@ export function ModelsPage() {
     }
   }
 
-  return (
-    <div className="page">
-      <h1>{t("models")}</h1>
-      <StartHere onChange={refreshLocal} />
-      {hw && (
-        <div className="card row muted">
-          <strong style={{ color: "var(--text)" }}>{t("yourHardware")}</strong>
-          {hw.gpus.map((g) => <span key={g.name} className="mono">{g.name} · {gb(g.vramTotal)} VRAM</span>)}
-          <span className="mono">{gb(hw.ramTotal)} RAM{hw.unifiedMemory ? " (unified)" : ""}</span>
-        </div>
-      )}
+  const [tab, setTabState] = useState<string>(() => {
+    try {
+      return localStorage.getItem("kesher-models-tab") ?? "chat";
+    } catch {
+      return "chat";
+    }
+  });
+  const setTab = (id: string) => {
+    setTabState(id);
+    try {
+      localStorage.setItem("kesher-models-tab", id);
+    } catch {
+      // remembered tab is only a convenience
+    }
+  };
+  const [disk, setDisk] = useState<{ freeGb?: number } | null>(null);
+  useEffect(() => {
+    void api<{ freeGb?: number }>("/api/disk").then(setDisk).catch(() => undefined);
+  }, [doneCount]);
+  const tabs: Array<{ id: string; label: string; engine?: string }> = [
+    { id: "chat", label: categoryLabel("chat") },
+    { id: "image", label: categoryLabel("image") },
+    { id: "video", label: categoryLabel("video"), engine: "soon" },
+    { id: "speech-to-text", label: categoryLabel("speech-to-text"), engine: "soon" },
+    { id: "text-to-speech", label: categoryLabel("text-to-speech"), engine: "soon" },
+    { id: "embedding", label: categoryLabel("embedding"), engine: "soon" },
+    { id: "storage", label: t("storage") },
+  ];
+  const current = tabs.find((x) => x.id === tab) ?? tabs[0]!;
+  const IMAGE_NAME = /qwen[-_ ]?image|flux|sdxl|sd[-_]?xl|stable[-_]?diffusion|z[-_]?image/i;
+  const ofTab = (f: LocalFile): boolean => {
+    const p = f.path.replace(/\\/g, "/");
+    if (tab === "image") return p.includes("/image/") || (p.includes("/other/") && IMAGE_NAME.test(p));
+    if (tab === "chat") return !!f.gguf && !p.includes("/image/") && !IMAGE_NAME.test(p);
+    return p.includes(`/${tab}/`);
+  };
 
-      <HubBrowser />
+  return (
+    <div className="page models-page">
+      <header className="page-head">
+        <h1>{t("models")}</h1>
+        {hw && (
+          <p className="muted hw-line" dir="auto">
+            {hw.gpus.map((g) => `${g.name} · ${gb(g.vramTotal)} VRAM`).join(", ") || t("noGpu")} · {gb(hw.ramTotal)} RAM
+            {disk?.freeGb !== undefined && ` · ${t("diskFree", { gb: disk.freeGb.toFixed(0) })}`}
+          </p>
+        )}
+      </header>
+
+      <nav className="tabs" role="tablist" aria-label={t("models")}>
+        {tabs.map((x) => (
+          <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} className={tab === x.id ? "on" : ""} onClick={() => setTab(x.id)}>
+            {x.label}
+            {x.id === "storage" && local.length > 0 && <span className="tab-count">{local.length}</span>}
+          </button>
+        ))}
+      </nav>
+
       {error && <p className="error">{error}</p>}
 
-      <section className="card">
-        <h2>{t("localFiles")}</h2>
-        <ModelFolders onChange={refreshLocal} />
-        <div className="list">
-          {local.map((f) => (
-            <div key={f.path} className="row">
-              <span className="mono grow" dir="ltr">{f.name}</span>
-              {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
-              <span className="muted mono" dir="ltr">{gb(f.size)}</span>
-              {f.estimate && f.gguf && <RatingBadge e={f.estimate} />}
-              {f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
-            </div>
-          ))}
-          {!local.length && <p className="muted">{t("noLocalModels")}</p>}
-        </div>
-      </section>
+      {tab === "chat" && <StartHere onChange={refreshLocal} />}
+      {current.engine === "soon" && <p className="card muted">{t("engineSoon", { category: current.label })}</p>}
+
+      {tab !== "storage" && (
+        <>
+          {local.filter(ofTab).length > 0 && (
+            <section className="card stack">
+              <h2>{t("onThisComputer")}</h2>
+              <div className="list">
+                {local.filter(ofTab).map((f) => (
+                  <div key={f.path} className="row">
+                    <span className="mono grow" dir="ltr">{f.name}</span>
+                    {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
+                    <span className="muted mono" dir="ltr">{gb(f.size)}</span>
+                    {f.estimate && f.gguf && <RatingBadge e={f.estimate} />}
+                    {tab === "chat" && f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+          <HubBrowser key={tab} fixedCategory={tab} onDownloaded={refreshLocal} />
+        </>
+      )}
+
+      {tab === "storage" && (
+        <section className="card stack">
+          <h2>{t("localFiles")}</h2>
+          <ModelFolders onChange={refreshLocal} />
+          <div className="list">
+            {local.map((f) => (
+              <div key={f.path} className="row">
+                <span className="mono grow" dir="ltr">{f.name}</span>
+                {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
+                <span className="muted mono" dir="ltr">{gb(f.size)}</span>
+                {f.estimate && f.gguf && <RatingBadge e={f.estimate} />}
+                {f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
+              </div>
+            ))}
+            {!local.length && <p className="muted">{t("noLocalModels")}</p>}
+          </div>
+        </section>
+      )}
     </div>
   );
+}
+
+function categoryLabel(id: string): string {
+  const c = BUILT_IN_CATEGORIES.find((x) => x.id === id);
+  return c ? (c.label[getLocale()] ?? c.label.en) : id;
 }
 
 interface Folder { folder: string; source: string }

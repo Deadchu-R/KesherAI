@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, withToken } from "./api";
-import { t, type StringKey } from "./i18n";
+import { getLocale, t, type StringKey } from "./i18n";
 
 /** One download, as the server reports it. */
 export interface Job { id: string; label: string; status: string; received: number; total?: number; speed: number; error?: string }
@@ -40,6 +40,16 @@ export function useDownloads(): Job[] {
 const gb = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : `${(b / 1024 ** 2).toFixed(0)} MB`);
 const ACTIVE = new Set(["queued", "downloading", "verifying"]);
 
+/** "about 4 min" from seconds, in the interface language. */
+function eta(seconds: number): string {
+  const nf = (n: number, unit: "second" | "minute" | "hour") => new Intl.NumberFormat(getLocale(), { style: "unit", unit, unitDisplay: "short" }).format(n);
+  if (seconds < 60) return nf(Math.max(1, Math.round(seconds)), "second");
+  if (seconds < 3600) return nf(Math.round(seconds / 60), "minute");
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return m ? `${nf(h, "hour")} ${nf(m, "minute")}` : nf(h, "hour");
+}
+
 /**
  * The small round downloads button in the corner of every screen. It shows
  * a progress ring while something downloads and a dot when one failed, and
@@ -76,6 +86,7 @@ export function DownloadsButton() {
                 {ACTIVE.has(j.status) && j.total ? <div className="bar"><div style={{ width: `${(100 * j.received) / j.total}%` }} /></div> : null}
                 <div className="row muted">
                   <span className="mono grow" dir="ltr">{gb(j.received)}{j.total ? ` / ${gb(j.total)}` : ""}{j.speed ? ` · ${(j.speed / 1024 ** 2).toFixed(1)} MB/s` : ""}</span>
+                  {j.status === "downloading" && j.total && j.speed > 0 && <span className="muted">{t("timeLeft", { time: eta((j.total - j.received) / j.speed) })}</span>}
                   {ACTIVE.has(j.status) && <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>}
                   {(j.status === "failed" || j.status === "cancelled") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("retry")}</button>}
                   {!ACTIVE.has(j.status) && <button type="button" onClick={() => remove(j.id)} aria-label={t("remove")}>✕</button>}

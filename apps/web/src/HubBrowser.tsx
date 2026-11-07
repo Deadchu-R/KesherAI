@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES } from "@kesher/shared";
 import { api } from "./api";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, type StringKey } from "./i18n";
 import { RatingBadge, type Estimate } from "./Estimate";
 
 interface HubModel {
@@ -47,10 +47,10 @@ function ago(iso?: string): string {
  *
  * @param props.onDownloaded - Called after a download starts.
  */
-export function HubBrowser({ onDownloaded }: { onDownloaded?: () => void }) {
+export function HubBrowser({ onDownloaded, fixedCategory }: { onDownloaded?: () => void; fixedCategory?: string }) {
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("chat");
-  const [format, setFormat] = useState("gguf");
+  const [category, setCategory] = useState(fixedCategory ?? "chat");
+  const [format, setFormat] = useState((fixedCategory ?? "chat") === "chat" ? "gguf" : "");
   const [sort, setSort] = useState<Sort>("trending");
   const [results, setResults] = useState<HubModel[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,12 +83,15 @@ export function HubBrowser({ onDownloaded }: { onDownloaded?: () => void }) {
   return (
     <section className="card stack hub">
       <h2>{t("hubTitle")}</h2>
+      <p className="muted small">{t("hubHint")}</p>
       <form className="hub-filters" onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <input className="grow" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchHub")} aria-label={t("searchHub")} />
-        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
-          <option value="">{t("anyCategory")}</option>
-          {BUILT_IN_CATEGORIES.filter((c) => c.huggingFacePipelineTags?.length).map((c) => <option key={c.id} value={c.id}>{label(c.id)}</option>)}
-        </select>
+        {!fixedCategory && (
+          <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
+            <option value="">{t("anyCategory")}</option>
+            {BUILT_IN_CATEGORIES.filter((c) => c.huggingFacePipelineTags?.length).map((c) => <option key={c.id} value={c.id}>{label(c.id)}</option>)}
+          </select>
+        )}
         <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label={t("format")}>
           {FORMATS.map((f) => <option key={f} value={f}>{f ? f.toUpperCase() : t("anyFormat")}</option>)}
         </select>
@@ -122,11 +125,24 @@ function HubRow({ m, open, onToggle, label, onDownloaded }: { m: HubModel; open:
       .then((f) => setFiles(f.filter((x) => WEIGHTS.test(x.path)).sort((a, b) => a.size - b.size)))
       .catch((e: Error) => setError(e.message));
   }, [open]);
+  const [plan, setPlan] = useState<{ file: HubFile; data?: Plan } | null>(null);
+  const askDownload = async (f: HubFile) => {
+    setError("");
+    setPlan({ file: f });
+    try {
+      const params = new URLSearchParams({ repo: m.repo, path: f.path, category: m.category ?? "other", size: String(f.size) });
+      setPlan({ file: f, data: await api<Plan>(`/api/downloads/plan?${params}`) });
+    } catch (e) {
+      setPlan(null);
+      setError((e as Error).message);
+    }
+  };
   const download = async (f: HubFile) => {
     setError("");
     try {
       await api("/api/downloads", { method: "POST", body: { repo: m.repo, path: f.path, category: m.category ?? "other" } });
       setStarted((s) => [...s, f.path]);
+      setPlan(null);
       onDownloaded?.();
     } catch (e) {
       setError((e as Error).message);
@@ -169,14 +185,55 @@ function HubRow({ m, open, onToggle, label, onDownloaded }: { m: HubModel; open:
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                 {f.estimate && <RatingBadge e={f.estimate} />}
                 {/\.(ckpt|bin|pt|pth)$/i.test(f.path) && <span className="pill bad" title={t("pickleWarning")}>pickle</span>}
-                <button type="button" className={started.includes(f.path) ? "" : "primary"} disabled={started.includes(f.path)} onClick={() => void download(f)}>
+                <button type="button" className={started.includes(f.path) ? "" : "primary"} disabled={started.includes(f.path)} onClick={() => void askDownload(f)}>
                   {started.includes(f.path) ? t("dl-queued") : t("download")}
                 </button>
               </div>
             ))}
+            {plan && <PlanBox plan={plan.data} onCancel={() => setPlan(null)} onConfirm={() => void download(plan.file)} />}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface Plan {
+  items: Array<{ name: string; sizeGb: number; have: boolean; why: "model" | "extra" | "engine" }>;
+  totalGb: number;
+  freeGb?: number;
+  fitsDisk: boolean;
+  estimate?: Estimate;
+}
+
+/**
+ * What a download really involves, before it starts: the file, the extra
+ * files and engine needed to run it, the total, and the free disk space.
+ */
+function PlanBox({ plan, onCancel, onConfirm }: { plan?: Plan; onCancel: () => void; onConfirm: () => void }) {
+  if (!plan) return <div className="plan card"><p className="muted">{t("loading")}</p></div>;
+  const size = (g: number) => (g >= 1 ? `${g.toFixed(1)} GB` : `${Math.round(g * 1024)} MB`);
+  return (
+    <div className="plan card stack" role="dialog" aria-label={t("planTitle")}>
+      <strong>{t("planTitle")}</strong>
+      <ul className="plan-items">
+        {plan.items.map((i) => (
+          <li key={i.name} className={i.have ? "have" : ""}>
+            <span className="grow" dir="auto">{t(`plan-${i.why}` as StringKey)}: <span className="mono" dir="ltr">{i.name}</span></span>
+            <span className="mono" dir="ltr">{i.have ? t("planHave") : size(i.sizeGb)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="row">
+        <strong className="grow">{t("planTotal", { size: size(plan.totalGb) })}</strong>
+        {plan.freeGb !== undefined && <span className={plan.fitsDisk ? "muted" : "error"}>{t("diskFree", { gb: plan.freeGb.toFixed(0) })}</span>}
+      </div>
+      {plan.estimate && plan.estimate.rating === "too-big" && <p className="error">{t("planTooBig")}</p>}
+      {!plan.fitsDisk && <p className="error">{t("planNoSpace")}</p>}
+      <div className="row">
+        <button type="button" className="primary" disabled={!plan.fitsDisk} onClick={onConfirm}>{t("planDownload", { size: size(plan.totalGb) })}</button>
+        <button type="button" onClick={onCancel}>{t("cancel")}</button>
+      </div>
     </div>
   );
 }

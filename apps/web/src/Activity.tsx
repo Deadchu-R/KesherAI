@@ -85,7 +85,7 @@ export function ActivityGroup({ steps, live, renderStep }: { steps: Step[]; live
           {live && <span className="spinner" aria-hidden />}
           <span className="activity-sum">{groupSummary(steps)}</span>
           {failed > 0 && <span className="pill bad">{t("stepsFailed", { n: failed })}</span>}
-          <span className="chev" aria-hidden>▾</span>
+          <span className="chev" aria-hidden />
         </summary>
         <ol className="steps">
           {steps.map((s) => (
