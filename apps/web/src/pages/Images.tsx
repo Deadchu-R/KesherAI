@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pickModel } from "../ModelPicker";
 import { api, withToken, type Asset } from "../api";
 import { useModels } from "../useModels";
 import { t } from "../i18n";
@@ -17,12 +18,20 @@ export function ImagesPage() {
   const selected = modelId || models[0]?.id || "";
 
   async function generate() {
+    let use = selected;
+    if (!use) {
+      // No image model yet: let the user choose or get one instead of an error.
+      const picked = await pickModel("image");
+      if (!picked) return;
+      setModelId(picked);
+      use = picked;
+    }
     setBusy(true);
     setError("");
     try {
       const { assets } = await api<{ assets: Asset[] }>("/api/images", {
         method: "POST",
-        body: { modelId: selected, prompt, width, height, steps },
+        body: { modelId: use, prompt, width, height, steps },
       });
       setResults((prev) => [...assets, ...prev]);
     } catch (e) {

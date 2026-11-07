@@ -58,9 +58,22 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
     body = JSON.stringify(init.body);
   }
   const res = await fetch(path, { ...init, headers, body });
-  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(json.error ?? `${res.status} ${res.statusText}`);
+  const json = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string; category?: string };
+  if (!res.ok) throw new ApiError(json.error ?? `${res.status} ${res.statusText}`, res.status, json.code, json.category);
   return json;
+}
+
+/** An error from the server, with its machine-readable `code` when it sent one (e.g. `no-model`). */
+export class ApiError extends Error {
+  /**
+   * @param message - Human-readable message.
+   * @param status - HTTP status.
+   * @param code - e.g. `no-model`.
+   * @param category - For `no-model`: which category needs a model.
+   */
+  constructor(message: string, readonly status: number, readonly code?: string, readonly category?: string) {
+    super(message);
+  }
 }
 
 /**

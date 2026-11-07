@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent, ConversationKind, PermissionMode, Project } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
-import { assertFolder } from "../conversations.js";
+import { assertFolder, NoModelError } from "../conversations.js";
 import { assertWritableFolder } from "../library.js";
 import { isLoopback } from "../auth.js";
 
@@ -82,6 +82,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
         const { messages: _m, events: _e, ...summary } = c;
         return summary;
       } catch (err) {
+        if (err instanceof NoModelError) return reply.code(400).send({ error: err.message, code: "no-model", category: err.category });
         return reply.code(400).send({ error: (err as Error).message });
       }
     },

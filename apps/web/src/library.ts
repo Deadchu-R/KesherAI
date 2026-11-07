@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ConversationSummary, Project } from "@kesher/shared";
-import { api } from "./api";
+import { ApiError, api } from "./api";
+import { pickModel } from "./ModelPicker";
 
 /**
  * The sidebar's data: projects and conversation summaries, shared by every
@@ -56,7 +57,16 @@ export async function createConversation(body: {
   workspace?: string;
   modelId?: string;
 }): Promise<string> {
-  const c = await api<{ id: string }>("/api/conversations", { method: "POST", body });
+  let c: { id: string };
+  try {
+    c = await api<{ id: string }>("/api/conversations", { method: "POST", body });
+  } catch (e) {
+    // No chat model yet: let the user choose one instead of showing an error.
+    if (!(e instanceof ApiError) || e.code !== "no-model") throw e;
+    const modelId = await pickModel(e.category ?? "chat");
+    if (!modelId) return "";
+    c = await api<{ id: string }>("/api/conversations", { method: "POST", body: { ...body, modelId } });
+  }
   await refreshLibrary();
   location.hash = `#/c/${c.id}`;
   return c.id;

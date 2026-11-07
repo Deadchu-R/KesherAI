@@ -1,3 +1,4 @@
+import { ModelPickerHost } from "./ModelPicker";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { t } from "./i18n";
@@ -75,6 +76,7 @@ export function App() {
         {page}
       </main>
       {message && <div className="toast" role="status">{message}</div>}
+      <ModelPickerHost />
     </div>
   );
 }

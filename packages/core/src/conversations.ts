@@ -55,6 +55,14 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string): Model
  * tools in code conversations, a tool per active media model, plugin
  * tools) and saves them as they change.
  */
+/** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
+export class NoModelError extends Error {
+  /** @param category - The category that needs a model, e.g. `chat`. */
+  constructor(readonly category: string) {
+    super(`Choose a ${category} model first.`);
+  }
+}
+
 export class ConversationManager {
   private readonly sessions = new Map<string, AgentSession>();
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
@@ -174,7 +182,7 @@ export class ConversationManager {
    */
   async create(opts: NewConversation): Promise<Conversation> {
     const modelId = opts.modelId ?? this.defaultChatModel();
-    if (!modelId) throw new Error("Pick a chat model first (Settings → Active models, or load one under Models).");
+    if (!modelId) throw new NoModelError("chat");
     const projectId = opts.projectId ?? null;
     if (projectId && !this.deps.library.getProject(projectId)) throw new Error("That project does not exist.");
     if (opts.kind === "code") {
