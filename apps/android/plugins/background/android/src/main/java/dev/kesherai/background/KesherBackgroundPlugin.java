@@ -9,7 +9,6 @@ import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
-import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -85,11 +84,4 @@ public class KesherBackgroundPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Whether the app is in front (true) or in the background. */
-    @PluginMethod
-    public void isActive(PluginCall call) {
-        JSObject r = new JSObject();
-        r.put("active", getActivity() != null && getActivity().hasWindowFocus());
-        call.resolve(r);
-    }
 }
