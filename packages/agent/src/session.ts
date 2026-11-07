@@ -112,6 +112,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
+  /** Pictures the tool that just ran returned, for its tool message. */
+  private pendingImages?: Array<{ mimeType: string; data: string }>;
   /** What the model said in its latest answer, shown on approval cards as the reason for the action. */
   private lastSaid = "";
 
@@ -507,8 +509,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           return;
         }
         for (const call of result.toolCalls) {
+          this.pendingImages = undefined;
           const output = await this.execute(call, abort.signal);
-          this.messages.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: output });
+          const images = this.pendingImages as Array<{ mimeType: string; data: string }> | undefined;
+          if (images) {
+            // Screenshots are big: only the newest one stays in the conversation.
+            for (const m of this.messages) if (m.images) delete m.images;
+          }
+          this.messages.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: output, ...(images ? { images } : {}) });
         }
         this.onChange?.(this);
       }
@@ -618,6 +626,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     try {
       const out = await tool.run(call.arguments, ctx);
       const output = truncate(out.output);
+      if (out.images?.length) this.pendingImages = out.images;
       this.push({
         type: "tool_result",
         callId: call.id,

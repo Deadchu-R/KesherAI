@@ -30,6 +30,8 @@ export interface AgentMessage {
   toolCallId?: string;
   /** For `tool` messages: the tool's name (Anthropic needs it). */
   toolName?: string;
+  /** Pictures the model should see (e.g. a screenshot a tool took), base64. Only models with vision use them. */
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 /** A tool as offered to a model. */

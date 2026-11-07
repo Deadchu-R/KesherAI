@@ -186,10 +186,16 @@ export class OpenAICompatibleProvider implements Provider {
  * @returns Messages for `/chat/completions`.
  */
 export function toOpenAIMessages(messages: AgentMessage[]): Array<Record<string, unknown>> {
-  return messages.map((m) => {
-    if (m.role === "tool") return { role: "tool", tool_call_id: m.toolCallId, content: m.content };
+  return messages.flatMap((m): Array<Record<string, unknown>> => {
+    const pictures = (m.images ?? []).map((img) => ({ type: "image_url", image_url: { url: `data:${img.mimeType};base64,${img.data}` } }));
+    // Tool messages can only hold text in the OpenAI format, so their pictures follow as a user message.
+    if (m.role === "tool") {
+      const tool = { role: "tool", tool_call_id: m.toolCallId, content: m.content };
+      return pictures.length ? [tool, { role: "user", content: [{ type: "text", text: `(The picture from ${m.toolName ?? "the tool"}.)` }, ...pictures] }] : [tool];
+    }
+    if (pictures.length && m.role === "user") return [{ role: "user", content: [{ type: "text", text: m.content }, ...pictures] }];
     if (m.role === "assistant" && m.toolCalls?.length) {
-      return {
+      return [{
         role: "assistant",
         content: m.content || null,
         tool_calls: m.toolCalls.map((tc) => ({
@@ -197,9 +203,9 @@ export function toOpenAIMessages(messages: AgentMessage[]): Array<Record<string,
           type: "function",
           function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
         })),
-      };
+      }];
     }
-    return { role: m.role, content: m.content };
+    return [{ role: m.role, content: m.content }];
   });
 }
 

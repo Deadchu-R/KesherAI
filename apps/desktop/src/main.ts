@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut } from "electron";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import { createKesherServer, type KesherServer } from "@kesher/core";
@@ -150,6 +150,12 @@ app.whenReady().then(async () => {
   try {
     const coreUrl = await startCore();
     await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);
+    // Stops computer control from anywhere, even when another app is in front.
+    const stopKey = process.platform === "darwin" ? "Command+Shift+Escape" : "Control+Alt+Escape";
+    globalShortcut.register(stopKey, () => {
+      void fetch(`${coreUrl.replace(/\/$/, "")}/api/computer/stop`, { method: "POST" }).catch(() => undefined);
+      BrowserWindow.getAllWindows()[0]?.show();
+    });
   } catch (err) {
     dialog.showErrorBox(`${branding.productName} could not start`, err instanceof Error ? err.message : String(err));
     app.quit();
@@ -160,6 +166,8 @@ app.whenReady().then(async () => {
     }
   });
 });
+
+app.on("will-quit", () => globalShortcut.unregisterAll());
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

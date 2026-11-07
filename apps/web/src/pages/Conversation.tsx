@@ -206,6 +206,7 @@ function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<
     : ev.name === "install_tool" ? t("apInstall", { what: String(ev.input.name ?? "") })
     : ev.name === "build_executable" ? t("apBuild", { what: String(ev.input.entry ?? "") })
     : ev.name === "download_file" ? t("apDownload")
+    : ev.name === "computer_use_app" ? t("apComputer", { what: String(ev.input.app ?? "") })
     : ev.name === "write_file" || ev.name === "edit_file" ? t("apWrite", { what: path })
     : reasonText(ev.reason);
   const danger = /^This command .+, so it always needs your approval\.$/.test(ev.reason);

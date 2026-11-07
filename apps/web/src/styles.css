@@ -537,3 +537,12 @@ html, body { overflow-x: hidden; }
 .gpu-split-name { width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gpu-examples ul { margin: 4px 0 0; padding-inline-start: 18px; }
 .gpus .gpu-use, .gpus .gpu-lead, .gpus label.row { flex-direction: row; align-items: center; }
+
+/* ---------- computer control ---------- */
+.computer .cc-switch { flex-direction: row; align-items: center; gap: 8px; }
+.cc-rules { margin: 0; padding-inline-start: 18px; display: grid; gap: 4px; color: var(--text-2); }
+.cc-log { margin: 6px 0 0; padding-inline-start: 18px; max-height: 260px; overflow-y: auto; display: grid; gap: 3px; }
+.cc-log li.bad { color: var(--bad); }
+.cc-banner { position: fixed; top: calc(var(--bar-h) + 8px); inset-inline: 0; margin: 0 auto; width: fit-content; max-width: 92vw; z-index: 40; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px; background: #3a1d1d; border: 1px solid #7a3434; color: #ffd9d9; font-size: 13.5px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); }
+.cc-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b; animation: live-pulse 1s infinite; }
+.cc-banner button { height: 28px; padding: 0 14px; border-radius: 999px; border: 0; background: #ff6b6b; color: #2a0e0e; font-weight: 600; }

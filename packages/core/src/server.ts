@@ -19,6 +19,8 @@ import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
 import { Coach } from "./coach.js";
+import { ComputerControl } from "./computer.js";
+import { computerRoutes } from "./routes/computer.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
@@ -95,6 +97,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
   const coach = new Coach(paths.root);
+  // Stops conversations through a late-bound reference: the manager is created below.
+  let stopConversation: (id: string) => void = () => undefined;
+  const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)));
   /** NVIDIA cards with their PCI-order index. */
   const nvidiaGpus = async (): Promise<Gpu[]> =>
     (await detectHardwareCached()).gpus
@@ -172,9 +177,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       config,
       outputsDir: join(paths.root, "outputs"),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
+      computerTools: (id) => computer.tools(id),
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
     }),
     coach,
+    computer,
     updater: new Updater(),
     google,
     driveSync,
@@ -188,6 +195,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       }
     },
   };
+  stopConversation = (id) => services.conversations.stop(id);
 
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
   // The desktop window and the Vite dev server are separate origins.
@@ -203,6 +211,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await terminalRoutes(app, services);
   await coachRoutes(app, services);
   await pluginRoutes(app, services);
+  await computerRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);

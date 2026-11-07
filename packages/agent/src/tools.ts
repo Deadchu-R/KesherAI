@@ -17,6 +17,8 @@ export interface ToolOutput {
   assetIds?: string[];
   /** Files the tool made for the user (paths relative to the workspace), shown as cards with Download. */
   files?: string[];
+  /** Pictures for the model to look at (vision models), e.g. a screenshot. Only the latest ones are kept in the conversation. */
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 /** What a tool can use while running. */

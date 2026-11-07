@@ -103,6 +103,8 @@ export const KesherConfigSchema = z.object({
       anywhere: z.boolean().default(false),
     })
     .default({}),
+  /** Computer control: models with vision see the screen and click and type (off until the user turns it on). */
+  computer: z.object({ enabled: z.boolean().default(false) }).default({}),
   /** The coach (prompt and usage advice). */
   coach: z
     .object({

@@ -184,7 +184,9 @@ export class AnthropicProvider implements Provider {
 type AnthropicBlock =
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string };
+  | { type: "tool_result"; tool_use_id: string; content: string | Array<{ type: "text"; text: string } | AnthropicImage> }
+  | AnthropicImage;
+type AnthropicImage = { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
 /**
  * Converts provider-neutral messages to the Messages API format: `system`
@@ -204,10 +206,13 @@ export function toAnthropicMessages(messages: AgentMessage[]): {
     if (m.role === "system") continue;
     const role = m.role === "assistant" ? "assistant" : "user";
     const blocks: AnthropicBlock[] = [];
+    const pictures: AnthropicImage[] = (m.images ?? []).map((img) => ({ type: "image", source: { type: "base64", media_type: img.mimeType, data: img.data } }));
     if (m.role === "tool") {
-      blocks.push({ type: "tool_result", tool_use_id: m.toolCallId ?? "", content: m.content || "(no output)" });
+      const text = m.content || "(no output)";
+      blocks.push({ type: "tool_result", tool_use_id: m.toolCallId ?? "", content: pictures.length ? [{ type: "text", text }, ...pictures] : text });
     } else {
       if (m.content) blocks.push({ type: "text", text: m.content });
+      blocks.push(...pictures);
       for (const tc of m.toolCalls ?? []) blocks.push({ type: "tool_use", id: tc.id, name: tc.name, input: tc.arguments });
     }
     if (blocks.length === 0) continue;

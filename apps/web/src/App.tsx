@@ -1,4 +1,5 @@
 import { AppBar } from "./AppBar";
+import { ComputerBanner } from "./ComputerSection";
 import { UsagePage } from "./pages/Usage";
 import { PluginsPage } from "./pages/Plugins";
 import { PluginPage } from "./pages/PluginPage";
@@ -147,6 +148,7 @@ export function App() {
         {page}
       </main>
       {message && <div className="toast" role="status">{message}</div>}
+      <ComputerBanner />
       <ModelPickerHost />
       <PluginStyles />
       <DownloadsButton />

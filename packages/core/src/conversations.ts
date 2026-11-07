@@ -113,6 +113,8 @@ export class ConversationManager {
        * active: uses a downloaded one, or starts downloading the best fit.
        */
       ensureImageModel?(): Promise<{ modelId?: string; message?: string }>;
+      /** Computer-control tools for a conversation (empty when the user has not turned it on). */
+      computerTools?(conversationId: string): AgentTool[];
       /** Notes the coach learned about how the user works, added to every system prompt. */
       userNotes?(): Promise<string[]>;
     },
@@ -206,12 +208,18 @@ export class ConversationManager {
     }));
   }
 
-  private toolsFor(kind: ConversationKind): { tools: AgentTool[]; notes: string[] } {
+  private toolsFor(kind: ConversationKind, id?: string): { tools: AgentTool[]; notes: string[] } {
     const media = this.mediaTools();
+    const computer = id ? (this.deps.computerTools?.(id) ?? []) : [];
+    if (computer.length) {
+      media.notes.push(
+        "You can see and control this computer: first computer_use_app (the user approves each app), then computer_screenshot → one action → computer_screenshot to check. Prefer your other tools (files, run_command, build_executable) when they can do the job; use the screen for apps that have no other way in (Unity, Blender, Office, settings dialogs). Browsers are view-only, terminals click-only, and you never type passwords or payment details.",
+      );
+    }
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
-    return { tools: [...code, ...media.tools, ...this.pluginTools()], notes: media.notes };
+    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools()], notes: media.notes };
   }
 
   private teamCache = new Map<string, Teammate[]>();
@@ -278,7 +286,7 @@ export class ConversationManager {
    * @returns Tool and plugin names, the main model and teammates.
    */
   setupOf(c: Conversation): { tools: string[]; plugins: string[]; mainModel: string; team: string[] } {
-    const { tools } = this.toolsFor(c.kind);
+    const { tools } = this.toolsFor(c.kind, c.id);
     return {
       tools: tools.map((t) => t.spec.name),
       plugins: [...new Set([...this.deps.plugins.tools.values()].map((t) => t.pluginId))],
@@ -333,7 +341,7 @@ export class ConversationManager {
     this.teamCache.set(id, conversation.team ?? []);
     const live = this.sessions.get(id);
     if (live) return { session: live, conversation };
-    const { tools, notes } = this.toolsFor(conversation.kind);
+    const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     const workspace = this.workspaceOf(conversation);
     if (workspace && conversation.kind !== "code") await mkdir(workspace, { recursive: true });
     const session = new AgentSession({
@@ -374,7 +382,7 @@ export class ConversationManager {
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
     // Rebuild tools and prompt so new active models and project changes apply.
-    const { tools, notes } = this.toolsFor(conversation.kind);
+    const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     session.setTools(tools);
     session.systemPrompt = await this.promptFor(conversation, notes);
     if (session.messages.length === 0 && /^New (chat|code session)$/.test(conversation.title)) {
@@ -405,6 +413,15 @@ export class ConversationManager {
       messages: session.messages,
       events: session.events,
     });
+  }
+
+  /**
+   * Stops a conversation's work (like pressing Stop in it).
+   *
+   * @param id - Conversation.
+   */
+  stop(id: string): void {
+    this.sessions.get(id)?.stop();
   }
 
   /** @param id - Conversation to delete; its session is stopped first. */

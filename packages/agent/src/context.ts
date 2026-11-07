@@ -18,7 +18,8 @@ const KEEP_FULL = 8;
 
 /** @returns Approximate size of messages, in characters. */
 export function sizeOf(messages: readonly AgentMessage[]): number {
-  return messages.reduce((n, m) => n + m.content.length + (m.toolCalls ? JSON.stringify(m.toolCalls).length : 0) + 16, 0);
+  // A picture costs about as much as 6000 characters of text.
+  return messages.reduce((n, m) => n + m.content.length + (m.toolCalls ? JSON.stringify(m.toolCalls).length : 0) + (m.images?.length ?? 0) * 6000 + 16, 0);
 }
 
 /**
