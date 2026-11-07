@@ -414,3 +414,64 @@ export function sdProvider(engine: SdEngine): Provider {
     },
   };
 }
+
+let pendingImageDownload: string | undefined;
+
+/**
+ * Makes sure an image model that runs here is ready, for the chat's
+ * generate_image: uses a downloaded recommended model, or starts
+ * downloading the one that fits this computer (Qwen-Image 2512 with 12 GB
+ * of VRAM or more, otherwise FLUX.1 schnell) and makes it the active image
+ * model once it is there.
+ *
+ * @param d - Engine, downloads, config and where models go.
+ * @returns The model id to use now, or a message saying what is downloading.
+ */
+export async function ensureImageModel(d: {
+  sd: SdEngine;
+  downloads: DownloadManager;
+  config: { activeModels: Record<string, string> };
+  modelsDir: () => string;
+  save: () => Promise<void>;
+}): Promise<{ modelId?: string; message?: string }> {
+  const idOf = (m: (typeof RECOMMENDED_IMAGE_MODELS)[number]) => `sdcpp/${m.repo}/${m.file}`;
+  for (const m of RECOMMENDED_IMAGE_MODELS) {
+    if (existsSync(join(d.modelsDir(), "image", m.repo, m.file))) {
+      d.config.activeModels.image = idOf(m);
+      await d.save();
+      return { modelId: idOf(m) };
+    }
+  }
+  const { detectHardwareCached } = await import("@kesher/downloads");
+  const hw = await detectHardwareCached();
+  const vramGb = Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3));
+  const pick = RECOMMENDED_IMAGE_MODELS.find((m) => m.id === (vramGb >= 12 ? "qwen-image-2512" : "flux-schnell"))!;
+  if (pendingImageDownload === pick.id) {
+    return { message: `${pick.name} is still downloading for images. Follow it in the downloads circle; ask again when it is done.` };
+  }
+  const files = await listHubFiles(pick.repo);
+  const f = files.find((x) => x.path === pick.file);
+  if (!f) return { message: `Could not find ${pick.file} on Hugging Face. Pick an image model under Models → Images.` };
+  pendingImageDownload = pick.id;
+  const job = d.downloads.enqueue({
+    url: f.url,
+    dest: join(d.modelsDir(), "image", pick.repo, pick.file),
+    size: f.size,
+    ...(f.sha256 ? { sha256: f.sha256 } : {}),
+    label: `${pick.name} · ${pick.file}`,
+  });
+  const extraGb = d.sd.prepare(pick.file);
+  void waitForDownload(d.downloads, job.id)
+    .then(async () => {
+      d.config.activeModels.image = idOf(pick);
+      await d.save();
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      pendingImageDownload = undefined;
+    });
+  const gb = f.size / 1024 ** 3 + extraGb;
+  return {
+    message: `There was no image model that runs on this computer, so KesherAI started downloading ${pick.name} (about ${gb.toFixed(1)} GB with the files it needs). Tell the user it is downloading (they can follow it in the downloads circle) and to ask again when it is done; it becomes their image model by itself.`,
+  };
+}

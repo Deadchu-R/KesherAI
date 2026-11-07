@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   restart: (): Promise<void> => ipcRenderer.invoke("kesher:restart"),
   /** Opens a folder in Explorer / Finder. */
   openPath: (path: string): Promise<void> => ipcRenderer.invoke("kesher:open-path", path),
+  /** Runs a program the agent built, when the user clicks Run on its card. */
+  runFile: (path: string): Promise<void> => ipcRenderer.invoke("kesher:run-file", path),
   /** Opens the system file picker (several files allowed). */
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke("kesher:pick-files"),
   /** The full path of a file dropped on the window. */

@@ -313,3 +313,18 @@ button.on { border-color: var(--accent); }
 
 .scope-menu { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 .scope-menu button { text-align: start; }
+
+/* Markdown in replies */
+.msg-text { white-space: normal; }
+.msg-text p { margin: 0 0 8px; white-space: pre-wrap; }
+.msg-text ul, .msg-text ol { margin: 4px 0 10px; padding-inline-start: 22px; }
+.msg-text li { margin: 2px 0; }
+.md-h { font-weight: 600; margin-top: 12px !important; }
+.md-h1, .md-h2 { font-size: 17px; }
+.inline-code { font-family: "IBM Plex Mono", monospace; font-size: 13px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; }
+/* Files the agent made */
+.made { display: flex; flex-direction: column; gap: 8px; }
+.file-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.file-card p { margin: 0; }
+.file-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+a.primary-link { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 600; }

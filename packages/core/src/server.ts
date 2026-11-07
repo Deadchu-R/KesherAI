@@ -17,7 +17,7 @@ import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
-import { SdEngine, sdProvider } from "./sdcpp.js";
+import { SdEngine, ensureImageModel, sdProvider } from "./sdcpp.js";
 import { detectHardwareCached } from "@kesher/downloads";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
@@ -28,6 +28,8 @@ import { downloadRoutes } from "./routes/downloads.js";
 import { openAIRoutes } from "./routes/openai.js";
 import { libraryRoutes } from "./routes/library.js";
 import { fileRoutes } from "./routes/files.js";
+import { terminalRoutes } from "./routes/terminal.js";
+import websocket from "@fastify/websocket";
 import { googleRoutes } from "./routes/google.js";
 import { loadModel } from "./routes/engine.js";
 
@@ -145,7 +147,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     plugins,
     engine,
     library,
-    conversations: new ConversationManager({ registry, library, assets, plugins, config, outputsDir: join(paths.root, "outputs") }),
+    conversations: new ConversationManager({
+      registry,
+      library,
+      assets,
+      plugins,
+      config,
+      outputsDir: join(paths.root, "outputs"),
+      ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
+    }),
     updater: new Updater(),
     google,
     driveSync,
@@ -170,6 +180,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await generateRoutes(app, services);
   if (features.downloads) await downloadRoutes(app, services);
   if (features.openaiCompatibleApi) await openAIRoutes(app, services);
+  await app.register(websocket);
+  await terminalRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);

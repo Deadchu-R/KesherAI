@@ -77,6 +77,11 @@ export class ConversationManager {
       config: KesherConfig;
       /** Folder for the files chats make (one sub-folder per conversation). */
       outputsDir: string;
+      /**
+       * Finds an image model that runs on this computer when none usable is
+       * active: uses a downloaded one, or starts downloading the best fit.
+       */
+      ensureImageModel?(): Promise<{ modelId?: string; message?: string }>;
     },
   ) {}
 
@@ -90,50 +95,64 @@ export class ConversationManager {
   mediaTools(): { tools: AgentTool[]; notes: string[] } {
     const tools: AgentTool[] = [];
     const notes: string[] = [];
-    const imageModel = this.deps.config.activeModels.image;
-    if (imageModel) {
-      let supported = false;
+    const usable = (id: string | undefined): id is string => {
+      if (!id || /(^|[-_./ ])mlx([-_./ ]|$)/i.test(id)) return false;
       try {
-        supported = !!this.deps.registry.resolve(imageModel).provider.generateImage;
+        return !!this.deps.registry.resolve(id).provider.generateImage;
       } catch {
-        supported = false;
+        return false;
       }
-      if (supported) {
-        notes.push(`generate_image uses the user's active image model (${imageModel}). Write the prompt in English.`);
-        tools.push({
-          risk: "safe",
-          spec: {
-            name: "generate_image",
-            description: "Generate an image from a text prompt with the user's active image model. The image is shown to the user.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                prompt: { type: "string", description: "Detailed description of the image, in English." },
-                negative_prompt: { type: "string" },
-                width: { type: "integer", description: "Default 1024." },
-                height: { type: "integer", description: "Default 1024." },
-              },
-              required: ["prompt"],
+    };
+    const active = this.deps.config.activeModels.image;
+    if (usable(active) || this.deps.ensureImageModel) {
+      notes.push(
+        usable(active)
+          ? `generate_image uses the user's active image model (${active}). Write the prompt in English.`
+          : "generate_image makes pictures with KesherAI's built-in image engine; if no image model is ready it downloads one that fits this computer and says so. Write the prompt in English.",
+      );
+      tools.push({
+        risk: "safe",
+        spec: {
+          name: "generate_image",
+          description: "Generate an image from a text prompt. The image is shown to the user. If no image model is ready yet, one is downloaded and the result says how long to wait.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              prompt: { type: "string", description: "Detailed description of the image, in English." },
+              negative_prompt: { type: "string" },
+              width: { type: "integer", description: "Default 1024." },
+              height: { type: "integer", description: "Default 1024." },
             },
+            required: ["prompt"],
           },
-          run: async (input) => {
-            const { provider, providerModelId } = this.deps.registry.resolve(imageModel);
-            const files = await provider.generateImage!({
-              providerModelId,
-              prompt: String(input.prompt ?? ""),
-              ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}),
-              width: Number(input.width ?? 1024),
-              height: Number(input.height ?? 1024),
-              steps: 20,
-              seed: randomInt(2 ** 31),
-            });
-            const assets = await Promise.all(
-              files.map((f) => this.deps.assets.save(f.data, f.mimeType, { sourceModelId: imageModel, ...(f.meta ? { meta: f.meta } : {}) })),
-            );
-            return { output: `Generated ${assets.length} image(s); the user can see them.`, assetIds: assets.map((a) => a.id) };
-          },
-        });
-      }
+        },
+        run: async (input) => {
+          let imageModel = this.deps.config.activeModels.image;
+          let switched = "";
+          if (!usable(imageModel)) {
+            const before = imageModel;
+            const r = (await this.deps.ensureImageModel?.()) ?? {};
+            const why = before ? `The user's image model ${before} does not run on this computer${/mlx/i.test(before) ? " (it is an Apple MLX build, for Macs only)" : ""}. ` : "";
+            if (!r.modelId) return { output: why + (r.message ?? "No image model is available. Ask the user to pick one under Models → Images.") };
+            imageModel = r.modelId;
+            if (before) switched = ` ${why}KesherAI switched to ${r.modelId}, which runs here; tell the user, and that they can change it under Models → Images.`;
+          }
+          const { provider, providerModelId } = this.deps.registry.resolve(imageModel);
+          const files = await provider.generateImage!({
+            providerModelId,
+            prompt: String(input.prompt ?? ""),
+            ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}),
+            width: Number(input.width ?? 1024),
+            height: Number(input.height ?? 1024),
+            steps: 0, // 0 = the model family's own default (4 for FLUX schnell, 8 for turbo models)
+            seed: randomInt(2 ** 31),
+          });
+          const assets = await Promise.all(
+            files.map((f) => this.deps.assets.save(f.data, f.mimeType, { sourceModelId: imageModel, ...(f.meta ? { meta: f.meta } : {}) })),
+          );
+          return { output: `Generated ${assets.length} image(s); the user can see them.${switched}`, assetIds: assets.map((a) => a.id) };
+        },
+      });
     }
     return { tools, notes };
   }

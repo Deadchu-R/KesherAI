@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@kesher/shared";
-import { withToken } from "./api";
+import { api, withToken } from "./api";
+import { desktop } from "./library";
 import { t, type StringKey } from "./i18n";
 
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
@@ -74,10 +75,12 @@ export function groupSummary(steps: Step[]): string {
  * @param props.live - Whether the agent is still working on this group.
  * @param props.renderStep - Draws one step when the group is open.
  */
-export function ActivityGroup({ steps, live, renderStep }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode }) {
+export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   const images = steps.flatMap((s) => s.result?.assetIds ?? []);
+  // Older builds only said "Built dist/x.exe." in their output.
+  const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
     <div className="activity">
       <details>
@@ -100,10 +103,41 @@ export function ActivityGroup({ steps, live, renderStep }: { steps: Step[]; live
           {stepLabel(current)}
         </p>
       )}
+      {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {images.length > 0 && (
         <div className="activity-images">
           {images.map((id) => <img key={id} src={withToken(`/api/assets/${id}`)} alt="" className="asset" />)}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A file the agent made, right in the conversation: download it, open its
+ * folder, or (in the desktop app) run it.
+ */
+export function FileCard({ convId, path }: { convId: string; path: string }) {
+  const name = path.split("/").pop() ?? path;
+  const runnable = /\.(exe|msi|bat|cmd|app)$/i.test(name);
+  const url = withToken(`/api/conversations/${convId}/files/download?path=${encodeURIComponent(path)}`);
+  const folder = async () => {
+    const d = await api<{ folder: string }>(`/api/conversations/${convId}/files`);
+    return `${d.folder.replace(/[\\/]+$/, "")}/${path}`;
+  };
+  return (
+    <div className="file-card card">
+      <span className="file-icon" aria-hidden>{runnable ? "▶" : "📄"}</span>
+      <div className="grow">
+        <strong dir="ltr">{name}</strong>
+        <p className="muted small" dir="ltr">{path}</p>
+      </div>
+      <a className="button primary-link" href={url} download>{t("download")}</a>
+      {desktop()?.openPath && (
+        <button type="button" onClick={() => void folder().then((p) => desktop()!.openPath!(p.replace(/[\\/][^\\/]+$/, "")))}>{t("openFolder")}</button>
+      )}
+      {runnable && desktop()?.runFile && (
+        <button type="button" onClick={() => void folder().then((p) => desktop()!.runFile!(p))}>{t("runProgram")}</button>
       )}
     </div>
   );

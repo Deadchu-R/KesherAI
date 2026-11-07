@@ -42,6 +42,8 @@ interface DesktopBridge {
   restart?(): Promise<void>;
   /** Opens a folder in Explorer / Finder. Missing before 0.3.3. */
   openPath?(path: string): Promise<void>;
+  /** Runs a program the agent built (the user clicked Run). Missing before 0.4.1. */
+  runFile?(path: string): Promise<void>;
   /** Picks one or more files. Missing before 0.3.3. */
   pickFiles?(): Promise<string[]>;
   /** The path of a file dropped on the window. Missing before 0.3.3. */

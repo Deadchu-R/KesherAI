@@ -113,6 +113,8 @@ export type AgentEvent = EventBase &
         diff?: string;
         /** Assets produced, e.g. generated images. */
         assetIds?: string[];
+        /** Files made for the user, relative to the conversation's folder (e.g. a built .exe). */
+        files?: string[];
       }
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
     | { type: "status"; status: AgentStatus; message?: string }

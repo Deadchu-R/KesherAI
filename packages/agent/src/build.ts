@@ -113,8 +113,10 @@ export const buildExecutableTool: AgentTool = {
     const built = await runShell(`${py} ${args.join(" ")}`, cwd, TEN_MINUTES, ctx.signal);
     const file = join("dist", process.platform === "win32" ? `${name}.exe` : name);
     if (built.code !== 0 || !existsSync(join(cwd, file))) throw new Error(`The build failed:\n${tail(built)}`);
+    const rel = file.replace(/\\/g, "/");
     return {
-      output: `Built ${file.replace(/\\/g, "/")}. Tell the user it is ready to download from the Files panel of this conversation (or to run from the dist folder).`,
+      output: `Built ${rel}. The user sees it as a card with Download and Run buttons right under this step, so just tell them it is ready.`,
+      files: [rel],
     };
   },
 };

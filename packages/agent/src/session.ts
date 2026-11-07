@@ -478,6 +478,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         output,
         ...(out.diff ? { diff: out.diff } : {}),
         ...(out.assetIds?.length ? { assetIds: out.assetIds } : {}),
+        ...(out.files?.length ? { files: out.files } : {}),
       });
       return output;
     } catch (err) {

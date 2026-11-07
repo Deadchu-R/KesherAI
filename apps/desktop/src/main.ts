@@ -119,6 +119,14 @@ ipcMain.handle("kesher:open-path", async (_event, path: unknown) => {
   if (st?.isDirectory()) await shell.openPath(path);
 });
 
+// "Run" on a program the agent built. Only files inside KesherAI's outputs folder or a
+// conversation's folder reach here, and only when the user clicks.
+ipcMain.handle("kesher:run-file", async (_event, path: unknown) => {
+  if (typeof path !== "string") return;
+  const st = await stat(path).catch(() => undefined);
+  if (st?.isFile()) await shell.openPath(path);
+});
+
 // After an update: start the app again with the new code.
 ipcMain.handle("kesher:restart", () => {
   app.relaunch();

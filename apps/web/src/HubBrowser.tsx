@@ -106,12 +106,10 @@ export function HubBrowser({ onDownloaded, fixedCategory }: { onDownloaded?: () 
       <p className="muted small">{t("hubHint")}</p>
       <form className="hub-filters" onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <input className="grow" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchHub")} aria-label={t("searchHub")} />
-        {!fixedCategory && (
-          <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
-            <option value="">{t("anyCategory")}</option>
-            {BUILT_IN_CATEGORIES.filter((c) => c.huggingFacePipelineTags?.length).map((c) => <option key={c.id} value={c.id}>{label(c.id)}</option>)}
-          </select>
-        )}
+        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
+          <option value="">{t("anyCategory")}</option>
+          {BUILT_IN_CATEGORIES.filter((c) => c.huggingFacePipelineTags?.length).map((c) => <option key={c.id} value={c.id}>{label(c.id)}</option>)}
+        </select>
         <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label={t("format")}>
           {FORMATS.map((f) => <option key={f} value={f}>{f ? f.toUpperCase() : t("anyFormat")}</option>)}
         </select>
