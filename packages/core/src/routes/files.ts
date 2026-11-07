@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import { zipSync } from "fflate";
-import { resolveInWorkspace } from "@kesher/agent";
+import { buildExecutableTool, resolveInWorkspace } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -75,6 +75,25 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       .header("content-length", st.size)
       .header("content-disposition", `attachment; filename="${name.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`)
       .send(createReadStream(full));
+  });
+
+  /**
+   * Builds a Python file into a program (.exe on Windows), for the "Build"
+   * button next to .py files. The click is the approval. Can take minutes.
+   */
+  app.post<{ Params: { id: string }; Body: { path?: string; windowed?: boolean } }>("/api/conversations/:id/files/build", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    const entry = req.body?.path ?? "";
+    try {
+      const out = await buildExecutableTool.run(
+        { entry, ...(req.body?.windowed !== undefined ? { windowed: req.body.windowed } : {}) },
+        { workspace: root, signal: AbortSignal.timeout(20 * 60_000), recordChange() {} },
+      );
+      return { ok: true, output: out.output };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
   });
 
   app.get<{ Params: { id: string } }>("/api/conversations/:id/files/zip", async (req, reply) => {

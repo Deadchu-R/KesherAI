@@ -215,3 +215,41 @@ test("request_access grants a folder outside the workspace, and the file tools c
   assert.match((results[2] as { output: string }).output, /secret plan/);
   assert.deepEqual(session.info().grants, [outside]);
 });
+
+test("an agent that stops before building the requested .exe is sent back once", async () => {
+  const { mkdtemp: mk } = await import("node:fs/promises");
+  const { tmpdir: td } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { AgentSession } = await import("./index.js");
+  const built: string[] = [];
+  const buildTool = {
+    risk: "safe" as const,
+    spec: { name: "build_executable", description: "", inputSchema: { type: "object" } },
+    async run(input: Record<string, unknown>) {
+      built.push(String(input.entry));
+      return { output: "Built dist/calc.exe" };
+    },
+  };
+  const runTool = { risk: "safe" as const, spec: { name: "run_command", description: "", inputSchema: { type: "object" } }, async run() { return { output: "" }; } };
+  const seen: string[] = [];
+  const session = new AgentSession({
+    id: "n",
+    modelId: "m",
+    mode: "auto",
+    workspace: await mk(j(td(), "kesher-nudge-")),
+    tools: [buildTool, runTool],
+    systemPrompt: "",
+    model: async ({ messages }) => {
+      const last = messages.at(-1)!;
+      seen.push(String(last.content).slice(0, 12));
+      if (String(last.content).startsWith("[KesherAI]")) return { text: "", toolCalls: [{ id: "b", name: "build_executable", arguments: { entry: "calc.py" } }] };
+      if (last.role === "tool") return { text: "Done: dist/calc.exe", toolCalls: [] };
+      return { text: "Save the code as calc.py and run: python calc.py", toolCalls: [] };
+    },
+  });
+  session.send("build me a calculator as an exe");
+  await new Promise<void>((resolve) => session.on("event", (e) => e.type === "status" && e.status === "idle" && resolve()));
+  assert.deepEqual(built, ["calc.py"]);
+  assert.ok(session.events.some((e) => e.type === "note" && /finish/.test(e.text)));
+  assert.equal(session.events.filter((e) => e.type === "assistant").at(-1)?.type === "assistant" && (session.events.filter((e) => e.type === "assistant").at(-1) as { text: string }).text, "Done: dist/calc.exe");
+});

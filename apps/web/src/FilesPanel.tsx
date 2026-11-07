@@ -18,6 +18,9 @@ const RUNNABLE = /\.(exe|msi|apk|appimage|dmg|zip)$/i;
  */
 export function FilesPanel({ convId, refresh, onCount }: { convId: string; refresh: number; onCount?: (n: number, runnable: boolean) => void }) {
   const [data, setData] = useState<{ folder: string; files: FileItem[] } | null>(null);
+  const [building, setBuilding] = useState("");
+  const [buildMsg, setBuildMsg] = useState("");
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     void api<{ folder: string; files: FileItem[] }>(`/api/conversations/${convId}/files`)
       .then((d) => {
@@ -25,17 +28,37 @@ export function FilesPanel({ convId, refresh, onCount }: { convId: string; refre
         onCount?.(d.files.length, d.files.some((f) => RUNNABLE.test(f.path)));
       })
       .catch(() => setData({ folder: "", files: [] }));
-  }, [convId, refresh]);
+  }, [convId, refresh, reload]);
   if (!data) return null;
   const base = `/api/conversations/${convId}/files`;
   const runnable = data.files.filter((f) => RUNNABLE.test(f.path));
   const others = data.files.filter((f) => !RUNNABLE.test(f.path));
+  const build = async (path: string) => {
+    setBuilding(path);
+    setBuildMsg("");
+    try {
+      await api(`${base}/build`, { method: "POST", body: { path } });
+      setBuildMsg(t("buildDone"));
+      setReload((n) => n + 1);
+    } catch (e) {
+      setBuildMsg((e as Error).message);
+    } finally {
+      setBuilding("");
+    }
+  };
   const row = (f: FileItem) => (
-    <a key={f.path} className="file-row" href={withToken(`${base}/download?path=${encodeURIComponent(f.path)}`)} download>
-      <span className="mono grow" dir="ltr">{f.path}</span>
-      <span className="muted mono" dir="ltr">{size(f.size)}</span>
-      <span aria-hidden>⬇</span>
-    </a>
+    <div key={f.path} className="file-line">
+      <a className="file-row grow" href={withToken(`${base}/download?path=${encodeURIComponent(f.path)}`)} download>
+        <span className="mono grow" dir="ltr">{f.path}</span>
+        <span className="muted mono" dir="ltr">{size(f.size)}</span>
+        <span aria-hidden>⬇</span>
+      </a>
+      {/\.py$/i.test(f.path) && (
+        <button type="button" disabled={!!building} onClick={() => void build(f.path)} title={t("buildExeHint")}>
+          {building === f.path ? t("building") : t("buildExe")}
+        </button>
+      )}
+    </div>
   );
   return (
     <aside className="files-panel card stack" aria-label={t("files")}>
@@ -45,6 +68,8 @@ export function FilesPanel({ convId, refresh, onCount }: { convId: string; refre
         {desktop()?.openPath && data.folder && <button type="button" onClick={() => void desktop()!.openPath!(data.folder)}>{t("openFolder")}</button>}
       </div>
       {data.files.length === 0 && <p className="muted">{t("noFiles")}</p>}
+      {building && <p className="muted">{t("buildingHint")}</p>}
+      {buildMsg && <p className={buildMsg === t("buildDone") ? "pill good" : "error"} style={{ alignSelf: "flex-start" }}>{buildMsg}</p>}
       {runnable.length > 0 && (
         <div className="stack">
           <span className="pill good" style={{ alignSelf: "flex-start" }}>{t("readyToRun")}</span>

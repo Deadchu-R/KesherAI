@@ -14,3 +14,4 @@ export { buildSystemPrompt, readProjectGuide, type PromptOptions } from "./promp
 export * from "./system-tools.js";
 export { REQUEST_ACCESS_TOOL, requestAccessSpec } from "./tools.js";
 export { resolveForTool } from "./workspace.js";
+export { buildExecutableTool } from "./build.js";
