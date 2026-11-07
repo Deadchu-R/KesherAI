@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
-import { waitForDownload } from "../llamacpp.js";
+import { findLlamaRelease, waitForDownload } from "../llamacpp.js";
 import { insideAny, looksLikeGguf } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 
@@ -139,6 +139,33 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post("/api/engines/llamacpp/stop", async () => {
     await s.engine.stop();
     return s.engine.status();
+  });
+
+  /** Is there a newer llama.cpp? (It updates without a KesherAI update.) */
+  app.get("/api/engines/llamacpp/update", async (_req, reply) => {
+    try {
+      const rel = await findLlamaRelease(AbortSignal.timeout(15_000));
+      const installed = s.config.engines.llamaVersion ?? null;
+      const num = (v: string | null) => Number(/b(\d+)/.exec(v ?? "")?.[1] ?? 0);
+      return { installed, latest: rel.tag_name, newer: !!installed && num(rel.tag_name) > num(installed) };
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  /** Updates llama.cpp to the newest build and loads the model again (the user presses the button). */
+  app.post("/api/engines/llamacpp/update", async (_req, reply) => {
+    if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
+    void (async () => {
+      const running = s.engine.status();
+      const hw = await detectHardware();
+      const { binaryPath, version } = await s.engine.install(s.downloads, { platform: process.platform, arch: process.arch, nvidia: hw.gpus.length > 0 });
+      s.config.engines.llamaServerPath = binaryPath;
+      s.config.engines.llamaVersion = version;
+      await s.saveConfig();
+      if (running.running && running.modelPath) await loadModel(s, running.modelPath);
+    })().catch((err) => s.engine.fail(err));
+    return reply.code(202).send(s.engine.status());
   });
 
   /** "Skip for now" during "Set it up for me": skips the model being downloaded and goes on. */

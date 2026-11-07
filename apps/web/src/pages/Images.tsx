@@ -9,6 +9,7 @@ export function ImagesPage() {
   const { models } = useModels("image");
   const [modelId, setModelId] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [enhancing, setEnhancing] = useState(false);
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
   const [steps, setSteps] = useState(20);
@@ -61,7 +62,23 @@ export function ImagesPage() {
         </label>
         <label style={{ gridColumn: "1 / -1" }}>
           {t("prompt")}
-          <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+          <textarea rows={3} dir="auto" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+          <span className="row">
+            <button
+              type="button"
+              className="as-link"
+              disabled={!prompt.trim() || enhancing}
+              title={t("enhanceHint")}
+              onClick={() => {
+                setEnhancing(true);
+                void api<{ prompt: string }>("/api/prompts/enhance", { method: "POST", body: { prompt, kind: "image" } })
+                  .then((r) => setPrompt(r.prompt), (e: Error) => setError(e.message))
+                  .finally(() => setEnhancing(false));
+              }}
+            >
+              ✨ {enhancing ? "…" : t("enhancePrompt")}
+            </button>
+          </span>
         </label>
         <label>{t("width")}<input type="number" step={64} value={width} onChange={(e) => setWidth(Number(e.target.value))} /></label>
         <label>{t("height")}<input type="number" step={64} value={height} onChange={(e) => setHeight(Number(e.target.value))} /></label>

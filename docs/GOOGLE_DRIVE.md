@@ -73,3 +73,13 @@ To offer them, also do this once in the same Google Cloud project:
 ## The phone: "Sign in with Google"
 
 The Android app can find your computers by itself: tap **Sign in with Google**, approve in the browser, and it reads `devices.json` from your KesherAI folder in Drive — the computers signed in to the same account with "Let my other devices use this computer" on, with their addresses and access tokens. The sign-in is the installed-app flow (browser → `127.0.0.1` on the phone → PKCE), with the same Desktop OAuth client as the desktop app (the APK workflow writes `www/google-client.json` from the repository secrets `KESHER_GOOGLE_CLIENT_ID` and `KESHER_GOOGLE_CLIENT_SECRET`). The only Drive scope is `drive.file`. The list refreshes each time the app opens, so a changed "anywhere" address is picked up.
+
+## Running from the source code
+
+The release builds carry the project's Google client (from the repository secrets). A copy run from the source (`pnpm dev`, `pnpm dev:desktop`, `kesher serve`) has none: either install KesherAI from the releases, or put the client in a `google-client.json` in the KesherAI data folder (`~/.kesher`, `%USERPROFILE%\.kesher` on Windows):
+
+```json
+{ "clientId": "….apps.googleusercontent.com", "clientSecret": "GOCSPX-…" }
+```
+
+The environment variables `KESHER_GOOGLE_CLIENT_ID` and `KESHER_GOOGLE_CLIENT_SECRET` work too.

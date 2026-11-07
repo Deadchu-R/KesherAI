@@ -141,8 +141,8 @@ Working on now, in this order:
 2. Split chat: two to four panes on different models, one question to all (Off Grid) ✅ ("Compare models")
 3. One search across chats, knowledge, "My day" and meetings (Off Grid unified search) ✅
 4. Serving others: a request log per access key (tokens, model) and staying awake while serving (Off Grid Gateway, LU local API log) ✅
-5. Engine updates: a newer llama.cpp without an app update (Off Grid) ⬜
-6. "Enhance prompt" before images and video (LU prompt rewriting) ⬜
+5. Engine updates: a newer llama.cpp without an app update (Off Grid) ✅
+6. "Enhance prompt" before images and video (LU prompt rewriting) ✅
 7. A download speed limit (LU) ⬜
 8. Voice conversation on the computer: talk, hear the answer, interrupt (LU voice, Off Grid hands-free) ⬜
 

@@ -19,6 +19,21 @@ interface EngineStatus {
   runningParallel?: number;
 }
 
+/** A newer llama.cpp: shown with an Update button (it downloads only when pressed). */
+function EngineUpdate({ onStarted }: { onStarted: (s: EngineStatus) => void }) {
+  const [u, setU] = useState<{ installed: string | null; latest: string; newer: boolean } | null>(null);
+  useEffect(() => {
+    void api<{ installed: string | null; latest: string; newer: boolean }>("/api/engines/llamacpp/update").then(setU, () => undefined);
+  }, []);
+  if (!u?.newer) return null;
+  return (
+    <p className="muted small">
+      {t("engineUpdate", { from: u.installed ?? "", to: u.latest })}{" "}
+      <button type="button" className="as-link" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/update", { method: "POST" }).then((s) => { onStarted(s); setU(null); })}>{t("engineUpdateNow")}</button>
+    </p>
+  );
+}
+
 /** "Start here": the built-in engine and one-click models. */
 function StartHere({ onChange }: { onChange: () => void }) {
   const [models, setModels] = useState<Recommended[]>([]);
@@ -81,6 +96,7 @@ function StartHere({ onChange }: { onChange: () => void }) {
           </label>
         )}
       </div>
+      {engine?.installed && <EngineUpdate onStarted={setEngine} />}
       {engine?.running && engine.runningParallel !== undefined && engine.parallel !== undefined && engine.runningParallel < engine.parallel && <p className="muted small">{t("parallelFellBack")}</p>}
       {engine?.job && (
         <p className={engine.job.phase === "error" ? "error" : "muted"}>

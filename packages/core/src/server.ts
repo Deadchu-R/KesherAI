@@ -4,7 +4,7 @@ import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
 import { branding, features } from "@kesher/shared";
@@ -241,7 +241,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void personas.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
-  const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? branding.google);
+  // The project's Google client: from the release build, or — for a copy run from the source — a
+  // google-client.json in the data folder (the same file the release workflow writes).
+  const fileClient = (() => {
+    try {
+      const j = JSON.parse(readFileSync(join(paths.root, "google-client.json"), "utf8")) as { clientId?: string; clientSecret?: string };
+      return j.clientId ? { clientId: j.clientId, clientSecret: j.clientSecret ?? "" } : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? fileClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));

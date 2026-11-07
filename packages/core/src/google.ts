@@ -133,7 +133,7 @@ export class GoogleDrive {
    */
   authUrl(redirectUri: string, services: GoogleService[] = []): string {
     const clientId = this.clientId;
-    if (!clientId) throw new Error("Add a Google OAuth client id first (see docs/GOOGLE_DRIVE.md).");
+    if (!clientId) throw new Error("This copy of KesherAI has no Google sign-in built in — it was run from the source code. Install KesherAI from the release (github.com/Deadchu-R/KesherAI/releases), or put google-client.json in the KesherAI data folder (see docs/GOOGLE_DRIVE.md).");
     const verifier = base64url(randomBytes(32));
     const state = base64url(randomBytes(16));
     const wanted = [...new Set([...(this.config.services ?? []), ...services])].filter((x): x is GoogleService => x in SERVICE_SCOPES);
