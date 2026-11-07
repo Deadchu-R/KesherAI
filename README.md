@@ -45,6 +45,8 @@ pnpm build:packages
 pnpm dev            # core server on :7420 + UI on http://localhost:5173
 ```
 
+On Windows you can also double-click `start-kesherai.cmd`, which installs on first run and opens the interface in your browser.
+
 Or the desktop app:
 
 ```bash
