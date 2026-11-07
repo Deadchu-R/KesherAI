@@ -27,7 +27,7 @@ export const branding: Branding = {
   productName: "Kesher",
   appId: "kesher",
   accentColor: "#5EEAD4",
-  repositoryUrl: "https://github.com/OWNER/kesher",
-  docsUrl: "https://OWNER.github.io/kesher",
+  repositoryUrl: "https://github.com/Deadchu-R/kesher",
+  docsUrl: "https://deadchu-r.github.io/kesher",
   defaultPort: 7420,
 };

@@ -27,7 +27,7 @@
 <div dir="ltr">
 
 ```bash
-git clone https://github.com/OWNER/kesher.git
+git clone https://github.com/Deadchu-R/kesher.git
 cd kesher
 pnpm install
 pnpm build:packages

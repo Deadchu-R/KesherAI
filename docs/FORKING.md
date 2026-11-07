@@ -40,7 +40,7 @@ Prefer adding behaviour through a plugin in your fork's `plugins/` folder over e
 ## 4. Stay in sync with upstream
 
 ```bash
-git remote add upstream https://github.com/OWNER/kesher.git
+git remote add upstream https://github.com/Deadchu-R/kesher.git
 git fetch upstream
 git merge upstream/main     # conflicts should be limited to the config files above
 ```

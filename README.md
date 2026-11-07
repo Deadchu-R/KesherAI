@@ -38,7 +38,7 @@ Running AI locally today means juggling LM Studio for chat, ComfyUI for images, 
 Requirements: **Node.js 22+** and **pnpm 10+** (`corepack enable`).
 
 ```bash
-git clone https://github.com/OWNER/kesher.git
+git clone https://github.com/Deadchu-R/kesher.git
 cd kesher
 pnpm install
 pnpm build:packages
