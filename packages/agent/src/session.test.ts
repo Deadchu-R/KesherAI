@@ -284,3 +284,31 @@ test("a long conversation is summarised for the model, and nothing is deleted", 
   assert.equal(session.messages.length, 82, "the stored conversation keeps every message");
   assert.equal(session.events.filter((e) => e.type === "compacted").length, 1);
 });
+
+test("a team: the planner's plan reaches the worker, and the reviewer sends a weak answer back once", async () => {
+  const workerSaw: string[] = [];
+  let answers = 0;
+  let reviews = 0;
+  const session = new AgentSession({
+    id: "t", modelId: "worker", mode: "auto", tools: [], systemPrompt: "sys",
+    model: async (req) => {
+      workerSaw.push(req.messages.map((m) => m.content).join("\n"));
+      answers++;
+      return { text: answers === 1 ? "draft" : "fixed answer", toolCalls: [] };
+    },
+    team: () => [
+      { role: "planner", modelId: "p", model: async () => ({ text: "1. do it well", toolCalls: [] }) },
+      { role: "reviewer", modelId: "r", model: async () => ({ text: ++reviews === 1 ? "- the draft is too short" : "APPROVED looks good", toolCalls: [] }) },
+    ],
+  });
+  session.send("make a thing");
+  await new Promise<void>((resolve) => {
+    const on = (e: AgentEvent) => { if (e.type === "status" && e.status === "idle") { session.off("event", on); resolve(); } };
+    session.on("event", on);
+  });
+  assert.match(workerSaw[0]!, /1\. do it well/);
+  assert.match(workerSaw[1]!, /too short/);
+  const mates = session.events.filter((e) => e.type === "teammate");
+  assert.deepEqual(mates.map((e) => (e.type === "teammate" ? [e.role, e.approved] : [])), [["planner", undefined], ["reviewer", false], ["reviewer", true]]);
+  assert.equal(answers, 2);
+});

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode } from "@kesher/shared";
+import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate } from "@kesher/shared";
 import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
@@ -121,6 +121,61 @@ function reasonText(reason: string): string {
   const danger = /^This command (.+), so it always needs your approval\.$/.exec(reason);
   if (danger) return t("reasonDanger", { what: danger[1]! });
   return reason;
+}
+
+/**
+ * Multi-model chat: pick a planner (writes a plan before each request) and a
+ * reviewer (checks the answer and sends it back with notes) next to the
+ * main model. Any connected model can take either job.
+ */
+function TeamButton({ team, models, onChange }: { team: Teammate[]; models: ModelInfo[]; onChange: (team: Teammate[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node) && !(e.target as Element).closest?.(".model-pop")) setOpen(false);
+    };
+    addEventListener("mousedown", close);
+    addEventListener("keydown", close);
+    return () => {
+      removeEventListener("mousedown", close);
+      removeEventListener("keydown", close);
+    };
+  }, [open]);
+  const of = (role: Teammate["role"]) => team.find((m) => m.role === role)?.modelId ?? "";
+  const set = (role: Teammate["role"], modelId: string) => onChange([...team.filter((m) => m.role !== role), ...(modelId ? [{ role, modelId }] : [])]);
+  return (
+    <div className="team" ref={ref}>
+      <button type="button" className={team.length ? "on" : ""} aria-expanded={open} onClick={() => setOpen(!open)} title={t("teamHint")}>
+        {t("team")}{team.length ? ` (${team.length + 1})` : ""}
+      </button>
+      {open && (
+        <div className="team-pop" role="dialog" aria-label={t("team")}>
+          <p className="muted small">{t("teamHint")}</p>
+          {(["planner", "reviewer"] as const).map((role) => (
+            <div key={role} className="team-row">
+              <div>
+                <strong>{role === "planner" ? t("rolePlanner") : t("roleReviewer")}</strong>
+                <p className="muted small">{role === "planner" ? t("plannerHint") : t("reviewerHint")}</p>
+              </div>
+              <div className="row">
+                {of(role) ? (
+                  <>
+                    <ModelMenu models={models} value={of(role)} onChange={(id) => set(role, id)} />
+                    <button type="button" className="link-btn" onClick={() => set(role, "")}>{t("remove")}</button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => models[0] && set(role, models[0].id)} disabled={!models.length}>{t("addTeammate")}</button>
+                )}
+              </div>
+            </div>
+          ))}
+          <p className="muted small">{t("teamCost")}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<"approval_request">; pending: boolean; result?: Ev<"approval_result"> }) {
@@ -396,7 +451,7 @@ export function ConversationPage({ id }: { id: string }) {
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[] }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
     setConv({ ...conv, ...body });
     await refreshLibrary().catch(() => undefined);
@@ -436,6 +491,7 @@ export function ConversationPage({ id }: { id: string }) {
         slot,
       )}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
+        <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />
         <span className="grow" />
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
@@ -478,6 +534,17 @@ export function ConversationPage({ id }: { id: string }) {
                 return <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
               case "question":
                 return <QuestionCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingQuestions.includes(e.questionId)} answer={answers.get(e.questionId)} />;
+              case "teammate":
+                return (
+                  <details key={e.seq} className={`teammate ${e.role}${e.approved === false ? " sent-back" : ""}`} open={e.role === "reviewer" && e.approved === false}>
+                    <summary>
+                      <span className="mate-role">{e.role === "planner" ? t("rolePlanner") : t("roleReviewer")}</span>
+                      <span className="mate-model" dir="ltr">{e.modelId.split("/").pop()}</span>
+                      {e.role === "reviewer" && <span className={`pill ${e.approved ? "good" : "bad"}`}>{e.approved ? t("reviewApproved") : t("reviewSentBack")}</span>}
+                    </summary>
+                    <div className="mate-body"><RichText text={e.text.replace(/^\s*\**APPROVED\**[:.]?\s*/i, "")} /></div>
+                  </details>
+                );
               case "note":
                 return <p key={e.seq} className="muted note">{e.text}</p>;
               case "compacted":

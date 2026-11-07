@@ -450,3 +450,20 @@ html, body { overflow-x: hidden; }
 .image-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 2px 0; }
 .image-progress .bar { flex: 1 1 100%; height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; }
 .image-progress .bar > span { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+
+/* ---------- multi-model team ---------- */
+.team { position: relative; }
+.team-pop { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 25; width: min(380px, 90vw); display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 16px 40px rgb(0 0 0 / .45); }
+.team-pop p { margin: 0; }
+.team-row { display: flex; flex-direction: column; gap: 6px; }
+.team-row strong { font-weight: 500; }
+.team-pop .model-pop { bottom: auto; top: calc(100% + 6px); }
+.teammate { border-inline-start: 2px solid var(--border-strong); padding: 4px 12px; margin: 2px 0; }
+.teammate.planner { border-color: var(--accent); }
+.teammate.reviewer { border-color: var(--good); }
+.teammate.sent-back { border-color: var(--live); }
+.teammate summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); list-style: none; }
+.teammate summary::-webkit-details-marker { display: none; }
+.mate-role { color: var(--text); font-weight: 500; }
+.mate-body { font-size: 14px; padding-top: 6px; }
+

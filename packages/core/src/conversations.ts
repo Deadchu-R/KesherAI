@@ -1,8 +1,8 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { AgentSession, CODE_TOOLS, buildSystemPrompt, type AgentTool, type ModelTurn } from "@kesher/agent";
-import { branding, type Conversation, type ConversationKind, type PermissionMode } from "@kesher/shared";
+import { AgentSession, CODE_TOOLS, buildSystemPrompt, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
+import { branding, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
@@ -212,6 +212,23 @@ export class ConversationManager {
     return { tools: [...code, ...media.tools, ...this.pluginTools()], notes: media.notes };
   }
 
+  private teamCache = new Map<string, Teammate[]>();
+
+  /**
+   * @param id - Conversation id.
+   * @returns Its teammates, resolved to callable models (unknown models are skipped).
+   */
+  private teamOf(id: string): TeamMember[] {
+    return (this.teamCache.get(id) ?? []).flatMap((m) => {
+      try {
+        this.deps.registry.resolve(m.modelId);
+        return [{ role: m.role, modelId: m.modelId, model: modelTurnFor(this.deps.registry, m.modelId) }];
+      } catch {
+        return [];
+      }
+    });
+  }
+
   private contextFor(modelId: string): number {
     try {
       return this.deps.registry.resolve(modelId).provider.location === "cloud" ? 100_000 : 12_000;
@@ -290,6 +307,7 @@ export class ConversationManager {
   async open(id: string): Promise<{ session: AgentSession; conversation: Conversation } | undefined> {
     const conversation = await this.deps.library.getConversation(id);
     if (!conversation) return undefined;
+    this.teamCache.set(id, conversation.team ?? []);
     const live = this.sessions.get(id);
     if (live) return { session: live, conversation };
     const { tools, notes } = this.toolsFor(conversation.kind);
@@ -308,6 +326,8 @@ export class ConversationManager {
       onChange: () => this.scheduleSave(id),
       // Cloud models read far more than a 16k-context local model.
       contextTokens: this.contextFor(conversation.modelId),
+      // Read on every request, so adding or removing a teammate applies to the next message.
+      team: () => this.teamOf(id),
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(
           (r) =>
@@ -347,10 +367,11 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId">>): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team">>): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
+    if (patch.team) this.teamCache.set(id, patch.team);
     if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId));
     if (patch.mode) session.setMode(patch.mode);
     return this.deps.library.saveConversation({

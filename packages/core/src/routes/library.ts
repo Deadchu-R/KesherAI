@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
-import type { AgentEvent, ConversationKind, PermissionMode, Project } from "@kesher/shared";
+import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
@@ -99,11 +99,14 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ...summary, session: opened.session.info(), events: opened.session.events };
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[] } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
       if (b.mode && !MODES.includes(b.mode)) return reply.code(400).send({ error: "Unknown mode" });
+      if (b.team && (!Array.isArray(b.team) || b.team.some((m) => !m || typeof m.modelId !== "string" || (m.role !== "planner" && m.role !== "reviewer")))) {
+        return reply.code(400).send({ error: "A teammate needs a modelId and the role planner or reviewer." });
+      }
       const c = await s.conversations.update(req.params.id, b);
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;

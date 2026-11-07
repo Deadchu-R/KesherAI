@@ -128,6 +128,15 @@ export type AgentEvent = EventBase &
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
     | { type: "status"; status: AgentStatus; message?: string }
     | { type: "note"; text: string }
+    | {
+        /** A teammate model's contribution: a plan before the work, or a review after it. */
+        type: "teammate";
+        role: TeamRole;
+        modelId: string;
+        text: string;
+        /** For reviews: whether the reviewer accepted the answer. */
+        approved?: boolean;
+      }
   );
 
 /** What a client needs to know about a session besides its events. */
@@ -146,4 +155,18 @@ export interface AgentSessionInfo {
   canUndo: boolean;
   /** Folders or files outside the workspace this conversation was given access to. */
   grants: string[];
+}
+
+/**
+ * A teammate's job in a multi-model chat. The main model does the work and
+ * talks to the user; a `planner` writes a short plan before each request;
+ * a `reviewer` checks the finished answer and sends it back with notes
+ * (up to twice) until it is right.
+ */
+export type TeamRole = "planner" | "reviewer";
+
+/** A model that helps the main one in a conversation. */
+export interface Teammate {
+  role: TeamRole;
+  modelId: string;
 }

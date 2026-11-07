@@ -9,6 +9,7 @@ import type {
   ApprovalDecision,
   PermissionMode,
   ToolCall,
+  TeamRole,
   ToolSpec,
 } from "@kesher/shared";
 import { decide } from "./permissions.js";
@@ -24,6 +25,18 @@ export type ModelTurn = (
   signal: AbortSignal,
   onText: (delta: string) => void,
 ) => Promise<{ text: string; toolCalls: ToolCall[] }>;
+
+/** A helper model, already resolved to something the session can call. */
+export interface TeamMember {
+  role: TeamRole;
+  modelId: string;
+  model: ModelTurn;
+}
+
+const PLANNER_PROMPT =
+  "You are the planner in a team of AI models. Another model (the worker) will do the task with tools (files, commands, building programs, images, web). Write a short numbered plan (at most 7 steps) for the worker: what to do, in what order, what to check. Mention the pitfalls. Do not do the task yourself and do not write the final answer. Reply in the user's language.";
+const REVIEWER_PROMPT =
+  "You are the reviewer in a team of AI models. Another model (the worker) did the user's request; you see the request, what it did and its answer. Check that the answer is correct, complete, and actually does what was asked (files really made, programs really built, no instructions left for the user to do by hand). If it is good, reply with the single word APPROVED on the first line, optionally followed by one sentence. Otherwise reply with a short list of concrete problems and how to fix them. Reply in the user's language.";
 
 /** Everything needed to start (or resume) a session. */
 export interface AgentSessionOptions {
@@ -52,6 +65,8 @@ export interface AgentSessionOptions {
   isAlwaysAllowed?(tool: string, modelId: string): boolean;
   /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
   contextTokens?: number;
+  /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
+  team?: () => TeamMember[];
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -96,6 +111,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
+  private readonly team?: () => TeamMember[];
   /** What the model said in its latest answer, shown on approval cards as the reason for the action. */
   private lastSaid = "";
 
@@ -113,6 +129,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.contextTokens = opts.contextTokens ?? 12_000;
+    this.team = opts.team;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
     this.turn = this.events.reduce((n, e) => (e.type === "assistant" ? Math.max(n, e.turn) : n), 0);
@@ -280,6 +297,55 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * Asks a teammate model (no tools) and shows its answer in the chat.
+   *
+   * @param member - The teammate.
+   * @param system - Its role prompt.
+   * @param content - What it should look at.
+   * @param signal - Stops it with the session.
+   * @param review - Whether this is a review (marks approval).
+   * @returns Its text, or `undefined` if it failed (the work goes on without it).
+   */
+  private async askTeammate(member: TeamMember, system: string, content: string, signal: AbortSignal, review = false): Promise<string | undefined> {
+    try {
+      const r = await member.model({ messages: [{ role: "system", content: system }, { role: "user", content }], tools: [] }, signal, () => undefined);
+      const text = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      if (!text) return undefined;
+      const approved = review ? /^\s*\**APPROVED/i.test(text) : undefined;
+      this.push({ type: "teammate", role: member.role, modelId: member.modelId, text, ...(approved !== undefined ? { approved } : {}) });
+      return text;
+    } catch (err) {
+      if (signal.aborted) throw err;
+      this.push({ type: "note", text: `The ${member.role} (${member.modelId}) could not answer: ${(err as Error).message}` });
+      return undefined;
+    }
+  }
+
+  /**
+   * What the reviewer sees: the request, the actions taken this request
+   * (with short results), and the final answer.
+   *
+   * @param request - The user's message.
+   * @param answer - The worker's final answer.
+   * @returns The brief.
+   */
+  private reviewBrief(request: string, answer: string): string {
+    const lastUser = this.messages.map((m) => m.role === "user" && m.content === request).lastIndexOf(true);
+    const actions = this.messages
+      .slice(lastUser + 1)
+      .flatMap((m) =>
+        m.role === "assistant" && m.toolCalls?.length
+          ? m.toolCalls.map((c) => `- ${c.name} ${JSON.stringify(c.arguments).slice(0, 300)}`)
+          : m.role === "tool"
+            ? [`  → ${m.content.slice(0, 400).replace(/\s+/g, " ")}`]
+            : [],
+      )
+      .slice(-40)
+      .join("\n");
+    return `The user's request:\n${request}\n\nWhat the worker did:\n${actions || "(no tools used)"}\n\nThe worker's answer:\n${answer}`;
+  }
+
+  /**
    * Whether the agent stopped before finishing what the user asked for:
    * it was asked for a program to run (.exe) and did not build one, or it
    * tells the user to save, install or run things itself although it has
@@ -370,6 +436,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.setStatus("running");
     try {
       let nudges = 0;
+      let reviews = 0;
+      const team = this.team?.() ?? [];
+      const planner = team.find((m) => m.role === "planner");
+      const reviewer = team.find((m) => m.role === "reviewer");
+      const request = [...this.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+      if (planner) {
+        const plan = await this.askTeammate(planner, PLANNER_PROMPT, `The user's request:\n${request}`, abort.signal);
+        if (plan) this.messages.push({ role: "user", content: `(A plan from your teammate ${planner.modelId}; follow it where it makes sense, the user's words come first.)\n${plan}` });
+      }
       for (let step = 0; step < this.maxSteps; step++) {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
@@ -400,6 +475,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             this.push({ type: "note", text: nudge.note });
             this.messages.push({ role: "user", content: nudge.message });
             continue;
+          }
+          if (reviewer && reviews < 2) {
+            reviews++;
+            const review = await this.askTeammate(reviewer, REVIEWER_PROMPT, this.reviewBrief(request, result.text), abort.signal, true);
+            if (review && !/^\s*\**APPROVED/i.test(review)) {
+              this.messages.push({ role: "user", content: `Your teammate ${reviewer.modelId} reviewed your answer and found problems. Fix them (use your tools), then answer the user again:\n${review}` });
+              continue;
+            }
           }
           this.setStatus("idle");
           return;

@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage, PermissionMode } from "./agent.js";
+import type { Teammate, AgentEvent, AgentMessage, PermissionMode } from "./agent.js";
 
 /**
  * A project groups conversations. It can carry a workspace folder (code
@@ -30,6 +30,8 @@ export interface Conversation {
   mode: PermissionMode;
   /** For code conversations: the folder. Falls back to the project's. */
   workspace?: string;
+  /** Other models that plan or review alongside the main one. */
+  team?: Teammate[];
   /** What the model sees. */
   messages: AgentMessage[];
   /** What the user sees. */
