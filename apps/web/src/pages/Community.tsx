@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { refreshPluginUi } from "../plugins";
-import { t, type StringKey } from "../i18n";
+import { getLocale, t, type StringKey } from "../i18n";
+import { LibraryStore } from "./LibraryStore";
 
 /** One store item (a GitHub repository with a kesher-plugin.json). */
 export interface StoreItem {
@@ -22,6 +23,30 @@ const categoryOf = (it: StoreItem): Category[] => it.topics.flatMap((x) => (/^ke
 
 /** The community store: official items (checked by KesherAI) and community items (anyone's, unchecked), with a warning. */
 export function CommunityPage() {
+  const he = getLocale() === "he";
+  const [kind, setKind] = useState<"plugins" | "prompts" | "skills">("plugins");
+  const kinds = (
+    <div className="store-kinds row seg" role="tablist">
+      {([["plugins", he ? "תוספים ומודים" : "Plugins and mods"], ["prompts", he ? "פרומפטים ופרסונות" : "Prompts and personas"], ["skills", he ? "מיומנויות" : "Skills"]] as const).map(([k, label]) => (
+        <button key={k} type="button" role="tab" aria-selected={kind === k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>{label}</button>
+      ))}
+    </div>
+  );
+  if (kind !== "plugins") {
+    return (
+      <div className="page store">
+        <header className="store-hero">
+          <h1>{t("stTitle")}</h1>
+        </header>
+        {kinds}
+        <LibraryStore kind={kind} />
+      </div>
+    );
+  }
+  return <PluginStore kinds={kinds} />;
+}
+
+function PluginStore({ kinds }: { kinds: React.ReactNode }) {
   const [tab, setTab] = useState<"official" | "community">("official");
   const [data, setData] = useState<{ official: StoreItem[]; community: StoreItem[] } | null>(null);
   const [error, setError] = useState("");
@@ -69,6 +94,7 @@ export function CommunityPage() {
         <h1>{t("stTitle")}</h1>
         <p className="muted">{t("stIntro")}</p>
       </header>
+      {kinds}
 
       <div className="store-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "official"} className={tab === "official" ? "on" : ""} onClick={() => setTab("official")}>

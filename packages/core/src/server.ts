@@ -28,6 +28,9 @@ import { mcpServerRoutes } from "./routes/mcp-server.js";
 import { anthropicRoutes } from "./routes/anthropic.js";
 import { apiKeyRoutes } from "./routes/api-keys.js";
 import { ApiKeys } from "./api-keys.js";
+import { SkillStore } from "./skill-store.js";
+import { skillRoutes } from "./routes/skills.js";
+import { libraryStoreRoutes } from "./routes/library-store.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
@@ -217,6 +220,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const knowledge = new Knowledge(join(paths.root, "knowledge"));
   void knowledge.load();
   const personas = new Personas(join(paths.root, "personas.json"));
+  const skills = new SkillStore(paths.skills);
+  void skills.list().catch(() => undefined);
   void personas.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
@@ -282,6 +287,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       outputsDir: join(paths.root, "outputs"),
       checkpoints: new Checkpoints(join(paths.root, "checkpoints")),
       personas,
+      skills,
       onEvent: (convId, e, title, lastAnswer) => notifier.onConversationEvent(convId, title, e, lastAnswer),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
       computerTools: (id) => computer.tools(id),
@@ -317,6 +323,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     journal,
     knowledge,
     personas,
+    skills,
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,
@@ -362,6 +369,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await knowledgeRoutes(app, services);
   await personaRoutes(app, services);
   await promptRoutes(app, services);
+  await skillRoutes(app, services);
+  await libraryStoreRoutes(app, services);
   await notificationRoutes(app, services);
   await mcpServerRoutes(app, services);
   await githubRoutes(app, services);

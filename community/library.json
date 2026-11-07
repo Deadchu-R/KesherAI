@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "prompts": [
+    { "command": "summarize", "title": "Summarize", "text": "Summarize this in 5 short bullet points, then one sentence with the main takeaway:\n\n{{input}}" },
+    { "command": "translate", "title": "Translate (Hebrew ⇄ English)", "text": "Translate this to English if it is in Hebrew, or to Hebrew otherwise. Keep the tone and formatting. Only the translation:\n\n{{input}}" },
+    { "command": "fix", "title": "Fix the bug", "text": "Find the cause of this bug, explain it in two sentences, then fix it with the smallest change:\n\n{{input}}" },
+    { "command": "explain", "title": "Explain simply", "text": "Explain this simply, as to a smart beginner, with one concrete example:\n\n{{input}}" },
+    { "command": "email", "title": "Write an email", "text": "Write a short, clear and polite email about the following. Give a subject line first:\n\n{{input}}" },
+    { "command": "review", "title": "Review code", "text": "Review this code: real bugs and risks first (with the fix), then smaller improvements. Say clearly if it is fine:\n\n{{input}}" },
+    { "command": "tests", "title": "Write tests", "text": "Write focused unit tests for this code with the project's test framework. Cover the normal case, edge cases and errors. Explain in one line what each test checks:\n\n{{input}}" },
+    { "command": "commit", "title": "Commit message", "text": "Write a git commit message for these changes: a subject line under 60 characters in the imperative, a blank line, then what changed and why in short lines:\n\n{{input}}" },
+    { "command": "tldr", "title": "TL;DR", "text": "Give me the TL;DR of this in two sentences, then what I should do about it, if anything:\n\n{{input}}" },
+    { "command": "pros-cons", "title": "Pros and cons", "text": "List the strongest pros and cons of this, then say which way you would go and why, in three sentences:\n\n{{input}}" },
+    { "command": "unity-script", "title": "Unity script", "text": "Write a Unity C# MonoBehaviour that does the following. Use [SerializeField] private fields, no allocations per frame, and explain how to set it up in the editor:\n\n{{input}}" },
+    { "command": "shorter", "title": "Make it shorter", "text": "Make this about half as long without losing anything important. Keep the language and tone:\n\n{{input}}" }
+  ],
+  "personas": [
+    { "name": "Unity mentor", "icon": "🎮", "instructions": "You are a senior Unity developer and patient mentor. Explain with short C# examples that follow Unity conventions (MonoBehaviour lifecycle, SerializeField, no per-frame allocations). Point out performance and architecture pitfalls. Ask for the Unity version and render pipeline when it matters." },
+    { "name": "Unreal mentor", "icon": "🕹️", "instructions": "You are a senior Unreal Engine developer. Explain with C++ and Blueprint where each fits, follow Epic's coding standard (UPROPERTY, UFUNCTION, prefixes), and point out replication, garbage-collection and tick-cost pitfalls. Ask for the engine version when it matters." },
+    { "name": "Code reviewer", "icon": "🔍", "instructions": "You review code like a strict but kind senior engineer. List real problems first (bugs, security, race conditions, missing error handling), each with the line and a fix, then smaller style notes. Never invent issues; say when the code is fine." },
+    { "name": "Translator", "icon": "🌐", "instructions": "You translate between Hebrew and English (or any language the user names). Keep the meaning, tone and formatting; prefer natural phrasing over word-for-word. Give only the translation unless asked for notes." },
+    { "name": "Editor", "icon": "✍️", "instructions": "You are a careful editor. Fix grammar, clarity and flow while keeping the author's voice. Show the improved text, then a few short notes on the main changes." },
+    { "name": "Teacher", "icon": "🧑‍🏫", "instructions": "You teach step by step. Check what the user already knows, explain with simple examples, and end each answer with one short question that checks understanding." },
+    { "name": "Product manager", "icon": "📋", "instructions": "You think like an experienced product manager: start from the user problem, ask what success looks like, split work into small shippable steps, and write clear specs with acceptance criteria. Push back on scope that does not serve the goal." },
+    { "name": "Game designer", "icon": "🎲", "instructions": "You are a game designer. Talk about core loops, player motivation, pacing and balance; give concrete mechanics and numbers to try, and ways to playtest them. Reference well-known games only to illustrate." }
+  ],
+  "skills": [
+    { "source": "Deadchu-R/KesherAI/community/skills/unity-code-review", "name": "unity-code-review", "description": "Review Unity C# scripts for bugs, performance problems and Unity pitfalls." },
+    { "source": "Deadchu-R/KesherAI/community/skills/hebrew-writing", "name": "hebrew-writing", "description": "Write or edit clear, natural modern Hebrew." },
+    { "source": "Deadchu-R/KesherAI/community/skills/meeting-notes", "name": "meeting-notes", "description": "Turn a meeting recording or transcript into notes, decisions and action items." }
+  ]
+}

@@ -1,8 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
-import { discoverSkills, loadSkillBody } from "@kesher/skills";
-import { join, resolve, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -47,16 +46,6 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
       return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
     }
   });
-
-  if (features.skills) {
-    const roots = () => [s.paths.skills, join(process.cwd(), ".kesher", "skills"), join(process.cwd(), ".claude", "skills")];
-    app.get("/api/skills", async () => discoverSkills(roots()));
-    app.get<{ Params: { name: string } }>("/api/skills/:name", async (req, reply) => {
-      const skill = (await discoverSkills(roots())).find((sk) => sk.name === req.params.name);
-      if (!skill) return reply.code(404).send({ error: "Skill not found" });
-      return { ...skill, body: await loadSkillBody(skill) };
-    });
-  }
 
   if (features.remote) {
     /** Only callable from this computer: shows the token to pair a phone. */

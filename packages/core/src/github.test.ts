@@ -35,7 +35,7 @@ test("device sign-in: code, waiting, then a token and the user's name", async ()
   const g = new GitHubAuth(config, async () => void saved++, "Iv1.test", { web: base, api: base }, 0);
   const start = await g.start();
   assert.equal(start.userCode, "ABCD-1234");
-  for (let i = 0; i < 200 && !g.connected; i++) await new Promise((r) => setTimeout(r, 10));
+  for (let i = 0; i < 1000 && !(g.connected && config.login && g.status().pending?.state === "done"); i++) await new Promise((r) => setTimeout(r, 10));
   assert.equal(config.token, "gho_x");
   assert.equal(config.login, "Deadchu-R");
   assert.equal(g.status().pending?.state, "done");

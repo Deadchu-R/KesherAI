@@ -1,5 +1,6 @@
 import type { Checkpoints } from "./checkpoints.js";
 import { personaPrompt, type Personas } from "./personas.js";
+import type { SkillStore } from "./skill-store.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -160,6 +161,8 @@ export class ConversationManager {
       userNotes?(): Promise<string[]>;
       /** Saved personas. */
       personas?: Personas;
+      /** SKILL.md skills, listed in the prompt and loaded with use_skill. */
+      skills?: SkillStore;
       /** Every event of every open conversation (for notifications). */
       onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
     },
@@ -296,7 +299,8 @@ export class ConversationManager {
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
-    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools(), ...(this.deps.mcpTools?.() ?? [])], notes: media.notes };
+    const skills = this.deps.skills?.count ? [this.deps.skills.tool()] : [];
+    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools(), ...skills, ...(this.deps.mcpTools?.() ?? [])], notes: media.notes };
   }
 
   private teamCache = new Map<string, Teammate[]>();
@@ -348,7 +352,7 @@ export class ConversationManager {
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
-      toolNotes: [...notes, ...(await this.learnedNotes())],
+      toolNotes: [...notes, ...(await this.learnedNotes()), ...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean)],
       ...(persona ? { persona: personaPrompt(persona) } : {}),
     });
   }
