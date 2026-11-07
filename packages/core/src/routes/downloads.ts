@@ -197,6 +197,8 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
   });
 
   /** Starts a failed or cancelled download again (it resumes where it stopped). */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/pause", async (req) => ({ ok: s.downloads.pause(req.params.id) }));
+
   app.post<{ Params: { id: string } }>("/api/downloads/:id/retry", async (req, reply) => {
     const job = s.downloads.list().find((j) => j.id === req.params.id);
     if (!job) return reply.code(404).send({ error: "Download not found" });

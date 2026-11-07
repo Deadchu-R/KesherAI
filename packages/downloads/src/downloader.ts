@@ -1,13 +1,13 @@
 import { EventEmitter } from "node:events";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, stat, unlink } from "node:fs/promises";
+import { mkdir, rename, stat, statfs, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 /** Lifecycle of a download. */
-export type DownloadStatus = "queued" | "downloading" | "verifying" | "done" | "failed" | "cancelled";
+export type DownloadStatus = "queued" | "downloading" | "paused" | "verifying" | "done" | "failed" | "cancelled";
 
 /** What to download and where. */
 export interface DownloadRequest {
@@ -103,8 +103,22 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   cancel(id: string): boolean {
     const entry = this.jobs.get(id);
     if (!entry || ["done", "failed", "cancelled"].includes(entry.job.status)) return false;
-    entry.abort?.abort();
     this.update(entry.job, { status: "cancelled" });
+    entry.abort?.abort();
+    return true;
+  }
+
+  /**
+   * Pauses a queued or running job (the `.part` file is kept); {@link retry} resumes it.
+   *
+   * @param id - Job id.
+   * @returns `true` if it was paused.
+   */
+  pause(id: string): boolean {
+    const entry = this.jobs.get(id);
+    if (!entry || !["queued", "downloading"].includes(entry.job.status)) return false;
+    this.update(entry.job, { status: "paused", speed: 0 });
+    entry.abort?.abort();
     return true;
   }
 
@@ -117,7 +131,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   retry(id: string): DownloadJob | undefined {
     const entry = this.jobs.get(id);
     if (!entry) return undefined;
-    if (entry.job.status === "failed" || entry.job.status === "cancelled") {
+    if (entry.job.status === "failed" || entry.job.status === "cancelled" || entry.job.status === "paused") {
       delete entry.job.error;
       this.update(entry.job, { status: "queued", speed: 0 });
       this.pump();
@@ -158,7 +172,9 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   private async run(entry: { job: DownloadJob; req: DownloadRequest; abort?: AbortController }): Promise<void> {
     const { job, req } = entry;
     const part = `${req.dest}.part`;
-    entry.abort = new AbortController();
+    const ctrl = new AbortController();
+    entry.abort = ctrl;
+    let diskFull = false;
     try {
       await mkdir(dirname(req.dest), { recursive: true });
       const existing = await stat(part).then((s) => s.size).catch(() => 0);
@@ -174,6 +190,16 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       const length = Number(res.headers.get("content-length") ?? NaN);
       if (job.total === undefined && Number.isFinite(length)) job.total = start + length;
       this.update(job, { received: start });
+      // Enough room on the disk? Stop now with a clear message instead of failing near the end.
+      const need = (job.total ?? 0) - start;
+      if (need > 0) {
+        const free = await freeSpace(dirname(req.dest));
+        if (free !== undefined && free < need + 256 * 1024 ** 2) {
+          diskFull = true;
+          ctrl.abort();
+          throw new Error(`Not enough disk space: this needs ${gb(need)}, and only ${gb(free)} is free on that drive. Free up space or choose another models folder, then press Retry.`);
+        }
+      }
 
       let windowBytes = 0;
       let windowStart = Date.now();
@@ -201,13 +227,37 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       await rename(part, req.dest);
       this.update(job, { status: "done", speed: 0, received: job.total ?? job.received });
     } catch (err) {
-      if (job.status === "cancelled") return;
+      // Stopped on purpose (pause or cancel), even if it was resumed since: not a failure.
+      if ((ctrl.signal.aborted && !diskFull) || job.status === "cancelled" || job.status === "paused") return;
       // Node reports network problems as "fetch failed" with the real reason in `cause`.
       const e = err as Error & { cause?: { code?: string; message?: string } };
       const reason = e.message === "fetch failed" || e.message === "terminated" ? `${e.message}: ${e.cause?.code ?? e.cause?.message ?? "network error"}` : (e.message ?? String(err));
       this.update(job, { status: "failed", speed: 0, error: reason });
     }
   }
+}
+
+const gb = (b: number) => `${(b / 1024 ** 3).toFixed(b < 10 * 1024 ** 3 ? 1 : 0)} GB`;
+
+/**
+ * Free space on the drive that holds a folder (the folder may not exist yet).
+ *
+ * @param dir - A folder.
+ * @returns Bytes free for this user, or undefined when it cannot be told.
+ */
+export async function freeSpace(dir: string): Promise<number | undefined> {
+  let d = dir;
+  for (let i = 0; i < 30; i++) {
+    try {
+      const s = await statfs(d);
+      return Number(s.bavail) * Number(s.bsize);
+    } catch {
+      const up = dirname(d);
+      if (up === d) return undefined;
+      d = up;
+    }
+  }
+  return undefined;
 }
 
 /**

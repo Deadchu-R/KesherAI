@@ -20,6 +20,18 @@ export interface NewConversation {
   title?: string;
 }
 
+let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
+
+/**
+ * Where measured speeds go (the server keeps them per model, for "measured
+ * N tokens/s" next to models instead of an estimate).
+ *
+ * @param fn - Gets the model, the tokens it wrote (about), and the time it took.
+ */
+export function onModelSpeed(fn: typeof speedRecorder): void {
+  speedRecorder = fn;
+}
+
 /**
  * Builds the model function an agent session calls for each turn. Providers
  * with tool calling get the tools; chat-only providers (some plugins) still
@@ -30,6 +42,23 @@ export interface NewConversation {
  * @returns The turn function.
  */
 export function modelTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
+  const inner = rawTurnFor(registry, modelId);
+  return async (req, signal, onText) => {
+    let first = 0;
+    let chars = 0;
+    const r = await inner(req, signal, (t) => {
+      if (!first) first = Date.now();
+      chars += t.length;
+      onText(t);
+    });
+    // Speed of writing (after the first word), so reading a long prompt does not count against it.
+    const ms = first ? Date.now() - first : 0;
+    if (chars > 200 && ms > 500) speedRecorder?.(modelId, Math.round(chars / 4), ms);
+    return r;
+  };
+}
+
+function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
   return async (req, signal, onText) => {
     const { provider, providerModelId } = registry.resolve(modelId);
     if (provider.chatWithTools) {

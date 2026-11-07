@@ -161,7 +161,7 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
   );
 }
 
-interface LocalFile { path: string; name: string; size: number; source?: string; gguf?: boolean; estimate?: Estimate }
+interface LocalFile { path: string; name: string; size: number; source?: string; gguf?: boolean; estimate?: Estimate; measured?: { tps: number; n: number } }
 interface Hardware { ramTotal: number; gpus: Array<{ name: string; vramTotal: number }>; unifiedMemory: boolean }
 
 const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
@@ -267,7 +267,7 @@ export function ModelsPage() {
                     <span className="mono grow" dir="ltr">{f.name}</span>
                     {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
                     <span className="muted mono" dir="ltr">{gb(f.size)}</span>
-                    {f.estimate && f.gguf && <RatingBadge e={f.estimate} />}
+                    {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                     {tab === "chat" && f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
                   </div>
                 ))}
@@ -288,7 +288,7 @@ export function ModelsPage() {
                 <span className="mono grow" dir="ltr">{f.name}</span>
                 {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
-                {f.estimate && f.gguf && <RatingBadge e={f.estimate} />}
+                {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                 {f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
               </div>
             ))}

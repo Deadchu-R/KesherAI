@@ -113,3 +113,48 @@ test("summarizeCard keeps the first real paragraphs of a model card", async () =
   assert.equal(parametersFromName("HuggingFaceTB/SmolLM2-135M-Instruct"), "135M");
   assert.equal(parametersFromName("black-forest-labs/FLUX.1-dev"), undefined);
 });
+
+test("pause keeps the part file and resume finishes the download", async () => {
+  const { createServer } = await import("node:http");
+  const { mkdtemp, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { DownloadManager } = await import("./downloader.js");
+  const data = Buffer.alloc(400_000, 7);
+  const srv = createServer((req, res) => {
+    const range = /bytes=(\d+)-/.exec(req.headers.range ?? "");
+    const start = range ? Number(range[1]) : 0;
+    res.writeHead(range ? 206 : 200, { "content-length": String(data.length - start) });
+    // Send slowly so there is time to pause.
+    let i = start;
+    const tick = () => {
+      if (i >= data.length) return res.end();
+      res.write(data.subarray(i, i + 20_000));
+      i += 20_000;
+      setTimeout(tick, 15);
+    };
+    tick();
+  });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const url = `http://127.0.0.1:${(srv.address() as { port: number }).port}/f.bin`;
+  const dir = await mkdtemp(join(tmpdir(), "kesher-dl-"));
+  const dm = new DownloadManager();
+  const job = dm.enqueue({ url, dest: join(dir, "f.bin"), size: data.length });
+  await new Promise((r) => setTimeout(r, 120));
+  assert.ok(dm.pause(job.id));
+  assert.equal(dm.list()[0]!.status, "paused");
+  const got = dm.list()[0]!.received;
+  assert.ok(got > 0 && got < data.length);
+  dm.retry(job.id);
+  for (let i = 0; i < 200 && dm.list()[0]!.status !== "done"; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.equal(dm.list()[0]!.status, "done");
+  assert.deepEqual(await readFile(join(dir, "f.bin")), data);
+  srv.closeAllConnections();
+  srv.close();
+});
+
+test("free space can be read for a folder that does not exist yet", async () => {
+  const { freeSpace } = await import("./downloader.js");
+  const free = await freeSpace("/tmp/kesher-not-there/deeper");
+  assert.ok(free === undefined || free > 0);
+});

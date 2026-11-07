@@ -27,24 +27,24 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | One-click model download (LM Studio) | Chat models only | Every category; "Start here" list that installs the engine, downloads and loads in one click | ✅ chat · ⬜ others |
 | "Fits my hardware" badge (LM Studio, Locally Uncensored) | Yes/no only | Good / OK / slow / too big, plus expected time for a short answer, a long answer, reading a file and loading the model | ✅ |
 | Guided first-run setup with a resource level (Off Grid: Conservative / Balanced / Extreme, models per category, total download) | — | Same levels, picked from our own speed estimate for this computer, separate coding-agent pick when the chat model is weak at tools; nothing downloads before you press the button | ✅ chat and code · ⬜ speech, read-aloud, embeddings, video |
-| Disk-space check before a download (Locally Uncensored) | — | Same, and show it per file | ⬜ |
-| Pause / resume / "skip for now" on big downloads (Locally Uncensored) | — | Resumable downloads exist; add pause and a skip button in the first-run flow | 🟡 |
+| Disk-space check before a download (Locally Uncensored) | — | Same, and show it per file | ✅ |
+| Pause / resume / "skip for now" on big downloads (Locally Uncensored) | — | Pause and resume in the downloads circle (resumes from the part file) | ✅ |
 | Use the app while a big download runs (Locally Uncensored) | — | Already true: downloads run in the background queue | ✅ |
-| Detect existing engines (Locally Uncensored: 12) | — | LM Studio, LM Studio Bionic, Ollama, ComfyUI today; add Jan, KoboldCpp, vLLM | 🟡 |
+| Detect existing engines (Locally Uncensored: 12) | — | LM Studio, LM Studio Bionic, Ollama, Jan, KoboldCpp, vLLM, text-generation-webui, GPT4All, LocalAI/llamafile, ComfyUI | ✅ |
 | Choose the models folder, scan for models other apps downloaded (LM Studio: own folder only) | Each app re-downloads the same model | Scan LM Studio, Ollama (reads its manifests, so `llama3.2:3b` loads in our engine), Hugging Face cache, Jan, GPT4All, ComfyUI; use files in place, never copied | ✅ |
-| Measure real speed after a model runs | Nobody does it | Replace the estimate with measured words/second from the user's own runs | ⬜ |
+| Measure real speed after a model runs | Nobody does it | Replace the estimate with measured words/second from the user's own runs | ✅ |
 
 ### Coding agent
 
 | Idea (who) | Their weak spot | KesherAI upgrade | Status |
 | --- | --- | --- | --- |
 | Diff before applying, permission modes (Locally Uncensored, Bionic, Claude Code) | — | Three modes, a list of dangerous commands that always ask, "always allow" per session, a note to the agent when you deny | ✅ |
-| Checkpoints (Bionic) | — | Undo of the last change now; git checkpoint per turn next | 🟡 |
+| Checkpoints (Bionic) | — | A checkpoint before every message in a separate git store; restore with one click | ✅ |
 | Project rules file (`.lurules`, `AGENTS.md`) | Each app invents its own name | Read the shared `AGENTS.md` (and `CLAUDE.md`), so one file works in every tool | ✅ |
-| Plan mode (Locally Uncensored: Ask / Plan / Bypass) | — | A plan step the user approves before any edit | ⬜ |
-| Repo map | — | Symbol index so small local models find code without reading everything | ⬜ |
+| Plan mode (Locally Uncensored: Ask / Plan / Bypass) | — | A plan step the user approves before any edit | ✅ |
+| Repo map | — | Symbol index so small local models find code without reading everything (code_map) | ✅ |
 | The agent asks questions | Most agents guess | `ask_user` with suggested answers, shown as buttons, also on the phone | ✅ |
-| LSP diagnostics after edits (OpenCode) | — | Same, starting with TypeScript, C# and C++ | ⬜ |
+| Diagnostics after edits (OpenCode) | — | check_code runs the project's own checker (tsc, dotnet, clang, cargo, go, python) | ✅ |
 
 ### Computer use
 
@@ -60,7 +60,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Projects with conversations (Bionic, Jan) | — | Projects carry a folder and instructions every conversation inherits | ✅ |
 | Cloud backup | Usually needs the vendor's cloud and an account | Any synced folder (Google Drive for desktop, OneDrive, Dropbox), no account | ✅ |
 | Google sign-in backup (Claude-style connector) | — | `drive.file` only: KesherAI sees just its own folder, never the rest of your Drive | ✅ Google · ⬜ OneDrive |
-| Document chat with cited sources (Off Grid, AnythingLLM) | — | Same, using the active embedding model | ⬜ |
+| Document chat with cited sources (Off Grid, AnythingLLM) | — | PDF and Word by page with page citations (also from Drive); a knowledge base over whole folders next | 🟡 |
 | Search across all conversations | — | Full-text search over conversations and the day journal (My day → Search) | ✅ |
 | Second brain: Day, Replay, Reflect, Entities, Actions (Off Grid) | macOS-first; Search still "coming" | My day: opt-in screen journal kept on this computer (Windows OCR built in, no download), local model by default, skips password managers, private windows and sign-in/bank pages, delete the last 15 minutes or any day, unified search with conversations | ✅ Windows · 🟡 macOS/Linux (no OCR without tesseract) |
 | Meeting notes (Off Grid) | — | Record a meeting in My day: microphone plus the call's sound (desktop loopback), transcribed every half minute by the speech engine, then summary, decisions and action items; the audio is not kept | ✅ |
@@ -107,3 +107,28 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 5. More engine auto-detection (Jan, KoboldCpp, vLLM).
 6. Conversation search and document chat.
 7. Push notifications and built-in TLS for the phone.
+
+## From the November 2026 review (Msty, LM Studio, AnythingLLM, Open WebUI)
+
+Working on now, in this order:
+
+1. Knowledge base over folders and web pages, kept up to date, with sources (AnythingLLM, Msty Knowledge Stacks) ⬜
+2. Personas: assistants with their own instructions, model, tools and knowledge (Msty, Open WebUI) ⬜
+3. Conversation branches: edit an earlier message, compare branches (Msty Branch Explorer) ⬜
+4. Prompt library with variables and `/` commands (Msty Prompts Studio) ⬜
+5. Context explorer: what the model sees now and how many tokens each part takes (Msty) ⬜
+6. Several chats at once on one local model (LM Studio 0.4 parallel requests) ⬜
+7. Phone notification when a long job on the computer finishes ⬜
+8. Small fixes: disk space, pause, measured speed, more engines ✅
+9. Speech as agent tools: transcribe and speak ⬜
+10. KesherAI as an MCP server for other apps ⬜
+11. Anthropic-style API and separate access keys per app (LM Studio permission tokens) ⬜
+12. Community store for skills and prompts too (Msty Discover Hub) ⬜
+13. Control the computer from the phone: watch and approve ⬜
+14. Pipelines with loops and conditions (Msty Turnstiles), and managed ComfyUI ⬜
+
+Later (priority to be decided):
+
+- Built-in TLS for remote access; signed installers (needs a code-signing certificate)
+- OneDrive backup
+- A command line (`kesher chat`) and a window-less server mode (LM Studio llmster)

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { mkdir, readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
@@ -49,10 +49,14 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     const own = await Promise.all(
       files.map(async (path) => {
         const size = (await stat(path)).size;
-        return { path, name: relative(s.paths.models, path), size, source: "KesherAI", gguf: path.toLowerCase().endsWith(".gguf"), estimate: estimatePerformance(size, hw) };
+        const measured = await s.speeds.get(basename(path));
+        return { path, name: relative(s.paths.models, path), size, source: "KesherAI", gguf: path.toLowerCase().endsWith(".gguf"), estimate: estimatePerformance(size, hw), ...(measured ? { measured } : {}) };
       }),
     );
-    const others = extra.flat().map((m) => ({ path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw) }));
+    const others = await Promise.all(extra.flat().map(async (m) => {
+      const measured = await s.speeds.get(basename(m.path));
+      return { path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw), ...(measured ? { measured } : {}) };
+    }));
     return [...own, ...others];
   });
 

@@ -14,15 +14,23 @@ function duration(seconds: number): string {
   return `~${Math.round(seconds / 60)} min`;
 }
 
-/** A coloured badge: runs well / OK / slow / too big. */
-export function RatingBadge({ e }: { e: Estimate }) {
-  const cls = e.rating === "good" ? "good" : e.rating === "ok" ? "warn" : "bad";
+/** Speed measured on this computer from real answers. */
+export interface Measured {
+  tps: number;
+  n: number;
+}
+
+/** A coloured badge: runs well / OK / slow / too big. Once the model ran here, the measured speed replaces the estimate. */
+export function RatingBadge({ e, measured }: { e: Estimate; measured?: Measured | undefined }) {
+  const rating: Estimate["rating"] = measured ? (measured.tps >= 15 ? "good" : measured.tps >= 6 ? "ok" : "slow") : e.rating;
+  const cls = rating === "good" ? "good" : rating === "ok" ? "warn" : "bad";
   const keys: Record<Estimate["rating"], StringKey> = { good: "ratingGood", ok: "ratingOk", slow: "ratingSlow", "too-big": "ratingToo-big" };
-  const label = t(keys[e.rating]);
+  const words = measured ? Math.round(measured.tps * 0.75 * 10) / 10 : e.wordsPerSecond;
+  const speed = measured ? t("measuredPerSecond", { n: words }) : t("perSecond", { n: words });
   return (
-    <span className={`pill ${cls}`} title={e.rating === "too-big" ? "" : t("perSecond", { n: e.wordsPerSecond })}>
-      {label}
-      {e.rating !== "too-big" ? ` · ${t("perSecond", { n: e.wordsPerSecond })}` : ""}
+    <span className={`pill ${cls}`} title={measured ? t("measuredHint", { n: measured.n }) : rating === "too-big" ? "" : speed}>
+      {t(keys[rating])}
+      {rating !== "too-big" ? ` · ${speed}` : ""}
     </span>
   );
 }

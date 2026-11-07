@@ -1,6 +1,6 @@
 {
   "name": "@kesher/web",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "private": true,
   "description": "The KesherAI interface. The desktop app shows it in a window; phones open it from the core server.",
   "license": "Apache-2.0",

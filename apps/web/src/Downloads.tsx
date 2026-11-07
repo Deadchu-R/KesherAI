@@ -87,7 +87,9 @@ export function DownloadsButton() {
                 <div className="row muted">
                   <span className="mono grow" dir="ltr">{gb(j.received)}{j.total ? ` / ${gb(j.total)}` : ""}{j.speed ? ` · ${(j.speed / 1024 ** 2).toFixed(1)} MB/s` : ""}</span>
                   {j.status === "downloading" && j.total && j.speed > 0 && <span className="muted">{t("timeLeft", { time: eta((j.total - j.received) / j.speed) })}</span>}
-                  {ACTIVE.has(j.status) && <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>}
+                  {(j.status === "downloading" || j.status === "queued") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/pause`, { method: "POST" })}>{t("dlPause")}</button>}
+                  {j.status === "paused" && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("dlResume")}</button>}
+                  {(ACTIVE.has(j.status) || j.status === "paused") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>}
                   {(j.status === "failed" || j.status === "cancelled") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("retry")}</button>}
                   {!ACTIVE.has(j.status) && <button type="button" onClick={() => remove(j.id)} aria-label={t("remove")}>✕</button>}
                 </div>

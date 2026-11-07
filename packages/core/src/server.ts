@@ -13,7 +13,8 @@ import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
 import { LlamaEngine } from "./llamacpp.js";
 import { Library } from "./library.js";
-import { ConversationManager, modelTurnFor } from "./conversations.js";
+import { ConversationManager, modelTurnFor, onModelSpeed } from "./conversations.js";
+import { Speeds } from "./speeds.js";
 import { Updater } from "./updates.js";
 import type { PackagedUpdates } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
@@ -201,6 +202,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
 
+  const speeds = new Speeds(join(paths.root, "speeds.json"));
+  onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
   const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads);
   const updater = new Updater(undefined, options.updates);
   const devices = new Devices({
@@ -270,6 +273,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     coach,
     computer,
     mcp,
+    speeds,
     runtimes,
     github,
     journal,

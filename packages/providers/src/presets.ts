@@ -36,6 +36,36 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     autodetect: true,
   },
   {
+    config: { id: "jan", type: "openai-compatible", name: "Jan", baseUrl: "http://localhost:1337/v1", location: "server" },
+    description: "Models in Jan, through its local API server (Settings → Local API Server).",
+    autodetect: true,
+  },
+  {
+    config: { id: "koboldcpp", type: "openai-compatible", name: "KoboldCpp", baseUrl: "http://localhost:5001/v1", location: "server" },
+    description: "The model loaded in KoboldCpp.",
+    autodetect: true,
+  },
+  {
+    config: { id: "vllm", type: "openai-compatible", name: "vLLM", baseUrl: "http://localhost:8000/v1", location: "server" },
+    description: "Models served by vLLM (fast on NVIDIA cards).",
+    autodetect: true,
+  },
+  {
+    config: { id: "textgen", type: "openai-compatible", name: "Text Generation WebUI", baseUrl: "http://localhost:5000/v1", location: "server" },
+    description: "The model loaded in oobabooga's text-generation-webui (start it with --api).",
+    autodetect: true,
+  },
+  {
+    config: { id: "gpt4all", type: "openai-compatible", name: "GPT4All", baseUrl: "http://localhost:4891/v1", location: "server" },
+    description: "Models in GPT4All, through its local API server.",
+    autodetect: true,
+  },
+  {
+    config: { id: "localai", type: "openai-compatible", name: "LocalAI / llamafile", baseUrl: "http://localhost:8080/v1", location: "server" },
+    description: "LocalAI or a llamafile, on their default port.",
+    autodetect: true,
+  },
+  {
     config: { id: "comfyui", type: "comfyui", name: "ComfyUI", baseUrl: "http://127.0.0.1:8188", location: "local" },
     description: "Image, video and audio workflows in ComfyUI.",
     autodetect: true,
