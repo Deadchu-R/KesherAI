@@ -112,7 +112,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 
 Working on now, in this order:
 
-1. Knowledge base over folders and web pages, kept up to date, with sources (AnythingLLM, Msty Knowledge Stacks) ⬜
+1. Knowledge base over folders and web pages, kept up to date, with sources (AnythingLLM, Msty Knowledge Stacks) ✅ (Knowledge page, `search_knowledge` tool)
 2. Personas: assistants with their own instructions, model, tools and knowledge (Msty, Open WebUI) ⬜
 3. Conversation branches: edit an earlier message, compare branches (Msty Branch Explorer) ⬜
 4. Prompt library with variables and `/` commands (Msty Prompts Studio) ⬜

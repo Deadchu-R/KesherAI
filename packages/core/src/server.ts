@@ -19,6 +19,8 @@ import { Updater } from "./updates.js";
 import type { PackagedUpdates } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { googleTools } from "./google-tools.js";
+import { Knowledge, knowledgeTools } from "./knowledge.js";
+import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
@@ -197,6 +199,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     }
   }, undefined, options.screen);
   void journal.load();
+  // Knowledge bases: the user's folders and web pages, searchable by the models, with sources.
+  const knowledge = new Knowledge(join(paths.root, "knowledge"));
+  void knowledge.load();
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? branding.google);
@@ -251,6 +256,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       computerTools: (id) => computer.tools(id),
       mcpTools: () => [
         ...googleTools(google),
+        ...knowledgeTools(knowledge),
         ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
           spec,
           // Tools that only read run without asking; the rest ask, like any command.
@@ -277,6 +283,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     runtimes,
     github,
     journal,
+    knowledge,
     whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
       const nv = await nvidiaGpus();
       return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
@@ -315,6 +322,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await speechRoutes(app, services);
   await mcpRoutes(app, services);
   await journalRoutes(app, services);
+  await knowledgeRoutes(app, services);
   await githubRoutes(app, services);
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);
@@ -357,6 +365,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       mcp.close();
       devices.close();
       journal.close();
+      knowledge.close();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();
