@@ -17,3 +17,23 @@ createRoot(document.getElementById("root")!).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   addEventListener("load", () => void navigator.serviceWorker.register("./sw.js").catch(() => undefined));
 }
+
+// Inside the Android app: scanning another computer's QR code while connected
+// (kesherai://connect?server=…) switches to that computer.
+type DeepLinkApp = { addListener(event: "appUrlOpen", cb: (e: { url: string }) => void): unknown };
+const androidApp = (window as unknown as { Capacitor?: { Plugins?: { App?: DeepLinkApp } } }).Capacitor?.Plugins?.App;
+androidApp?.addListener("appUrlOpen", ({ url }) => {
+  try {
+    const server = new URL(url).searchParams.get("server");
+    if (server && /^https?:\/\//.test(server)) {
+      try {
+        localStorage.setItem("kesherai-server", server);
+      } catch {
+        // the saved link is only a convenience
+      }
+      location.href = server;
+    }
+  } catch {
+    // not a KesherAI link
+  }
+});

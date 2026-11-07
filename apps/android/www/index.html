@@ -110,8 +110,29 @@
     }
   }
   $("form").onsubmit = (e) => { e.preventDefault(); connect($("url").value); };
-  const saved = localStorage.getItem(KEY);
-  if (saved) { $("url").value = saved; connect(saved); }
+
+  /**
+   * The QR code in KesherAI → Settings → Phone is a `kesherai://connect?server=<link>` link:
+   * scanning it with the phone camera opens this app and connects straight away.
+   */
+  function fromDeepLink(link) {
+    try {
+      const u = new URL(link);
+      if (u.protocol !== "kesherai:") return null;
+      const server = u.searchParams.get("server");
+      return server && /^https?:\/\//.test(server) ? server : null;
+    } catch { return null; }
+  }
+  const App = window.Capacitor?.Plugins?.App;
+  App?.addListener("appUrlOpen", (e) => {
+    const server = fromDeepLink(e.url);
+    if (server) { $("url").value = server; connect(server); }
+  });
+  (async () => {
+    const launch = fromDeepLink((await App?.getLaunchUrl?.().catch(() => null))?.url ?? "");
+    const saved = launch || localStorage.getItem(KEY);
+    if (saved) { $("url").value = saved; connect(saved); }
+  })();
 </script>
 </body>
 </html>

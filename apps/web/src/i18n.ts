@@ -180,7 +180,9 @@ const en = {
   keepAwake: "Keep this computer awake while remote access is on (desktop app)",
   wakeHint: "The Android app can also wake this computer from sleep over the home network (Wake-on-LAN). It needs a one-time setting in Windows:",
   copied: "Copied",
-  phoneApp: "Scan the code to open KesherAI in the phone's browser, or paste the link into the KesherAI Android app. Outside your home network, use the Tailscale address.",
+  phoneApp: "Scan the code with the phone camera: it opens the KesherAI Android app and connects. No app yet? Install it with the small code below, or copy the link into the phone's browser. Outside your home network, use the Tailscale address.",
+  installApp: "Install the Android app",
+  downloadApk: "Download the APK",
   saved: "Saved",
 } as const;
 
@@ -359,7 +361,9 @@ const he: Record<StringKey, string> = {
   keepAwake: "השאר את המחשב ער כשגישה מרחוק פעילה (באפליקציית הדסקטופ)",
   wakeHint: "אפליקציית האנדרואיד יכולה גם להעיר את המחשב ממצב שינה ברשת הביתית (Wake-on-LAN). זה דורש הגדרה חד-פעמית ב-Windows:",
   copied: "הועתק",
-  phoneApp: "סרוק את הקוד כדי לפתוח את KesherAI בדפדפן של הטלפון, או הדבק את הקישור באפליקציית האנדרואיד של KesherAI. מחוץ לבית השתמש בכתובת של Tailscale.",
+  phoneApp: "סרוק את הקוד במצלמת הטלפון: הוא פותח את אפליקציית KesherAI ומתחבר. עוד אין לך את האפליקציה? התקן אותה עם הקוד הקטן למטה, או העתק את הקישור לדפדפן בטלפון. מחוץ לבית השתמש בכתובת של Tailscale.",
+  installApp: "התקן את אפליקציית האנדרואיד",
+  downloadApk: "הורד APK",
   saved: "נשמר",
 };
 

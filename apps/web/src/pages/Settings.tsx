@@ -239,12 +239,17 @@ function Updates() {
   );
 }
 
+/** The newest Android app, published by .github/workflows/android.yml. */
+const APK_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/KesherAI-android.apk";
+
 function Phone() {
   const [remote, setRemote] = useState<Remote | null>(null);
   const [qr, setQr] = useState<Array<{ url: string; image: string; tailscale: boolean }>>([]);
   const [copied, setCopied] = useState("");
   const [restart, setRestart] = useState(false);
+  const [apkQr, setApkQr] = useState("");
   useEffect(() => {
+    void QRCode.toDataURL(APK_URL, { margin: 1, width: 140 }).then(setApkQr);
     api<Remote>("/api/remote")
       .then(async (r) => {
         setRemote(r);
@@ -256,7 +261,9 @@ function Phone() {
               // The link also carries the network card's address, so the Android app can wake this computer.
               const wake = a.tailscale || a.mac === "00:00:00:00:00:00" ? "" : `&wake=${a.mac}&bcast=${a.broadcast}`;
               const url = `http://${a.address}:${r.port}/?token=${encodeURIComponent(r.token)}${wake}`;
-              return { url, image: await QRCode.toDataURL(url, { margin: 1, width: 220 }), tailscale: a.tailscale };
+              // The code opens the KesherAI Android app and connects; the copied link works in any browser.
+              const deep = `kesherai://connect?server=${encodeURIComponent(url)}`;
+              return { url, image: await QRCode.toDataURL(deep, { margin: 1, width: 220 }), tailscale: a.tailscale };
             }),
           ),
         );
@@ -295,6 +302,13 @@ function Phone() {
         ))}
       </div>
       {qr.length > 0 && <p className="muted">{t("phoneApp")}</p>}
+      {qr.length > 0 && apkQr && (
+        <figure className="qr">
+          <img src={apkQr} alt={t("installApp")} width={140} height={140} />
+          <figcaption className="muted">{t("installApp")}</figcaption>
+          <a href={APK_URL} target="_blank" rel="noreferrer">{t("downloadApk")}</a>
+        </figure>
+      )}
     </section>
   );
 }

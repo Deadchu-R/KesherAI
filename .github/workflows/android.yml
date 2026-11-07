@@ -41,6 +41,18 @@ jobs:
           npx cap add android
           # The computer serves KesherAI over plain HTTP on the home network or Tailscale.
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+          # kesherai://connect?server=… links (the QR code in Settings → Phone) open the app and connect.
+          python3 - <<'PY'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          filt = ('<intent-filter><action android:name="android.intent.action.VIEW" />'
+                  '<category android:name="android.intent.category.DEFAULT" />'
+                  '<category android:name="android.intent.category.BROWSABLE" />'
+                  '<data android:scheme="kesherai" /></intent-filter>')
+          i = s.index("</intent-filter>", s.index("android.intent.action.MAIN")) + len("</intent-filter>")
+          open(p, "w").write(s[:i] + filt + s[i:])
+          PY
+          grep -c 'android:scheme="kesherai"' android/app/src/main/AndroidManifest.xml
           npx cap sync android
       - name: Build the APK
         working-directory: apps/android/android
