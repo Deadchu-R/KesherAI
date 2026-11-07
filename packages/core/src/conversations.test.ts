@@ -170,3 +170,27 @@ test("version and settings endpoints answer", async () => {
     await server.close();
   }
 });
+
+test("an approval given for good holds in the chosen scope and survives a restart", async () => {
+  const { mkdtemp: mk } = await import("node:fs/promises");
+  const { tmpdir: td } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { createKesherServer: create } = await import("./server.js");
+  const dir = await mk(j(td(), "kesher-perm-"));
+  const s = await create({ dataDir: dir, autodetect: false, pluginRoots: [] });
+  try {
+    s.services.config.permissions.push({ tool: "run_command", scope: "model", modelId: "x/y" });
+    const c = (await s.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "x/y" } })).json() as { id: string };
+    const opened = await s.services.conversations.open(c.id);
+    const check = (opened!.session as unknown as { isAlwaysAllowed: (t: string, m: string) => boolean }).isAlwaysAllowed;
+    assert.equal(check("run_command", "x/y"), true);
+    assert.equal(check("run_command", "other/model"), false);
+    assert.equal(check("write_file", "x/y"), false);
+    const list = (await s.app.inject({ method: "GET", url: "/api/permissions" })).json() as unknown[];
+    assert.equal(list.length, 1);
+    assert.equal((await s.app.inject({ method: "DELETE", url: "/api/permissions/0" })).statusCode, 200);
+    assert.equal(check("run_command", "x/y"), false);
+  } finally {
+    await s.close();
+  }
+});

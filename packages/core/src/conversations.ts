@@ -243,6 +243,12 @@ export class ConversationManager {
       messages: conversation.messages,
       events: conversation.events,
       onChange: () => this.scheduleSave(id),
+      isAlwaysAllowed: (tool, modelId) =>
+        this.deps.config.permissions.some(
+          (r) =>
+            (r.tool === tool || r.tool === "*") &&
+            (r.scope === "everywhere" || (r.scope === "model" && r.modelId === modelId) || (r.scope === "conversation" && r.conversationId === id)),
+        ),
     });
     this.sessions.set(id, session);
     return { session, conversation };

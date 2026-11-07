@@ -43,6 +43,12 @@ export interface AgentSessionOptions {
   events?: AgentEvent[];
   /** Called after every event worth saving. */
   onChange?(session: AgentSession): void;
+  /**
+   * Permanent approvals the user gave (for this conversation, this model, or
+   * everywhere). Called before asking; return true to run without asking.
+   * Dangerous commands still always ask.
+   */
+  isAlwaysAllowed?(tool: string, modelId: string): boolean;
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -82,6 +88,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
   private readonly questions = new Map<string, (text: string) => void>();
   private readonly alwaysAllowed = new Set<string>();
+  private readonly isAlwaysAllowed?: (tool: string, modelId: string) => boolean;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
 
@@ -97,6 +104,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.tools = new Map(opts.tools.map((t) => [t.spec.name, t]));
     this.maxSteps = opts.maxSteps ?? 60;
     this.onChange = opts.onChange;
+    this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
     this.turn = this.events.reduce((n, e) => (e.type === "assistant" ? Math.max(n, e.turn) : n), 0);
@@ -433,7 +441,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       signal,
       recordChange: (path, before) => this.changes.push({ path, before }),
     };
-    const verdict = decide(this.mode, tool.risk, this.alwaysAllowed.has(tool.spec.name), tool.commandOf?.(call.arguments));
+    const always = this.alwaysAllowed.has(tool.spec.name) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId);
+    const verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
     if (verdict.action === "ask") {
       let preview = "";
       try {

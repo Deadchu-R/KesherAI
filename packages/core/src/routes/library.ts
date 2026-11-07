@@ -150,13 +150,33 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string } }>(
+  app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string; scope?: "conversation" | "model" | "everywhere" } }>(
     "/api/conversations/:id/approvals/:requestId",
     async (req, reply) => {
       const opened = await s.conversations.open(req.params.id);
       const d = req.body?.decision;
       if (!opened) return reply.code(404).send({ error: "Conversation not found" });
       if (d !== "allow" && d !== "always" && d !== "deny") return reply.code(400).send({ error: "decision must be allow, always or deny" });
+      if (d === "always") {
+        // Remember it, so it also holds after a restart (and, by scope, in other conversations).
+        const ev = opened.session.events.find((e) => e.type === "approval_request" && e.requestId === req.params.requestId);
+        const tool = ev && ev.type === "approval_request" ? ev.name : undefined;
+        const scope = req.body.scope ?? "conversation";
+        if (tool) {
+          const rule = {
+            tool,
+            scope,
+            ...(scope === "conversation" ? { conversationId: req.params.id } : {}),
+            ...(scope === "model" ? { modelId: opened.session.modelId } : {}),
+            createdAt: new Date().toISOString(),
+          };
+          const same = (r: { tool: string; scope: string; conversationId?: string; modelId?: string }) => r.tool === rule.tool && r.scope === rule.scope && r.conversationId === rule.conversationId && r.modelId === rule.modelId;
+          if (!s.config.permissions.some(same)) {
+            s.config.permissions.push(rule);
+            await s.saveConfig();
+          }
+        }
+      }
       if (!opened.session.approve(req.params.requestId, d, req.body.feedback)) return reply.code(404).send({ error: "That request is no longer waiting" });
       return { ok: true };
     },
@@ -197,6 +217,17 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     } catch (err) {
       return reply.code(409).send({ error: (err as Error).message });
     }
+  });
+
+  // ---------- Permanent approvals ----------
+  app.get("/api/permissions", async () => s.config.permissions);
+  app.delete<{ Params: { index: string } }>("/api/permissions/:index", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Approvals can only be changed on this computer." });
+    const i = Number(req.params.index);
+    if (!Number.isInteger(i) || i < 0 || i >= s.config.permissions.length) return reply.code(404).send({ error: "No such approval" });
+    s.config.permissions.splice(i, 1);
+    await s.saveConfig();
+    return s.config.permissions;
   });
 
   // ---------- Settings ----------

@@ -70,9 +70,10 @@ function reasonText(reason: string): string {
 function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<"approval_request">; pending: boolean; result?: Ev<"approval_result"> }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const decide = async (decision: "allow" | "always" | "deny") => {
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const decide = async (decision: "allow" | "always" | "deny", scope?: "conversation" | "model" | "everywhere") => {
     setBusy(true);
-    await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
+    await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(scope ? { scope } : {}), ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
     setBusy(false);
   };
   if (!pending) {
@@ -90,9 +91,17 @@ function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<
       <input placeholder={t("noteForAgent")} value={note} onChange={(e) => setNote(e.target.value)} aria-label={t("noteForAgent")} />
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => void decide("allow")}>{t("allow")}</button>
-        <button type="button" disabled={busy} onClick={() => void decide("always")}>{t("allowAlways")}</button>
+        <button type="button" disabled={busy} aria-expanded={scopeOpen} onClick={() => setScopeOpen(!scopeOpen)}>{t("allowAlways")} ▾</button>
         <button type="button" disabled={busy} onClick={() => void decide("deny")}>{t("deny")}</button>
       </div>
+      {scopeOpen && (
+        <div className="scope-menu" role="menu">
+          <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "conversation")}>{t("alwaysChat", { tool: ev.name })}</button>
+          <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "model")}>{t("alwaysModel", { tool: ev.name })}</button>
+          <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "everywhere")}>{t("alwaysEverywhere", { tool: ev.name })}</button>
+          <span className="muted small">{t("alwaysNote")}</span>
+        </div>
+      )}
     </div>
   );
 }

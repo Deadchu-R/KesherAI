@@ -51,6 +51,21 @@ export const KesherConfigSchema = z.object({
   modelsDir: z.string().optional(),
   /** Other folders with models (from "Scan computer" or added by hand). KesherAI only reads them. */
   modelFolders: z.array(z.object({ folder: z.string(), source: z.string() })).default([]),
+  /**
+   * Permanent approvals: run a tool without asking, in one conversation, with
+   * one model, or everywhere. Dangerous commands always ask anyway.
+   */
+  permissions: z
+    .array(
+      z.object({
+        tool: z.string(),
+        scope: z.enum(["conversation", "model", "everywhere"]),
+        conversationId: z.string().optional(),
+        modelId: z.string().optional(),
+        createdAt: z.string().optional(),
+      }),
+    )
+    .default([]),
   /** Active model per category id, e.g. `{ "chat": "llamacpp/Qwen3-8B-Q4_K_M", "image": "comfyui/flux1-dev.safetensors" }`. */
   activeModels: z.record(z.string(), z.string()).default({}),
   /** Google Drive sign-in. The client id defaults to the one in branding.config.ts. */

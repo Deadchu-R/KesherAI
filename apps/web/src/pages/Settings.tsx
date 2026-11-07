@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
 import { api, type ModelListing } from "../api";
-import { desktop } from "../library";
+import { desktop, useLibrary } from "../library";
 import { getLocale, t } from "../i18n";
 
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
@@ -396,10 +396,41 @@ export function SettingsPage() {
     <div className="page">
       <h1>{t("settings")}</h1>
       <ActiveModels />
+      <PermissionsSection />
       <GoogleDriveSection />
       <Sync />
       <Updates />
       <Phone />
     </div>
+  );
+}
+
+interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string }
+
+/** Approvals the user gave for good: what runs without asking, and where. */
+export function PermissionsSection() {
+  const [rules, setRules] = useState<Rule[] | null>(null);
+  const { conversations } = useLibrary();
+  useEffect(() => {
+    void api<Rule[]>("/api/permissions").then(setRules).catch(() => setRules([]));
+  }, []);
+  if (!rules) return null;
+  const where = (r: Rule) =>
+    r.scope === "everywhere" ? t("scopeEverywhere") : r.scope === "model" ? t("scopeModel", { model: r.modelId ?? "" }) : t("scopeChat", { chat: conversations.find((c) => c.id === r.conversationId)?.title ?? "?" });
+  return (
+    <section className="card stack">
+      <h2>{t("permissionsTitle")}</h2>
+      <p className="muted">{t("permissionsHint")}</p>
+      {rules.length === 0 && <p className="muted">{t("permissionsNone")}</p>}
+      <div className="list">
+        {rules.map((r, i) => (
+          <div key={`${r.tool}-${r.scope}-${r.conversationId ?? r.modelId ?? ""}`} className="row">
+            <span className="mono">{r.tool}</span>
+            <span className="grow muted" dir="auto">{where(r)}</span>
+            <button type="button" onClick={() => void api<Rule[]>(`/api/permissions/${i}`, { method: "DELETE" }).then(setRules)}>{t("remove")}</button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
