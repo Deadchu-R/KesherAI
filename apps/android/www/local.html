@@ -117,6 +117,26 @@
   }
   $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון ו-${navigator.hardwareConcurrency || "?"} ליבות${gpu.name ? `, כרטיס גרפי: ${gpu.name}${gpu.strong ? " (חזק: גם מודלים של 3–4B יכולים לרוץ מהר אחרי כיוונון)" : ""}` : ""}. ליד כל מודל כתוב כמה טוב הוא ירוץ כאן; אחרי שיחה זה מתעדכן לפי המהירות שנמדדה.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory and ${navigator.hardwareConcurrency || "?"} cores${gpu.name ? `, graphics: ${gpu.name}${gpu.strong ? " (strong: 3–4B models can run fast once tuned)" : ""}` : ""}. Each model says how well it will run here; after you chat, it updates with the measured speed.`);
 
+  // ---------- keep working in the background (Android foreground service with a notification) ----------
+  const BG = window.Capacitor?.Plugins?.KesherBackground;
+  const jobs = new Map(); // id → { title, text, progress }
+  let bgTimer;
+  function bg(id, job) {
+    if (job) jobs.set(id, job);
+    else jobs.delete(id);
+    clearTimeout(bgTimer);
+    // Batch updates: Android limits how often a notification may change.
+    bgTimer = setTimeout(() => {
+      if (!BG) return;
+      const all = [...jobs.values()];
+      if (!all.length) return void BG.stop().catch(() => undefined);
+      const main = all[0];
+      const text = all.length > 1 ? `${main.text} · ${T(`ועוד ${all.length - 1}`, `+${all.length - 1} more`)}` : main.text;
+      BG.start({ title: main.title, text, progress: main.progress ?? -1 }).catch(() => undefined);
+    }, 400);
+  }
+  const doneNotice = (title, text) => { if (document.hidden) BG?.notify({ title, text }).catch(() => undefined); };
+
   const wllama = new Wllama({ default: new URL("./vendor/wllama/wllama.wasm", location.href).href }, { allowOffline: true, suppressNativeLog: true });
   const mm = wllama.modelManager;
   const urlOf = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
@@ -256,12 +276,17 @@
           try {
             await mm.downloadModel(url, {
               progressCallback: ({ loaded, total }) => {
-                bar.firstElementChild.style.width = `${total ? (loaded / total) * 100 : 0}%`;
-                dl.textContent = `${T("מוריד", "Downloading")} ${total ? Math.round((loaded / total) * 100) : 0}%`;
+                const pct = total ? Math.round((loaded / total) * 100) : 0;
+                bar.firstElementChild.style.width = `${pct}%`;
+                dl.textContent = `${T("מוריד", "Downloading")} ${pct}%`;
+                bg(`dl:${url}`, { title: T(`מוריד את ${item.name}`, `Downloading ${item.name}`), text: `${pct}% · ${gb(loaded)} / ${gb(total || file.size)}`, progress: pct });
               },
             });
+            bg(`dl:${url}`);
+            doneNotice(T("ההורדה הסתיימה", "Download finished"), T(`${item.name} מוכן לשיחה בטלפון`, `${item.name} is ready to chat on the phone`));
             renderList();
           } catch (e) {
+            bg(`dl:${url}`);
             dl.disabled = false;
             dl.textContent = T("נסה שוב", "Try again");
             card.querySelector("p").textContent = T("ההורדה נכשלה: ", "Download failed: ") + (e.message || e);
@@ -374,6 +399,7 @@
       bar.firstElementChild.style.width = pct + "%";
       const secs = Math.round((performance.now() - started) / 1000);
       $("status").textContent = `${pct}% · ${label} · ${T(`${secs} שניות`, `${secs}s`)}`;
+      bg("tune", { title: T("מכוונן מודל לטלפון", "Tuning a model for the phone"), text: `${pct}% · ${label}`, progress: pct });
     };
     const tick = setInterval(() => say(currentPart), 1000);
     let currentPart = 0;
@@ -412,6 +438,8 @@
       }
     }
     clearInterval(tick);
+    bg("tune");
+    doneNotice(T("הכיוונון הסתיים", "Tuning finished"), T(`~${best.tps.toFixed(1)} טוקנים לשנייה`, `~${best.tps.toFixed(1)} tokens/s`));
     bar.firstElementChild.style.width = "100%";
     setTimeout(() => (bar.hidden = true), 1200);
     await wllama.exit();
@@ -459,6 +487,7 @@
     $("send").textContent = "■";
     $("status").textContent = T("חושב…", "Thinking…");
     let reply = "";
+    bg("answer", { title: T(`${current.item.name} עונה`, `${current.item.name} is answering`), text: text.slice(0, 80) });
     const started = performance.now();
     let tokens = 0;
     try {
@@ -491,12 +520,14 @@
     } finally {
       abort = null;
       $("send").textContent = "↑";
+      bg("answer");
     }
     const seconds = (performance.now() - started) / 1000;
     if (tokens > 8) rememberSpeed(current.url, tokens / seconds);
     const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
+    doneNotice(T("התשובה מוכנה", "The answer is ready"), clean.slice(0, 120));
     try { localStorage.setItem(HISTORY(current.url), JSON.stringify(messages.slice(-60))); } catch { /* full */ }
   };
 

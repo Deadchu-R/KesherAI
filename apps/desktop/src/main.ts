@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage } from "electron";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import { createKesherServer, type KesherServer } from "@kesher/core";
@@ -58,13 +58,7 @@ async function startCore(): Promise<string> {
 
 // One window: opening KesherAI again focuses the existing window.
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on("second-instance", () => {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  }
-});
+app.on("second-instance", () => showWindow());
 
 async function createWindow(url: string): Promise<void> {
   const win = new BrowserWindow({
@@ -94,7 +88,94 @@ async function createWindow(url: string): Promise<void> {
     }
   });
 
+  // Closing the window keeps KesherAI working in the background (chats, downloads, tasks), in the tray.
+  win.on("close", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    win.hide();
+    if (!toldAboutTray && Notification.isSupported()) {
+      toldAboutTray = true;
+      new Notification({ title: branding.productName, body: "Still running in the background: chats and downloads keep going. Quit from the tray icon." }).show();
+    }
+  });
+
   await win.loadURL(url);
+}
+
+let quitting = false;
+let toldAboutTray = false;
+let tray: Tray | undefined;
+
+/** Shows the window again (from the tray, a notification, or a second launch). */
+function showWindow(): void {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+/**
+ * The tray icon: open, what is running, quit. While the window is closed
+ * it polls the core and shows a notification when a chat finishes or a
+ * download completes, so the user can leave KesherAI working.
+ */
+function setupTray(coreUrl: string): void {
+  const dist = app.isPackaged ? join(resourcesDir(), "web") : join(resourcesDir(), "apps/web/dist");
+  const icon = nativeImage.createFromPath(join(dist, "icon-192.png")).resize({ width: 18, height: 18 });
+  tray = new Tray(icon);
+  tray.setToolTip(branding.productName);
+  const base = coreUrl.replace(/\/$/, "");
+  let status = "";
+  const menu = () =>
+    Menu.buildFromTemplate([
+      { label: `Open ${branding.productName}`, click: showWindow },
+      ...(status ? [{ label: status, enabled: false }] : []),
+      { type: "separator" },
+      { label: "Quit (stops chats and downloads)", click: () => { quitting = true; app.quit(); } },
+    ]);
+  tray.setContextMenu(menu());
+  tray.on("click", showWindow);
+
+  let running: Record<string, string> = {};
+  let downloading = new Set<string>();
+  const poll = async () => {
+    try {
+      const [activity, jobs, convs] = await Promise.all([
+        fetch(`${base}/api/conversations/activity`).then((r) => r.json() as Promise<Record<string, string>>),
+        fetch(`${base}/api/downloads`).then((r) => (r.ok ? (r.json() as Promise<Array<{ id: string; status: string; label?: string }>>) : [])),
+        fetch(`${base}/api/conversations`).then((r) => r.json() as Promise<Array<{ id: string; title: string }>>),
+      ]);
+      const hidden = !BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.isFocused());
+      for (const id of Object.keys(running)) {
+        if (!activity[id] && hidden && Notification.isSupported()) {
+          const title = convs.find((c) => c.id === id)?.title ?? "A chat";
+          const n = new Notification({ title: `${title}: done`, body: "The answer is ready." });
+          n.on("click", () => { showWindow(); void BrowserWindow.getAllWindows()[0]?.loadURL(`${base}/#/c/${id}`); });
+          n.show();
+        }
+        if (activity[id] === "waiting" && running[id] !== "waiting" && hidden && Notification.isSupported()) {
+          new Notification({ title: convs.find((c) => c.id === id)?.title ?? "A chat", body: "Waiting for your approval or answer." }).show();
+        }
+      }
+      const active = new Set(jobs.filter((j) => /^(queued|downloading|verifying)$/.test(j.status)).map((j) => j.id));
+      for (const id of downloading) {
+        const job = jobs.find((j) => j.id === id);
+        if (!active.has(id) && job && job.status === "done" && hidden && Notification.isSupported()) {
+          new Notification({ title: "Download finished", body: job.label ?? "" }).show();
+        }
+      }
+      running = activity;
+      downloading = active;
+      const n = Object.keys(activity).length;
+      status = [n ? `${n} chat${n > 1 ? "s" : ""} working` : "", active.size ? `${active.size} download${active.size > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
+      tray?.setToolTip(status ? `${branding.productName}: ${status}` : branding.productName);
+      tray?.setContextMenu(menu());
+    } catch {
+      // the core is restarting; try again next time
+    }
+  };
+  setInterval(() => void poll(), 4000);
 }
 
 // The folder picker for "New code session" and the sync folder setting.
@@ -150,6 +231,7 @@ app.whenReady().then(async () => {
   try {
     const coreUrl = await startCore();
     await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);
+    setupTray(coreUrl);
     // Stops computer control from anywhere, even when another app is in front.
     const stopKey = process.platform === "darwin" ? "Command+Shift+Escape" : "Control+Alt+Escape";
     globalShortcut.register(stopKey, () => {
@@ -161,7 +243,8 @@ app.whenReady().then(async () => {
     app.quit();
   }
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (BrowserWindow.getAllWindows().length > 0) showWindow();
+    else {
       void createWindow(process.env.KESHER_DEV_URL ?? `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}`);
     }
   });
@@ -169,11 +252,13 @@ app.whenReady().then(async () => {
 
 app.on("will-quit", () => globalShortcut.unregisterAll());
 
+// The window hides instead of closing (see createWindow), so the app keeps working until Quit.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (quitting) app.quit();
 });
 
 app.on("before-quit", (event) => {
+  quitting = true;
   if (!server) return;
   event.preventDefault();
   const s = server;

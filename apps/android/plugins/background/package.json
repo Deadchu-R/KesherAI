@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-background",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keeps the KesherAI Android app working while it is in the background (model downloads, answers from a model on the phone), with a notification.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}
