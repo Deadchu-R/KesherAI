@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-updater",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Checks GitHub for a newer KesherAI Android app, downloads it and opens the Android installer.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

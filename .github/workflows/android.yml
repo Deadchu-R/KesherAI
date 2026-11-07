@@ -53,11 +53,22 @@ jobs:
           open(p, "w").write(s[:i] + filt + s[i:])
           PY
           grep -c 'android:scheme="kesherai"' android/app/src/main/AndroidManifest.xml
+          # Every build gets a higher version number, so the app's update button can tell it is newer.
+          VERSION=$(node -p "require('../../package.json').version")
+          sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"$VERSION (${{ github.run_number }})\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
           npx cap sync android
+      - name: Use the project's fixed signing key (apps/android/signing/README.md)
+        run: mkdir -p ~/.android && cp apps/android/signing/debug.keystore ~/.android/debug.keystore
       - name: Build the APK
         working-directory: apps/android/android
         run: ./gradlew assembleDebug --no-daemon
       - run: cp apps/android/android/app/build/outputs/apk/debug/app-debug.apk KesherAI-android.apk
+      - name: Describe this build for the app's update button
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "{\"versionCode\": ${{ github.run_number }}, \"versionName\": \"$VERSION (${{ github.run_number }})\", \"apkUrl\": \"https://github.com/${{ github.repository }}/releases/download/android-latest/KesherAI-android.apk\"}" > android-version.json
+          cat android-version.json
       - uses: actions/upload-artifact@v4
         with:
           name: KesherAI-android
@@ -71,5 +82,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           notes="The newest Android app, rebuilt on every change. Open this page on your phone, tap KesherAI-android.apk, and allow installing from this source. Then paste the link from KesherAI → Settings → Phone."
-          gh release upload android-latest KesherAI-android.apk --clobber \
-            || gh release create android-latest KesherAI-android.apk --prerelease --title "Android app (latest)" --notes "$notes"
+          gh release upload android-latest KesherAI-android.apk android-version.json --clobber \
+            || gh release create android-latest KesherAI-android.apk android-version.json --prerelease --title "Android app (latest)" --notes "$notes"

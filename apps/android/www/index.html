@@ -17,11 +17,23 @@
     button { height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 16px; }
     button.primary { background: var(--accent); color: var(--bg); border: none; font-weight: 600; }
     .error { color: var(--bad); }
+    .update { border: 1px solid var(--accent); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .update[hidden] { display: none; }
+    .row { display: flex; gap: 10px; }
+    .row button { flex: 1; }
+    .small { font-size: 13px; text-align: center; }
     ol { margin: 0; padding-inline-start: 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
   </style>
 </head>
 <body>
 <main>
+  <div id="update" class="update" hidden>
+    <strong id="updateText"></strong>
+    <div class="row">
+      <button id="updateNow" class="primary" type="button" data-he="עדכן עכשיו" data-en="Update now">עדכן עכשיו</button>
+      <button id="updateLater" type="button" data-he="אחר כך" data-en="Later">אחר כך</button>
+    </div>
+  </div>
   <h1><img src="icon.svg" width="34" height="34" alt="" /> KesherAI</h1>
   <p data-he="התחבר ל-KesherAI שרץ במחשב שלך. כל העבודה רצה במחשב; הטלפון רק שולח ומציג." data-en="Connect to KesherAI running on your computer. All the work runs there; the phone only sends and shows.">התחבר ל-KesherAI שרץ במחשב שלך. כל העבודה רצה במחשב; הטלפון רק שולח ומציג.</p>
   <ol>
@@ -35,7 +47,9 @@
   </form>
   <button class="primary" type="submit" form="form" data-he="התחבר" data-en="Connect">התחבר</button>
   <p id="status"></p>
+  <button id="checkUpdate" type="button" data-he="בדוק עדכונים לאפליקציה" data-en="Check for app updates">בדוק עדכונים לאפליקציה</button>
   <button id="lang" type="button">English</button>
+  <p id="version" class="small" dir="ltr"></p>
 </main>
 <script>
   // The whole app: remember the link, check it answers, then open the
@@ -48,6 +62,12 @@
     fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale.", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale." },
     bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." },
     wake: { he: "הער את המחשב", en: "Wake the computer" },
+    newVersion: { he: "גרסה חדשה של האפליקציה זמינה: ", en: "A new version of the app is available: " },
+    upToDate: { he: "האפליקציה מעודכנת.", en: "The app is up to date." },
+    checkingUpdate: { he: "בודק עדכונים…", en: "Checking for updates…" },
+    downloading: { he: "מוריד את העדכון… ", en: "Downloading the update… " },
+    allowInstall: { he: "אפשר ל-KesherAI להתקין עדכונים במסך שנפתח, חזור ולחץ שוב על עדכן.", en: "Allow KesherAI to install updates on the screen that opened, then come back and tap Update again." },
+    updateFailed: { he: "העדכון נכשל: ", en: "The update failed: " },
     waking: { he: "שולח בקשת הערה ומחכה למחשב (עד דקה)…", en: "Sent a wake-up and waiting for the computer (up to a minute)…" },
     noWake: { he: "המחשב לא התעורר. בדוק ש-Wake-on-LAN מופעל, שהמחשב מחובר בכבל רשת, ושהטלפון באותה רשת ביתית.", en: "The computer did not wake. Check that Wake-on-LAN is on, the computer is on a network cable, and the phone is on the same home network." } };
   function applyLang() {
@@ -128,8 +148,53 @@
     const server = fromDeepLink(e.url);
     if (server) { $("url").value = server; connect(server); }
   });
+  // ---------- App updates (published by .github/workflows/android.yml) ----------
+  const Updater = window.Capacitor?.Plugins?.KesherUpdater;
+  const VERSION_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
+  let latest = null;
+  if (!Updater) $("checkUpdate").hidden = true;
+
+  /** @returns Whether a newer version is available. */
+  async function checkForUpdate(quiet) {
+    if (!Updater) return false;
+    if (!quiet) { $("status").className = ""; $("status").textContent = tr.checkingUpdate[lang]; }
+    try {
+      latest = await Updater.check({ url: VERSION_URL });
+      $("version").textContent = `v${latest.currentName}`;
+      if (latest.available) {
+        $("updateText").textContent = tr.newVersion[lang] + latest.latestName;
+        $("update").hidden = false;
+        if (!quiet) $("status").textContent = "";
+        return true;
+      }
+      if (!quiet) $("status").textContent = tr.upToDate[lang];
+    } catch (e) {
+      if (!quiet) { $("status").textContent = tr.updateFailed[lang] + (e?.message || e); $("status").className = "error"; }
+    }
+    return false;
+  }
+  $("checkUpdate").onclick = () => { cancelled = true; checkForUpdate(false); };
+  $("updateLater").onclick = () => { $("update").hidden = true; const saved = localStorage.getItem(KEY); if (saved) connect(saved); };
+  $("updateNow").onclick = async () => {
+    if (!latest?.apkUrl) return;
+    $("status").className = "";
+    $("status").textContent = tr.downloading[lang];
+    const sub = await Updater.addListener("progress", (p) => { if (p.percent >= 0) $("status").textContent = tr.downloading[lang] + p.percent + "%"; });
+    try {
+      await Updater.install({ url: latest.apkUrl });
+      $("status").textContent = "";
+    } catch (e) {
+      const msg = e?.message || String(e);
+      $("status").textContent = msg === "needs-permission" ? tr.allowInstall[lang] : tr.updateFailed[lang] + msg;
+    } finally {
+      sub?.remove?.();
+    }
+  };
+
   (async () => {
     const launch = fromDeepLink((await App?.getLaunchUrl?.().catch(() => null))?.url ?? "");
+    // A newer app waits for the user's choice before connecting; a scanned code connects anyway.
+    if ((await checkForUpdate(true)) && !launch) return;
     const saved = launch || localStorage.getItem(KEY);
     if (saved) { $("url").value = saved; connect(saved); }
   })();

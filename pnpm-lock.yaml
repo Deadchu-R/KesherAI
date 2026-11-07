@@ -47,6 +47,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.6.0
         version: 8.6.0
+      capacitor-kesher-updater:
+        specifier: file:./plugins/updater
+        version: file:apps/android/plugins/updater(@capacitor/core@8.6.0)
       capacitor-kesher-wake-on-lan:
         specifier: file:./plugins/wake-on-lan
         version: file:apps/android/plugins/wake-on-lan(@capacitor/core@8.6.0)
@@ -1371,6 +1374,11 @@ packages:
 
   caniuse-lite@1.0.30001823:
     resolution: {integrity: sha512-TQ5s/djDjNk1axreUW+4rULH+BmdCMLiJkhaXnO5wqivG7tITkSUj4ItIdzqdZHKaXcHAV8dhH3JxOM7/7bwqw==}
+
+  capacitor-kesher-updater@file:apps/android/plugins/updater:
+    resolution: {directory: apps/android/plugins/updater, type: directory}
+    peerDependencies:
+      '@capacitor/core': ^8.0.0
 
   capacitor-kesher-wake-on-lan@file:apps/android/plugins/wake-on-lan:
     resolution: {directory: apps/android/plugins/wake-on-lan, type: directory}
@@ -4448,6 +4456,10 @@ snapshots:
   camelcase@5.3.1: {}
 
   caniuse-lite@1.0.30001823: {}
+
+  capacitor-kesher-updater@file:apps/android/plugins/updater(@capacitor/core@8.6.0):
+    dependencies:
+      '@capacitor/core': 8.6.0
 
   capacitor-kesher-wake-on-lan@file:apps/android/plugins/wake-on-lan(@capacitor/core@8.6.0):
     dependencies:
