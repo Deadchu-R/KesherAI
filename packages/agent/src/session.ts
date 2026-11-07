@@ -96,6 +96,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
+  /** What the model said in its latest answer, shown on approval cards as the reason for the action. */
+  private lastSaid = "";
 
   /** @param opts - See {@link AgentSessionOptions}. */
   constructor(opts: AgentSessionOptions) {
@@ -388,6 +390,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           } else throw err;
         }
         if (result.text) this.push({ type: "assistant", turn, text: result.text });
+        this.lastSaid = result.text.trim();
         this.messages.push({ role: "assistant", content: result.text, ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {}) });
         if (result.toolCalls.length === 0) {
           const nudge = nudges >= 3 ? undefined : this.unfinished(result.text, nudges);
@@ -493,7 +496,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       const requestId = randomUUID();
       const { decision, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
         this.approvals.set(requestId, resolve);
-        this.push({ type: "approval_request", requestId, callId: call.id, name: call.name, input: call.arguments, preview, reason: verdict.reason });
+        const given = typeof call.arguments.purpose === "string" ? call.arguments.purpose.trim() : "";
+        const purpose = (given || this.lastSaid).slice(0, 400);
+        const folder = tool.risk === "exec" ? this.workspace : undefined;
+        this.push({ type: "approval_request", requestId, callId: call.id, name: call.name, input: call.arguments, preview, reason: verdict.reason, ...(purpose ? { purpose } : {}), ...(folder ? { folder } : {}) });
         this.setStatus("waiting");
       });
       this.push({ type: "approval_result", requestId, decision, ...(feedback ? { feedback } : {}) });

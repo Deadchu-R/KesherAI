@@ -310,6 +310,7 @@ const runCommandTool: AgentTool = {
       type: "object",
       properties: {
         command: { type: "string", description: "The command line." },
+        purpose: { type: "string", description: "One short sentence for the user, in their language: what this command does and why it is needed now. Shown when they approve it." },
         timeout_seconds: { type: "integer", description: "Stop after this many seconds (default 120, max 600)." },
       },
       required: ["command"],

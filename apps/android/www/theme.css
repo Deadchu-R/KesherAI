@@ -1,0 +1,23 @@
+/* The phone screens share the desktop app's look (apps/web/src/styles.css). */
+@font-face { font-family: Rubik; font-weight: 400; font-display: swap; src: url(vendor/fonts/rubik-hebrew-400.woff2) format("woff2"); unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+@font-face { font-family: Rubik; font-weight: 400; font-display: swap; src: url(vendor/fonts/rubik-latin-400.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122; }
+@font-face { font-family: Rubik; font-weight: 500; font-display: swap; src: url(vendor/fonts/rubik-hebrew-500.woff2) format("woff2"); unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+@font-face { font-family: Rubik; font-weight: 500; font-display: swap; src: url(vendor/fonts/rubik-latin-500.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122; }
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1420; --panel: #131927; --panel-2: #182032; --raised: #1f2840;
+  --border: #232c42; --text: #e8ecf4; --muted: #9aa3b8;
+  --accent: #8b9cff; --accent-ink: #0f1420; --live: #f2b66d; --bad: #ff9b9b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: Rubik, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { min-height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); padding: 0 16px; font-size: 16px; }
+button:active { background: var(--raised); }
+button.primary { background: var(--accent); color: var(--accent-ink); border: none; font-weight: 500; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .5; }
+input { height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); padding: 0 14px; font-size: 15px; }
+.brand { display: flex; gap: 10px; align-items: center; font-size: 22px; font-weight: 500; margin: 0; }
+.muted { color: var(--muted); }

@@ -49,7 +49,7 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
       "- check_tools tells you what is installed (python, java, node, git, …); install_tool installs a missing one after the user approves.",
       "- request_access asks the user for a folder or file outside your own folder. Paths the user attached to their message are already granted.",
       "- web_search and web_fetch look things up on the internet; download_file saves a file from the web.",
-      "Do the work yourself with these tools. Never ask the user to save files, type commands in a terminal, install programs or run scripts: you can do all of that, and they only approve. Ask the user only for choices and approvals.",
+      "Do the work yourself with these tools. Never ask the user to save files, type commands in a terminal, install programs or run scripts: you can do all of that, and they only approve. Ask the user only for choices. Never ask 'do you approve?' yourself (not in text, not with ask_user): just call the tool, and the app shows the user an approval card with the exact command, what it does and the folder. Fill the purpose field of run_command with one short sentence in the user's language.",
       "When the user wants a program they can run (an .exe), the job is done only when build_executable succeeded and you told them it is in the Files panel.",
     ].join("\n"),
   ];

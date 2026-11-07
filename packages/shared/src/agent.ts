@@ -88,6 +88,10 @@ export type AgentEvent = EventBase &
         preview: string;
         /** Why approval is needed, in one sentence. */
         reason: string;
+        /** What the agent says it is doing and why (its own words), if it said. */
+        purpose?: string;
+        /** The folder the command runs in. */
+        folder?: string;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
     | {

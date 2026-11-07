@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode } from "@kesher/shared";
+import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
@@ -7,7 +8,7 @@ import { FilesPanel } from "../FilesPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
 import { ActivityGroup, stepLabel, type Step } from "../Activity";
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[] };
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
@@ -133,14 +134,51 @@ function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<
     const d = result?.decision;
     return (
       <p className="muted approval-done">
-        {ev.name} · {d === "deny" ? t("denied") : d === "expired" ? t("expired") : t("allowed")}
+        <span dir="auto">{summary(ev.name, ev.input)}</span> · {d === "deny" ? t("denied") : d === "expired" ? t("expired") : t("allowed")}
       </p>
     );
   }
+  const cmd = ev.name === "run_command" && typeof ev.input.command === "string" ? ev.input.command : ev.name === "install_tool" ? ev.preview.split("\n").pop() : undefined;
+  const parts = cmd ? explainCommand(cmd) : [];
+  const he = getLocale() === "he";
+  const path = typeof ev.input.path === "string" ? ev.input.path : "";
+  const headline =
+    ev.name === "run_command" ? t("apRun")
+    : ev.name === "install_tool" ? t("apInstall", { what: String(ev.input.name ?? "") })
+    : ev.name === "build_executable" ? t("apBuild", { what: String(ev.input.entry ?? "") })
+    : ev.name === "download_file" ? t("apDownload")
+    : ev.name === "write_file" || ev.name === "edit_file" ? t("apWrite", { what: path })
+    : reasonText(ev.reason);
+  const danger = /^This command .+, so it always needs your approval\.$/.test(ev.reason);
   return (
-    <div className="card approval" role="group" aria-label={reasonText(ev.reason)}>
-      <strong>{reasonText(ev.reason)}</strong>
+    <div className="card approval" role="group" aria-label={headline}>
+      <strong dir="auto">{headline}</strong>
+      {danger && <p className="ap-danger">⚠ {reasonText(ev.reason)}</p>}
+      {ev.purpose && (
+        <div className="ap-why">
+          <span className="muted small">{t("apWhy")}</span>
+          <p dir="auto">{ev.purpose}</p>
+        </div>
+      )}
       {ev.name === "run_command" ? <pre className="code" dir="ltr">{ev.preview}</pre> : ev.preview.startsWith("---") || ev.preview.includes("@@") ? <Diff diff={ev.preview} /> : <pre className="code" dir="ltr">{ev.preview}</pre>}
+      {parts.length > 0 && (
+        <div className="ap-what">
+          <span className="muted small">{t("apWhat")}</span>
+          <ul>
+            {parts.map((p, i) => (
+              <li key={i} className={p.risky ? "risky" : ""}>
+                <span dir="auto">{he ? p.he : p.en}</span>
+                {parts.length > 1 && <code dir="ltr">{p.text}</code>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {ev.folder && (
+        <p className="muted small">
+          {t("apWhere")} <code dir="ltr">{ev.folder}</code>
+        </p>
+      )}
       <input placeholder={t("noteForAgent")} value={note} onChange={(e) => setNote(e.target.value)} aria-label={t("noteForAgent")} />
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => void decide("allow")}>{t("allow")}</button>
