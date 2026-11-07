@@ -3,6 +3,7 @@ import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shar
 import { api, withToken } from "../api";
 import { getLocale, t } from "../i18n";
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
+import { desktop } from "../library";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -161,7 +162,7 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
 interface HubModel { repo: string; category?: string; downloads: number; likes: number; gated: boolean | string }
 interface HubFile { path: string; size: number; sha256?: string; estimate?: Estimate }
 interface Job { id: string; label: string; status: string; received: number; total?: number; speed: number; error?: string }
-interface LocalFile { path: string; name: string; size: number; estimate?: Estimate }
+interface LocalFile { path: string; name: string; size: number; source?: string; gguf?: boolean; estimate?: Estimate }
 interface Hardware { ramTotal: number; gpus: Array<{ name: string; vramTotal: number }>; unifiedMemory: boolean }
 
 const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
@@ -217,10 +218,10 @@ export function ModelsPage() {
     }
   }
 
-  async function loadInLlama(path: string) {
+  async function loadInLlama(path: string, name?: string) {
     try {
       setError("");
-      await api("/api/engines/llamacpp/load", { method: "POST", body: { modelPath: path } });
+      await api("/api/engines/llamacpp/load", { method: "POST", body: { modelPath: path, ...(name ? { name } : {}) } });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -298,17 +299,125 @@ export function ModelsPage() {
 
       <section className="card">
         <h2>{t("localFiles")}</h2>
+        <ModelFolders onChange={refreshLocal} />
         <div className="list">
           {local.map((f) => (
             <div key={f.path} className="row">
               <span className="mono grow" dir="ltr">{f.name}</span>
+              {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
               <span className="muted mono" dir="ltr">{gb(f.size)}</span>
-              {f.estimate && f.name.endsWith(".gguf") && <RatingBadge e={f.estimate} />}
-              {f.name.endsWith(".gguf") && <button type="button" onClick={() => void loadInLlama(f.path)}>{t("load")}</button>}
+              {f.estimate && f.gguf && <RatingBadge e={f.estimate} />}
+              {f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
             </div>
           ))}
+          {!local.length && <p className="muted">{t("noLocalModels")}</p>}
         </div>
       </section>
+    </div>
+  );
+}
+
+interface Folder { folder: string; source: string }
+interface ScanResult extends Folder { added: boolean; totalSize: number; models: Array<{ path: string; name: string; size: number; format: string }> }
+
+/**
+ * Where models are downloaded, the other folders KesherAI reads models
+ * from, and "Scan this computer" to find models other apps downloaded.
+ */
+function ModelFolders({ onChange }: { onChange: () => void }) {
+  const [info, setInfo] = useState<{ modelsDir: string; defaultDir: string; folders: Folder[] } | null>(null);
+  const [dir, setDir] = useState("");
+  const [extra, setExtra] = useState("");
+  const [scan, setScan] = useState<ScanResult[] | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    void api<typeof info>("/api/models/folders").then((i) => { setInfo(i); setDir(i?.modelsDir ?? ""); }).catch(() => undefined);
+  }, []);
+  if (!info) return null;
+  const save = async (body: { modelsDir?: string | null; folders?: Folder[] }) => {
+    setError("");
+    try {
+      const next = await api<NonNullable<typeof info>>("/api/models/folders", { method: "PUT", body });
+      setInfo(next);
+      setDir(next.modelsDir);
+      onChange();
+      return next;
+    } catch (e) {
+      setError((e as Error).message);
+      return undefined;
+    }
+  };
+  const runScan = async () => {
+    setScanning(true);
+    setError("");
+    try { setScan(await api<ScanResult[]>("/api/models/scan", { method: "POST" })); } catch (e) { setError((e as Error).message); }
+    setScanning(false);
+  };
+  const add = async (f: Folder) => {
+    const next = await save({ folders: [...info.folders, f] });
+    if (next && scan) setScan(scan.map((r) => (r.folder === f.folder ? { ...r, added: true } : r)));
+  };
+  const pick = (set: (v: string) => void) => desktop() && <button type="button" onClick={() => void desktop()!.pickFolder().then((f) => f && set(f))}>{t("browse")}</button>;
+  return (
+    <div className="stack folders">
+      <label className="stack">
+        <strong>{t("modelsFolder")}</strong>
+        <span className="muted">{t("modelsFolderHint")}</span>
+        <div className="row">
+          <input className="grow mono" dir="ltr" value={dir} onChange={(e) => setDir(e.target.value)} />
+          {pick(setDir)}
+          <button type="button" className="primary" disabled={dir === info.modelsDir} onClick={() => void save({ modelsDir: dir })}>{t("save")}</button>
+          {info.modelsDir !== info.defaultDir && <button type="button" onClick={() => void save({ modelsDir: null })}>{t("useDefault")}</button>}
+        </div>
+      </label>
+
+      <div className="stack">
+        <strong>{t("otherFolders")}</strong>
+        <span className="muted">{t("otherFoldersHint")}</span>
+        {info.folders.map((f) => (
+          <div key={f.folder} className="row">
+            <span className="pill">{f.source}</span>
+            <span className="mono grow" dir="ltr">{f.folder}</span>
+            <button type="button" onClick={() => void save({ folders: info.folders.filter((x) => x.folder !== f.folder) })}>{t("remove")}</button>
+          </div>
+        ))}
+        <div className="row">
+          <input className="grow mono" dir="ltr" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="D:\AI\models" aria-label={t("otherFolders")} />
+          {pick(setExtra)}
+          <button type="button" disabled={!extra} onClick={() => void add({ folder: extra, source: "Folder" }).then(() => setExtra(""))}>{t("addFolder")}</button>
+          <button type="button" className="primary" disabled={scanning} onClick={() => void runScan()}>{scanning ? t("scanning") : t("scanComputer")}</button>
+        </div>
+      </div>
+      {error && <p className="error">{error}</p>}
+
+      {scan && (
+        <div className="card stack">
+          <strong>{scan.length ? t("scanFound", { n: scan.reduce((n, r) => n + r.models.length, 0) }) : t("scanNothing")}</strong>
+          {scan.map((r) => (
+            <details key={r.folder}>
+              <summary className="row">
+                <span className="pill">{r.source}</span>
+                <span className="mono grow" dir="ltr">{r.folder}</span>
+                <span className="muted" dir="ltr">{r.models.length} · {gb(r.totalSize)}</span>
+                {r.added ? <span className="pill good">{t("added")}</span> : (
+                  <button type="button" className="primary" onClick={(e) => { e.preventDefault(); void add({ folder: r.folder, source: r.source }); }}>{t("useThese")}</button>
+                )}
+              </summary>
+              <div className="list">
+                {r.models.map((m) => (
+                  <div key={m.path} className="row muted">
+                    <span className="mono grow" dir="ltr">{m.name}</span>
+                    <span className="mono" dir="ltr">{m.format}</span>
+                    <span className="mono" dir="ltr">{gb(m.size)}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+          <span className="muted">{t("scanNote")}</span>
+        </div>
+      )}
     </div>
   );
 }

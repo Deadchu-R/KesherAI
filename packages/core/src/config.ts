@@ -47,6 +47,10 @@ export const KesherConfigSchema = z.object({
       autoLoadLast: z.boolean().default(true),
     })
     .default({}),
+  /** Where KesherAI downloads models. Defaults to `models` in the data folder. */
+  modelsDir: z.string().optional(),
+  /** Other folders with models (from "Scan computer" or added by hand). KesherAI only reads them. */
+  modelFolders: z.array(z.object({ folder: z.string(), source: z.string() })).default([]),
   /** Active model per category id, e.g. `{ "chat": "llamacpp/Qwen3-8B-Q4_K_M", "image": "comfyui/flux1-dev.safetensors" }`. */
   activeModels: z.record(z.string(), z.string()).default({}),
   /** Google Drive sign-in. The client id defaults to the one in branding.config.ts. */

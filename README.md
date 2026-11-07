@@ -49,13 +49,13 @@ pnpm build:packages
 pnpm dev            # core server on :7420 + UI on http://localhost:5173
 ```
 
-On Windows you can also double-click `start-kesherai.cmd`, which installs on first run and opens the interface in your browser.
+**On Windows, double-click `KesherAI.cmd`.** It builds KesherAI on first run, opens it as a desktop app in its own window, and puts a KesherAI shortcut on your desktop. (`start-kesherai.cmd` runs the developer version in your browser instead.)
 
-Or the desktop app:
+The desktop app from the command line:
 
 ```bash
-pnpm --filter @kesher/web build
-pnpm dev:desktop
+pnpm build
+pnpm --filter @kesher/desktop start
 ```
 
 Then open **Models & downloads** and press **Download & run** on a model under "Start here": KesherAI installs its llama.cpp engine for your GPU, downloads the model and loads it. If LM Studio, Ollama or ComfyUI are running, KesherAI also finds them by itself under **Connections**.

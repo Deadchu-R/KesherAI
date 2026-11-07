@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
@@ -72,6 +73,10 @@ export interface KesherServer {
 export async function createKesherServer(options: KesherServerOptions = {}): Promise<KesherServer> {
   const paths = dataPaths(options.dataDir);
   const config = await loadConfig(paths);
+  if (config.modelsDir) {
+    paths.models = config.modelsDir;
+    await mkdir(paths.models, { recursive: true }).catch(() => undefined);
+  }
   if (options.port !== undefined) config.port = options.port;
 
   const registry = new ProviderRegistry();

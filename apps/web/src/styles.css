@@ -180,3 +180,7 @@ label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: c
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; gap: 2px; }
 .segmented button { border: 0; background: transparent; border-radius: 999px; padding: 6px 14px; }
 .segmented button.on { background: var(--accent); color: var(--accent-ink); }
+
+.folders { margin-bottom: 14px; }
+details summary { cursor: pointer; list-style: none; }
+details .list { padding: 8px 0 4px; }

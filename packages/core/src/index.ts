@@ -18,3 +18,4 @@ export { DriveSync, type SyncResult } from "./drive-sync.js";
 export { isLoopback } from "./auth.js";
 export type { KesherServices } from "./services.js";
 export { CORE_VERSION } from "./routes/system.js";
+export * from "./model-scan.js";

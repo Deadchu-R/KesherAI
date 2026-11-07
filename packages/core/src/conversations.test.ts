@@ -160,7 +160,7 @@ test("version and settings endpoints answer", async () => {
   const { server } = await setup();
   try {
     const v = (await server.app.inject({ method: "GET", url: "/api/version" })).json() as { version: string; install: string };
-    assert.equal(v.version, "0.3.0");
+    assert.equal(v.version, "0.3.1");
     assert.ok(v.install === "git" || v.install === "package");
     const engine = (await server.app.inject({ method: "GET", url: "/api/engines/llamacpp" })).json() as { installed: boolean };
     assert.equal(engine.installed, false);

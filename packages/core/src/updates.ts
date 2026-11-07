@@ -125,6 +125,7 @@ export class Updater {
         await this.step("Installing dependencies", "pnpm", ["install"]);
         await this.step("Building", "pnpm", ["build:packages"]);
         await this.step("Building the interface", "pnpm", ["--filter", "@kesher/web", "build"]);
+        await this.step("Building the desktop app", "pnpm", ["--filter", "@kesher/desktop", "build"]);
         // From source (`pnpm dev`) the server and UI reload themselves; a built copy needs a restart.
         this.progress.restartRequired = !import.meta.url.endsWith(".ts");
         this.progress.step = "Done";

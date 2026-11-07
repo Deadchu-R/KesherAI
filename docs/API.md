@@ -28,7 +28,10 @@ The request and response types referenced below are exported from `@kesher/share
 | Method & path | Description |
 | --- | --- |
 | `GET /api/models` | `{ models: ModelInfo[], errors: { providerId, message }[] }` from every provider |
-| `GET /api/models/local` | Files in KesherAI's models folder: `{ path, name, size }[]` |
+| `GET /api/models/local` | Model files KesherAI can use, from its models folder and the added folders: `{ path, name, size, source, gguf, estimate }[]` |
+| `GET /api/models/folders` | `{ modelsDir, defaultDir, folders: { folder, source }[] }` |
+| `PUT /api/models/folders` | Only from this computer. `{ modelsDir?: string \| null, folders?: { folder, source }[] }` — change the download folder (`null` = default) and the folders KesherAI reads models from in place |
+| `POST /api/models/scan` | Only from this computer. Finds models in LM Studio, Ollama, the Hugging Face cache, Jan, GPT4All, ComfyUI and the added folders: `{ folder, source, added, totalSize, models[] }[]`. Adds nothing by itself |
 | `GET /api/providers` | Connections, with `healthy`, `autodetected`, `capabilities`, `hasApiKey` (keys are never returned) |
 | `GET /api/providers/presets` | Ready-made connections for the "Add" dialog |
 | `GET /api/providers/types` | Provider types available (built-in and from plugins) |
@@ -44,7 +47,7 @@ The request and response types referenced below are exported from `@kesher/share
 | --- | --- |
 | `GET /api/engines/llamacpp` | `{ installed, version, running, modelPath, job?: { phase, message }, log[] }`. `job.phase` is `installing`, `downloading-model`, `loading` or `error` |
 | `POST /api/engines/llamacpp/install` | Downloads the right llama.cpp build for this computer (CUDA on NVIDIA, Vulkan otherwise, Metal on Mac) in the background |
-| `POST /api/engines/llamacpp/load` | `{ modelPath }` — loads a GGUF from the models folder; it appears as `llamacpp/<file name>` and becomes the active chat model if none is set |
+| `POST /api/engines/llamacpp/load` | `{ modelPath, name? }` — loads a GGUF from the models folder or an added folder (Ollama blobs too); it appears as `llamacpp/<file name>` and becomes the active chat model if none is set |
 | `POST /api/engines/llamacpp/stop` | Stops the running model |
 
 ## Performance estimates

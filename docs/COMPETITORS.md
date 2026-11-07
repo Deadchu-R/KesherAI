@@ -31,6 +31,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Pause / resume / "skip for now" on big downloads (Locally Uncensored) | — | Resumable downloads exist; add pause and a skip button in the first-run flow | 🟡 |
 | Use the app while a big download runs (Locally Uncensored) | — | Already true: downloads run in the background queue | ✅ |
 | Detect existing engines (Locally Uncensored: 12) | — | LM Studio, LM Studio Bionic, Ollama, ComfyUI today; add Jan, KoboldCpp, vLLM | 🟡 |
+| Choose the models folder, scan for models other apps downloaded (LM Studio: own folder only) | Each app re-downloads the same model | Scan LM Studio, Ollama (reads its manifests, so `llama3.2:3b` loads in our engine), Hugging Face cache, Jan, GPT4All, ComfyUI; use files in place, never copied | ✅ |
 | Measure real speed after a model runs | Nobody does it | Replace the estimate with measured words/second from the user's own runs | ⬜ |
 
 ### Coding agent

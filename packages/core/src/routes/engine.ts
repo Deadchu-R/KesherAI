@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
-import { basename, join, normalize, sep } from "node:path";
+import { basename, join } from "node:path";
 import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { waitForDownload } from "../llamacpp.js";
+import { insideAny, looksLikeGguf } from "../model-scan.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -34,19 +35,19 @@ export async function ensureEngine(s: KesherServices): Promise<void> {
  * @param modelPath - Absolute path inside the models folder.
  * @returns The model id, e.g. `llamacpp/Qwen3-8B-Q4_K_M`.
  */
-export async function loadModel(s: KesherServices, modelPath: string): Promise<string> {
+export async function loadModel(s: KesherServices, modelPath: string, name?: string): Promise<string> {
   await s.engine.load(modelPath);
   s.registerEngineProvider();
-  const modelId = `llamacpp/${basename(modelPath).replace(/\.gguf$/i, "")}`;
+  const modelId = `llamacpp/${(name ?? basename(modelPath)).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}`;
   s.config.engines.lastModel = modelPath;
   if (!s.config.activeModels.chat || s.config.activeModels.chat.startsWith("llamacpp/")) s.config.activeModels.chat = modelId;
   await s.saveConfig();
   return modelId;
 }
 
-function insideModels(s: KesherServices, path: string): boolean {
-  const n = normalize(path);
-  return n.startsWith(normalize(s.paths.models) + sep);
+/** Models load only from KesherAI's models folder or a folder the user added. */
+function allowedModelPath(s: KesherServices, path: string): boolean {
+  return insideAny(path, [s.paths.models, ...s.config.modelFolders.map((f) => f.folder)]);
 }
 
 /**
@@ -65,12 +66,12 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     return s.engine.status();
   });
 
-  app.post<{ Body: { modelPath: string } }>("/api/engines/llamacpp/load", async (req, reply) => {
+  app.post<{ Body: { modelPath: string; name?: string } }>("/api/engines/llamacpp/load", async (req, reply) => {
     const path = req.body?.modelPath ?? "";
-    if (!insideModels(s, path)) return reply.code(400).send({ error: "Only models inside the KesherAI models folder can be loaded" });
-    if (!path.toLowerCase().endsWith(".gguf")) return reply.code(400).send({ error: "llama.cpp loads .gguf files" });
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added can be loaded" });
+    if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "llama.cpp loads GGUF files" });
     try {
-      const modelId = await loadModel(s, path);
+      const modelId = await loadModel(s, path, req.body.name);
       return { ...s.engine.status(), modelId };
     } catch (err) {
       return reply.code(500).send({ error: (err as Error).message });
