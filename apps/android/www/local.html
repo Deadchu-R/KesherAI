@@ -21,6 +21,13 @@
     .model p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
     .model .row { display: flex; gap: 8px; }
     .model .row button { flex: 1; min-height: 42px; font-size: 15px; }
+    .rating { font-size: 12.5px; font-weight: 500; }
+    .rating.good { color: #6fd3a5; }
+    .rating.ok { color: var(--accent); }
+    .rating.slow { color: var(--live); }
+    .rating.bad { color: var(--bad); }
+    .gpu-opt { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); line-height: 1.5; padding: 4px 2px 8px; }
+    .gpu-opt input { width: 20px; height: 20px; flex: none; margin-top: 1px; }
     .tag { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--raised); color: var(--accent); }
     .bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
     .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
@@ -81,11 +88,11 @@
     { repo: "Qwen/Qwen2.5-0.5B-Instruct-GGUF", name: "Qwen 2.5 · 0.5B", ram: 2, he: "הכי קטן ומהיר. טוב לשאלות קצרות ולתרגום פשוט.", en: "Smallest and fastest. Good for short questions and simple translation." },
     { repo: "bartowski/Llama-3.2-1B-Instruct-GGUF", name: "Llama 3.2 · 1B", ram: 3, he: "מאוזן. עונה יפה באנגלית, סביר בעברית.", en: "Balanced. Answers well in English, fair in Hebrew." },
     { repo: "bartowski/google_gemma-3-1b-it-GGUF", name: "Gemma 3 · 1B", ram: 3, he: "של Google. כתיבה טובה ושפות רבות.", en: "From Google. Good writing and many languages." },
-    { repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", name: "Qwen 2.5 · 1.5B", ram: 4, rec: true, he: "הכי חכם מהרשימה שעדיין רץ חלק בטלפון טוב. תומך בעברית.", en: "The smartest here that still runs smoothly on a good phone. Handles Hebrew." },
+    { repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", name: "Qwen 2.5 · 1.5B", ram: 4, he: "הכי חכם מהרשימה שעדיין רץ חלק בטלפון טוב. תומך בעברית.", en: "The smartest here that still runs smoothly on a good phone. Handles Hebrew." },
     { repo: "unsloth/Qwen3-1.7B-GGUF", name: "Qwen 3 · 1.7B", ram: 4, he: "חדש יותר, חושב לפני שעונה (איטי יותר).", en: "Newer; thinks before answering (slower)." },
   ];
   const deviceGb = navigator.deviceMemory || 4; // Android reports up to 8
-  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון. מודלים שגדולים מדי מסומנים.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory. Models that are too big are marked.`);
+  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון ו-${navigator.hardwareConcurrency || "?"} ליבות. ליד כל מודל כתוב כמה טוב הוא ירוץ כאן; אחרי שיחה זה מתעדכן לפי המהירות שנמדדה.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory and ${navigator.hardwareConcurrency || "?"} cores. Each model says how well it will run here; after you chat, it updates with the measured speed.`);
 
   const wllama = new Wllama({ default: new URL("./vendor/wllama/wllama.wasm", location.href).href }, { allowOffline: true, suppressNativeLog: true });
   const mm = wllama.modelManager;
@@ -105,34 +112,88 @@
     return f;
   }
 
+  // ---------- how well each model runs on this phone ----------
+  const cores = navigator.hardwareConcurrency || 4;
+  const SPEED = (url) => "kesherai-phone-speed:" + url;
+  const useGpu = () => localStorage.getItem("kesherai-phone-gpu") === "1";
+  /** Measured tokens/s for a model on this phone (average of recent answers), or undefined. */
+  const measured = (url) => { const v = Number(localStorage.getItem(SPEED(url))); return v > 0 ? v : undefined; };
+  function rememberSpeed(url, tps) {
+    if (!(tps > 0) || !Number.isFinite(tps)) return;
+    const old = measured(url);
+    localStorage.setItem(SPEED(url), String(old ? old * 0.6 + tps * 0.4 : tps));
+  }
+  /** Rating for a model of this size: speed (measured, else estimated) and whether it fits memory. */
+  function rate(sizeBytes, url) {
+    const sizeGb = sizeBytes / 1024 ** 3;
+    // The app runs llama.cpp in WebAssembly on one processor core (Android web views cannot share memory between threads).
+    const est = (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * (useGpu() ? 2 : 1);
+    const real = measured(url);
+    const tps = real ?? est;
+    const tooBig = sizeGb * 1.6 > deviceGb * 0.5;
+    const level = tooBig ? "bad" : tps >= 8 ? "good" : tps >= 3 ? "ok" : "slow";
+    const text = {
+      good: T("רץ טוב בטלפון הזה", "Runs well on this phone"),
+      ok: T("רץ, קצת לאט", "Runs, a bit slowly"),
+      slow: T("איטי בטלפון הזה", "Slow on this phone"),
+      bad: T("גדול מדי לטלפון הזה", "Too big for this phone"),
+    }[level];
+    const speed = tooBig ? "" : ` · ${real ? "" : "~"}${tps.toFixed(tps < 10 ? 1 : 0)} ${T("טוקנים/שנייה", "tokens/s")} ${real ? T("(נמדד)", "(measured)") : T("(הערכה)", "(estimate)")}`;
+    return { level, text: text + speed, tps, tooBig };
+  }
+
+  // Chats from the first version were often garbled (graphics chip), so start them fresh once.
+  if (localStorage.getItem("kesherai-phone-v") !== "2") {
+    for (const k of Object.keys(localStorage)) if (k.startsWith("kesherai-phone-chat:")) localStorage.removeItem(k);
+    localStorage.setItem("kesherai-phone-gpu", "0");
+    localStorage.setItem("kesherai-phone-v", "2");
+  }
+
   let downloaded = [];
   let activeUrl = localStorage.getItem("kesherai-phone-model") || "";
   async function renderList() {
     downloaded = await mm.getModels().catch(() => []);
     const list = $("modelList");
     list.replaceChildren();
-    for (const item of CATALOG) {
+    // Settings: the phone's graphics chip is faster but gives broken text on many phones.
+    const gpuRow = document.createElement("label");
+    gpuRow.className = "gpu-opt";
+    gpuRow.innerHTML = `<input type="checkbox" ${useGpu() ? "checked" : ""} /><span></span>`;
+    gpuRow.querySelector("span").textContent = T("להשתמש בכרטיס הגרפי של הטלפון (מהיר יותר, אבל בחלק מהטלפונים יוצא טקסט שבור; אם כך, כבה)", "Use the phone's graphics chip (faster, but on some phones the text comes out broken; if so, turn this off)");
+    gpuRow.querySelector("input").onchange = (e) => { localStorage.setItem("kesherai-phone-gpu", e.target.checked ? "1" : "0"); if (wllama.isModelLoaded()) { wllama.exit(); wllama.__url = ""; } renderList(); };
+    list.append(gpuRow);
+
+    const rows = await Promise.all(CATALOG.map(async (item) => {
+      try { return { item, file: await fileFor(item) }; } catch (e) { return { item, error: e }; }
+    }));
+    // Recommended: the biggest model that runs well here; otherwise the fastest one that fits.
+    const rated = rows.filter((r) => r.file).map((r) => ({ ...r, url: urlOf(r.item.repo, r.file.path), rating: rate(r.file.size, urlOf(r.item.repo, r.file.path)) }));
+    const good = rated.filter((r) => r.rating.level === "good").sort((x, y) => y.file.size - x.file.size)[0];
+    const fallback = rated.filter((r) => !r.rating.tooBig).sort((x, y) => y.rating.tps - x.rating.tps)[0];
+    const recUrl = (good ?? fallback)?.url;
+
+    for (const r of rows) {
+      const item = r.item;
       const card = document.createElement("div");
       card.className = "model";
-      card.innerHTML = `<div class="top"><strong></strong><span class="size"></span></div><p></p><div class="bar" hidden><span></span></div><div class="row"></div>`;
+      card.innerHTML = `<div class="top"><strong></strong><span class="size"></span></div><span class="rating"></span><p></p><div class="bar" hidden><span></span></div><div class="row"></div>`;
       card.querySelector("strong").textContent = item.name;
       card.querySelector("p").textContent = item[lang];
-      if (item.rec) card.querySelector(".top").append(Object.assign(document.createElement("span"), { className: "tag", textContent: T("מומלץ", "Recommended") }));
-      if (item.ram > deviceGb + 1) card.querySelector("p").textContent += T(" · כנראה גדול מדי לטלפון הזה.", " · Probably too big for this phone.");
       list.append(card);
       const row = card.querySelector(".row");
-      const size = card.querySelector(".size");
-      let file;
-      try {
-        file = await fileFor(item);
-        size.textContent = file.size ? gb(file.size) : "";
-      } catch (e) {
-        size.textContent = "";
-        if (!navigator.onLine) { row.textContent = T("צריך אינטרנט כדי להוריד.", "Needs the internet to download."); continue; }
-        row.textContent = String(e.message || e);
+      if (!r.file) {
+        card.querySelector(".rating").remove();
+        row.textContent = navigator.onLine ? String(r.error?.message || r.error) : T("צריך אינטרנט כדי להוריד.", "Needs the internet to download.");
         continue;
       }
+      const file = r.file;
       const url = urlOf(item.repo, file.path);
+      const rating = rate(file.size, url);
+      card.querySelector(".size").textContent = file.size ? gb(file.size) : "";
+      const badge = card.querySelector(".rating");
+      badge.textContent = rating.text;
+      badge.className = `rating ${rating.level}`;
+      if (url === recUrl) card.querySelector(".top").append(Object.assign(document.createElement("span"), { className: "tag", textContent: T("מומלץ לטלפון הזה", "Best for this phone") }));
       const have = downloaded.find((m) => m.url === url && m.size > 0);
       if (url === activeUrl && have) card.classList.add("active");
       const btn = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
@@ -140,7 +201,7 @@
         btn(T("פתח צ'אט", "Open chat"), "primary", () => openChat(item, url));
         btn(T("מחק", "Delete"), "", async () => { await have.remove(); if (activeUrl === url) { activeUrl = ""; localStorage.removeItem("kesherai-phone-model"); } renderList(); });
       } else {
-        const dl = btn(T("הורד", "Download") + (file.size ? ` (${gb(file.size)})` : ""), "primary", async () => {
+        const dl = btn(T("הורד", "Download") + (file.size ? ` (${gb(file.size)})` : ""), rating.tooBig ? "" : "primary", async () => {
           dl.disabled = true;
           const bar = card.querySelector(".bar");
           bar.hidden = false;
@@ -199,7 +260,15 @@
       try {
         if (wllama.isModelLoaded()) await wllama.exit();
         const model = (await mm.getModels()).find((m) => m.url === url);
-        await wllama.loadModel(model, { n_ctx: 2048, n_threads: Math.max(1, Math.min(4, navigator.hardwareConcurrency || 4)) });
+        const load = (gpu) => wllama.loadModel(model, { n_ctx: 2048, n_threads: Math.max(1, Math.min(4, cores)), n_gpu_layers: gpu ? 99 : 0 });
+        await load(useGpu());
+        // The phone's graphics chip gives garbled text on many Android phones: check with a tiny question first.
+        if (useGpu() && !(await looksSane())) {
+          await wllama.exit();
+          localStorage.setItem("kesherai-phone-gpu", "0");
+          await load(false);
+          addMsg("note", T("הכרטיס הגרפי של הטלפון נתן טקסט שבור, אז עברתי למעבד (איטי יותר אבל נכון).", "The phone's graphics chip gave broken text, so I switched to the processor (slower, but correct)."));
+        }
         wllama.__url = url;
         $("status").textContent = "";
       } catch (e) {
@@ -208,6 +277,16 @@
       } finally {
         $("send").disabled = false;
       }
+    }
+  }
+
+  /** Asks for one word; garbled or empty output means this setup does not compute correctly. */
+  async function looksSane() {
+    try {
+      const r = await wllama.createChatCompletion({ messages: [{ role: "user", content: "Reply with the single word: OK" }], max_tokens: 8, temp: 0, temperature: 0 });
+      return /\bok\b/i.test(r.choices?.[0]?.message?.content ?? "");
+    } catch {
+      return false;
     }
   }
 
@@ -230,7 +309,8 @@
     try {
       // Keep the last turns that fit the phone's small context.
       const recent = messages.slice(-12);
-      const stream = await wllama.createChatCompletion({ messages: recent, stream: true, max_tokens: 768, temperature: 0.7, abortSignal: abort.signal });
+      const system = { role: "system", content: T("אתה עוזר מועיל. ענה בקצרה ובשפה שבה המשתמש כתב.", "You are a helpful assistant. Answer briefly, in the user's language.") };
+      const stream = await wllama.createChatCompletion({ messages: [system, ...recent], stream: true, max_tokens: 768, temperature: 0.7, temp: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, penalty_last_n: 128, abortSignal: abort.signal });
       for await (const chunk of stream) {
         const d = chunk.choices?.[0]?.delta?.content ?? "";
         if (!d) continue;
@@ -247,6 +327,8 @@
       abort = null;
       $("send").textContent = "↑";
     }
+    const seconds = (performance.now() - started) / 1000;
+    if (tokens > 8) rememberSpeed(current.url, tokens / seconds);
     const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
