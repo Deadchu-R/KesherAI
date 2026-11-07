@@ -60,6 +60,18 @@
     .q-n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--panel-2); color: var(--muted); flex: none; }
     .q-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .q-item button { min-height: 32px; width: 32px; padding: 0; border: 0; background: transparent; color: var(--muted); }
+    .model-switch { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--panel-2); font-size: 15px; font-weight: 500; }
+    .model-switch #modelName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sheet-scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .45); z-index: 40; }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 72vh; overflow-y: auto; padding: 8px 14px max(16px, env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: rgb(31 31 34 / .96); backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; animation: sheet-in .22s cubic-bezier(.2,.9,.25,1); }
+    @keyframes sheet-in { from { transform: translateY(40%); opacity: .4; } }
+    .sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: var(--raised); margin: 4px auto 6px; }
+    .sheet strong { font-weight: 500; padding: 0 4px; }
+    .sheet-list { display: flex; flex-direction: column; gap: 2px; }
+    .sheet-list .grp { font-size: 12px; color: var(--muted); padding: 10px 6px 4px; }
+    .sheet-list button { min-height: 50px; text-align: start; display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 0; border-radius: 12px; background: transparent; font-size: 15px; }
+    .sheet-list button.on { background: var(--raised); }
+    .sheet-list button small { color: var(--muted); font-size: 12px; }
     .tune-bar { height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; margin: 0 4px 6px; }
     .tune-bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
     .status { font-size: 12.5px; color: var(--muted); margin: 0 4px 6px; min-height: 1em; }
@@ -71,6 +83,7 @@
   <header>
     <button class="icon" id="back" type="button" aria-label="Back">→</button>
     <h1 id="title" data-he="בטלפון הזה" data-en="On this phone">בטלפון הזה</h1>
+    <button type="button" id="modelSwitch" class="model-switch" hidden><span id="modelName"></span> <span aria-hidden="true">▾</span></button>
     <button class="icon" id="newChat" type="button" aria-label="New chat" hidden>＋</button>
     <button class="icon" id="menu" type="button" aria-label="Menu" hidden>☰</button>
   </header>
@@ -96,6 +109,12 @@
   <main id="chatView" hidden>
     <div class="msgs" id="msgs"></div>
   </main>
+  <div class="sheet-scrim" id="sheetScrim" hidden></div>
+  <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true">
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <strong id="sheetTitle"></strong>
+    <div id="sheetList" class="sheet-list"></div>
+  </div>
   <footer id="chatFoot" hidden>
     <div class="tune-bar" id="tuneBar" hidden><span></span></div>
     <p class="status" id="status"></p>
@@ -491,7 +510,40 @@
   let messages = [];
   let current = null; // { item, url }
   let abort = null;
-  const HISTORY = (url) => "kesherai-phone-chat:" + url;
+  const HISTORY = (url) => "kesherai-phone-chat:" + url; // old: one history per model
+  // Chats: a list (shown in the side menu), each with its own messages and model.
+  const CHATS = "kesherai-phone-chats";
+  const MSGS = (id) => "kesherai-phone-msgs:" + id;
+  let chatId = null;
+  const allChats = () => { try { return JSON.parse(localStorage.getItem(CHATS) || "[]"); } catch { return []; } };
+  const saveChats = (list) => { try { localStorage.setItem(CHATS, JSON.stringify(list.slice(0, 100))); } catch { /* full */ } };
+  function saveChat() {
+    if (!chatId || !messages.length) return;
+    const list = allChats().filter((c) => c.id !== chatId);
+    const first = messages.find((m) => m.role === "user")?.content ?? "";
+    list.unshift({ id: chatId, title: first.replace(/\s+/g, " ").slice(0, 48), url: current.url, name: current.item.name, updatedAt: Date.now() });
+    saveChats(list);
+    try { localStorage.setItem(MSGS(chatId), JSON.stringify(messages.slice(-80))); } catch { /* full */ }
+  }
+  // Move the old per-model histories into the chat list, once.
+  if (!localStorage.getItem("kesherai-phone-chats-v")) {
+    const list = allChats();
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith("kesherai-phone-chat:")) continue;
+      try {
+        const msgs = JSON.parse(localStorage.getItem(k) || "[]");
+        if (msgs.length) {
+          const id = crypto.randomUUID();
+          localStorage.setItem(MSGS(id), JSON.stringify(msgs));
+          const url = k.slice("kesherai-phone-chat:".length);
+          list.push({ id, title: (msgs.find((m) => m.role === "user")?.content ?? "").slice(0, 48), url, name: url.split("/").pop(), updatedAt: Date.now() });
+        }
+      } catch { /* skip */ }
+      localStorage.removeItem(k);
+    }
+    saveChats(list);
+    localStorage.setItem("kesherai-phone-chats-v", "1");
+  }
 
   function show(view) {
     const chat = view === "chat";
@@ -499,7 +551,10 @@
     $("chatView").hidden = !chat;
     $("chatFoot").hidden = !chat;
     $("newChat").hidden = !chat;
-    $("title").textContent = chat ? current.item.name : T("בטלפון הזה", "On this phone");
+    $("title").hidden = chat;
+    $("modelSwitch").hidden = !chat;
+    if (chat) $("modelName").textContent = current.item.name;
+    $("title").textContent = T("בטלפון הזה", "On this phone");
   }
 
   function addMsg(role, text) {
@@ -509,13 +564,26 @@
     return el;
   }
 
-  async function openChat(item, url) {
+  /**
+   * Opens a chat with a model. `id` reopens a saved chat; `fresh` starts a new
+   * one; otherwise the model's latest chat (or a new one). `keep` switches
+   * the model of the open chat without clearing it.
+   */
+  async function openChat(item, url, { id, fresh, keep } = {}) {
     current = { item, url };
     activeUrl = url;
     localStorage.setItem("kesherai-phone-model", url);
-    try { messages = JSON.parse(localStorage.getItem(HISTORY(url)) || "[]"); } catch { messages = []; }
-    $("msgs").replaceChildren();
-    for (const m of messages) addMsg(m.role, m.content);
+    if (!keep) {
+      const latest = !fresh && !id ? allChats().find((c) => c.url === url) : undefined;
+      chatId = id ?? latest?.id ?? crypto.randomUUID();
+      try { messages = JSON.parse(localStorage.getItem(MSGS(chatId)) || "[]"); } catch { messages = []; }
+      $("msgs").replaceChildren();
+      for (const m of messages) addMsg(m.role, m.content);
+      history.replaceState(null, "", `local.html?c=${encodeURIComponent(chatId)}`);
+    } else {
+      addMsg("note", T(`עברתי ל-${item.name}. השיחה ממשיכה.`, `Switched to ${item.name}. The chat goes on.`));
+      saveChat();
+    }
     show("chat");
     if (item.api) { $("status").textContent = T("מודל דרך האינטרנט", "A model over the internet"); return; }
     if (!wllama.isModelLoaded() || wllama.__url !== url) {
@@ -638,6 +706,7 @@
   const paintWeb = () => { $("web").setAttribute("aria-pressed", String(webOn())); $("web").classList.toggle("on", webOn()); $("web").title = T("חיפוש באינטרנט לכל הודעה", "Search the web for each message"); };
   $("web").onclick = () => { localStorage.setItem("kesherai-phone-web", webOn() ? "0" : "1"); paintWeb(); };
   paintWeb();
+  addEventListener("kesher-web-changed", paintWeb);
   async function webSearch(q) {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q.slice(0, 200))}`;
     const http = window.Capacitor?.Plugins?.CapacitorHttp;
@@ -758,19 +827,83 @@
     // Next in the queue, if any (not after Stop).
     if (queue.length && !stoppedByUser) setTimeout(() => $("composer").requestSubmit(), 50);
     stoppedByUser = false;
-    try { localStorage.setItem(HISTORY(current.url), JSON.stringify(messages.slice(-60))); } catch { /* full */ }
+    saveChat();
   };
 
   const autosize = () => { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * 0.3) + "px"; };
   $("input").addEventListener("input", autosize);
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) { e.preventDefault(); $("composer").requestSubmit(); } });
-  $("newChat").onclick = () => { messages = []; localStorage.removeItem(HISTORY(current.url)); $("msgs").replaceChildren(); $("status").textContent = ""; };
+  $("newChat").onclick = () => { saveChat(); chatId = crypto.randomUUID(); messages = []; $("msgs").replaceChildren(); $("status").textContent = ""; history.replaceState(null, "", `local.html?c=${encodeURIComponent(chatId)}`); };
+
+  // ---------- switch the model from the chat's title (a sheet from the bottom, thumb-friendly) ----------
+  const closeSheet = () => { $("sheet").hidden = true; $("sheetScrim").hidden = true; };
+  $("sheetScrim").onclick = closeSheet;
+  $("modelSwitch").onclick = async () => {
+    $("sheetTitle").textContent = T("החלף מודל לשיחה הזו", "Switch the model for this chat");
+    const list = $("sheetList");
+    list.replaceChildren(Object.assign(document.createElement("div"), { className: "grp", textContent: T("טוען…", "Loading…") }));
+    $("sheet").hidden = false;
+    $("sheetScrim").hidden = false;
+    const groups = [];
+    // Downloaded phone models.
+    const have = await mm.getModels().catch(() => []);
+    const phone = [];
+    for (const it of CATALOG) {
+      const f = JSON.parse(localStorage.getItem("kesherai-phone-file2:" + it.repo) || "null");
+      if (!f) continue;
+      const url = urlOf(it.repo, f.path);
+      if (have.some((m) => m.url === url && m.size > 0)) phone.push({ item: it, url, sub: tuned(url) ? `~${tuned(url).tps.toFixed(1)} ${T("טוקנים/שנייה", "tokens/s")}` : T("בטלפון", "on the phone") });
+    }
+    groups.push([T("בטלפון (בלי אינטרנט)", "On the phone (offline)"), phone]);
+    // Models over the internet.
+    for (const p of providers()) {
+      const ids = await listModels(p).catch(() => []);
+      groups.push([p.name || p.id, ids.map((m) => ({ item: { name: `${m} · ${p.name || p.id}`, api: { provider: p.id, model: m } }, url: `api:${p.id}/${m}`, sub: T("דרך האינטרנט", "over the internet") }))]);
+    }
+    list.replaceChildren();
+    for (const [name, entries] of groups) {
+      if (!entries.length) continue;
+      list.append(Object.assign(document.createElement("div"), { className: "grp", textContent: name }));
+      for (const e of entries) {
+        const b = document.createElement("button");
+        b.type = "button";
+        if (e.url === current?.url) b.className = "on";
+        b.innerHTML = `<span dir="auto"></span><small></small>`;
+        b.querySelector("span").textContent = e.item.name;
+        b.querySelector("small").textContent = e.url === current?.url ? "✓" : e.sub;
+        b.onclick = () => { closeSheet(); if (e.url !== current?.url) openChat(e.item, e.url, { keep: true }); };
+        list.append(b);
+      }
+    }
+    if (!list.children.length) list.append(Object.assign(document.createElement("div"), { className: "grp", textContent: T("אין עוד מודלים. הורד מודל או חבר API.", "No other models yet. Download one or connect an API.") }));
+  };
   $("back").onclick = () => { if (!$("chatView").hidden) { show("models"); renderList(); } else location.href = "index.html?switch=1"; };
 
   renderList()
     .then(async () => {
+      const q = new URLSearchParams(location.search);
+      const itemFor = (url) => {
+        if (url?.startsWith("api:")) {
+          const [provider, ...rest] = url.slice(4).split("/");
+          return { name: `${rest.join("/")} · ${provider}`, api: { provider, model: rest.join("/") } };
+        }
+        return CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
+      };
+      // A chat from the side menu.
+      if (q.get("c")) {
+        const c = allChats().find((x) => x.id === q.get("c"));
+        const item = c && itemFor(c.url);
+        if (c && item) return openChat(item, c.url, { id: c.id });
+      }
+      // "New chat on this phone": with the last model used, if any.
+      if (q.has("new")) {
+        const url = localStorage.getItem("kesherai-phone-model");
+        const item = itemFor(url);
+        if (item && (item.api || downloaded.some((m) => m.url === url && m.size > 0))) return openChat(item, url, { fresh: true });
+        return;
+      }
       // From the side menu ("Chat on this phone"): go straight back into the last chat.
-      if (!new URLSearchParams(location.search).has("chat")) return;
+      if (!q.has("chat")) return;
       const url = localStorage.getItem("kesherai-phone-model");
       if (url?.startsWith("api:")) {
         const [provider, ...rest] = url.slice(4).split("/");
