@@ -45,6 +45,13 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | The agent asks questions | Most agents guess | `ask_user` with suggested answers, shown as buttons, also on the phone | ✅ |
 | LSP diagnostics after edits (OpenCode) | — | Same, starting with TypeScript, C# and C++ | ⬜ |
 
+### Computer use
+
+| Idea (who) | Their weak spot | KesherAI upgrade | Status |
+| --- | --- | --- | --- |
+| The model sees the screen and clicks and types (Off Grid "Computer Use", Claude) | Cloud-only, or a closed app | Local vision models (Qwen-VL, UI-TARS) through the built-in engine, or Claude / OpenAI computer-use APIs. You allow each app first; browsers and terminals get read-only or click-only access; a big Stop button and a hotkey; it never types passwords or payment details; every action is logged and can be replayed | ⬜ |
+| Drive it from the phone | — | Watch the screen and approve actions from the Android app | ⬜ |
+
 ### Conversations, projects, memory
 
 | Idea (who) | Their weak spot | KesherAI upgrade | Status |
@@ -86,6 +93,8 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Updates inside the app (Locally Uncensored: signed updates) | — | Check and install from Settings today; signed installers later | 🟡 |
 
 ## Next up, in order
+
+0. Category tabs on the Models screen, conversation search, integrations (MCP), and computer use with local vision models.
 
 1. Managed ComfyUI with on-demand GPU download → images without any other app.
 2. Measured speed replacing estimates; disk-space check; pause and skip on first-run downloads.
