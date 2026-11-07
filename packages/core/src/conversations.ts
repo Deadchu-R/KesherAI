@@ -4,7 +4,7 @@ import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
-import { branding, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
+import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
@@ -160,6 +160,8 @@ export class ConversationManager {
       userNotes?(): Promise<string[]>;
       /** Saved personas. */
       personas?: Personas;
+      /** Every event of every open conversation (for notifications). */
+      onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
     },
   ) {}
 
@@ -447,6 +449,11 @@ export class ConversationManager {
         ),
     });
     this.sessions.set(id, session);
+    if (this.deps.onEvent) {
+      const title = () => this.deps.library.listConversations().find((c) => c.id === id)?.title ?? conversation.title;
+      const lastAnswer = () => [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant")?.text;
+      session.on("event", (e: AgentEvent) => this.deps.onEvent?.(id, e, title, lastAnswer));
+    }
     // When the agent is free again, the next queued message goes.
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type === "status" && (e.status === "idle" || e.status === "error")) setTimeout(() => void this.drain(id), 50);

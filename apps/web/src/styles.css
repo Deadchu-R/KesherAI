@@ -855,3 +855,11 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ctx-role.assistant { color: var(--accent); }
 .ctx-preview { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
 .ctx-panel > * { flex-shrink: 0; }
+
+/* Notifications */
+.notify-phone { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; padding: 12px; border-radius: 12px; background: var(--raised); }
+.notify-phone img { border-radius: 8px; background: #fff; }
+.notify-phone ol { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+.notify-topic { list-style: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.notify-topic code { padding: 4px 8px; border-radius: 6px; background: var(--panel); overflow-wrap: anywhere; }
+.notify-min { flex-direction: row; } .notify-min select { width: auto; }

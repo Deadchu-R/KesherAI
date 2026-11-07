@@ -23,6 +23,7 @@ import type { Journal } from "./journal.js";
 import type { Knowledge } from "./knowledge.js";
 import type { Personas } from "./personas.js";
 import type { Prompts } from "./prompts.js";
+import type { Notifier } from "./notify.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -74,6 +75,8 @@ export interface KesherServices {
   personas: Personas;
   /** The prompt library, run with `/command` in a message box. */
   prompts: Prompts;
+  /** Notifications on the phone (ntfy) and this computer. */
+  notifier: Notifier;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

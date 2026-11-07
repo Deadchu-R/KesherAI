@@ -270,7 +270,8 @@ function setupTray(coreUrl: string): void {
         fetch(`${base}/api/downloads`).then((r) => (r.ok ? (r.json() as Promise<Array<{ id: string; status: string; label?: string }>>) : [])),
         fetch(`${base}/api/conversations`).then((r) => r.json() as Promise<Array<{ id: string; title: string }>>),
       ]);
-      const hidden = !BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.isFocused());
+      // Off in Settings → Notifications: no notifications on this computer.
+      const hidden = server?.services.config.notifications.desktop !== false && !BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.isFocused());
       for (const id of Object.keys(running)) {
         if (!activity[id] && hidden && Notification.isSupported()) {
           const title = convs.find((c) => c.id === id)?.title ?? "A chat";

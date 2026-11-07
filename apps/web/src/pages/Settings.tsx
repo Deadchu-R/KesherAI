@@ -1,6 +1,7 @@
 import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
+import { NotificationsSection } from "../NotificationsSection";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
@@ -400,6 +401,7 @@ export function SettingsPage() {
       <h1>{t("settings")}</h1>
       <ActiveModels />
       <GpuSection />
+      <NotificationsSection />
       <SpeechSection />
       <ComputerSection />
       <PermissionsSection />

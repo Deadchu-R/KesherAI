@@ -22,6 +22,8 @@ import { googleTools } from "./google-tools.js";
 import { Knowledge, knowledgeTools } from "./knowledge.js";
 import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
+import { Notifier, type Note } from "./notify.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
@@ -83,6 +85,8 @@ export interface KesherServerOptions {
   updates?: PackagedUpdates;
   /** The desktop app's screen capture for "My day" (no PowerShell, which antivirus programs block). */
   screen?: ScreenSource;
+  /** Shows a notification on this computer (desktop app); returns false when the window is in front. */
+  notify?: (n: Note) => boolean | Promise<boolean>;
   /** The project's GitHub OAuth App client id, for "Connect with GitHub" (builds pass it from repository secrets). */
   githubClientId?: string;
 }
@@ -218,6 +222,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
   const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads);
   const updater = new Updater(undefined, options.updates);
+  if (!config.notifications.ntfy.topic) {
+    config.notifications.ntfy.topic = Notifier.newTopic();
+    void persist().catch(() => undefined);
+  }
+  const notifier = new Notifier(() => config.notifications, {
+    ...(options.notify ? { desktop: options.notify } : {}),
+    publicUrl: () => tunnel.status().url,
+  });
+  downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => notifier.onDownload(job));
   const devices = new Devices({
     config: config.devices,
     remote: config.remote,
@@ -260,6 +273,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       outputsDir: join(paths.root, "outputs"),
       checkpoints: new Checkpoints(join(paths.root, "checkpoints")),
       personas,
+      onEvent: (convId, e, title, lastAnswer) => notifier.onConversationEvent(convId, title, e, lastAnswer),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
       computerTools: (id) => computer.tools(id),
       mcpTools: () => [
@@ -293,6 +307,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     journal,
     knowledge,
     personas,
+    notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper: new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
       const nv = await nvidiaGpus();
@@ -335,6 +350,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await knowledgeRoutes(app, services);
   await personaRoutes(app, services);
   await promptRoutes(app, services);
+  await notificationRoutes(app, services);
   await githubRoutes(app, services);
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);
@@ -378,6 +394,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       devices.close();
       journal.close();
       knowledge.close();
+      notifier.close();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();

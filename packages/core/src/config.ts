@@ -144,6 +144,21 @@ export const KesherConfigSchema = z.object({
       learn: z.boolean().default(true),
     })
     .default({}),
+  /** Notifications when long work ends or KesherAI waits for an answer. */
+  notifications: z
+    .object({
+      /** On the phone through ntfy (https://ntfy.sh or a server of your own). */
+      ntfy: z.object({ enabled: z.boolean().default(false), server: z.string().default("https://ntfy.sh"), topic: z.string().optional() }).default({}),
+      /** A notification on this computer when the window is not in front. */
+      desktop: z.boolean().default(true),
+      /** Only work that took at least this long. */
+      minSeconds: z.number().int().min(0).default(60),
+      /** Put the start of the answer in the notification (it then passes through the ntfy server). */
+      includeText: z.boolean().default(false),
+      /** Tell when an agent waits for an approval or an answer for a minute. */
+      waiting: z.boolean().default(true),
+    })
+    .default({}),
   /** Per-plugin settings, keyed by plugin id. */
   plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).default({}) })).default({}),
 });

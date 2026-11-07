@@ -118,7 +118,7 @@ Working on now, in this order:
 4. Prompt library with variables and `/` commands (Msty Prompts Studio) ✅ (Prompts page, `/` menu in every message box, `{{input}}`)
 5. Context explorer: what the model sees now and how many tokens each part takes (Msty) ✅ ("Context" panel in every conversation)
 6. Several chats at once on one local model (LM Studio 0.4 parallel requests) ✅ ("Chats at once" on the Models page; llama-server slots)
-7. Phone notification when a long job on the computer finishes ⬜
+7. Phone notification when a long job on the computer finishes ✅ (Settings → Notifications, through ntfy)
 8. Small fixes: disk space, pause, measured speed, more engines ✅
 9. Speech as agent tools: transcribe and speak ⬜
 10. KesherAI as an MCP server for other apps ⬜
