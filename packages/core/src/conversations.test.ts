@@ -212,3 +212,41 @@ test("large conversations are stored compressed and read back unchanged", async 
   const back = await lib.getConversation("c1");
   assert.deepEqual(back?.messages, big.messages);
 });
+
+test("branches: copy up to a reply, or edit an earlier message and resend it", async () => {
+  const { server } = await setup();
+  const app = server.app;
+  type Ev = { seq: number; type: string; text?: string };
+  const get = async (id: string) => (await app.inject({ method: "GET", url: `/api/conversations/${id}` })).json() as { events: Ev[]; session: { status: string }; branchOf?: { id: string; seq: number }; title: string };
+  const replies = async (id: string, n: number) => until(async () => {
+    const c = await get(id);
+    const a = c.events.filter((e) => e.type === "assistant");
+    return c.session.status === "idle" && a.length >= n ? a.map((e) => e.text) : undefined;
+  });
+  try {
+    await app.inject({ method: "PUT", url: "/api/settings", payload: { activeModels: { chat: "fake/m" } } });
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat" } })).json() as { id: string };
+    await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "first" } });
+    await replies(c.id, 1);
+    await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "second" } });
+    await replies(c.id, 2);
+    const events = (await get(c.id)).events;
+    const firstReply = events.find((e) => e.type === "assistant")!;
+    const secondUser = events.filter((e) => e.type === "user")[1]!;
+
+    const bad = await app.inject({ method: "POST", url: `/api/conversations/${c.id}/branch`, payload: { seq: firstReply.seq, text: "x" } });
+    assert.equal(bad.statusCode, 400, "only the user's messages can be edited");
+
+    const copy = (await app.inject({ method: "POST", url: `/api/conversations/${c.id}/branch`, payload: { seq: firstReply.seq } })).json() as { id: string; branchOf: { id: string } };
+    assert.equal(copy.branchOf.id, c.id);
+    const copied = await get(copy.id);
+    assert.deepEqual(copied.events.filter((e) => e.type === "user").map((e) => e.text), ["first"]);
+    assert.match(copied.title, /↳$/);
+
+    const edited = (await app.inject({ method: "POST", url: `/api/conversations/${c.id}/branch`, payload: { seq: secondUser.seq, text: "changed" } })).json() as { id: string };
+    assert.deepEqual(await replies(edited.id, 2), ["You said: first", "You said: changed"]);
+    assert.equal((await get(c.id)).events.filter((e) => e.type === "user").length, 2, "the original is untouched");
+  } finally {
+    await server.close();
+  }
+});

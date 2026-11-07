@@ -4,7 +4,7 @@ import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
-import { branding, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
+import { branding, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
@@ -603,6 +603,65 @@ export class ConversationManager {
       messages: session.messages,
       events: session.events,
     });
+  }
+
+  /**
+   * Branches a conversation: a new conversation with everything up to an
+   * event, which then goes its own way. With `edit`, the event must be one
+   * of the user's messages; the branch starts just before it and sends the
+   * edited message instead ("edit and resend").
+   *
+   * The branch's model memory is rebuilt from what the user saw (messages,
+   * answers, short tool results), so it works however the original was
+   * summarized. Files are not copied: a code session's branch works in the
+   * same folder.
+   *
+   * @param id - The conversation.
+   * @param seq - The event to branch at.
+   * @param edit - New text for the user's message at `seq`.
+   * @returns The new conversation.
+   */
+  async branch(id: string, seq: number, edit?: string): Promise<Conversation> {
+    const opened = await this.open(id);
+    if (!opened) throw new Error("Conversation not found");
+    const { session, conversation } = opened;
+    const at = session.events.find((e) => e.seq === seq);
+    if (!at) throw new Error("That message is not in this conversation.");
+    if (edit !== undefined && at.type !== "user") throw new Error("Only your own messages can be edited.");
+    const keep = session.events.filter((e) => e.seq > 0 && (edit !== undefined ? e.seq < seq : e.seq <= seq));
+    const messages: AgentMessage[] = [];
+    let tools: string[] = [];
+    const say = (role: "user" | "assistant", content: string) => {
+      const last = messages.at(-1);
+      if (last && last.role === role && typeof last.content === "string") last.content = `${last.content}\n\n${content}`;
+      else messages.push({ role, content } as AgentMessage);
+    };
+    for (const e of keep) {
+      if (e.type === "user") {
+        tools = [];
+        say("user", e.text);
+      } else if (e.type === "answer") say("user", e.text);
+      else if (e.type === "compacted") say("user", `(Summary of the conversation so far: ${e.summary})`);
+      else if (e.type === "tool_result") tools.push(`[${e.name} ${e.ok ? "→" : "failed:"} ${e.output.replace(/\s+/g, " ").slice(0, 300)}]`);
+      else if (e.type === "assistant" && e.text.trim()) {
+        say("assistant", tools.length ? `${tools.join("\n")}\n\n${e.text}` : e.text);
+        tools = [];
+      }
+    }
+    const now = new Date().toISOString();
+    const { messages: _m, events: _e, branchOf: _b, ...rest } = conversation;
+    const created = await this.deps.library.saveConversation({
+      ...rest,
+      id: randomUUID(),
+      title: `${conversation.title.replace(/ ↳\d*$/, "")} ↳`,
+      branchOf: { id, seq, title: conversation.title },
+      messages,
+      events: keep,
+      createdAt: now,
+      updatedAt: now,
+    });
+    if (edit?.trim()) await this.send(created.id, edit.trim());
+    return created;
   }
 
   /**

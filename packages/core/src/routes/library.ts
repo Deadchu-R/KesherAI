@@ -237,6 +237,20 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
+  /** Branch at an event (`seq`); with `text`, edit that message of the user's and resend it in the branch. */
+  app.post<{ Params: { id: string }; Body: { seq?: number; text?: string } }>("/api/conversations/:id/branch", async (req, reply) => {
+    const seq = Number(req.body?.seq);
+    if (!Number.isInteger(seq) || seq < 1) return reply.code(400).send({ error: "Say which message to branch at." });
+    if (req.body?.text !== undefined && !String(req.body.text).trim()) return reply.code(400).send({ error: "The edited message is empty." });
+    try {
+      const c = await s.conversations.branch(req.params.id, seq, req.body?.text);
+      const { messages: _m, events: _e, ...summary } = c;
+      return summary;
+    } catch (err) {
+      return reply.code(/not found/i.test((err as Error).message) ? 404 : 400).send({ error: (err as Error).message });
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/conversations/:id/undo", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });

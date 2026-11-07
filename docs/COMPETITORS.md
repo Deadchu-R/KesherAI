@@ -114,7 +114,7 @@ Working on now, in this order:
 
 1. Knowledge base over folders and web pages, kept up to date, with sources (AnythingLLM, Msty Knowledge Stacks) ✅ (Knowledge page, `search_knowledge` tool)
 2. Personas: assistants with their own instructions, model, tools and knowledge (Msty, Open WebUI) ✅ (Personas page; instructions, model and knowledge base)
-3. Conversation branches: edit an earlier message, compare branches (Msty Branch Explorer) ⬜
+3. Conversation branches: edit an earlier message, compare branches (Msty Branch Explorer) ✅ (✎ edit and resend, ⑂ branch from a reply)
 4. Prompt library with variables and `/` commands (Msty Prompts Studio) ⬜
 5. Context explorer: what the model sees now and how many tokens each part takes (Msty) ⬜
 6. Several chats at once on one local model (LM Studio 0.4 parallel requests) ⬜

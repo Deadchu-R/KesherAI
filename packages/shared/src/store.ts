@@ -34,6 +34,8 @@ export interface Conversation {
   team?: Teammate[];
   /** The persona this chat talks as (its instructions join the system prompt). */
   personaId?: string;
+  /** For a branch: the conversation and event it was branched from. */
+  branchOf?: { id: string; seq: number; title: string };
   /** What the model sees. */
   messages: AgentMessage[];
   /** What the user sees. */

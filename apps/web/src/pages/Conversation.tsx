@@ -313,6 +313,8 @@ function QuestionCard({ convId, ev, pending, answer }: { convId: string; ev: Ev<
 /** One conversation: chat or code, with live events, approvals and questions. */
 export function ConversationPage({ id }: { id: string }) {
   const [conv, setConv] = useState<Loaded | null>(null);
+  const [editingSeq, setEditingSeq] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [info, setInfo] = useState<AgentSessionInfo | null>(null);
   const [streaming, setStreaming] = useState<Record<number, string>>({});
@@ -345,6 +347,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [fileCount, setFileCount] = useState(0);
   const { models } = useModels("chat");
   const { conversations } = useLibrary();
+  const branches = conversations.filter((c) => c.branchOf?.id === id);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -477,6 +480,17 @@ export function ConversationPage({ id }: { id: string }) {
     setConv(next);
     await refreshLibrary().catch(() => undefined);
   };
+  /** Opens a branch at an event; with text, the user's message there is replaced by it. */
+  const branchAt = async (seq: number, text?: string) => {
+    try {
+      const b = await api<{ id: string }>(`/api/conversations/${id}/branch`, { method: "POST", body: { seq, ...(text !== undefined ? { text } : {}) } });
+      setEditingSeq(null);
+      await refreshLibrary().catch(() => undefined);
+      location.hash = `#/c/${b.id}`;
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
   const remove = async () => {
     await api(`/api/conversations/${id}`, { method: "DELETE" });
     await refreshLibrary();
@@ -530,6 +544,16 @@ export function ConversationPage({ id }: { id: string }) {
         </button>
       </div>
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
+      {(conv.branchOf || branches.length > 0) && (
+        <div className="branch-bar">
+          {conv.branchOf && <span>⑂ {t("branchOf")} <a href={`#/c/${conv.branchOf.id}`} dir="auto">{conv.branchOf.title}</a></span>}
+          {branches.length > 0 && (
+            <span>
+              {t("branches")}: {branches.map((b, i) => <a key={b.id} href={`#/c/${b.id}`} dir="auto">{i ? ", " : ""}{b.title}</a>)}
+            </span>
+          )}
+        </div>
+      )}
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
       {openPanel && (() => {
         const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);
@@ -558,9 +582,30 @@ export function ConversationPage({ id }: { id: string }) {
             const e = b.e;
             switch (e.type) {
               case "user":
-                return <div key={e.seq} className="msg user">{e.text}</div>;
+                return editingSeq === e.seq ? (
+                  <form key={e.seq} className="msg user editing" onSubmit={(ev) => { ev.preventDefault(); void branchAt(e.seq, editText); }}>
+                    <textarea dir="auto" autoFocus rows={Math.min(10, editText.split("\n").length + 1)} value={editText} onChange={(ev) => setEditText(ev.target.value)} />
+                    <div className="row">
+                      <span className="muted small">{t("editBranchHint")}</span>
+                      <span className="grow" />
+                      <button type="button" onClick={() => setEditingSeq(null)}>{t("cancel")}</button>
+                      <button type="submit" className="primary" disabled={!editText.trim()}>{t("send")}</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div key={e.seq} className="msg user">
+                    {e.text}
+                    {!busy && <span className="msg-tools"><button type="button" className="msg-tool" title={t("editMessage")} aria-label={t("editMessage")} onClick={() => { setEditingSeq(e.seq); setEditText(e.text.replace(/\n*\[[^\]\n]+: [^\]\n]+\]\s*$/g, "")); }}>✎</button></span>}
+                  </div>
+                );
               case "assistant":
-                return <div key={e.seq} className="msg"><RichText text={e.text} /><SpeakButton text={e.text} /></div>;
+                return (
+                  <div key={e.seq} className="msg">
+                    <RichText text={e.text} />
+                    <SpeakButton text={e.text} />
+                    {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}>⑂</button>}
+                  </div>
+                );
               case "approval_request":
                 return <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
               case "plan":

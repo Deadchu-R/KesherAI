@@ -813,3 +813,14 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .persona-text { margin: 0; white-space: pre-wrap; }
 .persona-icon input { width: 64px; text-align: center; }
 .persona-templates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* Branches */
+.msg.user { position: relative; }
+.msg-tools { position: absolute; inset-block-end: -12px; inset-inline-end: 8px; opacity: 0; transition: opacity .12s; }
+.msg.user:hover .msg-tools, .msg-tools:focus-within { opacity: 1; }
+.msg-tool { height: 24px; min-width: 24px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--panel); color: var(--muted); font-size: 12px; }
+.msg.user.editing { display: flex; flex-direction: column; gap: 8px; width: 80%; }
+.msg.user.editing textarea { width: 100%; resize: vertical; font: inherit; }
+.branch-btn { margin-inline-start: 4px; }
+.branch-bar { display: flex; flex-wrap: wrap; gap: 16px; padding: 6px 28px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.branch-bar a { color: var(--text); }
