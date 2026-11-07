@@ -149,7 +149,11 @@ public class KesherLlmPlugin extends Plugin {
                     String usedLm = lm.load(f.getAbsolutePath(), !"cpu".equals(backend));
                     lmLoaded = true;
                     loaded = name;
-                    done(call, usedLm);
+                    JSObject r = new JSObject();
+                    r.put("name", loaded);
+                    r.put("backend", usedLm);
+                    r.put("vision", lm.getSeesImages());
+                    call.resolve(r);
                     return;
                 }
                 String used = backend;
@@ -245,6 +249,20 @@ public class KesherLlmPlugin extends Plugin {
             roles.add(m.optString("role", "user"));
             texts.add(m.optString("text", ""));
         }
+        // Pictures arrive as data URLs; the runtime reads files.
+        final java.util.List<String> images = new java.util.ArrayList<>();
+        JSArray imgs = call.getArray("images");
+        if (imgs != null) for (int i = 0; i < imgs.length(); i++) {
+            String url = imgs.optString(i, "");
+            int comma = url.indexOf(',');
+            if (!url.startsWith("data:") || comma < 0) continue;
+            try {
+                byte[] bytes = android.util.Base64.decode(url.substring(comma + 1), android.util.Base64.DEFAULT);
+                File f = new File(getContext().getCacheDir(), "kesher-img-" + i + (url.startsWith("data:image/png") ? ".png" : ".jpg"));
+                try (FileOutputStream o = new FileOutputStream(f)) { o.write(bytes); }
+                images.add(f.getAbsolutePath());
+            } catch (Exception ignored) { }
+        }
         stopRequested = false;
         final long started = System.currentTimeMillis();
         final StringBuilder all = new StringBuilder();
@@ -254,7 +272,7 @@ public class KesherLlmPlugin extends Plugin {
             lmEnd = end;
             final Throwable[] failed = { null };
             try {
-                lm.generate(system, roles, texts, text, call.getInt("topK", 40), call.getDouble("topP", 0.9), call.getDouble("temperature", 0.6), new LiteRtLm.Sink() {
+                lm.generate(system, roles, texts, text, images, call.getInt("topK", 40), call.getDouble("topP", 0.9), call.getDouble("temperature", 0.6), new LiteRtLm.Sink() {
                     @Override public void token(String t) {
                         if (stopRequested || t == null || t.isEmpty()) return;
                         all.append(t);

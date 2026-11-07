@@ -1,6 +1,7 @@
 package dev.kesherai.llm
 
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -26,30 +27,46 @@ class LiteRtLm(private val cacheDir: String) {
     private var conversation: Conversation? = null
     @Volatile private var stopped = false
 
-    /** Loads a model; returns "gpu" or "cpu" (whichever worked). */
+    /** Whether the loaded model was set up to see images. */
+    var seesImages = false
+        private set
+
+    private fun start(path: String, gpu: Boolean, vision: Boolean): Engine {
+        val main = if (gpu) Backend.GPU() else Backend.CPU()
+        val cfg = if (vision) EngineConfig(modelPath = path, backend = main, visionBackend = Backend.GPU(), cacheDir = cacheDir)
+        else EngineConfig(modelPath = path, backend = main, cacheDir = cacheDir)
+        val e = Engine(cfg)
+        try {
+            e.initialize()
+        } catch (t: Throwable) {
+            try { e.close() } catch (_: Throwable) { }
+            throw t
+        }
+        return e
+    }
+
+    /** Loads a model (with image understanding when it has it); returns "gpu" or "cpu". */
     fun load(path: String, gpu: Boolean): String {
         close()
-        if (gpu) {
+        val tries = if (gpu) listOf(true to true, true to false, false to true, false to false) else listOf(false to true, false to false)
+        var last: Throwable? = null
+        for ((g, v) in tries) {
             try {
-                val e = Engine(EngineConfig(modelPath = path, backend = Backend.GPU(), cacheDir = cacheDir))
-                e.initialize()
-                engine = e
-                return "gpu"
+                engine = start(path, g, v)
+                seesImages = v
+                return if (g) "gpu" else "cpu"
             } catch (t: Throwable) {
-                // Fall back to the processor below.
+                last = t
             }
         }
-        val e = Engine(EngineConfig(modelPath = path, backend = Backend.CPU(), cacheDir = cacheDir))
-        e.initialize()
-        engine = e
-        return "cpu"
+        throw last ?: IllegalStateException("Could not load the model.")
     }
 
     /**
      * Answers [text], given the system instruction and earlier turns
      * (roles "user" / "assistant", alternating).
      */
-    fun generate(system: String, roles: List<String>, texts: List<String>, text: String, topK: Int, topP: Double, temperature: Double, sink: Sink) {
+    fun generate(system: String, roles: List<String>, texts: List<String>, text: String, images: List<String>, topK: Int, topP: Double, temperature: Double, sink: Sink) {
         val e = engine ?: throw IllegalStateException("No model is loaded.")
         try { conversation?.close() } catch (_: Throwable) { }
         val history = roles.indices.map { i -> if (roles[i] == "assistant") Message.model(texts[i]) else Message.user(texts[i]) }
@@ -62,13 +79,19 @@ class LiteRtLm(private val cacheDir: String) {
         )
         conversation = c
         stopped = false
-        c.sendMessageAsync(text, object : MessageCallback {
+        val callback = object : MessageCallback {
             override fun onMessage(message: Message) {
                 if (!stopped) sink.token(message.toString())
             }
             override fun onDone() = sink.done(null)
             override fun onError(throwable: Throwable) = sink.done(if (stopped) null else throwable)
-        })
+        }
+        if (images.isNotEmpty() && seesImages) {
+            val parts = images.map { Content.ImageFile(it) } + Content.Text(text)
+            c.sendMessageAsync(Contents.of(*parts.toTypedArray()), callback)
+        } else {
+            c.sendMessageAsync(text, callback)
+        }
     }
 
     /** Stops the answer: asks the runtime to cancel when it can, and drops the rest. */
