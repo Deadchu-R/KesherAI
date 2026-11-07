@@ -74,7 +74,7 @@ async function fakeGoogle() {
 async function signIn(server: Awaited<ReturnType<typeof createKesherServer>>) {
   const { url } = (await server.app.inject({ method: "POST", url: "/api/google/connect" })).json() as { url: string };
   const auth = new URL(url);
-  assert.equal(auth.searchParams.get("scope"), "https://www.googleapis.com/auth/drive.file openid email");
+  assert.equal(auth.searchParams.get("scope"), "https://www.googleapis.com/auth/drive.file openid email profile");
   assert.equal(auth.searchParams.get("code_challenge_method"), "S256");
   const cb = await server.app.inject({ method: "GET", url: `/api/google/callback?code=abc&state=${auth.searchParams.get("state")}` });
   assert.match(cb.body, /connected to Google/);

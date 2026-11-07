@@ -21,6 +21,8 @@ export interface GoogleConfig {
   clientSecret?: string;
   refreshToken?: string;
   email?: string;
+  name?: string;
+  picture?: string;
   folderId?: string;
   lastSync?: string;
   lastError?: string;
@@ -65,7 +67,7 @@ export const GOOGLE_ENDPOINTS: GoogleEndpoints = {
   calendar: "https://www.googleapis.com/calendar/v3",
 };
 
-const SCOPES = "https://www.googleapis.com/auth/drive.file openid email";
+const SCOPES = "https://www.googleapis.com/auth/drive.file openid email profile";
 const FOLDER_NAME = "KesherAI";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -179,8 +181,10 @@ export class GoogleDrive {
     this.access = { token: json.access_token, expires: Date.now() + (json.expires_in - 60) * 1000 };
     if (json.id_token) {
       try {
-        const payload = JSON.parse(Buffer.from(json.id_token.split(".")[1] ?? "", "base64url").toString()) as { email?: string };
+        const payload = JSON.parse(Buffer.from(json.id_token.split(".")[1] ?? "", "base64url").toString()) as { email?: string; name?: string; picture?: string };
         if (payload.email) this.config.email = payload.email;
+        if (payload.name) this.config.name = payload.name;
+        if (payload.picture && /^https:\/\/[\w.-]+\.googleusercontent\.com\//.test(payload.picture)) this.config.picture = payload.picture;
       } catch {
         // the email is only for display
       }
@@ -195,6 +199,8 @@ export class GoogleDrive {
     const token = this.config.refreshToken;
     delete this.config.refreshToken;
     delete this.config.email;
+    delete this.config.name;
+    delete this.config.picture;
     delete this.config.folderId;
     delete this.config.lastSync;
     delete this.config.services;

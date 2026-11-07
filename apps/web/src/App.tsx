@@ -11,6 +11,7 @@ import { PromptTextarea, expandSlash } from "./SlashMenu";
 import { PromptsPage } from "./pages/PromptsPage";
 import { WatchPage, usePending } from "./pages/WatchPage";
 import { PipelinesPage } from "./pages/PipelinesPage";
+import { ComparePage } from "./pages/ComparePage";
 import { PluginsPage } from "./pages/Plugins";
 import { CommunityPage } from "./pages/Community";
 import { PluginPage } from "./pages/PluginPage";
@@ -164,6 +165,7 @@ export function App() {
   else if (hash === "#/prompts") page = <PromptsPage />;
   else if (hash === "#/watch") page = <WatchPage />;
   else if (hash === "#/pipelines") page = <PipelinesPage />;
+  else if (hash === "#/compare") page = <ComparePage />;
   else if (hash === "#/plugins") page = <PluginsPage />;
   else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;

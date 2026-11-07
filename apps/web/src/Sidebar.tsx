@@ -6,6 +6,7 @@ import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
 import { usePluginUi } from "./plugins";
 import { QuickMenu } from "./QuickMenu";
+import { AccountButton } from "./AccountButton";
 
 /** A dialog for a new code session or a new project. */
 function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () => void }) {
@@ -140,6 +141,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const loose = conversations.filter((c) => !c.projectId);
   const nav: Array<[string, Parameters<typeof t>[0]]> = [
     ["#/day", "dayNav"],
+    ["#/compare", "compareNav"],
     ["#/knowledge", "knowledgeNav"],
     ["#/personas", "personasNav"],
     ["#/prompts", "promptsNav"],
@@ -226,6 +228,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       </div>
 
       <div className="sidebar-foot">
+      <AccountButton />
       <div className="brand small-brand">
         {/* The knot: two rings linked, one passing over the other. */}
         <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="knot">

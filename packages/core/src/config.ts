@@ -94,6 +94,9 @@ export const KesherConfigSchema = z.object({
       clientSecret: z.string().optional(),
       refreshToken: z.string().optional(),
       email: z.string().optional(),
+      /** The account's name and picture, for the account button. */
+      name: z.string().optional(),
+      picture: z.string().optional(),
       folderId: z.string().optional(),
       lastSync: z.string().optional(),
       lastError: z.string().optional(),

@@ -23,6 +23,8 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
     configured: s.google.configured,
     connected: s.google.connected,
     email: s.config.google.email ?? null,
+    name: s.config.google.name ?? null,
+    picture: s.config.google.picture ?? null,
     lastSync: s.config.google.lastSync ?? null,
     lastError: s.config.google.lastError ?? null,
     /** True when the user entered their own OAuth client (rather than the project's). */
