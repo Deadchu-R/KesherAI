@@ -405,10 +405,11 @@
   // ---------- extra fast: Google's on-device runtime (native plugin), on the graphics chip ----------
   const LLM = window.Capacitor?.Plugins?.KesherLlm;
   const FAST = [
-    { repo: "litert-community/Qwen2.5-1.5B-Instruct", name: "Qwen 2.5 · 1.5B", family: "chatml", he: "מומלץ: מהיר מאוד, עברית סבירה.", en: "Recommended: very fast, fair Hebrew." },
-    { repo: "litert-community/Qwen2.5-0.5B-Instruct", name: "Qwen 2.5 · 0.5B", family: "chatml", he: "הכי מהיר, לשאלות קצרות.", en: "Fastest, for short questions." },
-    { repo: "litert-community/Qwen2.5-3B-Instruct", name: "Qwen 2.5 · 3B", family: "chatml", he: "הכי טוב בעברית מבין אלה; עדיין מהיר בטלפון חזק.", en: "Best Hebrew of these; still fast on a strong phone." },
-    { repo: "litert-community/DeepSeek-R1-Distill-Qwen-1.5B", name: "DeepSeek R1 · 1.5B", family: "deepseek", he: "חושב לפני שעונה; טוב במתמטיקה, חלש בעברית (עונה בעיקר באנגלית).", en: "Thinks before answering; good at maths, weak in Hebrew." },
+    { repo: "litert-community/gemma-4-E2B-it-litert-lm", name: "Gemma 4 · E2B", family: "gemma", he: "מומלץ לעברית: הכי טוב בעברית, מהיר על הכרטיס הגרפי.", en: "Recommended for Hebrew: the best Hebrew here, fast on the graphics chip." },
+    { repo: "litert-community/gemma-4-E4B-it-litert-lm", name: "Gemma 4 · E4B", family: "gemma", he: "חכם יותר מ-E2B ואיטי קצת יותר; לטלפון עם 12GB זיכרון ומעלה.", en: "Smarter than E2B, a bit slower; for phones with 12 GB of memory or more." },
+    { repo: "litert-community/Qwen2.5-1.5B-Instruct", name: "Qwen 2.5 · 1.5B", family: "chatml", he: "מהיר מאוד; עברית בינונית.", en: "Very fast; fair Hebrew." },
+    { repo: "litert-community/Qwen2.5-0.5B-Instruct", name: "Qwen 2.5 · 0.5B", family: "chatml", he: "הכי מהיר, לשאלות קצרות באנגלית.", en: "Fastest, for short questions in English." },
+    { repo: "litert-community/DeepSeek-R1-Distill-Qwen-1.5B", name: "DeepSeek R1 · 1.5B", family: "deepseek", he: "חושב לפני שעונה; טוב במתמטיקה, חלש בעברית.", en: "Thinks before answering; good at maths, weak in Hebrew." },
     { repo: "litert-community/Phi-4-mini-instruct", name: "Phi-4 mini · 3.8B", family: "phi", he: "של Microsoft, חזק באנגלית ובהגיון; עברית חלשה.", en: "From Microsoft, strong in English and reasoning; weak Hebrew." },
   ];
   /** Puts the chat in the model's own format (these files expect the raw prompt). */
@@ -424,9 +425,10 @@
     const c = localStorage.getItem(key);
     if (c) return JSON.parse(c);
     const files = await getJson(`https://huggingface.co/api/models/${item.repo}/tree/main`, {});
-    const tasks = files.filter((f) => /\.task$/i.test(f.path)).map((f) => ({ path: f.path, size: f.size ?? f.lfs?.size ?? 0 }));
+    // Phone builds: .litertlm (newer runtime) or .task; never the web or single-chip (NPU) builds.
+    const tasks = files.filter((f) => /\.(task|litertlm)$/i.test(f.path) && !/web|qualcomm|qcs\d|mt\d{4}|sm\d{4}|_npu|tpu/i.test(f.path)).map((f) => ({ path: f.path, size: f.size ?? f.lfs?.size ?? 0 }));
     // Prefer the 4096-token context, 8-bit, multi-prefill builds (they run on the graphics chip).
-    const score = (p) => (/ekv4096/i.test(p) ? 4 : /ekv2048/i.test(p) ? 3 : /ekv1280/i.test(p) ? 2 : 1) + (/q8/i.test(p) ? 0.5 : 0) + (/multi-prefill/i.test(p) ? 0.3 : 0) - (/web|cpu/i.test(p) ? 3 : 0);
+    const score = (p) => (/\.litertlm$/i.test(p) ? 10 : 0) + (/ekv4096/i.test(p) ? 4 : /ekv2048/i.test(p) ? 3 : /ekv1280/i.test(p) ? 2 : 1) + (/q8/i.test(p) ? 0.5 : 0) + (/multi-prefill/i.test(p) ? 0.3 : 0) - (/web|cpu/i.test(p) ? 3 : 0);
     const pick = tasks.sort((a, b) => score(b.path) - score(a.path))[0];
     if (!pick) throw new Error(T("אין גרסה לטלפון", "No phone build"));
     const f = { ...pick, name: pick.path.split("/").pop() };
@@ -512,7 +514,11 @@
     const stop = () => LLM.stop();
     signal.addEventListener("abort", stop, { once: true });
     try {
-      const r = await LLM.generate({ prompt: promptFor(native.family, msgs) });
+      const text = (m) => (typeof m.content === "string" ? m.content : m.content.map((p) => p.text ?? "").join(" "));
+      // .litertlm models: the runtime applies the model's own chat format, so send plain messages.
+      const r = native.file.endsWith(".litertlm")
+        ? await LLM.generate({ system: msgs[0]?.role === "system" ? text(msgs[0]) : "", history: msgs.slice(msgs[0]?.role === "system" ? 1 : 0, -1).map((m) => ({ role: m.role, text: text(m) })), text: text(msgs.at(-1)) })
+        : await LLM.generate({ prompt: promptFor(native.family, msgs) });
       if (r.tokens > 8 && r.ms > 0) rememberSpeed(`native:${native.file}`, r.tokens / (r.ms / 1000));
       if (signal.aborted) throw new DOMException("stopped", "AbortError");
       return { looped: cut };
@@ -1183,7 +1189,7 @@
         // Small phone models: a short context works much better than a long one.
         const short = [{ role: "system", content: system.content.slice(0, 2500) }, ...recent.slice(-6)];
         const r = await nativeAnswer(current.item.native, short, abort.signal, onText);
-        if (r?.looped) addMsg("note", T("המודל התחיל לחזור על עצמו, אז עצרתי אותו. מודל גדול יותר (Qwen 3B) עונה טוב יותר.", "The model started repeating itself, so I stopped it. A bigger model (Qwen 3B) answers better."));
+        if (r?.looped) addMsg("note", T("המודל התחיל לחזור על עצמו, אז עצרתי אותו. Gemma 4 עונה טוב יותר.", "The model started repeating itself, so I stopped it. Gemma 4 answers better."));
         $("status").textContent = `${(measured(current.url) ?? 0).toFixed(1)} ${T("טוקנים לשנייה", "tokens/s")} ⚡`;
       } else {
       const stream = await wllama.createChatCompletion({ messages: [system, ...recent], stream: true, max_tokens: 768, temperature: 0.7, temp: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, penalty_last_n: 128, abortSignal: abort.signal });
