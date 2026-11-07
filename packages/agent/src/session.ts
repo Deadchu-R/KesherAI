@@ -212,12 +212,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * Sends a user message and starts working on it in the background.
    *
    * @param text - The message.
+   * @param context - Extra material for the model only (web results), shown to it after the message.
+   * @param note - A line for the user about it, e.g. "Searched the web".
    * @throws Error if the agent is still busy with the previous message.
    */
-  send(text: string): void {
+  send(text: string, context?: string, note?: string): void {
     if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
-    this.messages.push({ role: "user", content: text });
+    // `context` (e.g. web search results) goes to the model with the message, not into the user's bubble.
+    this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text });
     this.push({ type: "user", text });
+    if (note) this.push({ type: "note", text: note });
     void this.run();
   }
 

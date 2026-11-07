@@ -22,6 +22,7 @@
     .model .row { display: flex; gap: 8px; }
     .model .row button { flex: 1; min-height: 42px; font-size: 15px; }
     .rating { font-size: 12.5px; font-weight: 500; }
+    .model.dim { opacity: .62; }
     .rating.good { color: #6fd3a5; }
     .rating.ok { color: var(--accent); }
     .rating.slow { color: var(--live); }
@@ -40,18 +41,20 @@
     footer { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
     .composer { display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--border); background: var(--panel); border-radius: 18px; padding: 8px; }
     .composer textarea { flex: 1; resize: none; border: 0; background: transparent; outline: none; font-size: 16px; line-height: 1.4; max-height: 30vh; padding: 6px 4px; }
+    .composer .web { background: transparent; border: 1px solid var(--border); font-size: 17px; filter: grayscale(1); opacity: .65; }
+    .composer .web.on { background: rgb(152 163 255 / 0.16); border-color: rgb(152 163 255 / 0.5); filter: none; opacity: 1; }
     .composer button { min-height: 40px; width: 40px; padding: 0; border-radius: 12px; font-size: 18px; }
     .status { font-size: 12.5px; color: var(--muted); margin: 0 4px 6px; min-height: 1em; }
     .error { color: var(--bad); }
     [hidden] { display: none !important; }
   </style>
 </head>
-<body>
+<body class="kd-has-header">
   <header>
     <button class="icon" id="back" type="button" aria-label="Back">→</button>
     <h1 id="title" data-he="בטלפון הזה" data-en="On this phone">בטלפון הזה</h1>
     <button class="icon" id="newChat" type="button" aria-label="New chat" hidden>＋</button>
-    <button class="icon" id="toModels" type="button" aria-label="Models" hidden>☰</button>
+    <button class="icon" id="menu" type="button" aria-label="Menu" hidden>☰</button>
   </header>
 
   <main id="modelsView">
@@ -66,6 +69,7 @@
   <footer id="chatFoot" hidden>
     <p class="status" id="status"></p>
     <form class="composer" id="composer">
+      <button type="button" id="web" class="web" aria-pressed="false" title="Search the web">🌐</button>
       <textarea id="input" rows="1" data-ph-he="כתוב הודעה…" data-ph-en="Write a message…" placeholder="כתוב הודעה…"></textarea>
       <button class="primary" id="send" type="submit" aria-label="Send">↑</button>
     </form>
@@ -91,9 +95,24 @@
     { repo: "bartowski/google_gemma-3-1b-it-GGUF", name: "Gemma 3 · 1B", ram: 3, he: "של Google. כתיבה טובה ושפות רבות.", en: "From Google. Good writing and many languages." },
     { repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", name: "Qwen 2.5 · 1.5B", ram: 4, he: "הכי חכם מהרשימה שעדיין רץ חלק בטלפון טוב. תומך בעברית.", en: "The smartest here that still runs smoothly on a good phone. Handles Hebrew." },
     { repo: "unsloth/Qwen3-1.7B-GGUF", name: "Qwen 3 · 1.7B", ram: 4, he: "חדש יותר, חושב לפני שעונה (איטי יותר).", en: "Newer; thinks before answering (slower)." },
+    // Bigger models: fast only with a strong graphics chip (e.g. Snapdragon 8 Elite / Adreno 830) after tuning.
+    { repo: "Qwen/Qwen2.5-3B-Instruct-GGUF", name: "Qwen 2.5 · 3B", ram: 6, big: true, he: "חכם בהרבה, טוב בעברית ובקוד. לטלפונים עם כרטיס גרפי חזק.", en: "Much smarter, good at Hebrew and code. For phones with a strong graphics chip." },
+    { repo: "bartowski/Llama-3.2-3B-Instruct-GGUF", name: "Llama 3.2 · 3B", ram: 6, big: true, he: "חזק באנגלית, כתיבה וסיכומים. לטלפונים עם כרטיס גרפי חזק.", en: "Strong in English, writing and summaries. For phones with a strong graphics chip." },
+    { repo: "bartowski/google_gemma-3-4b-it-GGUF", name: "Gemma 3 · 4B", ram: 7, big: true, he: "הכי חכם ברשימה, הרבה שפות. דחוס יותר כדי להיכנס לטלפון.", en: "The smartest here, many languages. Compressed more to fit a phone." },
+    { repo: "unsloth/Qwen3-4B-GGUF", name: "Qwen 3 · 4B", ram: 7, big: true, he: "חושב לפני שעונה, חזק בהיגיון ובקוד. דחוס יותר כדי להיכנס.", en: "Thinks before answering, strong at reasoning and code. Compressed more to fit." },
   ];
   const deviceGb = navigator.deviceMemory || 4; // Android reports up to 8
-  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון ו-${navigator.hardwareConcurrency || "?"} ליבות. ליד כל מודל כתוב כמה טוב הוא ירוץ כאן; אחרי שיחה זה מתעדכן לפי המהירות שנמדדה.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory and ${navigator.hardwareConcurrency || "?"} cores. Each model says how well it will run here; after you chat, it updates with the measured speed.`);
+  /** The graphics chip, and whether it is strong enough for 3–4B models (recent Adreno, Immortalis, Xclipse). */
+  let gpu = { name: "", strong: false };
+  try {
+    const adapter = await navigator.gpu?.requestAdapter();
+    const info = adapter?.info ?? (await adapter?.requestAdapterInfo?.());
+    const name = [info?.vendor, info?.architecture, info?.description].filter(Boolean).join(" ");
+    gpu = { name, strong: !!adapter && /qualcomm|adreno|immortalis|xclipse|apple/i.test(name) && deviceGb >= 8 };
+  } catch {
+    // no WebGPU here
+  }
+  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון ו-${navigator.hardwareConcurrency || "?"} ליבות${gpu.name ? `, כרטיס גרפי: ${gpu.name}${gpu.strong ? " (חזק: גם מודלים של 3–4B יכולים לרוץ מהר אחרי כיוונון)" : ""}` : ""}. ליד כל מודל כתוב כמה טוב הוא ירוץ כאן; אחרי שיחה זה מתעדכן לפי המהירות שנמדדה.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory and ${navigator.hardwareConcurrency || "?"} cores${gpu.name ? `, graphics: ${gpu.name}${gpu.strong ? " (strong: 3–4B models can run fast once tuned)" : ""}` : ""}. Each model says how well it will run here; after you chat, it updates with the measured speed.`);
 
   const wllama = new Wllama({ default: new URL("./vendor/wllama/wllama.wasm", location.href).href }, { allowOffline: true, suppressNativeLog: true });
   const mm = wllama.modelManager;
@@ -101,14 +120,20 @@
   const gb = (b) => (b / 1024 ** 3).toFixed(b < 1024 ** 3 ? 2 : 1) + " GB";
 
   async function fileFor(item) {
-    const key = "kesherai-phone-file:" + item.repo;
+    const key = "kesherai-phone-file2:" + item.repo;
     const cached = localStorage.getItem(key);
     if (cached) return JSON.parse(cached);
     const res = await fetch(`https://huggingface.co/api/models/${item.repo}/tree/main`);
     if (!res.ok) throw new Error(`Hugging Face ${res.status}`);
-    const files = (await res.json()).filter((f) => /q4_k_m\.gguf$/i.test(f.path) && !/-\d{5}-of-\d{5}/.test(f.path));
-    if (!files.length) throw new Error(T("לא נמצא קובץ מתאים", "No suitable file found"));
-    const f = { path: files[0].path, size: files[0].size ?? files[0].lfs?.size ?? 0 };
+    // The best quality that still fits one file the phone can load (under 2 GB).
+    const PREF = ["q4_k_m", "q4_k_s", "iq4_xs", "q4_0", "q3_k_l", "iq3_m", "q3_k_m", "iq3_xs", "q3_k_s"];
+    const all = (await res.json()).filter((f) => /\.gguf$/i.test(f.path) && !/-\d{5}-of-\d{5}|mmproj/i.test(f.path)).map((f) => ({ path: f.path, size: f.size ?? f.lfs?.size ?? 0 }));
+    const fits = all.filter((f) => f.size > 0 && f.size < 1.95 * 1024 ** 3);
+    let pick;
+    for (const q of PREF) { pick = fits.find((f) => f.path.toLowerCase().includes(q)); if (pick) break; }
+    if (!pick) throw new Error(T("אין גרסה שנכנסת לטלפון", "No version small enough for a phone"));
+    const quant = /(i?q\d_[a-z0-9_]+)/i.exec(pick.path)?.[1]?.toUpperCase() ?? "";
+    const f = { path: pick.path, size: pick.size, quant };
     localStorage.setItem(key, JSON.stringify(f));
     return f;
   }
@@ -133,10 +158,11 @@
     const sizeGb = sizeBytes / 1024 ** 3;
     // The app runs llama.cpp in WebAssembly on one processor core (Android web views cannot share memory between threads).
     const t = tuned(url);
-    const est = t?.tps ?? (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * (useGpu() ? 2 : 1);
+    const gpuGain = !useGpu() || !navigator.gpu ? 1 : gpu.strong ? 4 : 2;
+    const est = t?.tps ?? (6.5 / Math.max(0.25, sizeGb)) * (cores >= 8 ? 1 : 0.7) * gpuGain;
     const real = measured(url);
     const tps = real ?? est;
-    const tooBig = sizeGb * 1.6 > deviceGb * 0.5;
+    const tooBig = sizeGb * 1.6 > deviceGb * (deviceGb >= 8 ? 0.55 : 0.5);
     const level = tooBig ? "bad" : tps >= 8 ? "good" : tps >= 3 ? "ok" : "slow";
     const text = {
       good: T("רץ טוב בטלפון הזה", "Runs well on this phone"),
@@ -183,7 +209,11 @@
     const good = rated.filter((r) => r.rating.level === "good").sort((x, y) => y.file.size - x.file.size)[0];
     const fallback = rated.filter((r) => !r.rating.tooBig).sort((x, y) => y.rating.tps - x.rating.tps)[0];
     const recUrl = (good ?? fallback)?.url;
+    // Also point out the fastest one that still runs well, for quick answers.
+    const quick = rated.filter((r) => r.rating.level === "good" && r.url !== recUrl).sort((x, y) => y.rating.tps - x.rating.tps)[0]?.url;
 
+    const rank = (r) => { const u = r.file ? urlOf(r.item.repo, r.file.path) : ""; return u === recUrl ? 0 : u === quick ? 1 : r.file ? 2 + (rate(r.file.size, u).tooBig ? 5 : 0) : 9; };
+    rows.sort((a, b) => rank(a) - rank(b));
     for (const r of rows) {
       const item = r.item;
       const card = document.createElement("div");
@@ -201,11 +231,13 @@
       const file = r.file;
       const url = urlOf(item.repo, file.path);
       const rating = rate(file.size, url);
-      card.querySelector(".size").textContent = file.size ? gb(file.size) : "";
+      card.querySelector(".size").textContent = (file.size ? gb(file.size) : "") + (file.quant ? ` · ${file.quant}` : "");
       const badge = card.querySelector(".rating");
       badge.textContent = rating.text;
       badge.className = `rating ${rating.level}`;
       if (url === recUrl) card.querySelector(".top").append(Object.assign(document.createElement("span"), { className: "tag", textContent: T("מומלץ לטלפון הזה", "Best for this phone") }));
+      else if (url === quick) card.querySelector(".top").append(Object.assign(document.createElement("span"), { className: "tag", textContent: T("הכי מהיר", "Fastest") }));
+      if (item.big && !gpu.strong) card.classList.add("dim");
       const have = downloaded.find((m) => m.url === url && m.size > 0);
       if (url === activeUrl && have) card.classList.add("active");
       const btn = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
@@ -248,7 +280,6 @@
     $("chatView").hidden = !chat;
     $("chatFoot").hidden = !chat;
     $("newChat").hidden = !chat;
-    $("toModels").hidden = !chat;
     $("title").textContent = chat ? current.item.name : T("בטלפון הזה", "On this phone");
   }
 
@@ -360,6 +391,29 @@
     return best;
   }
 
+  // ---------- web search (DuckDuckGo, through the app's native HTTP so websites' CORS rules do not block it) ----------
+  const webOn = () => localStorage.getItem("kesherai-phone-web") === "1";
+  const paintWeb = () => { $("web").setAttribute("aria-pressed", String(webOn())); $("web").classList.toggle("on", webOn()); $("web").title = T("חיפוש באינטרנט לכל הודעה", "Search the web for each message"); };
+  $("web").onclick = () => { localStorage.setItem("kesherai-phone-web", webOn() ? "0" : "1"); paintWeb(); };
+  paintWeb();
+  async function webSearch(q) {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q.slice(0, 200))}`;
+    const http = window.Capacitor?.Plugins?.CapacitorHttp;
+    const html = http
+      ? String((await http.get({ url, headers: { "User-Agent": "Mozilla/5.0 (Linux; Android) KesherAI" } })).data ?? "")
+      : await (await fetch(url)).text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return [...doc.querySelectorAll(".result")].slice(0, 6).flatMap((r) => {
+      const a = r.querySelector(".result__a");
+      if (!a) return [];
+      let href = a.getAttribute("href") || "";
+      const m = /[?&]uddg=([^&]+)/.exec(href);
+      if (m) href = decodeURIComponent(m[1]);
+      if (href.startsWith("//")) href = "https:" + href;
+      return [{ title: a.textContent.trim(), url: href, snippet: (r.querySelector(".result__snippet")?.textContent ?? "").trim() }];
+    });
+  }
+
   $("composer").onsubmit = async (e) => {
     e.preventDefault();
     if (abort) { abort.abort(); return; }
@@ -379,7 +433,17 @@
     try {
       // Keep the last turns that fit the phone's small context.
       const recent = messages.slice(-12);
-      const system = { role: "system", content: T("אתה עוזר מועיל. ענה בקצרה ובשפה שבה המשתמש כתב.", "You are a helpful assistant. Answer briefly, in the user's language.") };
+      let found = "";
+      if (webOn()) {
+        $("status").textContent = T("מחפש באינטרנט…", "Searching the web…");
+        const results = await webSearch(text).catch((err) => { addMsg("note", T("החיפוש נכשל: ", "Search failed: ") + (err.message || err)); return []; });
+        if (results.length) {
+          found = results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.snippet}`).join("\n");
+          addMsg("note", T(`חיפשתי באינטרנט: ${results.length} תוצאות`, `Searched the web: ${results.length} results`));
+        }
+        $("status").textContent = T("חושב…", "Thinking…");
+      }
+      const system = { role: "system", content: T("אתה עוזר מועיל. ענה בקצרה ובשפה שבה המשתמש כתב.", "You are a helpful assistant. Answer briefly, in the user's language.") + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
       const stream = await wllama.createChatCompletion({ messages: [system, ...recent], stream: true, max_tokens: 768, temperature: 0.7, temp: 0.7, top_p: 0.9, top_k: 40, penalty_repeat: 1.1, penalty_last_n: 128, abortSignal: abort.signal });
       for await (const chunk of stream) {
         const d = chunk.choices?.[0]?.delta?.content ?? "";
@@ -409,10 +473,18 @@
   $("input").addEventListener("input", autosize);
   $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) { e.preventDefault(); $("composer").requestSubmit(); } });
   $("newChat").onclick = () => { messages = []; localStorage.removeItem(HISTORY(current.url)); $("msgs").replaceChildren(); $("status").textContent = ""; };
-  $("toModels").onclick = () => { show("models"); renderList(); };
   $("back").onclick = () => { if (!$("chatView").hidden) { show("models"); renderList(); } else location.href = "index.html?switch=1"; };
 
-  renderList().catch((e) => { $("modelList").textContent = String(e.message || e); });
+  renderList()
+    .then(async () => {
+      // From the side menu ("Chat on this phone"): go straight back into the last chat.
+      if (!new URLSearchParams(location.search).has("chat")) return;
+      const url = localStorage.getItem("kesherai-phone-model");
+      const item = CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
+      if (item && downloaded.some((m) => m.url === url && m.size > 0)) await openChat(item, url);
+    })
+    .catch((e) => { $("modelList").textContent = String(e.message || e); });
 </script>
+<script src="drawer.js"></script>
 </body>
 </html>

@@ -649,3 +649,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .qm-icon { width: 22px; text-align: center; font-size: 13px; opacity: .85; flex: none; }
 .qm-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .qm-pop { animation: none; } .qm-item.hot { transform: none; } }
+
+.web-chip { width: auto; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12.5px; border-radius: 999px; }
+.web-chip.on { background: var(--accent-soft); border-color: rgb(152 163 255 / 0.45); color: var(--text); }

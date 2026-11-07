@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { AgentSession, CODE_TOOLS, buildSystemPrompt, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
+import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
 import { branding, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
@@ -377,7 +377,7 @@ export class ConversationManager {
    * @param text - Message.
    * @throws Error if the conversation does not exist or is busy.
    */
-  async send(id: string, text: string): Promise<void> {
+  async send(id: string, text: string, opts: { web?: boolean } = {}): Promise<void> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
@@ -388,7 +388,21 @@ export class ConversationManager {
     if (session.messages.length === 0 && /^New (chat|code session)$/.test(conversation.title)) {
       await this.deps.library.saveConversation({ ...conversation, title: titleFrom(text), messages: session.messages, events: session.events });
     }
-    session.send(text);
+    // "Search the web" in the composer: KesherAI searches first and gives the model the results, so even
+    // models without tool calling answer from current information (models with tools can also search themselves).
+    let context: string | undefined;
+    let note: string | undefined;
+    if (opts.web) {
+      const query = text.replace(/\s+/g, " ").slice(0, 200);
+      try {
+        const r = await webSearchTool.run({ query }, { signal: AbortSignal.timeout(20_000), recordChange: () => undefined });
+        context = `Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}`;
+        note = `Searched the web: ${r.output === "No results." ? "no results" : `${r.output.split("\n").filter((l) => /^\d+\. /.test(l)).length} results`}.`;
+      } catch (err) {
+        context = `(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;
+      }
+    }
+    session.send(text, context, note);
   }
 
   /**

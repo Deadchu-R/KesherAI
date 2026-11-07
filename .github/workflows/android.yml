@@ -61,7 +61,7 @@ jobs:
           grep -E "versionCode|versionName" android/app/build.gradle
           # The app knows which commit it was built from, to list what changed in a newer build.
           node scripts/vendor.mjs
-          echo "{\"commit\": \"$(git rev-parse HEAD)\"}" > www/build.json
+          echo "{\"commit\": \"$(git rev-parse HEAD)\", \"date\": $(git log -1 --format=%ct)}" > www/build.json
           npx cap sync android
       - name: Sign every build with the project's fixed key (apps/android/signing/README.md)
         working-directory: apps/android/android
@@ -99,8 +99,14 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           node -e '
             const { execSync } = require("node:child_process");
-            const log = execSync("git log -50 --format=%H%x09%s", { encoding: "utf8" }).trim().split("\n");
-            const changes = log.map((l) => { const [sha, ...rest] = l.split("\t"); return { sha, subject: rest.join("\t") }; });
+            // Only what changed in the phone app (not the computer's), newest first, with dates.
+            // A commit can say it in Hebrew too, with a line "Phone-he: …" in its message.
+            const log = execSync("git log -60 --format=%H%x1f%ct%x1f%s%x1f%b%x1e -- apps/android", { encoding: "utf8" }).split("\x1e").map((x) => x.trim()).filter(Boolean);
+            const changes = log.map((l) => {
+              const [sha, t, subject, body = ""] = l.split("\x1f");
+              const he = /^Phone-he:\s*(.+)$/m.exec(body)?.[1]?.trim();
+              return { sha, t: Number(t), subject: subject.replace(/^Phone( app)?:\s*/i, ""), ...(he ? { he } : {}) };
+            });
             require("node:fs").writeFileSync("android-version.json", JSON.stringify({
               versionCode: Number(process.argv[1]), versionName: `${process.argv[2]} (${process.argv[1]})`,
               apkUrl: `https://github.com/${process.argv[3]}/releases/download/android-latest/KesherAI-android.apk`, changes }));

@@ -309,11 +309,13 @@
   /** Lists the changes between the installed build and the new one (newest first). */
   async function showChanges(changes) {
     if (!Array.isArray(changes) || changes.length === 0) return;
-    const mine = await fetch("build.json").then((r) => r.json()).then((b) => b.commit).catch(() => "");
+    // Only the phone app's own changes since the installed build (by date; older builds only know their commit).
+    const build = await fetch("build.json").then((r) => r.json()).catch(() => ({}));
     const list = [];
     for (const c of changes) {
-      if (mine && c.sha === mine) break;
-      if (!/^Merge /.test(c.subject)) list.push(c.subject);
+      if (build.date && c.t && c.t <= build.date) break;
+      if (!build.date && build.commit && c.sha === build.commit) break;
+      if (!/^Merge /.test(c.subject)) list.push(lang === "he" && c.he ? c.he : c.subject);
     }
     const ul = $("changeList");
     ul.replaceChildren(...list.slice(0, 20).map((text) => Object.assign(document.createElement("li"), { textContent: text, dir: "auto" })));
@@ -388,5 +390,6 @@
     else if (!cameBack && saved) connect(saved);
   })();
 </script>
+<script src="drawer.js"></script>
 </body>
 </html>

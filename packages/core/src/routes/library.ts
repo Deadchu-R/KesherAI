@@ -144,11 +144,11 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     });
   });
 
-  app.post<{ Params: { id: string }; Body: { text?: string } }>("/api/conversations/:id/messages", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
     const text = req.body?.text?.trim();
     if (!text) return reply.code(400).send({ error: "Empty message" });
     try {
-      await s.conversations.send(req.params.id, text);
+      await s.conversations.send(req.params.id, text, { web: req.body?.web === true });
       return { ok: true };
     } catch (err) {
       const msg = (err as Error).message;

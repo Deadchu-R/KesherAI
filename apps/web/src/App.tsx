@@ -1,4 +1,5 @@
 import { AppBar } from "./AppBar";
+import { WebToggle, useWebSearch } from "./WebToggle";
 import { ComputerBanner } from "./ComputerSection";
 import { UsagePage } from "./pages/Usage";
 import { PluginsPage } from "./pages/Plugins";
@@ -38,6 +39,7 @@ function Home() {
   const [text, setText] = useState("");
   const [modelId, setModelId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [web, setWeb] = useWebSearch();
   useEffect(() => {
     void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setModelId((m) => m || s.activeModels.chat || "")).catch(() => undefined);
   }, []);
@@ -50,7 +52,7 @@ function Home() {
     try {
       const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}) });
       if (!id) return;
-      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value } });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value, ...(web ? { web: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
       toast((e as Error).message);
@@ -79,6 +81,7 @@ function Home() {
             }}
           />
           <div className="box-bar">
+            <WebToggle on={web} onChange={setWeb} />
             <select className="model-chip" value={modelId} onChange={(e) => setModelId(e.target.value)} aria-label={t("pickModel")}>
               {!modelId && <option value="">{t("pickModel")}</option>}
               {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}

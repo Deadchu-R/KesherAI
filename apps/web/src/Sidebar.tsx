@@ -237,6 +237,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           {t("language")}
         </button>
         {appHome() && (
+          // Inside the Android app: the chat with a model on the phone itself.
+          <button type="button" onClick={() => (location.href = `${appHome()!.replace(/\/$/, "")}/local.html?chat=1`)}>
+            {t("phoneChat")}
+          </button>
+        )}
+        {appHome() && (
           // Inside the Android app: back to its list of computers, without reconnecting.
           <button type="button" onClick={() => (location.href = `${appHome()!.replace(/\/$/, "")}/?switch=1`)}>
             {t("switchComputer")}

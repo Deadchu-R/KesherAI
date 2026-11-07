@@ -7,6 +7,7 @@ import { desktop, refreshLibrary, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
+import { WebToggle, useWebSearch } from "../WebToggle";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
@@ -317,6 +318,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
+  const [web, setWeb] = useWebSearch();
   const [openPanel, setOpenPanel] = useState("");
   const pluginUi = usePluginUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -437,7 +439,7 @@ export function ConversationPage({ id }: { id: string }) {
     setInput("");
     setError("");
     try {
-      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text } });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text, ...(web ? { web: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -623,6 +625,7 @@ export function ConversationPage({ id }: { id: string }) {
               {desktop()?.pickFiles && (
                 <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>
               )}
+              <WebToggle on={web} onChange={setWeb} />
               <ModelMenu models={modelOptions} value={conv.modelId} onChange={(id) => void patch({ modelId: id })} />
               <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
                 <option value="ask">{t("modeAsk")}</option>
