@@ -12,7 +12,8 @@ interface Started { day: string; meeting: { id: string } }
 /**
  * Records a meeting: your microphone plus the call's sound (the desktop app
  * captures what the computer plays), turns each half minute into text with
- * the speech engine, and when you stop, the model writes the summary,
+ * the speech engine (the microphone and the call apart, so it knows who
+ * spoke: you or the others), and when you stop, the model writes the summary,
  * decisions and action items. Nothing leaves this computer unless your
  * speech or chat engine is a cloud one.
  *
@@ -56,49 +57,56 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
     setCallSound(!!sys);
     const started = await api<Started>("/api/journal/meetings", { method: "POST", body: { title: title || L("פגישה", "Meeting") } });
     const ctx = new AudioContext({ sampleRate: 16000 });
-    const mix = ctx.createGain();
-    const sources = [ctx.createMediaStreamSource(mic), ...(sys ? [ctx.createMediaStreamSource(sys)] : [])];
-    sources.forEach((src) => src.connect(mix));
-    const node = ctx.createScriptProcessor(4096, 1, 1);
     const mute = ctx.createGain();
     mute.gain.value = 0; // record without playing the call back through the speakers
-    mix.connect(node);
-    node.connect(mute);
     mute.connect(ctx.destination);
-    let chunks: Float32Array[] = [];
-    let pieceStart = Date.now();
     let queue = Promise.resolve();
-    const flush = () => {
-      if (!chunks.length) return;
-      const wav = encodeWav(chunks, ctx.sampleRate);
-      const t = pieceStart;
-      chunks = [];
-      pieceStart = Date.now();
-      setPieces((p) => ({ ...p, sent: p.sent + 1 }));
-      queue = queue.then(async () => {
-        try {
-          const res = await fetch(withToken("/api/speech/transcribe"), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
-          const j = (await res.json()) as { text?: string; error?: string; code?: string };
-          if (j.code === "needs-setup") throw new Error(L("צריך להגדיר דיבור-לטקסט: הגדרות ← דיבור.", "Set up speech to text first: Settings → Speech."));
-          if (!res.ok) throw new Error(j.error ?? String(res.status));
-          if (j.text?.trim()) await api(`/api/journal/meetings/${started.day}/${started.meeting.id}/segment`, { method: "POST", body: { t, text: j.text } });
-        } catch (e) {
-          setError((e as Error).message);
-        } finally {
-          setPieces((p) => ({ ...p, done: p.done + 1 }));
-        }
-      });
+    // The microphone and the call's sound are transcribed apart, so the transcript tells "Me" from "Others".
+    const channel = (stream: MediaStream, who: "me" | "others" | undefined) => {
+      const src = ctx.createMediaStreamSource(stream);
+      const node = ctx.createScriptProcessor(4096, 1, 1);
+      src.connect(node);
+      node.connect(mute);
+      let chunks: Float32Array[] = [];
+      let peak = 0;
+      let pieceStart = Date.now();
+      const flush = () => {
+        const loud = peak > 0.02;
+        const wav = chunks.length && loud ? encodeWav(chunks, ctx.sampleRate) : undefined;
+        const t = pieceStart;
+        chunks = [];
+        peak = 0;
+        pieceStart = Date.now();
+        if (!wav) return; // silence: nothing to transcribe
+        setPieces((p) => ({ ...p, sent: p.sent + 1 }));
+        queue = queue.then(async () => {
+          try {
+            const res = await fetch(withToken("/api/speech/transcribe"), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+            const j = (await res.json()) as { text?: string; error?: string; code?: string };
+            if (j.code === "needs-setup") throw new Error(L("צריך להגדיר דיבור-לטקסט: הגדרות ← דיבור.", "Set up speech to text first: Settings → Speech."));
+            if (!res.ok) throw new Error(j.error ?? String(res.status));
+            if (j.text?.trim()) await api(`/api/journal/meetings/${started.day}/${started.meeting.id}/segment`, { method: "POST", body: { t, text: j.text, ...(who ? { who } : {}) } });
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setPieces((p) => ({ ...p, done: p.done + 1 }));
+          }
+        });
+      };
+      node.onaudioprocess = (e) => {
+        const d = e.inputBuffer.getChannelData(0);
+        chunks.push(new Float32Array(d));
+        for (let i = 0; i < d.length; i += 64) peak = Math.max(peak, Math.abs(d[i]!));
+        if (Date.now() - pieceStart >= PIECE_SEC * 1000) flush();
+      };
+      return { flush, stop: () => { node.disconnect(); src.disconnect(); } };
     };
-    node.onaudioprocess = (e) => {
-      chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-      if (Date.now() - pieceStart >= PIECE_SEC * 1000) flush();
-    };
+    // Without the call's sound, the microphone hears everyone in the room: no labels then.
+    const channels = [channel(mic, sys ? "me" : undefined), ...(sys ? [channel(sys, "others")] : [])];
     rec.current = {
       stop: async () => {
         rec.current = null;
-        flush();
-        node.disconnect();
-        sources.forEach((s) => s.disconnect());
+        channels.forEach((c) => { c.flush(); c.stop(); });
         [mic, sys].forEach((st) => st?.getTracks().forEach((t) => t.stop()));
         void ctx.close();
         setState("finishing");

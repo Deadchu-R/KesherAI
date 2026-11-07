@@ -102,8 +102,8 @@ export interface Meeting {
   title: string;
   t0: number;
   t1?: number;
-  /** What was said, in order (each piece is about half a minute). */
-  segments: Array<{ t: number; text: string }>;
+  /** What was said, in order (each piece is about half a minute); `who` tells the user's microphone from the call's sound. */
+  segments: Array<{ t: number; text: string; who?: "me" | "others" }>;
   summary?: string;
   decisions?: string[];
   /** Ids of the action items it added to the day. */
@@ -235,6 +235,17 @@ export function parseInsights(text: string): {
 }
 
 /**
+ * A meeting's transcript as text: one line per piece, with the time and who
+ * spoke ("Me" is the user's microphone, "Others" the call's sound).
+ *
+ * @param m - The meeting.
+ * @returns The transcript.
+ */
+export function meetingTranscript(m: Pick<Meeting, "segments">): string {
+  return m.segments.map((x) => `[${new Date(x.t).toTimeString().slice(0, 5)}] ${x.who === "me" ? "Me: " : x.who === "others" ? "Others: " : ""}${x.text}`).join("\n");
+}
+
+/**
  * Reads the model's meeting write-up.
  *
  * @param text - The model's answer.
@@ -317,7 +328,7 @@ class TextReader {
   }
 }
 
-const MEETING_PROMPT = `You get the transcript of a meeting recorded on the user's computer (their microphone and the call's audio, transcribed in pieces, so words may be cut or misheard). Answer with JSON only:
+const MEETING_PROMPT = `You get the transcript of a meeting recorded on the user's computer (their microphone and the call's audio, transcribed in pieces, so words may be cut or misheard; "Me:" is the user, "Others:" is everyone on the call). Answer with JSON only:
 {"summary":"3-6 plain sentences: what the meeting was about and what was agreed","decisions":["each decision, one line"],"actions":[{"text":"a concrete follow-up, in the imperative","who":"who owns it, if said"}]}
 Never invent names, numbers or decisions that are not in the transcript. Write in the language most of the meeting was in.`;
 
@@ -817,11 +828,11 @@ export class Journal {
   }
 
   /** Adds what was said in one piece of the recording. */
-  async addSegment(day: string, id: string, t: number, text: string): Promise<Meeting> {
+  async addSegment(day: string, id: string, t: number, text: string, who?: "me" | "others"): Promise<Meeting> {
     const m = await this.meeting(day, id);
     if (!m) throw new Error("No such meeting.");
     const clean = text.trim();
-    if (clean) m.segments.push({ t: Number.isFinite(t) ? t : Date.now(), text: clean.slice(0, 8000) });
+    if (clean) m.segments.push({ t: Number.isFinite(t) ? t : Date.now(), text: clean.slice(0, 8000), ...(who ? { who } : {}) });
     m.segments.sort((a, b) => a.t - b.t);
     await this.saveMeeting(day, m);
     return m;
@@ -840,7 +851,7 @@ export class Journal {
     if (!m) throw new Error("No such meeting.");
     m.t1 ??= Date.now();
     delete m.error;
-    const transcript = m.segments.map((x) => `[${new Date(x.t).toTimeString().slice(0, 5)}] ${x.text}`).join("\n");
+    const transcript = meetingTranscript(m);
     if (transcript.length < 40) {
       m.error = "Too little was said to write it up.";
       await this.saveMeeting(day, m);

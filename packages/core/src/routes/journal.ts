@@ -43,9 +43,10 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
   // /api/speech/transcribe, and adds the text here; at the end the model writes it up.
   app.post<{ Body: { title?: string } }>("/api/journal/meetings", opts, async (req) => s.journal.startMeeting(String(req.body?.title ?? "")));
   app.get<{ Params: { day: string } }>("/api/journal/meetings/:day", opts, async (req) => s.journal.meetings(req.params.day));
-  app.post<{ Params: { day: string; id: string }; Body: { t?: number; text?: string } }>("/api/journal/meetings/:day/:id/segment", opts, async (req, reply) => {
+  app.post<{ Params: { day: string; id: string }; Body: { t?: number; text?: string; who?: string } }>("/api/journal/meetings/:day/:id/segment", opts, async (req, reply) => {
     try {
-      const m = await s.journal.addSegment(req.params.day, req.params.id, Number(req.body?.t ?? Date.now()), String(req.body?.text ?? ""));
+      const who = req.body?.who === "me" || req.body?.who === "others" ? req.body.who : undefined;
+      const m = await s.journal.addSegment(req.params.day, req.params.id, Number(req.body?.t ?? Date.now()), String(req.body?.text ?? ""), who);
       return { segments: m.segments.length };
     } catch (err) {
       return reply.code(404).send({ error: (err as Error).message });

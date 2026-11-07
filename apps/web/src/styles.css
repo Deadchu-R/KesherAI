@@ -968,3 +968,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .batch-item.working img { opacity: .6; }
 .batch-item.failed img { outline: 2px solid #c44; }
 .batch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.transcript .who { font-weight: 600; margin-inline-end: 4px; }
+.transcript .who.me { color: var(--accent, #7aa2ff); }
+.transcript .who.others { color: #e0a15a; }

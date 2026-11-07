@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
-import { toast } from "../library";
+import { createConversation, toast } from "../library";
 import { MeetingRecorder } from "../MeetingRecorder";
 
 /** Hebrew or English, for this page's own words. */
@@ -13,7 +13,7 @@ interface Capture { t: number; app: string; title: string; text?: string; frame?
 interface Observation { id: string; t0: number; t1: number; text: string; kind?: string }
 interface Action { id: string; t: number; text: string; who?: string; state: "open" | "done" | "dismissed"; day?: string }
 interface Stats { activeMinutes: number; apps: Array<{ app: string; minutes: number }>; switches: number; longestFocus: { app: string; minutes: number }; meetings: Array<{ t0: number; t1: number; title: string }>; hours: number[] }
-interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string }>; summary?: string; decisions?: string[]; error?: string }
+interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string; who?: "me" | "others" }>; summary?: string; decisions?: string[]; error?: string }
 interface DayData { day: string; captures: Capture[]; meetings: Meeting[]; insights: { observations: Observation[]; actions: Action[]; summarizedTo: number; error?: string }; stats: Stats; entities: Array<{ id: string; name: string; kind: string }> }
 interface Entity { id: string; name: string; kind: "person" | "project" | "company" | "concept"; summary?: string; aliases: string[]; parent?: string; hidden?: boolean; days: string[]; lastSeen: number }
 interface SearchHit { kind: "screen" | "observation" | "entity" | "action" | "meeting"; day: string; t: number; title: string; snippet: string; frame?: string }
@@ -294,15 +294,28 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
       <div className="row small">
         <button type="button" className="link-btn" onClick={() => setOpen(!open)}>{open ? L("הסתר תמלול", "Hide transcript") : L(`תמלול (${m.segments.length})`, `Transcript (${m.segments.length})`)}</button>
         {(m.error || !m.summary) && <button type="button" className="link-btn" disabled={busy} onClick={() => { setBusy(true); void api(`/api/journal/meetings/${day}/${m.id}/finish`, { method: "POST", body: {} }).then(reload).finally(() => setBusy(false)); }}>{busy ? L("כותב…", "Writing…") : L("סכם שוב", "Write up again")}</button>}
+        {m.segments.length > 0 && <button type="button" className="link-btn" onClick={() => void askAbout(m)}>{L("שאל על הפגישה", "Ask about this meeting")}</button>}
         <button type="button" className="link-btn" onClick={() => void api(`/api/journal/meetings/${day}/${m.id}`, { method: "DELETE" }).then(reload)}>{L("מחק", "Delete")}</button>
       </div>
       {open && (
         <ol className="transcript">
-          {m.segments.map((x) => <li key={x.t}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.text}</li>)}
+          {m.segments.map((x) => <li key={`${x.t}-${x.who ?? ""}`}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.who && <strong className={`who ${x.who}`}>{x.who === "me" ? L("אני", "Me") : L("האחרים", "Others")}:</strong>} {x.text}</li>)}
         </ol>
       )}
     </article>
   );
+}
+
+/** Opens a chat about a meeting: its write-up and transcript go in the first message. */
+async function askAbout(m: Meeting): Promise<void> {
+  const lines = m.segments.map((x) => `[${hhmm(x.t)}] ${x.who === "me" ? "Me: " : x.who === "others" ? "Others: " : ""}${x.text}`).join("\n");
+  const id = await createConversation({ kind: "chat" });
+  if (!id) return;
+  const text = L(
+    `זו הפגישה "${m.title}". אני אשאל עליה שאלות; ענה רק לפי מה שנאמר בה. בינתיים אשר בקצרה שקראת.`,
+    `This is the meeting "${m.title}". I will ask questions about it; answer only from what was said. For now, just confirm briefly that you read it.`,
+  ) + `\n\n${m.summary ? `${L("סיכום", "Summary")}: ${m.summary}\n\n` : ""}${L("תמלול", "Transcript")} ("Me" = ${L("אני", "me")}):\n${lines.slice(-60_000)}`;
+  await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text } }).catch(() => undefined);
 }
 
 function Replay({ data, at }: { data: DayData; at: number | null }) {

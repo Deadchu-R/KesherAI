@@ -148,7 +148,7 @@ Working on now, in this order:
 
 Later (priority to be decided):
 
-- Meetings: tell speakers apart, a chat beside each meeting, transcript that follows playback
+- Meetings: tell speakers apart ✅ (me and the others, from the microphone and the call apart), a chat about each meeting ✅; telling the others apart from each other and a transcript that follows playback ⬜ (needs the recording kept)
 - Browser tasks through an extension, signed in where the user already is
 - Send a model from the computer to the phone
 - LoRAs on the Images page ✅ (find, choose with a strength, remove); batch image tools ✅ (remove background with ormbg in the window, 4× upscale with Real-ESRGAN, ZIP)

@@ -121,11 +121,11 @@ test("meetings: transcript pieces, write-up, actions join the day, search", asyn
   }));
   const { day, meeting } = await j.startMeeting("Weekly sync | Microsoft Teams");
   const t = Date.now();
-  await j.addSegment(day, meeting.id, t + 2000, "and then we ship on Thursday, right?");
-  await j.addSegment(day, meeting.id, t + 1000, "Let's talk about the release date.");
+  await j.addSegment(day, meeting.id, t + 2000, "and then we ship on Thursday, right?", "others");
+  await j.addSegment(day, meeting.id, t + 1000, "Let's talk about the release date.", "me");
   await j.addSegment(day, meeting.id, t, "   ");
   const m = await j.finishMeeting(day, meeting.id);
-  assert.match(sent, /release date[\s\S]*Thursday/);
+  assert.match(sent, /Me: Let's talk about the release date[\s\S]*Others: and then we ship on Thursday/);
   assert.equal(m.summary, "Agreed to ship on Thursday.");
   assert.deepEqual(m.decisions, ["Ship Thursday"]);
   assert.equal(m.segments.length, 2);
