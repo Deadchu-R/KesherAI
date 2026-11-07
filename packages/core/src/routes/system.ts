@@ -5,6 +5,7 @@ import { discoverSkills, loadSkillBody } from "@kesher/skills";
 import { join } from "node:path";
 import { networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
+import { isLocalRequest } from "../auth.js";
 
 /** Version of the core server API. */
 export const CORE_VERSION = "0.3.2";
@@ -60,7 +61,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
   if (features.remote) {
     /** Only callable from this computer: shows the token to pair a phone. */
     app.get("/api/remote", async (req, reply) => {
-      if (req.ip !== "127.0.0.1" && req.ip !== "::1" && req.ip !== "::ffff:127.0.0.1") {
+      if (!isLocalRequest(req)) {
         return reply.code(403).send({ error: "Only available on this computer" });
       }
       // Addresses other devices can use: the home network, and Tailscale (100.64.0.0/10) if installed.
@@ -74,7 +75,37 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
           mac: a.mac,
           broadcast: broadcastOf(a.address, a.netmask),
         }));
-      return { enabled: s.config.remote.enabled, keepAwake: s.config.remote.keepAwake, token: s.config.remote.token, port: s.config.port, addresses };
+      return {
+        enabled: s.config.remote.enabled,
+        keepAwake: s.config.remote.keepAwake,
+        anywhere: s.config.remote.anywhere,
+        tunnel: s.tunnel.status(),
+        token: s.config.remote.token,
+        port: s.config.port,
+        addresses,
+      };
+    });
+
+    /**
+     * "Access from anywhere": turns the Cloudflare tunnel on or off and
+     * remembers the choice. Only from this computer. Body: `{ on: boolean }`.
+     * Turning it on downloads cloudflared the first time (about 60 MB).
+     */
+    app.post<{ Body: { on?: boolean } }>("/api/remote/anywhere", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      const on = req.body?.on === true;
+      s.config.remote.anywhere = on;
+      await s.saveConfig();
+      if (!on) {
+        s.tunnel.stop();
+        return s.tunnel.status();
+      }
+      try {
+        await s.tunnel.start(s.config.port);
+      } catch (err) {
+        return reply.code(502).send({ ...s.tunnel.status(), error: (err as Error).message });
+      }
+      return s.tunnel.status();
     });
   }
 }

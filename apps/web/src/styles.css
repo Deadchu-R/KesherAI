@@ -221,3 +221,5 @@ button.on { border-color: var(--accent); }
 .hub-row.open .hub-summary:hover { -webkit-line-clamp: unset; }
 .small { font-size: 13px; }
 @media (max-width: 760px) { .hub-head { grid-template-areas: "name" "stats" "facts"; grid-template-columns: 1fr; } }
+
+.anywhere { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }

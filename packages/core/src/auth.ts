@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 
 /**
  * Whether a request comes from this computer.
@@ -10,6 +10,31 @@ import type { FastifyInstance } from "fastify";
 export function isLoopback(ip: string): boolean {
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
+
+/** Headers a tunnel or proxy adds. A request carrying one came from outside, even if it reached us over 127.0.0.1. */
+const FORWARDED = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip"];
+
+/**
+ * Whether a request really comes from this computer: from a loopback
+ * address and not forwarded by a tunnel (Cloudflare connects over
+ * 127.0.0.1, so the address alone is not enough).
+ *
+ * @param request - The request.
+ * @returns `true` only for requests made on this computer.
+ */
+export function isLocalRequest(request: Pick<FastifyRequest, "ip" | "headers">): boolean {
+  return isLoopback(request.ip) && !FORWARDED.some((h) => request.headers[h] !== undefined);
+}
+
+/** The visitor's address, for counting failed attempts: the real one behind a tunnel. */
+function clientAddress(request: Pick<FastifyRequest, "ip" | "headers">): string {
+  const cf = request.headers["cf-connecting-ip"];
+  return (Array.isArray(cf) ? cf[0] : cf) ?? request.ip;
+}
+
+const failures = new Map<string, { count: number; since: number }>();
+const MAX_FAILURES = 20;
+const WINDOW_MS = 10 * 60_000;
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -32,14 +57,22 @@ function safeEqual(a: string, b: string): boolean {
  */
 export function registerRemoteAuth(app: FastifyInstance, getToken: () => string | undefined): void {
   app.addHook("onRequest", async (request, reply) => {
-    if (isLoopback(request.ip)) return;
+    if (isLocalRequest(request)) return;
     const path = request.url.split("?")[0] ?? "";
     if (!path.startsWith("/api/") && path !== "/api" && !path.startsWith("/v1/") && path !== "/v1") return;
     const token = getToken();
     const header = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     const query = (request.query as Record<string, string | undefined> | undefined)?.token;
     const given = header ?? query;
+    const who = clientAddress(request);
+    const f = failures.get(who);
+    if (f && Date.now() - f.since < WINDOW_MS && f.count >= MAX_FAILURES) {
+      await reply.code(429).send({ error: "Too many wrong tokens. Try again in a few minutes." });
+      return;
+    }
     if (!token || !given || !safeEqual(given, token)) {
+      const fresh = !f || Date.now() - f.since >= WINDOW_MS;
+      failures.set(who, { count: fresh ? 1 : f.count + 1, since: fresh ? Date.now() : f.since });
       await reply.code(401).send({ error: "Remote access needs a valid token" });
     }
   });

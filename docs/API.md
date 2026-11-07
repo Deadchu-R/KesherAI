@@ -11,12 +11,16 @@ The request and response types referenced below are exported from `@kesher/share
 
 ## System
 
+Requests that arrive through a tunnel or proxy (they carry `cf-connecting-ip`, `x-forwarded-for` and similar headers) are always treated as remote, even though they reach the server over 127.0.0.1. After 20 wrong tokens from one address in 10 minutes, it gets `429` for a while.
+
+
 | Method & path | Description |
 | --- | --- |
 | `GET /api/health` | `{ ok, version, productName, features, remote: { enabled } }` |
 | `GET /api/categories` | All categories (built-in and from plugins): `CategoryDefinition[]` |
 | `GET /api/hardware` | `{ platform, cpu, ramTotal, ramFree, gpus[], unifiedMemory }` |
-| `GET /api/remote` | Only from this computer. `{ enabled, keepAwake, token, port, addresses: [{ address, tailscale, mac, broadcast }] }` for pairing a device. `mac` and `broadcast` let the phone wake this computer ([WAKE_ON_LAN.md](WAKE_ON_LAN.md)) |
+| `POST /api/remote/anywhere` | Only from this computer. `{ on }` — "Access from anywhere": starts or stops a Cloudflare quick tunnel (downloads `cloudflared` the first time). Returns `{ installed, running, url?, error? }` |
+| `GET /api/remote` | Only from this computer (never through a tunnel). Also returns `anywhere` and `tunnel`. `{ enabled, keepAwake, token, port, addresses: [{ address, tailscale, mac, broadcast }] }` for pairing a device. `mac` and `broadcast` let the phone wake this computer ([WAKE_ON_LAN.md](WAKE_ON_LAN.md)) |
 | `GET /api/plugins` | Plugins found, with `status` (`active`, `disabled`, `error`) and `error` |
 | `GET /api/tools` | Tools registered by plugins: `{ name, description, inputSchema, pluginId }[]` |
 | `POST /api/tools/:name` | Runs a tool. Body: the tool's input. Returns `{ result }` |

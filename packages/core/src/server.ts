@@ -16,6 +16,7 @@ import { ConversationManager } from "./conversations.js";
 import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
 import { DriveSync } from "./drive-sync.js";
+import { Tunnel } from "./tunnel.js";
 import { registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
@@ -128,12 +129,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
 
+  const downloads = new DownloadManager();
   const services: KesherServices = {
     config,
     paths,
     registry,
     assets,
-    downloads: new DownloadManager(),
+    downloads,
     plugins,
     engine,
     library,
@@ -141,6 +143,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     updater: new Updater(),
     google,
     driveSync,
+    tunnel: new Tunnel(join(paths.engines, "cloudflared"), downloads),
     autodetected,
     saveConfig: persist,
     registerEngineProvider: () => {
@@ -188,9 +191,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     async listen() {
       const host = features.remote && config.remote.enabled ? "0.0.0.0" : "127.0.0.1";
       await app.listen({ port: config.port, host });
+      if (config.remote.anywhere) {
+        services.tunnel.start(config.port).catch((err: Error) => console.warn(`[tunnel] ${err.message}`));
+      }
       return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${config.port}`;
     },
     async close() {
+      services.tunnel.stop();
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();

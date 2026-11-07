@@ -5,7 +5,8 @@ import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
 import { assertWritableFolder } from "../library.js";
-import { isLoopback } from "../auth.js";
+import { isLocalRequest } from "../auth.js";
+import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
 
 const MODES: PermissionMode[] = ["ask", "auto-edit", "auto"];
 
@@ -195,8 +196,13 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
 
   app.put<{ Body: { activeModels?: Record<string, string>; syncFolder?: string | null; remote?: { enabled?: boolean; keepAwake?: boolean } } }>("/api/settings", async (req, reply) => {
     const b = req.body ?? {};
-    if (b.remote && !isLoopback(req.ip)) return reply.code(403).send({ error: "Remote access can only be changed on this computer." });
-    if (typeof b.remote?.enabled === "boolean") s.config.remote.enabled = b.remote.enabled;
+    if (b.remote && !isLocalRequest(req)) return reply.code(403).send({ error: "Remote access can only be changed on this computer." });
+    let firewall: FirewallResult | undefined;
+    if (typeof b.remote?.enabled === "boolean") {
+      s.config.remote.enabled = b.remote.enabled;
+      // Let the phone through Windows Firewall (Windows asks the user once).
+      if (b.remote.enabled) firewall = await allowThroughFirewall(s.config.port).catch(() => undefined);
+    }
     if (typeof b.remote?.keepAwake === "boolean") s.config.remote.keepAwake = b.remote.keepAwake;
     if (b.activeModels) {
       s.config.activeModels = Object.fromEntries(Object.entries(b.activeModels).filter(([, v]) => typeof v === "string" && v));
@@ -223,6 +229,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       syncFolder: s.config.syncFolder ?? null,
       remote: { enabled: s.config.remote.enabled, keepAwake: s.config.remote.keepAwake },
       ...(synced !== undefined ? { synced } : {}),
+      ...(firewall ? { firewall } : {}),
     };
   });
 

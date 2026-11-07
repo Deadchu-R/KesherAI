@@ -15,7 +15,9 @@ export { ConversationManager, modelTurnFor, type NewConversation } from "./conve
 export { Updater, type VersionInfo, type UpdateCheck, type UpdateProgress } from "./updates.js";
 export { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleConfig, type GoogleEndpoints, type RemoteItem } from "./google.js";
 export { DriveSync, type SyncResult } from "./drive-sync.js";
-export { isLoopback } from "./auth.js";
+export { isLoopback, isLocalRequest } from "./auth.js";
 export type { KesherServices } from "./services.js";
 export { CORE_VERSION } from "./routes/system.js";
 export * from "./model-scan.js";
+export * from "./tunnel.js";
+export { allowThroughFirewall, type FirewallResult } from "./firewall.js";

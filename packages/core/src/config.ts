@@ -75,6 +75,8 @@ export const KesherConfigSchema = z.object({
       token: z.string().optional(),
       /** Keep the computer from sleeping while remote access is on (desktop app only). */
       keepAwake: z.boolean().default(false),
+      /** "Access from anywhere": run a Cloudflare tunnel while KesherAI runs. */
+      anywhere: z.boolean().default(false),
     })
     .default({}),
   /** Per-plugin settings, keyed by plugin id. */

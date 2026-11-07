@@ -5,7 +5,7 @@ import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { scanComputer, scanFolder } from "../model-scan.js";
-import { isLoopback } from "../auth.js";
+import { isLocalRequest } from "../auth.js";
 import { assertWritableFolder } from "../library.js";
 import { engineRoutes } from "./engine.js";
 
@@ -68,7 +68,7 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
    * computer. Body: `{ modelsDir?: string | null, folders?: { folder, source }[] }`.
    */
   app.put<{ Body: { modelsDir?: string | null; folders?: Array<{ folder: string; source?: string }> } }>("/api/models/folders", async (req, reply) => {
-    if (!isLoopback(req.ip)) return reply.code(403).send({ error: "Model folders can only be changed on this computer." });
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Model folders can only be changed on this computer." });
     const b = req.body ?? {};
     try {
       if (b.modelsDir !== undefined) {
@@ -103,7 +103,7 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
    * Read-only: nothing is added until the user saves the folders.
    */
   app.post("/api/models/scan", async (req, reply) => {
-    if (!isLoopback(req.ip)) return reply.code(403).send({ error: "Scanning runs only on this computer." });
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Scanning runs only on this computer." });
     const hw = await detectHardwareCached();
     const results = await scanComputer(s.config.modelFolders);
     return results.map((r) => ({

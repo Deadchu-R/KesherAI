@@ -9,7 +9,8 @@ interface Settings { activeModels: Record<string, string>; syncFolder: string | 
 interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[] }
 interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; fromSource?: boolean; finishedAt?: string }
 interface Remote {
-  enabled: boolean; keepAwake: boolean; token: string; port: number;
+  enabled: boolean; keepAwake: boolean; anywhere: boolean; token: string; port: number;
+  tunnel: { installed: boolean; running: boolean; url?: string; message?: string; error?: string };
   addresses: Array<{ address: string; tailscale: boolean; mac: string; broadcast: string }>;
 }
 
@@ -276,6 +277,28 @@ function Phone() {
   const [copied, setCopied] = useState("");
   const [restart, setRestart] = useState(false);
   const [apkQr, setApkQr] = useState("");
+  const [note, setNote] = useState("");
+  const [anyBusy, setAnyBusy] = useState(false);
+  const [anyQr, setAnyQr] = useState("");
+  const anywhereLink = remote?.tunnel.url ? `${remote.tunnel.url}/?token=${encodeURIComponent(remote.token)}` : "";
+  useEffect(() => {
+    if (!anywhereLink) return setAnyQr("");
+    void QRCode.toDataURL(`kesherai://connect?server=${encodeURIComponent(anywhereLink)}`, { margin: 1, width: 220 }).then(setAnyQr);
+  }, [anywhereLink]);
+  const setAnywhere = async (on: boolean) => {
+    if (!remote) return;
+    setAnyBusy(true);
+    setNote("");
+    try {
+      const tunnel = await api<Remote["tunnel"]>("/api/remote/anywhere", { method: "POST", body: { on } });
+      setRemote({ ...remote, anywhere: on, tunnel });
+    } catch (e) {
+      setNote((e as Error).message);
+      setRemote({ ...remote, anywhere: on, tunnel: { ...remote.tunnel, running: false } });
+    } finally {
+      setAnyBusy(false);
+    }
+  };
   useEffect(() => {
     void QRCode.toDataURL(APK_URL, { margin: 1, width: 140 }).then(setApkQr);
     api<Remote>("/api/remote")
@@ -300,8 +323,9 @@ function Phone() {
   }, []);
   if (!remote) return null;
   const setRemote2 = async (patch: { enabled?: boolean; keepAwake?: boolean }) => {
-    await api("/api/settings", { method: "PUT", body: { remote: patch } });
+    const res = await api<{ firewall?: string }>("/api/settings", { method: "PUT", body: { remote: patch } });
     setRemote({ ...remote, ...patch });
+    if (res.firewall === "declined") setNote(t("firewallDeclined"));
     if (patch.enabled !== undefined) {
       // The server only starts listening for other devices after a restart; the desktop app does it right away.
       if (desktop()?.restart) void desktop()!.restart!();
@@ -321,6 +345,26 @@ function Phone() {
         <input type="checkbox" checked={remote.keepAwake} disabled={!remote.enabled} onChange={(e) => void setRemote2({ keepAwake: e.target.checked })} />
         {t("keepAwake")}
       </label>
+      {note && <p className="error">{note}</p>}
+      <div className="card stack anywhere">
+        <label className="check">
+          <input type="checkbox" checked={remote.anywhere} disabled={anyBusy} onChange={(e) => void setAnywhere(e.target.checked)} />
+          <strong>{t("anywhere")}</strong>
+        </label>
+        <p className="muted">{t("anywhereHint")}</p>
+        {anyBusy && <p className="muted">{remote.tunnel.installed ? t("anywhereConnecting") : t("anywhereDownloading")}</p>}
+        {remote.anywhere && remote.tunnel.error && !anyBusy && <p className="error">{remote.tunnel.error}</p>}
+        {anyQr && (
+          <figure className="qr">
+            <img src={anyQr} alt={t("scanToConnect")} width={220} height={220} />
+            <figcaption className="mono muted" dir="ltr">{remote.tunnel.url}</figcaption>
+            <button type="button" onClick={() => void navigator.clipboard?.writeText(anywhereLink).then(() => setCopied(anywhereLink))}>
+              {copied === anywhereLink ? t("copied") : t("copyLink")}
+            </button>
+          </figure>
+        )}
+        {anyQr && <p className="muted small">{t("anywhereNote")}</p>}
+      </div>
       <p className="muted">{t("wakeHint")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/WAKE_ON_LAN.md" target="_blank" rel="noreferrer">docs/WAKE_ON_LAN.md</a></p>
       <div className="row" style={{ alignItems: "flex-start" }}>
         {qr.map((q) => (

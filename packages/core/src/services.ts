@@ -9,6 +9,7 @@ import type { ConversationManager } from "./conversations.js";
 import type { Updater } from "./updates.js";
 import type { GoogleDrive } from "./google.js";
 import type { DriveSync } from "./drive-sync.js";
+import type { Tunnel } from "./tunnel.js";
 
 /**
  * Everything a route needs, created once in `createKesherServer` and passed
@@ -34,6 +35,8 @@ export interface KesherServices {
   google: GoogleDrive;
   /** Keeps the library in step with Google Drive. */
   driveSync: DriveSync;
+  /** "Access from anywhere" (Cloudflare tunnel). */
+  tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */
   autodetected: Set<string>;
   /** Persists `config` to disk. */

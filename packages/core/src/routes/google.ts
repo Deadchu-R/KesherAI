@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { branding } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
-import { isLoopback } from "../auth.js";
+import { isLocalRequest } from "../auth.js";
 
 function page(title: string, text: string): string {
   const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -45,7 +45,7 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
 
   /** Returns the Google consent URL to open in the browser. */
   app.post("/api/google/connect", async (req, reply) => {
-    if (!isLoopback(req.ip)) return reply.code(403).send({ error: "Connect Google Drive from the computer that runs KesherAI." });
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Connect Google Drive from the computer that runs KesherAI." });
     try {
       return { url: s.google.authUrl(`http://127.0.0.1:${s.config.port}/api/google/callback`) };
     } catch (err) {
