@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode } from "@kesher/shared";
 import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "../api";
@@ -255,6 +256,21 @@ export function ConversationPage({ id }: { id: string }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
+  const [titleMenu, setTitleMenu] = useState(false);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setSlot(document.getElementById("appbar-title")), []);
+  useEffect(() => {
+    if (!titleMenu) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest?.(".bar-conv")) setTitleMenu(false);
+    };
+    addEventListener("mousedown", close);
+    addEventListener("keydown", close);
+    return () => {
+      removeEventListener("mousedown", close);
+      removeEventListener("keydown", close);
+    };
+  }, [titleMenu]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [ideOpen, setIdeOpen] = useState<boolean | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -396,17 +412,30 @@ export function ConversationPage({ id }: { id: string }) {
 
   return (
     <>
-      <div className="topbar">
-        {editingTitle ? (
-          <form className="row grow" onSubmit={(e) => { e.preventDefault(); setEditingTitle(false); void patch({ title: (e.currentTarget.elements.namedItem("title") as HTMLInputElement).value }); }}>
-            <input name="title" className="grow" defaultValue={title} autoFocus aria-label={t("rename")} />
-            <button type="submit">{t("save")}</button>
+      {slot && createPortal(
+        editingTitle ? (
+          <form className="bar-rename" onSubmit={(e) => { e.preventDefault(); setEditingTitle(false); void patch({ title: (e.currentTarget.elements.namedItem("title") as HTMLInputElement).value }); }}>
+            <input name="title" defaultValue={title} autoFocus aria-label={t("rename")} onBlur={() => setEditingTitle(false)} onKeyDown={(e) => e.key === "Escape" && setEditingTitle(false)} />
           </form>
         ) : (
-          <button type="button" className="title-btn grow" onClick={() => setEditingTitle(true)} title={t("rename")}>
-            {conv.kind === "code" ? "</> " : ""}{title}
-          </button>
-        )}
+          <div className="bar-conv">
+            <button type="button" className="bar-title" aria-haspopup="menu" aria-expanded={titleMenu} aria-label={t("convMenu")} onClick={() => setTitleMenu(!titleMenu)}>
+              <span className="bar-title-text" dir="auto">{conv.kind === "code" ? "</> " : ""}{title}</span>
+              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            {titleMenu && (
+              <div className="bar-pop" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); setEditingTitle(true); }}>{t("rename")}</button>
+                {info?.workspace && desktop()?.openPath && <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); void desktop()!.openPath!(info.workspace!); }}>{t("openFolder")}</button>}
+                <button type="button" role="menuitem" className="danger" onClick={() => { setTitleMenu(false); void remove(); }}>{t("delete")}</button>
+              </div>
+            )}
+          </div>
+        ),
+        slot,
+      )}
+      <div className="topbar conv-tools" data-conv-kind={conv.kind}>
+        <span className="grow" />
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
         )}
@@ -416,7 +445,6 @@ export function ConversationPage({ id }: { id: string }) {
         <button type="button" className={filesOpen ? "on" : ""} aria-pressed={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           {t("files")}{fileCount ? ` (${fileCount})` : ""}
         </button>
-        <button type="button" onClick={() => void remove()} aria-label={t("delete")}>{t("delete")}</button>
       </div>
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}

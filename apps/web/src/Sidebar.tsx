@@ -3,6 +3,7 @@ import { branding, type ConversationSummary } from "@kesher/shared";
 import { api, appHome } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
+import { NEW_CODE_EVENT } from "./AppBar";
 
 /** A dialog for a new code session or a new project. */
 function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () => void }) {
@@ -119,6 +120,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const activeId = hash.startsWith("#/c/") ? hash.slice(4) : "";
 
   useEffect(() => {
+    const open = () => setDialog("code");
+    addEventListener(NEW_CODE_EVENT, open);
+    return () => removeEventListener(NEW_CODE_EVENT, open);
+  }, []);
+
+  useEffect(() => {
     api<{ version: string; commit?: string }>("/api/version")
       .then((v) => setVersion(`v${v.version}${v.commit ? ` · ${v.commit}` : ""}`))
       .catch(() => undefined);
@@ -134,16 +141,6 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
-      <div className="brand">
-        {/* The knot: two rings linked, one passing over the other. */}
-        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="knot">
-          <circle cx="10" cy="14" r="6" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
-          <circle cx="18" cy="14" r="6" fill="none" stroke="var(--text)" strokeWidth="2.4" />
-          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--panel)" strokeWidth="5" />
-          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" />
-        </svg>
-        {branding.productName}
-      </div>
       <div className="sidebar-actions">
         <a className="nav-link new-chat" href="#/" aria-current={hash === "#/" ? "page" : undefined}>
           <span className="plus" aria-hidden>+</span> {t("newChat")}
@@ -201,9 +198,17 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       </div>
 
       <div className="sidebar-foot">
-        <span>
-          <span style={{ color: online ? "var(--good)" : "var(--bad)" }}>●</span> {location.host} · {version}
-        </span>
+      <div className="brand small-brand">
+        {/* The knot: two rings linked, one passing over the other. */}
+        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="knot">
+          <circle cx="10" cy="14" r="6" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
+          <circle cx="18" cy="14" r="6" fill="none" stroke="var(--text)" strokeWidth="2.4" />
+          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--panel)" strokeWidth="5" />
+          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" />
+        </svg>
+        <span>{branding.productName}<small dir="ltr"><span style={{ color: online ? "var(--good)" : "var(--bad)" }}>●</span> {location.host} · {version}</small></span>
+      </div>
+
         <button
           type="button"
           onClick={() => {

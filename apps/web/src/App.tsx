@@ -1,3 +1,4 @@
+import { AppBar } from "./AppBar";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
 import { useEffect, useState } from "react";
@@ -93,7 +94,26 @@ export function App() {
   const hash = useHash();
   const [, rerender] = useState(0);
   const [online, setOnline] = useState<boolean | null>(null);
+  const narrow = () => matchMedia("(max-width: 760px)").matches;
   const [menuOpen, setMenuOpen] = useState(false);
+  // On a computer the sidebar can be hidden with the top bar's toggle (remembered); on a phone it is a menu.
+  const [sidebarHidden, setSidebarHidden] = useState(() => {
+    try {
+      return localStorage.getItem("kesher-sidebar") === "hidden";
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebar = () => {
+    if (narrow()) return setMenuOpen(!menuOpen);
+    const next = !sidebarHidden;
+    setSidebarHidden(next);
+    try {
+      localStorage.setItem("kesher-sidebar", next ? "hidden" : "shown");
+    } catch {
+      // not stored; fine
+    }
+  };
   const message = useToast();
 
   // On a phone the sidebar is a full-screen menu; close it when the user navigates.
@@ -112,13 +132,8 @@ export function App() {
   else page = <Home />;
 
   return (
-    <div className="app">
-      <header className="mobile-bar">
-        <button type="button" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
-          {menuOpen ? "✕" : "☰"}
-        </button>
-        <strong>KesherAI</strong>
-      </header>
+    <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
+      <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <main className="main">
         {online === false && <p className="error" style={{ padding: "12px 28px" }}>{t("serverOffline")}</p>}
