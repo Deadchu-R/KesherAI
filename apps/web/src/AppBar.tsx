@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, appHome } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
+import { ComputerHub } from "./ComputerHub";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -111,10 +112,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {/* Pages render their own title here with a portal; React leaves this element's children to them. */}
           <div id="appbar-title" className="appbar-slot" />
         </div>
-        <span className={`bar-status ${online ? "ok" : online === false ? "off" : ""}`} title={status} aria-label={status} role="status">
-          {Icon.computer}
-          <span className="dot" aria-hidden="true" />
-        </span>
+        <ComputerHub online={online} status={status} icon={Icon.computer} />
       </div>
     </header>
   );

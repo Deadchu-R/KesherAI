@@ -73,7 +73,7 @@ async function createWindow(url: string): Promise<void> {
     minWidth: 900,
     minHeight: 600,
     title: branding.productName,
-    backgroundColor: "#0E1014",
+    backgroundColor: "#121213",
     webPreferences: {
       contextIsolation: true,
       sandbox: true,

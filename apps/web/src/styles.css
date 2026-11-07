@@ -1,26 +1,30 @@
-/* Design tokens. KesherAI's look: deep ink blue, one periwinkle "thread"
-   accent for what is selected or yours, amber only for things running now.
+/* Design tokens. KesherAI's look: neutral graphite (no tint), one
+   periwinkle "thread" accent for what is selected or yours, amber only for
+   things running now. Depth comes from light, not borders: surfaces get
+   lighter as they come forward.
    A fork restyles the app here and in @kesher/shared's branding.config.ts.
    The Android app's connect screen (apps/android/www) uses the same values. */
 :root {
-  --bg: #0f1420;
-  --panel: #131927;
-  --panel-2: #182032;
-  --raised: #1f2840;
-  --border: #232c42;
-  --border-strong: #2c3650;
-  --text: #e8ecf4;
-  --text-2: #c3cad9;
-  --muted: #9aa3b8;
-  --accent: #8b9cff;
-  --accent-ink: #0f1420;
-  --accent-soft: rgba(139, 156, 255, 0.14);
+  --bg: #121213;
+  --panel: #18181a;
+  --panel-2: #1f1f22;
+  --raised: #29292d;
+  --border: rgb(255 255 255 / 0.07);
+  --border-strong: rgb(255 255 255 / 0.12);
+  --text: #ededee;
+  --text-2: #c6c6cb;
+  --muted: #94949c;
+  --accent: #98a3ff;
+  --accent-ink: #121213;
+  --accent-soft: rgb(152 163 255 / 0.13);
   --live: #f2b66d;
   --good: #6fd3a5;
   --warn: #f2b66d;
   --bad: #f08a8a;
-  --radius: 14px;
+  --radius: 16px;
   --radius-sm: 10px;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.22);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.35), 0 24px 64px rgb(0 0 0 / 0.45);
   font-family: Rubik, system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.5;
@@ -150,7 +154,7 @@ label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: c
 .tool.ok .tool-state { color: var(--good); }
 .tool.fail .tool-state { color: var(--bad); }
 .asset { max-width: min(420px, 100%); border-radius: 10px; margin-top: 8px; display: block; }
-.approval { border-color: var(--warn); background: #1e1910; display: flex; flex-direction: column; gap: 10px; }
+.approval { border-color: rgb(242 182 109 / 0.45); background: #1f1b15; display: flex; flex-direction: column; gap: 10px; }
 .question { border-color: var(--accent); display: flex; flex-direction: column; gap: 10px; }
 .question.done { border-color: var(--border); }
 .approval .ap-why, .approval .ap-what { display: flex; flex-direction: column; gap: 4px; }
@@ -546,3 +550,48 @@ html, body { overflow-x: hidden; }
 .cc-banner { position: fixed; top: calc(var(--bar-h) + 8px); inset-inline: 0; margin: 0 auto; width: fit-content; max-width: 92vw; z-index: 40; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px; background: #3a1d1d; border: 1px solid #7a3434; color: #ffd9d9; font-size: 13.5px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); }
 .cc-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b; animation: live-pulse 1s infinite; }
 .cc-banner button { height: 28px; padding: 0 14px; border-radius: 999px; border: 0; background: #ff6b6b; color: #2a0e0e; font-weight: 600; }
+
+/* ---------- computer hub (hover the computer icon) ---------- */
+.hub { position: relative; }
+.hub .bar-status { border: 0; background: transparent; border-radius: 8px; padding: 0; }
+.hub .bar-status:hover, .hub .bar-status[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+.hub-pop { position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 35; width: 320px; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--border-strong); box-shadow: 0 24px 60px rgb(0 0 0 / .5); }
+.hub-head { display: flex; gap: 10px; align-items: center; }
+.hub-head > div { display: flex; flex-direction: column; min-width: 0; }
+.hub-head strong { font-weight: 500; }
+.hub-led { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 4px rgb(255 120 120 / .12); flex: none; }
+.hub-led.ok { background: var(--good); box-shadow: 0 0 0 4px rgb(111 211 165 / .14); }
+.hub-line { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-meter { display: grid; gap: 5px; font-size: 12.5px; }
+.hub-meter-top { display: flex; justify-content: space-between; gap: 8px; }
+.hub-bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.hub-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.hub-bar.hot > span { background: var(--live); }
+.hub-facts { display: grid; gap: 4px; border-top: 1px solid var(--border); padding-top: 10px; }
+.hub-facts p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-actions { display: flex; gap: 14px; font-size: 13px; }
+.hub-actions a { color: var(--accent); text-decoration: none; }
+
+/* ---------- modern polish: light instead of lines, glass top bar, softer controls ---------- */
+.appbar { background: rgb(18 18 19 / 0.72); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); border-bottom-color: var(--border); }
+.appbar-start, .app.sidebar-hidden .appbar-start { background: transparent; border-inline-end: 0; }
+.sidebar { background: var(--bg); border-inline-end: 1px solid var(--border); }
+.nav-link { border-radius: 9px; transition: background .12s, color .12s; }
+.nav-link[aria-current="page"] { background: var(--raised); }
+.card { border-color: var(--border); background: var(--panel); border-radius: var(--radius); }
+button { transition: background .12s, border-color .12s, color .12s, transform .06s; }
+button:active:not(:disabled) { transform: translateY(0.5px); }
+button.primary { box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 4px 14px rgb(152 163 255 / 0.18); }
+input, select, textarea { transition: border-color .12s, box-shadow .12s; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
+.composer .box, .home-composer .box { border-radius: 20px; background: var(--panel-2); border-color: var(--border-strong); box-shadow: var(--shadow-1); }
+.composer .box:focus-within, .home-composer .box:focus-within { border-color: rgb(152 163 255 / 0.45); box-shadow: var(--shadow-1), 0 0 0 4px var(--accent-soft); }
+.msg.user { background: var(--raised); border-radius: 18px; }
+.bar-pop, .model-pop, .team-pop, .hub-pop { background: rgb(31 31 34 / 0.92); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: var(--shadow-2); }
+.greeting { font-weight: 400; letter-spacing: -0.025em; }
+.pill { border-color: var(--border-strong); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.09); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 0.16); background-clip: padding-box; border: 2px solid transparent; }
+::-webkit-scrollbar-track { background: transparent; }
+.box textarea, .box textarea:focus-visible { border: 0; background: transparent; box-shadow: none; outline: none; }
