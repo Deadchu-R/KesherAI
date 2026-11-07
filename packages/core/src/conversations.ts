@@ -120,7 +120,7 @@ export class ConversationManager {
       };
       /** Computer-control tools for a conversation (empty when the user has not turned it on). */
       computerTools?(conversationId: string): AgentTool[];
-      /** Tools from the connected MCP servers. */
+      /** Tools from connected apps: Gmail and Calendar (Google sign-in) and MCP servers. */
       mcpTools?(): AgentTool[];
       /** Notes the coach learned about how the user works, added to every system prompt. */
       userNotes?(): Promise<string[]>;

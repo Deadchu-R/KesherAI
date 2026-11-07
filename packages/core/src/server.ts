@@ -1,3 +1,4 @@
+import type { AgentTool } from "@kesher/agent";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -15,6 +16,7 @@ import { Library } from "./library.js";
 import { ConversationManager, modelTurnFor } from "./conversations.js";
 import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
+import { googleTools } from "./google-tools.js";
 import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
@@ -199,8 +201,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       outputsDir: join(paths.root, "outputs"),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
       computerTools: (id) => computer.tools(id),
-      mcpTools: () =>
-        mcp.tools().map(({ server, tool, spec }) => ({
+      mcpTools: () => [
+        ...googleTools(google),
+        ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
           spec,
           // Tools that only read run without asking; the rest ask, like any command.
           risk: tool.annotations?.readOnlyHint && !tool.annotations.destructiveHint ? ("read" as const) : ("exec" as const),
@@ -212,6 +215,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
             return { output: text, ...(images.length ? { images } : {}) };
           },
         })),
+      ],
       video: {
         ensure: () => ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
         generate: (path, req) => sd.generateVideo(path, req),

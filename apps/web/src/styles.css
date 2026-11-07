@@ -776,3 +776,5 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .hits img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
 [dir="rtl"] .day-nav .icon-btn { transform: scaleX(-1); }
 .obs-time { direction: ltr; unicode-bidi: isolate; }
+.mcp-preset.card-like { border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); }
+.mcp-preset.card-like button { margin-top: 6px; align-self: flex-start; }

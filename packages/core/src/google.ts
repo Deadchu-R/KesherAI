@@ -24,7 +24,21 @@ export interface GoogleConfig {
   folderId?: string;
   lastSync?: string;
   lastError?: string;
+  /** Extra services the user connected on top of Drive (granted scopes). */
+  services?: GoogleService[];
 }
+
+/** Google services besides Drive that KesherAI can connect. */
+export type GoogleService = "gmail" | "calendar";
+
+/**
+ * The permissions each service asks for. Gmail can read and write drafts,
+ * never send; Calendar reads and adds events.
+ */
+export const SERVICE_SCOPES: Record<GoogleService, string[]> = {
+  gmail: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose"],
+  calendar: ["https://www.googleapis.com/auth/calendar.events"],
+};
 
 /** Endpoints, overridable for tests. */
 export interface GoogleEndpoints {
@@ -33,6 +47,9 @@ export interface GoogleEndpoints {
   revoke: string;
   api: string;
   upload: string;
+  /** Gmail and Calendar APIs (default to Google's). */
+  gmail?: string;
+  calendar?: string;
 }
 
 /** The real Google endpoints. */
@@ -42,6 +59,8 @@ export const GOOGLE_ENDPOINTS: GoogleEndpoints = {
   revoke: "https://oauth2.googleapis.com/revoke",
   api: "https://www.googleapis.com/drive/v3",
   upload: "https://www.googleapis.com/upload/drive/v3",
+  gmail: "https://gmail.googleapis.com/gmail/v1",
+  calendar: "https://www.googleapis.com/calendar/v3",
 };
 
 const SCOPES = "https://www.googleapis.com/auth/drive.file openid email";
@@ -65,7 +84,7 @@ function base64url(buf: Buffer): string {
  * Holds no state besides the config object it was given, which it updates.
  */
 export class GoogleDrive {
-  private pending = new Map<string, { verifier: string; redirectUri: string; at: number }>();
+  private pending = new Map<string, { verifier: string; redirectUri: string; at: number; services: GoogleService[] }>();
   private access?: { token: string; expires: number };
   private fileIds = new Map<string, string>();
 
@@ -104,20 +123,23 @@ export class GoogleDrive {
    * Starts sign-in.
    *
    * @param redirectUri - KesherAI's callback, e.g. `http://127.0.0.1:7420/api/google/callback`.
+   * @param services - Extra services to connect (Gmail, Calendar); Drive is always included.
    * @returns The Google consent URL to open in the browser.
    * @throws Error if no client id is configured.
    */
-  authUrl(redirectUri: string): string {
+  authUrl(redirectUri: string, services: GoogleService[] = []): string {
     const clientId = this.clientId;
     if (!clientId) throw new Error("Add a Google OAuth client id first (see docs/GOOGLE_DRIVE.md).");
     const verifier = base64url(randomBytes(32));
     const state = base64url(randomBytes(16));
-    this.pending.set(state, { verifier, redirectUri, at: Date.now() });
+    const wanted = [...new Set([...(this.config.services ?? []), ...services])].filter((x): x is GoogleService => x in SERVICE_SCOPES);
+    this.pending.set(state, { verifier, redirectUri, at: Date.now(), services: wanted });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: SCOPES,
+      scope: [SCOPES, ...wanted.flatMap((x) => SERVICE_SCOPES[x])].join(" "),
+      include_granted_scopes: "true",
       access_type: "offline",
       prompt: "consent",
       state,
@@ -147,6 +169,11 @@ export class GoogleDrive {
     });
     if (!json.refresh_token) throw new Error("Google did not return a refresh token. Remove KesherAI's access in your Google account and connect again.");
     this.config.refreshToken = json.refresh_token;
+    // Keep the services whose permissions the user actually ticked on the consent page.
+    const granted = (json.scope ?? "").split(" ");
+    const got = p.services.filter((x) => SERVICE_SCOPES[x].every((sc) => granted.includes(sc)));
+    if (got.length) this.config.services = got;
+    else delete this.config.services;
     this.access = { token: json.access_token, expires: Date.now() + (json.expires_in - 60) * 1000 };
     if (json.id_token) {
       try {
@@ -168,6 +195,7 @@ export class GoogleDrive {
     delete this.config.email;
     delete this.config.folderId;
     delete this.config.lastSync;
+    delete this.config.services;
     this.access = undefined;
     this.fileIds.clear();
     await this.save();
@@ -179,6 +207,7 @@ export class GoogleDrive {
     expires_in: number;
     refresh_token?: string;
     id_token?: string;
+    scope?: string;
   }> {
     const res = await fetch(this.endpoints.token, {
       method: "POST",
@@ -206,9 +235,30 @@ export class GoogleDrive {
     const res = await fetch(url, { ...init, headers: { authorization: `Bearer ${await this.token()}`, ...(init.headers as Record<string, string>) } });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Google Drive answered ${res.status}: ${text.slice(0, 200)}`);
+      throw new Error(`Google answered ${res.status}: ${text.slice(0, 200)}`);
     }
     return (res.status === 204 ? undefined : await res.json()) as T;
+  }
+
+  /** @returns Whether a service (Gmail, Calendar) is connected. */
+  has(service: GoogleService): boolean {
+    return this.connected && !!this.config.services?.includes(service);
+  }
+
+  /** @returns The API base for a service. */
+  base(service: GoogleService): string {
+    return (service === "gmail" ? this.endpoints.gmail : this.endpoints.calendar) ?? GOOGLE_ENDPOINTS[service]!;
+  }
+
+  /**
+   * Calls a Google API with the signed-in user's token.
+   *
+   * @param url - The full URL.
+   * @param init - Fetch options.
+   * @returns The JSON answer.
+   */
+  async api<T>(url: string, init: RequestInit = {}): Promise<T> {
+    return this.call<T>(url, init);
   }
 
   /** @returns The id of the KesherAI folder in Drive, creating it if needed. */

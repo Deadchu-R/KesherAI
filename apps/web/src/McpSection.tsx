@@ -108,7 +108,7 @@ export function McpSection() {
         <button type="button" onClick={() => setAdding("custom")}>{t("mcpAddCustom")}</button>
         <button type="button" onClick={() => setAdding("import")}>{t("mcpImport")}</button>
       </div>
-      <p className="muted small">{t("mcpGoogleNote")}</p>
+      <GoogleApps />
 
       {adding && <AddDialog what={adding} onClose={() => setAdding(null)} onDone={async (id, signInNow) => { setAdding(null); await load(); if (signInNow) void signIn(id); }} />}
     </section>
@@ -207,6 +207,55 @@ function AddDialog({ what, onClose, onDone }: { what: Preset | "custom" | "impor
           <button type="submit" className="primary" disabled={busy}>{preset?.signIn ? t("mcpAddAndSignIn") : t("add")}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+interface GoogleStatus { configured: boolean; connected: boolean; email: string | null; services: string[] }
+
+/** Gmail and Google Calendar: connected with Google's own sign-in and consent page, like Drive. */
+function GoogleApps() {
+  const [g, setG] = useState<GoogleStatus | null>(null);
+  const [waiting, setWaiting] = useState<string | null>(null);
+  const load = () => api<GoogleStatus>("/api/google").then(setG, () => setG(null));
+  useEffect(() => void load(), []);
+  useEffect(() => {
+    if (!waiting) return;
+    const id = setInterval(() => void api<GoogleStatus>("/api/google").then((s) => { setG(s); if (s.services.includes(waiting)) setWaiting(null); }), 2000);
+    return () => clearInterval(id);
+  }, [waiting]);
+  if (!g) return null;
+  const connect = async (service: string) => {
+    try {
+      const { url } = await api<{ url: string }>("/api/google/connect", { method: "POST", body: { services: [service] } });
+      window.open(url, "_blank", "noopener");
+      setWaiting(service);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  const apps = [
+    { id: "gmail", name: "Gmail", text: t("mcpGmail") },
+    { id: "calendar", name: "Google Calendar", text: t("mcpCalendar") },
+  ];
+  return (
+    <div className="mcp-presets">
+      {apps.map((a) => {
+        const on = g.services.includes(a.id);
+        return (
+          <div key={a.id} className="mcp-preset card-like">
+            <strong>{a.name}{on && <span className="pill good" style={{ marginInlineStart: 8 }}>{t("connected")}</span>}</strong>
+            <span className="muted small">{a.text}</span>
+            {on ? (
+              <span className="muted small">{g.email}</span>
+            ) : g.configured ? (
+              <button type="button" className="primary" onClick={() => void connect(a.id)}>{waiting === a.id ? t("driveWaiting") : t("mcpGoogleConnect")}</button>
+            ) : (
+              <span className="muted small">{t("mcpGoogleNoClient")} <a href="#/settings">{t("settings")}</a></span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

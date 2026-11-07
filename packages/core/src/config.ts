@@ -87,6 +87,7 @@ export const KesherConfigSchema = z.object({
       folderId: z.string().optional(),
       lastSync: z.string().optional(),
       lastError: z.string().optional(),
+      services: z.array(z.enum(["gmail", "calendar"])).optional(),
     })
     .default({}),
   /** A cloud-synced folder (Google Drive for desktop, OneDrive, Dropbox) to mirror projects and conversations to. */

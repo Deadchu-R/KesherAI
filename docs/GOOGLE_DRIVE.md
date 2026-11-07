@@ -44,6 +44,23 @@ A desktop client's secret is not truly secret — Google's documentation says it
 
 Paste both into `branding.config.ts` (for everyone) or Settings → Google Drive (just you), then **Connect Google Drive**. A browser window opens, you approve, and the page tells you it is connected.
 
+## Gmail and Google Calendar
+
+The same sign-in also connects Gmail and Calendar, from **Connections → Tools from other apps**. Each asks Google only when the user clicks it (incremental consent), and only the permissions ticked on Google's page are used.
+
+| Service | Permissions | What models can do |
+| --- | --- | --- |
+| Gmail | `gmail.readonly`, `gmail.compose` | Search and read mail; write **drafts** (never send) |
+| Calendar | `calendar.events` | List events; add an event (guests are not emailed) |
+
+Reading runs directly; writing a draft or adding an event shows an approval card first.
+
+To offer them, also do this once in the same Google Cloud project:
+
+1. **APIs & Services → Library:** enable **Gmail API** and **Google Calendar API**.
+2. **Data Access (scopes):** add the three scopes above.
+3. Google treats `calendar.events` as *sensitive* and the Gmail scopes as *restricted*. Until Google verifies the app (for restricted scopes this includes a paid security assessment), users see a "Google hasn't verified this app" page and at most 100 people can connect. For personal use and testing that is fine: press **Advanced → Go to KesherAI**. In Testing mode, add yourself under Test users; note that Testing-mode sign-ins expire after 7 days.
+
 ## How syncing works
 
 - Every save uploads that project or conversation to Drive about two seconds later.
