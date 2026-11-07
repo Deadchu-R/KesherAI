@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#0f1420" />
+  <title>KesherAI · On this phone</title>
+  <link rel="stylesheet" href="theme.css" />
+  <style>
+    body { height: 100dvh; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--border); background: var(--panel); }
+    header h1 { flex: 1; margin: 0; font-size: 17px; font-weight: 500; }
+    .icon { width: 40px; min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 20px; }
+    main { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .intro { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .model { border: 1px solid var(--border); background: var(--panel); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .model.active { border-color: var(--accent); }
+    .model .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .model strong { font-weight: 500; }
+    .model .size { color: var(--muted); font-size: 13px; direction: ltr; }
+    .model p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+    .model .row { display: flex; gap: 8px; }
+    .model .row button { flex: 1; min-height: 42px; font-size: 15px; }
+    .tag { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--raised); color: var(--accent); }
+    .bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+    .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+    .msgs { display: flex; flex-direction: column; gap: 12px; }
+    .msg { max-width: 88%; line-height: 1.55; font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .msg.user { align-self: flex-start; background: var(--raised); padding: 10px 14px; border-radius: 16px; }
+    .msg.assistant { align-self: stretch; }
+    .msg.note { align-self: center; color: var(--muted); font-size: 13px; }
+    footer { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
+    .composer { display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--border); background: var(--panel); border-radius: 18px; padding: 8px; }
+    .composer textarea { flex: 1; resize: none; border: 0; background: transparent; outline: none; font-size: 16px; line-height: 1.4; max-height: 30vh; padding: 6px 4px; }
+    .composer button { min-height: 40px; width: 40px; padding: 0; border-radius: 12px; font-size: 18px; }
+    .status { font-size: 12.5px; color: var(--muted); margin: 0 4px 6px; min-height: 1em; }
+    .error { color: var(--bad); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="icon" id="back" type="button" aria-label="Back">→</button>
+    <h1 id="title" data-he="בטלפון הזה" data-en="On this phone">בטלפון הזה</h1>
+    <button class="icon" id="newChat" type="button" aria-label="New chat" hidden>＋</button>
+    <button class="icon" id="toModels" type="button" aria-label="Models" hidden>☰</button>
+  </header>
+
+  <main id="modelsView">
+    <p class="intro" data-he="מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום." data-en="Small models that run on the phone itself, with no computer and no internet (after the download). They are slower and less capable than models on your computer, but work anywhere.">מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום.</p>
+    <p class="intro" id="memNote"></p>
+    <div id="modelList"></div>
+  </main>
+
+  <main id="chatView" hidden>
+    <div class="msgs" id="msgs"></div>
+  </main>
+  <footer id="chatFoot" hidden>
+    <p class="status" id="status"></p>
+    <form class="composer" id="composer">
+      <textarea id="input" rows="1" data-ph-he="כתוב הודעה…" data-ph-en="Write a message…" placeholder="כתוב הודעה…"></textarea>
+      <button class="primary" id="send" type="submit" aria-label="Send">↑</button>
+    </form>
+  </footer>
+
+<script type="module">
+  import { Wllama } from "./vendor/wllama/index.js";
+
+  const $ = (id) => document.getElementById(id);
+  const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
+  const he = lang === "he";
+  document.documentElement.lang = lang;
+  document.documentElement.dir = he ? "rtl" : "ltr";
+  for (const el of document.querySelectorAll("[data-he]")) el.textContent = el.dataset[lang];
+  $("input").placeholder = $("input").dataset[he ? "phHe" : "phEn"];
+  $("back").textContent = he ? "→" : "←";
+  const T = (h, e) => (he ? h : e);
+
+  // Small chat models that fit a phone. The file (Q4_K_M) is looked up on Hugging Face when listed.
+  const CATALOG = [
+    { repo: "Qwen/Qwen2.5-0.5B-Instruct-GGUF", name: "Qwen 2.5 · 0.5B", ram: 2, he: "הכי קטן ומהיר. טוב לשאלות קצרות ולתרגום פשוט.", en: "Smallest and fastest. Good for short questions and simple translation." },
+    { repo: "bartowski/Llama-3.2-1B-Instruct-GGUF", name: "Llama 3.2 · 1B", ram: 3, he: "מאוזן. עונה יפה באנגלית, סביר בעברית.", en: "Balanced. Answers well in English, fair in Hebrew." },
+    { repo: "bartowski/google_gemma-3-1b-it-GGUF", name: "Gemma 3 · 1B", ram: 3, he: "של Google. כתיבה טובה ושפות רבות.", en: "From Google. Good writing and many languages." },
+    { repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", name: "Qwen 2.5 · 1.5B", ram: 4, rec: true, he: "הכי חכם מהרשימה שעדיין רץ חלק בטלפון טוב. תומך בעברית.", en: "The smartest here that still runs smoothly on a good phone. Handles Hebrew." },
+    { repo: "unsloth/Qwen3-1.7B-GGUF", name: "Qwen 3 · 1.7B", ram: 4, he: "חדש יותר, חושב לפני שעונה (איטי יותר).", en: "Newer; thinks before answering (slower)." },
+  ];
+  const deviceGb = navigator.deviceMemory || 4; // Android reports up to 8
+  $("memNote").textContent = T(`בטלפון הזה יש בערך ${deviceGb >= 8 ? "8+" : deviceGb} GB זיכרון. מודלים שגדולים מדי מסומנים.`, `This phone has about ${deviceGb >= 8 ? "8+" : deviceGb} GB of memory. Models that are too big are marked.`);
+
+  const wllama = new Wllama({ default: new URL("./vendor/wllama/wllama.wasm", location.href).href }, { allowOffline: true, suppressNativeLog: true });
+  const mm = wllama.modelManager;
+  const urlOf = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
+  const gb = (b) => (b / 1024 ** 3).toFixed(b < 1024 ** 3 ? 2 : 1) + " GB";
+
+  async function fileFor(item) {
+    const key = "kesherai-phone-file:" + item.repo;
+    const cached = localStorage.getItem(key);
+    if (cached) return JSON.parse(cached);
+    const res = await fetch(`https://huggingface.co/api/models/${item.repo}/tree/main`);
+    if (!res.ok) throw new Error(`Hugging Face ${res.status}`);
+    const files = (await res.json()).filter((f) => /q4_k_m\.gguf$/i.test(f.path) && !/-\d{5}-of-\d{5}/.test(f.path));
+    if (!files.length) throw new Error(T("לא נמצא קובץ מתאים", "No suitable file found"));
+    const f = { path: files[0].path, size: files[0].size ?? files[0].lfs?.size ?? 0 };
+    localStorage.setItem(key, JSON.stringify(f));
+    return f;
+  }
+
+  let downloaded = [];
+  let activeUrl = localStorage.getItem("kesherai-phone-model") || "";
+  async function renderList() {
+    downloaded = await mm.getModels().catch(() => []);
+    const list = $("modelList");
+    list.replaceChildren();
+    for (const item of CATALOG) {
+      const card = document.createElement("div");
+      card.className = "model";
+      card.innerHTML = `<div class="top"><strong></strong><span class="size"></span></div><p></p><div class="bar" hidden><span></span></div><div class="row"></div>`;
+      card.querySelector("strong").textContent = item.name;
+      card.querySelector("p").textContent = item[lang];
+      if (item.rec) card.querySelector(".top").append(Object.assign(document.createElement("span"), { className: "tag", textContent: T("מומלץ", "Recommended") }));
+      if (item.ram > deviceGb + 1) card.querySelector("p").textContent += T(" · כנראה גדול מדי לטלפון הזה.", " · Probably too big for this phone.");
+      list.append(card);
+      const row = card.querySelector(".row");
+      const size = card.querySelector(".size");
+      let file;
+      try {
+        file = await fileFor(item);
+        size.textContent = file.size ? gb(file.size) : "";
+      } catch (e) {
+        size.textContent = "";
+        if (!navigator.onLine) { row.textContent = T("צריך אינטרנט כדי להוריד.", "Needs the internet to download."); continue; }
+        row.textContent = String(e.message || e);
+        continue;
+      }
+      const url = urlOf(item.repo, file.path);
+      const have = downloaded.find((m) => m.url === url && m.size > 0);
+      if (url === activeUrl && have) card.classList.add("active");
+      const btn = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
+      if (have) {
+        btn(T("פתח צ'אט", "Open chat"), "primary", () => openChat(item, url));
+        btn(T("מחק", "Delete"), "", async () => { await have.remove(); if (activeUrl === url) { activeUrl = ""; localStorage.removeItem("kesherai-phone-model"); } renderList(); });
+      } else {
+        const dl = btn(T("הורד", "Download") + (file.size ? ` (${gb(file.size)})` : ""), "primary", async () => {
+          dl.disabled = true;
+          const bar = card.querySelector(".bar");
+          bar.hidden = false;
+          try {
+            await mm.downloadModel(url, {
+              progressCallback: ({ loaded, total }) => {
+                bar.firstElementChild.style.width = `${total ? (loaded / total) * 100 : 0}%`;
+                dl.textContent = `${T("מוריד", "Downloading")} ${total ? Math.round((loaded / total) * 100) : 0}%`;
+              },
+            });
+            renderList();
+          } catch (e) {
+            dl.disabled = false;
+            dl.textContent = T("נסה שוב", "Try again");
+            card.querySelector("p").textContent = T("ההורדה נכשלה: ", "Download failed: ") + (e.message || e);
+          }
+        });
+      }
+    }
+  }
+
+  // ---------- chat ----------
+  let messages = [];
+  let current = null; // { item, url }
+  let abort = null;
+  const HISTORY = (url) => "kesherai-phone-chat:" + url;
+
+  function show(view) {
+    const chat = view === "chat";
+    $("modelsView").hidden = chat;
+    $("chatView").hidden = !chat;
+    $("chatFoot").hidden = !chat;
+    $("newChat").hidden = !chat;
+    $("toModels").hidden = !chat;
+    $("title").textContent = chat ? current.item.name : T("בטלפון הזה", "On this phone");
+  }
+
+  function addMsg(role, text) {
+    const el = Object.assign(document.createElement("div"), { className: `msg ${role}`, textContent: text, dir: "auto" });
+    $("msgs").append(el);
+    $("chatView").scrollTop = $("chatView").scrollHeight;
+    return el;
+  }
+
+  async function openChat(item, url) {
+    current = { item, url };
+    activeUrl = url;
+    localStorage.setItem("kesherai-phone-model", url);
+    try { messages = JSON.parse(localStorage.getItem(HISTORY(url)) || "[]"); } catch { messages = []; }
+    $("msgs").replaceChildren();
+    for (const m of messages) addMsg(m.role, m.content);
+    show("chat");
+    if (!wllama.isModelLoaded() || wllama.__url !== url) {
+      $("status").textContent = T("טוען את המודל לזיכרון…", "Loading the model into memory…");
+      $("send").disabled = true;
+      try {
+        if (wllama.isModelLoaded()) await wllama.exit();
+        const model = (await mm.getModels()).find((m) => m.url === url);
+        await wllama.loadModel(model, { n_ctx: 2048, n_threads: Math.max(1, Math.min(4, navigator.hardwareConcurrency || 4)) });
+        wllama.__url = url;
+        $("status").textContent = "";
+      } catch (e) {
+        $("status").innerHTML = "";
+        $("status").append(Object.assign(document.createElement("span"), { className: "error", textContent: T("לא הצלחתי לטעון: ", "Could not load: ") + (e.message || e) }));
+      } finally {
+        $("send").disabled = false;
+      }
+    }
+  }
+
+  $("composer").onsubmit = async (e) => {
+    e.preventDefault();
+    if (abort) { abort.abort(); return; }
+    const text = $("input").value.trim();
+    if (!text || !wllama.isModelLoaded()) return;
+    $("input").value = "";
+    autosize();
+    messages.push({ role: "user", content: text });
+    addMsg("user", text);
+    const out = addMsg("assistant", "");
+    abort = new AbortController();
+    $("send").textContent = "■";
+    $("status").textContent = T("חושב…", "Thinking…");
+    let reply = "";
+    const started = performance.now();
+    let tokens = 0;
+    try {
+      // Keep the last turns that fit the phone's small context.
+      const recent = messages.slice(-12);
+      const stream = await wllama.createChatCompletion({ messages: recent, stream: true, max_tokens: 768, temperature: 0.7, abortSignal: abort.signal });
+      for await (const chunk of stream) {
+        const d = chunk.choices?.[0]?.delta?.content ?? "";
+        if (!d) continue;
+        reply += d;
+        tokens++;
+        out.textContent = reply.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trimStart();
+        $("chatView").scrollTop = $("chatView").scrollHeight;
+        $("status").textContent = `${(tokens / ((performance.now() - started) / 1000)).toFixed(1)} ${T("מילים לשנייה בערך", "tokens/s")}`;
+      }
+    } catch (err) {
+      if (abort?.signal.aborted) reply += T(" (נעצר)", " (stopped)");
+      else addMsg("note", T("שגיאה: ", "Error: ") + (err.message || err));
+    } finally {
+      abort = null;
+      $("send").textContent = "↑";
+    }
+    const clean = reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    out.textContent = clean;
+    messages.push({ role: "assistant", content: clean });
+    try { localStorage.setItem(HISTORY(current.url), JSON.stringify(messages.slice(-60))); } catch { /* full */ }
+  };
+
+  const autosize = () => { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * 0.3) + "px"; };
+  $("input").addEventListener("input", autosize);
+  $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) { e.preventDefault(); $("composer").requestSubmit(); } });
+  $("newChat").onclick = () => { messages = []; localStorage.removeItem(HISTORY(current.url)); $("msgs").replaceChildren(); $("status").textContent = ""; };
+  $("toModels").onclick = () => { show("models"); renderList(); };
+  $("back").onclick = () => { if (!$("chatView").hidden) { show("models"); renderList(); } else location.href = "index.html?switch=1"; };
+
+  renderList().catch((e) => { $("modelList").textContent = String(e.message || e); });
+</script>
+</body>
+</html>

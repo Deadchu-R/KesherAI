@@ -28,6 +28,7 @@
     .row { display: flex; gap: 10px; }
     .row button { flex: 1; }
     .small { font-size: 13px; text-align: center; }
+    button.local { border-style: dashed; color: var(--accent); }
     .computers { display: flex; flex-direction: column; gap: 8px; }
     .computers[hidden] { display: none; }
     .computer { display: flex; gap: 8px; }
@@ -67,6 +68,7 @@
   </form>
   <button class="primary" type="submit" form="form" data-he="התחבר" data-en="Connect">התחבר</button>
   <button id="scan" type="button" data-he="סרוק קוד QR" data-en="Scan QR code">סרוק קוד QR</button>
+  <button id="local" type="button" class="local" data-he="בלי מחשב: מודל על הטלפון" data-en="No computer: a model on this phone">בלי מחשב: מודל על הטלפון</button>
   <p id="status"></p>
   <button id="checkUpdate" type="button" data-he="בדוק עדכונים לאפליקציה" data-en="Check for app updates">בדוק עדכונים לאפליקציה</button>
   <button id="lang" type="button">English</button>
@@ -102,6 +104,7 @@
     document.querySelectorAll("[data-he]").forEach((el) => (el.textContent = el.dataset[lang]));
     $("lang").textContent = lang === "he" ? "English" : "עברית";
   }
+  $("local").onclick = () => { cancelled = true; location.href = "local.html"; };
   $("lang").onclick = () => { lang = lang === "he" ? "en" : "he"; localStorage.setItem("lang", lang); applyLang(); };
   applyLang();
 
