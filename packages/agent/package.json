@@ -1,6 +1,6 @@
 {
   "name": "@kesher/agent",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "The KesherAI agent: a tool-calling loop with file and terminal tools, permission modes, approvals, questions and undo.",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,9 +13,13 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@kesher/shared": "workspace:*",
-    "diff": "^9.0.0"
+    "diff": "^9.0.0",
+    "mammoth": "^1.13.0",
+    "unpdf": "^1.9.1"
   }
 }

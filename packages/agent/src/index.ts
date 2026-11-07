@@ -16,3 +16,6 @@ export { REQUEST_ACCESS_TOOL, requestAccessSpec } from "./tools.js";
 export { resolveForTool } from "./workspace.js";
 export { buildExecutableTool } from "./build.js";
 export * from "./context.js";
+
+export { documentText, formatPages, readDocumentTool, type DocumentText } from "./documents.js";
+export { codeMap, symbolsOf } from "./code-intel.js";

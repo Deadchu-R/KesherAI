@@ -1,4 +1,4 @@
-import type { AgentTool } from "@kesher/agent";
+import { documentText, formatPages, type AgentTool } from "@kesher/agent";
 import type { GoogleDrive } from "./google.js";
 
 /**
@@ -194,7 +194,7 @@ export function googleTools(g: GoogleDrive): AgentTool[] {
       },
       {
         risk: "read",
-        spec: { name: "drive_read", description: "Read a Google Drive file (from drive_search): Docs and Slides as text, Sheets as CSV, text files as they are. For a folder, lists what is inside.", inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
+        spec: { name: "drive_read", description: "Read a Google Drive file (from drive_search): Docs and Slides as text, Sheets as CSV, PDF and Word by page (cite pages), text files as they are. For a folder, lists what is inside.", inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
         run: async (input) => {
           const id = encodeURIComponent(str(input.id));
           const meta = await g.api<{ name: string; mimeType: string; size?: string; webViewLink?: string }>(`${api}/files/${id}?fields=name,mimeType,size,webViewLink&supportsAllDrives=true`);
@@ -208,6 +208,13 @@ export function googleTools(g: GoogleDrive): AgentTool[] {
           else if (/^text\/|json|xml|csv|markdown|javascript|yaml/.test(meta.mimeType)) {
             if (Number(meta.size ?? 0) > 5_000_000) return { output: `${meta.name} is too big to read here (${meta.size} bytes). Link: ${meta.webViewLink ?? ""}` };
             text = await (await g.raw(`${api}/files/${id}?alt=media&supportsAllDrives=true`)).text();
+          } else if (/pdf$|wordprocessingml/.test(meta.mimeType)) {
+            // PDF and Word: read page by page, so answers can say where they came from.
+            if (Number(meta.size ?? 0) > 100_000_000) return { output: `${meta.name} is too big to read here. Link: ${meta.webViewLink ?? ""}` };
+            const bytes = new Uint8Array(await (await g.raw(`${api}/files/${id}?alt=media&supportsAllDrives=true`)).arrayBuffer());
+            const doc = await documentText(bytes, meta.mimeType.endsWith("pdf") ? `${meta.name.replace(/\.pdf$/i, "")}.pdf` : `${meta.name.replace(/\.docx$/i, "")}.docx`);
+            const { text: pages, last } = formatPages(doc, 1, doc.pages.length, 40_000);
+            return { output: `${meta.name} (${doc.pages.length} ${doc.kind === "pdf" ? "pages" : "parts"})\n${meta.webViewLink ?? ""}\nCite pages like (${meta.name}, p. 3).\n\n${pages}${last < doc.pages.length ? `\n\n(Shown up to ${last} of ${doc.pages.length}.)` : ""}` };
           } else return { output: `${meta.name} is a ${meta.mimeType} file, which cannot be read as text here. Link: ${meta.webViewLink ?? ""}` };
           return { output: `${meta.name}\n${meta.webViewLink ?? ""}\n\n${text.slice(0, 40_000)}${text.length > 40_000 ? "\n…(cut)" : ""}` };
         },

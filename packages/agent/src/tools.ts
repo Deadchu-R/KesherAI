@@ -7,6 +7,7 @@ import { buildExecutableTool } from "./build.js";
 import { SYSTEM_TOOLS } from "./system-tools.js";
 import { MAX_OUTPUT, runShell } from "./shell.js";
 import { checkCodeTool, codeMapTool } from "./code-intel.js";
+import { readDocumentTool } from "./documents.js";
 
 /** What a tool returns. */
 export interface ToolOutput {
@@ -382,4 +383,4 @@ export const requestAccessSpec: ToolSpec = {
 };
 
 /** The file and terminal tools of a code conversation. */
-export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, readFileTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];
+export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, readFileTool, readDocumentTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];

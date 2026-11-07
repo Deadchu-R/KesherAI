@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",
@@ -58,7 +58,10 @@
         "AppImage",
         "deb"
       ],
-      "category": "Development"
+      "category": "Development",
+      "maintainer": "KesherAI contributors <https://github.com/Deadchu-R/KesherAI/issues>",
+      "executableName": "kesherai",
+      "artifactName": "KesherAI-${version}.${ext}"
     },
     "publish": [
       {
@@ -72,5 +75,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Deadchu-R/KesherAI.git"
+  },
+  "author": {
+    "name": "KesherAI contributors",
+    "url": "https://github.com/Deadchu-R/KesherAI"
   }
 }
