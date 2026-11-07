@@ -151,4 +151,4 @@ Later (priority to be decided):
 - Meetings: tell speakers apart, a chat beside each meeting, transcript that follows playback
 - Browser tasks through an extension, signed in where the user already is
 - Send a model from the computer to the phone
-- LoRAs tab, and batch image tools (remove background, enhance, up to 50 images)
+- LoRAs on the Images page ✅ (find, choose with a strength, remove); batch image tools (remove background, enhance, up to 50 images) ⬜

@@ -47,8 +47,8 @@ function ago(iso?: string): string {
  *
  * @param props.onDownloaded - Called after a download starts.
  */
-export function HubBrowser({ onDownloaded, fixedCategory }: { onDownloaded?: () => void; fixedCategory?: string }) {
-  const [query, setQuery] = useState("");
+export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDownloaded?: () => void; fixedCategory?: string; initialQuery?: string }) {
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [category, setCategory] = useState(fixedCategory ?? "chat");
   const [format, setFormat] = useState((fixedCategory ?? "chat") === "chat" ? "gguf" : "");
   const [sort, setSort] = useState<Sort>("trending");

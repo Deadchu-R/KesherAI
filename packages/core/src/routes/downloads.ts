@@ -20,7 +20,7 @@ interface DownloadBody {
 /**
  * Picks where a downloaded file goes. Image models go into ComfyUI's
  * `models/checkpoints` (or `loras` for LoRA files) when the user told
- * KesherAI where ComfyUI lives; everything else into KesherAI's own models
+ * KesherAI where ComfyUI lives; LoRAs otherwise into `models/loras`; everything else into KesherAI's own models
  * folder, one sub-folder per category and repo.
  *
  * @param s - Services (for paths and config).
@@ -35,6 +35,10 @@ export function destinationFor(s: Pick<KesherServices, "paths" | "config">, body
   if (body.category === "image" && s.config.comfyui.modelsDir) {
     base = s.config.comfyui.modelsDir;
     dest = join(base, /lora/i.test(body.repo + body.path) ? "loras" : "checkpoints", fileName);
+  } else if (body.category === "image" && /lora/i.test(body.repo + body.path)) {
+    // LoRAs go together into one folder, where the image engine finds them by name.
+    base = s.paths.models;
+    dest = join(base, "loras", fileName);
   } else {
     base = s.paths.models;
     dest = join(base, body.category ?? "other", body.repo, body.path);

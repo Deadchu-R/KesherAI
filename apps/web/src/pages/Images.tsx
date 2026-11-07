@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { HubBrowser } from "../HubBrowser";
 import { pickModel } from "../ModelPicker";
 import { api, withToken, type Asset } from "../api";
 import { useModels } from "../useModels";
@@ -17,6 +18,13 @@ export function ImagesPage() {
   const [error, setError] = useState("");
   const [results, setResults] = useState<Asset[]>([]);
   const selected = modelId || models[0]?.id || "";
+  const [loras, setLoras] = useState<Array<{ name: string; size: number }>>([]);
+  const [chosen, setChosen] = useState<Record<string, number>>({});
+  const [findLoras, setFindLoras] = useState(false);
+  const loadLoras = () => void api<{ loras: Array<{ name: string; size: number }> }>("/api/loras").then((r) => setLoras(r.loras)).catch(() => undefined);
+  useEffect(loadLoras, []);
+  // The local engine reads LoRAs from the prompt, as <lora:name:weight>.
+  const withLoras = (p: string) => [p, ...Object.entries(chosen).map(([n, w]) => `<lora:${n}:${w}>`)].join(" ");
 
   async function generate() {
     let use = selected;
@@ -32,7 +40,7 @@ export function ImagesPage() {
     try {
       const { assets } = await api<{ assets: Asset[] }>("/api/images", {
         method: "POST",
-        body: { modelId: use, prompt, width, height, steps },
+        body: { modelId: use, prompt: withLoras(prompt), width, height, steps },
       });
       setResults((prev) => [...assets, ...prev]);
     } catch (e) {
@@ -80,6 +88,32 @@ export function ImagesPage() {
             </button>
           </span>
         </label>
+        <div className="stack" style={{ gridColumn: "1 / -1", gap: 6 }}>
+          <span className="row">
+            <span className="grow">{t("loras")}</span>
+            <button type="button" className="as-link" onClick={() => setFindLoras(!findLoras)}>{findLoras ? t("lorasHide") : t("lorasFind")}</button>
+          </span>
+          {loras.length === 0 ? (
+            <span className="muted small">{t("lorasNone")}</span>
+          ) : (
+            <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+              {loras.map((l) => {
+                const on = l.name in chosen;
+                return (
+                  <span key={l.name} className={`chip-text lora-chip${on ? " on" : ""}`}>
+                    <label className="row" style={{ gap: 4 }}>
+                      <input type="checkbox" checked={on} onChange={(e) => setChosen((c) => { const n = { ...c }; if (e.target.checked) n[l.name] = 0.8; else delete n[l.name]; return n; })} />
+                      <span dir="ltr">{l.name}</span>
+                    </label>
+                    {on && <input type="number" min={-2} max={2} step={0.1} value={chosen[l.name]} aria-label={t("loraWeight")} title={t("loraWeight")} style={{ width: 58 }} onChange={(e) => setChosen((c) => ({ ...c, [l.name]: Number(e.target.value) }))} />}
+                    <button type="button" className="as-link" aria-label={t("remove")} title={t("remove")} onClick={() => void api(`/api/loras/${encodeURIComponent(l.name)}`, { method: "DELETE" }).then(() => { setChosen((c) => { const n = { ...c }; delete n[l.name]; return n; }); loadLoras(); })}>✕</button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <span className="muted small">{t("lorasHint")}</span>
+        </div>
         <label>{t("width")}<input type="number" step={64} value={width} onChange={(e) => setWidth(Number(e.target.value))} /></label>
         <label>{t("height")}<input type="number" step={64} value={height} onChange={(e) => setHeight(Number(e.target.value))} /></label>
         <label>{t("steps")}<input type="number" value={steps} onChange={(e) => setSteps(Number(e.target.value))} /></label>
@@ -89,6 +123,7 @@ export function ImagesPage() {
           </button>
         </div>
       </form>
+      {findLoras && <HubBrowser fixedCategory="image" initialQuery="lora" onDownloaded={loadLoras} />}
       {error && <p className="error">{error}</p>}
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
         {results.map((a) => (

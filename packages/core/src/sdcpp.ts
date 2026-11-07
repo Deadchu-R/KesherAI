@@ -286,6 +286,30 @@ export class SdEngine {
     return join(this.modelsDir(), "image");
   }
 
+  /** Where LoRA files go; a prompt names them as `<lora:name:weight>`. */
+  get loraDir(): string {
+    return join(this.modelsDir(), "loras");
+  }
+
+  /** @returns The LoRA files in `models/loras`, by name (the file name without its extension). */
+  async loras(): Promise<Array<{ name: string; file: string; size: number }>> {
+    const out: Array<{ name: string; file: string; size: number }> = [];
+    for (const e of await readdir(this.loraDir, { withFileTypes: true }).catch(() => [])) {
+      if (!e.isFile() || !/\.(safetensors|gguf|ckpt|pt)$/i.test(e.name)) continue;
+      const st = await stat(join(this.loraDir, e.name)).catch(() => undefined);
+      out.push({ name: e.name.replace(/\.[^.]+$/, ""), file: e.name, size: st?.size ?? 0 });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** Deletes a LoRA file by name. */
+  async removeLora(name: string): Promise<boolean> {
+    const lora = (await this.loras()).find((l) => l.name === name);
+    if (!lora) return false;
+    await rm(join(this.loraDir, lora.file));
+    return true;
+  }
+
   /** Where the extra files of model families go. */
   private get supportDir(): string {
     return join(this.modelsDir(), "image-support");
@@ -475,6 +499,7 @@ export class SdEngine {
       "--cfg-scale", String(family.cfg),
       "-s", String(req.seed),
       "-o", out,
+      ...(/<lora:/i.test(req.prompt) && existsSync(this.loraDir) ? ["--lora-model-dir", this.loraDir] : []),
       ...(await this.memoryArgs(modelFile, family)),
     ];
     const started = Date.now();

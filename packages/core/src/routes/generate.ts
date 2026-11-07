@@ -42,6 +42,12 @@ export async function generateRoutes(app: FastifyInstance, s: KesherServices): P
   });
 
   if (features.images) {
+    /** LoRAs for the local image engine: name them in a prompt as `<lora:name:weight>`. */
+    app.get("/api/loras", async () => ({ dir: s.sd.loraDir, loras: await s.sd.loras() }));
+    app.delete<{ Params: { name: string } }>("/api/loras/:name", async (req, reply) =>
+      (await s.sd.removeLora(req.params.name)) ? { ok: true } : reply.code(404).send({ error: "No such LoRA" }),
+    );
+
     /** Generates images and stores them as assets. */
     app.post("/api/images", async (req, reply) => {
       const parsed = ImageRequestSchema.safeParse(req.body);

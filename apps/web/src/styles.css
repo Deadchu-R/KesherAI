@@ -959,3 +959,5 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .api-log { width: 100%; border-collapse: collapse; margin-top: 8px; }
 .api-log td { padding: 4px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 .api-log td.bad { color: #fca5a5; }
+.lora-chip { display: inline-flex; align-items: center; gap: 6px; }
+.lora-chip.on { border-color: var(--accent, #5b8def); }

@@ -74,3 +74,25 @@ test("reads progress from stable-diffusion.cpp output", async () => {
   p = progressFrom("  |==========| 20/20 - 2.00it/s", p);
   assert.equal(p.secondsPerStep, 0.5);
 });
+
+test("LoRAs: downloads go to models/loras, are listed by name, and are not image models", async () => {
+  const data = await mkdtemp(join(tmpdir(), "kesher-lora-"));
+  const s = await createKesherServer({ dataDir: data, autodetect: false, pluginRoots: [] });
+  try {
+    const { destinationFor } = await import("./routes/downloads.js");
+    const dest = destinationFor(s.services, { repo: "acme/pixel-art-lora", path: "pixel.safetensors", category: "image" });
+    assert.equal(dest, join(s.services.paths.models, "loras", "pixel.safetensors"));
+    await mkdir(join(dest, ".."), { recursive: true });
+    const fh = await open(dest, "w");
+    await fh.truncate(150 * 1024 ** 2);
+    await fh.close();
+    const r = (await s.app.inject({ method: "GET", url: "/api/loras" })).json() as { loras: Array<{ name: string }> };
+    assert.deepEqual(r.loras.map((l) => l.name), ["pixel"]);
+    const listing = (await s.app.inject({ method: "GET", url: "/api/models" })).json() as { models: Array<{ id: string; category: string }> };
+    assert.ok(!listing.models.some((m) => m.category === "image" && m.id.includes("pixel")));
+    assert.equal((await s.app.inject({ method: "DELETE", url: "/api/loras/pixel" })).statusCode, 200);
+    assert.equal(((await s.app.inject({ method: "GET", url: "/api/loras" })).json() as { loras: unknown[] }).loras.length, 0);
+  } finally {
+    await s.app.close();
+  }
+});
