@@ -22,6 +22,12 @@
     .row { display: flex; gap: 10px; }
     .row button { flex: 1; }
     .small { font-size: 13px; text-align: center; }
+    .computers { display: flex; flex-direction: column; gap: 8px; }
+    .computers[hidden] { display: none; }
+    .computer { display: flex; gap: 8px; }
+    .computer button.go { flex: 1; text-align: start; padding: 10px 14px; height: auto; display: flex; flex-direction: column; gap: 2px; }
+    .computer button.go small { color: var(--muted); font-size: 12px; direction: ltr; }
+    .computer button.del { width: 48px; flex: none; }
     ol { margin: 0; padding-inline-start: 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
   </style>
 </head>
@@ -36,6 +42,10 @@
   </div>
   <h1><img src="icon.svg" width="34" height="34" alt="" /> KesherAI</h1>
   <p data-he="התחבר ל-KesherAI שרץ במחשב שלך. כל העבודה רצה במחשב; הטלפון רק שולח ומציג." data-en="Connect to KesherAI running on your computer. All the work runs there; the phone only sends and shows.">התחבר ל-KesherAI שרץ במחשב שלך. כל העבודה רצה במחשב; הטלפון רק שולח ומציג.</p>
+  <div id="computers" class="computers" hidden>
+    <strong data-he="המחשבים שלך" data-en="Your computers">המחשבים שלך</strong>
+    <div id="computerList" class="computers"></div>
+  </div>
   <ol>
     <li data-he="במחשב: הגדרות ← טלפון. העתק את קישור החיבור." data-en="On the computer: Settings → Phone. Copy the connection link.">במחשב: הגדרות ← טלפון. העתק את קישור החיבור.</li>
     <li data-he="הדבק אותו כאן. הוא נשמר, ובפעם הבאה האפליקציה תתחבר מעצמה." data-en="Paste it here. It is saved, and next time the app connects by itself.">הדבק אותו כאן. הוא נשמר, ובפעם הבאה האפליקציה תתחבר מעצמה.</li>
@@ -63,6 +73,9 @@
     fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale. בפעם הראשונה ב-Windows: הפעל במחשב את scripts\\windows\\allow-phone.cmd מתיקיית KesherAI (פותח את חומת האש).", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale. First time on Windows: on the computer, run scripts\\windows\\allow-phone.cmd from the KesherAI folder (it opens the firewall)." },
     bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." },
     wake: { he: "הער את המחשב", en: "Wake the computer" },
+    lastUsed: { he: "שימוש אחרון: ", en: "Last used: " },
+    removeComputer: { he: "להסיר את המחשב הזה מהרשימה?", en: "Remove this computer from the list?" },
+    tryingNext: { he: "מנסה כתובת אחרת…", en: "Trying another address…" },
     installingScanner: { he: "מכין את הסורק (פעם ראשונה בלבד)…", en: "Preparing the scanner (first time only)…" },
     notKesher: { he: "זה לא קוד של KesherAI. סרוק את הקוד שבמחשב: הגדרות ← טלפון.", en: "That is not a KesherAI code. Scan the code on the computer: Settings → Phone." },
     scanFailed: { he: "הסריקה לא הצליחה: ", en: "Scanning did not work: " },
@@ -103,6 +116,82 @@
     if (!cancelled) { $("status").textContent = tr.noWake[lang]; $("status").className = "error"; }
   }
 
+  // ---------- Saved computers ----------
+  // Each computer is saved with its token and every address it was seen at
+  // (home network, Tailscale, the "anywhere" link), so it reconnects without
+  // scanning again, even after the network or the tunnel address changes.
+  const COMPUTERS = "kesherai-computers";
+  const loadComputers = () => { try { return JSON.parse(localStorage.getItem(COMPUTERS) || "[]"); } catch { return []; } };
+  const saveComputers = (list) => localStorage.setItem(COMPUTERS, JSON.stringify(list));
+
+  /** Remembers a computer after a successful connection, and learns its other addresses. */
+  async function rememberComputer(url, token) {
+    const list = loadComputers();
+    let c = list.find((x) => x.token === token);
+    if (!c) { c = { token, name: url.hostname, links: [] }; list.push(c); }
+    const base = url.origin;
+    c.links = [base, ...c.links.filter((l) => l !== base)];
+    c.wake = url.searchParams.get("wake") || c.wake;
+    c.bcast = url.searchParams.get("bcast") || c.bcast;
+    c.lastUsed = new Date().toISOString();
+    try {
+      const info = await fetch(`${base}/api/remote/links`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) }).then((r) => r.json());
+      if (info?.name) c.name = info.name;
+      for (const l of info?.links ?? []) {
+        if (!c.links.includes(l.url)) c.links.push(l.url);
+        if (l.kind === "home" && l.mac && !c.wake) { c.wake = l.mac; c.bcast = l.broadcast; }
+      }
+    } catch { /* older KesherAI: keep what we have */ }
+    saveComputers(list);
+  }
+
+  function linkFor(c, base) {
+    const u = new URL(base);
+    u.pathname = "/";
+    u.search = `?token=${encodeURIComponent(c.token)}${c.wake ? `&wake=${c.wake}&bcast=${c.bcast || ""}` : ""}`;
+    return u.href;
+  }
+
+  /** Tries each saved address of a computer, the last one that worked first. */
+  async function connectComputer(c) {
+    cancelled = false;
+    for (let i = 0; i < c.links.length && !cancelled; i++) {
+      if (i > 0) { $("status").className = ""; $("status").textContent = tr.tryingNext[lang]; }
+      const ok = await fetch(`${c.links[i]}/api/health`, { headers: { authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(5000) }).then((r) => r.ok).catch(() => false);
+      if (ok) return connect(linkFor(c, c.links[i]));
+    }
+    if (!cancelled) connect(linkFor(c, c.links[0])); // shows the error and the wake button
+  }
+
+  function renderComputers() {
+    const list = loadComputers().sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || ""));
+    $("computers").hidden = list.length === 0;
+    const box = $("computerList");
+    box.textContent = "";
+    for (const c of list) {
+      const row = document.createElement("div");
+      row.className = "computer";
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "go";
+      const name = document.createElement("strong");
+      name.textContent = c.name;
+      const small = document.createElement("small");
+      small.textContent = (c.lastUsed ? tr.lastUsed[lang] + new Date(c.lastUsed).toLocaleString() : "") + " · " + c.links.length + " addresses";
+      go.append(name, small);
+      go.onclick = () => connectComputer(c);
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "del";
+      del.textContent = "✕";
+      del.setAttribute("aria-label", "Remove");
+      del.onclick = () => { if (confirm(tr.removeComputer[lang])) { saveComputers(loadComputers().filter((x) => x.token !== c.token)); renderComputers(); } };
+      row.append(go, del);
+      box.append(row);
+    }
+  }
+  renderComputers();
+
   async function connect(link) {
     let url;
     try { url = new URL(link.trim()); } catch { $("status").textContent = tr.bad[lang]; $("status").className = "error"; return; }
@@ -117,6 +206,7 @@
       if (!res.ok) throw new Error(String(res.status));
       if (cancelled) return;
       localStorage.setItem(KEY, url.href);
+      if (token) await rememberComputer(url, token);
       // Coming back here with the Back button shows this screen instead of connecting again.
       sessionStorage.setItem("kesherai-connected", "1");
       location.href = url.href; // the interface stores the token and removes it from the address
@@ -236,7 +326,10 @@
     const saved = launch || localStorage.getItem(KEY);
     if (saved) $("url").value = saved;
     const cameBack = sessionStorage.getItem("kesherai-connected") === "1";
-    if (launch || (saved && !cameBack)) connect(saved);
+    const recent = loadComputers().sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || ""))[0];
+    if (launch) connect(launch);
+    else if (!cameBack && recent) connectComputer(recent);
+    else if (!cameBack && saved) connect(saved);
   })();
 </script>
 </body>

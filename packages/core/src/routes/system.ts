@@ -3,7 +3,7 @@ import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
 import { discoverSkills, loadSkillBody } from "@kesher/skills";
 import { join } from "node:path";
-import { networkInterfaces } from "node:os";
+import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 
@@ -84,6 +84,21 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
         port: s.config.port,
         addresses,
       };
+    });
+
+    /**
+     * For the phone app (needs the token like every remote request): this
+     * computer's name and every address it can be reached at right now, so a
+     * saved computer keeps working when the network or the tunnel address
+     * changes. The token itself is not included.
+     */
+    app.get("/api/remote/links", async () => {
+      const lan = Object.values(networkInterfaces())
+        .flat()
+        .filter((a): a is NonNullable<typeof a> => !!a && a.family === "IPv4" && !a.internal)
+        .map((a) => ({ url: `http://${a.address}:${s.config.port}`, kind: /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) ? "tailscale" : "home", mac: a.mac, broadcast: broadcastOf(a.address, a.netmask) }));
+      const tunnel = s.tunnel.status().url;
+      return { name: hostname(), links: [...lan, ...(tunnel ? [{ url: tunnel, kind: "anywhere" }] : [])] };
     });
 
     /**

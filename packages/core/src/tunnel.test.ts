@@ -31,6 +31,13 @@ test("requests through a tunnel are remote even though they come from 127.0.0.1"
     assert.equal((await s.app.inject({ method: "GET", url: "/api/health", headers: cf })).statusCode, 401);
     assert.equal((await s.app.inject({ method: "GET", url: "/api/health" })).statusCode, 200, "this computer still needs no token");
 
+    // The phone app learns this computer's name and addresses with the token.
+    const links = await s.app.inject({ method: "GET", url: "/api/remote/links", headers: { ...cf, authorization: `Bearer ${token}` } });
+    assert.equal(links.statusCode, 200);
+    const body = links.json() as { name: string; links: Array<{ url: string }> };
+    assert.ok(body.name.length > 0);
+    assert.ok(!JSON.stringify(body).includes(token), "the token is not in the answer");
+
     // Guessing the token is cut off after 20 tries from one address.
     for (let i = 0; i < 20; i++) await s.app.inject({ method: "GET", url: "/api/health", headers: { "cf-connecting-ip": "198.51.100.1", authorization: "Bearer wrong" } });
     const locked = await s.app.inject({ method: "GET", url: "/api/health", headers: { "cf-connecting-ip": "198.51.100.1", authorization: `Bearer ${token}` } });
