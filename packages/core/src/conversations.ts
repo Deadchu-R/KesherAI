@@ -367,6 +367,10 @@ export class ConversationManager {
         ),
     });
     this.sessions.set(id, session);
+    // When the agent is free again, the next queued message goes.
+    session.on("event", (e: { type: string; status?: string }) => {
+      if (e.type === "status" && (e.status === "idle" || e.status === "error")) setTimeout(() => void this.drain(id), 50);
+    });
     return { session, conversation };
   }
 
@@ -377,7 +381,71 @@ export class ConversationManager {
    * @param text - Message.
    * @throws Error if the conversation does not exist or is busy.
    */
-  async send(id: string, text: string, opts: { web?: boolean } = {}): Promise<void> {
+  async send(id: string, text: string, opts: { web?: boolean } = {}): Promise<{ queued?: number }> {
+    const opened = await this.open(id);
+    if (!opened) throw new Error("Conversation not found");
+    const { session } = opened;
+    // Busy: the message waits in the queue and goes as soon as the agent is free, like in Claude.
+    if (session.busy || session.queued.length) {
+      session.queued.push({ id: randomUUID(), text, data: opts });
+      session.queuePaused = false;
+      session.queueChanged();
+      if (!session.busy) await this.drain(id);
+      return { queued: session.queued.length };
+    }
+    session.queuePaused = false;
+    await this.sendNow(id, text, opts);
+    return {};
+  }
+
+  /** Sends the next queued message, if the agent is free and the queue is not paused. */
+  private async drain(id: string): Promise<void> {
+    const session = this.sessions.get(id);
+    if (!session || session.queuePaused || !session.queued.length) return;
+    if (session.busy) {
+      setTimeout(() => void this.drain(id), 250);
+      return;
+    }
+    const next = session.queued.shift();
+    if (!next) return;
+    session.queueChanged();
+    await this.sendNow(id, next.text, (next.data as { web?: boolean }) ?? {}).catch((err: Error) => {
+      session.queued.unshift(next);
+      session.queueChanged();
+      console.warn(`[queue] ${id}: ${err.message}`);
+    });
+  }
+
+  /**
+   * Lets a paused queue (after Stop) go on.
+   *
+   * @param id - Conversation.
+   */
+  async resumeQueue(id: string): Promise<void> {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    session.queuePaused = false;
+    session.queueChanged();
+    await this.drain(id);
+  }
+
+  /**
+   * Removes a queued message.
+   *
+   * @param id - Conversation.
+   * @param queuedId - The queued message.
+   * @returns Whether it was there.
+   */
+  unqueue(id: string, queuedId: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session) return false;
+    const before = session.queued.length;
+    session.queued = session.queued.filter((q) => q.id !== queuedId);
+    if (session.queued.length !== before) session.queueChanged();
+    return session.queued.length !== before;
+  }
+
+  private async sendNow(id: string, text: string, opts: { web?: boolean }): Promise<void> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
@@ -435,7 +503,14 @@ export class ConversationManager {
    * @param id - Conversation.
    */
   stop(id: string): void {
-    this.sessions.get(id)?.stop();
+    const s = this.sessions.get(id);
+    if (!s) return;
+    // After Stop, queued messages wait until the user sends again (or removes them).
+    if (s.queued.length) {
+      s.queuePaused = true;
+      s.queueChanged();
+    }
+    s.stop();
   }
 
   /** @param id - Conversation to delete; its session is stopped first. */

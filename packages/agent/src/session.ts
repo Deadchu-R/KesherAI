@@ -112,6 +112,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
+  /** Messages sent while the agent was busy, in order; the owner (the conversation manager) drains it. */
+  queued: Array<{ id: string; text: string; data?: unknown }> = [];
+  /** Set after Stop: the queue waits until the user sends again. */
+  queuePaused = false;
+
+  /** Tells listeners the queue changed (a `queue` event, not saved, followed by info). */
+  queueChanged(): void {
+    this.push({ type: "queue" }, false);
+  }
   /** Pictures the tool that just ran returned, for its tool message. */
   private pendingImages?: Array<{ mimeType: string; data: string }>;
   /** What the model said in its latest answer, shown on approval cards as the reason for the action. */
@@ -150,6 +159,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       pendingQuestions: [...this.questions.keys()],
       canUndo: this.changes.length > 0,
       grants: this.grants,
+      queued: this.queued.map(({ id, text }) => ({ id, text })),
+      ...(this.queuePaused ? { queuePaused: true } : {}),
     };
   }
 

@@ -111,6 +111,8 @@ export type AgentEvent = EventBase &
      * for the model and are sent as this summary instead. Nothing is deleted.
      */
     | { type: "compacted"; upTo: number; summary: string }
+    /** The message queue changed (not saved; the info that follows has the queue). */
+    | { type: "queue" }
     /** The session may now read and change files under `path` (given by the user, or approved when the agent asked). */
     | { type: "access"; path: string }
     | { type: "answer"; questionId: string; text: string }
@@ -168,6 +170,10 @@ export interface AgentSessionInfo {
   canUndo: boolean;
   /** Folders or files outside the workspace this conversation was given access to. */
   grants: string[];
+  /** Messages waiting their turn: sent one by one as soon as the agent is free. */
+  queued: Array<{ id: string; text: string }>;
+  /** Whether the queue waits (after Stop) until the user sends again. */
+  queuePaused?: boolean;
 }
 
 /**

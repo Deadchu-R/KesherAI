@@ -435,7 +435,8 @@ export function ConversationPage({ id }: { id: string }) {
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
   const send = async () => {
     const text = input.trim();
-    if (!text || busy) return;
+    // While the agent works, the message joins the queue and goes when it is free.
+    if (!text) return;
     setInput("");
     setError("");
     try {
@@ -614,6 +615,23 @@ export function ConversationPage({ id }: { id: string }) {
                 }
               }}
             />
+            {(info?.queued?.length ?? 0) > 0 && (
+              <div className="queue" aria-label={t("queueTitle")}>
+                <div className="queue-head small">
+                  <span>{info!.queuePaused ? t("queuePaused") : t("queueWaiting", { n: info!.queued.length })}</span>
+                  {info!.queuePaused && <button type="button" className="link-btn" onClick={() => void api(`/api/conversations/${id}/queue/resume`, { method: "POST" })}>{t("queueResume")}</button>}
+                </div>
+                <ol>
+                  {info!.queued.map((q, i) => (
+                    <li key={q.id}>
+                      <span className="queue-n" aria-hidden>{i + 1}</span>
+                      <span className="queue-text" dir="auto">{q.text}</span>
+                      <button type="button" className="queue-x" aria-label={t("queueRemove")} title={t("queueRemove")} onClick={() => void api(`/api/conversations/${id}/queue/${q.id}`, { method: "DELETE" }).catch(() => undefined)}>✕</button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
             {pluginUi.composerActions.length > 0 && (
               <div className="composer-actions">
                 {pluginUi.composerActions.map((a) => (
@@ -634,7 +652,10 @@ export function ConversationPage({ id }: { id: string }) {
               </select>
               <span className="grow" />
               {busy ? (
-                <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })} aria-label={t("stop")}>■</button>
+                <>
+                  {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
+                  <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })} aria-label={t("stop")}>■</button>
+                </>
               ) : (
                 <button type="submit" className="primary send" disabled={!input.trim()} aria-label={t("send")}>↑</button>
               )}

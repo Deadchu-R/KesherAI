@@ -144,12 +144,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     });
   });
 
+  /** Lets the queue go on after Stop. */
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/queue/resume", async (req) => {
+    await s.conversations.resumeQueue(req.params.id);
+    return { ok: true };
+  });
+
+  /** Removes a message from the queue (it was sent while the agent was busy). */
+  app.delete<{ Params: { id: string; qid: string } }>("/api/conversations/:id/queue/:qid", async (req, reply) =>
+    s.conversations.unqueue(req.params.id, req.params.qid) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" }),
+  );
+
   app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
     const text = req.body?.text?.trim();
     if (!text) return reply.code(400).send({ error: "Empty message" });
     try {
-      await s.conversations.send(req.params.id, text, { web: req.body?.web === true });
-      return { ok: true };
+      const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true });
+      return { ok: true, ...r };
     } catch (err) {
       const msg = (err as Error).message;
       return reply.code(/not found/i.test(msg) ? 404 : 409).send({ error: msg });
@@ -210,7 +221,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.post<{ Params: { id: string } }>("/api/conversations/:id/stop", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
-    opened.session.stop();
+    s.conversations.stop(req.params.id);
     return { ok: true };
   });
 
