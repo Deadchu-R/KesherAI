@@ -158,3 +158,21 @@ test("free space can be read for a folder that does not exist yet", async () => 
   const free = await freeSpace("/tmp/kesher-not-there/deeper");
   assert.ok(free === undefined || free > 0);
 });
+
+test("the speed limit slows a download down", async () => {
+  const { createServer } = await import("node:http");
+  const data = Buffer.alloc(600 * 1024, 7);
+  const srv = createServer((_req, res) => {
+    res.writeHead(200, { "content-length": String(data.length) });
+    res.end(data);
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+  const dir = await mkdtemp(join(tmpdir(), "kesher-limit-"));
+  const dm = new DownloadManager();
+  dm.limit = 400 * 1024; // 400 KB/s: 600 KB takes about 1.5 s
+  const t0 = Date.now();
+  const job = dm.enqueue({ url: `http://127.0.0.1:${(srv.address() as { port: number }).port}/f`, dest: join(dir, "f.bin") });
+  await new Promise<void>((ok, no) => dm.on("update", (j: { id: string; status: string; error?: string }) => j.id === job.id && (j.status === "done" ? ok() : j.status === "failed" ? no(new Error(j.error)) : undefined)));
+  assert.ok(Date.now() - t0 > 1000, `took ${Date.now() - t0} ms`);
+  srv.close();
+});

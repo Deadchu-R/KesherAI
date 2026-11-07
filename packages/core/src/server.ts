@@ -209,6 +209,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     parallel: config.engines.parallel,
     gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
   });
+  downloads.limit = config.downloadLimitMBps * 1024 * 1024;
   const assets = new AssetStore(paths.assets);
   // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.
   const persistEarly = () => saveConfig(paths, config);

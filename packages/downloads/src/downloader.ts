@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rename, stat, statfs, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 /** Lifecycle of a download. */
@@ -59,6 +59,9 @@ export interface DownloadJob {
 export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   private readonly jobs = new Map<string, { job: DownloadJob; req: DownloadRequest; abort?: AbortController }>();
   private active = 0;
+
+  /** Bytes per second all downloads may use together (0: no limit), so the internet stays usable. */
+  limit = 0;
 
   /** @param concurrency - How many downloads run at the same time. */
   constructor(private readonly concurrency = 1) {
@@ -214,7 +217,24 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
           windowStart = Date.now();
         }
       });
-      await pipeline(body, createWriteStream(part, { flags: resumed ? "a" : "w" }));
+      // The speed limit: wait before taking more when ahead of it (checked per chunk, so a change applies at once).
+      let tStart = Date.now();
+      let tBytes = 0;
+      const throttle = new Transform({
+        transform: (chunk: Buffer, _enc, done) => {
+          const limit = this.limit / Math.max(1, this.active);
+          if (!limit) return done(null, chunk);
+          tBytes += chunk.length;
+          const ahead = (tBytes / limit) * 1000 - (Date.now() - tStart);
+          if (Date.now() - tStart > 10_000) {
+            tStart = Date.now();
+            tBytes = 0;
+          }
+          if (ahead > 5) setTimeout(() => done(null, chunk), Math.min(ahead, 5000));
+          else done(null, chunk);
+        },
+      });
+      await pipeline(body, throttle, createWriteStream(part, { flags: resumed ? "a" : "w" }));
 
       if (req.sha256) {
         this.update(job, { status: "verifying", speed: 0 });

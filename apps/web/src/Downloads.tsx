@@ -58,6 +58,14 @@ function eta(seconds: number): string {
 export function DownloadsButton() {
   const all = useDownloads();
   const [open, setOpen] = useState(false);
+  const [limit, setLimit] = useState(0);
+  useEffect(() => {
+    if (open) void api<{ mbps: number }>("/api/downloads/limit").then((r) => setLimit(r.mbps)).catch(() => undefined);
+  }, [open]);
+  const changeLimit = (mbps: number) => {
+    setLimit(mbps);
+    void api("/api/downloads/limit", { method: "PUT", body: { mbps } }).catch(() => undefined);
+  };
   const active = all.filter((j) => ACTIVE.has(j.status));
   const failed = all.some((j) => j.status === "failed");
   if (all.length === 0) return null;
@@ -97,6 +105,14 @@ export function DownloadsButton() {
               </div>
             ))}
           </div>
+          <label className="row muted">
+            <span className="grow">{t("dlLimit")}</span>
+            <select value={limit} onChange={(e) => changeLimit(Number(e.target.value))}>
+              {[...new Set([0, 1, 2, 5, 10, 20, 50, limit])].sort((a, b) => a - b).map((v) => (
+                <option key={v} value={v}>{v === 0 ? t("dlNoLimit") : `${v} MB/s`}</option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
       <button type="button" className="dl-button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${t("downloads")} (${active.length})`}>

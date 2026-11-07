@@ -174,6 +174,17 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
 
   app.get("/api/downloads", async () => s.downloads.list());
 
+  /** The download speed limit in MB/s (0: none). */
+  app.get("/api/downloads/limit", async () => ({ mbps: s.config.downloadLimitMBps }));
+  app.put<{ Body: { mbps?: number } }>("/api/downloads/limit", async (req, reply) => {
+    const v = Number(req.body?.mbps);
+    if (!Number.isFinite(v) || v < 0 || v > 10_000) return reply.code(400).send({ error: "A number of MB/s, 0 for no limit." });
+    s.config.downloadLimitMBps = v;
+    s.downloads.limit = v * 1024 * 1024;
+    await s.saveConfig();
+    return { mbps: v };
+  });
+
   app.post<{ Body: DownloadBody }>("/api/downloads", async (req, reply) => {
     try {
       const files = await listHubFiles(req.body.repo, { token: token() });
