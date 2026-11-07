@@ -15,6 +15,13 @@ if not exist apps\desktop\dist\main.js (
   call pnpm --filter @kesher/web build || goto :fail
   call pnpm --filter @kesher/desktop build || goto :fail
 )
+rem pnpm may skip Electron's own download step; fetch the Electron program if it is missing.
+if not exist apps\desktop\node_modules\electron\dist\electron.exe (
+  echo [..] Downloading the Electron window ^(about 100 MB, first run only^)...
+  pushd apps\desktop\node_modules\electron
+  call node install.js || (popd & goto :fail)
+  popd
+)
 if not exist "%USERPROFILE%\Desktop\KesherAI.lnk" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\KesherAI.lnk'); $s.TargetPath='%~dp0KesherAI.cmd'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.IconLocation='%~dp0apps\desktop\node_modules\electron\dist\electron.exe,0'; $s.Save()" >nul 2>nul
   echo [ok] Added a KesherAI shortcut to your desktop.
