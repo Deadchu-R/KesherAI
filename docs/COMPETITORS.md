@@ -132,3 +132,23 @@ Later (priority to be decided):
 - Built-in TLS for remote access ✅ (HTTPS through Tailscale); signed installers (needs a code-signing certificate) ⬜
 - OneDrive backup ✅ (one-click cloud folders: OneDrive, Google Drive, Dropbox, iCloud)
 - A command line (`kesher chat`) and a window-less server mode (LM Studio llmster) ✅ (docs/CLI.md)
+
+## Second review, November 2026 (Off Grid AI Desktop 0.0.56, Locally Uncensored 3.0.6)
+
+Working on now, in this order:
+
+1. Routines: pipelines and prompts on a schedule, with a notification (Off Grid "Routines") ⬜
+2. Split chat: two to four panes on different models, one question to all (Off Grid) ⬜
+3. One search across chats, knowledge, "My day" and meetings (Off Grid unified search) ⬜
+4. Serving others: a request log per access key (tokens, model) and staying awake while serving (Off Grid Gateway, LU local API log) ⬜
+5. Engine updates: a newer llama.cpp without an app update (Off Grid) ⬜
+6. "Enhance prompt" before images and video (LU prompt rewriting) ⬜
+7. A download speed limit (LU) ⬜
+8. Voice conversation on the computer: talk, hear the answer, interrupt (LU voice, Off Grid hands-free) ⬜
+
+Later (priority to be decided):
+
+- Meetings: tell speakers apart, a chat beside each meeting, transcript that follows playback
+- Browser tasks through an extension, signed in where the user already is
+- Send a model from the computer to the phone
+- LoRAs tab, and batch image tools (remove background, enhance, up to 50 images)
