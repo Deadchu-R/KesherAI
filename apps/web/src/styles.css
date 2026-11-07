@@ -863,3 +863,9 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .notify-topic { list-style: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .notify-topic code { padding: 4px 8px; border-radius: 6px; background: var(--panel); overflow-wrap: anywhere; }
 .notify-min { flex-direction: row; } .notify-min select { width: auto; }
+
+/* MCP server */
+.seg button.on { border-color: var(--accent); color: var(--text); }
+.snippet { position: relative; }
+.snippet pre { margin: 0; padding: 12px 14px; padding-inline-end: 80px; border-radius: 10px; background: var(--raised); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+.snippet button { position: absolute; top: 8px; right: 8px; height: 30px; padding: 0 10px; font-size: 12px; }

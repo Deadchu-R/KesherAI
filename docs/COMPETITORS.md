@@ -121,7 +121,7 @@ Working on now, in this order:
 7. Phone notification when a long job on the computer finishes ✅ (Settings → Notifications, through ntfy)
 8. Small fixes: disk space, pause, measured speed, more engines ✅
 9. Speech as agent tools: transcribe and speak ✅ (`transcribe_audio`, `speak_text`)
-10. KesherAI as an MCP server for other apps ⬜
+10. KesherAI as an MCP server for other apps ✅ (`/mcp`, stdio bridge, Settings snippets)
 11. Anthropic-style API and separate access keys per app (LM Studio permission tokens) ⬜
 12. Community store for skills and prompts too (Msty Discover Hub) ⬜
 13. Control the computer from the phone: watch and approve ⬜

@@ -144,6 +144,8 @@ export const KesherConfigSchema = z.object({
       learn: z.boolean().default(true),
     })
     .default({}),
+  /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
+  mcpServer: z.object({ enabled: z.boolean().default(true) }).default({}),
   /** Notifications when long work ends or KesherAI waits for an answer. */
   notifications: z
     .object({

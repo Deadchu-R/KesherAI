@@ -24,6 +24,7 @@ import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
 import { Notifier, type Note } from "./notify.js";
 import { speechTools } from "./speech-tools.js";
+import { mcpServerRoutes } from "./routes/mcp-server.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
@@ -354,6 +355,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await personaRoutes(app, services);
   await promptRoutes(app, services);
   await notificationRoutes(app, services);
+  await mcpServerRoutes(app, services);
   await githubRoutes(app, services);
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);

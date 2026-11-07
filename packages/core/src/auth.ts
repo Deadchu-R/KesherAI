@@ -59,7 +59,7 @@ export function registerRemoteAuth(app: FastifyInstance, getToken: () => string 
   app.addHook("onRequest", async (request, reply) => {
     if (isLocalRequest(request)) return;
     const path = request.url.split("?")[0] ?? "";
-    if (!path.startsWith("/api/") && path !== "/api" && !path.startsWith("/v1/") && path !== "/v1") return;
+    if (!path.startsWith("/api/") && path !== "/api" && !path.startsWith("/v1/") && path !== "/v1" && path !== "/mcp") return;
     const token = getToken();
     const header = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     const query = (request.query as Record<string, string | undefined> | undefined)?.token;

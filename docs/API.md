@@ -220,3 +220,21 @@ Tool calls, images in messages and embeddings are not supported on `/v1` yet.
 ## Versioning
 
 Until 1.0, endpoints may change between minor versions; changes are listed in the release notes. After 1.0, breaking changes go under a new path prefix.
+
+## KesherAI as an MCP server
+
+KesherAI answers MCP (Streamable HTTP, JSON responses) at `POST /mcp`, so other AI apps can use it:
+
+| Tool | What it does |
+| --- | --- |
+| `list_models` | Models KesherAI can use, with ids |
+| `ask_model` | One answer from a model (default: the active chat model) |
+| `search_knowledge` | Passages from the user's knowledge bases, with sources |
+| `generate_image` | A picture from the active image model |
+| `transcribe_audio` | An audio or video file (full path) to text |
+
+Requests from this computer need nothing; from other devices they need the remote access token (`Authorization: Bearer …`). Turn it off in Settings → "Use KesherAI from other apps" (`PUT /api/mcp-server {"enabled": false}`).
+
+- Claude Code: `claude mcp add --transport http kesherai http://127.0.0.1:7420/mcp`
+- Cursor / VS Code: an `http` server with that URL.
+- Apps that only start programs (Claude Desktop): the bundled stdio bridge `mcp-bridge.cjs` (in the app's resources folder). Settings shows the exact entry for `claude_desktop_config.json`.
