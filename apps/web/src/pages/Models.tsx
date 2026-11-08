@@ -129,6 +129,27 @@ function StartHere({ onChange }: { onChange: () => void }) {
   );
 }
 
+/** "Measure speed": how fast this model writes on this computer, kept and shown next to it. */
+function BenchButton({ path, onDone }: { path: string; onDone: () => void }) {
+  const [state, setState] = useState<"idle" | "busy" | string>("idle");
+  return (
+    <button
+      type="button"
+      disabled={state === "busy"}
+      title={t("benchHint")}
+      onClick={() => {
+        setState("busy");
+        void api<{ tps: number }>("/api/models/benchmark", { method: "POST", body: { modelPath: path } }).then(
+          (r) => { setState(t("benchResult", { tps: r.tps })); onDone(); },
+          (e: Error) => { setState("idle"); toast(e.message); },
+        );
+      }}
+    >
+      {state === "busy" ? t("benchRunning") : state === "idle" ? t("bench") : state}
+    </button>
+  );
+}
+
 const LEVELS: ResourceLevel[] = ["conservative", "balanced", "extreme"];
 
 /**
@@ -336,6 +357,7 @@ export function ModelsPage() {
                     {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
                     <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                     {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
+                    {tab === "chat" && f.gguf && <BenchButton path={f.path} onDone={refreshLocal} />}
                     {tab === "chat" && f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
                   </div>
                 ))}

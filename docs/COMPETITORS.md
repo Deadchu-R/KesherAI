@@ -172,7 +172,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ✅ (English voices; Hebrew stays with the system voice)
 9. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ✅ (Images page: start from a picture, paint what to change, strength)
 10. Music generation, as a tool the chat can call (LU) ⬜
-11. Hardware benchmark: tokens per second for each model on this computer (LU, PocketPal) ⬜
+11. Hardware benchmark: tokens per second for each model on this computer (LU, PocketPal) ✅ ("Measure speed" next to each chat model; the phone already measures)
 
 **3. High-importance features**
 

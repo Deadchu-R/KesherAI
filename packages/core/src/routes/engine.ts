@@ -125,6 +125,32 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
   });
 
+  /**
+   * Measures how fast a model writes on this computer: loads it, writes about
+   * 200 tokens to a fixed request, and keeps the speed (shown next to the
+   * model instead of the estimate). Body: `{ modelPath }`.
+   */
+  app.post<{ Body: { modelPath?: string } }>("/api/models/benchmark", async (req, reply) => {
+    const path = req.body?.modelPath ?? "";
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added can be measured" });
+    if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "Speed tests run on GGUF files" });
+    if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
+    try {
+      if (s.engine.status().modelPath !== path || !s.engine.status().running) await loadModel(s, path);
+      const body = { prompt: "Write a short story about a lighthouse keeper, in plain English.", n_predict: 200, temperature: 0.7, cache_prompt: false };
+      const res = await fetch(`http://127.0.0.1:${s.config.engines.llamaServerPort}/completion`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(300_000) });
+      if (!res.ok) throw new Error(`The engine answered ${res.status}`);
+      const j = (await res.json()) as { timings?: { predicted_n?: number; predicted_ms?: number; predicted_per_second?: number; prompt_per_second?: number } };
+      const n = j.timings?.predicted_n ?? 0;
+      const ms = j.timings?.predicted_ms ?? 0;
+      if (!n || !ms) throw new Error("The engine did not report its speed.");
+      await s.speeds.record(basename(path), n, ms);
+      return { tps: Math.round((n / (ms / 1000)) * 10) / 10, promptTps: Math.round(j.timings?.prompt_per_second ?? 0), tokens: n };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
   /** How many chats the engine answers at once. A running model is loaded again with it. */
   app.put<{ Body: { parallel?: number } }>("/api/engines/llamacpp/settings", async (req, reply) => {
     const n = Number(req.body?.parallel);
