@@ -9,8 +9,11 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "./styles.css";
 import { startPhoneShare } from "./phone";
 import { installSlideMenus } from "./slideMenus";
+import { loadAppearance } from "./appearance";
 
 setLocale(getLocale());
+// The look the user picked (Settings → Appearance, or "make it light" in a chat).
+loadAppearance();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -65,7 +65,8 @@ function useHash(): string {
  */
 function Home() {
   const { models } = useModels("chat");
-  const [text, setText] = useState("");
+  // `#/?ask=…` (Settings → Appearance "say it in words", and other pages) fills the box.
+  const [text, setText] = useState(() => new URLSearchParams(location.hash.split("?")[1] ?? "").get("ask") ?? "");
   const [modelId, setModelId] = useState("");
   const [personaId, setPersonaId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);

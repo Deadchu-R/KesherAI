@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { PARTS, partOn } from "@kesher/shared";
+import { PARTS, partOn, cleanAppearance, type Appearance } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { ensureVideoModel } from "../sdcpp.js";
 import { isLocalRequest } from "../auth.js";
@@ -36,6 +36,19 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (typeof req.body?.role === "string") s.config.onboarding.role = req.body.role.slice(0, 200);
     await s.saveConfig();
     return s.config.onboarding;
+  });
+
+  /** How the app looks. Only looks (no access, no files), so the phone may change it too. */
+  app.get("/api/appearance", async () => ({ appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0 }));
+
+  /** Body: `{ appearance }` (the whole look; `{}` is the default look), or `{ undo: true }`. */
+  app.put<{ Body: { appearance?: unknown; undo?: boolean } }>("/api/appearance", async (req) => {
+    if (req.body?.undo) {
+      const prev = s.config.appearanceHistory.pop();
+      s.config.appearance = prev ? cleanAppearance(prev) as Record<string, unknown> : {};
+    } else setAppearance(s, cleanAppearance(req.body?.appearance));
+    await s.saveConfig();
+    return { appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0 };
   });
 
   /** Body: `{ parts: { <id>: true | false } }`, or `{ preset: "chat" | "all" }`. */
@@ -86,4 +99,15 @@ async function apply(s: KesherServices, on: string[], off: string[]): Promise<vo
     if (id === "video") void ensureVideoModel({ sd: s.sd, downloads: s.downloads, config: s.config, modelsDir: () => s.paths.models, save: () => s.saveConfig() }).catch(() => undefined);
     if (id === "nodes" && !s.comfy.status().installed) void s.comfy.install().catch(() => undefined);
   }
+}
+
+/**
+ * Sets the look and keeps the one before it for Undo (the last 10).
+ *
+ * @param s - The server state.
+ * @param next - The new, checked look.
+ */
+export function setAppearance(s: { config: { appearance: Record<string, unknown>; appearanceHistory: Array<Record<string, unknown>> } }, next: Appearance): void {
+  s.config.appearanceHistory = [...s.config.appearanceHistory, s.config.appearance].slice(-10);
+  s.config.appearance = next as Record<string, unknown>;
 }

@@ -16,3 +16,4 @@ export * from "./recommended.js";
 export * from "./explain.js";
 export * from "./parts.js";
 export * from "./roles.js";
+export * from "./appearance.js";

@@ -1,4 +1,5 @@
 import { ImportChats } from "../ImportChats";
+import { AppearanceSection } from "../AppearanceSection";
 import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
@@ -394,6 +395,7 @@ function Phone() {
 /** The settings in categories; only the open one is drawn (and asks the computer anything). */
 const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; render: () => React.ReactNode }> = [
   { id: "general", icon: "⚙", en: "General", he: "כללי", render: () => <><ActiveModels /><NotificationsSection /><SpeechSection /><ImportChats /></> },
+  { id: "appearance", icon: "🎨", en: "Appearance", he: "מראה", render: () => <AppearanceSection /> },
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", render: () => <><GpuSection /><GuardSection /><ComputerSection /><PermissionsSection /></> },
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", render: () => <Phone /> },
   { id: "accounts", icon: "☁", en: "Accounts and backup", he: "חשבונות וגיבוי", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /></> },

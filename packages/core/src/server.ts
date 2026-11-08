@@ -7,7 +7,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync } from "node:fs";
 import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { branding, features } from "@kesher/shared";
+import { branding, cleanAppearance, features } from "@kesher/shared";
 import { dataPaths, loadConfig, saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
@@ -65,7 +65,7 @@ import { Kokoro } from "./kokoro.js";
 import { memoryTools } from "./memory-tools.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
-import { partsRoutes } from "./routes/parts.js";
+import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { Pages } from "./pages.js";
 import { pairRoutes } from "./routes/pair.js";
@@ -469,6 +469,21 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           },
         })),
       ],
+      // change_look: the chat changes how the app looks (the same as Settings → Appearance).
+      look: {
+        get: () => cleanAppearance(config.appearance),
+        set: async (next) => {
+          setAppearance({ config }, next);
+          await persist();
+        },
+        undo: async () => {
+          const prev = config.appearanceHistory.pop();
+          if (prev === undefined) return false;
+          config.appearance = prev;
+          await persist();
+          return true;
+        },
+      },
       // Music and 3D from the chat: the ready-made ComfyUI flows (comfy-flows.ts).
       flows: {
         state: (id: string) => {

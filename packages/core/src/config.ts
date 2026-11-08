@@ -110,6 +110,9 @@ export const KesherConfigSchema = z.object({
       active: z.string().optional(),
     })
     .default({}),
+  /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
+  appearance: z.record(z.string(), z.unknown()).default({}),
+  appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
   /** The first-run welcome: whether it was finished, and the role the user picked (shapes suggestions). */
   onboarding: z
     .object({

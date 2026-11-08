@@ -1,3 +1,4 @@
+import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate } from "@kesher/shared";
@@ -477,6 +478,11 @@ export function ConversationPage({ id }: { id: string }) {
   useEffect(() => {
     if (lastBuild) setFilesOpen(true);
   }, [lastBuild?.seq]);
+  // The chat changed the app's look: show it at once.
+  const lastLook = useMemo(() => [...events].reverse().find((e): e is Ev<"tool_result"> => e.type === "tool_result" && e.name === "change_look" && e.ok), [events]);
+  useEffect(() => {
+    if (lastLook) appearanceChanged();
+  }, [lastLook?.seq]);
   const answers = useMemo(() => new Map(events.filter((e): e is Ev<"answer"> => e.type === "answer").map((e) => [e.questionId, e])), [events]);
 
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;

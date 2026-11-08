@@ -6,7 +6,7 @@ import type { ImportedChat } from "./chat-import.js";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
-import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
+import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, branding, cleanAppearance, type Appearance, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
@@ -166,6 +166,12 @@ export class ConversationManager {
           signal: AbortSignal,
         ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
       };
+      /** How the app looks: the change_look tool reads and changes it (Undo keeps the last looks). */
+      look?: {
+        get(): Appearance;
+        set(next: Appearance): Promise<void>;
+        undo(): Promise<boolean>;
+      };
       /** Computer-control tools for a conversation (empty when the user has not turned it on). */
       computerTools?(conversationId: string): AgentTool[];
       /** Tools from connected apps: Gmail and Calendar (Google sign-in) and MCP servers. */
@@ -290,7 +296,65 @@ export class ConversationManager {
       });
     }
     tools.push(...this.flowTools(notes));
+    tools.push(...this.lookTools(notes));
     return { tools, notes };
+  }
+
+  /**
+   * change_look: the user asks in words ("make it light", "bigger text",
+   * "green accent", "put Work first") and the model changes KesherAI's look.
+   * Only looks: checked by cleanAppearance, nothing else can change.
+   */
+  private lookTools(notes: string[]): AgentTool[] {
+    const look = this.deps.look;
+    if (!look) return [];
+    notes.push(
+      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background, the order of the tool groups) when the user asks for it. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed and that they can say \"undo\" or open Settings → Appearance.",
+    );
+    const fonts = APPEARANCE_FONTS.map((f) => `${f.id}${f.hebrew ? "" : " (no Hebrew letters)"}`).join(", ");
+    return [
+      {
+        risk: "safe",
+        spec: {
+          name: "change_look",
+          description: "Change how the KesherAI app looks. Every field is optional; what is not given stays as it is. The page updates at once.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              preset: { type: "string", enum: APPEARANCE_PRESETS.map((p) => p.id), description: "Start from a ready-made look (graphite is the default; paper is light). Clears the user's own colours." },
+              colors: {
+                type: "object",
+                description: "Colours as #rrggbb. bg: page; panel: cards; panel-2: fields and menus; raised: hover; text; muted: secondary text; accent: buttons and what is selected. Keep text readable on bg.",
+                properties: Object.fromEntries(APPEARANCE_COLORS.map((c) => [c, { type: "string" }])),
+              },
+              font: { type: "string", description: `One of: ${fonts}.` },
+              fontSize: { type: "number", description: "Text size in px, 12–20 (default 15)." },
+              radius: { type: "number", description: "Corner roundness in px, 0 (square) – 28 (very round); default 16." },
+              density: { type: "string", enum: ["compact", "normal", "roomy"] },
+              background: { type: "object", description: "{ kind: 'plain' } or { kind: 'gradient', from: '#rrggbb', to: '#rrggbb', angle: 0–360 }." },
+              navOrder: { type: "array", items: { type: "string", enum: [...APPEARANCE_NAV_GROUPS] }, description: "The tool groups top to bottom (create, work, assistant, system)." },
+              navHide: { type: "array", items: { type: "string", enum: [...APPEARANCE_NAV_GROUPS] }, description: "Tool groups to hide from the menus." },
+              reset: { type: "boolean", description: "Back to the default look." },
+              undo: { type: "boolean", description: "Go back one step." },
+            },
+          },
+        },
+        run: async (input) => {
+          if (input.undo === true) return { output: (await look.undo()) ? "Went back to the previous look." : "There is nothing to undo." };
+          if (input.reset === true) {
+            await look.set({});
+            return { output: "Back to the default look." };
+          }
+          const change = cleanAppearance(input);
+          if (!Object.keys(change).length) return { output: "Nothing valid to change. Colours must be #rrggbb; fonts and groups must be from the lists." };
+          const cur = look.get();
+          const next: Appearance = change.preset ? { ...change } : { ...cur, ...change, colors: { ...cur.colors, ...change.colors } };
+          if (!next.colors || !Object.keys(next.colors).length) delete next.colors;
+          await look.set(next);
+          return { output: `Changed the look: ${Object.keys(change).join(", ")}.` };
+        },
+      },
+    ];
   }
 
   /**

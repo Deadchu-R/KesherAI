@@ -5,6 +5,7 @@ import { NAV_GROUPS, NAV_ICONS, usePins } from "../Sidebar";
 import { setParts, useParts } from "../parts";
 import { usePluginUi } from "../plugins";
 import { toast } from "../library";
+import { orderGroups, useAppearance } from "../appearance";
 
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
 
@@ -18,8 +19,9 @@ export function AppsPage() {
   const [pins, togglePin] = usePins();
   const { parts } = useParts();
   const { pages } = usePluginUi();
+  const look = useAppearance();
   const partOf = (href: string) => parts.find((p) => p.pages.some((x) => href === x || href.startsWith(`${x}/`))) ?? parts.find((p) => p.plugin && href.startsWith(`#/p/${p.plugin}/`));
-  const groups = NAV_GROUPS.map((g) => ({
+  const groups = orderGroups(NAV_GROUPS, look).map((g) => ({
     ...g,
     items: [
       ...g.items.map(([href, key]) => {
