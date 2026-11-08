@@ -28,6 +28,23 @@ export async function deviceRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { computers: await s.devices.updateOthers() };
   });
 
+  /** Another of my computers (it holds this one's token) says it is going to sleep, or is back. */
+  app.post<{ Body: { id?: string; state?: string } }>("/api/devices/presence", async (req, reply) => {
+    const id = String(req.body?.id ?? "");
+    const state = req.body?.state;
+    if (!/^[\w-]{8,64}$/.test(id) || (state !== "asleep" && state !== "awake")) return reply.code(400).send({ error: "id and state (asleep or awake) are needed." });
+    if (!s.devices.presence(id, state)) return reply.code(404).send({ error: "Not one of your computers." });
+    return { ok: true };
+  });
+
+  /** This computer is going to sleep or shutting down (from the desktop app), or woke up: tell the others. Local only. */
+  app.post<{ Body: { state?: string } }>("/api/devices/announce", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only this computer can say that." });
+    const state = req.body?.state === "awake" ? "awake" : "asleep";
+    await s.devices.announce(state);
+    return { ok: true };
+  });
+
   app.post("/api/devices/sync", async () => {
     await s.devices.sync();
     return s.devices.status();

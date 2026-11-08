@@ -45,3 +45,9 @@
 - C# built by the tools: user and model text enters only as escaped C# string literals (backslash and quote escaped, control characters dropped); component type names must match a strict identifier pattern; numbers must be finite. Tested with an injection attempt in a GameObject name.
 - The CLI is run with an argument list, never a shell; `recompile` and `logs --console` take only fixed flags plus the project path.
 - Performance: the CLI check starts when the server starts (so the first chat has the tools) and is cached for a minute; file listing stops at 500 files and 12 folder levels; hierarchy at 400 objects.
+
+## My devices: faster, live, sleep notice (0.5.47)
+
+- `POST /api/devices/presence` sits behind the normal access token (a computer only reaches another with the token that one published in the user's own devices.json); it accepts only a known device id and "asleep"/"awake", and only changes whether this computer waits on that one's models. `POST /api/devices/announce` is local only (the desktop app on suspend, shutdown, resume and quit).
+- Addresses of a computer are tried at once (first answer wins, 8 s each) instead of one by one; another computer's model list is served from the last answer (up to 10 minutes old) and refreshed in the background, so opening a chat never waits on it.
+- Reading answers aloud by itself now starts off (new setting key), under Settings → Accessibility.

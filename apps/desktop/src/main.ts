@@ -481,6 +481,12 @@ app.whenReady().then(async () => {
     if (!headless) await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);
     watchCore(coreUrl);
     setupTray(coreUrl);
+    // Going to sleep or shutting down: tell my other computers at once, so they stop waiting on this one; and when back.
+    const announce = (state: "asleep" | "awake") => fetch(`${coreUrl.replace(/\/$/, "")}/api/devices/announce`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ state }), signal: AbortSignal.timeout(3000) }).catch(() => undefined);
+    announceAway = () => announce("asleep");
+    powerMonitor.on("suspend", () => void announce("asleep"));
+    powerMonitor.on("shutdown", () => void announce("asleep"));
+    powerMonitor.on("resume", () => setTimeout(() => void announce("awake"), 5000));
     // Stops computer control from anywhere, even when another app is in front.
     const stopKey = process.platform === "darwin" ? "Command+Shift+Escape" : "Control+Alt+Escape";
     globalShortcut.register(stopKey, () => {
@@ -537,6 +543,9 @@ app.on("window-all-closed", () => {
   if (quitting) app.quit();
 });
 
+/** Tells my other computers this one is going away (set once the server runs). */
+let announceAway: (() => Promise<unknown>) | undefined;
+
 app.on("before-quit", (event) => {
   quitting = true;
   // A downloaded update installs as the app closes (silently on Windows).
@@ -549,5 +558,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   const s = server;
   server = undefined;
-  void s.close().finally(() => app.quit());
+  void Promise.resolve(announceAway?.())
+    .finally(() => s.close())
+    .finally(() => app.quit());
 });

@@ -32,6 +32,7 @@ async function loadProviderNames(fresh = false): Promise<Record<string, string>>
 export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [finding, setFinding] = useState(false);
+  const [findLine, setFindLine] = useState("");
   const [q, setQ] = useState("");
   const [names, setNames] = useState<Record<string, string>>(providerNames ?? {});
   const ref = useRef<HTMLDivElement>(null);
@@ -130,8 +131,8 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
           </div>
           <button type="button" className="model-pop-foot small" disabled={finding} onClick={() => {
             setFinding(true);
-            void refreshComputers().then((msg) => { toast(msg); return loadProviderNames(true).then(setNames); }, (e: Error) => toast(e.message)).finally(() => setFinding(false));
-          }}>{finding ? "⟳ …" : `⟳ ${t("findComputers")}`}</button>
+            void refreshComputers(setFindLine).then((msg) => { toast(msg); return loadProviderNames(true).then(setNames); }, (e: Error) => toast(e.message)).finally(() => { setFinding(false); setFindLine(""); });
+          }}>{finding ? `⟳ ${findLine || "…"}` : `⟳ ${t("findComputers")}`}</button>
           {!devices.length && <a className="model-pop-foot small" href="#/connections">{t("runOnOtherComputer")}</a>}
           <a className="model-pop-foot" href="#/connections">{t("connectMoreModels")}</a>
         </div>

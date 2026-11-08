@@ -3,7 +3,8 @@ import { withToken } from "./api";
 import { getLocale, t } from "./i18n";
 
 const VOICE_KEY = "kesher-tts-voice"; // "system:<voiceURI>" | "cloud:openai:<voice>" | ""
-const AUTO_KEY = "kesher-tts-auto";
+// A new key (0.5.47): reading aloud by itself starts off for everyone; turn it on in Settings → Accessibility.
+const AUTO_KEY = "kesher-tts-auto-v2";
 
 const read = (k: string) => {
   try {
@@ -210,7 +211,6 @@ export function SpeakButton({ text }: { text: string }) {
 export function VoicePicker({ clouds }: { clouds: string[] }) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voice, setVoice] = useState(read(VOICE_KEY));
-  const [auto, setAuto] = useState(autoSpeak());
   useEffect(() => {
     // Inside the Android app the page has no speechSynthesis (the phone's own voice is used instead).
     if (typeof speechSynthesis === "undefined") return;
@@ -246,11 +246,22 @@ export function VoicePicker({ clouds }: { clouds: string[] }) {
           {!local.busy && <button type="button" onClick={() => void fetch(withToken("/api/speech/tts/local/setup"), { method: "POST" }).then(() => setLocal({ ...local, busy: true }))}>{t("micDownload")}</button>}
         </p>
       )}
+      <button type="button" onClick={() => void speak(getLocale() === "he" ? "שלום, ככה אני נשמע." : "Hello, this is how I sound.")}>{t("ttsTry")}</button>
+    </>
+  );
+}
+
+/** Settings → Accessibility: reading answers aloud by itself (off unless turned on here). */
+export function AccessibilitySection() {
+  const [auto, setAuto] = useState(autoSpeak());
+  return (
+    <section className="card stack">
+      <h2>{t("a11yTitle")}</h2>
       <label className="row tts-auto">
         <input type="checkbox" checked={auto} onChange={(e) => { setAuto(e.target.checked); write(AUTO_KEY, e.target.checked ? "1" : "0"); }} />
         <span>{t("ttsAuto")}</span>
       </label>
-      <button type="button" onClick={() => void speak(getLocale() === "he" ? "שלום, ככה אני נשמע." : "Hello, this is how I sound.")}>{t("ttsTry")}</button>
-    </>
+      <p className="muted small">{t("a11yAutoHint")}</p>
+    </section>
   );
 }

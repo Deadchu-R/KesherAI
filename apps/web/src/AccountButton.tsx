@@ -7,7 +7,7 @@ import { refreshComputers } from "./computers";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 interface Google { configured: boolean; connected: boolean; email: string | null; name: string | null; picture: string | null; services: string[] }
-interface Devices { connected: boolean; share: boolean; devices: Array<{ id: string; name: string; me: boolean; online: boolean }> }
+interface Devices { connected: boolean; share: boolean; devices: Array<{ id: string; name: string; me: boolean; online: boolean; asleepSince?: string }> }
 
 /** The account circle: who is signed in (Google), their devices, sign in and out — like Claude's. */
 export function AccountButton() {
@@ -16,6 +16,7 @@ export function AccountButton() {
   const [open, setOpen] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [finding, setFinding] = useState(false);
+  const [findLine, setFindLine] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const load = () => {
     void api<Google>("/api/google").then(setG, () => undefined);
@@ -111,11 +112,11 @@ export function AccountButton() {
                       <span className="grow">{L("המכשירים שלי", "My devices")}</span>
                       <button type="button" className="link-btn small" disabled={finding} onClick={() => {
                         setFinding(true);
-                        void refreshComputers().then((msg) => { toast(msg); void api<Devices>("/api/devices").then(setD); }, (e: Error) => toast(e.message)).finally(() => setFinding(false));
-                      }}>{finding ? "⟳ …" : `⟳ ${L("רענן", "Refresh")}`}</button>
+                        void refreshComputers(setFindLine).then((msg) => { toast(msg); void api<Devices>("/api/devices").then(setD); }, (e: Error) => toast(e.message)).finally(() => { setFinding(false); setFindLine(""); });
+                      }}>{finding ? `⟳ ${findLine || "…"}` : `⟳ ${L("רענן", "Refresh")}`}</button>
                     </span>
                     {others.length === 0 && <span className="muted small">{L("עוד אין — התחבר עם אותו חשבון במחשב או בטלפון השני.", "None yet — sign in with the same account on your other computer or phone.")}</span>}
-                    {others.map((x) => <span key={x.id} className="small"><span style={{ color: x.online ? "var(--good)" : "var(--muted)" }}>●</span> {x.name}</span>)}
+                    {others.map((x) => <span key={x.id} className="small"><span style={{ color: x.online ? "var(--good)" : "var(--muted)" }}>●</span> {x.name}{x.asleepSince ? ` 💤 ${L("במצב שינה", "asleep")}` : ""}</span>)}
                   </div>
                 </>
               )}

@@ -44,6 +44,8 @@ export interface DeviceView {
   models: number;
   lastSeen: string;
   providerId?: string;
+  /** It said it is going to sleep or shutting down (when). */
+  asleepSince?: string;
 }
 
 /** The `devices` section of the config. */
@@ -114,6 +116,9 @@ export class Devices {
   private lastError?: string;
   private lastRun?: string;
   private running?: Promise<void>;
+  /** While looking: what is happening now, and each computer's state (shown live in the menus). */
+  private step?: string;
+  private checking = new Map<string, { name: string; state: "checking" | "online" | "offline" | "asleep" }>();
 
   /**
    * @param d - What it works with.
@@ -149,7 +154,8 @@ export class Devices {
     clearInterval(this.timer);
     this.timer = setInterval(() => void this.sync().catch(() => undefined), 3 * 60_000);
     this.timer.unref?.();
-    setTimeout(() => void this.sync().catch(() => undefined), 15_000).unref?.();
+    // At start: look, then tell the others this computer is back (it may have said "asleep" before a restart or an update).
+    setTimeout(() => void this.sync().then(() => this.announce("awake", false), () => undefined), 15_000).unref?.();
   }
 
   /** Stops checking. */
@@ -159,7 +165,18 @@ export class Devices {
 
   /** @returns The settings page's view. */
   status() {
-    return { connected: this.d.google.connected, share: this.d.config.share, syncSettings: this.d.config.syncSettings, me: { id: this.id, name: hostname() }, devices: this.views, lastRun: this.lastRun ?? null, error: this.lastError ?? null };
+    return {
+      connected: this.d.google.connected,
+      share: this.d.config.share,
+      syncSettings: this.d.config.syncSettings,
+      me: { id: this.id, name: hostname() },
+      devices: this.views,
+      lastRun: this.lastRun ?? null,
+      error: this.lastError ?? null,
+      running: !!this.running,
+      step: this.step ?? null,
+      checking: [...this.checking.values()],
+    };
   }
 
   /**
@@ -185,6 +202,63 @@ export class Devices {
     const v = this.views.find((x) => x.id === id);
     const url = v?.url ?? e.urls[0];
     return url && e.token ? { name: e.name, url, token: e.token } : undefined;
+  }
+
+  /**
+   * Another of the user's computers says it is going to sleep (or shutting
+   * down), or that it is back: its models stop being waited on at once, and
+   * come back the moment it returns.
+   *
+   * @param id - Its device id (must be one of the user's computers).
+   * @param state - "asleep" or "awake".
+   * @returns Whether that computer is known.
+   */
+  presence(id: string, state: "asleep" | "awake"): boolean {
+    const e = this.entries.find((x) => x.id === id && x.id !== this.id);
+    if (!e) return false;
+    const providerId = `device-${e.id.slice(0, 8)}`;
+    const v = this.views.find((x) => x.id === id);
+    if (state === "asleep") {
+      this.d.registry.setAway(providerId, `${e.name} went to sleep or was turned off; its models come back when it wakes up.`);
+      if (v) Object.assign(v, { online: false, asleepSince: new Date().toISOString() });
+    } else {
+      this.d.registry.setAway(providerId, undefined);
+      if (v) delete v.asleepSince;
+      // Reach it again now (it may have a new address after waking).
+      void this.useDevice(e).then((nv) => (this.views = this.views.map((x) => (x.id === id ? nv : x))), () => undefined);
+    }
+    return true;
+  }
+
+  /**
+   * Tells the user's other online computers that this one is going away
+   * (sleep, shutdown) or is back. Quick: the system gives a moment before sleeping.
+   *
+   * @param state - "asleep" or "awake".
+   * @param look - When back, also look for the others again (default yes).
+   */
+  async announce(state: "asleep" | "awake", look = true): Promise<void> {
+    if (!this.d.config.share) return;
+    const others = this.entries.filter((x) => x.id !== this.id);
+    await Promise.allSettled(
+      others.map(async (e) => {
+        const v = this.views.find((x) => x.id === e.id);
+        const urls = v?.url ? [v.url] : e.urls;
+        await Promise.any(
+          urls.map((u) =>
+            fetch(`${u.replace(/\/$/, "")}/api/devices/presence`, {
+              method: "POST",
+              headers: { authorization: `Bearer ${e.token}`, "content-type": "application/json" },
+              body: JSON.stringify({ id: this.id, state }),
+              signal: AbortSignal.timeout(state === "asleep" ? 2500 : 8000),
+            }).then((r) => {
+              if (!r.ok) throw new Error(String(r.status));
+            }),
+          ),
+        );
+      }),
+    );
+    if (state === "awake" && look) void this.sync().catch(() => undefined);
   }
 
   /**
@@ -269,7 +343,9 @@ export class Devices {
 
   private async syncOnce(): Promise<void> {
     if (!this.d.google.connected) return;
+    this.checking.clear();
     try {
+      this.step = "reading your devices from Google Drive";
       // Every devices.json KesherAI can see (each computer may have its own KesherAI folder); the newest entry of each computer wins.
       const files = this.d.google.readAllJson ? await this.d.google.readAllJson<{ devices?: DeviceEntry[] }>("devices.json") : [(await this.d.google.readJson<{ devices: DeviceEntry[] }>("devices.json")) ?? { devices: [] }];
       const newest = new Map<string, DeviceEntry>();
@@ -286,15 +362,19 @@ export class Devices {
         const gpu = await this.d.gpu().catch(() => undefined);
         devices = [...devices, { id: this.id, name: hostname(), platform: process.platform, urls, token: this.d.remote.token, ...(gpu ? { gpu } : {}), version: await this.d.version(), updatedAt: new Date().toISOString() }];
       }
-      await this.d.google.writeJson("devices.json", { devices });
+      this.step = "checking which computers answer";
+      for (const x of devices) if (x.id !== this.id) this.checking.set(x.id, { name: x.name, state: "checking" });
+      // Publishing this computer and reaching the others happen at the same time.
+      const [views] = await Promise.all([Promise.all(devices.map((x) => this.useDevice(x))), this.d.google.writeJson("devices.json", { devices })]);
       this.entries = devices;
-      this.views = await Promise.all(devices.map((x) => this.useDevice(x)));
+      this.views = views;
       if (this.d.config.syncSettings) await this.syncSettings();
       this.lastError = undefined;
     } catch (e) {
       this.lastError = (e as Error).message;
     } finally {
       this.lastRun = new Date().toISOString();
+      this.step = undefined;
     }
   }
 
@@ -303,23 +383,32 @@ export class Devices {
     const view: DeviceView = { id: x.id, name: x.name, platform: x.platform, ...(x.gpu ? { gpu: x.gpu } : {}), me: x.id === this.id, online: false, models: 0, lastSeen: x.updatedAt };
     if (view.me) return { ...view, online: true };
     const providerId = `device-${x.id.slice(0, 8)}`;
-    for (const url of x.urls) {
-      try {
-        const res = await fetch(`${url.replace(/\/$/, "")}/v1/models`, { headers: { authorization: `Bearer ${x.token}` }, signal: AbortSignal.timeout(12_000) });
-        if (!res.ok) continue;
-        const j = (await res.json()) as { data?: unknown[] };
-        await this.d.addProvider({ id: providerId, type: "openai-compatible", name: `${x.name} (your computer)`, location: "server", baseUrl: `${url.replace(/\/$/, "")}/v1`, apiKey: x.token }, false);
-        // Its models show at once in every model list (the list asks it again later).
-        const provider = this.d.registry.get(providerId);
-        if (provider) {
-          const models = await provider.listModels(AbortSignal.timeout(15_000)).catch(() => undefined);
-          if (models) this.d.registry.rememberModels(providerId, models);
-        }
-        return { ...view, online: true, url, models: j.data?.length ?? 0, providerId };
-      } catch {
-        /* try the next address */
+    // A computer that said it went to sleep stays away until it says it is back (or a check later finds it).
+    const prev = this.views.find((v) => v.id === x.id);
+    // Every address at once; the first that answers wins (no waiting address after address).
+    const tries = x.urls.map(async (u) => {
+      const url = u.replace(/\/$/, "");
+      const res = await fetch(`${url}/v1/models`, { headers: { authorization: `Bearer ${x.token}` }, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`answered ${res.status}`);
+      const j = (await res.json()) as { data?: unknown[] };
+      return { url, count: j.data?.length ?? 0 };
+    });
+    const hit = tries.length ? await Promise.any(tries).catch(() => undefined) : undefined;
+    if (hit) {
+      const { url, count } = hit;
+      await this.d.addProvider({ id: providerId, type: "openai-compatible", name: `${x.name} (your computer)`, location: "server", baseUrl: `${url}/v1`, apiKey: x.token }, false);
+      this.d.registry.setAway(providerId, undefined);
+      // Its models show at once in every model list (the list asks it again later).
+      const provider = this.d.registry.get(providerId);
+      if (provider) {
+        const models = await provider.listModels(AbortSignal.timeout(15_000)).catch(() => undefined);
+        if (models) this.d.registry.rememberModels(providerId, models);
       }
+      this.checking.set(x.id, { name: x.name, state: "online" });
+      return { ...view, online: true, url, models: count, providerId };
     }
+    this.checking.set(x.id, { name: x.name, state: prev?.asleepSince ? "asleep" : "offline" });
+    if (prev?.asleepSince) view.asleepSince = prev.asleepSince;
     // Not reachable now (asleep, restarting, offline): keep its connection, so a chat that uses its model
     // still knows it and says it cannot reach the computer, and works again the moment it is back.
     const url = x.urls[0]?.replace(/\/$/, "");

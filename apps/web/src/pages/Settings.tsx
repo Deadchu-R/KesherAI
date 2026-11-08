@@ -5,6 +5,7 @@ import { ResetSection } from "../ResetSection";
 import { TelegramSection } from "../TelegramSection";
 import { AccessLogSection, DeviceKeysSection } from "../AccessLogSection";
 import { SpeechSection } from "../SpeechSection";
+import { AccessibilitySection } from "../Speak";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { GuardSection } from "../GuardSection";
@@ -400,6 +401,7 @@ function Phone() {
 const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; render: () => React.ReactNode }> = [
   { id: "general", icon: "⚙", en: "General", he: "כללי", render: () => <><ActiveModels /><NotificationsSection /><SpeechSection /><ImportChats /><ResetSection /></> },
   { id: "appearance", icon: "🎨", en: "Appearance", he: "מראה", render: () => <AppearanceSection /> },
+  { id: "accessibility", icon: "♿", en: "Accessibility", he: "נגישות", render: () => <AccessibilitySection /> },
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", render: () => <><GpuSection /><GuardSection /><ComputerSection /><PermissionsSection /></> },
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", render: () => <><Phone /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },
   { id: "accounts", icon: "☁", en: "Accounts and backup", he: "חשבונות וגיבוי", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /></> },

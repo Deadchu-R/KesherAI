@@ -49,3 +49,34 @@ test("registry rejects bad ids and unknown types", () => {
   assert.throws(() => reg.add({ id: "ok", type: "nope" }));
   assert.throws(() => reg.registerFactory(echoFactory));
 });
+
+test("another computer's models show at once from the last list; a computer that went to sleep is not waited on", async () => {
+  let asked = 0;
+  const reg = new ProviderRegistry();
+  reg.registerFactory({
+    ...echoFactory,
+    type: "slow-server",
+    create: (config) => ({
+      ...echoFactory.create(config),
+      location: "server",
+      listModels: async () => {
+        asked++;
+        await new Promise((r) => setTimeout(r, 50));
+        return [{ id: `${config.id}/big`, providerId: config.id, providerModelId: "big", name: "big", category: "chat", location: "server" }];
+      },
+    }),
+  });
+  reg.add({ id: "pc", type: "slow-server" });
+  assert.deepEqual((await reg.listAllModels()).models.map((m) => m.id), ["pc/big"]);
+  assert.equal(asked, 1);
+  const t0 = Date.now();
+  assert.deepEqual((await reg.listAllModels()).models.map((m) => m.id), ["pc/big"]);
+  assert.ok(Date.now() - t0 < 40, "served from the last list without waiting");
+  assert.equal(asked, 1);
+  reg.setAway("pc", "PC went to sleep");
+  const away = await reg.listAllModels();
+  assert.deepEqual(away.models, []);
+  assert.deepEqual(away.errors, [{ providerId: "pc", message: "PC went to sleep" }]);
+  reg.setAway("pc", undefined);
+  assert.equal((await reg.listAllModels()).models.length, 1);
+});

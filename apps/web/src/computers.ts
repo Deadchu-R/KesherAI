@@ -10,9 +10,22 @@ export const COMPUTERS_EVENT = "kesher-computers-changed";
  *
  * @returns A short line for a toast: how many were found and how many are online.
  */
-export async function refreshComputers(): Promise<string> {
+export async function refreshComputers(onProgress?: (line: string) => void): Promise<string> {
   const he = getLocale() === "he";
-  const st = await api<{ devices: Array<{ me: boolean; online: boolean; name: string }>; error: string | null; connected: boolean }>("/api/devices/sync", { method: "POST" });
+  type Progress = { running?: boolean; step?: string | null; checking?: Array<{ name: string; state: "checking" | "online" | "offline" | "asleep" }> };
+  // While it looks: what it is doing and each computer's state, every ~0.7 s.
+  const word = { checking: he ? "בודק…" : "checking…", online: he ? "זמין ✓" : "online ✓", offline: he ? "לא עונה" : "not answering", asleep: he ? "במצב שינה" : "asleep" };
+  const poll = onProgress
+    ? setInterval(() => {
+        void api<Progress>("/api/devices").then((p) => {
+          if (!p.running) return;
+          const list = (p.checking ?? []).map((c) => `${c.name}: ${word[c.state]}`).join(" · ");
+          onProgress(list || (he ? "קורא את המכשירים שלך מ-Google Drive…" : "Reading your devices from Google Drive…"));
+        }, () => undefined);
+      }, 700)
+    : undefined;
+  onProgress?.(he ? "מחפש את המחשבים שלך…" : "Looking for your computers…");
+  const st = await api<{ devices: Array<{ me: boolean; online: boolean; name: string }>; error: string | null; connected: boolean }>("/api/devices/sync", { method: "POST" }).finally(() => clearInterval(poll));
   dispatchEvent(new Event(COMPUTERS_EVENT));
   if (!st.connected) return he ? "המחשב הזה לא מחובר לחשבון Google: התחבר בעיגול החשבון." : "This computer is not signed in to Google: sign in from the account circle.";
   if (st.error) return st.error;

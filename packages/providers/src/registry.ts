@@ -166,30 +166,58 @@ export class ProviderRegistry {
    * @returns All models found, and the providers that failed.
    */
   async listAllModels(timeoutMs = 5000): Promise<ModelListing> {
-    const entries = this.list().filter(({ provider }) => this.permitted(provider.id));
+    const listing: ModelListing = { models: [], errors: [] };
+    const ask: Provider[] = [];
+    for (const { provider } of this.list().filter(({ provider }) => this.permitted(provider.id))) {
+      const id = provider.id;
+      // A computer that said it is going to sleep: no waiting on it.
+      const away = this.away.get(id);
+      if (away) {
+        listing.errors.push({ providerId: id, message: away });
+        continue;
+      }
+      // Another computer (a "server" provider) with a list from the last minutes: shown at once, refreshed behind the scenes,
+      // so opening a chat never waits on a computer that was already found.
+      const cached = this.lastModels.get(id);
+      if (provider.location === "server" && cached && Date.now() - cached.at < 10 * 60_000) {
+        listing.models.push(...cached.models);
+        if (Date.now() - cached.at > 60_000) this.refreshInBackground(provider);
+        continue;
+      }
+      ask.push(provider);
+    }
     // Servers on another network (another computer through the internet) get longer: their own list asks their providers first.
     const wait = (p: Provider) => (p.location === "server" ? Math.max(timeoutMs, 15_000) : timeoutMs);
-    const results = await Promise.allSettled(
-      entries.map(({ provider }) => provider.listModels(AbortSignal.timeout(wait(provider)))),
-    );
-    const listing: ModelListing = { models: [], errors: [] };
+    const results = await Promise.allSettled(ask.map((provider) => provider.listModels(AbortSignal.timeout(wait(provider)))));
     results.forEach((r, i) => {
-      const providerId = entries[i]!.provider.id;
+      const providerId = ask[i]!.id;
       if (r.status === "fulfilled") {
-        this.lastModels.set(providerId, r.value);
+        this.lastModels.set(providerId, { at: Date.now(), models: r.value });
         listing.models.push(...r.value);
       } else {
         // A slow or briefly unreachable server keeps showing the models it had a moment ago.
         const last = this.lastModels.get(providerId);
-        if (last) listing.models.push(...last);
+        if (last) listing.models.push(...last.models);
         listing.errors.push({ providerId, message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
       }
     });
     return listing;
   }
 
-  /** The last model list each provider gave (shown while it is slow to answer). */
-  private readonly lastModels = new Map<string, ModelInfo[]>();
+  /** The last model list each provider gave, and when (shown while it is slow to answer). */
+  private readonly lastModels = new Map<string, { at: number; models: ModelInfo[] }>();
+  private readonly refreshing = new Set<string>();
+  /** Providers whose computer said it is going away (sleep, shutdown), with the line to show. */
+  private readonly away = new Map<string, string>();
+
+  private refreshInBackground(provider: Provider): void {
+    if (this.refreshing.has(provider.id)) return;
+    this.refreshing.add(provider.id);
+    void provider
+      .listModels(AbortSignal.timeout(20_000))
+      .then((models) => this.lastModels.set(provider.id, { at: Date.now(), models }), () => undefined)
+      .finally(() => this.refreshing.delete(provider.id));
+  }
 
   /**
    * Remembers a provider's models (e.g. right after reaching another computer), so they show at once.
@@ -198,7 +226,23 @@ export class ProviderRegistry {
    * @param models - Its models.
    */
   rememberModels(providerId: string, models: ModelInfo[]): void {
-    this.lastModels.set(providerId, models);
+    this.lastModels.set(providerId, { at: Date.now(), models });
+  }
+
+  /**
+   * Marks a provider's computer as away (it announced sleep or shutdown), or back.
+   *
+   * @param providerId - The provider.
+   * @param why - The line to show while away; undefined = back.
+   */
+  setAway(providerId: string, why: string | undefined): void {
+    if (why) this.away.set(providerId, why);
+    else this.away.delete(providerId);
+  }
+
+  /** @returns Why the provider's computer is away, if it said so. */
+  awayReason(providerId: string): string | undefined {
+    return this.away.get(providerId);
   }
 
   /**
