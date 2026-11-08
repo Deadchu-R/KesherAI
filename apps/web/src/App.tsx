@@ -28,6 +28,7 @@ import { ConversationPage } from "./pages/Conversation";
 import { ImagesPage } from "./pages/Images";
 import { BatchImagesPage } from "./pages/BatchImages";
 import { PairPrompt } from "./PairPrompt";
+import { PageBoundary } from "./PageBoundary";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/Models";
 import { ConnectionsPage } from "./pages/Connections";
@@ -183,7 +184,7 @@ export function App() {
       <PairPrompt />
       <main className="main">
         {online === false && <p className="error" style={{ padding: "12px 28px" }}>{t("serverOffline")}</p>}
-        {page}
+        <PageBoundary page={hash}>{page}</PageBoundary>
       </main>
       {message && <div className="toast" role="status">{message}</div>}
       <ComputerBanner />

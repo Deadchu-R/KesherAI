@@ -129,6 +129,8 @@ function steerImagesToEngine(tool: AgentTool): AgentTool {
  */
 export class ConversationManager {
   private readonly sessions = new Map<string, AgentSession>();
+  /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
+  private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
 
   /** @param deps - Services the manager needs. */
@@ -460,11 +462,88 @@ export class ConversationManager {
       const lastAnswer = () => [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant")?.text;
       session.on("event", (e: AgentEvent) => this.deps.onEvent?.(id, e, title, lastAnswer));
     }
-    // When the agent is free again, the next queued message goes.
+    // When the agent is free again, the next queued message goes; with a goal, it is checked first.
     session.on("event", (e: { type: string; status?: string }) => {
-      if (e.type === "status" && (e.status === "idle" || e.status === "error")) setTimeout(() => void this.drain(id), 50);
+      if (e.type !== "status" || (e.status !== "idle" && e.status !== "error")) return;
+      if (e.status === "idle" && this.goals.has(id) && !session.queued.length) void this.checkGoal(id);
+      else setTimeout(() => void this.drain(id), 50);
     });
     return { session, conversation };
+  }
+
+  /**
+   * "Keep going until done": sets a goal for a conversation and sends it.
+   * Each time the agent stops, a reviewer pass (the same model) checks the
+   * goal against what was done; while something is missing, the agent is
+   * sent back to finish it (at most 6 times). An empty goal stops it.
+   *
+   * @param id - Conversation.
+   * @param goal - What must be true when it is done.
+   */
+  async setGoal(id: string, goal: string): Promise<void> {
+    const opened = await this.open(id);
+    if (!opened) throw new Error("Conversation not found");
+    const g = goal.trim();
+    if (!g) {
+      if (this.goals.delete(id)) opened.session.note("Goal stopped.");
+      return;
+    }
+    this.goals.set(id, { goal: g.slice(0, 2000), rounds: 0 });
+    opened.session.note(`Goal: ${g.slice(0, 300)} (KesherAI checks it each time the agent stops, and sends it back until it is done.)`);
+    await this.send(id, `Goal: ${g}\n\nWork until this goal is fully met. When you think it is done, say what you did and how you checked it.`);
+  }
+
+  /** @returns The conversation's goal, if one is set. */
+  goalOf(id: string): { goal: string; rounds: number } | undefined {
+    const g = this.goals.get(id);
+    return g ? { goal: g.goal, rounds: g.rounds } : undefined;
+  }
+
+  private async checkGoal(id: string): Promise<void> {
+    const g = this.goals.get(id);
+    const opened = await this.open(id);
+    if (!g || g.checking || !opened) return;
+    const { session, conversation } = opened;
+    g.checking = true;
+    try {
+      const recent = session.events
+        .slice(-40)
+        .map((e) => (e.type === "assistant" ? `Assistant: ${e.text}` : e.type === "tool_call" ? `Tool: ${e.name}` : e.type === "tool_result" ? `Result of ${e.name}: ${e.ok ? "ok" : "failed"} ${e.output.slice(0, 300)}` : e.type === "user" ? `User: ${e.text}` : ""))
+        .filter(Boolean)
+        .join("\n")
+        .slice(-12_000);
+      const review = await modelTurnFor(this.deps.registry, conversation.modelId)(
+        {
+          messages: [
+            { role: "system", content: 'You check whether a goal is fully done, strictly, from the work shown. Reply with JSON only: {"done": true|false, "missing": "what is still missing, in one sentence"}.' },
+            { role: "user", content: `Goal: ${g.goal}\n\nThe work so far (latest last):\n${recent}` },
+          ],
+          tools: [],
+        },
+        AbortSignal.timeout(180_000),
+        () => undefined,
+      );
+      const m = /\{[\s\S]*\}/.exec(review.text.replace(/<think>[\s\S]*?<\/think>/g, ""));
+      const verdict = m ? (JSON.parse(m[0]) as { done?: boolean; missing?: string }) : { done: false, missing: "" };
+      if (verdict.done) {
+        this.goals.delete(id);
+        session.note(`Goal reached ✓ (checked after ${g.rounds + 1} ${g.rounds ? "rounds" : "round"}).`);
+        return;
+      }
+      if (++g.rounds > 6) {
+        this.goals.delete(id);
+        session.note(`Stopped after 7 rounds; the goal is not met yet${verdict.missing ? `: ${verdict.missing}` : "."} Say how to go on.`);
+        return;
+      }
+      const missing = String(verdict.missing ?? "").slice(0, 500) || "the check did not find it done";
+      session.note(`Goal check ${g.rounds}: not done yet. ${missing}`);
+      await this.send(id, `[KesherAI goal check] The goal is not met yet: ${missing}\nKeep going until it is: ${g.goal}`);
+    } catch (err) {
+      session.note(`The goal check failed (${(err as Error).message}); stopped the goal.`);
+      this.goals.delete(id);
+    } finally {
+      g.checking = false;
+    }
   }
 
   /**

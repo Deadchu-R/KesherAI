@@ -257,6 +257,17 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { path, name: basename(path) };
   });
 
+  /** "Keep going until done": `{ goal }` sets it and sends it; an empty goal stops it. */
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/goal", async (req) => s.conversations.goalOf(req.params.id) ?? {});
+  app.post<{ Params: { id: string }; Body: { goal?: string } }>("/api/conversations/:id/goal", async (req, reply) => {
+    try {
+      await s.conversations.setGoal(req.params.id, String(req.body?.goal ?? ""));
+      return s.conversations.goalOf(req.params.id) ?? {};
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+  });
+
   /** Gives the conversation access to a folder or file outside its own (the paper clip, or drag and drop). */
   app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/access", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Files can only be attached on this computer." });

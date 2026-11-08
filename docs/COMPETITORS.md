@@ -177,8 +177,8 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 **3. High-importance features**
 
 12. Personal memory you can see and edit (LobeHub, LU) ✅ (Memory page; "remember" and "forget" in chats)
-13. Long chats summarize their older part automatically (LU) ⬜
-14. "Keep going until done": a goal checked by a reviewer pass before the agent stops (OpenCode `/goal`) ⬜
+13. Long chats summarize their older part automatically (LU) ✅ (it already did: the context explorer shows the summary)
+14. "Keep going until done": a goal checked by a reviewer pass before the agent stops (OpenCode `/goal`) ✅ (type /goal … in a chat)
 15. Agent Builder: describe an assistant in words, get a persona with tools and knowledge (LobeHub) ⬜
 16. Import chats from ChatGPT, Claude and Gemini exports (LU) ⬜
 17. Export a chat as Markdown or PDF (LM Studio) ⬜

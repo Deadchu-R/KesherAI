@@ -105,6 +105,7 @@ export async function speak(text: string, onEnd?: () => void): Promise<void> {
     said.id = (await nv.speak({ text: say, language: /[֐-׿]/.test(say) ? "he-IL" : "en-US" }).catch(() => ({ id: undefined }))).id;
     return;
   }
+  if (typeof speechSynthesis === "undefined" || typeof SpeechSynthesisUtterance === "undefined") return onEnd?.();
   const u = new SpeechSynthesisUtterance(say);
   const voices = speechSynthesis.getVoices();
   const chosen = voice.startsWith("system:") ? voices.find((v) => v.voiceURI === voice.slice(7)) : undefined;
@@ -155,6 +156,8 @@ export function VoicePicker({ clouds }: { clouds: string[] }) {
   const [voice, setVoice] = useState(read(VOICE_KEY));
   const [auto, setAuto] = useState(autoSpeak());
   useEffect(() => {
+    // Inside the Android app the page has no speechSynthesis (the phone's own voice is used instead).
+    if (typeof speechSynthesis === "undefined") return;
     const load = () => setVoices(speechSynthesis.getVoices());
     load();
     speechSynthesis.addEventListener("voiceschanged", load);

@@ -416,6 +416,14 @@ export function ConversationPage({ id }: { id: string }) {
   // The server titles a conversation from its first message; the sidebar list has the latest title.
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
   const send = async () => {
+    // "/goal …": keep going until it is done (checked each time the agent stops); "/goal" alone stops it.
+    const goal = /^\/goal(?:\s+([\s\S]*))?$/i.exec(input.trim());
+    if (goal) {
+      setInput("");
+      setError("");
+      await api(`/api/conversations/${id}/goal`, { method: "POST", body: { goal: goal[1] ?? "" } }).catch((e: Error) => setError(e.message));
+      return;
+    }
     const text = expandSlash(input.trim());
     // While the agent works, the message joins the queue and goes when it is free.
     if (!text) return;
