@@ -3,7 +3,11 @@ package dev.kesherai.updater;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.DownloadManager;
 import android.app.PendingIntent;
+import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.os.Environment;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -25,7 +29,6 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -48,15 +51,6 @@ public class KesherUpdaterPlugin extends Plugin {
         return "https".equals(u.getScheme()) && "github.com".equals(u.getHost());
     }
 
-    private static String readText(File f) throws Exception {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (InputStream in = new java.io.FileInputStream(f)) {
-            byte[] buf = new byte[256];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-        }
-        return out.toString("UTF-8").trim();
-    }
 
     /** Follows GitHub's redirect to its download host. */
     private static HttpURLConnection open(String url) throws Exception {
@@ -155,116 +149,101 @@ public class KesherUpdaterPlugin extends Plugin {
             call.reject("needs-permission");
             return;
         }
-        // open: false downloads in the background and only offers "tap to install" in a notification.
+        // Android's own download service fetches the file: it keeps going while KesherAI is in the
+        // background (Android freezes apps that are not on screen), resumes after a dropped
+        // connection, and shows its progress in a notification. open: false only offers
+        // "tap to install" when it is done.
         final boolean openWhenDone = call.getBoolean("open", true);
         final Context ctx = getContext().getApplicationContext();
+        final DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
+        final SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        long previous = prefs.getLong("download", -1);
+        if (previous >= 0) dm.remove(previous);
+        File apk = apkFile(ctx);
+        if (apk.exists()) apk.delete();
+        DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url))
+            .setTitle("KesherAI")
+            .setDescription("Downloading the update")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+            .setDestinationInExternalFilesDir(ctx, Environment.DIRECTORY_DOWNLOADS, APK_NAME)
+            .addRequestHeader("User-Agent", "KesherAI-Android");
+        final long id = dm.enqueue(req);
+        prefs.edit().putLong("download", id).putBoolean("open", openWhenDone).apply();
+        // While the app is on screen: report the percent to the page, and open the installer when done.
         new Thread(() -> {
-            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(new NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_LOW));
-            NotificationCompat.Builder n = new NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(ctx.getApplicationInfo().icon)
-                .setContentTitle("KesherAI")
-                .setContentText("Downloading the update…")
-                .setOnlyAlertOnce(true)
-                .setOngoing(true)
-                .setProgress(100, 0, true);
+            int lastPercent = -2;
             try {
-                nm.notify(NOTE, n.build());
-            } catch (SecurityException ignored) {
-                // no permission to show notifications: the page still shows the progress
-            }
-            try {
-                File dir = new File(ctx.getCacheDir(), "updates");
-                dir.mkdirs();
-                File apk = new File(dir, "KesherAI-update.apk");
-                File part = new File(dir, "KesherAI-update.apk.part");
-                // While a new build is being published, GitHub briefly has no file there (404): wait and try again.
-                // A download cut off earlier (the phone's connection dropped) goes on where it stopped.
-                File sizeFile = new File(dir, "KesherAI-update.size");
-                long done = part.exists() && sizeFile.exists() ? part.length() : 0;
-                HttpURLConnection c = openRetrying(url, done);
-                for (int attempt = 0; c.getResponseCode() == 404 && attempt < 6; attempt++) {
-                    c.disconnect();
-                    Thread.sleep(10000);
-                    c = openRetrying(url, done);
-                }
-                if (c.getResponseCode() == 404) throw new Exception("GitHub is publishing a new build right now. Try again in a minute.");
-                int code = c.getResponseCode();
-                if (code == 416) {
-                    // The kept piece does not fit this file (a newer build): start over.
-                    c.disconnect();
-                    part.delete();
-                    done = 0;
-                    c = openRetrying(url, 0);
-                    code = c.getResponseCode();
-                }
-                boolean resumed = code == 206;
-                if (resumed) {
-                    // Only a piece of the same build is continued (a new build has another size).
-                    String range = c.getHeaderField("Content-Range");
-                    String kept = readText(sizeFile);
-                    if (range == null || !range.endsWith("/" + kept)) {
-                        c.disconnect();
-                        part.delete();
-                        resumed = false;
-                        done = 0;
-                        c = openRetrying(url, 0);
-                        code = c.getResponseCode();
-                    }
-                }
-                if (!resumed) done = 0;
-                if (code != 200 && code != 206) throw new Exception("GitHub answered " + code + ". Try again in a few minutes.");
-                long length = c.getContentLengthLong();
-                long total = length >= 0 ? length + done : -1;
-                if (!resumed && total > 0) try (FileOutputStream o = new FileOutputStream(sizeFile)) { o.write(String.valueOf(total).getBytes("UTF-8")); }
-                try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part, resumed)) {
-                    byte[] buf = new byte[65536];
-                    int read;
-                    int lastPercent = -1;
-                    while ((read = in.read(buf)) > 0) {
-                        out.write(buf, 0, read);
-                        done += read;
-                        int percent = total > 0 ? (int) (100 * done / total) : -1;
+                while (true) {
+                    Thread.sleep(500);
+                    try (Cursor c = dm.query(new DownloadManager.Query().setFilterById(id))) {
+                        if (c == null || !c.moveToFirst()) throw new Exception("The download was cancelled.");
+                        int status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                        long got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                        long total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                        int percent = total > 0 ? (int) (100 * got / total) : -1;
                         if (percent != lastPercent) {
                             lastPercent = percent;
                             JSObject p = new JSObject();
                             p.put("percent", percent);
                             notifyListeners("progress", p);
-                            n.setProgress(100, Math.max(0, percent), percent < 0).setContentText("Downloading the update… " + Math.max(0, percent) + "%");
-                            try { nm.notify(NOTE, n.build()); } catch (SecurityException ignored) { /* see above */ }
+                        }
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) break;
+                        if (status == DownloadManager.STATUS_FAILED) {
+                            int reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
+                            throw new Exception(reason >= 500 && reason < 600 ? "GitHub answered " + reason + ". Try again in a few minutes." : "The download failed (" + reason + "). Try again.");
                         }
                     }
                 }
-                if (total > 0 && part.length() != total) throw new Exception("The download stopped early. Tap update again to go on from where it stopped.");
-                sizeFile.delete();
-                if (apk.exists()) apk.delete();
-                if (!part.renameTo(apk)) throw new Exception("Could not save the update.");
-                Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".kesher.updates", apk);
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(uri, "application/vnd.android.package-archive");
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                // Ready: a notification to install it (works while the app is in the background too).
-                PendingIntent tap = PendingIntent.getActivity(ctx, 7, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                Notification ready = new NotificationCompat.Builder(ctx, CHANNEL)
-                    .setSmallIcon(ctx.getApplicationInfo().icon)
-                    .setContentTitle("KesherAI")
-                    .setContentText("The update is ready. Tap to install.")
-                    .setContentIntent(tap)
-                    .setAutoCancel(true)
-                    .build();
-                try { nm.notify(NOTE, ready); } catch (SecurityException ignored) { /* see above */ }
-                if (openWhenDone && inFront) {
-                    ctx.startActivity(intent);
-                    nm.cancel(NOTE);
-                }
+                ready(ctx, openWhenDone && inFront);
                 JSObject r = new JSObject();
                 r.put("ready", true);
                 call.resolve(r);
             } catch (Exception e) {
-                nm.cancel(NOTE);
                 call.reject(e.getMessage());
             }
         }).start();
+    }
+
+    static final String PREFS = "kesher-updater";
+    static final String APK_NAME = "KesherAI-update.apk";
+
+    static File apkFile(Context ctx) {
+        return new File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_NAME);
+    }
+
+    /**
+     * The download is done: a "tap to install" notification (it works while the app is in the
+     * background or closed), and the installer at once when the app is on screen.
+     */
+    static synchronized void ready(Context ctx, boolean openNow) {
+        SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (prefs.getLong("download", -1) < 0) return;
+        File apk = apkFile(ctx);
+        if (!apk.exists()) return;
+        prefs.edit().putLong("download", -1).apply();
+        Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".kesher.updates", apk);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/vnd.android.package-archive");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(new NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT));
+        PendingIntent tap = PendingIntent.getActivity(ctx, 7, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification note = new NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(ctx.getApplicationInfo().icon)
+            .setContentTitle("KesherAI")
+            .setContentText("The update is ready. Tap to install.")
+            .setContentIntent(tap)
+            .setAutoCancel(true)
+            .build();
+        try {
+            nm.notify(NOTE, note);
+        } catch (SecurityException ignored) {
+            // no permission to show notifications
+        }
+        if (openNow) {
+            ctx.startActivity(intent);
+            nm.cancel(NOTE);
+        }
     }
 
     /** Whether the app is on screen (the installer opens by itself only then). */
@@ -274,6 +253,17 @@ public class KesherUpdaterPlugin extends Plugin {
     protected void handleOnResume() {
         super.handleOnResume();
         inFront = true;
+        // Back on screen with an update that finished while the app was away: offer it now.
+        Context ctx = getContext().getApplicationContext();
+        SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        long id = prefs.getLong("download", -1);
+        if (id < 0) return;
+        DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
+        try (Cursor c = dm.query(new DownloadManager.Query().setFilterById(id))) {
+            if (c != null && c.moveToFirst() && c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL) ready(ctx, prefs.getBoolean("open", true));
+        } catch (Exception ignored) {
+            // the download service is busy; the notification comes when it finishes
+        }
     }
 
     @Override
@@ -282,6 +272,6 @@ public class KesherUpdaterPlugin extends Plugin {
         inFront = false;
     }
 
-    private static final String CHANNEL = "kesher-updates";
-    private static final int NOTE = 7420;
+    static final String CHANNEL = "kesher-updates";
+    static final int NOTE = 7420;
 }

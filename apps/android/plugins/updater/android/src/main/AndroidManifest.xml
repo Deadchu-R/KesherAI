@@ -10,5 +10,11 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/kesher_update_paths" />
         </provider>
+        <!-- Shows "tap to install" when Android's download service finishes the update, even in the background. -->
+        <receiver android:name="dev.kesherai.updater.UpdateDoneReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
