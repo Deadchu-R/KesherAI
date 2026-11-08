@@ -141,6 +141,7 @@ export class ProviderRegistry {
    * @returns `true` if it existed.
    */
   remove(id: string): boolean {
+    this.lastModels.delete(id);
     return this.providers.delete(id);
   }
 
@@ -166,16 +167,38 @@ export class ProviderRegistry {
    */
   async listAllModels(timeoutMs = 5000): Promise<ModelListing> {
     const entries = this.list().filter(({ provider }) => this.permitted(provider.id));
+    // Servers on another network (another computer through the internet) get longer: their own list asks their providers first.
+    const wait = (p: Provider) => (p.location === "server" ? Math.max(timeoutMs, 15_000) : timeoutMs);
     const results = await Promise.allSettled(
-      entries.map(({ provider }) => provider.listModels(AbortSignal.timeout(timeoutMs))),
+      entries.map(({ provider }) => provider.listModels(AbortSignal.timeout(wait(provider)))),
     );
     const listing: ModelListing = { models: [], errors: [] };
     results.forEach((r, i) => {
       const providerId = entries[i]!.provider.id;
-      if (r.status === "fulfilled") listing.models.push(...r.value);
-      else listing.errors.push({ providerId, message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+      if (r.status === "fulfilled") {
+        this.lastModels.set(providerId, r.value);
+        listing.models.push(...r.value);
+      } else {
+        // A slow or briefly unreachable server keeps showing the models it had a moment ago.
+        const last = this.lastModels.get(providerId);
+        if (last) listing.models.push(...last);
+        listing.errors.push({ providerId, message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+      }
     });
     return listing;
+  }
+
+  /** The last model list each provider gave (shown while it is slow to answer). */
+  private readonly lastModels = new Map<string, ModelInfo[]>();
+
+  /**
+   * Remembers a provider's models (e.g. right after reaching another computer), so they show at once.
+   *
+   * @param providerId - The provider.
+   * @param models - Its models.
+   */
+  rememberModels(providerId: string, models: ModelInfo[]): void {
+    this.lastModels.set(providerId, models);
   }
 
   /**

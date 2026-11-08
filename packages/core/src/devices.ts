@@ -305,10 +305,16 @@ export class Devices {
     const providerId = `device-${x.id.slice(0, 8)}`;
     for (const url of x.urls) {
       try {
-        const res = await fetch(`${url.replace(/\/$/, "")}/v1/models`, { headers: { authorization: `Bearer ${x.token}` }, signal: AbortSignal.timeout(6000) });
+        const res = await fetch(`${url.replace(/\/$/, "")}/v1/models`, { headers: { authorization: `Bearer ${x.token}` }, signal: AbortSignal.timeout(12_000) });
         if (!res.ok) continue;
         const j = (await res.json()) as { data?: unknown[] };
         await this.d.addProvider({ id: providerId, type: "openai-compatible", name: `${x.name} (your computer)`, location: "server", baseUrl: `${url.replace(/\/$/, "")}/v1`, apiKey: x.token }, false);
+        // Its models show at once in every model list (the list asks it again later).
+        const provider = this.d.registry.get(providerId);
+        if (provider) {
+          const models = await provider.listModels(AbortSignal.timeout(15_000)).catch(() => undefined);
+          if (models) this.d.registry.rememberModels(providerId, models);
+        }
         return { ...view, online: true, url, models: j.data?.length ?? 0, providerId };
       } catch {
         /* try the next address */

@@ -28,7 +28,8 @@ function textOf(content: OpenAIChatBody["messages"][number]["content"]): string 
  */
 export async function openAIRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   app.get("/v1/models", async (req) => {
-    const { models } = await s.registry.listAllModels();
+    // Not the models of the user's other computers: they list their own (and two computers would list each other forever).
+    const models = (await s.registry.listAllModels()).models.filter((m) => !m.providerId.startsWith("device-"));
     // Anthropic SDKs send anthropic-version and read their own list format.
     if (req.headers["anthropic-version"]) {
       const data = models.filter((m) => m.category === "chat").map((m) => ({ type: "model", id: m.id, display_name: m.name, created_at: "2025-01-01T00:00:00Z" }));
