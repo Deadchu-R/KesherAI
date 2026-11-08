@@ -4,8 +4,8 @@ import { join } from "node:path";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
-import { modelTurnFor } from "../conversations.js";
-import { BRIDGE_VERSION, blueprintPrompt, parseOps, unityPrompt } from "../unreal-bridge.js";
+import { editGraph } from "../graph-edit.js";
+import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
 
@@ -82,20 +82,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     const chat = s.config.activeModels.chat;
     if (!chat) return reply.code(400).send({ error: "Choose a chat model first; it makes the change." });
     try {
-      const { graph: bp } = await b.graph(path);
-      const graphName = req.body?.graph || bp.graphs[0]?.name || "EventGraph";
-      const turn = modelTurnFor(s.registry, chat);
-      const text = (await turn({ messages: kind === "unreal" ? blueprintPrompt(bp, graphName, request) : unityPrompt(bp, request), tools: [] }, AbortSignal.timeout(300_000), () => undefined)).text;
-      const { ops, note } = parseOps(text);
-      if (!ops.length) return { ops, note: note || "Nothing to change.", applied: false };
-      if (kind === "unreal" && !b.connected) {
-        const project = (await b.project()) ?? "Project";
-        const queued = await b.enqueue({ project, path, graph: graphName, ops, request });
-        return { ops, note, applied: false, queued: queued.id };
-      }
-      const result = await b.request<{ results: Array<{ ok: boolean; error?: string }>; failed: number }>("apply", { path, graph: graphName, ops: kind === "unity" ? JSON.stringify(ops) : ops }, kind === "unity" ? 120_000 : 30_000);
-      const compile = await b.request<{ ok: boolean; messages: Array<{ severity: string; text: string }> }>("compile", { path }).catch(() => undefined);
-      return { ops, note, applied: true, result, compile };
+      return await editGraph(kind, b, s.registry, chat, { path, ...(req.body?.graph ? { graph: req.body.graph } : {}), request, signal: AbortSignal.timeout(300_000) });
     } catch (err) {
       return reply.code(502).send({ error: (err as Error).message });
     }

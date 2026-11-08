@@ -14,6 +14,8 @@ import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import { runSplit, type SplitWorker } from "./split-task.js";
 import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, unityTools } from "./unity-tools.js";
+import { graphTools } from "./graph-edit.js";
+import type { UnrealBridge } from "./unreal-bridge.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 
@@ -174,6 +176,8 @@ export class ConversationManager {
       };
       /** Unity's CLI: the chat's Unity tools (when the CLI is installed). */
       unity?: UnityCli;
+      /** The KesherAI Bridge plugin in Unreal: the chat's Blueprint tools (when the editor is connected). */
+      unreal?: UnrealBridge;
       /** How the app looks: the change_look tool reads and changes it (Undo keeps the last looks). */
       look?: {
         get(): Appearance;
@@ -640,6 +644,16 @@ export class ConversationManager {
       ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id)
       : [];
     if (unity.length) media.notes.push(UNITY_NOTE);
+    // Graphs in words from any chat: Unity Script/State Graphs, and Unreal Blueprints (KesherAI Bridge plugin).
+    const chatModel = () => this.defaultChatModel();
+    if (unity.length && this.deps.unity?.activeProject) {
+      split.push(...graphTools("unity", this.deps.unity, this.deps.registry, chatModel));
+      media.notes.push("unity_list_graphs, unity_read_graph and unity_change_graph see and change the project's Visual Scripting graphs (Script Graphs and State Graphs) in words; prefer them for graph logic.");
+    }
+    if (this.deps.unreal?.connected) {
+      split.push(...graphTools("unreal", this.deps.unreal, this.deps.registry, chatModel));
+      media.notes.push("The user's Unreal Editor is connected (KesherAI Bridge): unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled).");
+    }
     // Unreal 5.8's own MCP server (the "Unreal Engine" connection): how to use it well.
     if ((this.deps.mcpTools?.() ?? []).some((t) => /(^|_)(list_toolsets|describe_toolset)$/.test(t.spec.name))) {
       media.notes.push(
