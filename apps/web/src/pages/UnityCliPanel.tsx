@@ -106,7 +106,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
               </label>
               <label>{L("תיקייה", "Folder")}
                 <span className="row">
-                  <input className="grow" dir="ltr" value={parent} onChange={(e) => setParent(e.target.value)} placeholder="C:\Users\…\Unity Projects" />
+                  <input className="grow" dir="ltr" value={parent} onChange={(e) => setParent(e.target.value)} placeholder={L("ריק = התיקייה Unity Projects בתיקיית הבית", "Empty = the Unity Projects folder in your home folder")} />
                   {desktop() && <button type="button" onClick={() => void desktop()!.pickFolder().then((f) => f && setParent(f))}>{L("בחר…", "Choose…")}</button>}
                 </span>
               </label>
@@ -126,7 +126,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
               </div>
               <label className="row small"><input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} /> {L("פתח ב-Unity כשמוכן", "Open in Unity when ready")}</label>
               <p className="muted small">{L("נוצר דרך ה-CLI של Unity, בלי קישור ל-Unity Cloud, עם חבילת Pipeline ו-KesherAI Bridge. צריך רישיון Unity פעיל (גם Personal החינמי).", "Made with Unity's CLI, without a Unity Cloud link, with the Pipeline and KesherAI Bridge packages. Needs an active Unity licence (the free Personal one is fine).")}</p>
-              <div className="row"><button type="button" className="primary" disabled={!name.trim() || !parent.trim()} onClick={create}>{L("צור פרויקט", "Make the project")}</button></div>
+              <div className="row"><button type="button" className="primary" disabled={!name.trim()} onClick={create}>{L("צור פרויקט", "Make the project")}</button></div>
             </div>
           )}
         </>

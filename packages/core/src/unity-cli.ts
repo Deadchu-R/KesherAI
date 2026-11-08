@@ -82,11 +82,15 @@ const shown = (args: string[]) => args.map((a) => (a.length > 160 ? `${a.slice(0
 
 const realRunner: CliRunner = (args, timeoutMs) => {
   const started = Date.now();
-  logLine(`\n[${new Date().toLocaleTimeString()}] > unity ${shown(args)}`);
+  const at = new Date().toLocaleTimeString();
+  // Quick checks (version, editor list) are not shown: the page asks them every few seconds.
+  const quiet = args[0] === "--version" || (args[0] === "editors" && args[1] === "--installed");
+  if (!quiet) logLine(`\n[${at}] > unity ${shown(args)}   (running…)`);
   return realRun(args, timeoutMs).then((r) => {
+    if (quiet) return r;
     const out = `${r.stdout}${r.stderr ? `\n${r.stderr}` : ""}`.trim();
-    logLine(`${out.length > 3000 ? `${out.slice(0, 3000)}\n… (${out.length - 3000} more characters)` : out}`);
-    logLine(`[exit ${r.code} · ${((Date.now() - started) / 1000).toFixed(1)} s]`);
+    // One block per finished command, so commands running at the same time do not mix.
+    logLine(`[${at}] < unity ${shown(args.slice(0, 3))} …\n${out.length > 3000 ? `${out.slice(0, 3000)}\n… (${out.length - 3000} more characters)` : out}\n[exit ${r.code}, ${((Date.now() - started) / 1000).toFixed(1)} s]`);
     return r;
   });
 };
@@ -203,6 +207,7 @@ export class UnityCli {
   private statusCache?: { at: number; ready: boolean; project?: string };
   /** Whether the CLI is installed (checked at most once a minute: the page asks every few seconds). */
   private cliCache?: { at: number; found: boolean };
+  private editorsCache?: { at: number; list: string[] };
 
   /**
    * @param config - The `unity` config section.
@@ -393,8 +398,12 @@ export class UnityCli {
   async cliInfo(): Promise<{ cli: boolean; version?: string; editors: string[]; job?: UnityCli["createJob"] }> {
     const v = await this.run(["--version"], 10_000);
     if (v.code !== 0) return { cli: false, editors: [], ...(this.createJob ? { job: this.createJob } : {}) };
-    const e = await this.run(["editors", "--installed", "--format", "json"], 30_000);
-    const editors = editorVersions(e.stdout);
+    // The installed editors change rarely: asked at most once a minute.
+    if (!this.editorsCache || Date.now() - this.editorsCache.at > 60_000) {
+      const e = await this.run(["editors", "--installed", "--format", "json"], 30_000);
+      this.editorsCache = { at: Date.now(), list: editorVersions(e.stdout) };
+    }
+    const editors = this.editorsCache.list;
     return { cli: true, version: v.stdout.trim().split(/\s+/).pop()?.slice(0, 40), editors, ...(this.createJob ? { job: this.createJob } : {}) };
   }
 
@@ -405,7 +414,7 @@ export class UnityCli {
    * made, KesherAI's bridge package is added and the project is shown here.
    *
    * @param opts.name - The project's name (letters, numbers, spaces, - and _).
-   * @param opts.parent - The folder to make it in (it must exist).
+   * @param opts.parent - The folder to make it in (it must exist); empty = ~/Unity Projects.
    * @param opts.editor - An installed editor version (default: Unity's default).
    * @param opts.template - 3d (URP), 2d, or a template id.
    * @param opts.open - Open it in Unity when it is made.
@@ -414,8 +423,11 @@ export class UnityCli {
     if (this.createJob?.state === "running") throw new Error("A project is being made already.");
     const name = opts.name.trim();
     if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]{0,59}$/u.test(name)) throw new Error("Use a name with letters, numbers, spaces, - or _ (up to 60).");
-    const parent = resolve(opts.parent.trim());
-    if (!isAbsolute(opts.parent.trim()) || !existsSync(parent) || !statSync(parent).isDirectory()) throw new Error("Choose a folder that exists for the new project.");
+    // No folder given: "Unity Projects" in the user's home folder (made if needed), like Unity Hub.
+    const given = opts.parent.trim() || join(homedir(), "Unity Projects");
+    if (!opts.parent.trim()) mkdirSync(given, { recursive: true });
+    const parent = resolve(given);
+    if (!isAbsolute(given) || !existsSync(parent) || !statSync(parent).isDirectory()) throw new Error("Choose a folder that exists for the new project.");
     const path = join(parent, name);
     if (existsSync(path)) throw new Error(`There is already a folder named ${name} there.`);
     if (opts.editor && !/^[\w.]{3,30}$/.test(opts.editor)) throw new Error("That is not an editor version.");
