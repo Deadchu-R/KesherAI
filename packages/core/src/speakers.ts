@@ -64,25 +64,48 @@ export class Speakers {
     return this.preparing;
   }
 
-  private async download(): Promise<void> {
+  /** The sherpa-onnx addon's script, for other engines that use it (text to speech). */
+  get addonPath(): string {
+    return this.files.addon;
+  }
+
+  /** Whether the sherpa-onnx addon is installed. */
+  get addonReady(): boolean {
+    return existsSync(this.files.addon) && existsSync(this.files.native);
+  }
+
+  /**
+   * Installs the sherpa-onnx addon (from npm) when it is missing.
+   *
+   * @param label - What the downloads circle shows it as.
+   */
+  async installAddon(label = "Speaker separation"): Promise<void> {
     const f = this.files;
-    const get = async (url: string, name: string, label: string) => {
-      const dest = join(this.dir, "downloads", name);
-      if (!existsSync(dest)) await waitForDownload(this.downloads, this.downloads.enqueue({ url, dest, label }).id);
-      return dest;
-    };
     const npm = async (pkg: string, target: string) => {
       if (existsSync(target)) return;
-      const tgz = await get(`https://registry.npmjs.org/${pkg}/-/${pkg}-${SHERPA_VERSION}.tgz`, `${pkg}.tgz`, `Speaker separation · ${pkg}`);
+      const tgz = await this.get(`https://registry.npmjs.org/${pkg}/-/${pkg}-${SHERPA_VERSION}.tgz`, `${pkg}.tgz`, `${label} · ${pkg}`);
       const tmp = join(this.dir, `tmp-${randomUUID()}`);
       await extractArchive(tgz, tmp);
       await mkdir(join(this.dir, "node_modules"), { recursive: true });
       await rm(join(this.dir, "node_modules", pkg), { recursive: true, force: true });
       await rename(join(tmp, "package"), join(this.dir, "node_modules", pkg));
       await rm(tmp, { recursive: true, force: true });
+      await rm(tgz, { force: true });
     };
     await npm("sherpa-onnx-node", join(this.dir, "node_modules", "sherpa-onnx-node", "package.json"));
     await npm(platformPackage(), f.native);
+  }
+
+  private async get(url: string, name: string, label: string): Promise<string> {
+    const dest = join(this.dir, "downloads", name);
+    if (!existsSync(dest)) await waitForDownload(this.downloads, this.downloads.enqueue({ url, dest, label }).id);
+    return dest;
+  }
+
+  private async download(): Promise<void> {
+    const f = this.files;
+    const get = (url: string, name: string, label: string) => this.get(url, name, label);
+    await this.installAddon();
     await mkdir(join(this.dir, "models"), { recursive: true });
     if (!existsSync(f.segmentation)) {
       const archive = await get(SEGMENTATION, "segmentation.tar.bz2", "Speaker separation · pyannote segmentation");

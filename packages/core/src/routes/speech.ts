@@ -24,10 +24,24 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     ttsClouds: s.config.providers.filter((p) => p.id === "openai" && p.apiKey).map((p) => p.id),
   }));
 
-  /** Reads text aloud with a cloud voice (OpenAI): `{ text, voice }` → MP3. */
-  app.post<{ Body: { text?: string; provider?: string; voice?: string } }>("/api/speech/tts", async (req, reply) => {
+  /** The natural voice on this computer (Kokoro): whether it is set up, and its voices. */
+  app.get("/api/speech/tts/local", async () => s.kokoro.status());
+  app.post("/api/speech/tts/local/setup", async (_req, reply) => {
+    void s.kokoro.prepare().catch(() => undefined);
+    return reply.code(202).send({ ok: true });
+  });
+
+  /** Reads text aloud: `{ text, provider: "local", voice }` → WAV (Kokoro), or a cloud voice (OpenAI) → MP3. */
+  app.post<{ Body: { text?: string; provider?: string; voice?: string; speed?: number } }>("/api/speech/tts", async (req, reply) => {
     const text = String(req.body?.text ?? "").slice(0, 4000);
     if (!text) return reply.code(400).send({ error: "No text" });
+    if (req.body?.provider === "local") {
+      try {
+        return reply.type("audio/wav").send(await s.kokoro.speak(text, Number(req.body.voice ?? 3) || 3, Number(req.body.speed ?? 1) || 1));
+      } catch (err) {
+        return reply.code(409).send({ error: (err as Error).message });
+      }
+    }
     const p = s.config.providers.find((x) => x.id === (req.body?.provider ?? "openai"));
     if (!p?.apiKey) return reply.code(400).send({ error: "Connect OpenAI to use its voices." });
     const res = await fetch(`${(p.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "")}/audio/speech`, {

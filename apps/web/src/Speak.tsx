@@ -62,6 +62,18 @@ export async function speak(text: string, onEnd?: () => void): Promise<void> {
   const say = speakable(text);
   if (!say) return onEnd?.();
   const voice = read(VOICE_KEY);
+  // The natural voice on this computer (Kokoro) speaks English; Hebrew goes to the system's voice.
+  if (voice.startsWith("local:") && !/[֐-׿]/.test(say)) {
+    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "local", voice: voice.slice(6) }) }).catch(() => undefined);
+    if (res?.ok) {
+      const url = URL.createObjectURL(await res.blob());
+      const audio = new Audio(url);
+      current = { stop: () => { audio.pause(); URL.revokeObjectURL(url); onEnd?.(); } };
+      audio.onended = () => { URL.revokeObjectURL(url); current = null; onEnd?.(); };
+      await audio.play();
+      return;
+    }
+  }
   if (voice.startsWith("cloud:")) {
     const [, provider, name] = voice.split(":");
     const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider, voice: name }) });
@@ -148,6 +160,14 @@ export function VoicePicker({ clouds }: { clouds: string[] }) {
     speechSynthesis.addEventListener("voiceschanged", load);
     return () => speechSynthesis.removeEventListener("voiceschanged", load);
   }, []);
+  const [local, setLocal] = useState<{ ready: boolean; busy: boolean; sizeMb: number; voices: Array<{ id: number; name: string }> } | null>(null);
+  const loadLocal = () => void fetch(withToken("/api/speech/tts/local")).then((r) => (r.ok ? r.json() : null)).then(setLocal, () => undefined);
+  useEffect(loadLocal, []);
+  useEffect(() => {
+    if (!local?.busy) return;
+    const id = setInterval(loadLocal, 3000);
+    return () => clearInterval(id);
+  }, [local?.busy]);
   const sorted = [...voices].sort((a, b) => Number(/^he|^iw/i.test(b.lang)) - Number(/^he|^iw/i.test(a.lang)) || a.lang.localeCompare(b.lang));
   return (
     <>
@@ -155,11 +175,18 @@ export function VoicePicker({ clouds }: { clouds: string[] }) {
         <span>{t("ttsVoice")}</span>
         <select value={voice} onChange={(e) => { setVoice(e.target.value); write(VOICE_KEY, e.target.value); }}>
           <option value="">{t("ttsVoiceAuto")}</option>
+          {local?.ready && local.voices.map((v) => <option key={v.id} value={`local:${v.id}`}>{t("ttsLocal")} · {v.name}</option>)}
           {clouds.includes("openai") && ["alloy", "nova", "shimmer", "echo", "onyx", "sage"].map((v) => <option key={v} value={`cloud:openai:${v}`}>OpenAI · {v}</option>)}
           {sorted.map((v) => <option key={v.voiceURI} value={`system:${v.voiceURI}`}>{v.name} ({v.lang})</option>)}
         </select>
       </label>
       {voices.length > 0 && !voices.some((v) => /^he|^iw/i.test(v.lang)) && <p className="muted small">{t("ttsNoHebrew")}</p>}
+      {local && !local.ready && (
+        <p className="row small">
+          <span className="grow muted">{local.busy ? t("ttsLocalPreparing") : t("ttsLocalOffer", { mb: local.sizeMb })}</span>
+          {!local.busy && <button type="button" onClick={() => void fetch(withToken("/api/speech/tts/local/setup"), { method: "POST" }).then(() => setLocal({ ...local, busy: true }))}>{t("micDownload")}</button>}
+        </p>
+      )}
       <label className="row tts-auto">
         <input type="checkbox" checked={auto} onChange={(e) => { setAuto(e.target.checked); write(AUTO_KEY, e.target.checked ? "1" : "0"); }} />
         <span>{t("ttsAuto")}</span>

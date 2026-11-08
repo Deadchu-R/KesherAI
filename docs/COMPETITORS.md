@@ -169,7 +169,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 **2. Every kind of model on the computer, and downloading it**
 
 7. One-click setup for video, like chat and speech ✅ ("Set it up for me" also offers pictures and video)
-8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ⬜
+8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ✅ (English voices; Hebrew stays with the system voice)
 9. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ⬜
 10. Music generation, as a tool the chat can call (LU) ⬜
 11. Hardware benchmark: tokens per second for each model on this computer (LU, PocketPal) ⬜

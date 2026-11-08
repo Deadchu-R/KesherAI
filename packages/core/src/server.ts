@@ -50,6 +50,7 @@ import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
+import { Kokoro } from "./kokoro.js";
 import { browserRoutes } from "./routes/browser.js";
 import { pairRoutes } from "./routes/pair.js";
 import { Coach } from "./coach.js";
@@ -164,6 +165,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       .filter((g) => /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name))
       .map((g, i) => ({ index: g.index ?? i, name: g.name, vramTotal: g.vramTotal, vramFree: g.vramFree, ...(g.computeCap ? { computeCap: g.computeCap } : {}) }));
   const browser = new BrowserBridge();
+  const speakers = new Speakers(join(paths.engines, "speakers"), downloads);
   const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => {
     const nv = await nvidiaGpus();
     // The image engine uses one card: the fastest allowed one (or the chosen leader).
@@ -452,7 +454,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,
-    speakers: new Speakers(join(paths.engines, "speakers"), downloads),
+    speakers,
+    kokoro: new Kokoro(join(paths.engines, "voice"), speakers, downloads),
     updater,
     google,
     driveSync,
