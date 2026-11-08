@@ -376,7 +376,7 @@
       const btn = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
       if (have) {
         btn(T("פתח צ'אט", "Open chat"), "primary", () => openChat(item, url));
-        if (runMode() === "auto" && tuned(url)) btn(T("כוונן שוב", "Retune"), "", () => { localStorage.removeItem(TUNE(url)); renderList(); });
+        if (runMode() === "auto" && tuned(url)) btn(T("כוונן שוב", "Retune"), "", () => { localStorage.removeItem(TUNE(url)); localStorage.removeItem("kesherai-phone-tune-try:" + url); renderList(); });
         btn(T("מחק", "Delete"), "", async () => { await have.remove(); if (activeUrl === url) { activeUrl = ""; localStorage.removeItem("kesherai-phone-model"); } renderList(); });
       } else {
         const dl = btn(T("הורד", "Download") + (file.size ? ` (${gb(file.size)})` : ""), rating.tooBig ? "" : "primary", async () => {
@@ -844,6 +844,9 @@
    */
   async function openChat(item, url, { id, fresh, keep } = {}) {
     // Text shared from another app (with no computer connected) waits in the message box.
+    // From the widget: start talking, or take a photo, once the chat is open.
+    const act = new URLSearchParams(location.search);
+    if (act.has("talk") || act.has("photo")) setTimeout(() => (act.has("talk") ? $("mic") : $("photoPick"))?.click(), 400);
     const shared = sessionStorage.getItem("kesherai-shared-text");
     if (shared) { sessionStorage.removeItem("kesherai-shared-text"); setTimeout(() => { $("input").value = shared; $("input").dispatchEvent(new Event("input")); }, 0); }
     current = { item, url };
@@ -955,7 +958,14 @@
     };
     const tick = setInterval(() => say(), 1000);
     let best = null;
+    // Tuning goes on where it stopped: a setup that crashed the app last time (the page reloaded
+    // in the middle of it) counts as failed and is not tried again.
+    const PROGRESS = "kesherai-phone-tune-try:" + url;
+    const before = (() => { try { return JSON.parse(localStorage.getItem(PROGRESS) || "null"); } catch { return null; } })();
+    if (before) { total = before.total || 0; done = before.next; }
     for (const [i, cfg] of tries.entries()) {
+      if (before && i < before.next) continue;
+      localStorage.setItem(PROGRESS, JSON.stringify({ next: i + 1, total }));
       const layers = cfg.half ? Math.max(1, Math.ceil(total * cfg.half)) : cfg.layers;
       if (cfg.half && !total) { done++; continue; }
       const what = cfg.half ? T(`${layers}/${total} שכבות על הכרטיס הגרפי`, `${layers}/${total} layers on the graphics chip`) : T("הכול על הכרטיס הגרפי", "all on the graphics chip");
@@ -965,6 +975,7 @@
         // A small context loads faster; the real chat reloads with the full one.
         await load(layers, { ...cfg.extra, n_ctx: 256 });
         total = total || (wllama.getLoadedContextInfo?.().n_layer ?? 28);
+        localStorage.setItem(PROGRESS, JSON.stringify({ next: i + 1, total }));
         const r = await check();
         done = i + 1;
         if (r.ok && r.tps > cpuGuess * 1.2) {
@@ -984,6 +995,7 @@
     setTimeout(() => (bar.hidden = true), 1200);
     if (wllama.isModelLoaded()) await wllama.exit();
     localStorage.setItem(TUNE(url), JSON.stringify(best));
+    localStorage.removeItem(PROGRESS);
     const secs = Math.round((performance.now() - started) / 1000);
     addMsg("note", best.layers === 0
       ? T(`כיוונון (${secs} שניות): הכרטיס הגרפי נתן תשובות שגויות או לא היה מהיר יותר, אז המודל ירוץ על המעבד.`, `Tuned in ${secs}s: the graphics chip gave wrong answers or was not faster, so the model runs on the processor.`)

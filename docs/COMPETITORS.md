@@ -163,7 +163,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 2. A home-screen widget: new chat, talk, photo (Conduit, PocketPal) ✅
 3. Voice call mode on the phone: talk and hear the answer, hands-free (Conduit, Layla) ✅ (with a computer; the phone's own recognizer and voice)
 4. Find computers on the network by scanning, and pair with a QR code shown on the computer (Off Grid "Scan Network", LU QR pairing) ✅ (QR existed; scan + "Allow" on the computer with a matching code)
-5. Watch and approve the agent's computer use from the phone ⬜
+5. Watch and approve the agent's computer use from the phone ✅ ("Watch and approve" page with the live screen, Stop, and a notification when something waits)
 6. Image generation on the phone itself (Layla: Stable Diffusion 1.5) ⬜
 
 **2. Every kind of model on the computer, and downloading it**

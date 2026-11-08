@@ -214,4 +214,23 @@
   }, { passive: true });
   addEventListener("keydown", (e) => e.key === "Escape" && close());
   window.kesherDrawer = { open, close };
+
+  // ---------- "Share → KesherAI" and the home-screen widget, on the phone's own screens ----------
+  // When the last chat was with a computer, the computer's page takes them (it opens after connecting).
+  const Share = window.Capacitor?.Plugins?.KesherShare;
+  if (here === "local.html") localStorage.setItem("kesherai-last-mode", "phone");
+  const toPhone = async () => {
+    const lastComputer = localStorage.getItem("kesherai-last-mode") === "computer" && (saved || computers.length);
+    if (here === "index.html" && lastComputer) return;
+    const s = await Share.take().catch(() => ({}));
+    if (!s || (!s.text && !s.subject && !s.action && !s.files?.length)) return;
+    const text = [s.subject, s.text].filter(Boolean).join("\n");
+    if (text) sessionStorage.setItem("kesherai-shared-text", text);
+    const target = s.action === "new" ? "local.html?new=1" : s.action === "talk" ? "local.html?chat=1&talk=1" : s.action === "photo" ? "local.html?chat=1&photo=1" : "local.html?chat=1";
+    location.href = target;
+  };
+  if (Share) {
+    void toPhone();
+    Share.addListener("shared", () => void toPhone());
+  }
 })();
