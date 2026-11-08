@@ -338,7 +338,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const nv = await nvidiaGpus();
     return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
   });
-  const updater = new Updater(undefined, options.updates);
+  const updater = new Updater(undefined, options.updates, join(paths.root, "logs"));
   if (!config.notifications.ntfy.topic) {
     config.notifications.ntfy.topic = Notifier.newTopic();
     void persist().catch(() => undefined);

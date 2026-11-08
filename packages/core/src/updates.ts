@@ -1,6 +1,8 @@
 import { fetchRetrying } from "@kesher/downloads";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { fastDownload, redact } from "./fast-download.js";
 import { execFile, spawn } from "node:child_process";
-import { createWriteStream, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
@@ -100,6 +102,8 @@ export class Updater {
   constructor(
     private readonly root = resolve(import.meta.dirname, "../../.."),
     private readonly packaged?: PackagedUpdates,
+    /** Where update logs are kept (the last ten), with timings and no secrets. */
+    private readonly logDir?: string,
   ) {}
 
   private git(...args: string[]): Promise<string> {
@@ -199,30 +203,56 @@ export class Updater {
     const prog = (step: string, line?: string) => {
       this.packagedProgress = { ...this.packagedProgress, step, log: line ? [...this.packagedProgress.log, line].slice(-200) : this.packagedProgress.log };
     };
-    this.packagedProgress = { running: true, step: "Downloading", log: [`Downloading ${p.name}`] };
+    const t0 = Date.now();
+    const stamp = () => `[${((Date.now() - t0) / 1000).toFixed(1)} s]`;
+    const logLines: string[] = [];
+    const line = (text: string) => {
+      const l = redact(`${stamp()} ${text}`);
+      logLines.push(`${new Date().toISOString()} ${l}`);
+      prog(this.packagedProgress.step ?? "", l);
+    };
+    const saveLog = async () => {
+      if (!this.logDir) return;
+      try {
+        await mkdir(this.logDir, { recursive: true });
+        await writeFile(join(this.logDir, `update-${new Date(t0).toISOString().replace(/[:.]/g, "-")}.log`), `${logLines.join("\n")}\n`);
+        const old = (await readdir(this.logDir)).filter((f) => /^update-.*\.log$/.test(f)).sort().slice(0, -10);
+        for (const f of old) await rm(join(this.logDir, f), { force: true });
+      } catch {
+        // a log that cannot be written never stops the update
+      }
+    };
+    this.packagedProgress = { running: true, step: "Downloading", log: [] };
+    line(`Updating to ${p.name} (${(p.size / 1048576).toFixed(0)} MB) from GitHub`);
     void (async () => {
       try {
-        const res = await fetchRetrying(p.url, { headers: { "user-agent": "KesherAI" } });
-        if (!res.ok || !res.body) throw new Error(`The download failed: GitHub answered ${res.status}${res.status >= 500 ? ". GitHub's downloads are having trouble; try again in a few minutes." : "."}`);
         const file = join(tmpdir(), p.name);
-        const out = createWriteStream(file);
-        let got = 0;
-        let shown = -1;
-        for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-          got += chunk.length;
-          if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
-          const pct = p.size ? Math.floor((got / p.size) * 100) : 0;
-          if (pct !== shown) {
-            shown = pct;
-            prog(`Downloading ${pct}%`);
-          }
-        }
-        await new Promise<void>((ok, fail) => out.end((err?: Error | null) => (err ? fail(err) : ok())));
-        prog("Installing", `Saved ${file}; starting the installer`);
+        let lastLogged = 0;
+        await fastDownload(p.url, file, {
+          size: p.size,
+          headers: { "user-agent": "KesherAI" },
+          log: line,
+          onProgress: (got, total, bps) => {
+            const pct = Math.floor((got / total) * 100);
+            const eta = bps > 0 ? Math.round((total - got) / bps) : 0;
+            prog(`Downloading ${pct}% · ${(bps / 1048576).toFixed(1)} MB/s · ${eta} s left`);
+            if (pct - lastLogged >= 25) {
+              lastLogged = pct;
+              line(`${pct}% at ${(bps / 1048576).toFixed(1)} MB/s`);
+            }
+          },
+        });
+        line(`Downloaded in ${((Date.now() - t0) / 1000).toFixed(0)} s; starting the installer`);
+        prog("Installing");
         await installer.install(file);
+        line("The installer started; the app restarts when it finishes");
         this.packagedProgress = { ...this.packagedProgress, running: false, step: "Done", finishedAt: new Date().toISOString() } as UpdateProgress;
       } catch (err) {
-        this.packagedProgress = { ...this.packagedProgress, running: false, error: (err as Error).message };
+        const msg = (err as Error).message;
+        line(`Failed: ${msg}`);
+        this.packagedProgress = { ...this.packagedProgress, running: false, error: /5\d\d/.test(msg) ? `${msg} GitHub's downloads are having trouble; try again in a few minutes.` : msg };
+      } finally {
+        await saveLog();
       }
     })();
     return this.packagedProgress;
