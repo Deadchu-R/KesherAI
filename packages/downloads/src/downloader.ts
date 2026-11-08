@@ -42,6 +42,30 @@ export interface DownloadJob {
 }
 
 /**
+ * `fetch` that tries again when the server is briefly unwell: a 502, 503 or
+ * 504 answer (GitHub's download servers do this at times) or a dropped
+ * connection. It waits 2, 4 and 8 seconds between tries.
+ *
+ * @param url - What to fetch.
+ * @param init - Fetch options (an abort signal stops the waiting too).
+ * @param tries - How many tries in all.
+ * @returns The last answer.
+ */
+export async function fetchRetrying(url: string, init: RequestInit = {}, tries = 4): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (![502, 503, 504].includes(res.status) || attempt >= tries) return res;
+      await res.body?.cancel().catch(() => undefined);
+    } catch (err) {
+      if (init.signal?.aborted || attempt >= tries) throw err;
+    }
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+    if (init.signal?.aborted) throw new Error("Stopped.");
+  }
+}
+
+/**
  * A download queue that resumes interrupted files and verifies hashes.
  *
  * - Runs up to `concurrency` jobs at once (default 1: big files download
@@ -184,7 +208,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       const headers: Record<string, string> = { ...req.headers, ...(existing > 0 ? { range: `bytes=${existing}-` } : {}) };
       this.update(job, { status: "downloading", received: existing });
 
-      const res = await fetch(req.url, { headers, signal: entry.abort.signal, redirect: "follow" });
+      const res = await fetchRetrying(req.url, { headers, signal: entry.abort.signal, redirect: "follow" });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
       // 206 = the server honoured the Range header; anything else restarts from zero.

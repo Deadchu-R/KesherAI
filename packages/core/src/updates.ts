@@ -1,3 +1,4 @@
+import { fetchRetrying } from "@kesher/downloads";
 import { execFile, spawn } from "node:child_process";
 import { createWriteStream, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -144,7 +145,7 @@ export class Updater {
   /** Installed copies: is there a newer release on GitHub, with an installer for this system? */
   private async checkRelease(info: VersionInfo): Promise<UpdateCheck> {
     if (!this.packaged) throw new Error("This copy was not installed with git, so it cannot update itself here.");
-    const res = await fetch(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases/latest`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
+    const res = await fetchRetrying(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases/latest`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
     if (res.status === 404) return { ...info, newCommits: [], localChanges: [], checkedAt: new Date().toISOString() };
     let rel: { tag_name: string; name?: string; body?: string; assets: Array<{ name: string; browser_download_url: string; size: number }> };
     if (res.ok) rel = (await res.json()) as typeof rel;
@@ -168,7 +169,7 @@ export class Updater {
   private async releaseFromFeed(): Promise<{ tag_name: string; name?: string; body?: string; assets: Array<{ name: string; browser_download_url: string; size: number }> }> {
     const feed = process.platform === "darwin" ? "latest-mac.yml" : process.platform === "linux" ? "latest-linux.yml" : "latest.yml";
     const base = `https://github.com/${this.packaged!.repo}/releases/latest/download`;
-    const res = await fetch(`${base}/${feed}`, { headers: { "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
+    const res = await fetchRetrying(`${base}/${feed}`, { headers: { "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`GitHub is busy right now (${res.status}). Try again in a few minutes.`);
     const yml = await res.text();
     const version = /^version:\s*['"]?([^'"\s]+)/m.exec(yml)?.[1];
@@ -191,8 +192,8 @@ export class Updater {
     this.packagedProgress = { running: true, step: "Downloading", log: [`Downloading ${p.name}`] };
     void (async () => {
       try {
-        const res = await fetch(p.url, { headers: { "user-agent": "KesherAI" } });
-        if (!res.ok || !res.body) throw new Error(`The download failed (${res.status}).`);
+        const res = await fetchRetrying(p.url, { headers: { "user-agent": "KesherAI" } });
+        if (!res.ok || !res.body) throw new Error(`The download failed: GitHub answered ${res.status}${res.status >= 500 ? ". GitHub's downloads are having trouble; try again in a few minutes." : "."}`);
         const file = join(tmpdir(), p.name);
         const out = createWriteStream(file);
         let got = 0;
