@@ -7,7 +7,8 @@
 import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 const [run, version, repo, out = "android-version.json"] = process.argv.slice(2);
-const log = execSync("git log -60 --format=%H%x1f%ct%x1f%s%x1f%b%x1e -- apps/android", { encoding: "utf8" })
+// Commits that changed only the version number (every computer release does) are not phone changes.
+const log = execSync("git log -60 --format=%H%x1f%ct%x1f%s%x1f%b%x1e -- apps/android ':(exclude)apps/android/package.json'", { encoding: "utf8" })
   .split("\x1e")
   .map((x) => x.trim())
   .filter(Boolean);

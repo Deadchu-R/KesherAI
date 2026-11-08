@@ -12,6 +12,8 @@ on:
     tags: ["v*"]
     paths:
       - "apps/android/**"
+      # The version number changes with every computer release: that alone is no new phone app.
+      - "!apps/android/package.json"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
