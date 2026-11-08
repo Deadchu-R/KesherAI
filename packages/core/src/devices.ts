@@ -176,6 +176,18 @@ export class Devices {
   }
 
   /**
+   * One of the user's other computers, by id, with its best address and token
+   * (for the desktop app's "Open" in My devices; never sent to a page).
+   */
+  peer(id: string): { name: string; url: string; token: string } | undefined {
+    const e = this.entries.find((x) => x.id === id && x.id !== this.id);
+    if (!e) return undefined;
+    const v = this.views.find((x) => x.id === id);
+    const url = v?.url ?? e.urls[0];
+    return url && e.token ? { name: e.name, url, token: e.token } : undefined;
+  }
+
+  /**
    * Turns sharing this computer with the user's other devices on or off.
    * Turning it on also turns on remote access and "access from anywhere".
    */

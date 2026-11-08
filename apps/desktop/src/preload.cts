@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   connectComputer: (link: string): Promise<{ name?: string; error?: string }> => ipcRenderer.invoke("kesher:computer-connect", link),
   /** Opens a saved computer in its own window. */
   openComputer: (origin: string): Promise<{ error?: string }> => ipcRenderer.invoke("kesher:computer-open", origin),
+  /** Opens one of "My devices" (same Google account) in its own window. */
+  openDevice: (id: string): Promise<{ name?: string; error?: string }> => ipcRenderer.invoke("kesher:open-device", id),
   /** Forgets a saved computer (its key and its window's storage). */
   forgetComputer: (origin: string): Promise<void> => ipcRenderer.invoke("kesher:computer-forget", origin),
 });

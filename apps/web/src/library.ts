@@ -57,6 +57,8 @@ interface DesktopBridge {
   connectComputer?(link: string): Promise<{ name?: string; error?: string }>;
   openComputer?(origin: string): Promise<{ error?: string }>;
   forgetComputer?(origin: string): Promise<void>;
+  /** Opens one of "My devices" (same Google account). Missing before 0.5.22. */
+  openDevice?(id: string): Promise<{ name?: string; error?: string }>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

@@ -412,6 +412,13 @@ const appIcon = () => join(app.isPackaged ? join(resourcesDir(), "web") : join(r
 ipcMain.handle("kesher:computers", async (event) => (fromApp(event) ? listComputers() : []));
 ipcMain.handle("kesher:computer-connect", async (event, link: unknown) => (fromApp(event) && typeof link === "string" && link.length < 2000 ? connectComputer(link, appIcon()) : { error: "Not allowed." }));
 ipcMain.handle("kesher:computer-open", async (event, origin: unknown) => (fromApp(event) && typeof origin === "string" ? openComputer(origin, appIcon()) : { error: "Not allowed." }));
+// "My devices" (same Google account): open one of them; the address and token stay in this process.
+ipcMain.handle("kesher:open-device", async (event, id: unknown) => {
+  if (!fromApp(event) || typeof id !== "string" || !server) return { error: "Not allowed." };
+  const p = server.services.devices.peer(id);
+  if (!p) return { error: "That computer is not in My devices any more. Press Check now." };
+  return connectComputer(`${p.url.replace(/\/$/, "")}/?token=${encodeURIComponent(p.token)}`, appIcon());
+});
 ipcMain.handle("kesher:computer-forget", async (event, origin: unknown) => {
   if (fromApp(event) && typeof origin === "string") await forgetComputer(origin);
 });

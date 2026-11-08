@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
-import { toast } from "./library";
+import { desktop, toast } from "./library";
+import { isRemote } from "./api";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -64,6 +65,9 @@ export function DevicesSection() {
                     <span className="muted small"> · {os(d.platform)}{d.gpu ? ` · ${d.gpu}` : ""}</span>
                     <span className="muted small block">{d.online ? L(`מחובר · ${d.models} מודלים זמינים בצ'אט (תחת "${d.name} (your computer)")`, `Online · ${d.models} models in the chat's model list (under "${d.name} (your computer)")`) : L(`לא זמין כרגע · נראה לאחרונה ${new Date(d.lastSeen).toLocaleString()}`, `Not reachable now · last seen ${new Date(d.lastSeen).toLocaleString()}`)}</span>
                   </span>
+                  {d.online && desktop()?.openDevice && !isRemote() && (
+                    <button type="button" className="primary" onClick={() => void desktop()!.openDevice!(d.id).then((r) => r.error ? toast(r.error) : toast(L(`נפתח: ${r.name ?? d.name}`, `Opened ${r.name ?? d.name}`)))}>{L("התחבר", "Connect")}</button>
+                  )}
                 </li>
               ))}
             </ul>
