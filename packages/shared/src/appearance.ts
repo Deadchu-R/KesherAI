@@ -52,7 +52,21 @@ export interface Appearance {
   css?: string;
   /** The look's name (for theme files). */
   name?: string;
+  /** The start screen under the message box, top to bottom, and what is hidden. */
+  homeOrder?: HomeSection[];
+  homeHide?: HomeSection[];
+  /** The phone's bottom bar, start to end. */
+  tabsOrder?: PhoneTab[];
 }
+
+/** What the start screen can show under the message box. */
+export const HOME_SECTIONS = ["ideas", "recent", "pins"] as const;
+/** One part of the start screen. */
+export type HomeSection = (typeof HOME_SECTIONS)[number];
+/** The phone's bottom bar. */
+export const PHONE_TABS = ["chats", "new", "tools", "settings"] as const;
+/** One button of the phone bar. */
+export type PhoneTab = (typeof PHONE_TABS)[number];
 
 /** Ready-made looks. Graphite is the default look. */
 export const APPEARANCE_PRESETS: Array<{ id: string; title: { en: string; he: string }; look: Appearance }> = [
@@ -139,6 +153,13 @@ export function cleanAppearance(input: unknown): Appearance {
     const css = cleanCss(o.css);
     if (css) out.css = css;
   }
+  const pick = <T extends string>(v: unknown, all: readonly T[]): T[] | undefined => (Array.isArray(v) ? [...new Set(v.filter((x): x is T => typeof x === "string" && (all as readonly string[]).includes(x)))] : undefined);
+  const ho = pick(o.homeOrder, HOME_SECTIONS);
+  if (ho?.length) out.homeOrder = ho;
+  const hh = pick(o.homeHide, HOME_SECTIONS);
+  if (hh?.length) out.homeHide = hh;
+  const to = pick(o.tabsOrder, PHONE_TABS);
+  if (to?.length) out.tabsOrder = [...to, ...PHONE_TABS.filter((t) => !to.includes(t))];
   if (typeof o.name === "string" && o.name.trim()) out.name = o.name.trim().replace(/[<>]/g, "").slice(0, 60);
   return out;
 }

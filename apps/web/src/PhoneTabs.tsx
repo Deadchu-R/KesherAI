@@ -1,4 +1,7 @@
+import { Fragment } from "react";
+import { PHONE_TABS, type PhoneTab } from "@kesher/shared";
 import { t } from "./i18n";
+import { useAppearance } from "./appearance";
 
 /** Line icons for the bar (one stroke weight, like the phone's own). */
 const I = {
@@ -16,6 +19,8 @@ const icon = (k: keyof typeof I) => (
  * all tools, settings. Hidden inside a chat, where the message box is.
  */
 export function PhoneTabs({ hash, onChats }: { hash: string; onChats: () => void }) {
+  // The user's order (Settings → Appearance → Phone bar).
+  const order = useAppearance().tabsOrder;
   if (hash.startsWith("#/c/") || hash.startsWith("#/p/") || hash === "#/nodes") return null;
   const tab = (href: string, k: keyof typeof I, label: string) => (
     <a href={href} className="tab" aria-current={hash === href || (href === "#/settings" && hash.startsWith("#/settings")) ? "page" : undefined}>
@@ -23,15 +28,20 @@ export function PhoneTabs({ hash, onChats }: { hash: string; onChats: () => void
       <small>{label}</small>
     </a>
   );
-  return (
-    <nav className="phone-tabs" aria-label="Main" data-slide-bar>
-      <button type="button" className="tab" onClick={onChats}>
+  const parts: Record<PhoneTab, React.ReactNode> = {
+    chats: (
+      <button key="chats" type="button" className="tab" onClick={onChats}>
         {icon("chats")}
         <small>{t("tabChats")}</small>
       </button>
-      {tab("#/", "new", t("tabNew"))}
-      {tab("#/apps", "tools", t("tabTools"))}
-      {tab("#/settings", "settings", t("settings"))}
+    ),
+    new: <Fragment key="new">{tab("#/", "new", t("tabNew"))}</Fragment>,
+    tools: <Fragment key="tools">{tab("#/apps", "tools", t("tabTools"))}</Fragment>,
+    settings: <Fragment key="settings">{tab("#/settings", "settings", t("settings"))}</Fragment>,
+  };
+  return (
+    <nav className="phone-tabs" aria-label="Main" data-slide-bar>
+      {(order ?? PHONE_TABS).map((k) => parts[k])}
     </nav>
   );
 }

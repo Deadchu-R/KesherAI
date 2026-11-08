@@ -14,8 +14,11 @@ import { ModelPickerHost } from "./ModelPicker";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
-import { Sidebar } from "./Sidebar";
-import { createConversation, refreshLibrary, toast, useToast } from "./library";
+import { NAV_ICONS, Sidebar, useNavItems, usePins } from "./Sidebar";
+import { ToolIcon } from "./ToolIcon";
+import { useAppearance } from "./appearance";
+import { HOME_SECTIONS } from "@kesher/shared";
+import { createConversation, refreshLibrary, toast, useLibrary, useToast } from "./library";
 import { useModels } from "./useModels";
 import { PairPrompt } from "./PairPrompt";
 import { PageBoundary } from "./PageBoundary";
@@ -92,6 +95,13 @@ function Home() {
     }
   };
   const role = useRole();
+  // Under the message box, in the user's order (Settings → Appearance → Start screen).
+  const look = useAppearance();
+  const homeSections = [...(look.homeOrder ?? []), ...HOME_SECTIONS].filter((x, i, a) => a.indexOf(x) === i && !look.homeHide?.includes(x));
+  const { conversations } = useLibrary();
+  const recent = conversations.slice(0, 5);
+  const [pins] = usePins();
+  const navItems = useNavItems();
   const ideas = role ? role.ideas[getLocale() === "he" ? "he" : "en"] : [t("ideaExe"), t("ideaImage"), t("ideaCode"), t("ideaExplain")];
   return (
     <div className="home">
@@ -125,9 +135,25 @@ function Home() {
           </div>
         </div>
       </form>
-      <div className="ideas">
-        {ideas.map((i) => <button key={i} type="button" onClick={() => setText(i)}>{i}</button>)}
-      </div>
+      {homeSections.map((sec) =>
+        sec === "ideas" ? (
+          <div key="ideas" className="ideas">
+            {ideas.map((i) => <button key={i} type="button" onClick={() => setText(i)}>{i}</button>)}
+          </div>
+        ) : sec === "recent" ? (
+          recent.length > 0 && (
+            <nav key="recent" className="home-recent" aria-label={t("recents")}>
+              {recent.map((c) => <a key={c.id} href={`#/c/${c.id}`} dir="auto">{c.title}</a>)}
+            </nav>
+          )
+        ) : (
+          pins.length > 0 && (
+            <nav key="pins" className="home-pins" aria-label={t("allTools")}>
+              {pins.map((href) => <a key={href} href={href}><span aria-hidden="true"><ToolIcon href={href} fallback={NAV_ICONS[href] ?? "•"} /></span> {navItems.find((n) => n.href === href)?.label ?? href}</a>)}
+            </nav>
+          )
+        ),
+      )}
     </div>
   );
 }

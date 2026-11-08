@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_PRESETS, resolveAppearance, type Appearance, type AppearanceColor } from "@kesher/shared";
+import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_PRESETS, HOME_SECTIONS, PHONE_TABS, resolveAppearance, type Appearance, type AppearanceColor } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { applyAppearance, saveAppearance, undoAppearance, useAppearance } from "./appearance";
 import { getLocale, t } from "./i18n";
@@ -19,6 +19,9 @@ const COLOR_NAMES: Record<AppearanceColor, [string, string]> = {
   muted: ["טקסט משני", "Secondary text"],
   accent: ["צבע מבטא", "Accent"],
 };
+
+const HOME_NAMES: Record<string, [string, string]> = { ideas: ["רעיונות", "Ideas"], recent: ["צ'אטים אחרונים", "Recent chats"], pins: ["כלים שהצמדת", "Your pinned tools"] };
+const TAB_NAMES: Record<string, [string, string]> = { chats: ["צ'אטים", "Chats"], new: ["חדש", "New"], tools: ["כלים", "Tools"], settings: ["הגדרות", "Settings"] };
 
 /** The default colours (styles.css), for the pickers when nothing is set. */
 const DEFAULTS: Record<AppearanceColor, string> = { bg: "#121213", panel: "#18181a", "panel-2": "#1f1f22", raised: "#29292d", text: "#ededee", muted: "#94949c", accent: "#98a3ff" };
@@ -52,6 +55,16 @@ export function AppearanceSection() {
   const patch = (p: Partial<Appearance>, now = false) => change({ ...saved, ...p }, now);
   const setColor = (k: AppearanceColor, v: string) => patch({ colors: { ...saved.colors, [k]: v } });
   const groupOrder = [...(look.navOrder ?? []), ...NAV_GROUPS.map((g) => g.id)].filter((id, i, a) => a.indexOf(id) === i && NAV_GROUPS.some((g) => g.id === id));
+  const homeOrder = [...(look.homeOrder ?? []), ...HOME_SECTIONS].filter((x, i, a) => a.indexOf(x) === i);
+  const tabsOrder = look.tabsOrder ?? [...PHONE_TABS];
+  const moveIn = <T,>(list: T[], id: T, d: -1 | 1, done: (o: T[]) => void) => {
+    const o = [...list];
+    const i = o.indexOf(id);
+    const j = i + d;
+    if (j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j]!, o[i]!];
+    done(o);
+  };
   const move = (id: string, d: -1 | 1) => {
     const o = [...groupOrder];
     const i = o.indexOf(id);
@@ -215,6 +228,32 @@ export function AppearanceSection() {
             </li>
           );
         })}
+      </ol>
+
+      <h3>{L("מסך הפתיחה (מתחת לתיבת ההודעה)", "Start screen (under the message box)")}</h3>
+      <ol className="look-order">
+        {homeOrder.map((id, i) => {
+          const hidden = look.homeHide?.includes(id);
+          return (
+            <li key={id} className={hidden ? "off" : ""}>
+              <span className="grow">{HOME_NAMES[id] ? L(...HOME_NAMES[id]) : id}</span>
+              <button type="button" aria-label={L("למעלה", "Up")} disabled={i === 0} onClick={() => moveIn(homeOrder, id, -1, (o) => patch({ homeOrder: o }, true))}>↑</button>
+              <button type="button" aria-label={L("למטה", "Down")} disabled={i === homeOrder.length - 1} onClick={() => moveIn(homeOrder, id, 1, (o) => patch({ homeOrder: o }, true))}>↓</button>
+              <label className="row small"><input type="checkbox" checked={!hidden} onChange={(e) => patch({ homeHide: e.target.checked ? (look.homeHide ?? []).filter((x) => x !== id) : [...(look.homeHide ?? []), id] }, true)} /> {L("מוצג", "Shown")}</label>
+            </li>
+          );
+        })}
+      </ol>
+
+      <h3>{L("הפס התחתון בטלפון", "The phone's bottom bar")}</h3>
+      <ol className="look-order">
+        {tabsOrder.map((id, i) => (
+          <li key={id}>
+            <span className="grow">{L(...(TAB_NAMES[id] ?? [id, id]))}</span>
+            <button type="button" aria-label={L("קודם", "Earlier")} disabled={i === 0} onClick={() => moveIn(tabsOrder, id, -1, (o) => patch({ tabsOrder: o }, true))}>↑</button>
+            <button type="button" aria-label={L("אחר כך", "Later")} disabled={i === tabsOrder.length - 1} onClick={() => moveIn(tabsOrder, id, 1, (o) => patch({ tabsOrder: o }, true))}>↓</button>
+          </li>
+        ))}
       </ol>
 
       <details className="look-more">
