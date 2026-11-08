@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-share",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Share to KesherAI from any Android app (text, links, images, files), and a home-screen widget (new chat, talk, photo).",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

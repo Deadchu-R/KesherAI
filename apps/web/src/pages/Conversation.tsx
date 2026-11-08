@@ -14,6 +14,7 @@ import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
 import { Mic } from "../Mic";
 import { VoiceMode } from "../VoiceMode";
+import { takeOpening, uploadToConversation } from "../phone";
 import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
@@ -269,6 +270,32 @@ export function ConversationPage({ id }: { id: string }) {
   const [contextOpen, setContextOpen] = useState(false);
   const [web, setWeb] = useWebSearch();
   const [voice, setVoice] = useState(false);
+  const [askPhoto, setAskPhoto] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
+  // Opened from the phone (shared from another app, or a widget button): a draft, voice mode, or the camera.
+  useEffect(() => {
+    const apply = () => {
+      const o = takeOpening(id);
+      if (o?.draft) setInput((v) => (v ? `${v}\n${o.draft}` : o.draft!));
+      if (o?.voice) setVoice(true);
+      if (o?.photo) setAskPhoto(true);
+    };
+    apply();
+    const on = (e: Event) => (e as CustomEvent<string>).detail === id && apply();
+    addEventListener("kesher-opening", on);
+    return () => removeEventListener("kesher-opening", on);
+  }, [id]);
+  const addPhotos = async (files: FileList | null) => {
+    setAskPhoto(false);
+    for (const f of [...(files ?? [])]) {
+      try {
+        const path = await uploadToConversation(id, f.name || "photo.jpg", f);
+        setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}[${t("attached")}: ${path}]\n`);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    }
+  };
   const voiceOn = useRef(false);
   voiceOn.current = voice;
   const [openPanel, setOpenPanel] = useState("");
@@ -450,6 +477,14 @@ export function ConversationPage({ id }: { id: string }) {
   const lastAnswer = [...events].reverse().find((e): e is Ev<"assistant"> => e.type === "assistant");
   return (
     <>
+      {askPhoto && (
+        <div className="photo-ask card row">
+          <span className="grow">{t("photoAsk")}</span>
+          <button type="button" className="primary" onClick={() => photoInput.current?.click()}>{t("photoTake")}</button>
+          <button type="button" className="as-link" onClick={() => setAskPhoto(false)}>✕</button>
+        </div>
+      )}
+      <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void addPhotos(e.target.files); e.target.value = ""; }} />
       {voice && (
         <VoiceMode
           busy={busy}

@@ -159,9 +159,9 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 
 **1. The phone app**
 
-1. Share to KesherAI from any app (text, links, images, files) ⬜
-2. A home-screen widget: new chat, talk, photo (Conduit, PocketPal) ⬜
-3. Voice call mode on the phone: talk and hear the answer, hands-free (Conduit, Layla) ⬜
+1. Share to KesherAI from any app (text, links, images, files) ✅
+2. A home-screen widget: new chat, talk, photo (Conduit, PocketPal) ✅
+3. Voice call mode on the phone: talk and hear the answer, hands-free (Conduit, Layla) ✅ (with a computer; the phone's own recognizer and voice)
 4. Find computers on the network by scanning, and pair with a QR code shown on the computer (Off Grid "Scan Network", LU QR pairing) ⬜
 5. Watch and approve the agent's computer use from the phone ⬜
 6. Image generation on the phone itself (Layla: Stable Diffusion 1.5) ⬜

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kesher_widget_description">New chat, talk, or ask about a photo</string>
+    <string name="kesher_widget_new">New chat</string>
+    <string name="kesher_widget_talk">Talk</string>
+    <string name="kesher_widget_photo">Photo</string>
+</resources>

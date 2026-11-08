@@ -35,6 +35,14 @@ export function speakable(text: string): string {
 
 let current: { stop: () => void } | null = null;
 
+/** The Android app's own voice (the page's speechSynthesis has no voices inside the app). */
+type NativeVoice = {
+  speak(o: { text: string; language?: string }): Promise<{ id?: string }>;
+  stopSpeaking(): Promise<void>;
+  addListener(event: "spoken", cb: (e: { id?: string }) => void): Promise<{ remove: () => void }> | { remove: () => void };
+};
+const nativeVoice = (): NativeVoice | undefined => (window as unknown as { Capacitor?: { Plugins?: { KesherSpeech?: NativeVoice } } }).Capacitor?.Plugins?.KesherSpeech;
+
 /** Stops whatever is being read aloud. */
 export function stopSpeaking(): void {
   current?.stop();
@@ -66,6 +74,24 @@ export async function speak(text: string, onEnd?: () => void): Promise<void> {
       return;
     }
     // Fall back to the computer's voice if the cloud fails.
+  }
+  const nv = nativeVoice();
+  if (nv) {
+    let done = false;
+    const said: { id?: string } = {};
+    const finish = () => {
+      if (done) return;
+      done = true;
+      current = null;
+      void Promise.resolve(sub).then((x) => x.remove());
+      onEnd?.();
+    };
+    const sub = nv.addListener("spoken", (e) => {
+      if (!said.id || !e.id || e.id === said.id) finish();
+    });
+    current = { stop: () => { void nv.stopSpeaking(); finish(); } };
+    said.id = (await nv.speak({ text: say, language: /[֐-׿]/.test(say) ? "he-IL" : "en-US" }).catch(() => ({ id: undefined }))).id;
+    return;
   }
   const u = new SpeechSynthesisUtterance(say);
   const voices = speechSynthesis.getVoices();

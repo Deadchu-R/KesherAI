@@ -561,6 +561,13 @@
     if (launch) connect(launch);
     else if (!cameBack && recent) connectComputer(recent);
     else if (!cameBack && saved) connect(saved);
+    else if (!saved && !recent) {
+      // No computer yet: something shared, or a widget button, goes to the chat on this phone.
+      const Share = window.Capacitor?.Plugins?.KesherShare;
+      const s = Share ? await Share.take().catch(() => ({})) : {};
+      if (s.text || s.subject) sessionStorage.setItem("kesherai-shared-text", [s.subject, s.text].filter(Boolean).join("\n"));
+      if (s.text || s.subject || s.action) location.href = s.action === "new" ? "local.html?new=1" : "local.html?chat=1";
+    }
   })();
 </script>
 <script src="drawer.js"></script>

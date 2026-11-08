@@ -7,6 +7,7 @@ import "@fontsource/rubik/500.css";
 import "@fontsource/rubik/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "./styles.css";
+import { startPhoneShare } from "./phone";
 
 setLocale(getLocale());
 
@@ -21,6 +22,9 @@ createRoot(document.getElementById("root")!).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   addEventListener("load", () => void navigator.serviceWorker.register("./sw.js").catch(() => undefined));
 }
+
+// Inside the Android app: things shared from other apps, and the home-screen widget.
+startPhoneShare();
 
 // Inside the Android app: scanning another computer's QR code while connected
 // (kesherai://connect?server=…) switches to that computer.

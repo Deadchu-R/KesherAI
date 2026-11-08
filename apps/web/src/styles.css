@@ -976,3 +976,4 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .transcript .who.s3 { color: #e07a7a; }
 .transcript .who.s4 { color: #d6c25a; }
 .transcript .who.s5 { color: #6fb3e0; }
+.photo-ask { position: sticky; top: 0; z-index: 5; margin: 8px; gap: 10px; }

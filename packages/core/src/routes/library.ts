@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { cloudFolders } from "../cloud-folders.js";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
@@ -233,6 +235,26 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
     if (!opened.session.answer(req.params.questionId, req.body?.text ?? "")) return reply.code(404).send({ error: "That question is no longer waiting" });
     return { ok: true };
+  });
+
+  /**
+   * A file sent from another device (shared from the phone): saved in the
+   * conversation's own folder under `shared/`. Raw bytes, `?name=`.
+   */
+  app.post<{ Params: { id: string }; Querystring: { name?: string } }>("/api/conversations/:id/files", { bodyLimit: 60 * 1024 * 1024 }, async (req, reply) => {
+    const conv = await s.library.getConversation(req.params.id);
+    if (!conv) return reply.code(404).send({ error: "Conversation not found" });
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || !body.length) return reply.code(400).send({ error: "Send the file's bytes as application/octet-stream." });
+    const folder = s.conversations.workspaceOf(conv);
+    if (!folder) return reply.code(409).send({ error: "This conversation has no folder." });
+    const name = (String(req.query.name ?? "file").split(/[\\/]/).pop() ?? "file").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 120) || "file";
+    const dir = join(folder, "shared");
+    await mkdir(dir, { recursive: true });
+    let path = join(dir, name);
+    for (let i = 2; existsSync(path); i++) path = join(dir, name.replace(/(\.[^.]*)?$/, ` (${i})$1`));
+    await writeFile(path, body);
+    return { path, name: basename(path) };
   });
 
   /** Gives the conversation access to a folder or file outside its own (the paper clip, or drag and drop). */

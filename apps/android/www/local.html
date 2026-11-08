@@ -839,6 +839,9 @@
    * the model of the open chat without clearing it.
    */
   async function openChat(item, url, { id, fresh, keep } = {}) {
+    // Text shared from another app (with no computer connected) waits in the message box.
+    const shared = sessionStorage.getItem("kesherai-shared-text");
+    if (shared) { sessionStorage.removeItem("kesherai-shared-text"); setTimeout(() => { $("input").value = shared; $("input").dispatchEvent(new Event("input")); }, 0); }
     current = { item, url };
     activeUrl = url;
     localStorage.setItem("kesherai-phone-model", url);
@@ -1407,6 +1410,13 @@
   renderList()
     .then(async () => {
       const q = new URLSearchParams(location.search);
+      // Whether a chat can open with this model right now: an API, a native model, or a downloaded file.
+      const usable = (item, url) => !!item && (!!item.api || !!item.native || downloaded.some((m) => m.url === url && m.size > 0));
+      // Opened from the menu with nothing to chat with yet: say so above the models.
+      const noModelYet = (text = T("כדי לפתוח צ'אט בטלפון, הורד מודל או חבר API כאן למטה.", "To chat on the phone, download a model or connect an API below.")) => {
+        const p = Object.assign(document.createElement("p"), { className: "intro notice", textContent: text });
+        $("modelList").prepend(p);
+      };
       const itemFor = (url) => {
         if (url?.startsWith("native:")) {
           const file = url.slice(7);
@@ -1424,24 +1434,26 @@
       if (q.get("c")) {
         const c = allChats().find((x) => x.id === q.get("c"));
         const item = c && itemFor(c.url);
-        if (c && item) return openChat(item, c.url, { id: c.id });
+        if (c && usable(item, c.url)) return openChat(item, c.url, { id: c.id });
+        if (c) return noModelYet(T("המודל של הצ'אט הזה כבר לא בטלפון. בחר מודל כדי להמשיך.", "This chat's model is no longer on the phone. Choose a model to go on."));
       }
       // "New chat on this phone": with the last model used, if any.
       if (q.has("new")) {
         const url = localStorage.getItem("kesherai-phone-model");
         const item = itemFor(url);
-        if (item && (item.api || downloaded.some((m) => m.url === url && m.size > 0))) return openChat(item, url, { fresh: true });
-        return;
+        if (usable(item, url)) return openChat(item, url, { fresh: true });
+        return noModelYet();
       }
       // From the side menu ("Chat on this phone"): go straight back into the last chat.
       if (!q.has("chat")) return;
+      // The last chat, with its model; else the last model used.
+      const last = allChats()[0];
+      const lastItem = last && itemFor(last.url);
+      if (last && usable(lastItem, last.url)) return openChat(lastItem, last.url, { id: last.id });
       const url = localStorage.getItem("kesherai-phone-model");
-      if (url?.startsWith("api:")) {
-        const [provider, ...rest] = url.slice(4).split("/");
-        return openChat({ name: `${rest.join("/")} · ${provider}`, api: { provider, model: rest.join("/") } }, url);
-      }
-      const item = url?.includes(FROM_PC) ? { name: pcName(url) || "PC model" } : CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
-      if (item && downloaded.some((m) => m.url === url && m.size > 0)) await openChat(item, url);
+      const item = itemFor(url);
+      if (usable(item, url)) return openChat(item, url);
+      noModelYet();
     })
     .catch((e) => { $("modelList").textContent = String(e.message || e); });
 </script>

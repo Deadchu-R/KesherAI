@@ -3,7 +3,11 @@ import { api, withToken } from "./api";
 import { encodeWav } from "./Mic";
 import { speak, stopSpeaking } from "./Speak";
 import { toast } from "./library";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
+
+/** The Android app's speech recognizer, when the page runs inside it. */
+type NativeRecognizer = { start(o: { language?: string }): Promise<{ text: string }>; stop(): Promise<void> };
+const nativeRecognizer = (): NativeRecognizer | undefined => (window as unknown as { Capacitor?: { Plugins?: { KesherSpeech?: NativeRecognizer } } }).Capacitor?.Plugins?.KesherSpeech;
 
 type Phase = "listening" | "hearing" | "working" | "thinking" | "speaking";
 
@@ -35,8 +39,48 @@ export function VoiceMode({ onSend, answer, busy, onClose }: { onSend: (text: st
     setPhase(p);
   };
 
+  // Inside the Android app: the phone's own recognizer (it hears when you stop) and voice.
+  const phone = nativeRecognizer();
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!phone || phase !== "listening") return;
+    let stopped = false;
+    void (async () => {
+      try {
+        const r = await phone.start({ language: getLocale() === "he" ? "he-IL" : "" });
+        if (stopped || phaseRef.current !== "listening") return;
+        const text = (r.text ?? "").trim();
+        if (!text) return setTick((n) => n + 1);
+        setHeard(text);
+        go("thinking");
+        await onSend(text);
+      } catch (e) {
+        if (stopped) return;
+        const msg = (e as Error).message ?? "";
+        // Nothing heard: listen again; a real error ends voice mode.
+        if (/no match|no speech|timeout|7|6/i.test(msg)) setTimeout(() => !stopped && setTick((n) => n + 1), 300);
+        else {
+          toast(msg || t("micDenied"));
+          onClose();
+        }
+      }
+    })();
+    return () => {
+      stopped = true;
+      void phone.stop().catch(() => undefined);
+    };
+  }, [phase, tick]);
+
   // The microphone, open for the whole session, with a simple loudness detector.
   useEffect(() => {
+    if (phone) {
+      const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+      addEventListener("keydown", esc);
+      return () => {
+        removeEventListener("keydown", esc);
+        stopSpeaking();
+      };
+    }
     let closed = false;
     let stream: MediaStream | undefined;
     let ctx: AudioContext | undefined;

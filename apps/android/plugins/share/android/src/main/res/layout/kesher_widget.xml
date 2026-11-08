@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center"
+    android:padding="6dp"
+    android:background="@drawable/kesher_widget_bg">
+    <TextView android:id="@+id/widget_new" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_margin="3dp" android:gravity="center" android:background="@drawable/kesher_widget_btn" android:text="@string/kesher_widget_new" android:textColor="#FFFFFF" android:textSize="14sp" />
+    <TextView android:id="@+id/widget_talk" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_margin="3dp" android:gravity="center" android:background="@drawable/kesher_widget_btn" android:text="@string/kesher_widget_talk" android:textColor="#FFFFFF" android:textSize="14sp" />
+    <TextView android:id="@+id/widget_photo" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_margin="3dp" android:gravity="center" android:background="@drawable/kesher_widget_btn" android:text="@string/kesher_widget_photo" android:textColor="#FFFFFF" android:textSize="14sp" />
+</LinearLayout>

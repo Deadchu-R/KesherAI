@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kesher_widget_description">צ\'אט חדש, דיבור, או שאלה על תמונה</string>
+    <string name="kesher_widget_new">צ\'אט חדש</string>
+    <string name="kesher_widget_talk">דבר</string>
+    <string name="kesher_widget_photo">תמונה</string>
+</resources>
