@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check the plugin descriptor
-        run: node -e 'const p=require("./integrations/unreal/KesherAIBridge/KesherAIBridge.uplugin");if(!p.Modules?.length)throw new Error("no modules");console.log(p.FriendlyName,p.VersionName)'
+        run: node -e 'const p=JSON.parse(require("fs").readFileSync("integrations/unreal/KesherAIBridge/KesherAIBridge.uplugin","utf8"));if(!p.Modules?.length)throw new Error("no modules");console.log(p.FriendlyName,p.VersionName)'
       - name: Zip
         working-directory: integrations/unreal
         run: zip -r -q ../../KesherAIBridge.zip KesherAIBridge -x "*/Binaries/*" "*/Intermediate/*"
