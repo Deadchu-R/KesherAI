@@ -103,7 +103,7 @@ export interface Meeting {
   t0: number;
   t1?: number;
   /** What was said, in order (each piece is about half a minute); `who` tells the user's microphone from the call's sound. */
-  segments: Array<{ t: number; text: string; who?: "me" | "others" }>;
+  segments: MeetingSegment[];
   summary?: string;
   decisions?: string[];
   /** Ids of the action items it added to the day. */
@@ -242,7 +242,20 @@ export function parseInsights(text: string): {
  * @returns The transcript.
  */
 export function meetingTranscript(m: Pick<Meeting, "segments">): string {
-  return m.segments.map((x) => `[${new Date(x.t).toTimeString().slice(0, 5)}] ${x.who === "me" ? "Me: " : x.who === "others" ? "Others: " : ""}${x.text}`).join("\n");
+  return m.segments.map((x) => `[${new Date(x.t).toTimeString().slice(0, 5)}] ${x.who === "me" ? "Me: " : x.speaker ? `Speaker ${x.speaker}: ` : x.who === "others" ? "Others: " : ""}${x.text}`).join("\n");
+}
+
+/** A piece of a meeting's transcript. */
+export interface MeetingSegment {
+  /** When it was said (ms). */
+  t: number;
+  text: string;
+  /** The user's microphone, or the call's sound. */
+  who?: "me" | "others";
+  /** On the call, which speaker (from 1), once they were told apart. */
+  speaker?: number;
+  /** Whisper's pieces with their times (seconds from `t`), kept until the speakers are told apart. */
+  parts?: Array<{ start: number; end: number; text: string }>;
 }
 
 /**
@@ -328,7 +341,7 @@ class TextReader {
   }
 }
 
-const MEETING_PROMPT = `You get the transcript of a meeting recorded on the user's computer (their microphone and the call's audio, transcribed in pieces, so words may be cut or misheard; "Me:" is the user, "Others:" is everyone on the call). Answer with JSON only:
+const MEETING_PROMPT = `You get the transcript of a meeting recorded on the user's computer (their microphone and the call's audio, transcribed in pieces, so words may be cut or misheard; "Me:" is the user; "Others:" or "Speaker N:" are the people on the call). Answer with JSON only:
 {"summary":"3-6 plain sentences: what the meeting was about and what was agreed","decisions":["each decision, one line"],"actions":[{"text":"a concrete follow-up, in the imperative","who":"who owns it, if said"}]}
 Never invent names, numbers or decisions that are not in the transcript. Write in the language most of the meeting was in.`;
 
@@ -828,14 +841,29 @@ export class Journal {
   }
 
   /** Adds what was said in one piece of the recording. */
-  async addSegment(day: string, id: string, t: number, text: string, who?: "me" | "others"): Promise<Meeting> {
+  async addSegment(day: string, id: string, t: number, text: string, who?: "me" | "others", parts?: MeetingSegment["parts"]): Promise<Meeting> {
     const m = await this.meeting(day, id);
     if (!m) throw new Error("No such meeting.");
     const clean = text.trim();
-    if (clean) m.segments.push({ t: Number.isFinite(t) ? t : Date.now(), text: clean.slice(0, 8000), ...(who ? { who } : {}) });
+    if (clean) m.segments.push({ t: Number.isFinite(t) ? t : Date.now(), text: clean.slice(0, 8000), ...(who ? { who } : {}), ...(parts?.length ? { parts } : {}) });
     m.segments.sort((a, b) => a.t - b.t);
     await this.saveMeeting(day, m);
     return m;
+  }
+
+  /**
+   * Puts new segments in place of the call's ones (after telling the speakers apart).
+   *
+   * @param day - The meeting's day.
+   * @param id - The meeting.
+   * @param others - The call's segments, each with its speaker.
+   */
+  async replaceOthers(day: string, id: string, others: MeetingSegment[]): Promise<void> {
+    const m = await this.meeting(day, id);
+    if (!m) throw new Error("No such meeting.");
+    m.segments = [...m.segments.filter((x) => x.who !== "others"), ...others].sort((a, b) => a.t - b.t);
+    for (const x of m.segments) delete x.parts;
+    await this.saveMeeting(day, m);
   }
 
   /**

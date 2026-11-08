@@ -1,3 +1,9 @@
+import { join } from "node:path";
+import { rm } from "node:fs/promises";
+import type { MeetingSegment } from "../journal.js";
+import { keepCallPiece, separateSpeakers } from "../meeting-speakers.js";
+import { meetingAudioDir } from "../speakers.js";
+import { transcribeWith } from "../speech-tools.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -52,14 +58,64 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
       return reply.code(404).send({ error: (err as Error).message });
     }
   });
+  // A piece of audio (WAV): transcribed here; the call's pieces are kept until the write-up when
+  // speaker separation is on, so the people on the call can be told apart.
+  app.post<{ Params: { day: string; id: string }; Querystring: { t?: string; who?: string } }>("/api/journal/meetings/:day/:id/audio", opts, async (req, reply) => {
+    const wav = req.body as Buffer;
+    if (!Buffer.isBuffer(wav) || wav.length < 1000) return reply.code(400).send({ error: "Send a WAV recording as audio/wav." });
+    const m = await s.journal.meeting(req.params.day, req.params.id);
+    if (!m) return reply.code(404).send({ error: "No such meeting." });
+    const who = req.query.who === "me" || req.query.who === "others" ? req.query.who : undefined;
+    const t = Number(req.query.t ?? Date.now());
+    const local = await s.whisper.status();
+    const usesLocal = s.config.speech.stt === "local" || (s.config.speech.stt === "auto" && local.engine && local.model);
+    const separate = who === "others" && s.config.meetings.speakers && s.speakers.status().ready;
+    try {
+      let text: string;
+      let parts: MeetingSegment["parts"];
+      if (separate && usesLocal && local.engine && local.model) {
+        parts = await s.whisper.transcribeParts(wav, s.config.speech.language);
+        text = parts.map((p) => p.text).join(" ");
+      } else {
+        if (usesLocal && (!local.engine || !local.model)) return reply.code(409).send({ error: "needs-setup", code: "needs-setup" });
+        text = (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", s.config.speech.language)).text;
+      }
+      if (separate && text.trim()) await keepCallPiece(meetingAudioDir(join(s.paths.root, "journal"), m.id), t, wav);
+      await s.journal.addSegment(req.params.day, req.params.id, t, text, who, parts);
+      return { text };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
+  /** Speaker separation for meetings: on or off, and its one-time download. */
+  app.get("/api/journal/speakers", opts, async () => ({ on: s.config.meetings.speakers, ...s.speakers.status() }));
+  app.put<{ Body: { on?: boolean } }>("/api/journal/speakers", opts, async (req) => {
+    s.config.meetings.speakers = req.body?.on !== false;
+    await s.saveConfig();
+    return { on: s.config.meetings.speakers, ...s.speakers.status() };
+  });
+  app.post("/api/journal/speakers/setup", opts, async (_req, reply) => {
+    void s.speakers.prepare().catch(() => undefined);
+    return reply.code(202).send({ ok: true });
+  });
+
   app.post<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id/finish", opts, async (req, reply) => {
     try {
+      const m = await s.journal.meeting(req.params.day, req.params.id);
+      const dir = m && meetingAudioDir(join(s.paths.root, "journal"), m.id);
+      if (m && dir && s.speakers.status().ready) {
+        const others = await separateSpeakers(s.speakers, dir, m.segments.filter((x) => x.who === "others"), AbortSignal.timeout(3_600_000)).catch(() => undefined);
+        if (others?.length) await s.journal.replaceOthers(req.params.day, req.params.id, others);
+      }
+      if (dir) await rm(dir, { recursive: true, force: true });
       return await s.journal.finishMeeting(req.params.day, req.params.id);
     } catch (err) {
       return reply.code(404).send({ error: (err as Error).message });
     }
   });
   app.delete<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id", opts, async (req) => {
+    await rm(meetingAudioDir(join(s.paths.root, "journal"), req.params.id), { recursive: true, force: true });
     await s.journal.deleteMeeting(req.params.day, req.params.id).catch(() => undefined);
     return { ok: true };
   });

@@ -136,6 +136,13 @@ export const KesherConfigSchema = z.object({
     })
     .default({}),
   /** Speech: how the microphone button turns speech into text. */
+  /** Meetings in My day. */
+  meetings: z
+    .object({
+      /** Tell the people on the call apart (keeps the call's audio until the write-up, then deletes it). */
+      speakers: z.boolean().default(true),
+    })
+    .default({}),
   speech: z
     .object({
       /** `auto`: this computer when it can, else a connected cloud service; `local`; or `cloud:<connection id>` (Groq, OpenAI). */

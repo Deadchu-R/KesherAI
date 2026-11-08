@@ -81,11 +81,12 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
         setPieces((p) => ({ ...p, sent: p.sent + 1 }));
         queue = queue.then(async () => {
           try {
-            const res = await fetch(withToken("/api/speech/transcribe"), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+            // The server transcribes it, adds it to the meeting, and keeps the call's audio for telling speakers apart.
+            const q = `t=${t}${who ? `&who=${who}` : ""}`;
+            const res = await fetch(withToken(`/api/journal/meetings/${started.day}/${started.meeting.id}/audio?${q}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
             const j = (await res.json()) as { text?: string; error?: string; code?: string };
             if (j.code === "needs-setup") throw new Error(L("צריך להגדיר דיבור-לטקסט: הגדרות ← דיבור.", "Set up speech to text first: Settings → Speech."));
             if (!res.ok) throw new Error(j.error ?? String(res.status));
-            if (j.text?.trim()) await api(`/api/journal/meetings/${started.day}/${started.meeting.id}/segment`, { method: "POST", body: { t, text: j.text, ...(who ? { who } : {}) } });
           } catch (e) {
             setError((e as Error).message);
           } finally {
@@ -139,7 +140,8 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
       <div className="dialog-backdrop" role="presentation" onClick={() => setState("idle")}>
         <form className="dialog card stack" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void start(); }}>
           <strong>{L("הקלטת פגישה", "Record a meeting")}</strong>
-          <p className="muted small">{L("מקליט את המיקרופון ואת הקול של השיחה, הופך כל חצי דקה לטקסט, ובסוף כותב סיכום, החלטות ומשימות. ההקלטה עצמה לא נשמרת, רק הטקסט.", "Records your microphone and the call's sound, turns each half minute into text, and at the end writes a summary, decisions and action items. The audio itself is not kept, only the text.")}</p>
+          <p className="muted small">{L("מקליט את המיקרופון ואת הקול של השיחה, הופך כל חצי דקה לטקסט, ובסוף כותב סיכום, החלטות ומשימות. נשמר רק הטקסט.", "Records your microphone and the call's sound, turns each half minute into text, and at the end writes a summary, decisions and action items. Only the text is kept.")}</p>
+          <SpeakersOption />
           <p className="small">{L("ספר למשתתפים שאתה מקליט.", "Tell the other people you are recording.")}</p>
           <label className="stack"><span>{L("שם הפגישה", "Meeting name")}</span><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={L("למשל: סנכרון שבועי", "e.g. Weekly sync")} /></label>
           {error && <p className="error small">{error}</p>}
@@ -160,6 +162,37 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
       </span>
       {state === "recording" && <button type="button" className="primary" onClick={() => void rec.current?.stop()}>{L("עצור וסכם", "Stop and write up")}</button>}
       {error && <span className="error small">{error}</span>}
+    </div>
+  );
+}
+
+/** The option to tell the people on the call apart, with its one-time download. */
+function SpeakersOption() {
+  const [st, setSt] = useState<{ on: boolean; ready: boolean; busy: boolean; sizeMb: number } | null>(null);
+  const load = () => void api<{ on: boolean; ready: boolean; busy: boolean; sizeMb: number }>("/api/journal/speakers").then(setSt, () => undefined);
+  useEffect(load, []);
+  useEffect(() => {
+    if (!st?.busy) return;
+    const id = setInterval(load, 3000);
+    return () => clearInterval(id);
+  }, [st?.busy]);
+  if (!st) return null;
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <label className="check">
+        <input type="checkbox" checked={st.on} onChange={(e) => void api<typeof st>("/api/journal/speakers", { method: "PUT", body: { on: e.target.checked } }).then(setSt)} />
+        {L("להפריד בין הדוברים בשיחה (דובר 1, דובר 2…)", "Tell the people on the call apart (speaker 1, speaker 2…)")}
+      </label>
+      {st.on && (
+        <p className="muted small">
+          {st.ready
+            ? L("קול השיחה נשמר עד שהסיכום נכתב, ואז נמחק.", "The call's sound is kept until the write-up, then deleted.")
+            : st.busy
+              ? L("מוריד את מודל הפרדת הדוברים… אפשר לעקוב בעיגול ההורדות.", "Downloading the speaker model… follow it in the downloads circle.")
+              : L(`צריך פעם אחת מודל קטן (בערך ${st.sizeMb} MB). `, `Needs a small model once (about ${st.sizeMb} MB). `)}
+          {!st.ready && !st.busy && <button type="button" className="link-btn" onClick={() => void api("/api/journal/speakers/setup", { method: "POST" }).then(() => setSt({ ...st, busy: true }))}>{L("הורד", "Download")}</button>}
+        </p>
+      )}
     </div>
   );
 }

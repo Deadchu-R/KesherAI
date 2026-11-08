@@ -148,7 +148,7 @@ Working on now, in this order:
 
 Later (priority to be decided):
 
-- Meetings: tell speakers apart ✅ (me and the others, from the microphone and the call apart), a chat about each meeting ✅; telling the others apart from each other and a transcript that follows playback ⬜ (needs the recording kept)
+- Meetings: tell speakers apart ✅ (me and the others, from the microphone and the call apart), a chat about each meeting ✅; telling the people on the call apart ✅ (sherpa-onnx, pyannote segmentation + 3D-Speaker, on this computer; the call audio is kept only until the write-up); a transcript that follows playback ⬜
 - Browser tasks through an extension, signed in where the user already is ✅ (apps/browser-extension; Settings → Your browser)
 - Send a model from the computer to the phone ✅ (phone → On this phone → From your computer, over the network with resume)
 - LoRAs on the Images page ✅ (find, choose with a strength, remove); batch image tools ✅ (remove background with ormbg in the window, 4× upscale with Real-ESRGAN, ZIP)

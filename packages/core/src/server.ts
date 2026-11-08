@@ -49,6 +49,7 @@ import { DriveSync } from "./drive-sync.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
+import { Speakers } from "./speakers.js";
 import { browserRoutes } from "./routes/browser.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
@@ -450,6 +451,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     notifier,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,
+    speakers: new Speakers(join(paths.engines, "speakers"), downloads),
     updater,
     google,
     driveSync,

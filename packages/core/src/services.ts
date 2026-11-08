@@ -12,6 +12,7 @@ import type { DriveSync } from "./drive-sync.js";
 import type { Tunnel } from "./tunnel.js";
 import type { SdEngine } from "./sdcpp.js";
 import type { BrowserBridge } from "./browser-bridge.js";
+import type { Speakers } from "./speakers.js";
 import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
 import type { WhisperEngine } from "./whisper.js";
@@ -62,6 +63,8 @@ export interface KesherServices {
   browser: BrowserBridge;
   /** Speech to text (whisper.cpp). */
   whisper: WhisperEngine;
+  /** Tells speakers apart in meeting recordings. */
+  speakers: Speakers;
   /** Computer control (screen, mouse, keyboard) with its app approvals, stop switch and log. */
   computer: ComputerControl;
   /** Suggests better prompts, tools and models from how conversations went; learns the user's habits. */

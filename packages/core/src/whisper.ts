@@ -119,6 +119,29 @@ export function timedTranscript(out: string): string {
     .join("\n");
 }
 
+/** A piece of speech with its times, in seconds. */
+export interface SpeechPart {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
+ * Reads whisper's timed output into pieces.
+ *
+ * @param out - What whisper-cli printed with timestamps.
+ * @returns The pieces, without noise tags.
+ */
+export function speechParts(out: string): SpeechPart[] {
+  const sec = (h: string, m: string, s: string) => Number(h) * 3600 + Number(m) * 60 + Number(s.replace(",", "."));
+  return out.split(/\r?\n/).flatMap((l) => {
+    const m = /^\[(\d+):(\d+):([\d.,]+) --> (\d+):(\d+):([\d.,]+)\]\s*(.*)$/.exec(l.trim());
+    const text = m?.[7]?.trim();
+    if (!m || !text || /^\[(BLANK_AUDIO|MUSIC|NOISE|SILENCE)\]$|^\((music|silence)\)$/i.test(text)) return [];
+    return [{ start: sec(m[1]!, m[2]!, m[3]!), end: sec(m[4]!, m[5]!, m[6]!), text }];
+  });
+}
+
 /** Runs whisper.cpp and owns its files. */
 export class WhisperEngine {
   private installing?: Promise<string>;
@@ -262,6 +285,22 @@ export class WhisperEngine {
    * @returns The text.
    */
   async transcribe(wav: Buffer, language = "auto", ext = ".wav", timestamps = false): Promise<string> {
+    const out = await this.raw(wav, language, ext, timestamps);
+    return timestamps ? timedTranscript(out) : cleanTranscript(out);
+  }
+
+  /**
+   * Turns speech into text pieces with their times (seconds from the start).
+   *
+   * @param wav - A WAV file.
+   * @param language - `auto`, or a code like `he`.
+   * @returns The pieces.
+   */
+  async transcribeParts(wav: Buffer, language = "auto"): Promise<SpeechPart[]> {
+    return speechParts(await this.raw(wav, language, ".wav", true));
+  }
+
+  private async raw(wav: Buffer, language: string, ext: string, timestamps: boolean): Promise<string> {
     const st = await this.status();
     if (!st.engine || !st.model) throw new Error("The speech engine is not ready yet.");
     const exe = (await this.binary())!;
@@ -274,7 +313,7 @@ export class WhisperEngine {
           else resolve(stdout.toString());
         });
       });
-      return timestamps ? timedTranscript(out) : cleanTranscript(out);
+      return out;
     } finally {
       await rm(file, { force: true });
     }

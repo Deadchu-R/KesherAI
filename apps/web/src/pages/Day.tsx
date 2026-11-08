@@ -13,7 +13,7 @@ interface Capture { t: number; app: string; title: string; text?: string; frame?
 interface Observation { id: string; t0: number; t1: number; text: string; kind?: string }
 interface Action { id: string; t: number; text: string; who?: string; state: "open" | "done" | "dismissed"; day?: string }
 interface Stats { activeMinutes: number; apps: Array<{ app: string; minutes: number }>; switches: number; longestFocus: { app: string; minutes: number }; meetings: Array<{ t0: number; t1: number; title: string }>; hours: number[] }
-interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string; who?: "me" | "others" }>; summary?: string; decisions?: string[]; error?: string }
+interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string; who?: "me" | "others"; speaker?: number }>; summary?: string; decisions?: string[]; error?: string }
 interface DayData { day: string; captures: Capture[]; meetings: Meeting[]; insights: { observations: Observation[]; actions: Action[]; summarizedTo: number; error?: string }; stats: Stats; entities: Array<{ id: string; name: string; kind: string }> }
 interface Entity { id: string; name: string; kind: "person" | "project" | "company" | "concept"; summary?: string; aliases: string[]; parent?: string; hidden?: boolean; days: string[]; lastSeen: number }
 interface SearchHit { kind: "screen" | "observation" | "entity" | "action" | "meeting"; day: string; t: number; title: string; snippet: string; frame?: string }
@@ -299,7 +299,7 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
       </div>
       {open && (
         <ol className="transcript">
-          {m.segments.map((x) => <li key={`${x.t}-${x.who ?? ""}`}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.who && <strong className={`who ${x.who}`}>{x.who === "me" ? L("אני", "Me") : L("האחרים", "Others")}:</strong>} {x.text}</li>)}
+          {m.segments.map((x) => <li key={`${x.t}-${x.who ?? ""}`}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.who && <strong className={`who ${x.who}${x.speaker ? ` s${(x.speaker - 1) % 6}` : ""}`}>{x.who === "me" ? L("אני", "Me") : x.speaker ? L(`דובר ${x.speaker}`, `Speaker ${x.speaker}`) : L("האחרים", "Others")}:</strong>} {x.text}</li>)}
         </ol>
       )}
     </article>
@@ -308,7 +308,7 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
 
 /** Opens a chat about a meeting: its write-up and transcript go in the first message. */
 async function askAbout(m: Meeting): Promise<void> {
-  const lines = m.segments.map((x) => `[${hhmm(x.t)}] ${x.who === "me" ? "Me: " : x.who === "others" ? "Others: " : ""}${x.text}`).join("\n");
+  const lines = m.segments.map((x) => `[${hhmm(x.t)}] ${x.who === "me" ? "Me: " : x.speaker ? `Speaker ${x.speaker}: ` : x.who === "others" ? "Others: " : ""}${x.text}`).join("\n");
   const id = await createConversation({ kind: "chat" });
   if (!id) return;
   const text = L(

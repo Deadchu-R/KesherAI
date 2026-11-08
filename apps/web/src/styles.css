@@ -971,3 +971,8 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .transcript .who { font-weight: 600; margin-inline-end: 4px; }
 .transcript .who.me { color: var(--accent, #7aa2ff); }
 .transcript .who.others { color: #e0a15a; }
+.transcript .who.s1 { color: #6cc4a4; }
+.transcript .who.s2 { color: #c58ce0; }
+.transcript .who.s3 { color: #e07a7a; }
+.transcript .who.s4 { color: #d6c25a; }
+.transcript .who.s5 { color: #6fb3e0; }
