@@ -28,9 +28,22 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
   const [template, setTemplate] = useState("3d");
   const [open, setOpen] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const load = () => void api<CliInfo>("/api/unity/cli").then(setInfo, () => undefined);
   useEffect(load, []);
   const running = info?.job?.state === "running";
+  // While the CLI installs: look for it every 4 seconds, and show it the moment it is there.
+  useEffect(() => {
+    if (!installing) return;
+    const t = window.setInterval(() => void api<CliInfo>("/api/unity/cli").then((r) => {
+      setInfo(r);
+      if (r.cli) {
+        setInstalling(false);
+        toast(L("Unity CLI מותקן ומחובר", "Unity's CLI is installed and connected"));
+      }
+    }, () => undefined), 4000);
+    return () => window.clearInterval(t);
+  }, [installing]);
   useEffect(() => {
     if (!running) return;
     const t = window.setInterval(() => {
@@ -59,7 +72,16 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
         <span className={`pill ${info.cli ? "good" : ""}`}>{info.cli ? `🟢 ${L("מחובר", "Connected")}${info.version ? ` · ${info.version}` : ""}` : `⚪ ${L("לא מותקן", "Not installed")}`}</span>
       </div>
       {!info.cli ? (
-        <p className="small">{L("ה-CLI של Unity חינמי. התקנה פעם אחת ב-PowerShell:", "Unity's CLI is free. Install it once in PowerShell:")} <code dir="ltr">irm https://unity.com/install.ps1 | iex</code> {L("ואז פתח מחדש את KesherAI.", "then restart KesherAI.")}</p>
+        <div className="stack">
+          <p className="small">{L("ה-CLI של Unity חינמי. הכפתור מריץ את ההתקנה הרשמית של Unity בחלון PowerShell שרואים:", "Unity's CLI is free. The button runs Unity's official installer in a PowerShell window you can watch:")} <code dir="ltr">irm https://unity.com/install.ps1 | iex</code></p>
+          <div className="row">
+            <button type="button" className="primary" disabled={!local || installing} onClick={() => {
+              if (!confirm(L("להוריד ולהתקין את Unity CLI מ-unity.com?", "Download and install Unity's CLI from unity.com?"))) return;
+              setInstalling(true);
+              void api<{ message: string }>("/api/unity/cli/install", { method: "POST" }).then((r) => toast(r.message), (e: Error) => { toast(e.message); setInstalling(false); });
+            }}>{installing ? L("מתקין… (החלון פתוח)", "Installing… (see the window)") : L("התקן את Unity CLI", "Install Unity CLI")}</button>
+          </div>
+        </div>
       ) : (
         <>
           <p className="muted small">

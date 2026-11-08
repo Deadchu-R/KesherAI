@@ -141,6 +141,11 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       }
     });
     /** Updates Unity's CLI (`unity self-update`). Only on this computer. */
+    /** Installs Unity's CLI with Unity's own installer (a window shows it). Only on this computer. */
+    app.post(`${base}/cli/install`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Install Unity's CLI on the computer that runs KesherAI." });
+      return { message: unity.installCli() };
+    });
     app.post(`${base}/cli/update`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Update Unity's CLI on the computer that runs KesherAI." });
       try {

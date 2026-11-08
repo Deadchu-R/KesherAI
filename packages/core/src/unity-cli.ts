@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { homedir } from "node:os";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
@@ -34,13 +35,39 @@ export interface CliRun {
 /** Runs `unity` with arguments (replaceable in tests). */
 export type CliRunner = (args: string[], timeoutMs: number) => Promise<CliRun>;
 
+let pathCache: { at: number; value: string } | undefined;
+/**
+ * PATH with the user's current PATH from the registry added (Windows): the
+ * CLI's installer adds itself there, and KesherAI, started before, would not
+ * see it until restarted. Read at most once a minute.
+ */
+export function freshPath(): string {
+  const base = process.env.PATH ?? process.env.Path ?? "";
+  if (process.platform !== "win32") return [join(homedir(), ".local", "bin"), join(homedir(), ".unity", "bin"), base].join(":");
+  if (pathCache && Date.now() - pathCache.at < 10_000) return pathCache.value;
+  let user = "";
+  try {
+    const out = execFileSync("reg", ["query", "HKCU\\Environment", "/v", "Path"], { encoding: "utf8", windowsHide: true, timeout: 5000 });
+    user = /Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i.exec(out)?.[1]?.trim() ?? "";
+    user = user.replace(/%([^%]+)%/g, (_, v: string) => process.env[v] ?? `%${v}%`);
+  } catch {
+    // no user PATH
+  }
+  const seen = new Set(base.split(";").map((x) => x.toLowerCase()));
+  const extra = user.split(";").filter((x) => x && !seen.has(x.toLowerCase()));
+  const value = [base, ...extra].filter(Boolean).join(";");
+  pathCache = { at: Date.now(), value };
+  return value;
+}
+
 const realRunner: CliRunner = (args, timeoutMs) =>
   new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
     let child;
     try {
-      child = spawn("unity", ["--no-banner", "--non-interactive", ...args], { windowsHide: true, env: { ...process.env, UNITY_NO_AGENT_HINTS: "1", UNITY_NO_UPDATE_CHECK: "1" } });
+      const PATH = freshPath();
+      child = spawn("unity", ["--no-banner", "--non-interactive", ...args], { windowsHide: true, env: { ...process.env, PATH, ...(process.platform === "win32" ? { Path: PATH } : {}), UNITY_NO_AGENT_HINTS: "1", UNITY_NO_UPDATE_CHECK: "1" } });
     } catch (err) {
       return resolve({ code: -1, stdout: "", stderr: (err as Error).message });
     }
@@ -398,6 +425,26 @@ export class UnityCli {
   }
 
   /** Updates Unity's CLI to its newest version (`unity self-update`); the user pressed the button. */
+  /**
+   * Installs Unity's CLI with Unity's own installer (unity.com/install.ps1 or
+   * install.sh). On Windows it opens a PowerShell window the user can watch;
+   * elsewhere it runs in the background. The check for the CLI runs again
+   * every few seconds afterwards, so no restart is needed.
+   */
+  installCli(): string {
+    if (process.platform === "win32") {
+      const ps = "irm https://unity.com/install.ps1 | iex; Write-Host ''; Write-Host 'KesherAI: Unity CLI installed. You can close this window.'; Start-Sleep -Seconds 20";
+      // detached on Windows = its own console window, so the user sees the install run.
+      spawn("powershell.exe", ["-NoProfile", "-Command", ps], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+    } else {
+      spawn("bash", ["-c", "curl -fsSL https://unity.com/install.sh | bash"], { detached: true, stdio: "ignore" }).unref();
+    }
+    this.cliCache = undefined;
+    pathCache = undefined;
+    return "Installing Unity's CLI (a PowerShell window shows it). It takes a minute.";
+  }
+
+  /** Updates Unity's CLI (`unity self-update`). */
   async selfUpdate(): Promise<string> {
     const r = await this.run(["self-update", "--format", "json"], 300_000);
     if (r.code !== 0) throw failure(r);
