@@ -51,6 +51,39 @@ export const ROLES: RoleDefinition[] = [
     },
   },
   {
+    id: "modeler",
+    icon: "🧊",
+    title: { en: "3D artist or modeler", he: "תלת-ממדיסט/ית או מודליסט/ית" },
+    description: { en: "3D models from a picture or text, textures and reference pictures", he: "מודלים בתלת-ממד מתמונה או מטקסט, טקסטורות ותמונות רפרנס" },
+    parts: ["images", "image-editor", "nodes", "unreal", "unity", "pages", "community"],
+    ideas: {
+      en: ["Turn this picture into a 3D model", "Make a seamless stone texture", "Draw a front and side view of a robot for modeling", "Make a low-poly tree model"],
+      he: ["תהפוך את התמונה הזאת למודל תלת-ממד", "תכין טקסטורת אבן שחוזרת על עצמה", "צייר מבט חזית וצד של רובוט למידול", "תכין מודל של עץ בלואו-פולי"],
+    },
+  },
+  {
+    id: "sound",
+    icon: "🎧",
+    title: { en: "Sound or music creator", he: "יוצר/ת סאונד או מוזיקה" },
+    description: { en: "Music, sound effects, voice and speech to text", he: "מוזיקה, אפקטים קוליים, קול ותמלול" },
+    parts: ["nodes", "voice", "pages", "knowledge", "community"],
+    ideas: {
+      en: ["Make a 30-second calm piano loop", "Make lyrics for a summer song", "Write down what is said in this recording", "Read this script aloud in a deep voice"],
+      he: ["תכין לופ פסנתר רגוע של 30 שניות", "תכתוב מילים לשיר קיץ", "תמלל לי את ההקלטה הזאת", "תקריא את התסריט הזה בקול עמוק"],
+    },
+  },
+  {
+    id: "youtuber",
+    icon: "📹",
+    title: { en: "YouTuber or video creator", he: "יוטיובר/ית או יוצר/ת וידאו" },
+    description: { en: "Scripts, thumbnails, short clips, music and voice-over", he: "תסריטים, תמונות ממוזערות, קליפים קצרים, מוזיקה וקריינות" },
+    parts: ["video", "images", "image-editor", "nodes", "voice", "pages", "knowledge", "browser", "community"],
+    ideas: {
+      en: ["Write a script for a 5-minute video about local AI", "Make a thumbnail for my video", "Give me ten titles for a video", "Make background music for an intro"],
+      he: ["תכתוב תסריט לסרטון של 5 דקות על AI מקומי", "תכין תמונה ממוזערת לסרטון", "תן לי עשר כותרות לסרטון", "תכין מוזיקת רקע לפתיח"],
+    },
+  },
+  {
     id: "writer",
     icon: "✍️",
     title: { en: "Writer or content creator", he: "כותב/ת או יוצר/ת תוכן" },
@@ -97,10 +130,11 @@ export const ROLES: RoleDefinition[] = [
 ];
 
 /**
- * @param roleId - A role id.
- * @returns For every part, whether it starts on for that role (unknown role: all on).
+ * @param roleIds - One role id, several joined with commas, or a list.
+ * @returns For every part, whether it starts on for any of those roles (no known role: all on).
  */
-export function partsForRole(roleId: string | undefined): Record<string, boolean> {
-  const role = ROLES.find((r) => r.id === roleId);
-  return Object.fromEntries(ALL.map((id) => [id, !role || role.parts.includes(id)]));
+export function partsForRole(roleIds: string | string[] | undefined): Record<string, boolean> {
+  const ids = Array.isArray(roleIds) ? roleIds : (roleIds ?? "").split(",").filter(Boolean);
+  const roles = ROLES.filter((r) => ids.includes(r.id));
+  return Object.fromEntries(ALL.map((id) => [id, !roles.length || roles.some((r) => r.parts.includes(id))]));
 }

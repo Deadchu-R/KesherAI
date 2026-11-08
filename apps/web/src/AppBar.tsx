@@ -3,7 +3,6 @@ import { api, appHome } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
 import { reconnect } from "./Reconnect";
-import { NAV_GROUPS, useNavItems } from "./Sidebar";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -48,7 +47,6 @@ export const NEW_CODE_EVENT = "kesher:new-code";
  */
 export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { hash: string; online: boolean | null; sidebarOpen: boolean; onSidebar: () => void; onLocale: () => void }) {
   const [menu, setMenu] = useState(false);
-  const navItems = useNavItems();
   const [host, setHost] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -78,7 +76,11 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
     <header className="appbar">
       <div className="appbar-start">
         <div className="appbar-menu" ref={menuRef}>
-          <button type="button" data-slide-menu className="bar-btn" aria-label={t("menu")} aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu(!menu)}>
+          <button type="button" data-slide-menu className="bar-btn" aria-label={t("menu")} aria-expanded={menu} aria-haspopup="menu" onClick={() => {
+            // One menu at a time: on a phone the sidebar covers the screen.
+            if (!menu && sidebarOpen && matchMedia("(max-width: 760px)").matches) onSidebar();
+            setMenu(!menu);
+          }}>
             {Icon.menu}
           </button>
           {menu && (
@@ -86,15 +88,9 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
               <a role="menuitem" href="#/">{t("newChat")}</a>
               <button type="button" role="menuitem" onClick={() => { setMenu(false); dispatchEvent(new Event(NEW_CODE_EVENT)); }}>{t("newCode")}</button>
               <hr />
-              {NAV_GROUPS.map((g) => {
-                const items = navItems.filter((n) => n.group === g.id && n.href !== "#/updates");
-                return items.length ? (
-                  <div key={g.id} className="bar-pop-group" role="group" aria-label={t(g.label)}>
-                    <span className="bar-pop-head" aria-hidden="true">{g.icon} {t(g.label)}</span>
-                    {items.map((n) => <a key={n.href} role="menuitem" href={n.href}>{n.label}</a>)}
-                  </div>
-                ) : null;
-              })}
+              {/* The tools themselves live in one place (the sidebar and "All tools"), not repeated here. */}
+              <a role="menuitem" href="#/apps">{t("allTools")}</a>
+              <a role="menuitem" href="#/settings">{t("settings")}</a>
               <hr />
               <button type="button" role="menuitem" onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); setMenu(false); onLocale(); }}>{t("language")}</button>
               <a role="menuitem" href="#/updates">{t("checkUpdates")}</a>
@@ -103,7 +99,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
             </div>
           )}
         </div>
-        <button type="button" data-slide-menu className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={onSidebar}>
+        <button type="button" data-slide-menu className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={() => { setMenu(false); onSidebar(); }}>
           {Icon.sidebar}
         </button>
         <button type="button" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>

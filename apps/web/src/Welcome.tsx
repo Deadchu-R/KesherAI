@@ -14,13 +14,16 @@ export function openWelcome(): void {
   dispatchEvent(new Event("kesher-welcome"));
 }
 
-/** The role picked in the welcome, for the start screen's ideas. */
+/** The roles picked in the welcome, for the start screen's ideas (their ideas mixed). */
 export function useRole(): RoleDefinition | undefined {
   const [role, setRole] = useState<string | undefined>();
   useEffect(() => {
     void api<Onboarding>("/api/onboarding").then((o) => setRole(o.role), () => undefined);
   }, []);
-  return ROLES.find((r) => r.id === role);
+  const picked = ROLES.filter((r) => (role ?? "").split(",").includes(r.id));
+  if (picked.length <= 1) return picked[0];
+  const mix = (k: "en" | "he") => picked.flatMap((r) => r.ideas[k].slice(0, Math.ceil(4 / picked.length))).slice(0, 4);
+  return { ...picked[0]!, ideas: { en: mix("en"), he: mix("he") } };
 }
 
 /** The tool groups of the welcome (the same as the menu's). */
@@ -45,7 +48,7 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
   const [info, setInfo] = useState<Onboarding | null>(null);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("hello");
-  const [role, setRole] = useState<string>("");
+  const [roles, setRoles] = useState<string[]>([]);
   const [choice, setChoice] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const { parts } = useParts();
@@ -54,7 +57,7 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
     void api<Onboarding>("/api/onboarding").then((o) => {
       setInfo(o);
       if (o.show) setOpen(true);
-      if (o.role) setRole(o.role);
+      if (o.role) setRoles(o.role.split(",").filter(Boolean));
     }, () => undefined);
     const reopen = () => {
       setStep("hello");
@@ -73,17 +76,18 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
   if (!open || !info) return null;
   const index = STEPS.indexOf(step);
   const go = (s: Step) => setStep(s);
-  const chooseRole = (id: string) => {
-    setRole(id);
-    setChoice(partsForRole(id));
-    go("tools");
+  /** Each role is a toggle: the tools are what all the picked roles need. */
+  const toggleRole = (id: string) => {
+    const next = roles.includes(id) ? roles.filter((r) => r !== id) : [...roles, id];
+    setRoles(next);
+    setChoice(next.length ? partsForRole(next) : {});
   };
   /** Saves the answers. Skipping keeps everything as it is now. */
   const finish = async (skip = false) => {
     setSaving(true);
     try {
       if (!skip && Object.keys(choice).length) await setParts({ parts: choice });
-      await api("/api/onboarding", { method: "PUT", body: { done: true, ...(role ? { role } : {}) } });
+      await api("/api/onboarding", { method: "PUT", body: { done: true, ...(roles.length ? { role: roles.join(",") } : {}) } });
     } catch {
       // the welcome closes anyway; Settings has everything
     } finally {
@@ -131,18 +135,23 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
 
         {step === "role" && (
           <section className="welcome-body">
-            <h2>{L("מה הכי מתאים לך?", "What fits you best?")}</h2>
-            <p className="welcome-lead">{L("זה קובע עם אילו כלים מתחילים ואילו רעיונות יופיעו. אפשר לשנות כל הזמן.", "It sets which tools you start with and the ideas you see. You can change it any time.")}</p>
+            <h2>{L("מה מתאים לך?", "What fits you?")}</h2>
+            <p className="welcome-lead">{L("לחץ על כל מה שמתאים — אפשר כמה. לפי זה נסדר את הכלים, ובשלב הבא אפשר לשנות.", "Tap everything that fits — more than one is fine. The tools are set from it, and you can change them next.")}</p>
             <div className="welcome-roles">
               {ROLES.map((r) => (
-                <button key={r.id} type="button" className={`welcome-role${role === r.id ? " on" : ""}`} onClick={() => chooseRole(r.id)}>
+                <button key={r.id} type="button" className={`welcome-role${roles.includes(r.id) ? " on" : ""}`} aria-pressed={roles.includes(r.id)} onClick={() => toggleRole(r.id)}>
+                  {roles.includes(r.id) && <span className="welcome-role-check" aria-hidden="true">✓</span>}
                   <span className="welcome-role-icon" aria-hidden="true">{r.icon}</span>
                   <span className="welcome-role-title">{pick(r.title)}</span>
                   <span className="welcome-role-desc">{pick(r.description)}</span>
                 </button>
               ))}
             </div>
-            <div className="welcome-actions"><button type="button" onClick={() => go("hello")}>{L("חזרה", "Back")}</button></div>
+            <div className="welcome-actions">
+              <button type="button" onClick={() => go("hello")}>{L("חזרה", "Back")}</button>
+              <span className="grow muted small">{roles.length ? L(`נבחרו ${roles.length}`, `${roles.length} picked`) : ""}</span>
+              <button type="button" className="primary" disabled={!roles.length} onClick={() => go("tools")}>{L("המשך", "Continue")}</button>
+            </div>
           </section>
         )}
 

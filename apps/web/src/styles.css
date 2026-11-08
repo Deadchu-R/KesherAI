@@ -587,7 +587,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .composer .box, .home-composer .box { border-radius: 20px; background: var(--panel-2); border-color: var(--border-strong); box-shadow: var(--shadow-1); }
 .composer .box:focus-within, .home-composer .box:focus-within { border-color: rgb(152 163 255 / 0.45); box-shadow: var(--shadow-1), 0 0 0 4px var(--accent-soft); }
 .msg.user { background: var(--raised); border-radius: 18px; }
-.bar-pop, .model-pop, .team-pop, .hub-pop { background: rgb(31 31 34 / 0.92); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: var(--shadow-2); }
+.bar-pop, .model-pop, .team-pop, .hub-pop { background: rgb(31 31 34 / 0.985); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: var(--shadow-2); }
+/* Inside the app bar, which is blurred itself, a second blur fails in Chrome and the page reads through: the menus there are solid. */
+.appbar .bar-pop, .appbar .hub-pop { background: var(--panel-2); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .greeting { font-weight: 400; letter-spacing: -0.025em; }
 .pill { border-color: var(--border-strong); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1148,7 +1150,8 @@ label.biz-toggle .grow { flex: 1; }
 @keyframes welcome-link { from { inset-inline-start: 34px; opacity: 0; } to { inset-inline-start: 22px; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .welcome-mark span:last-child { animation: none; } }
 .welcome-points { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
-.welcome-points li { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--panel-2); color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+/* Plain lines, not cards: nothing here is tappable, so nothing looks like a button. */
+.welcome-points li { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 2px 0; padding-inline-start: 12px; border-inline-start: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); color: var(--muted); font-size: 13.5px; line-height: 1.45; }
 .welcome-points b { color: var(--text); font-size: 14.5px; }
 .welcome-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
 .welcome-actions .grow { flex: 1; }
@@ -1157,6 +1160,8 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: 12px; }
 .welcome-role { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; border-radius: 14px; text-align: start; background: var(--panel-2); border: 1px solid var(--border); min-height: 110px; transition: border-color 0.15s, transform 0.15s; }
 .welcome-role:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
 .welcome-role.on { border-color: var(--accent); background: var(--accent-soft); }
+.welcome-role { position: relative; }
+.welcome-role-check { position: absolute; top: 10px; inset-inline-end: 10px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #121213; font-size: 13px; font-weight: 700; }
 .welcome-role-icon { font-size: 24px; }
 .welcome-role-title { font-weight: 600; font-size: 15px; }
 .welcome-role-desc { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
@@ -1181,7 +1186,7 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: 12px; }
   .welcome-roles { grid-template-columns: 1fr 1fr; }
   .welcome-role { min-height: 0; }
   .welcome-tools { grid-template-columns: 1fr; }
-  .welcome-actions { position: sticky; bottom: 0; background: var(--panel); padding-top: 10px; }
+  .welcome-actions { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom)); z-index: 2; background: var(--panel); margin: 0 -18px calc(-20px - env(safe-area-inset-bottom)); padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
 }
 .page-loading { min-height: 40vh; }
 

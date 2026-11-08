@@ -33,7 +33,7 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.put<{ Body: { done?: boolean; role?: string } }>("/api/onboarding", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "The welcome runs on the computer that runs KesherAI." });
     if (typeof req.body?.done === "boolean") s.config.onboarding.done = req.body.done;
-    if (typeof req.body?.role === "string") s.config.onboarding.role = req.body.role.slice(0, 40);
+    if (typeof req.body?.role === "string") s.config.onboarding.role = req.body.role.slice(0, 200);
     await s.saveConfig();
     return s.config.onboarding;
   });

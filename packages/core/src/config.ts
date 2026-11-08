@@ -114,7 +114,7 @@ export const KesherConfigSchema = z.object({
   onboarding: z
     .object({
       done: z.boolean().default(false),
-      role: z.string().max(40).optional(),
+      role: z.string().max(200).optional(),
     })
     .default({}),
   /** Protecting the graphics card: temperature limit, unloading idle models, low priority (see gpu-guard.ts). */
