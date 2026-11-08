@@ -2,14 +2,17 @@
 // Run by .github/workflows/site-media.yml on the "site-media" branch, against `pnpm dev` (core :7420 + UI :5173).
 import { chromium, devices } from "playwright";
 import { mkdirSync, readdirSync, renameSync } from "node:fs";
-const OUT = "site-media"; mkdirSync(OUT + "/shots", { recursive: true }); mkdirSync(OUT + "/video", { recursive: true });
+const LANG = process.env.KLANG || "en";   // the app's UI language (localStorage "locale")
+const OUT = "site-media/" + LANG; mkdirSync(OUT + "/shots", { recursive: true }); mkdirSync(OUT + "/video", { recursive: true });
 const BASE = "http://localhost:5173/";
 const PAGES = [["home", "#/"], ["models", "#/models"], ["images", "#/images"], ["connections", "#/connections"], ["nodes", "#/nodes"], ["personas", "#/personas"],
   ["plugins", "#/plugins"], ["knowledge", "#/knowledge"], ["prompts", "#/prompts"], ["compare", "#/compare"], ["pipelines", "#/pipelines"], ["unreal", "#/unreal"],
   ["usage", "#/usage"], ["updates", "#/updates"], ["settings", "#/settings"], ["community", "#/community"], ["day", "#/day"], ["watch", "#/watch"]];
 const settle = async p => { await p.waitForLoadState("domcontentloaded").catch(() => {}); await p.waitForTimeout(2200); };   // (the app polls, so "network idle" never comes)
 const closeDialogs = async p => { for (let i = 0; i < 3; i++) { const b = p.locator('button:has-text("Skip"), button:has-text("Not now"), button:has-text("Later"), button:has-text("Close"), [aria-label="Close"]').first(); if (await b.isVisible().catch(() => false)) await b.click().catch(() => {}); else break; await p.waitForTimeout(300); } };
-const b = await chromium.launch();
+const b0 = await chromium.launch();
+// every context starts with the chosen UI language
+const b = { newContext: async o => { const c = await b0.newContext(o); await c.addInitScript(l => { try { localStorage.setItem("locale", l); } catch (e) {} }, LANG); return c; }, close: () => b0.close() };
 // desktop screenshots
 { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5, colorScheme: "dark" }); const p = await ctx.newPage();
   await p.goto(BASE); await settle(p); await closeDialogs(p);

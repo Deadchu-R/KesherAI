@@ -32,11 +32,11 @@ jobs:
       - name: Record
         run: |
           mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright@1.49.1 >/dev/null && npx playwright install --with-deps chromium >/dev/null
-          cd $GITHUB_WORKSPACE && NODE_PATH=/tmp/pw/node_modules node --experimental-default-type=module -e "import('/tmp/pw/node_modules/playwright/index.mjs').then(()=>0)" && cp scripts/site-media.mjs /tmp/pw/ && cd /tmp/pw && node site-media.mjs && mv site-media $GITHUB_WORKSPACE/
+          cd $GITHUB_WORKSPACE && NODE_PATH=/tmp/pw/node_modules node --experimental-default-type=module -e "import('/tmp/pw/node_modules/playwright/index.mjs').then(()=>0)" && cp scripts/site-media.mjs /tmp/pw/ && cd /tmp/pw && KLANG=en node site-media.mjs && KLANG=he node site-media.mjs && rm -rf $GITHUB_WORKSPACE/site-media && mv site-media $GITHUB_WORKSPACE/
       - name: Videos to MP4 and posters
         run: |
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          cd site-media/video && for f in *.webm; do n="${f%.webm}"; ffmpeg -loglevel error -y -i "$f" -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p -movflags +faststart "$n.mp4"; ffmpeg -loglevel error -y -ss 2 -i "$n.mp4" -frames:v 1 -q:v 4 "$n.jpg"; rm "$f"; done; ls -la
+          for d in site-media/*/video; do (cd $d && for f in *.webm; do n="${f%.webm}"; ffmpeg -loglevel error -y -i "$f" -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p -movflags +faststart "$n.mp4"; ffmpeg -loglevel error -y -ss 2 -i "$n.mp4" -frames:v 1 -q:v 4 "$n.jpg"; rm "$f"; done; ls -la); done
       # Saved on this branch (not main), so the files can be copied to the site.
       - name: Commit the media to this branch
         run: |
