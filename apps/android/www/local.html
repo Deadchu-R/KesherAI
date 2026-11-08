@@ -102,6 +102,14 @@
     .status { font-size: 12.5px; color: var(--muted); margin: 0 4px 6px; min-height: 1em; }
     .error { color: var(--bad); }
     [hidden] { display: none !important; }
+    .cats { display: flex; gap: 6px; overflow-x: auto; margin: 4px 0 10px; padding-bottom: 2px; }
+    .cats button { flex: none; border-radius: 999px; padding: 6px 14px; min-height: 36px; }
+    .cats button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    #modelsView[data-tab="chat"] [data-cat]:not([data-cat="chat"]),
+    #modelsView[data-tab="images"] [data-cat]:not([data-cat="images"]),
+    #modelsView[data-tab="voice"] [data-cat]:not([data-cat="voice"]),
+    #modelsView[data-tab="api"] [data-cat]:not([data-cat="api"]) { display: none !important; }
+    #modelsView[data-tab="images"] #imgSection:not([hidden]) ~ #imgNone, #modelsView[data-tab="images"] #imgNone:has(~ #imgSection:not([hidden])) { display: none !important; }
   </style>
 </head>
 <body class="kd-has-header">
@@ -115,19 +123,34 @@
 
   <main id="modelsView">
     <p class="intro" data-he="מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום." data-en="Small models that run on the phone itself, with no computer and no internet (after the download). They are slower and less capable than models on your computer, but work anywhere.">מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום.</p>
-    <p class="intro" id="memNote"></p>
-    <section class="api fast" id="fastSection" hidden>
+    <p class="intro" id="memNote" data-cat="chat"></p>
+    <!-- Models on this phone by kind, like the computer's Models page -->
+    <nav class="cats" id="cats" role="tablist">
+      <button type="button" data-tab="chat" class="on" data-he="💬 צ'אט" data-en="💬 Chat">💬 צ'אט</button>
+      <button type="button" data-tab="images" data-he="🖼 תמונות" data-en="🖼 Pictures">🖼 תמונות</button>
+      <button type="button" data-tab="voice" data-he="🎙 שיחה קולית" data-en="🎙 Voice">🎙 שיחה קולית</button>
+      <button type="button" data-tab="api" data-he="🌐 דרך האינטרנט" data-en="🌐 Online">🌐 דרך האינטרנט</button>
+    </nav>
+    <section class="api fast" id="fastSection" data-cat="chat" hidden>
       <h2 data-he="מהיר במיוחד: המנוע של Google לטלפונים" data-en="Extra fast: Google's engine for phones">מהיר במיוחד: המנוע של Google לטלפונים</h2>
       <p class="intro" data-he="מודלים שהוכנו לטלפונים ורצים על הכרטיס הגרפי (Adreno ב-Snapdragon) עם המנוע של Google, ‏LiteRT. מהירים בהרבה מהמודלים שלמטה." data-en="Models prepared for phones that run on the graphics chip (Adreno on Snapdragon) with Google's LiteRT engine. Much faster than the models below.">מודלים שהוכנו לטלפונים ורצים על הכרטיס הגרפי (Adreno ב-Snapdragon) עם המנוע של Google, ‏LiteRT. מהירים בהרבה מהמודלים שלמטה.</p>
       <div id="fastList"></div>
     </section>
-    <div id="modelList"></div>
-    <section class="api" id="imgSection" hidden>
+    <div id="modelList" data-cat="chat"></div>
+    <section class="api" id="imgNone" data-cat="images">
+      <p class="intro" data-he="תמונות בטלפון צריכות אנדרואיד 64-ביט וגרסה עדכנית של האפליקציה. אם אין כאן כלום, הטלפון הזה לא יכול לצייר בעצמו; אפשר לצייר דרך המחשב." data-en="Pictures on the phone need 64-bit Android and an up-to-date app. If nothing shows here, this phone cannot draw by itself; you can draw through your computer.">תמונות בטלפון צריכות אנדרואיד 64-ביט וגרסה עדכנית של האפליקציה. אם אין כאן כלום, הטלפון הזה לא יכול לצייר בעצמו; אפשר לצייר דרך המחשב.</p>
+    </section>
+    <section class="api" id="voiceSection" data-cat="voice">
+      <h2 data-he="שיחה קולית בטלפון" data-en="Voice on this phone">שיחה קולית בטלפון</h2>
+      <p class="intro" data-he="מדברים עם מודל הצ'אט של הטלפון והוא עונה בקול. הזיהוי והקול הם של אנדרואיד עצמו, ועובדים גם בלי אינטרנט כשחבילת השפה מותקנת (הגדרות ← מערכת ← שפות ← זיהוי דיבור)." data-en="Talk with the phone's chat model and it answers aloud. Recognition and the voice are Android's own, and work offline when the language pack is installed (Settings → System → Languages → Speech recognition).">מדברים עם מודל הצ'אט של הטלפון והוא עונה בקול. הזיהוי והקול הם של אנדרואיד עצמו, ועובדים גם בלי אינטרנט כשחבילת השפה מותקנת (הגדרות ← מערכת ← שפות ← זיהוי דיבור).</p>
+      <div id="voiceBody"></div>
+    </section>
+    <section class="api" id="imgSection" data-cat="images" hidden>
       <h2 data-he="תמונות בטלפון" data-en="Images on this phone">תמונות בטלפון</h2>
       <p class="intro" data-he="יוצר תמונות על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה), עם Stable Diffusion 1.5. לוקח כמה דקות לתמונה; קטן יותר = מהיר יותר." data-en="Makes pictures on the phone itself, with no computer and no internet (after the download), with Stable Diffusion 1.5. A picture takes a few minutes; smaller is faster.">יוצר תמונות על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה), עם Stable Diffusion 1.5. לוקח כמה דקות לתמונה; קטן יותר = מהיר יותר.</p>
       <div id="imgBody"></div>
     </section>
-    <section class="api" id="apiSection">
+    <section class="api" id="apiSection" data-cat="api">
       <h2 data-he="מודלים דרך האינטרנט (API)" data-en="Models over the internet (API)">מודלים דרך האינטרנט (API)</h2>
       <p class="intro" data-he="חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב." data-en="Connect Claude, Gemini, OpenAI and more with an API key. Connections sync with your computer: what you connected there shows here, and what you add here goes there.">חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב.</p>
       <p class="intro small" id="syncState"></p>
@@ -324,6 +347,39 @@
   let downloaded = [];
   let activeUrl = localStorage.getItem("kesherai-phone-model") || "";
   let renderGen = 0;
+  // ---------- categories: chat, pictures, voice, online ----------
+  function setCat(tab) {
+    $("modelsView").dataset.tab = tab;
+    document.querySelectorAll("#cats [data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+    localStorage.setItem("kesherai-phone-cat", tab);
+  }
+  document.querySelectorAll("#cats [data-tab]").forEach((b) => (b.onclick = () => setCat(b.dataset.tab)));
+  setCat(localStorage.getItem("kesherai-phone-cat") || "chat");
+
+  function renderVoice() {
+    const body = $("voiceBody");
+    body.replaceChildren();
+    const out = Object.assign(document.createElement("p"), { className: "status" });
+    const row = Object.assign(document.createElement("div"), { className: "row" });
+    const btn = (label, cls, fn) => { const b = Object.assign(document.createElement("button"), { type: "button", textContent: label }); if (cls) b.className = cls; b.onclick = fn; row.append(b); return b; };
+    if (!SPEECH) {
+      out.textContent = T("הגרסה הזאת של האפליקציה לא כוללת דיבור. עדכן את האפליקציה.", "This version of the app has no speech. Update the app.");
+      body.append(out);
+      return;
+    }
+    btn(T("🎙 בדוק מיקרופון", "🎙 Test the microphone"), "", async () => {
+      out.textContent = T("מקשיב… תגיד משהו", "Listening… say something");
+      try { out.textContent = `“${(await listenOnce((p) => (out.textContent = p))) || "…"}”`; } catch (e) { out.textContent = String(e.message || e); }
+    });
+    btn(T("🔊 שמע את הקול", "🔊 Hear the voice"), "", () => void speak(T("שלום! ככה אני נשמע בטלפון.", "Hello! This is how I sound on the phone.")));
+    const hasModel = downloaded.some((m) => m.size > 0) || !!activeUrl;
+    btn(T("💬 התחל שיחה קולית", "💬 Start a voice conversation"), "primary", () => {
+      if (!hasModel) { out.textContent = T("קודם הורד מודל צ'אט (בלשונית צ'אט).", "First download a chat model (in the Chat tab)."); setCat("chat"); return; }
+      location.href = "local.html?chat=1&talk=1";
+    });
+    body.append(row, out);
+  }
+
   async function renderList() {
     const gen = ++renderGen;
     downloaded = await mm.getModels().catch(() => []);
@@ -413,6 +469,7 @@
         });
       }
     }
+    renderVoice();
     // The computer's list comes in later: opening a chat must not wait for the network.
     void renderFromComputer(list, gen).catch(() => undefined);
   }

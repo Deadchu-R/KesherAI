@@ -167,7 +167,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 6. Image generation on the phone itself (Layla: Stable Diffusion 1.5) ✅ (stable-diffusion.cpp built for Android; SD 1.5 Q4_0)
 6a. Approve from the phone's notification or a smartwatch (Wear OS): Approve / Deny buttons with a one-time code ✅ (Settings → Notifications)
 6b. Update the phone app from the computer's pages (remote), without leaving them: a "new phone app" line with the percent ✅
-6c. The phone's own models by category, like the computer's: chat, pictures, voice conversation (speech to text and reading aloud), and the rest ⬜
+6c. The phone's own models by category, like the computer's: chat, pictures, voice conversation (speech to text and reading aloud), and the rest ✅
 
 **2. Every kind of model on the computer, and downloading it**
 
