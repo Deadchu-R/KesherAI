@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
 /**
@@ -268,8 +268,18 @@ export class UnityCli {
     return { graph: await this.request("graph", { path }), offline: !this.connected };
   }
 
+  /** Which of the packages the chat needs the project has: Unity's Pipeline (the CLI talks to the Editor through it) and KesherAI's bridge (graphs). */
+  packagesOf(folder: string): { pipeline: boolean; bridge: boolean } {
+    try {
+      const deps = (JSON.parse(readFileSync(join(folder, "Packages", "manifest.json"), "utf8")) as { dependencies?: Record<string, string> }).dependencies ?? {};
+      return { pipeline: "com.unity.pipeline" in deps, bridge: "com.kesherai.bridge" in deps || existsSync(join(folder, "Packages", "com.kesherai.bridge")) };
+    } catch {
+      return { pipeline: false, bridge: false };
+    }
+  }
+
   /** The page's status. */
-  async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; cli: boolean; active?: string }> {
+  async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; cli: boolean; active?: string; packages?: { pipeline: boolean; bridge: boolean } }> {
     if (!this.cliCache || Date.now() - this.cliCache.at > 60_000) this.cliCache = { at: Date.now(), found: (await this.run(["--version"], 10_000)).code === 0 };
     const found = this.cliCache.found;
     const ready = found ? await this.editorReady() : false;
@@ -280,7 +290,7 @@ export class UnityCli {
       projects: this.config.projects,
       queued: 0,
       cli: found,
-      ...(path ? { active: path } : {}),
+      ...(path ? { active: path, packages: this.packagesOf(path) } : {}),
     };
   }
 

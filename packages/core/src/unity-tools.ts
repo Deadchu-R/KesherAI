@@ -45,7 +45,12 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
         description: "Whether a Unity Editor is open on the user's project and ready for commands (or in Safe Mode, with its compile errors). Call it before other Unity tools.",
         inputSchema: { type: "object", properties: {} },
       },
-      run: async () => ({ output: cut(`Project: ${project() ?? "(none chosen)"}\n${await unity.cli(["status", ...at(), "--format", "json"], 20_000).catch((e: Error) => e.message)}`) }),
+      run: async () => {
+        const p = project();
+        const pk = p ? unity.packagesOf(p) : undefined;
+        const missing = pk && !pk.pipeline ? "\nThe project does NOT have Unity's Pipeline package, so no Editor commands work yet: tell the user to press 🕹 → Install now in the message box (or Create → Unity → Add to a project)." : "";
+        return { output: cut(`Project: ${p ?? "(none chosen)"}${missing}\n${await unity.cli(["status", ...at(), "--format", "json"], 20_000).catch((e: Error) => e.message)}`) };
+      },
     },
     {
       risk: "read",

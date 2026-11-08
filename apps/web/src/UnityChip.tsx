@@ -13,11 +13,17 @@ const base = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
  * installed.
  */
 export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
-  const [st, setSt] = useState<{ cli: boolean; projects: string[]; active?: string; connected: boolean } | null>(null);
+  const [st, setSt] = useState<{ cli: boolean; projects: string[]; active?: string; connected: boolean; packages?: { pipeline: boolean; bridge: boolean } } | null>(null);
+  const [installing, setInstalling] = useState(false);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const load = () => void api<{ cli: boolean; projects: string[]; active?: string; connected: boolean }>("/api/unity").then(setSt, () => undefined);
-  useEffect(load, []);
+  const load = () => void api<NonNullable<typeof st>>("/api/unity").then(setSt, () => undefined);
+  useEffect(() => {
+    load();
+    // A Unity project added through the message box's + menu.
+    addEventListener("kesher-unity-added", load);
+    return () => removeEventListener("kesher-unity-added", load);
+  }, []);
   useEffect(() => {
     if (!open) return;
     load();
@@ -43,7 +49,7 @@ export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
     <div className="model-menu unity-chip" ref={ref}>
       <button type="button" className="model-chip" aria-haspopup="menu" aria-expanded={open} title={L("פרויקט ה-Unity של הצ'אט", "The chat's Unity project")} onClick={() => setOpen(!open)}>
         <span className={`where-dot ${st.connected ? "local" : ""}`} aria-hidden="true" />
-        🕹 {active ? base(active) : L("Unity: בחר פרויקט", "Unity: choose a project")}
+        🕹 {active ? base(active) : L("Unity: בחר פרויקט", "Unity: choose a project")}{st.packages && !st.packages.pipeline ? " ⚠" : ""}
       </button>
       {open && (
         <div className="model-pop" role="menu">
@@ -58,6 +64,17 @@ export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
           </div>
           {desktop()?.pickFolder && !isRemote() && <button type="button" className="model-pop-foot" onClick={() => void addFolder()}>📁 {L("הוסף תיקיית פרויקט…", "Add a project folder…")}</button>}
           <a className="model-pop-foot" href="#/unity" onClick={() => setOpen(false)}>＋ {L("פרויקט חדש / הגדרות Unity", "New project / Unity settings")}</a>
+          {active && st.packages && (!st.packages.pipeline || !st.packages.bridge) && (
+            <div className="model-pop-foot stack">
+              <span className="small">⚠ {!st.packages.pipeline ? L("חסרה בפרויקט חבילת Pipeline של Unity: בלעדיה ה-CLI לא מדבר עם העורך.", "The project lacks Unity's Pipeline package: without it the CLI cannot talk to the Editor.") : L("חסרה חבילת KesherAI Bridge (לגרפים).", "The KesherAI Bridge package (for graphs) is missing.")}</span>
+              {!isRemote() && (
+                <button type="button" className="primary" disabled={installing} onClick={() => {
+                  setInstalling(true);
+                  void api<{ message: string }>("/api/unity/install", { method: "POST", body: { project: active } }).then((r) => { toast(r.message); load(); }, (e: Error) => toast(e.message)).finally(() => setInstalling(false));
+                }}>{installing ? "…" : L("התקן עכשיו", "Install now")}</button>
+              )}
+            </div>
+          )}
           {active && !st.connected && (
             <button type="button" className="model-pop-foot" onClick={() => void api("/api/unity/open-editor", { method: "POST" }).then(() => toast(L("Unity נפתח…", "Opening Unity…")), (e: Error) => toast(e.message))}>▶ {L("פתח ב-Unity", "Open in Unity")}</button>
           )}

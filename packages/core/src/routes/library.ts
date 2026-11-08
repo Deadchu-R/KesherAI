@@ -13,6 +13,7 @@ import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
+import { readProject } from "../unreal-install.js";
 
 const MODES: PermissionMode[] = ["plan", "ask", "auto-edit", "auto"];
 
@@ -312,6 +313,35 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
     try {
       return { path: await opened.session.grant(req.body?.path ?? "") };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * Adds a game project to a chat (the + menu → Project): a Unity project becomes the chat's Unity
+   * project (its tools work on it through the CLI), an Unreal project is opened to the chat's file tools
+   * and the Blueprint tools; any other folder is opened to the file tools. Only on this computer.
+   */
+  app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/project", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Add a project on this computer." });
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    const folder = String(req.body?.path ?? "");
+    try {
+      const path = await opened.session.grant(folder);
+      const name = basename(path);
+      if (existsSync(join(path, "Assets")) && existsSync(join(path, "ProjectSettings"))) {
+        await s.unity.addProject(path);
+        const pk = s.unity.packagesOf(path);
+        return { kind: "unity", name, path, line: `[Unity project: ${name} — ${path}${pk.pipeline ? "" : " (needs Unity's Pipeline package: 🕹 → Install now)"}]` };
+      }
+      const up = await readProject(path).catch(() => undefined);
+      if (up) {
+        const live = s.unreal.connected ? "the editor is connected" : "open it in Unreal with the KesherAI Bridge plugin, or Unreal 5.8's MCP (Create → Unreal Blueprints)";
+        return { kind: "unreal", name, path, line: `[Unreal project: ${name}, UE ${up.engine || "?"} — ${path}; ${live}]` };
+      }
+      return { kind: "folder", name, path, line: `[${name}: ${path}]` };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }

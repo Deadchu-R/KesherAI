@@ -531,6 +531,18 @@ export function ConversationPage({ id }: { id: string }) {
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
   };
+  /** + → Project: a Unity, Unreal or any project folder, for the chat to work in. */
+  const addProject = async () => {
+    const folder = await desktop()?.pickFolder();
+    if (!folder) return;
+    try {
+      const r = await api<{ kind: string; line: string }>(`/api/conversations/${id}/project`, { method: "POST", body: { path: folder } });
+      setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${r.line}\n`);
+      if (r.kind === "unity") dispatchEvent(new Event("kesher-unity-added"));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
     const { personaId, ...rest } = body;
@@ -830,9 +842,7 @@ export function ConversationPage({ id }: { id: string }) {
               </div>
             )}
             <div className="box-bar">
-              {desktop()?.pickFiles && (
-                <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>
-              )}
+              {desktop()?.pickFiles && <AddMenu onFiles={() => void desktop()!.pickFiles!().then((f) => attach(f))} onProject={() => void addProject()} />}
               <WebToggle on={web} onChange={setWeb} />
               <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
               {voicePart && <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />}
@@ -869,5 +879,32 @@ export function ConversationPage({ id }: { id: string }) {
       )}
       </div>
     </>
+  );
+}
+
+/** The message box's +: files, or a project (Unity, Unreal or any folder) for the chat to work in. */
+function AddMenu({ onFiles, onProject }: { onFiles: () => void; onProject: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    addEventListener("mousedown", close);
+    return () => removeEventListener("mousedown", close);
+  }, [open]);
+  const he = getLocale() === "he";
+  return (
+    <div className="model-menu add-menu" ref={ref}>
+      <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>+</button>
+      {open && (
+        <div className="model-pop" role="menu">
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onFiles(); }}>📎 {he ? "קבצים…" : "Files…"}</button>
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onProject(); }}>🎮 {he ? "פרויקט: Unity, Unreal או תיקייה…" : "Project: Unity, Unreal or a folder…"}</button>
+          <p className="muted small" style={{ margin: "4px 8px" }}>{he ? "פרויקט Unity נהיה הפרויקט של הצ'אט (דרך ה-CLI). פרויקט Unreal נפתח לכלי הקבצים ול-Blueprints." : "A Unity project becomes the chat's project (through the CLI); an Unreal project opens to the file tools and Blueprints."}</p>
+        </div>
+      )}
+    </div>
   );
 }
