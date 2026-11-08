@@ -75,7 +75,7 @@ export const APPEARANCE_PRESETS: Array<{ id: string; title: { en: string; he: st
   { id: "paper", title: { en: "Paper (light)", he: "נייר (בהיר)" }, look: { colors: { bg: "#f6f5f2", panel: "#ffffff", "panel-2": "#f0efeb", raised: "#e7e5df", text: "#1d1d1f", muted: "#6b6b73", accent: "#4f5bd5" } } },
   { id: "forest", title: { en: "Forest", he: "יער" }, look: { colors: { bg: "#101411", panel: "#151b17", "panel-2": "#1b231e", raised: "#243029", text: "#e9efe9", muted: "#94a398", accent: "#7fd6a0" } } },
   { id: "sunset", title: { en: "Sunset", he: "שקיעה" }, look: { colors: { accent: "#ffa27a" }, background: { kind: "gradient", from: "#1a1214", to: "#121213", angle: 160 } } },
-  { id: "fulldark", title: { en: "Full dark (night, OLED, HDR)", he: "חושך מלא (לילה, OLED, HDR)" }, look: { colors: { bg: "#000000", panel: "#050505", "panel-2": "#0b0b0c", raised: "#151517", text: "#d4d4d8", muted: "#6f6f78", accent: "#6f7cff" }, background: { kind: "plain" }, motion: "none" } },
+  { id: "fulldark", title: { en: "Full dark (night, OLED, HDR)", he: "חושך מלא (לילה, OLED, HDR)" }, look: { colors: { bg: "#000000", panel: "#0a0a0b", "panel-2": "#141416", raised: "#202024", text: "#f4f4f6", muted: "#a8a8b3", accent: "#8f9aff" }, background: { kind: "plain" }, motion: "none" } },
   { id: "contrast", title: { en: "High contrast", he: "ניגודיות גבוהה" }, look: { colors: { bg: "#000000", panel: "#0d0d0d", "panel-2": "#161616", raised: "#222222", text: "#ffffff", muted: "#c8c8c8", accent: "#ffd34d" }, fontSize: 16 } },
 ];
 

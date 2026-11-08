@@ -124,6 +124,10 @@ async function show(c: SavedComputer, icon?: string): Promise<void> {
       if (/^https?:\/\//.test(target)) void shell.openExternal(target);
     }
   });
+  // A redirect from that computer to somewhere else is stopped too.
+  win.webContents.on("will-redirect", (event, target) => {
+    if (!target.startsWith(`${c.origin}/`)) event.preventDefault();
+  });
   win.webContents.on("will-attach-webview", (event) => event.preventDefault());
   win.webContents.on("page-title-updated", (event) => {
     event.preventDefault();

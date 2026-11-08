@@ -56,7 +56,8 @@ const listeners = new Set<(a: Appearance) => void>();
 const hexToRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(" ");
 
 /** @param saved - The look as saved (before its preset is applied). */
-export function applyAppearance(input: Appearance): void {
+export function applyAppearance(input: Appearance, local = true): void {
+  if (local) lastLocal = Date.now();
   // Checked again here: this browser's copy could have been changed by hand.
   const saved = cleanAppearance(input);
   current = saved;
@@ -86,12 +87,14 @@ export function applyAppearance(input: Appearance): void {
   root.dataset.preset = a.preset ?? "";
   if (a.preset === "fulldark") {
     st.setProperty("color-scheme", "dark");
-    st.setProperty("--border", "rgb(255 255 255 / 0.06)");
-    st.setProperty("--border-strong", "rgb(255 255 255 / 0.11)");
+    // Clear edges: on true black, fields and buttons are seen by their borders.
+    st.setProperty("--border", "rgb(255 255 255 / 0.16)");
+    st.setProperty("--border-strong", "rgb(255 255 255 / 0.26)");
+    st.setProperty("--text-2", a.colors?.text ?? "#f4f4f6");
     st.setProperty("--shadow-1", "none");
-    st.setProperty("--shadow-2", "0 0 0 1px rgb(255 255 255 / 0.08)");
+    st.setProperty("--shadow-2", "0 0 0 1px rgb(255 255 255 / 0.18)");
     st.setProperty("dynamic-range-limit", "constrained");
-    if (!saved.colors?.accent && matchMedia("(dynamic-range: high)").matches) st.setProperty("--accent", "color(display-p3 0.43 0.48 1)");
+    if (!saved.colors?.accent && matchMedia("(dynamic-range: high)").matches) st.setProperty("--accent", "color(display-p3 0.56 0.6 1)");
   }
   const font = APPEARANCE_FONTS.find((f) => f.id === a.font);
   if (font && font.id !== "rubik") {
@@ -126,15 +129,26 @@ export function applyAppearance(input: Appearance): void {
 export function loadAppearance(): void {
   try {
     const cached = localStorage.getItem(CACHE);
-    if (cached) applyAppearance(JSON.parse(cached) as Appearance);
+    if (cached) applyAppearance(JSON.parse(cached) as Appearance, false);
   } catch {
     // ignore
   }
-  const refresh = () => void api<{ appearance: Appearance }>("/api/appearance").then((r) => applyAppearance(r.appearance), () => undefined);
+  // One look for every device: it lives on the computer, so a change on the phone shows on the computer
+  // (and the other way round) within a few seconds, a reset too. Not while this device is in the middle of a change.
+  const refresh = () =>
+    void api<{ appearance: Appearance }>("/api/appearance").then((r) => {
+      if (Date.now() - lastLocal < 4000) return;
+      if (JSON.stringify(cleanAppearance(r.appearance)) !== JSON.stringify(current)) applyAppearance(r.appearance, false);
+    }, () => undefined);
   refresh();
   addEventListener("kesher-appearance", refresh);
   addEventListener("focus", refresh);
+  document.addEventListener("visibilitychange", () => document.hidden || refresh());
+  setInterval(() => document.hidden || refresh(), 6000);
 }
+
+/** When this device last changed the look itself (the sync waits a moment after it). */
+let lastLocal = 0;
 
 /** Tells the page the look changed elsewhere (the chat's change_look). */
 export function appearanceChanged(): void {

@@ -27,14 +27,24 @@ describe("look pictures", () => {
     await assert.rejects(downloadPicture({ url: "https://upload.wikimedia.org/a.png", width: 1, height: 1, page: "", license: "", artist: "" }, { fetchImpl: f }), /not a picture/);
   });
 
-  it("finds a background and icons", async () => {
+  it("finds a background and icons on the web, through the proxy only", async () => {
+    const asked: string[] = [];
     const f = (async (u: string | URL) => {
-      if (String(u).startsWith("https://commons.wikimedia.org/")) return Response.json({ query: { pages: { a: page(1), b: page(2), c: page(3) } } });
+      const url = String(u);
+      asked.push(url);
+      if (url.startsWith("https://duckduckgo.com/?")) return new Response('<script>vqd="4-123456"</script>');
+      if (url.startsWith("https://duckduckgo.com/i.js")) {
+        const icon = new URL(url).searchParams.get("q")!.includes("icon");
+        return Response.json({ results: [1, 2, 3].map((i) => ({ image: `http://192.168.1.1/${i}.png`, url: `https://fans.example/${i}`, width: icon ? 256 : 1920, height: icon ? 256 : 1080 })) });
+      }
       return new Response(PNG);
     }) as unknown as typeof fetch;
     const r = await picturesForStyle("One Piece", { background: true, icons: 2, fetchImpl: f });
     assert.equal(r.background?.mimeType, "image/png");
     assert.equal(r.icons.length, 2);
+    // The home-network address in a result is never fetched directly.
+    assert.ok(asked.every((u) => !u.startsWith("http://192.168.")));
+    assert.ok(asked.some((u) => u.startsWith("https://external-content.duckduckgo.com/iu/?u=http%3A%2F%2F192.168.1.1")));
   });
 });
 

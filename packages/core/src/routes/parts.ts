@@ -74,21 +74,28 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     return looksView();
   });
 
+  const pictureSearch = { busy: false, times: [] as number[] };
   /**
    * "Find pictures on the web" (Settings → Appearance): a background and tool icons for a named style,
-   * free pictures from Wikimedia Commons, put in the look at once. Body: `{ style, background?, icons? }`.
+   * pictures from the web (DuckDuckGo images, then Wikimedia Commons), put in the look at once. Body: `{ style, background?, icons? }`.
    */
   app.post<{ Body: { style?: unknown; background?: boolean; icons?: boolean } }>("/api/appearance/pictures", async (req, reply) => {
     const style = typeof req.body?.style === "string" ? [...req.body.style].filter((c) => c >= " ").join("").trim().slice(0, 80) : "";
     if (!style) return reply.code(400).send({ error: "Say what to look for, e.g. One Piece." });
+    // One search at a time, a few a minute (each keeps up to seven pictures in the library).
+    if (pictureSearch.busy || pictureSearch.times.filter((t) => Date.now() - t < 60_000).length >= 4) return reply.code(429).send({ error: "Searching already; try again in a minute." });
+    pictureSearch.busy = true;
+    pictureSearch.times = [...pictureSearch.times.filter((t) => Date.now() - t < 60_000), Date.now()];
     const r = await styleLook(style, {
       background: req.body?.background !== false,
       iconPages: req.body?.icons === false ? [] : LOOK_ICON_PAGES,
       save: async (p, use) => (await s.assets.save(p.data, p.mimeType, { meta: { use, style, source: p.page, license: p.license, artist: p.artist } })).id,
-    }).catch((err: Error) => reply.code(502).send({ error: `Could not search for pictures: ${err.message}` }));
+    }).catch((err: Error) => reply.code(502).send({ error: `Could not search for pictures: ${err.message}` })).finally(() => {
+      pictureSearch.busy = false;
+    });
     if (reply.sent) return reply;
     const got = r as Awaited<ReturnType<typeof styleLook>>;
-    if (!got.background && !got.icons) return reply.code(404).send({ error: `Found no free pictures of "${style}". Try other words in English (a place, a character's ship, an object from it).` });
+    if (!got.background && !got.icons) return reply.code(404).send({ error: `Found no pictures of "${style}". Try other words (in English works best).` });
     const cur = cleanAppearance(s.config.appearance);
     setAppearance(s, { ...cur, ...(got.background ? { background: got.background } : {}), ...(got.icons ? { icons: { ...cur.icons, ...got.icons } } : {}) });
     await s.saveConfig();

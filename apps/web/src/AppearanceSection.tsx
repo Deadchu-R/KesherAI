@@ -52,7 +52,7 @@ export function AppearanceSection() {
       .then((r) => {
         applyAppearance(r.appearance);
         setCanUndo(r.canUndo);
-        toast(L(`נמצאו תמונות חופשיות (Wikimedia Commons). ${r.credits.join(" · ")}`, `Found free pictures (Wikimedia Commons). ${r.credits.join(" · ")}`));
+        toast(L(`נמצאו תמונות: ${r.credits.join(" · ")}`, `Found pictures: ${r.credits.join(" · ")}`));
       }, (e: Error) => toast(e.message))
       .finally(() => setPicBusy(false));
   };
@@ -163,10 +163,10 @@ export function AppearanceSection() {
 
       <h3>{L("רקע ואייקונים מהאינטרנט", "Background and icons from the web")}</h3>
       <div className="row">
-        <input className="grow" dir="auto" maxLength={80} value={picStyle} onChange={(e) => setPicStyle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && findPictures()} placeholder={L("באנגלית, למשל: One Piece, Thousand Sunny, Tokyo night", "e.g. One Piece, Thousand Sunny, Tokyo night")} aria-label={L("מה לחפש", "What to look for")} />
+        <input className="grow" dir="auto" maxLength={80} value={picStyle} onChange={(e) => setPicStyle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && findPictures()} placeholder={L("למשל: One Piece, Naruto, Tokyo night (באנגלית עובד הכי טוב)", "e.g. One Piece, Naruto, Tokyo night")} aria-label={L("מה לחפש", "What to look for")} />
         <button type="button" className="primary" disabled={picBusy || !picStyle.trim()} onClick={findPictures}>{picBusy ? L("מחפש…", "Searching…") : L("מצא ושים", "Find and use")}</button>
       </div>
-      <small className="muted">{L("KesherAI מחפש תמונות ואייקונים ברישיון חופשי ב-Wikimedia Commons, שם אחת כרקע ואחרות כאייקונים לכלים. \"בטל שינוי\" מחזיר. אפשר גם להעלות תמונה משלך למטה.", "KesherAI looks for free-licence pictures and icons on Wikimedia Commons, puts one as the background and others as tool icons. Undo brings back the previous look. You can also upload your own picture below.")}</small>
+      <small className="muted">{L("KesherAI מחפש ברשת (חיפוש תמונות עם סינון בטוח) טפט לרקע ואייקונים לכלים, ושם אותם מיד. התמונות נשמרות במחשב שלך, לשימוש שלך. \"בטל שינוי\" מחזיר. אפשר גם להעלות תמונה משלך למטה.", "KesherAI searches the web (picture search, safe search on) for a wallpaper and tool icons and applies them at once. They are kept on your computer, for your own screen. Undo brings back the previous look. You can also upload your own picture below.")}</small>
 
       <h3>{L("המראות שלי", "My looks")}</h3>
       <div className="row">

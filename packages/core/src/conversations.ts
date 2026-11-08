@@ -355,7 +355,7 @@ export class ConversationManager {
     const look = this.deps.look;
     if (!look) return [];
     notes.push(
-      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background, icons, motion and the order of the tool groups) when the user asks for it. When the user names a style (a series, a film, a game, a place: \"like One Piece\"), ALWAYS pass style with its name in English — change_look then finds free pictures of it on the web by itself and puts one as the background and others as tool icons — and in the same call give colours, font and motion that feel like it. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed (and the picture credits it gives) and that they can say \"undo\" or open Settings → Appearance.",
+      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background, icons, motion and the order of the tool groups) when the user asks for it. When the user names a style (a series, a film, a game, a place: \"like One Piece\"), ALWAYS pass style with its name in English — change_look then finds real pictures of it on the web by itself (a wallpaper as the background, icons for the tools) — and in the same call give colours, font and motion that feel like it. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed (and the picture credits it gives) and that they can say \"undo\" or open Settings → Appearance.",
     );
     const fonts = APPEARANCE_FONTS.map((f) => `${f.id}${f.hebrew ? "" : " (no Hebrew letters)"}`).join(", ");
     return [
@@ -383,7 +383,7 @@ export class ConversationManager {
               motion: { type: "string", enum: ["none", "subtle", "lively"], description: "How much moves: lively adds a slowly moving background, cards that lift and page transitions." },
               icons: { type: "object", description: "Icons for tools, by page: { \"#/images\": { \"emoji\": \"🏴‍☠️\" } } or { \"assetId\": \"<id of a picture made in this chat>\" }. Pages: #/images, #/pages, #/knowledge, #/models, #/settings, #/nodes, #/unreal, #/unity, #/day, #/compare, #/pipelines, #/personas, #/memory." },
               css: { type: "string", description: "Extra CSS for looks (replaces the previous extra CSS): rules, @media and @keyframes; no @import, no outside addresses (pictures only as url(\"/api/assets/<id>\")), no position: fixed. Classes: .card, .sidebar, .appbar, .page, .home, .greeting, .composer, .app-tile, .phone-tabs, button.primary. Keep it short." },
-              style: { type: "string", description: "A style the user named, in English (\"One Piece\", \"Studio Ghibli\", \"cyberpunk city\"): finds free pictures of it on the web (Wikimedia Commons) for the background and the tool icons, unless background or icons are given too." },
+              style: { type: "string", description: "A style the user named, in English (\"One Piece\", \"Studio Ghibli\", \"cyberpunk city\"): finds pictures of it on the web (a wallpaper for the background, icons for the tools), unless background or icons are given too." },
               pictures: { type: "string", enum: ["both", "background", "icons", "none"], description: "With style: which pictures to look for (default both)." },
               name: { type: "string", description: "A name for the look." },
               homeOrder: { type: "array", items: { type: "string", enum: ["ideas", "recent", "pins"] }, description: "The start screen under the message box, top to bottom: ideas, recent chats, pinned tools." },
@@ -418,7 +418,7 @@ export class ConversationManager {
               if (r.background) pics.background = r.background;
               if (r.icons) pics.icons = r.icons;
               credits.push(...r.credits);
-              found = r.background || r.icons ? "" : ` Found no free pictures of "${style}" on the web; use emoji icons and a gradient background that fit instead (call again with icons and background).`;
+              found = r.background || r.icons ? "" : ` Found no pictures of "${style}" on the web; use emoji icons and a gradient background that fit instead (call again with icons and background).`;
             } catch (err) {
               found = ` Could not search for pictures (${(err as Error).message}); use emoji icons and a gradient instead.`;
             }
@@ -429,7 +429,7 @@ export class ConversationManager {
           const next: Appearance = change.preset ? { ...change } : { ...cur, ...change, colors: { ...cur.colors, ...change.colors }, ...(change.icons ? { icons: { ...cur.icons, ...change.icons } } : {}) };
           if (!next.colors || !Object.keys(next.colors).length) delete next.colors;
           await look.set(next);
-          return { output: `Changed the look: ${Object.keys(change).join(", ")}.${credits.length ? ` Pictures (free licences): ${credits.join("; ")}.` : ""}${found}` };
+          return { output: `Changed the look: ${Object.keys(change).join(", ")}.${credits.length ? ` Pictures: ${credits.join("; ")}.` : ""}${found}` };
         },
       },
     ];

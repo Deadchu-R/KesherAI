@@ -1393,3 +1393,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 [dir="rtl"] .stop-speaking { transform: translateX(50%); }
 .stop-speaking:hover { background: var(--accent); filter: brightness(1.08); }
 @media (max-width: 760px) { .stop-speaking { bottom: calc(78px + env(safe-area-inset-bottom)); } }
+
+/* Full dark: on true black, controls are seen by their edges and text keeps full weight. */
+:root[data-preset="fulldark"] button:not(.primary), :root[data-preset="fulldark"] input, :root[data-preset="fulldark"] select, :root[data-preset="fulldark"] textarea { border-color: var(--border-strong); }
+:root[data-preset="fulldark"] button:not(.primary):hover { background: var(--raised); border-color: var(--accent); }
+:root[data-preset="fulldark"] body { -webkit-font-smoothing: auto; }

@@ -822,10 +822,16 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
    * the internet link. Any signed-in device may ask (the user is often away from the computer), and every
    * new key is announced on the computer and the phone, and can be removed alone.
    */
+  const invites: number[] = [];
   app.post<{ Body: { device?: string } }>("/api/remote/devices/invite", async (req, reply) => {
+    // A few an hour: a stolen key cannot make many more keys for itself.
+    const hourAgo = Date.now() - 3_600_000;
+    while (invites.length && invites[0]! < hourAgo) invites.shift();
+    if (invites.length >= 5) return reply.code(429).send({ error: "Five links were made in the last hour. Try again later." });
     const url = tunnel.status().url;
     if (!url) return reply.code(409).send({ error: "Turn on access from anywhere first (Settings → Phone)." });
     const name = String(req.body?.device ?? "Device").replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device";
+    invites.push(Date.now());
     const key = await deviceKeys.issue(name);
     void notifier.send({ title: "A new device key was made", body: `"${name}" can now connect to KesherAI through the internet link${isLocalRequest(req) ? "" : " (made from a connected device)"}. If it was not you, remove it in Settings → Phone.`, path: "#/settings/phone", tags: ["key"], priority: 4 }).catch(() => undefined);
     return { link: `${url.replace(/\/$/, "")}/?token=${encodeURIComponent(key)}`, name };
