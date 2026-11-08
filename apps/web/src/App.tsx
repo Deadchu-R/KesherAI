@@ -33,6 +33,7 @@ import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
 import { MemoryPage } from "./pages/MemoryPage";
 import { NodesPage } from "./pages/NodesPage";
+import { UnrealPage } from "./pages/UnrealPage";
 import { PartsPage } from "./pages/PartsPage";
 import { PagesPage } from "./pages/PagesPage";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
@@ -171,6 +172,7 @@ export function App() {
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/nodes") page = <NodesPage />;
+  else if (hash === "#/unreal") page = <UnrealPage />;
   else if (hash === "#/parts") page = <PartsPage />;
   else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;

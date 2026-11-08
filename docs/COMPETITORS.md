@@ -206,4 +206,9 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 22. OneDrive sign-in, like Google ✅ (code done; the project needs its free Microsoft app id, docs/ONEDRIVE.md)
 23. Signed Windows installer through SignPath (waiting for the application) ⬜
 24. Chrome Web Store listing for the extension (a one-time $5 fee; only if it is worth it) ⬜
-25. Gentle on the graphics card: automatic limits by hardware (memory, heat, power), pause and resume of running prompts and queues, light in the background, and unloading what is not needed in steps when idle ⬜
+25. Gentle on the graphics card: automatic limits by hardware (memory, heat, power), pause and resume of running prompts and queues, light in the background, and unloading what is not needed in steps when idle ✅ (Settings → Protect the graphics card)
+26. Unreal Blueprints in KesherAI: the KesherAI Bridge editor plugin connects by itself; see the graphs, change them in words (one undo step), compile, save; with Unreal closed, a saved copy and a queue of changes ✅ (docs/UNREAL.md)
+27. Unity Visual Scripting, the same way (a small Unity editor package) ⬜
+28. A tidier menu: pages in groups (Create, Work and knowledge, Your assistant, Models and settings) that fold ✅
+29. Train models from KesherAI (future): choose what to train — fine-tune a chat model (LoRA/QLoRA on your texts and chats), a picture LoRA (style or a character from 10–30 pictures), a voice (from a few minutes of speech) — and see for each kind what this computer can train (memory needed, time, which engines: e.g. unsloth/axolotl for text, kohya/ai-toolkit or ComfyUI for pictures), and whether the result plugs into a category (chat, pictures, voice) as a model you can pick, or merges into one that is ⬜
+

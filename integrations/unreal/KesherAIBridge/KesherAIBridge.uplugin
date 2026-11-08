@@ -1,0 +1,22 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "KesherAI Bridge",
+  "Description": "Connects the Unreal Editor to KesherAI on this computer: see your Blueprints in KesherAI and change them in words with your local model. Every change is one undo step.",
+  "Category": "Editor",
+  "CreatedBy": "KesherAI contributors",
+  "CreatedByURL": "https://github.com/Deadchu-R/KesherAI",
+  "DocsURL": "https://github.com/Deadchu-R/KesherAI/blob/main/docs/UNREAL.md",
+  "SupportURL": "https://github.com/Deadchu-R/KesherAI/issues",
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "KesherAIBridge",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit"
+    }
+  ]
+}

@@ -47,6 +47,8 @@ import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
+import { UnrealBridge } from "./unreal-bridge.js";
+import { unrealRoutes } from "./routes/unreal.js";
 import { guardRoutes } from "./routes/guard.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
@@ -505,6 +507,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     onedrive,
     onedriveSync,
     guard,
+    unreal: new UnrealBridge(join(paths.root, "unreal")),
     sd,
     tunnel,
     devices,
@@ -573,6 +576,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
+  await unrealRoutes(app, services);
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);
   await partsRoutes(app, services);

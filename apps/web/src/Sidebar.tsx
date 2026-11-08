@@ -119,42 +119,51 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
 }
 
 /** The left sidebar: new buttons, projects with their conversations, other screens. */
-/** The menu's pages (the sidebar, and the top bar's menu on a phone). */
-export const NAV: Array<[string, Parameters<typeof t>[0]]> = [
-    ["#/day", "dayNav"],
-  ["#/compare", "compareNav"],
-  ["#/pages", "pagesNav"],
-  ["#/knowledge", "knowledgeNav"],
-  ["#/personas", "personasNav"],
-  ["#/memory", "memoryNav"],
-  ["#/prompts", "promptsNav"],
-  ["#/pipelines", "pipelinesNav"],
-  ["#/watch", "watchNav"],
-  ["#/images", "images"],
-  ["#/batch", "batchNav"],
-  ["#/nodes", "nodesNav"],
-  ["#/models", "models"],
-  ["#/connections", "connections"],
-  ["#/usage", "usageNav"],
-  ["#/community", "communityNav"],
-  ["#/plugins", "pluginsNav"],
-  ["#/parts", "partsNav"],
-  ["#/updates", "updatesNav"],
-  ["#/settings", "settings"],
+/** The menu's pages in groups (the sidebar, and the top bar's menu on a phone). Plugin pages join "create". */
+export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typeof t>[0]; items: Array<[string, Parameters<typeof t>[0]]> }> = [
+  { id: "create", icon: "🎨", label: "navCreate", items: [["#/images", "images"], ["#/batch", "batchNav"], ["#/nodes", "nodesNav"], ["#/unreal", "unrealNav"]] },
+  { id: "work", icon: "🧠", label: "navWork", items: [["#/pages", "pagesNav"], ["#/knowledge", "knowledgeNav"], ["#/day", "dayNav"], ["#/compare", "compareNav"], ["#/pipelines", "pipelinesNav"], ["#/watch", "watchNav"]] },
+  { id: "assistant", icon: "🤖", label: "navAssistant", items: [["#/personas", "personasNav"], ["#/memory", "memoryNav"], ["#/prompts", "promptsNav"], ["#/community", "communityNav"], ["#/usage", "usageNav"]] },
+  { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "connections"], ["#/plugins", "pluginsNav"], ["#/parts", "partsNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
 
+/** Every menu page, in menu order. */
+export const NAV: Array<[string, Parameters<typeof t>[0]]> = NAV_GROUPS.flatMap((g) => g.items);
+
 /**
- * @returns The menu's pages, without the parts that are off, then the
- *   pages plugins add (the image editor, …), as `[href, label]`.
+ * @returns The menu's pages, without the parts that are off, with the
+ *   pages plugins add (the image editor, …) in "create", as
+ *   `[href, label, group]`.
  */
-export function useNavItems(): Array<{ href: string; label: string }> {
+export function useNavItems(): Array<{ href: string; label: string; group: string }> {
   const { parts } = useParts();
   const { pages } = usePluginUi();
   const off = Object.fromEntries(parts.filter((p) => !p.on).map((p) => [p.id, false]));
-  return [
-    ...NAV.filter(([h]) => !pageHidden(off, h)).map(([href, key]) => ({ href, label: t(key) })),
-    ...pages.map((p) => ({ href: `#/p/${p.pluginId}/${p.id}`, label: `${p.icon ? `${p.icon} ` : ""}${p.title}` })),
-  ];
+  return NAV_GROUPS.flatMap((g) => [
+    ...g.items.filter(([h]) => !pageHidden(off, h)).map(([href, key]) => ({ href, label: t(key), group: g.id })),
+    ...(g.id === "create" ? pages.map((p) => ({ href: `#/p/${p.pluginId}/${p.id}`, label: `${p.icon ? `${p.icon} ` : ""}${p.title}`, group: g.id })) : []),
+  ]);
+}
+
+/** Which menu groups are open; remembered on this device. The group of the page you are on is always open. */
+function useOpenGroups(): [Record<string, boolean>, (id: string, on: boolean) => void] {
+  const [open, setOpen] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("kesher.navGroups") ?? "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+  const set = (id: string, on: boolean) => {
+    const next = { ...open, [id]: on };
+    setOpen(next);
+    try {
+      localStorage.setItem("kesher.navGroups", JSON.stringify(next));
+    } catch {
+      // private window: only for this visit
+    }
+  };
+  return [open, set];
 }
 
 export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: string; online: boolean | null; open: boolean; onLocale: () => void }) {
@@ -164,7 +173,6 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const searching = useSearching();
   const [version, setVersion] = useState("");
   const activeId = hash.startsWith("#/c/") ? hash.slice(4) : "";
-  const pluginPages = usePluginUi().pages;
 
   useEffect(() => {
     const open = () => setDialog("code");
@@ -187,9 +195,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       () => undefined,
     );
   }, []);
-  const { parts } = useParts();
-  const offParts = Object.fromEntries(parts.filter((p) => !p.on).map((p) => [p.id, false]));
-  const nav = NAV;
+  const navItems = useNavItems();
+  const [groups, setGroup] = useOpenGroups();
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
@@ -202,19 +209,26 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         <button type="button" className="nav-link as-link" onClick={() => setDialog("code")}>
           <span className="plus" aria-hidden>{"</>"}</span> {t("newCode")}
         </button>
-        {nav.filter(([h]) => !pageHidden(offParts, h)).map(([h, label]) => (
-          <a key={h} href={h} className="nav-link" aria-current={hash === h ? "page" : undefined}>
-            {t(label)}
-            {h === "#/updates" && newVersion && <span className="update-dot" title={t("updateAvailable", { n: 1 })}> v{newVersion}</span>}
-          </a>
-        ))}
-        {pluginPages.map((p) => {
-          const h = `#/p/${p.pluginId}/${p.id}`;
+        {NAV_GROUPS.map((g) => {
+          const items = navItems.filter((n) => n.group === g.id);
+          if (!items.length) return null;
+          const here = items.some((n) => n.href === hash);
+          const expanded = here || (groups[g.id] ?? g.id === "create");
           return (
-            <a key={h} href={h} className="nav-link plugin-nav" aria-current={hash === h ? "page" : undefined}>
-              {p.icon && <span aria-hidden="true">{p.icon} </span>}
-              {p.title}
-            </a>
+            <div key={g.id} className="nav-group">
+              <button type="button" className="nav-group-head" aria-expanded={expanded} onClick={() => setGroup(g.id, !expanded)}>
+                <span aria-hidden="true">{g.icon}</span>
+                <span className="grow">{t(g.label)}</span>
+                {g.id === "system" && newVersion && !expanded && <span className="update-dot" title={t("updateAvailable", { n: 1 })}>●</span>}
+                <span className="nav-group-arrow" aria-hidden="true">{expanded ? "▾" : "▸"}</span>
+              </button>
+              {expanded && items.map((n) => (
+                <a key={n.href} href={n.href} className={`nav-link nav-sub${n.href.startsWith("#/p/") ? " plugin-nav" : ""}`} aria-current={hash === n.href ? "page" : undefined}>
+                  {n.label}
+                  {n.href === "#/updates" && newVersion && <span className="update-dot" title={t("updateAvailable", { n: 1 })}> v{newVersion}</span>}
+                </a>
+              ))}
+            </div>
           );
         })}
       </div>}

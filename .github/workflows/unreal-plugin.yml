@@ -1,0 +1,35 @@
+name: Unreal plugin
+
+# Packs the KesherAI Bridge plugin for Unreal (integrations/unreal/KesherAIBridge)
+# as a zip of its source. Unreal builds it the first time the project opens.
+# Every change on main publishes it to the "unreal-plugin-latest" release:
+#   https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "integrations/unreal/**"
+      - ".github/workflows/unreal-plugin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the plugin descriptor
+        run: node -e 'const p=require("./integrations/unreal/KesherAIBridge/KesherAIBridge.uplugin");if(!p.Modules?.length)throw new Error("no modules");console.log(p.FriendlyName,p.VersionName)'
+      - name: Zip
+        working-directory: integrations/unreal
+        run: zip -r -q ../../KesherAIBridge.zip KesherAIBridge -x "*/Binaries/*" "*/Intermediate/*"
+      - name: Publish to unreal-plugin-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes="The KesherAI Bridge plugin for Unreal Engine 5.1 and newer (source; Unreal builds it when the project opens). Unzip into YourProject/Plugins/ — see docs/UNREAL.md."
+          gh release upload unreal-plugin-latest KesherAIBridge.zip --clobber \
+            || gh release create unreal-plugin-latest KesherAIBridge.zip --prerelease --title "Unreal plugin (latest)" --notes "$notes"

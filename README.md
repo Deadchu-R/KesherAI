@@ -108,6 +108,7 @@ Each package has its own README explaining what it owns.
 | [docs/FORKING.md](docs/FORKING.md) | rebrand or trim KesherAI in your own fork |
 | [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md) | set up Google sign-in for Drive backup |
 | [docs/ONEDRIVE.md](docs/ONEDRIVE.md) | set up Microsoft sign-in for OneDrive backup |
+| [docs/UNREAL.md](docs/UNREAL.md) | Unreal Blueprints in KesherAI (the KesherAI Bridge plugin) |
 | [docs/WAKE_ON_LAN.md](docs/WAKE_ON_LAN.md) | wake the computer from the phone |
 | [docs/COMPETITORS.md](docs/COMPETITORS.md) | see what other apps do and what we build next |
 | [docs/LEGAL.md](docs/LEGAL.md) | know which licences apply |

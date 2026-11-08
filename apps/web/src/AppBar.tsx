@@ -3,7 +3,7 @@ import { api, appHome } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
 import { reconnect } from "./Reconnect";
-import { useNavItems } from "./Sidebar";
+import { NAV_GROUPS, useNavItems } from "./Sidebar";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -86,7 +86,15 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
               <a role="menuitem" href="#/">{t("newChat")}</a>
               <button type="button" role="menuitem" onClick={() => { setMenu(false); dispatchEvent(new Event(NEW_CODE_EVENT)); }}>{t("newCode")}</button>
               <hr />
-              {navItems.filter((n) => n.href !== "#/updates").map((n) => <a key={n.href} role="menuitem" href={n.href}>{n.label}</a>)}
+              {NAV_GROUPS.map((g) => {
+                const items = navItems.filter((n) => n.group === g.id && n.href !== "#/updates");
+                return items.length ? (
+                  <div key={g.id} className="bar-pop-group" role="group" aria-label={t(g.label)}>
+                    <span className="bar-pop-head" aria-hidden="true">{g.icon} {t(g.label)}</span>
+                    {items.map((n) => <a key={n.href} role="menuitem" href={n.href}>{n.label}</a>)}
+                  </div>
+                ) : null;
+              })}
               <hr />
               <button type="button" role="menuitem" onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); setMenu(false); onLocale(); }}>{t("language")}</button>
               <a role="menuitem" href="#/updates">{t("checkUpdates")}</a>
