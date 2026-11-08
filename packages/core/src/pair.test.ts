@@ -48,3 +48,23 @@ test("pairing: a phone on the network asks, the user allows it here, the phone g
     await s.app.close();
   }
 });
+
+test("a device with the shared token trades it for a key of its own", async () => {
+  const { createKesherServer } = await import("./server.js");
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const s = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-ex-")), autodetect: false, pluginRoots: [] });
+  try {
+    s.services.config.remote.enabled = true;
+    const shared = s.services.config.remote.token!;
+    const phone = { remoteAddress: "192.168.1.50", headers: { host: "192.168.1.5:7420", authorization: `Bearer ${shared}`, "content-type": "application/json" } };
+    const r = (await s.app.inject({ method: "POST", url: "/api/remote/devices/exchange", ...phone, payload: { device: "Pixel 9" } })).json() as { token: string };
+    assert.match(r.token, /^kd_/);
+    // A device key cannot trade itself for more keys.
+    const again = await s.app.inject({ method: "POST", url: "/api/remote/devices/exchange", ...phone, headers: { ...phone.headers, authorization: `Bearer ${r.token}` }, payload: {} });
+    assert.equal(again.statusCode, 400);
+  } finally {
+    await s.app.close();
+  }
+});

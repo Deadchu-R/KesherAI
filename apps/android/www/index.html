@@ -193,7 +193,7 @@
       const peers = await fetch(`${base}/api/devices/peers`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) }).then((r) => (r.ok ? r.json() : []));
       for (const p of peers ?? []) {
         if (!p?.token || !p.urls?.length) continue;
-        let other = list.find((x) => x.token === p.token);
+        let other = list.find((x) => x.token === p.token || x.shared === p.token);
         if (!other) { other = { token: p.token, name: p.name, links: [] }; list.push(other); }
         other.name = p.name || other.name;
         if (p.gpu) other.gpu = p.gpu;
@@ -211,12 +211,29 @@
   }
 
   /** Tries each saved address of a computer, the last one that worked first. */
+  /** This phone's model name, as Android tells it (for the computer's list of devices). */
+  const deviceName = () => (navigator.userAgent.match(/;\s*([^;)]+)\s+Build\//) || [])[1] || "Phone";
+
   async function connectComputer(c) {
     cancelled = false;
     for (let i = 0; i < c.links.length && !cancelled; i++) {
       if (i > 0) { $("status").className = ""; $("status").textContent = tr.tryingNext[lang]; }
       const ok = await fetch(`${c.links[i]}/api/health`, { headers: { authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(5000) }).then((r) => r.ok).catch(() => false);
-      if (ok) return connect(linkFor(c, c.links[i]));
+      if (ok) {
+        // Found with the shared token (Google, QR): trade it for a key of this phone's own, once.
+        if (!String(c.token).startsWith("kd_")) {
+          const mine = await fetch(`${c.links[i]}/api/remote/devices/exchange`, { method: "POST", headers: { authorization: `Bearer ${c.token}`, "content-type": "application/json" }, body: JSON.stringify({ device: deviceName() }), signal: AbortSignal.timeout(5000) })
+            .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+          if (mine && typeof mine.token === "string" && mine.token.startsWith("kd_")) {
+            const list = loadComputers();
+            const entry = list.find((x) => x.token === c.token);
+            if (entry) { entry.shared = c.token; entry.token = mine.token; saveComputers(list); }
+            c.shared = c.token;
+            c.token = mine.token;
+          }
+        }
+        return connect(linkFor(c, c.links[i]));
+      }
     }
     if (!cancelled) connect(linkFor(c, c.links[0])); // shows the error and the wake button
   }

@@ -3,6 +3,7 @@ import { mkdir, readFile as readFileFs, writeFile as writeFileFs } from "node:fs
 import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { constants as zlibConstants } from "node:zlib";
+import { timingSafeEqual } from "node:crypto";
 import cors from "@fastify/cors";
 import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
@@ -778,6 +779,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.deviceKeys = deviceKeys;
   // Paired devices (their own keys) and how the internet link lets them in: Settings → Phone.
   app.get("/api/remote/devices", async () => ({ devices: deviceKeys.devices(), devicesOnly: config.remote.anywhereDevicesOnly, idleDays: config.remote.anywhereIdleDays }));
+  /**
+   * A device that came in with the shared token (found through Google, or the QR code) trades it for a
+   * key of its own, so it keeps working when "only paired devices" is on, and can be removed alone.
+   */
+  app.post<{ Body: { device?: string } }>("/api/remote/devices/exchange", async (req, reply) => {
+    const given = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+    const token = config.remote.token ?? "";
+    if (isLocalRequest(req) || !token || given.length !== token.length || !timingSafeEqual(Buffer.from(given), Buffer.from(token))) {
+      return reply.code(400).send({ error: "Only a device that uses the shared token can trade it for its own key." });
+    }
+    return { token: await deviceKeys.issue(String(req.body?.device ?? "Device")) };
+  });
   app.delete<{ Params: { id: string } }>("/api/remote/devices/:id", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Devices are removed on the computer that runs KesherAI." });
     return { ok: await deviceKeys.remove(req.params.id) };
