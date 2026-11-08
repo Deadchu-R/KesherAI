@@ -139,6 +139,14 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   }, []);
 
   const loose = conversations.filter((c) => !c.projectId);
+  // A newer version next to "Updates" (checked once when the app opens).
+  const [newVersion, setNewVersion] = useState("");
+  useEffect(() => {
+    void api<{ newCommits: unknown[]; latestVersion?: string; version: string }>("/api/updates").then(
+      (c) => setNewVersion(c.newCommits.length && c.latestVersion && c.latestVersion !== c.version ? c.latestVersion : ""),
+      () => undefined,
+    );
+  }, []);
   const nav: Array<[string, Parameters<typeof t>[0]]> = [
     ["#/day", "dayNav"],
     ["#/compare", "compareNav"],
@@ -155,6 +163,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
     ["#/usage", "usageNav"],
     ["#/community", "communityNav"],
     ["#/plugins", "pluginsNav"],
+    ["#/updates", "updatesNav"],
     ["#/settings", "settings"],
   ];
 
@@ -172,6 +181,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         {nav.map(([h, label]) => (
           <a key={h} href={h} className="nav-link" aria-current={hash === h ? "page" : undefined}>
             {t(label)}
+            {h === "#/updates" && newVersion && <span className="update-dot" title={t("updateAvailable", { n: 1 })}> v{newVersion}</span>}
           </a>
         ))}
         {pluginPages.map((p) => {

@@ -981,3 +981,4 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .mask-canvas { width: 100%; max-width: 640px; border-radius: 10px; touch-action: none; cursor: crosshair; background: #0003; }
 .memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .memory-list li { padding: 8px 10px; border-radius: 10px; background: var(--raised, #ffffff08); gap: 8px; }
+.update-dot { color: var(--accent, #7aa2ff); font-size: 12px; margin-inline-start: 6px; }
