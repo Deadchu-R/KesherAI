@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { makeModelId, type ModelInfo, type ModelLocation } from "@kesher/shared";
-import type { GeneratedFile, Provider, ProviderConfig, ProviderFactory, ProviderImageRequest } from "./provider.js";
+import type { GeneratedFile, Provider, ProviderConfig, ProviderFactory, ProviderImageRequest, ProviderVideoRequest } from "./provider.js";
 import { fetchOk } from "./sse.js";
 
 /** A ComfyUI workflow in "API format": node id → `{ class_type, inputs }`. */
@@ -56,7 +56,7 @@ export class ComfyUIProvider implements Provider {
   readonly id: string;
   readonly name: string;
   readonly location: ModelLocation;
-  readonly capabilities = { image: true };
+  readonly capabilities = { image: true, video: true };
   private readonly baseUrl: string;
   private readonly options: Record<string, unknown>;
 
@@ -86,7 +86,8 @@ export class ComfyUIProvider implements Provider {
       CheckpointLoaderSimple?: { input?: { required?: { ckpt_name?: [string[]] } } };
     };
     const names = info.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? [];
-    return names.map((file) => ({
+    // The models folder is shared with KesherAI's own engines: leave out video models and text encoders.
+    const images: ModelInfo[] = names.filter((f) => !/wan2[._]?[12]|umt5|t5xxl|text_encoder|[\\/]video[\\/]/i.test(f)).map((file) => ({
       id: makeModelId(this.id, file),
       providerId: this.id,
       providerModelId: file,
@@ -94,11 +95,60 @@ export class ComfyUIProvider implements Provider {
       category: "image",
       location: this.location,
     }));
+    // Video: Wan text-to-video models in diffusion_models (they need a umt5 text encoder and the Wan VAE).
+    const videos = (await this.choices("UNETLoader", "unet_name", signal).catch(() => [] as string[]))
+      .filter((f) => /wan2[._]?[12].*t2v/i.test(f))
+      .map((file) => ({
+        id: makeModelId(this.id, file),
+        providerId: this.id,
+        providerModelId: file,
+        name: `${file.split(/[\\/]/).pop()!.replace(/\.(safetensors|gguf)$/i, "")} (ComfyUI)`,
+        category: "video" as const,
+        location: this.location,
+      }));
+    return [...images, ...videos];
+  }
+
+  /** The options ComfyUI offers for one input of a node (e.g. the files in a model folder). */
+  private async choices(node: string, input: string, signal?: AbortSignal): Promise<string[]> {
+    const res = await fetchOk(`${this.baseUrl}/object_info/${node}`, { signal });
+    const info = (await res.json()) as Record<string, { input?: { required?: Record<string, [unknown]> } }>;
+    const list = info[node]?.input?.required?.[input]?.[0];
+    return Array.isArray(list) ? list.map(String) : [];
+  }
+
+  /**
+   * Makes a short clip with a Wan 2.1 text-to-video model (ComfyUI's own
+   * example workflow: about 2 seconds at 16 frames a second, 832×480).
+   */
+  async generateVideo(request: ProviderVideoRequest, signal?: AbortSignal): Promise<GeneratedFile[]> {
+    const [encoders, vaes] = await Promise.all([this.choices("CLIPLoader", "clip_name", signal), this.choices("VAELoader", "vae_name", signal)]);
+    const encoder = encoders.find((f) => /umt5/i.test(f) && !/\.gguf$/i.test(f));
+    const vae = vaes.find((f) => /wan.*vae|vae.*wan/i.test(f));
+    if (!encoder || !vae) throw new Error(`ComfyUI is missing Wan's ${!encoder ? "text encoder (umt5_xxl in models/text_encoders)" : "VAE (wan_2.1_vae in models/vae)"}. Press "Set up Wan in ComfyUI" on the Models page → Video.`);
+    const frames = Math.max(1, Math.round(((request.seconds ?? 2) * 16) / 4)) * 4 + 1;
+    const workflow: ComfyWorkflow = {
+      "1": { class_type: "UNETLoader", inputs: { unet_name: request.providerModelId, weight_dtype: "default" } },
+      "2": { class_type: "CLIPLoader", inputs: { clip_name: encoder, type: "wan", device: "default" } },
+      "3": { class_type: "VAELoader", inputs: { vae_name: vae } },
+      "4": { class_type: "ModelSamplingSD3", inputs: { shift: 8, model: ["1", 0] } },
+      "5": { class_type: "CLIPTextEncode", inputs: { text: request.prompt, clip: ["2", 0] } },
+      "6": { class_type: "CLIPTextEncode", inputs: { text: request.negativePrompt ?? "blurry, low quality, distorted, static, still image", clip: ["2", 0] } },
+      "7": { class_type: "EmptyHunyuanLatentVideo", inputs: { width: 832, height: 480, length: Math.min(81, frames), batch_size: 1 } },
+      "8": { class_type: "KSampler", inputs: { seed: request.seed ?? Math.floor(Math.random() * 2 ** 31), steps: 30, cfg: 6, sampler_name: "uni_pc", scheduler: "simple", denoise: 1, model: ["4", 0], positive: ["5", 0], negative: ["6", 0], latent_image: ["7", 0] } },
+      "9": { class_type: "VAEDecode", inputs: { samples: ["8", 0], vae: ["3", 0] } },
+      "10": { class_type: "SaveAnimatedWEBP", inputs: { filename_prefix: "KesherAI/video", fps: 16, lossless: false, quality: 90, method: "default", images: ["9", 0] } },
+    };
+    return this.run(workflow, { prompt: request.prompt, seed: request.seed }, signal, 30 * 60_000);
   }
 
   /** @inheritDoc */
   async generateImage(request: ProviderImageRequest, signal?: AbortSignal): Promise<GeneratedFile[]> {
-    const workflow = this.buildWorkflow(request);
+    return this.run(this.buildWorkflow(request), { prompt: request.prompt, seed: request.seed, steps: request.steps }, signal);
+  }
+
+  /** Queues a workflow, waits for it, and fetches what it saved. */
+  private async run(workflow: ComfyWorkflow, meta: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<GeneratedFile[]> {
     const queued = await fetchOk(`${this.baseUrl}/prompt`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -113,7 +163,7 @@ export class ComfyUIProvider implements Provider {
       throw new Error(`ComfyUI rejected the workflow: ${JSON.stringify(nodeErrors).slice(0, 500)}`);
     }
 
-    const outputs = await this.waitForOutputs(promptId, signal);
+    const outputs = await this.waitForOutputs(promptId, signal, timeoutMs);
     const files: GeneratedFile[] = [];
     for (const image of outputs) {
       const params = new URLSearchParams({ filename: image.filename, subfolder: image.subfolder, type: image.type });
@@ -121,7 +171,7 @@ export class ComfyUIProvider implements Provider {
       files.push({
         data: new Uint8Array(await res.arrayBuffer()),
         mimeType: res.headers.get("content-type") ?? "image/png",
-        meta: { prompt: request.prompt, seed: request.seed, steps: request.steps, comfyPromptId: promptId },
+        meta: { ...meta, comfyPromptId: promptId },
       });
     }
     return files;
@@ -141,8 +191,9 @@ export class ComfyUIProvider implements Provider {
   private async waitForOutputs(
     promptId: string,
     signal?: AbortSignal,
+    timeoutMs?: number,
   ): Promise<Array<{ filename: string; subfolder: string; type: string }>> {
-    const deadline = Date.now() + Number(this.options.timeoutMs ?? 600_000);
+    const deadline = Date.now() + (timeoutMs ?? Number(this.options.timeoutMs ?? 600_000));
     while (Date.now() < deadline) {
       signal?.throwIfAborted();
       const res = await fetchOk(`${this.baseUrl}/history/${promptId}`, { signal });

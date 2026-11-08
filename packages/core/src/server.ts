@@ -436,8 +436,27 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         })),
       ],
       video: {
-        ensure: () => ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
-        generate: (path, req) => sd.generateVideo(path, req),
+        // A video model from a connection (ComfyUI's Wan) when that is the active one, else the built-in engine.
+        ensure: async () => {
+          const active = config.activeModels.video;
+          if (active && !existsSync(active)) {
+            try {
+              if (registry.resolve(active).provider.generateVideo) return { path: active };
+            } catch {
+              // that connection is gone: fall back to the built-in engine
+            }
+          }
+          return ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist });
+        },
+        generate: async (path, req) => {
+          if (!existsSync(path)) {
+            const target = registry.resolve(path);
+            const [file] = (await target.provider.generateVideo?.({ providerModelId: target.providerModelId, ...req })) ?? [];
+            if (!file) throw new Error("The video model made no video.");
+            return file;
+          }
+          return sd.generateVideo(path, req);
+        },
       },
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
       memoryTools: () => (config.coach?.learn === false ? [] : memoryTools(coach)),

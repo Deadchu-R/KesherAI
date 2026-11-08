@@ -170,6 +170,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 **2. Every kind of model on the computer, and downloading it**
 
 7. One-click setup for video, like chat and speech ✅ ("Set it up for me" also offers pictures and video)
+7a. The Models page shows every kind of model: video, speech to text, text to speech, search by meaning, music and 3D, each with its state, one-click setup and download percent ✅; video also through ComfyUI (Wan 2.1) ✅
 8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ✅ (English voices; Hebrew stays with the system voice)
 9. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ✅ (Images page: start from a picture, paint what to change, strength)
 10. Music generation, as a tool the chat can call (LU) ⬜ (later: acestep.cpp, MIT, ~7.7 GB of models, has no stable prebuilt release; we would build it)

@@ -1,3 +1,4 @@
+import { ComfyOnlyKind, ModelKindCard } from "../ModelKinds";
 import { ComfySection } from "../ComfySection";
 import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
@@ -303,10 +304,12 @@ export function ModelsPage() {
   const tabs: Array<{ id: string; label: string; engine?: string }> = [
     { id: "chat", label: categoryLabel("chat") },
     { id: "image", label: categoryLabel("image") },
-    { id: "video", label: categoryLabel("video"), engine: "soon" },
-    { id: "speech-to-text", label: categoryLabel("speech-to-text"), engine: "soon" },
-    { id: "text-to-speech", label: categoryLabel("text-to-speech"), engine: "soon" },
-    { id: "embedding", label: categoryLabel("embedding"), engine: "soon" },
+    { id: "video", label: categoryLabel("video") },
+    { id: "speech-to-text", label: categoryLabel("speech-to-text") },
+    { id: "text-to-speech", label: categoryLabel("text-to-speech") },
+    { id: "embedding", label: categoryLabel("embedding") },
+    { id: "music", label: categoryLabel("music") },
+    { id: "3d", label: categoryLabel("3d") },
     { id: "storage", label: t("storage") },
   ];
   const current = tabs.find((x) => x.id === tab) ?? tabs[0]!;
@@ -344,6 +347,9 @@ export function ModelsPage() {
       {tab === "chat" && <StartHere onChange={refreshLocal} />}
       {tab === "image" && <ImageStartHere />}
       {tab === "image" && <ComfySection />}
+      {(tab === "video" || tab === "speech-to-text" || tab === "text-to-speech" || tab === "embedding") && <ModelKindCard kind={tab} />}
+      {(tab === "music" || tab === "3d") && <ComfyOnlyKind kind={tab} />}
+      {(tab === "video" || tab === "music" || tab === "3d") && <ComfySection />}
       {current.engine === "soon" && <p className="card muted">{t("engineSoon", { category: current.label })}</p>}
 
       {tab !== "storage" && (

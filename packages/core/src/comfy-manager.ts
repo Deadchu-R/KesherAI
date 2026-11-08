@@ -167,7 +167,7 @@ export class ComfyManager {
     // Also look for checkpoints in KesherAI's models folder.
     const yaml = join(this.dir, "kesher_model_paths.yaml");
     await mkdir(this.dir, { recursive: true });
-    await writeFile(yaml, `kesherai:\n  base_path: ${JSON.stringify(this.opts.modelsDir())}\n  checkpoints: .\n  loras: loras\n  vae: vae\n`);
+    await writeFile(yaml, `kesherai:\n  base_path: ${JSON.stringify(this.opts.modelsDir())}\n  checkpoints: .\n  loras: loras\n  vae: vae\n  diffusion_models: video\n  text_encoders: text_encoders\n`);
     const { cmd, args } = await this.python(folder);
     const nvidia = await this.opts.nvidia().catch(() => false);
     const full = [...args, "--listen", "127.0.0.1", "--port", String(this.opts.port()), "--extra-model-paths-config", yaml, ...(nvidia || process.platform === "darwin" ? [] : ["--cpu"])];

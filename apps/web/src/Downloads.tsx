@@ -161,3 +161,29 @@ export function DownloadBar({ repo, file }: { repo: string; file?: string }) {
     </div>
   );
 }
+
+/**
+ * The downloads whose label matches, each with its percent and a bar (for a
+ * model kind's card: its engine and files download under several names).
+ */
+export function DownloadsMatching({ match }: { match: RegExp }) {
+  const all = useDownloads().filter((j) => match.test(j.label) && (ACTIVE.has(j.status) || j.status === "paused" || j.status === "failed"));
+  if (!all.length) return null;
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      {all.map((j) => {
+        const pct = j.total ? Math.floor((100 * j.received) / j.total) : 0;
+        return (
+          <div key={j.id} className="dl-inline stack">
+            <div className="row small">
+              <span className="grow" dir="auto">{j.label}</span>
+              <strong>{j.status === "failed" ? t("dl-failed") : j.status === "paused" ? t("dl-paused") : j.status === "queued" ? t("dl-queued") : `${pct}%`}</strong>
+            </div>
+            {j.total ? <div className="bar"><div style={{ width: `${pct}%` }} /></div> : null}
+            {j.status === "failed" && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("retry")}</button>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

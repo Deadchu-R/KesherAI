@@ -30,6 +30,19 @@ export interface ProviderCapabilities {
   image?: boolean;
   /** Runs tool-calling turns through {@link Provider.chatWithTools}. */
   tools?: boolean;
+  /** Makes short videos through {@link Provider.generateVideo}. */
+  video?: boolean;
+}
+
+/** Input to {@link Provider.generateVideo}. */
+export interface ProviderVideoRequest {
+  /** The provider's own model id. */
+  providerModelId: string;
+  prompt: string;
+  negativePrompt?: string;
+  /** Length, in seconds (the provider rounds it to what the model can make). */
+  seconds?: number;
+  seed?: number;
 }
 
 /** Input to {@link Provider.chatWithTools}. */
@@ -149,6 +162,9 @@ export interface Provider {
 
   /** Generates one or more images. */
   generateImage?(request: ProviderImageRequest, signal?: AbortSignal): Promise<GeneratedFile[]>;
+
+  /** Makes a short video clip. */
+  generateVideo?(request: ProviderVideoRequest, signal?: AbortSignal): Promise<GeneratedFile[]>;
 
   /** Turns texts into vectors (embedding models), in the same order. */
   embed?(request: { providerModelId: string; input: string[] }, signal?: AbortSignal): Promise<number[][]>;

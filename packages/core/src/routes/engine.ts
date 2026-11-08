@@ -8,7 +8,7 @@ import type { KesherServices } from "../services.js";
 import { findLlamaRelease, waitForDownload } from "../llamacpp.js";
 import { insideAny, looksLikeGguf } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
-import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
+import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -219,6 +219,33 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
     void setUp(s, [model]).catch((err) => s.engine.fail(err));
     return reply.code(202).send(s.engine.status());
+  });
+
+  /**
+   * Every kind of model KesherAI runs on this computer besides chat and
+   * pictures, for the Models page: is it ready, is it downloading, how big
+   * is it, and where its "Set it up" button posts.
+   */
+  app.get("/api/models/kinds", async () => {
+    const video = await videoStatus({ sd: s.sd, config: s.config, modelsDir: () => s.paths.models });
+    const stt = await s.whisper.status();
+    const tts = s.kokoro.status();
+    const emb = s.semantic.status();
+    return {
+      video: { ready: video.ready, busy: video.downloading, ...(video.model ? { model: video.model } : {}), name: RECOMMENDED_VIDEO_MODEL.name, sizeGb: 7.2, setup: "/api/models/setup/media/video", active: s.config.activeModels.video ?? null, comfy: comfyWanStatus(s.paths.models) },
+      "speech-to-text": { ready: stt.engine && !!stt.model, busy: !!stt.busy, ...(stt.error ? { error: stt.error } : {}), ...(stt.model ? { model: stt.model.split(/[\\/]/).pop() } : {}), name: `whisper.cpp · ${stt.recommended.label}`, sizeGb: stt.recommended.sizeGb, setup: stt.localPossible ? "/api/speech/stt/setup" : null },
+      "text-to-speech": { ready: tts.ready, busy: tts.busy, name: "Kokoro", sizeGb: tts.sizeMb / 1024, setup: "/api/speech/tts/local/setup", voices: tts.voices },
+      embedding: { ready: emb.usable, busy: emb.phase === "downloading" || emb.phase === "loading", ...(emb.phase === "error" && emb.message ? { error: emb.message } : {}), ...(emb.active ? { model: emb.active.split("/").pop() } : {}), name: emb.model.name, sizeGb: emb.model.sizeGb, setup: "/api/knowledge/semantic/setup" },
+    };
+  });
+
+  /** Downloads what ComfyUI needs for Wan 2.1 video (the model is shared with the built-in engine). */
+  app.post("/api/models/setup/comfy-video", async (_req, reply) => {
+    try {
+      return { started: await setupComfyWan({ downloads: s.downloads, modelsDir: () => s.paths.models }), ...comfyWanStatus(s.paths.models) };
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
   });
 
   /**

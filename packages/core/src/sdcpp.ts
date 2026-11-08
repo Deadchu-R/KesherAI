@@ -684,6 +684,59 @@ export const RECOMMENDED_VIDEO_MODEL = {
 };
 let pendingVideoDownload: string | undefined;
 
+/** The files ComfyUI's Wan 2.1 workflow needs, in KesherAI's models folder (ComfyUI reads it too). */
+function comfyWanFiles(modelsDir: string) {
+  const repo = RECOMMENDED_VIDEO_MODEL.repo;
+  return [
+    { repo, path: RECOMMENDED_VIDEO_MODEL.file, dest: join(modelsDir, "video", repo, RECOMMENDED_VIDEO_MODEL.file), label: "Wan 2.1 1.3B" },
+    { repo, path: "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", dest: join(modelsDir, "text_encoders", "umt5_xxl_fp8_e4m3fn_scaled.safetensors"), label: "Wan text encoder (umt5 xxl)" },
+    { repo, path: "split_files/vae/wan_2.1_vae.safetensors", dest: join(modelsDir, "vae", "wan_2.1_vae.safetensors"), label: "Wan VAE" },
+  ];
+}
+
+/**
+ * @param modelsDir - KesherAI's models folder.
+ * @returns Whether ComfyUI has everything for Wan video, and how much is missing (GB, approximate).
+ */
+export function comfyWanStatus(modelsDir: string): { ready: boolean; missingGb: number } {
+  const sizes: Record<string, number> = { "Wan 2.1 1.3B": 2.84, "Wan text encoder (umt5 xxl)": 6.74, "Wan VAE": 0.25 };
+  const missing = comfyWanFiles(modelsDir).filter((f) => !existsSync(f.dest));
+  return { ready: !missing.length, missingGb: missing.reduce((n, f) => n + (sizes[f.label] ?? 0), 0) };
+}
+
+/**
+ * Downloads what ComfyUI needs to make videos with Wan 2.1 (the model is
+ * shared with the built-in engine). Follow it in the downloads circle.
+ *
+ * @param d - Downloads and the models folder.
+ * @returns How many files started downloading.
+ */
+export async function setupComfyWan(d: { downloads: DownloadManager; modelsDir: () => string }): Promise<number> {
+  let n = 0;
+  for (const f of comfyWanFiles(d.modelsDir())) {
+    if (existsSync(f.dest) || d.downloads.list().some((j) => j.dest === f.dest && !["failed", "cancelled", "done"].includes(j.status))) continue;
+    const hub = (await listHubFiles(f.repo)).find((x) => x.path === f.path);
+    if (!hub) throw new Error(`${f.repo} no longer has ${f.path}.`);
+    d.downloads.enqueue({ url: hub.url, dest: f.dest, size: hub.size, ...(hub.sha256 ? { sha256: hub.sha256 } : {}), label: `ComfyUI video · ${f.label}` });
+    n++;
+  }
+  return n;
+}
+
+/**
+ * The video model's state, without starting anything.
+ *
+ * @param d - The engine, settings and models folder.
+ * @returns Whether a video model is ready, downloading, or not there yet.
+ */
+export async function videoStatus(d: { sd: SdEngine; config: { activeModels: Record<string, string> }; modelsDir: () => string }): Promise<{ ready: boolean; downloading: boolean; model?: string }> {
+  const chosen = d.config.activeModels.video;
+  const dest = join(d.modelsDir(), "video", RECOMMENDED_VIDEO_MODEL.repo, RECOMMENDED_VIDEO_MODEL.file);
+  const file = chosen && existsSync(chosen) ? chosen : existsSync(dest) ? dest : undefined;
+  const ready = !!file && (await d.sd.ready(file).catch(() => false));
+  return { ready, downloading: !!pendingVideoDownload || (!!file && !ready), ...(file ? { model: basename(file) } : {}) };
+}
+
 /**
  * Finds the video model, or starts downloading one (with its encoder and
  * VAE) the way {@link ensureImageModel} does for pictures.
