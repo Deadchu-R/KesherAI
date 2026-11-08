@@ -67,6 +67,9 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
           </p>
           <div className="row">
             <button type="button" className="primary" disabled={!local || running} onClick={() => setShowNew((v) => !v)}>＋ {L("פרויקט חדש", "New project")}</button>
+            {info.version && /beta|alpha|preview/i.test(info.version) && (
+              <button type="button" disabled={!local} onClick={() => void api<{ message: string }>("/api/unity/cli/update", { method: "POST" }).then((r) => { toast(r.message); load(); }, (e: Error) => toast(e.message))}>{L("עדכן את Unity CLI", "Update Unity CLI")}</button>
+            )}
             {hasProject && <button type="button" disabled={!local} onClick={() => void api("/api/unity/open-editor", { method: "POST" }).then(() => toast(L("Unity נפתח…", "Opening Unity…")), (e: Error) => toast(e.message))}>{L("פתח ב-Unity", "Open in Unity")}</button>}
             {!local && <span className="muted small">{L("יצירה ופתיחה של פרויקט: רק במחשב עצמו.", "Making and opening projects: on the computer itself.")}</span>}
           </div>

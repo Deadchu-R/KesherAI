@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
@@ -173,6 +173,101 @@ export function usePins(): [string[], (href: string) => void] {
   return [pins, toggle];
 }
 
+/** Puts the pinned pages in a new order (long press and drag in the sidebar). */
+export function setPinOrder(next: string[]): void {
+  pins = next;
+  try {
+    localStorage.setItem(PIN_KEY, JSON.stringify(pins));
+  } catch {
+    // only for this visit
+  }
+  pinListeners.forEach((l) => l());
+}
+
+/**
+ * Long press, then drag, to reorder a list of links (mouse or finger).
+ * A short press still opens the link; moving before the press is long
+ * enough scrolls as usual.
+ *
+ * @param order - The items, in order.
+ * @param onOrder - Saves the new order.
+ */
+function useDragOrder(order: string[], onOrder: (next: string[]) => void) {
+  const [dragging, setDragging] = useState<string | null>(null);
+  const press = useRef<{ id: string; x: number; y: number; timer: number } | null>(null);
+  const moved = useRef(false);
+  // While dragging with a finger, the page must not scroll (that would cancel the drag).
+  useEffect(() => {
+    if (!dragging) return;
+    const stop = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener("touchmove", stop, { passive: false });
+    return () => document.removeEventListener("touchmove", stop);
+  }, [dragging]);
+  const cancel = () => {
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = null;
+  };
+  const props = (id: string) => ({
+    "data-drag-id": id,
+    // A link's own drag (to the address bar) would take over the mouse.
+    draggable: false,
+    onDragStart: (e: React.DragEvent) => e.preventDefault(),
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.button !== 0) return;
+      moved.current = false;
+      const el = e.currentTarget;
+      const pointer = e.pointerId;
+      press.current = {
+        id,
+        x: e.clientX,
+        y: e.clientY,
+        timer: window.setTimeout(() => {
+          setDragging(id);
+          moved.current = true;
+          try {
+            el.setPointerCapture(pointer);
+          } catch {
+            // the pointer is gone
+          }
+          navigator.vibrate?.(12);
+        }, 450),
+      };
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      if (!dragging) {
+        if (press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8) cancel();
+        return;
+      }
+      e.preventDefault();
+      const over = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-drag-id]")?.dataset.dragId;
+      if (!over || over === dragging || !order.includes(over)) return;
+      const next = order.filter((x) => x !== dragging);
+      const at = next.indexOf(over) + (order.indexOf(over) > order.indexOf(dragging) ? 1 : 0);
+      next.splice(at, 0, dragging);
+      onOrder(next);
+    },
+    onPointerUp: () => {
+      cancel();
+      setDragging(null);
+    },
+    onPointerCancel: () => {
+      cancel();
+      setDragging(null);
+    },
+    onClick: (e: React.MouseEvent) => {
+      // The press that ended a drag does not open the page.
+      if (moved.current) {
+        e.preventDefault();
+        moved.current = false;
+      }
+    },
+    onContextMenu: (e: React.MouseEvent) => {
+      if (press.current || dragging) e.preventDefault();
+    },
+  });
+  return { dragging, props };
+}
+
 /** Every menu page, in menu order. */
 export const NAV: Array<[string, Parameters<typeof t>[0]]> = NAV_GROUPS.flatMap((g) => g.items);
 
@@ -223,6 +318,9 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   }, []);
   const navItems = useNavItems();
   const [pinned] = usePins();
+  // Pinned tools in the user's own order (long press and drag to change it).
+  const pinnedItems = pinned.map((h) => navItems.find((n) => n.href === h)).filter((n): n is NonNullable<typeof n> => !!n);
+  const pinDrag = useDragOrder(pinnedItems.map((n) => n.href), (order) => setPinOrder([...order, ...pinned.filter((h) => !order.includes(h))]));
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
@@ -238,10 +336,10 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         <a className="nav-link" href="#/apps" aria-current={hash === "#/apps" ? "page" : undefined}>
           <span className="nav-ico" aria-hidden="true">▦</span> {t("allTools")}
         </a>
-        {navItems.filter((n) => pinned.includes(n.href)).length > 0 && (
-          <div className="nav-pins">
-            {navItems.filter((n) => pinned.includes(n.href)).map((n) => (
-              <a key={n.href} href={n.href} className="nav-link nav-pin" aria-current={hash === n.href ? "page" : undefined}>
+        {pinnedItems.length > 0 && (
+          <div className={`nav-pins${pinDrag.dragging ? " reordering" : ""}`} title={t("dragToReorder")}>
+            {pinnedItems.map((n) => (
+              <a key={n.href} href={n.href} className={`nav-link nav-pin${pinDrag.dragging === n.href ? " dragging" : ""}`} aria-current={hash === n.href ? "page" : undefined} {...pinDrag.props(n.href)}>
                 {NAV_ICONS[n.href] && <span className="nav-ico" aria-hidden="true"><ToolIcon href={n.href} fallback={NAV_ICONS[n.href]!} /></span>} {n.label}
               </a>
             ))}

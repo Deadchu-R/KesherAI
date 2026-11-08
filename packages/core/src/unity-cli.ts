@@ -102,6 +102,44 @@ function failure(run: CliRun): Error {
   return new Error((run.stderr || run.stdout).trim().split(/\r?\n/).slice(-3).join(" ") || `Unity's CLI stopped (code ${run.code}).`);
 }
 
+/** Editor versions anywhere in `unity editors` JSON (its shape changed between CLI versions). */
+export function editorVersions(stdout: string): string[] {
+  const out = new Set<string>();
+  const walk = (v: unknown, depth: number): void => {
+    if (depth > 6 || !v) return;
+    if (typeof v === "string") {
+      if (/^\d{4}\.\d+\.\d+[abfp]\d+$/.test(v)) out.add(v);
+      return;
+    }
+    if (Array.isArray(v)) return v.forEach((x) => walk(x, depth + 1));
+    if (typeof v === "object") for (const [k, x] of Object.entries(v)) if (k !== "errors" && k !== "warnings") walk(x, depth + 1);
+  };
+  try {
+    walk(JSON.parse(stdout), 0);
+  } catch {
+    for (const m of stdout.matchAll(/\b(\d{4}\.\d+\.\d+[abfp]\d+)\b/g)) out.add(m[1]!);
+  }
+  return [...out].sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
+}
+
+/** From a TEMPLATE_NOT_FOUND answer's list of templates the editor offers, the best one for 2D or 3D. */
+export function closestTemplate(stdout: string, kind: "2d" | "3d"): string | undefined {
+  let offered: string[] = [];
+  try {
+    const j = JSON.parse(stdout) as { data?: { offered?: unknown }; errors?: Array<{ data?: { offered?: unknown } }> };
+    const list = j.data?.offered ?? j.errors?.[0]?.data?.offered;
+    if (Array.isArray(list)) offered = list.map((x) => (typeof x === "string" ? x : String((x as { id?: unknown })?.id ?? ""))).filter((x) => /^com\.unity\.template\.[\w.-]+$/.test(x));
+  } catch {
+    offered = [...stdout.matchAll(/com\.unity\.template\.[\w.-]+/g)].map((m) => m[0]);
+  }
+  const prefs = kind === "2d" ? [/universal-2d/, /urp.*2d|2d.*urp/, /\.2d$/, /2d/] : [/urp-blank/, /universal|urp/, /\.3d$/, /3d/];
+  for (const p of prefs) {
+    const hit = offered.find((t) => p.test(t));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 /** Unity projects through the CLI. Same calls as the Unreal bridge, so the page is shared. */
 export class UnityCli {
   private statusCache?: { at: number; ready: boolean; project?: string };
@@ -245,13 +283,7 @@ export class UnityCli {
     const v = await this.run(["--version"], 10_000);
     if (v.code !== 0) return { cli: false, editors: [], ...(this.createJob ? { job: this.createJob } : {}) };
     const e = await this.run(["editors", "--installed", "--format", "json"], 30_000);
-    let editors: string[] = [];
-    try {
-      const items = (JSON.parse(e.stdout) as { data?: { items?: Array<{ version?: string }> } }).data?.items ?? [];
-      editors = [...new Set(items.map((i) => String(i.version ?? "")).filter((x) => /^[\w.]{3,30}$/.test(x)))];
-    } catch {
-      editors = [];
-    }
+    const editors = editorVersions(e.stdout);
     return { cli: true, version: v.stdout.trim().split(/\s+/).pop()?.slice(0, 40), editors, ...(this.createJob ? { job: this.createJob } : {}) };
   }
 
@@ -276,12 +308,18 @@ export class UnityCli {
     const path = join(parent, name);
     if (existsSync(path)) throw new Error(`There is already a folder named ${name} there.`);
     if (opts.editor && !/^[\w.]{3,30}$/.test(opts.editor)) throw new Error("That is not an editor version.");
-    const template = opts.template === "2d" ? "2d" : opts.template && /^[\w.-]{2,80}$/.test(opts.template) ? opts.template : "3d";
-    const args = ["projects", "create", name, "--path", parent, "--template", template, "--no-cloud", "--format", "json", ...(opts.editor ? ["--editor-version", opts.editor] : [])];
+    const kind = opts.template === "2d" ? "2d" : "3d";
+    // Full template ids (older CLIs know no "2d"/"3d" short names); when the editor offers others, the closest one is used.
+    const template = opts.template && /^com\.unity\.template\.[\w.-]{2,80}$/.test(opts.template) ? opts.template : kind === "2d" ? "com.unity.template.universal-2d" : "com.unity.template.urp-blank";
+    const args = (t: string) => ["projects", "create", name, "--path", parent, "--template", t, "--no-cloud", "--format", "json", ...(opts.editor ? ["--editor-version", opts.editor] : [])];
     this.createJob = { name, path, state: "running", startedAt: Date.now() };
     const job = this.createJob;
     void (async () => {
-      const r = await this.run(args, 20 * 60_000);
+      let r = await this.run(args(template), 20 * 60_000);
+      if (r.code !== 0) {
+        const other = closestTemplate(r.stdout, kind);
+        if (other && other !== template) r = await this.run(args(other), 20 * 60_000);
+      }
       if (r.code !== 0) {
         job.state = "failed";
         job.message = failure(r).message;
@@ -304,6 +342,14 @@ export class UnityCli {
       job.state = "done";
       if (opts.open) await this.openProject(made).catch(() => undefined);
     })();
+  }
+
+  /** Updates Unity's CLI to its newest version (`unity self-update`); the user pressed the button. */
+  async selfUpdate(): Promise<string> {
+    const r = await this.run(["self-update", "--format", "json"], 300_000);
+    if (r.code !== 0) throw failure(r);
+    this.cliCache = undefined;
+    return "Unity's CLI is up to date.";
   }
 
   /** Opens a project (the one shown, by default) in the Unity editor. */

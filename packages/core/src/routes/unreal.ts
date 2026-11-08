@@ -152,6 +152,15 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(400).send({ error: (err as Error).message });
       }
     });
+    /** Updates Unity's CLI (`unity self-update`). Only on this computer. */
+    app.post(`${base}/cli/update`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Update Unity's CLI on the computer that runs KesherAI." });
+      try {
+        return { message: await unity.selfUpdate() };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
     /** Opens the shown project in the Unity editor. Only on this computer. */
     app.post(`${base}/open-editor`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Open Unity on the computer that runs KesherAI." });

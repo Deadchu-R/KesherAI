@@ -227,8 +227,15 @@ export class Devices {
   private async syncOnce(): Promise<void> {
     if (!this.d.google.connected) return;
     try {
-      const file = (await this.d.google.readJson<{ devices: DeviceEntry[] }>("devices.json")) ?? { devices: [] };
-      let devices = file.devices.filter((x) => x.id !== this.id && Date.now() - Date.parse(x.updatedAt) < 30 * 86_400_000);
+      // Every devices.json KesherAI can see (each computer may have its own KesherAI folder); the newest entry of each computer wins.
+      const files = this.d.google.readAllJson ? await this.d.google.readAllJson<{ devices?: DeviceEntry[] }>("devices.json") : [(await this.d.google.readJson<{ devices: DeviceEntry[] }>("devices.json")) ?? { devices: [] }];
+      const newest = new Map<string, DeviceEntry>();
+      for (const f of files) for (const x of f?.devices ?? []) {
+        if (!x?.id || typeof x.updatedAt !== "string") continue;
+        const had = newest.get(x.id);
+        if (!had || Date.parse(x.updatedAt) > Date.parse(had.updatedAt)) newest.set(x.id, x);
+      }
+      let devices = [...newest.values()].filter((x) => x.id !== this.id && Date.now() - Date.parse(x.updatedAt) < 30 * 86_400_000);
       if (this.d.config.share && this.d.remote.token) {
         const tunnel = this.d.tunnelUrl() ?? (this.d.remote.anywhere ? await this.d.startTunnel().catch(() => undefined) : undefined);
         const https = await this.d.httpsUrl?.().catch(() => undefined);

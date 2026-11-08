@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { UnityCli, type CliRunner } from "./unity-cli.js";
+import { UnityCli, closestTemplate, editorVersions, type CliRunner } from "./unity-cli.js";
 
 test("Unity CLI without a project: info, and a new project made through the CLI", async () => {
   const root = await mkdtemp(join(tmpdir(), "kesher-unity-"));
@@ -36,5 +36,13 @@ test("Unity CLI without a project: info, and a new project made through the CLI"
   assert.deepEqual(config.projects, [join(root, "My Game")]);
   const create = calls.find((c) => c[0] === "projects")!;
   assert.ok(create.includes("--no-cloud"));
-  assert.deepEqual(create.slice(0, 7), ["projects", "create", "My Game", "--path", root, "--template", "2d"]);
+  assert.deepEqual(create.slice(0, 7), ["projects", "create", "My Game", "--path", root, "--template", "com.unity.template.universal-2d"]);
+});
+
+test("editor versions in any shape, and the closest template the editor offers", () => {
+  assert.deepEqual(editorVersions(JSON.stringify({ data: [{ version: "2022.3.10f1", path: "C:/x" }, { editor: { version: "6000.0.47f1" } }] })), ["6000.0.47f1", "2022.3.10f1"]);
+  assert.deepEqual(editorVersions("Unity 2021.3.5f1 (installed)"), ["2021.3.5f1"]);
+  const offered = JSON.stringify({ success: false, errors: [{ code: "TEMPLATE_NOT_FOUND", data: { offered: ["com.unity.template.2d", "com.unity.template.3d", "com.unity.template.universal"] } }] });
+  assert.equal(closestTemplate(offered, "2d"), "com.unity.template.2d");
+  assert.equal(closestTemplate(offered, "3d"), "com.unity.template.universal");
 });

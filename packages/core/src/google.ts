@@ -291,7 +291,8 @@ export class GoogleDrive {
   async folder(): Promise<string> {
     if (this.config.folderId) return this.config.folderId;
     const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='${FOLDER_MIME}' and trashed=false`);
-    const found = await this.call<{ files: Array<{ id: string }> }>(`${this.endpoints.api}/files?q=${q}&fields=files(id)`);
+    // The oldest one, so computers that sign in later all use the same folder.
+    const found = await this.call<{ files: Array<{ id: string }> }>(`${this.endpoints.api}/files?q=${q}&fields=files(id)&orderBy=createdTime`);
     const id =
       found.files[0]?.id ??
       (await this.call<{ id: string }>(`${this.endpoints.api}/files?fields=id`, {
@@ -318,6 +319,28 @@ export class GoogleDrive {
     if (!id) return undefined;
     this.fileIds.set(name, id);
     return this.call<T>(`${this.endpoints.api}/files/${id}?alt=media`);
+  }
+
+  /**
+   * Reads every file with this name that KesherAI can see in Drive, in any
+   * KesherAI folder. Two computers that signed in at the same time can each
+   * have made a folder of their own; reading them all lets them still find
+   * each other. (KesherAI only sees files it made itself: drive.file.)
+   *
+   * @param name - File name, e.g. `devices.json`.
+   */
+  async readAllJson<T>(name: string): Promise<T[]> {
+    const q = encodeURIComponent(`name='${name}' and trashed=false`);
+    const found = await this.call<{ files: Array<{ id: string }> }>(`${this.endpoints.api}/files?q=${q}&fields=files(id)&pageSize=20`);
+    const out: T[] = [];
+    for (const f of found.files) {
+      try {
+        out.push(await this.call<T>(`${this.endpoints.api}/files/${f.id}?alt=media`));
+      } catch {
+        // a file that cannot be read: skip it
+      }
+    }
+    return out;
   }
 
   /**
