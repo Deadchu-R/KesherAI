@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { HubBrowser } from "../HubBrowser";
+import { MaskEditor, type StartImage } from "../MaskEditor";
 import { pickModel } from "../ModelPicker";
 import { api, withToken, type Asset } from "../api";
 import { useModels } from "../useModels";
@@ -21,6 +22,7 @@ export function ImagesPage() {
   const [loras, setLoras] = useState<Array<{ name: string; size: number }>>([]);
   const [chosen, setChosen] = useState<Record<string, number>>({});
   const [findLoras, setFindLoras] = useState(false);
+  const [start, setStart] = useState<StartImage | undefined>();
   const loadLoras = () => void api<{ loras: Array<{ name: string; size: number }> }>("/api/loras").then((r) => setLoras(r.loras)).catch(() => undefined);
   useEffect(loadLoras, []);
   // The local engine reads LoRAs from the prompt, as <lora:name:weight>.
@@ -40,7 +42,7 @@ export function ImagesPage() {
     try {
       const { assets } = await api<{ assets: Asset[] }>("/api/images", {
         method: "POST",
-        body: { modelId: use, prompt: withLoras(prompt), width, height, steps },
+        body: { modelId: use, prompt: withLoras(prompt), steps, ...(start ? { width: start.width, height: start.height, initImage: start.image, strength: start.strength, ...(start.mask ? { mask: start.mask } : {}) } : { width, height }) },
       });
       setResults((prev) => [...assets, ...prev]);
     } catch (e) {
@@ -114,6 +116,7 @@ export function ImagesPage() {
           )}
           <span className="muted small">{t("lorasHint")}</span>
         </div>
+        <MaskEditor max={Math.max(width, height)} onChange={setStart} />
         <label>{t("width")}<input type="number" step={64} value={width} onChange={(e) => setWidth(Number(e.target.value))} /></label>
         <label>{t("height")}<input type="number" step={64} value={height} onChange={(e) => setHeight(Number(e.target.value))} /></label>
         <label>{t("steps")}<input type="number" value={steps} onChange={(e) => setSteps(Number(e.target.value))} /></label>

@@ -69,14 +69,17 @@ export async function generateRoutes(app: FastifyInstance, s: KesherServices): P
     });
 
     /** Generates images and stores them as assets. */
-    app.post("/api/images", async (req, reply) => {
+    app.post("/api/images", { bodyLimit: 60 * 1024 * 1024 }, async (req, reply) => {
       const parsed = ImageRequestSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
-      const { modelId, seed, ...rest } = parsed.data;
+      const { modelId, seed, initImage, mask, ...rest } = parsed.data;
+      const png = (b64?: string) => (b64 ? new Uint8Array(Buffer.from(b64.replace(/^data:[^,]+,/, ""), "base64")) : undefined);
       try {
         const { provider, providerModelId } = s.registry.resolve(modelId);
         if (!provider.generateImage) return reply.code(400).send({ error: `${modelId} is not an image model` });
-        const files = await provider.generateImage({ providerModelId, seed: seed ?? randomInt(2 ** 31), ...rest });
+        const init = png(initImage);
+        const maskPng = init ? png(mask) : undefined;
+        const files = await provider.generateImage({ providerModelId, seed: seed ?? randomInt(2 ** 31), ...rest, ...(init ? { initImage: init } : {}), ...(maskPng ? { mask: maskPng } : {}) });
         const assets = await Promise.all(
           files.map((f) => s.assets.save(f.data, f.mimeType, { sourceModelId: modelId, ...(f.meta ? { meta: f.meta } : {}) })),
         );

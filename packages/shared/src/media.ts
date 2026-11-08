@@ -11,6 +11,12 @@ export const ImageRequestSchema = z.object({
   steps: z.number().int().min(1).max(200).default(20),
   /** Omit for a random seed. */
   seed: z.number().int().nonnegative().optional(),
+  /** Start from this picture (PNG, base64): image to image. */
+  initImage: z.string().max(40_000_000).optional(),
+  /** With `initImage`: white where to paint, black where to keep (PNG, base64): inpainting. */
+  mask: z.string().max(40_000_000).optional(),
+  /** With `initImage`: how much to change it, 0–1 (default 0.75). */
+  strength: z.number().min(0).max(1).optional(),
 });
 
 /** Body of `POST /api/images`; see {@link ImageRequestSchema}. */

@@ -555,6 +555,11 @@ export class SdEngine {
     const video = family.video;
     const out = join(tmpdir(), `kesher-${video ? "video" : "image"}-${randomUUID()}.${video ? "webm" : "png"}`);
     const frames = video ? Math.max(5, Math.round(((req.frames ?? video.frames) - 1) / 4) * 4 + 1) : 0;
+    // Image to image, and inpainting with a mask.
+    const initFile = !video && req.initImage ? join(tmpdir(), `kesher-init-${randomUUID()}.png`) : undefined;
+    const maskFile = initFile && req.mask ? join(tmpdir(), `kesher-mask-${randomUUID()}.png`) : undefined;
+    if (initFile) await writeFile(initFile, req.initImage!);
+    if (maskFile) await writeFile(maskFile, req.mask!);
     const args = [
       ...(video ? ["-M", "vid_gen", "--video-frames", String(frames), "--fps", String(video.fps)] : []),
       family.modelFlag, modelFile,
@@ -567,6 +572,8 @@ export class SdEngine {
       "--cfg-scale", String(family.cfg),
       "-s", String(req.seed),
       "-o", out,
+      ...(initFile ? ["-i", initFile, "--strength", String(req.strength ?? 0.75)] : []),
+      ...(maskFile ? ["--mask", maskFile] : []),
       ...(/<lora:/i.test(req.prompt) && existsSync(this.loraDir) ? ["--lora-model-dir", this.loraDir] : []),
       ...(await this.memoryArgs(modelFile, family)),
     ];
@@ -602,6 +609,8 @@ export class SdEngine {
         if (code === 0) resolve(text);
         else reject(new Error(`The image engine failed (exit code ${code}):\n${text.split("\n").slice(-12).join("\n")}`));
       });
+    }).finally(() => {
+      for (const f of [initFile, maskFile]) if (f) void rm(f, { force: true });
     });
     const data = await readFile(out).catch(() => {
       throw new Error(`The image engine finished without ${video ? "a video" : "an image"}:\n${log.split("\n").slice(-12).join("\n")}`);

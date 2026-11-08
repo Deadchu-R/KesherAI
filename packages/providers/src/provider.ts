@@ -70,6 +70,12 @@ export interface ProviderImageRequest {
   height: number;
   steps: number;
   seed: number;
+  /** Start from this picture (PNG): image to image. */
+  initImage?: Uint8Array;
+  /** White where to paint, black where to keep (PNG): inpainting. */
+  mask?: Uint8Array;
+  /** How much to change the starting picture, 0–1. */
+  strength?: number;
 }
 
 /** A file a provider produced, before the core server stores it as an Asset. */

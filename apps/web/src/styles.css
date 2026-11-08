@@ -978,3 +978,4 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .transcript .who.s5 { color: #6fb3e0; }
 .photo-ask { position: sticky; top: 0; z-index: 5; margin: 8px; gap: 10px; }
 .pair-code { font-size: 40px; letter-spacing: 10px; text-align: center; font-weight: 700; margin: 6px 0; }
+.mask-canvas { width: 100%; max-width: 640px; border-radius: 10px; touch-action: none; cursor: crosshair; background: #0003; }
