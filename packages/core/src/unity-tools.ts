@@ -362,7 +362,29 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         // No scene in Build Settings (a new project): the open scene is added, so the build has something to build.
         await evalCs("var list = new System.Collections.Generic.List<UnityEditor.EditorBuildSettingsScene>(UnityEditor.EditorBuildSettings.scenes); bool any = false; foreach (var s in list) if (s.enabled) any = true; if (!any) { var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a != \"\") { list.Add(new UnityEditor.EditorBuildSettingsScene(a, true)); UnityEditor.EditorBuildSettings.scenes = list.ToArray(); return \"added \" + a; } } return \"ok\";").catch(() => "");
         let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, "--confirm", "true"], 3_700_000);
-        if (r.code !== 0 && !existsSync(out)) r = await unity.cliRaw(["build", p, "--target", target.id, "--output-path", out, "--timeout", "3600", "--format", "json"], 3_700_000);
+        // The Editor queues the build and answers at once ("status: queued"): wait for it with `build status`.
+        if (r.code === 0 && /queued|running|building|in.?progress/i.test(r.stdout)) {
+          for (let i = 0; i < 720; i++) {
+            await new Promise((res) => setTimeout(res, 5000));
+            const st = await unity.cliRaw(["command", "build", "status", ...at(), "--result-only"], 30_000).catch(() => undefined);
+            const text = st?.code === 0 ? st.stdout : "";
+            const busy = /queued|running|building|in.?progress/i.test(text);
+            if (text && !busy && /succeeded|success|completed|finished|done/i.test(text)) {
+              r = { code: 0, stdout: text, stderr: "" };
+              break;
+            }
+            if (text && !busy && /failed|cancel/i.test(text)) {
+              r = { code: 1, stdout: text, stderr: "" };
+              break;
+            }
+            // No readable status: the game file appearing and the Editor idle again is enough.
+            if (!text && existsSync(out) && i > 2) {
+              r = { code: 0, stdout: "The game file is there.", stderr: "" };
+              break;
+            }
+          }
+        }
+        if (r.code !== 0 && !existsSync(out) && !/buildId|build status/i.test(r.stdout)) r = await unity.cliRaw(["build", p, "--target", target.id, "--output-path", out, "--timeout", "3600", "--format", "json"], 3_700_000);
         const made = existsSync(out);
         if (r.code !== 0 || !made) return { output: `The build did NOT finish (exit ${r.code}). ${made ? "" : "No game file was made. "}Unity said:\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
         const size = (await stat(out)).isFile() ? `${Math.round((await stat(out)).size / 1024)} KB` : "a folder";
