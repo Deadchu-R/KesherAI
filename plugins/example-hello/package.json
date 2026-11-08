@@ -1,6 +1,6 @@
 {
   "name": "@kesher/plugin-example-hello",
-  "version": "0.5.54",
+  "version": "0.5.55",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",

@@ -59,11 +59,32 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string): Model
   return async (req, signal, onText) => {
     let first = 0;
     let chars = 0;
-    const r = await inner(req, signal, (t) => {
-      if (!first) first = Date.now();
-      chars += t.length;
-      onText(t);
-    });
+    const once = () =>
+      inner(req, signal, (t) => {
+        if (!first) first = Date.now();
+        chars += t.length;
+        onText(t);
+      });
+    let r;
+    try {
+      r = await once();
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+      // The model server dropped the connection (a local server restarting, or out of memory/context).
+      const dropped = /terminated|ECONNRESET|socket hang up|fetch failed|other side closed/i.test(msg);
+      if (!dropped || signal?.aborted) throw err;
+      // Little or nothing was written yet: try once more, after a moment.
+      if (chars < 200) {
+        await new Promise((res) => setTimeout(res, 3000));
+        try {
+          r = await once();
+        } catch (again) {
+          throw new Error(`The model server closed the connection twice (${(again as Error).message}). This often means the conversation is longer than the model's context: start a new chat, or load the model with a bigger context.`);
+        }
+      } else {
+        throw new Error(`The model server closed the connection while answering (${msg}). This often means the conversation is longer than the model's context: say "continue", start a new chat, or load the model with a bigger context.`);
+      }
+    }
     // Speed of writing (after the first word), so reading a long prompt does not count against it.
     const ms = first ? Date.now() - first : 0;
     if (chars > 200 && ms > 500) speedRecorder?.(modelId, Math.round(chars / 4), ms);
@@ -1095,7 +1116,14 @@ export class ConversationManager {
     // models without tool calling answer from current information (models with tools can also search themselves).
     let context: string | undefined;
     let note: string | undefined;
-    if (opts.web) {
+    // "[Unity project: Name — C:\path]" (Unity page → Open in chat): that project, already on the user's list, is opened
+    // to the chat's file tools too, so list_files/read_file see it like the unity_* tools do.
+    const unityHeader = /^\s*\[Unity project: [^\]\n]*? — ([^\]\n]+)\]/.exec(text);
+    if (unityHeader && this.deps.unity?.hasProject(unityHeader[1]!.trim())) await session.grant(unityHeader[1]!.trim()).catch(() => undefined);
+    // A message about a project the user attached ("[Unity project: …]"): no search first — it fills a local
+    // model's context with unrelated pages; the model can still search with its web_search tool when it needs to.
+    const aboutProject = /^\s*\[[^\]\n]{0,40}project:/i.test(text);
+    if (opts.web && !aboutProject) {
       // The words the user typed, without the "[Unity project: …]" header a project adds.
       const query = text.replace(/^\s*\[[^\]\n]{1,300}\]\s*/, "").replace(/\s+/g, " ").trim().slice(0, 200);
       try {

@@ -225,6 +225,12 @@ export class UnityCli {
     return this.path;
   }
 
+  /** Whether a folder is one of the Unity projects the user added (case-insensitive on Windows). */
+  hasProject(folder: string): boolean {
+    const norm = (x: string) => (process.platform === "win32" ? resolve(x).toLowerCase() : resolve(x));
+    return this.config.projects.some((p) => norm(p) === norm(folder));
+  }
+
   /** Whether the CLI was found the last time it was checked (checks again in the background once a minute). */
   cliKnown(): boolean {
     if (!this.cliCache || Date.now() - this.cliCache.at > 60_000) {
