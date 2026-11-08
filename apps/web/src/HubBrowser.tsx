@@ -3,6 +3,7 @@ import { BUILT_IN_CATEGORIES } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, t, type StringKey } from "./i18n";
 import { RatingBadge, type Estimate } from "./Estimate";
+import { DownloadBar } from "./Downloads";
 
 interface HubModel {
   repo: string;
@@ -214,6 +215,7 @@ function HubRow({ m, open, onToggle, label, onDownloaded, onlyRuns }: { m: HubMo
                 <button type="button" className={started.includes(f.path) ? "" : "primary"} disabled={started.includes(f.path)} onClick={() => void askDownload(f)}>
                   {started.includes(f.path) ? t("dl-queued") : t("download")}
                 </button>
+                <DownloadBar repo={m.repo} file={f.path} />
               </div>
             ))}
             {plan && <PlanBox plan={plan.data} onCancel={() => setPlan(null)} onConfirm={() => void download(plan.file)} />}

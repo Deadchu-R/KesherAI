@@ -13,6 +13,7 @@ export function UpdatesPage() {
     <div className="page">
       <h1>{t("updatesNav")}</h1>
       <Updates />
+      <PhoneAppUpdates />
     </div>
   );
 }
@@ -120,3 +121,60 @@ function Updates() {
   );
 }
 
+
+type PhoneUpdater = {
+  check(o: { url: string }): Promise<{ available: boolean; currentName: string; latestName: string; apkUrl?: string; changes?: Array<{ subject: string; he?: string }> }>;
+  install(o: { url: string; open?: boolean }): Promise<unknown>;
+  addListener(event: "progress", cb: (p: { percent: number }) => void): Promise<{ remove: () => void }>;
+};
+const PHONE_VERSION_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
+
+/** Inside the Android app: the phone app's own updates, without leaving the computer's page. */
+function PhoneAppUpdates() {
+  const up = (window as unknown as { Capacitor?: { Plugins?: { KesherUpdater?: PhoneUpdater } } }).Capacitor?.Plugins?.KesherUpdater;
+  const [info, setInfo] = useState<Awaited<ReturnType<PhoneUpdater["check"]>> | null>(null);
+  const [state, setState] = useState("");
+  const [pct, setPct] = useState(-1);
+  useEffect(() => {
+    if (up) void up.check({ url: PHONE_VERSION_URL }).then(setInfo, () => undefined);
+  }, []);
+  if (!up) return null;
+  const check = async () => {
+    setState(t("checking"));
+    try {
+      setInfo(await up.check({ url: PHONE_VERSION_URL }));
+      setState("");
+    } catch (e) {
+      setState((e as Error).message);
+    }
+  };
+  const install = async () => {
+    if (!info?.apkUrl) return;
+    setPct(0);
+    const sub = await up.addListener("progress", (p) => setPct(p.percent));
+    try {
+      await up.install({ url: info.apkUrl, open: true });
+      setState(t("phoneUpdateInstalling"));
+    } catch (e) {
+      const m = (e as Error).message;
+      setState(m === "needs-permission" ? t("phoneUpdatePermission") : m);
+    } finally {
+      sub.remove();
+      setPct(-1);
+    }
+  };
+  return (
+    <section className="card stack">
+      <h2>{t("phoneAppUpdates")}</h2>
+      <p className="mono">{info ? `v${info.currentName}` : ""}</p>
+      <div className="row">
+        <button type="button" onClick={() => void check()} disabled={pct >= 0}>{t("checkUpdates")}</button>
+        {info?.available && <button type="button" className="primary" disabled={pct >= 0} onClick={() => void install()}>{pct >= 0 ? `${pct}%` : t("installUpdate")}</button>}
+      </div>
+      {info && !info.available && <p className="pill good" style={{ alignSelf: "flex-start" }}>{t("upToDate")}</p>}
+      {info?.available && <p>{t("phoneUpdateAvailable", { v: info.latestName })}</p>}
+      {pct >= 0 && <div className="bar"><div style={{ width: `${pct}%` }} /></div>}
+      {state && <p className="muted">{state}</p>}
+    </section>
+  );
+}

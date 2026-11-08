@@ -982,3 +982,8 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .memory-list li { padding: 8px 10px; border-radius: 10px; background: var(--raised, #ffffff08); gap: 8px; }
 .update-dot { color: var(--accent, #7aa2ff); font-size: 12px; margin-inline-start: 6px; }
+.dl-pct { fill: var(--text, #eee); font-size: 12px; font-weight: 600; }
+.dl-inline { gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--raised, #ffffff08); width: 100%; box-sizing: border-box; }
+/* Press-and-slide menus: the item under the finger. */
+.slide-hot { background: var(--accent, #7aa2ff) !important; color: var(--accent-ink, #0b0b12) !important; border-radius: 10px; transform: scale(1.02); transition: transform .08s; }
+[data-slide-menu] { touch-action: none; }

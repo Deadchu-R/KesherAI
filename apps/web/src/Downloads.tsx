@@ -3,7 +3,7 @@ import { api, withToken } from "./api";
 import { getLocale, t, type StringKey } from "./i18n";
 
 /** One download, as the server reports it. */
-export interface Job { id: string; label: string; status: string; received: number; total?: number; speed: number; error?: string }
+export interface Job { id: string; label: string; url?: string; status: string; received: number; total?: number; speed: number; error?: string }
 
 /**
  * Downloads, shared by every screen: one live connection to the server,
@@ -119,11 +119,45 @@ export function DownloadsButton() {
         <svg width="52" height="52" viewBox="0 0 52 52" aria-hidden>
           <circle cx="26" cy="26" r={r} className="dl-track" />
           {active.length > 0 && <circle cx="26" cy="26" r={r} className="dl-ring" strokeDasharray={c} strokeDashoffset={c * (1 - progress)} />}
-          <path d="M26 15v15m-6-6 6 6 6-6M18 36h16" className="dl-icon" />
+          {active.length > 0 && totals.all > 0 ? (
+            <text x="26" y="30" textAnchor="middle" className="dl-pct">{Math.floor(progress * 100)}%</text>
+          ) : (
+            <path d="M26 15v15m-6-6 6 6 6-6M18 36h16" className="dl-icon" />
+          )}
         </svg>
         {active.length > 0 && <span className="dl-count">{active.length}</span>}
         {failed && active.length === 0 && <span className="dl-count bad">!</span>}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The download of one file, shown where it was started (a model's card):
+ * percent, size, speed, time left, pause and cancel.
+ *
+ * @param props.repo - The Hugging Face repo.
+ * @param props.file - The file's path in the repo (any file of the repo when left out).
+ */
+export function DownloadBar({ repo, file }: { repo: string; file?: string }) {
+  const all = useDownloads();
+  const mine = all.filter((j) => j.url?.includes(`/${repo}/resolve/`) && (!file || decodeURIComponent(j.url).endsWith(`/${file}`)));
+  const j = mine.find((x) => ACTIVE.has(x.status) || x.status === "paused") ?? mine.find((x) => x.status === "failed");
+  if (!j) return null;
+  const pct = j.total ? Math.floor((100 * j.received) / j.total) : 0;
+  return (
+    <div className="dl-inline stack">
+      <div className="row small">
+        <strong className="grow">{j.status === "failed" ? t("dl-failed") : j.status === "paused" ? t("dl-paused") : j.status === "queued" ? t("dl-queued") : `${pct}%`}</strong>
+        <span className="muted mono" dir="ltr">{gb(j.received)}{j.total ? ` / ${gb(j.total)}` : ""}{j.speed ? ` · ${(j.speed / 1024 ** 2).toFixed(1)} MB/s` : ""}</span>
+      </div>
+      {j.total ? <div className="bar"><div style={{ width: `${pct}%` }} /></div> : null}
+      <div className="row small">
+        <span className="muted grow">{j.status === "downloading" && j.total && j.speed > 0 ? t("timeLeft", { time: eta((j.total - j.received) / j.speed) }) : j.error ?? ""}</span>
+        {(j.status === "downloading" || j.status === "queued") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/pause`, { method: "POST" })}>{t("dlPause")}</button>}
+        {(j.status === "paused" || j.status === "failed") && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{j.status === "paused" ? t("dlResume") : t("retry")}</button>}
+        {j.status !== "failed" && <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>}
+      </div>
     </div>
   );
 }

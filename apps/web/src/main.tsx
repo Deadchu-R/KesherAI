@@ -8,6 +8,7 @@ import "@fontsource/rubik/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "./styles.css";
 import { startPhoneShare } from "./phone";
+import { installSlideMenus } from "./slideMenus";
 
 setLocale(getLocale());
 
@@ -25,6 +26,8 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 
 // Inside the Android app: things shared from other apps, and the home-screen widget.
 startPhoneShare();
+// Press a menu button, slide to an item, let go to choose it.
+installSlideMenus();
 
 // Inside the Android app: scanning another computer's QR code while connected
 // (kesherai://connect?server=…) switches to that computer.

@@ -6,7 +6,7 @@ import { getLocale, t } from "../i18n";
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
 import { desktop, toast } from "../library";
 import { HubBrowser } from "../HubBrowser";
-import { useDownloads } from "../Downloads";
+import { DownloadBar, useDownloads } from "../Downloads";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -120,6 +120,7 @@ function StartHere({ onChange }: { onChange: () => void }) {
             <button type="button" className={m.estimate.rating === "too-big" ? "" : "primary"} disabled={busy} onClick={() => void run(m.id)}>
               {m.downloaded ? t("run") : t("downloadAndRun")}
             </button>
+            {!m.downloaded && <DownloadBar repo={m.repo} />}
           </div>
         ))}
       </div>
@@ -550,6 +551,7 @@ function ImageStartHere() {
               ) : (
                 <button type="button" className="primary" onClick={() => void download(m)}>{t("download")}</button>
               )}
+              {!m.downloaded && <DownloadBar repo={m.repo} file={m.file} />}
             </div>
           );
         })}

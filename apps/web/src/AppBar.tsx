@@ -76,7 +76,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
     <header className="appbar">
       <div className="appbar-start">
         <div className="appbar-menu" ref={menuRef}>
-          <button type="button" className="bar-btn" aria-label={t("menu")} aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu(!menu)}>
+          <button type="button" data-slide-menu className="bar-btn" aria-label={t("menu")} aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu(!menu)}>
             {Icon.menu}
           </button>
           {menu && (
@@ -99,7 +99,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
             </div>
           )}
         </div>
-        <button type="button" className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={onSidebar}>
+        <button type="button" data-slide-menu className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={onSidebar}>
           {Icon.sidebar}
         </button>
         <button type="button" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
