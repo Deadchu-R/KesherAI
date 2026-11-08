@@ -53,6 +53,7 @@ import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
 import { memoryTools } from "./memory-tools.js";
 import { browserRoutes } from "./routes/browser.js";
+import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { pairRoutes } from "./routes/pair.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
@@ -551,6 +552,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await fileRoutes(app, services);
   await googleRoutes(app, services);
   await browserRoutes(app, services);
+  await comfyUiRoutes(app, services);
   await pairRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {

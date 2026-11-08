@@ -987,3 +987,9 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 /* Press-and-slide menus: the item under the finger. */
 .slide-hot { background: var(--accent, #7aa2ff) !important; color: var(--accent-ink, #0b0b12) !important; border-radius: 10px; transform: scale(1.02); transition: transform .08s; }
 [data-slide-menu] { touch-action: none; }
+
+/* Nodes: ComfyUI's editor fills the page, under a line for changing the flow in words. */
+.nodes-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.nodes-ask { padding: 8px 12px; gap: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.nodes-ask input { flex: 1 1 280px; min-width: 0; }
+.nodes-frame { flex: 1; width: 100%; border: 0; background: #202020; min-height: 0; }

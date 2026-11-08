@@ -31,6 +31,7 @@ import { PairPrompt } from "./PairPrompt";
 import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
 import { MemoryPage } from "./pages/MemoryPage";
+import { NodesPage } from "./pages/NodesPage";
 import { UpdatesPage } from "./pages/UpdatesPage";
 import { ModelsPage } from "./pages/Models";
 import { ConnectionsPage } from "./pages/Connections";
@@ -163,6 +164,7 @@ export function App() {
   else if (hash === "#/images") page = <ImagesPage />;
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
+  else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
   else if (hash === "#/connections") page = <ConnectionsPage />;
