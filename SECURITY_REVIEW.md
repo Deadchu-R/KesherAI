@@ -22,3 +22,10 @@
 - Graph tools: changes are `write` risk (asked in "ask" mode), the model's operations are checked by parseOps before the bridge applies them, one undo step in the editor.
 - Update all my computers: each computer is reached through its own token-protected address from My devices; updates come only from the project's GitHub releases (the same path as "Install update"); results are reported per computer.
 - Performance: the Unity CLI check runs at most once a minute in the background; tool lists are built per message as before.
+
+## Scan after 0.5.35 (0.5.36)
+
+- Updates: the installer is now checked against the sha512 the release publishes in its update feed (latest.yml / latest-mac.yml / latest-linux.yml) before it runs; a mismatch deletes the file and stops. The download must be exactly the release's size. Update logs are redacted (tokens, keys, Bearer values, passwords in addresses), stay on this computer (.kesher/logs, the last ten), and are shown only on the Updates page behind the usual access token.
+- analyze_chat reads only files inside the chat's folder or folders the user attached (resolveForTool), at most 20 MB, and never sends the chat anywhere.
+- + → Project: local only; it opens the chosen folder to the chat's file tools, as attaching files does. Switching the chat's Unity project from the phone works only among projects already added on the computer.
+- Tool search changes which tool descriptions the model reads, not what may run: every tool keeps its own risk and approvals.

@@ -1,5 +1,5 @@
 import { fetchRetrying } from "@kesher/downloads";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { fastDownload, redact } from "./fast-download.js";
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -93,7 +93,7 @@ export function installerFor(names: string[], platform = process.platform, arch 
 /** Updates KesherAI: a git checkout in place, or an installed copy from GitHub releases. */
 export class Updater {
   private packagedProgress: UpdateProgress = { running: false, log: [] };
-  private pending?: { url: string; name: string; size: number };
+  private pending?: { url: string; name: string; size: number; feedUrl?: string };
 
   /**
    * @param root - The repository folder (defaults to three levels above this file).
@@ -169,7 +169,10 @@ export class Updater {
     const newer = compareVersions(latestVersion, info.version) > 0;
     const file = installerFor(rel.assets.map((a) => a.name));
     const asset = rel.assets.find((a) => a.name === file);
-    this.pending = (newer || force) && asset ? { url: asset.browser_download_url, name: asset.name, size: asset.size } : undefined;
+    // The installer's sha512 is in the release's update feed (latest.yml): checked before it runs.
+    const feedName = process.platform === "darwin" ? "latest-mac.yml" : process.platform === "linux" ? "latest-linux.yml" : "latest.yml";
+    const feed = rel.assets.find((a) => a.name === feedName);
+    this.pending = (newer || force) && asset ? { url: asset.browser_download_url, name: asset.name, size: asset.size, ...(feed ? { feedUrl: feed.browser_download_url } : {}) } : undefined;
     // What's new: the release notes' bullet points, shown like the git copy's list of changes.
     const notes = (rel.body ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.replace(/^[-*] /, "").replace(/\*\*/g, "")).slice(0, 12);
     const newCommits = newer ? (notes.length ? notes : [rel.name ?? `v${latestVersion}`]).map((subject, i) => ({ hash: i === 0 ? `v${latestVersion}` : "", subject })) : [];
@@ -242,6 +245,18 @@ export class Updater {
             }
           },
         });
+        // Integrity: the file must match the sha512 the release published for it.
+        const feedUrl = p.feedUrl ?? `https://github.com/${installer.repo}/releases/latest/download/${process.platform === "darwin" ? "latest-mac.yml" : process.platform === "linux" ? "latest-linux.yml" : "latest.yml"}`;
+        const yml = await fetchRetrying(feedUrl, { headers: { "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) }).then((r) => (r.ok ? r.text() : ""), () => "");
+        const want = expectedSha512(yml, p.name);
+        if (want) {
+          const have = createHash("sha512").update(await readFile(file)).digest("base64");
+          if (have !== want) {
+            await rm(file, { force: true });
+            throw new Error("The downloaded installer does not match the release's fingerprint (sha512), so it was deleted and not run. Try again.");
+          }
+          line("Checked the installer's sha512 against the release: it matches");
+        } else line("The release has no sha512 for this file; installing without that check");
         line(`Downloaded in ${((Date.now() - t0) / 1000).toFixed(0)} s; starting the installer`);
         prog("Installing");
         await installer.install(file);
@@ -317,4 +332,24 @@ export class Updater {
     child.unref();
     return this.status();
   }
+}
+
+/**
+ * The sha512 (base64) the update feed (latest.yml) gives for one file.
+ *
+ * @param yml - The feed's text.
+ * @param name - The installer's file name.
+ */
+export function expectedSha512(yml: string, name: string): string | undefined {
+  const lines = yml.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const url = /^\s*-?\s*url:\s*['"]?([^'"\s]+)/.exec(lines[i]!)?.[1];
+    if (url !== name) continue;
+    for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
+      const sha = /^\s*sha512:\s*['"]?([A-Za-z0-9+/=]+)/.exec(lines[j]!)?.[1];
+      if (sha) return sha;
+    }
+  }
+  const path = /^path:\s*['"]?([^'"\s]+)/m.exec(yml)?.[1];
+  return path === name ? /^sha512:\s*['"]?([A-Za-z0-9+/=]+)/m.exec(yml)?.[1] : undefined;
 }

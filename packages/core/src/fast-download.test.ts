@@ -32,3 +32,10 @@ test("downloads in parts, resumes a part that drops, and checks the size", async
 test("logs keep no secrets", () => {
   assert.equal(redact("GET https://h/?token=abcdef123&x=1 Bearer abcdefghijkl kd_1234567890"), "GET https://h/?token=…&x=1 Bearer … kd_…");
 });
+
+test("the installer's sha512 is read from the release feed", async () => {
+  const { expectedSha512 } = await import("./updates.js");
+  const yml = "version: 0.5.33\nfiles:\n  - url: KesherAI-Setup-0.5.33.exe\n    sha512: QDZP72k1==\n    size: 105217283\npath: KesherAI-Setup-0.5.33.exe\nsha512: QDZP72k1==\n";
+  assert.equal(expectedSha512(yml, "KesherAI-Setup-0.5.33.exe"), "QDZP72k1==");
+  assert.equal(expectedSha512(yml, "other.exe"), undefined);
+});
