@@ -14,7 +14,7 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.0";
+        const string Version = "0.2.1";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 

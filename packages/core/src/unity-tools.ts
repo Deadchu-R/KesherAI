@@ -38,16 +38,24 @@ export const UNITY_TOOL_NAMES = [
   "unity_command",
   "unity_script_eval",
   "unity_screenshot",
+  "unity_build",
 ] as const;
 
 /** The workflow, for the model (Unity's own guidance for agents, in short). */
 export const UNITY_NOTE =
-  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look. 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. At the end, list exactly what changed (files and scene objects).";
+  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look. 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. When the user asks for a game they can run, unity_build (after saving the scene). At the end, list exactly what changed (files and scene objects).";
 
 const MAX_TEXT = 300_000;
 const CODE_EXT = /\.(cs|shader|hlsl|cginc|compute|uss|uxml|tss|asmdef|asmref)$/i;
 const READ_ROOTS = ["Assets", "Packages", "ProjectSettings"];
 const TYPE = /^[A-Za-z_][A-Za-z0-9_.]{0,120}$/;
+const BUILD_TARGETS: Record<string, { id: string; folder: string; ext: string }> = {
+  windows: { id: "StandaloneWindows64", folder: "Windows", ext: ".exe" },
+  mac: { id: "StandaloneOSX", folder: "Mac", ext: ".app" },
+  linux: { id: "StandaloneLinux64", folder: "Linux", ext: ".x86_64" },
+  webgl: { id: "WebGL", folder: "WebGL", ext: "/" },
+  android: { id: "Android", folder: "Android", ext: ".apk" },
+};
 const PRIMITIVES = ["Cube", "Sphere", "Capsule", "Cylinder", "Plane", "Quad"] as const;
 
 /** A C# string literal for any text (quotes and backslashes escaped, control characters dropped). */
@@ -120,7 +128,7 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
         const p = project();
         const pk = p ? unity.packagesOf(p) : undefined;
         const missing = pk && !pk.pipeline ? "\nThe project does NOT have Unity's Pipeline package, so no Editor commands work yet: tell the user to press 🕹 → Install now in the message box (or Create → Unity → Add to a project)." : "";
-        return { output: cut(`Project: ${p ?? "(none chosen)"}${missing}\n${await unity.cli(["status", ...at(), "--format", "json"], 20_000).catch((e: Error) => e.message)}`) };
+        return { output: cut(`Project: ${p ?? "(none chosen)"}${missing}\n${await unity.cli(["status", ...at(), "--json"], 20_000).catch((e: Error) => e.message)}`) };
       },
     },
     {
@@ -322,6 +330,32 @@ ${ADD_COMPONENTS(comps)}
 UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(go.scene);
 return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scene save).";`;
         return { output: await evalCs(code) };
+      },
+    },
+    {
+      risk: "exec",
+      spec: {
+        name: "unity_build",
+        description: "Build the Unity project into a game the user can run (Unity's CLI `unity build`; through the open Editor when it is open). Save the scene first. Only when the user asks for a build. The result goes to <project>/Builds/<target>/.",
+        inputSchema: {
+          type: "object",
+          properties: { target: { type: "string", enum: ["windows", "mac", "linux", "webgl", "android"], description: "Default windows." }, name: { type: "string", description: "The game's file name (default: the project's name)." } },
+        },
+      },
+      preview: async (input) => `unity build ${project() ?? "(no project)"} --target ${String(input.target ?? "windows")}`,
+      run: async (input) => {
+        need();
+        const p = project()!;
+        const target = BUILD_TARGETS[String(input.target ?? "windows")] ?? BUILD_TARGETS.windows!;
+        const name = (String(input.name ?? "").replace(/[^\w -]/g, "").trim() || p.split(/[\\/]/).pop() || "Game").slice(0, 60);
+        const folder = join(p, "Builds", target.folder);
+        await mkdir(folder, { recursive: true });
+        const out = target.ext === "/" ? folder : join(folder, `${name}${target.ext}`);
+        const r = await unity.cliRaw(["build", p, "--target", target.id, "--output-path", out, "--timeout", "3600", "--format", "json"], 3_700_000);
+        const made = existsSync(out);
+        if (r.code !== 0 || !made) return { output: `The build did NOT finish (exit ${r.code}). ${made ? "" : "No game file was made. "}Unity said:\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
+        const size = (await stat(out)).isFile() ? `${Math.round((await stat(out)).size / 1024)} KB` : "a folder";
+        return { output: `Built ${target.id}: ${out} (${size}). The user can run it from there.\n${cut(r.stdout.trim())}` };
       },
     },
     {

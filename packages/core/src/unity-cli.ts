@@ -84,7 +84,7 @@ const realRunner: CliRunner = (args, timeoutMs) => {
   const started = Date.now();
   const at = new Date().toLocaleTimeString();
   // Quick checks (version, editor list) are not shown: the page asks them every few seconds.
-  const quiet = args[0] === "--version" || (args[0] === "editors" && args[1] === "--installed");
+  const quiet = args[0] === "--version" || (args[0] === "editors" && args[1] === "--installed") || (args[0] === "status" && args.includes("--format"));
   if (!quiet) logLine(`\n[${at}] > unity ${shown(args)}   (running…)`);
   return realRun(args, timeoutMs).then((r) => {
     if (quiet) return r;
