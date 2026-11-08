@@ -192,6 +192,8 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 18. Browser extension without the Chrome store: a package from Settings, and the free Edge and Firefox add-on stores ✅ (store upload: Roee)
 18a. Everything modular: a plugin can be a whole separate app inside KesherAI (its own pages and windows, its own files), that asks the local models for what it needs (chat, images, speech, vision) through a stable plugin API, and installs straight from the plugin store with one click ✅
 18b. The first official plugin, as the example for others: a Photoshop-like image editor (layers, brushes, selection, filters), with the local models inside it (generate into a layer, fill a selection, remove background, upscale) ✅
+18c. The image editor's interface after Photoshop and Affinity: a menu bar, a context bar for the chosen tool, docked panels with tabs (Layers, Adjustments, History, Color, AI), and personas like Affinity's ⬜
+18d. Working with Affinity: open the picture in Affinity in one click and bring the saved file back as a layer ⬜
 
 **4. The rest**
 
