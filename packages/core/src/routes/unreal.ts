@@ -44,18 +44,19 @@ export async function unityRoutes(app: FastifyInstance, s: KesherServices): Prom
  */
 async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unreal" | "unity"): Promise<void> {
   const b = kind === "unreal" ? s.unreal : s.unity;
+  const unreal = s.unreal;
   const base = `/api/${kind}`;
   const name = kind === "unreal" ? "The Unreal Editor" : "The Unity Editor";
 
-  /** The editor connects here; only from this computer. */
-  app.get(`${base}/ws`, {
+  /** The Unreal editor connects here; only from this computer. (Unity goes through its CLI.) */
+  if (kind === "unreal") app.get(`${base}/ws`, {
     websocket: true,
     preHandler: async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: `${name} connects from this computer only.` });
     },
-  }, (socket) => b.attach(socket as unknown as WebSocket));
+  }, (socket) => unreal.attach(socket as unknown as WebSocket));
 
-  app.get(base, async () => ({ ...(await b.status()), latestBridge: BRIDGE_VERSION, download: kind === "unreal" ? BRIDGE_DOWNLOAD : UNITY_PACKAGE_URL }));
+  app.get(base, async () => ({ ...(await b.status()), latestBridge: kind === "unreal" ? BRIDGE_VERSION : "0.2.0", download: kind === "unreal" ? BRIDGE_DOWNLOAD : UNITY_PACKAGE_URL }));
 
   app.get(`${base}/blueprints`, async () => b.list());
 
@@ -86,12 +87,12 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       const text = (await turn({ messages: kind === "unreal" ? blueprintPrompt(bp, graphName, request) : unityPrompt(bp, request), tools: [] }, AbortSignal.timeout(300_000), () => undefined)).text;
       const { ops, note } = parseOps(text);
       if (!ops.length) return { ops, note: note || "Nothing to change.", applied: false };
-      if (!b.connected) {
+      if (kind === "unreal" && !b.connected) {
         const project = (await b.project()) ?? "Project";
         const queued = await b.enqueue({ project, path, graph: graphName, ops, request });
         return { ops, note, applied: false, queued: queued.id };
       }
-      const result = await b.request<{ results: Array<{ ok: boolean; error?: string }>; failed: number }>("apply", { path, graph: graphName, ops });
+      const result = await b.request<{ results: Array<{ ok: boolean; error?: string }>; failed: number }>("apply", { path, graph: graphName, ops: kind === "unity" ? JSON.stringify(ops) : ops }, kind === "unity" ? 120_000 : 30_000);
       const compile = await b.request<{ ok: boolean; messages: Array<{ severity: string; text: string }> }>("compile", { path }).catch(() => undefined);
       return { ops, note, applied: true, result, compile };
     } catch (err) {
@@ -104,7 +105,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     const { path, graph = "", ops } = req.body ?? {};
     if (!path || !Array.isArray(ops)) return reply.code(400).send({ error: "Send the Blueprint and the operations." });
     try {
-      return await b.request("apply", { path, graph, ops });
+      return await b.request("apply", { path, graph, ops: kind === "unity" ? JSON.stringify(ops) : ops });
     } catch (err) {
       return reply.code(502).send({ error: (err as Error).message });
     }
@@ -125,12 +126,26 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   app.delete<{ Params: { id: string } }>(`${base}/queue/:id`, async (req) => ({ removed: await b.unqueue(req.params.id) }));
 
   if (kind === "unity") {
-    /** Copies the package into a Unity project's Packages folder (no git or compiler needed). Only on this computer. */
+    const unity = s.unity;
+    /**
+     * Prepares a Unity project (Unity 6+): copies the KesherAI Bridge package into
+     * Packages/ and adds Unity's Pipeline package with its CLI. Only on this computer.
+     */
     app.post<{ Body: { project?: string } }>(`${base}/install`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Add the package on the computer that runs KesherAI." });
       if (!req.body?.project) return reply.code(400).send({ error: "Choose the project folder." });
       try {
-        return { message: await installUnityPackage(req.body.project) };
+        return { message: await unity.install(req.body.project, installUnityPackage) };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+    /** Adds a project folder, or picks which one the page shows. Only on this computer. */
+    app.put<{ Body: { project?: string } }>(`${base}/project`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Choose the project on the computer that runs KesherAI." });
+      try {
+        await unity.addProject(String(req.body?.project ?? ""));
+        return unity.status();
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
       }

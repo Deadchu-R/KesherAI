@@ -12,6 +12,7 @@ import type { DriveSync } from "./drive-sync.js";
 import type { OneDrive } from "./onedrive.js";
 import type { GpuGuard } from "./gpu-guard.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
+import type { UnityCli } from "./unity-cli.js";
 import type { Copilot } from "./copilot.js";
 import type { BusinessPolicy } from "./business.js";
 import type { Tunnel } from "./tunnel.js";
@@ -71,8 +72,8 @@ export interface KesherServices {
   guard: GpuGuard;
   /** The Unreal Editor's connection (KesherAI Bridge plugin) and saved Blueprints. */
   unreal: UnrealBridge;
-  /** The Unity Editor's connection (KesherAI Bridge package) and saved Script Graphs. */
-  unity: UnrealBridge;
+  /** Unity projects through Unity's CLI (KesherAI Bridge package). */
+  unity: UnityCli;
   /** Microsoft 365 Copilot sign-in. */
   copilot: Copilot;
   /** Business mode in force (an administrator's policy.json, else Settings). */

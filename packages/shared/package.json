@@ -1,6 +1,6 @@
 {
   "name": "@kesher/shared",
-  "version": "0.4.90",
+  "version": "0.4.91",
   "description": "Types, zod schemas, branding and feature flags shared by every KesherAI package.",
   "license": "Apache-2.0",
   "type": "module",

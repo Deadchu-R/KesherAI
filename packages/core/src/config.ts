@@ -103,6 +103,13 @@ export const KesherConfigSchema = z.object({
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
     .default({}),
+  /** Unity projects the user added (worked on through Unity's CLI). */
+  unity: z
+    .object({
+      projects: z.array(z.string()).default([]),
+      active: z.string().optional(),
+    })
+    .default({}),
   /** The first-run welcome: whether it was finished, and the role the user picked (shapes suggestions). */
   onboarding: z
     .object({

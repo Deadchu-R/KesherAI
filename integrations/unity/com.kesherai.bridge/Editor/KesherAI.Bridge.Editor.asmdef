@@ -4,15 +4,27 @@
   "references": [
     "Unity.VisualScripting.Core",
     "Unity.VisualScripting.Flow",
+    "Unity.VisualScripting.State",
     "Unity.VisualScripting.Core.Editor",
-    "Unity.VisualScripting.Flow.Editor"
+    "Unity.VisualScripting.Flow.Editor",
+    "Unity.Pipeline"
   ],
-  "includePlatforms": ["Editor"],
+  "includePlatforms": [
+    "Editor"
+  ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,
   "autoReferenced": false,
-  "defineConstraints": [],
-  "versionDefines": [],
+  "defineConstraints": [
+    "KESHER_PIPELINE"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.pipeline",
+      "expression": "0.0.0",
+      "define": "KESHER_PIPELINE"
+    }
+  ],
   "noEngineReferences": false
 }

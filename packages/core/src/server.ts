@@ -50,6 +50,7 @@ import { GpuGuard } from "./gpu-guard.js";
 import { ComfyUIProvider } from "@kesher/providers";
 import { flowState, readyFlows, setupFlow, withCheckpoints } from "./comfy-flows.js";
 import { UnrealBridge } from "./unreal-bridge.js";
+import { UnityCli } from "./unity-cli.js";
 import { Copilot, copilotProvider } from "./copilot.js";
 import { managedPolicy, policyCheck } from "./business.js";
 import { copilotRoutes } from "./routes/copilot.js";
@@ -555,7 +556,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     businessManaged: () => !!managedPolicy(paths.root),
     applyBusiness,
     unreal: new UnrealBridge(join(paths.root, "unreal")),
-    unity: new UnrealBridge(join(paths.root, "unity"), "Unity Editor"),
+    unity: new UnityCli(config.unity, persist),
     sd,
     tunnel,
     devices,

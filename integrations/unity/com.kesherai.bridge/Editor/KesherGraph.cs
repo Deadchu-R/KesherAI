@@ -6,35 +6,180 @@ using System.Linq;
 using System.Reflection;
 using Unity.VisualScripting;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace KesherAI.Bridge
 {
     /// <summary>
-    /// What KesherAI can do with Visual Scripting graphs (Script Graph assets),
-    /// as JSON in and JSON out — the same shape as the Unreal bridge:
-    /// list, graph, apply (one undo step), save, open.
-    /// Nodes are named by their GUID; a node added in the same apply is named
-    /// by the "ref" given to it ("$1", "$log"…). Ports are named by their key
-    /// ("enter", "exit", "trigger", "ifTrue", "ifFalse", "condition", "message"…).
+    /// What KesherAI can do with Visual Scripting, as JSON in and JSON out (the
+    /// same shape as the Unreal bridge): list, graph, apply (one undo step),
+    /// check, save, open.
+    ///
+    /// A "path" names where a graph lives:
+    /// - <c>Assets/Door.asset</c> — a Script Graph or State Graph asset;
+    /// - <c>Assets/Scenes/Main.unity#Player/Body@0</c> — a graph kept inside a
+    ///   Script Machine or State Machine on a GameObject in a scene (the number
+    ///   picks the machine when the object has several);
+    /// - <c>Assets/Door.prefab#Door/Hinge@0</c> — the same inside a prefab.
+    ///
+    /// A State Graph shows as several tabs: "States" (states and transitions),
+    /// then the flow graph inside each Flow State and each transition, and the
+    /// states of each Super State, so every part can be read and changed.
+    ///
+    /// Nodes are named by their GUID; a node added in the same apply is named by
+    /// the "ref" given to it. Ports are named by their key ("enter", "exit",
+    /// "trigger", "ifTrue", "condition", "message"…).
     /// </summary>
     internal static class KesherGraph
     {
         static Dictionary<string, object> Error(string message) => new Dictionary<string, object> { ["error"] = message };
 
-        static ScriptGraphAsset Load(string path) => AssetDatabase.LoadAssetAtPath<ScriptGraphAsset>(path);
+        // --- where a graph lives -----------------------------------------------
+
+        /// <summary>A loaded graph and how to record undo, mark it changed and save it.</summary>
+        sealed class Target
+        {
+            public IGraph Root;
+            public UnityEngine.Object Owner;
+            public string Name;
+            public Action Save = () => { };
+            public Action Done = () => { };
+        }
+
+        static Target Load(string path)
+        {
+            var hash = path.IndexOf('#');
+            var file = hash < 0 ? path : path.Substring(0, hash);
+            if (hash < 0)
+            {
+                var asset = AssetDatabase.LoadMainAssetAtPath(file);
+                var script = asset as ScriptGraphAsset;
+                if (script != null) return new Target { Root = script.graph, Owner = script, Name = script.name, Save = () => { EditorUtility.SetDirty(script); AssetDatabase.SaveAssetIfDirty(script); } };
+                var state = asset as StateGraphAsset;
+                if (state != null) return new Target { Root = state.graph, Owner = state, Name = state.name, Save = () => { EditorUtility.SetDirty(state); AssetDatabase.SaveAssetIfDirty(state); } };
+                return null;
+            }
+            var rest = path.Substring(hash + 1);
+            var at = rest.LastIndexOf('@');
+            var goPath = at < 0 ? rest : rest.Substring(0, at);
+            int index;
+            if (at < 0 || !int.TryParse(rest.Substring(at + 1), out index)) index = 0;
+
+            if (file.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                var contents = PrefabUtility.LoadPrefabContents(file);
+                var go = Find(contents, goPath);
+                var machine = go != null ? Machines(go).ElementAtOrDefault(index) : null;
+                if (machine == null) { PrefabUtility.UnloadPrefabContents(contents); return null; }
+                return new Target
+                {
+                    Root = machine.nest.graph,
+                    Owner = (UnityEngine.Object)machine,
+                    Name = go.name,
+                    Save = () => PrefabUtility.SaveAsPrefabAsset(contents, file),
+                    Done = () => PrefabUtility.UnloadPrefabContents(contents),
+                };
+            }
+
+            var scene = SceneManager.GetSceneByPath(file);
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                // In a batch run (Unity closed) open it; in the editor open it beside what is open.
+                scene = EditorSceneManager.OpenScene(file, Application.isBatchMode ? OpenSceneMode.Single : OpenSceneMode.Additive);
+            }
+            GameObject target = null;
+            var first = goPath.Split('/')[0];
+            foreach (var r in scene.GetRootGameObjects())
+            {
+                if (r.name != first) continue;
+                target = goPath.Contains("/") ? Find(r, goPath.Substring(first.Length + 1)) : r;
+                if (target != null) break;
+            }
+            var m = target != null ? Machines(target).ElementAtOrDefault(index) : null;
+            if (m == null) return null;
+            var s = scene;
+            return new Target
+            {
+                Root = m.nest.graph,
+                Owner = (UnityEngine.Object)m,
+                Name = target.name,
+                Save = () => { EditorSceneManager.MarkSceneDirty(s); EditorSceneManager.SaveScene(s); },
+            };
+        }
+
+        static GameObject Find(GameObject root, string path)
+        {
+            if (string.IsNullOrEmpty(path) || path == root.name) return root;
+            var t = root.transform.Find(path.StartsWith(root.name + "/", StringComparison.Ordinal) ? path.Substring(root.name.Length + 1) : path);
+            return t != null ? t.gameObject : null;
+        }
+
+        /// <summary>The object's Script and State Machines that keep their graph inside them (not a shared asset).</summary>
+        static List<IMachine> Machines(GameObject go)
+        {
+            var list = new List<IMachine>();
+            foreach (var c in go.GetComponents<MonoBehaviour>())
+            {
+                var m = c as IMachine;
+                if (m != null && m.nest != null && m.nest.source == GraphSource.Embed && m.nest.embed != null) list.Add(m);
+            }
+            return list;
+        }
+
+        static string GoPath(Transform t) => t.parent == null ? t.name : GoPath(t.parent) + "/" + t.name;
+
+        // --- list ----------------------------------------------------------------
 
         public static Dictionary<string, object> List()
         {
             var items = new List<object>();
             foreach (var guid in AssetDatabase.FindAssets("t:ScriptGraphAsset"))
             {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!path.StartsWith("Assets/", StringComparison.Ordinal)) continue;
-                items.Add(new Dictionary<string, object> { ["path"] = path, ["name"] = System.IO.Path.GetFileNameWithoutExtension(path), ["parent"] = "Script Graph" });
+                var p = AssetDatabase.GUIDToAssetPath(guid);
+                if (p.StartsWith("Assets/", StringComparison.Ordinal)) items.Add(Item(p, System.IO.Path.GetFileNameWithoutExtension(p), "Script Graph"));
+            }
+            foreach (var guid in AssetDatabase.FindAssets("t:StateGraphAsset"))
+            {
+                var p = AssetDatabase.GUIDToAssetPath(guid);
+                if (p.StartsWith("Assets/", StringComparison.Ordinal)) items.Add(Item(p, System.IO.Path.GetFileNameWithoutExtension(p), "State Graph"));
+            }
+            // Graphs inside prefabs.
+            foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { "Assets" }))
+            {
+                var p = AssetDatabase.GUIDToAssetPath(guid);
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(p);
+                if (prefab == null) continue;
+                foreach (var t in prefab.GetComponentsInChildren<Transform>(true)) AddMachines(items, p, t);
+            }
+            // Graphs inside the scenes that are open.
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (!scene.isLoaded || string.IsNullOrEmpty(scene.path)) continue;
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    foreach (var t in root.GetComponentsInChildren<Transform>(true)) AddMachines(items, scene.path, t);
+                }
             }
             return new Dictionary<string, object> { ["blueprints"] = items };
         }
+
+        static Dictionary<string, object> Item(string path, string name, string kind) => new Dictionary<string, object> { ["path"] = path, ["name"] = name, ["parent"] = kind };
+
+        static void AddMachines(List<object> items, string file, Transform t)
+        {
+            var machines = Machines(t.gameObject);
+            for (var k = 0; k < machines.Count; k++)
+            {
+                var kind = machines[k] is StateMachine ? "State Machine" : "Script Machine";
+                var where = System.IO.Path.GetFileNameWithoutExtension(file);
+                items.Add(Item(file + "#" + GoPath(t) + "@" + k, t.name + (machines.Count > 1 ? " #" + (k + 1) : "") + " (" + where + ")", kind));
+            }
+        }
+
+        // --- read ----------------------------------------------------------------
 
         static string Title(IUnit unit)
         {
@@ -52,22 +197,28 @@ namespace KesherAI.Bridge
             return name.EndsWith("Unit", StringComparison.Ordinal) ? name.Substring(0, name.Length - 4) : name;
         }
 
+        static string StateTitle(IState s)
+        {
+            var nester = s as INesterState;
+            var t = nester != null && nester.nest.graph != null ? nester.nest.graph.title : null;
+            return !string.IsNullOrEmpty(t) ? t : s is AnyState ? "Any State" : s.GetType().Name;
+        }
+
         static string TypeName(Type t) => t == null ? "" : t == typeof(object) ? "object" : t.Name;
 
         static Dictionary<string, object> PortJson(IUnitPort port, string dir, string type, IUnit unit)
         {
             var p = new Dictionary<string, object> { ["name"] = port.key, ["dir"] = dir, ["type"] = type };
-            if (port is ValueInput vi && !vi.hasValidConnection && unit.defaultValues.TryGetValue(vi.key, out var def) && def != null) p["default"] = def.ToString();
+            var vi = port as ValueInput;
+            object def;
+            if (vi != null && !vi.hasValidConnection && unit.defaultValues.TryGetValue(vi.key, out def) && def != null) p["default"] = def.ToString();
             var links = port.connectedPorts.Select(c => (object)(c.unit.guid.ToString() + ":" + c.key)).ToList();
             if (links.Count > 0) p["links"] = links;
             return p;
         }
 
-        public static Dictionary<string, object> Read(string path)
+        static List<object> FlowNodes(FlowGraph graph)
         {
-            var asset = Load(path);
-            if (asset == null) return Error("No Script Graph at " + path);
-            var graph = asset.graph;
             var nodes = new List<object>();
             foreach (var unit in graph.units)
             {
@@ -76,34 +227,88 @@ namespace KesherAI.Bridge
                 foreach (var p in unit.valueInputs) pins.Add(PortJson(p, "in", TypeName(p.type), unit));
                 foreach (var p in unit.controlOutputs) pins.Add(PortJson(p, "out", "exec", unit));
                 foreach (var p in unit.valueOutputs) pins.Add(PortJson(p, "out", TypeName(p.type), unit));
-                var n = new Dictionary<string, object>
-                {
-                    ["id"] = unit.guid.ToString(),
-                    ["title"] = Title(unit),
-                    ["class"] = unit.GetType().Name,
-                    ["x"] = (double)unit.position.x,
-                    ["y"] = (double)unit.position.y,
-                    ["pins"] = pins,
-                };
-                if (unit is MemberUnit m && m.member != null) n["function"] = (m.member.targetType != null ? m.member.targetType.FullName : "") + ":" + m.member.name;
+                var n = new Dictionary<string, object> { ["id"] = unit.guid.ToString(), ["title"] = Title(unit), ["class"] = unit.GetType().Name, ["x"] = (double)unit.position.x, ["y"] = (double)unit.position.y, ["pins"] = pins };
+                var m = unit as MemberUnit;
+                if (m != null && m.member != null) n["function"] = (m.member.targetType != null ? m.member.targetType.FullName : "") + ":" + m.member.name;
                 nodes.Add(n);
             }
-            var vars = new List<object>();
-            foreach (var v in graph.variables)
-            {
-                vars.Add(new Dictionary<string, object> { ["name"] = v.name, ["type"] = v.value != null ? v.value.GetType().Name : "object" });
-            }
-            return new Dictionary<string, object>
-            {
-                ["path"] = path,
-                ["name"] = asset.name,
-                ["parent"] = "Script Graph",
-                ["variables"] = vars,
-                ["graphs"] = new List<object> { new Dictionary<string, object> { ["name"] = asset.name, ["kind"] = "flow", ["nodes"] = nodes } },
-            };
+            return nodes;
         }
 
-        /// <summary>A Visual Scripting unit type by its short name ("Start", "Update", "If", "Sequence", "OnTriggerEnter"…).</summary>
+        static List<object> StateNodes(StateGraph graph)
+        {
+            var nodes = new List<object>();
+            foreach (var s in graph.states)
+            {
+                var pins = new List<object>
+                {
+                    new Dictionary<string, object> { ["name"] = "in", ["dir"] = "in", ["type"] = "exec", ["links"] = s.incomingTransitions.Select(t => (object)(t.source.guid + ":out")).ToList() },
+                    new Dictionary<string, object> { ["name"] = "start", ["dir"] = "in", ["type"] = "bool", ["default"] = s.isStart ? "true" : "false" },
+                    new Dictionary<string, object> { ["name"] = "out", ["dir"] = "out", ["type"] = "exec", ["links"] = s.outgoingTransitions.Select(t => (object)(t.destination.guid + ":in")).ToList() },
+                };
+                nodes.Add(new Dictionary<string, object> { ["id"] = s.guid.ToString(), ["title"] = StateTitle(s) + (s.isStart ? " ▶" : ""), ["class"] = s.GetType().Name, ["x"] = (double)s.position.x, ["y"] = (double)s.position.y, ["pins"] = pins });
+            }
+            return nodes;
+        }
+
+        /// <summary>Every graph in the tree, as tabs (name, graph).</summary>
+        static void Tabs(IGraph graph, string prefix, List<KeyValuePair<string, IGraph>> tabs)
+        {
+            var flow = graph as FlowGraph;
+            if (flow != null)
+            {
+                tabs.Add(new KeyValuePair<string, IGraph>(prefix == "" ? "Flow" : prefix, flow));
+                return;
+            }
+            var states = graph as StateGraph;
+            if (states == null) return;
+            tabs.Add(new KeyValuePair<string, IGraph>(prefix == "" ? "States" : prefix + " · States", states));
+            foreach (var s in states.states)
+            {
+                var nester = s as INesterState;
+                if (nester == null || nester.nest.source != GraphSource.Embed || nester.nest.graph == null) continue;
+                var name = (prefix == "" ? "" : prefix + " · ") + (s is SuperState ? "Super " : "State ") + StateTitle(s) + " [" + s.guid.ToString().Substring(0, 8) + "]";
+                Tabs(nester.nest.graph, name, tabs);
+            }
+            foreach (var t in states.transitions)
+            {
+                var nester = t as INesterStateTransition;
+                if (nester == null || nester.nest.source != GraphSource.Embed || nester.nest.graph == null) continue;
+                var name = (prefix == "" ? "" : prefix + " · ") + "Transition " + StateTitle(t.source) + " → " + StateTitle(t.destination) + " [" + t.guid.ToString().Substring(0, 8) + "]";
+                Tabs(nester.nest.graph, name, tabs);
+            }
+        }
+
+        public static Dictionary<string, object> Read(string path)
+        {
+            var target = Load(path);
+            if (target == null) return Error("No graph at " + path);
+            try
+            {
+                var tabs = new List<KeyValuePair<string, IGraph>>();
+                Tabs(target.Root, "", tabs);
+                var graphs = new List<object>();
+                foreach (var tab in tabs)
+                {
+                    var flow = tab.Value as FlowGraph;
+                    graphs.Add(new Dictionary<string, object> { ["name"] = tab.Key, ["kind"] = flow != null ? "function" : "macro", ["nodes"] = flow != null ? FlowNodes(flow) : StateNodes((StateGraph)tab.Value) });
+                }
+                var vars = new List<object>();
+                var withVars = target.Root as IGraphWithVariables;
+                if (withVars != null)
+                {
+                    foreach (var v in withVars.variables) vars.Add(new Dictionary<string, object> { ["name"] = v.name, ["type"] = v.value != null ? v.value.GetType().Name : "object" });
+                }
+                return new Dictionary<string, object> { ["path"] = path, ["name"] = target.Name, ["parent"] = target.Root is StateGraph ? "State Graph" : "Script Graph", ["variables"] = vars, ["graphs"] = graphs };
+            }
+            finally
+            {
+                target.Done();
+            }
+        }
+
+        // --- apply ---------------------------------------------------------------
+
         static Type UnitType(string name)
         {
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -117,7 +322,6 @@ namespace KesherAI.Bridge
             return null;
         }
 
-        /// <summary>"UnityEngine.Debug:Log", "Debug.Log" or "UnityEngine.Transform:Translate".</summary>
         static Member FindMember(string spec, int argCount)
         {
             var cut = spec.LastIndexOf(':');
@@ -145,7 +349,6 @@ namespace KesherAI.Bridge
         {
             switch ((name ?? "").ToLowerInvariant())
             {
-                case "string": return typeof(string);
                 case "int": case "integer": return typeof(int);
                 case "float": case "number": return typeof(float);
                 case "bool": case "boolean": return typeof(bool);
@@ -157,13 +360,9 @@ namespace KesherAI.Bridge
 
         static IUnitPort FindPort(IUnit unit, string name, bool output)
         {
-            IEnumerable<IUnitPort> ports = output
-                ? unit.controlOutputs.Cast<IUnitPort>().Concat(unit.valueOutputs)
-                : unit.controlInputs.Cast<IUnitPort>().Concat(unit.valueInputs);
-            var list = ports.ToList();
+            var list = (output ? unit.controlOutputs.Cast<IUnitPort>().Concat(unit.valueOutputs) : unit.controlInputs.Cast<IUnitPort>().Concat(unit.valueInputs)).ToList();
             var found = list.FirstOrDefault(p => string.Equals(p.key, name, StringComparison.OrdinalIgnoreCase));
             if (found != null) return found;
-            // "exec" / "then" / "in" / "out": the first control port on that side.
             if (new[] { "exec", "execute", "then", "in", "out", "enter", "exit" }.Contains((name ?? "").ToLowerInvariant()))
             {
                 return output ? (IUnitPort)unit.controlOutputs.FirstOrDefault() : unit.controlInputs.FirstOrDefault();
@@ -171,12 +370,41 @@ namespace KesherAI.Bridge
             return null;
         }
 
-        public static Dictionary<string, object> Apply(string path, List<object> ops)
+        public static Dictionary<string, object> Apply(string path, string graphName, List<object> ops)
         {
-            var asset = Load(path);
-            if (asset == null) return Error("No Script Graph at " + path);
-            var graph = asset.graph;
-            Undo.RegisterCompleteObjectUndo(asset, "KesherAI edit");
+            var target = Load(path);
+            if (target == null) return Error("No graph at " + path);
+            try
+            {
+                var tabs = new List<KeyValuePair<string, IGraph>>();
+                Tabs(target.Root, "", tabs);
+                var tab = tabs.FirstOrDefault(t => t.Key == graphName);
+                var graph = tab.Value ?? tabs[0].Value;
+                Undo.RegisterCompleteObjectUndo(target.Owner, "KesherAI edit");
+                var result = graph is FlowGraph ? ApplyFlow((FlowGraph)graph, ops) : ApplyStates((StateGraph)graph, ops);
+                EditorUtility.SetDirty(target.Owner);
+                // A prefab is edited in a copy of its contents, and a batch run (Unity closed) leaves nothing open: write them back now.
+                if (path.Contains(".prefab#") || Application.isBatchMode) target.Save();
+                return result;
+            }
+            finally
+            {
+                target.Done();
+            }
+        }
+
+        static Dictionary<string, object> Result(List<object> results, int failed) => new Dictionary<string, object> { ["results"] = results, ["failed"] = (double)failed };
+
+        static Dictionary<string, object> Res(string kind, string problem, string node)
+        {
+            var r = new Dictionary<string, object> { ["op"] = kind, ["ok"] = problem == null };
+            if (problem != null) r["error"] = problem;
+            if (node != null) r["node"] = node;
+            return r;
+        }
+
+        static Dictionary<string, object> ApplyFlow(FlowGraph graph, List<object> ops)
+        {
             var refs = new Dictionary<string, IUnit>();
             Func<string, IUnit> NodeOf = id =>
             {
@@ -186,7 +414,6 @@ namespace KesherAI.Bridge
                 Guid g;
                 return Guid.TryParse(id, out g) ? graph.units.FirstOrDefault(u => u.guid == g) : null;
             };
-
             var results = new List<object>();
             var failed = 0;
             foreach (var o in ops)
@@ -211,7 +438,8 @@ namespace KesherAI.Bridge
                         else if (type == "get" || type == "set")
                         {
                             var v = type == "get" ? (UnifiedVariableUnit)new GetVariable() : new SetVariable();
-                            v.kind = Enum.TryParse<VariableKind>(Json.Str(op, "kind"), true, out var k) ? k : VariableKind.Graph;
+                            VariableKind k;
+                            v.kind = Enum.TryParse(Json.Str(op, "kind"), true, out k) ? k : VariableKind.Graph;
                             unit = v;
                         }
                         else if (type == "literal")
@@ -219,10 +447,7 @@ namespace KesherAI.Bridge
                             var t = ValueType(Json.Str(op, "valueType"));
                             unit = new Literal(t, ConversionUtility.Convert(Json.Str(op, "value"), t));
                         }
-                        else if (type == "custom_event")
-                        {
-                            unit = new CustomEvent();
-                        }
+                        else if (type == "custom_event") unit = new CustomEvent();
                         else
                         {
                             var name = type == "unit" || type == "event" ? Json.Str(op, type == "event" ? "event" : "unit") : type;
@@ -258,11 +483,7 @@ namespace KesherAI.Bridge
                         var unit = NodeOf(Json.Str(op, "node"));
                         var pin = Json.Str(op, "pin");
                         if (unit == null || !unit.valueInputs.Contains(pin)) problem = "Input not found: " + pin;
-                        else
-                        {
-                            var input = unit.valueInputs[pin];
-                            input.SetDefaultValue(ConversionUtility.Convert(Json.Str(op, "value"), input.type));
-                        }
+                        else unit.valueInputs[pin].SetDefaultValue(ConversionUtility.Convert(Json.Str(op, "value"), unit.valueInputs[pin].type));
                     }
                     else if (kind == "move")
                     {
@@ -282,48 +503,179 @@ namespace KesherAI.Bridge
                 {
                     problem = e.Message;
                 }
-                var res = new Dictionary<string, object> { ["op"] = kind, ["ok"] = problem == null };
-                if (problem != null) { res["error"] = problem; failed++; }
-                if (made != null) res["node"] = made.guid.ToString();
-                results.Add(res);
+                if (problem != null) failed++;
+                results.Add(Res(kind, problem, made != null ? made.guid.ToString() : null));
             }
-            EditorUtility.SetDirty(asset);
-            return new Dictionary<string, object> { ["results"] = results, ["failed"] = (double)failed };
+            return Result(results, failed);
         }
 
-        /// <summary>Checks the graph: ports left without a needed connection and broken links (Visual Scripting has no separate compile step).</summary>
+        static Dictionary<string, object> ApplyStates(StateGraph graph, List<object> ops)
+        {
+            var refs = new Dictionary<string, IState>();
+            Func<string, IState> StateOf = id =>
+            {
+                if (string.IsNullOrEmpty(id)) return null;
+                IState r;
+                if (refs.TryGetValue(id, out r)) return r;
+                Guid g;
+                return Guid.TryParse(id, out g) ? graph.states.FirstOrDefault(s => s.guid == g) : null;
+            };
+            var results = new List<object>();
+            var failed = 0;
+            foreach (var o in ops)
+            {
+                var op = o as Dictionary<string, object>;
+                if (op == null) continue;
+                var kind = Json.Str(op, "op");
+                string problem = null;
+                IState made = null;
+                try
+                {
+                    if (kind == "add")
+                    {
+                        var type = Json.Str(op, "type");
+                        IState state = type == "super_state" ? (IState)SuperState.WithStart() : type == "any_state" ? (IState)new AnyState() : FlowState.WithEnterUpdateExit();
+                        var nester = state as INesterState;
+                        var title = Json.Str(op, "name");
+                        if (nester != null && !string.IsNullOrEmpty(title)) ((Graph)nester.nest.embed).title = title;
+                        state.position = new Vector2((float)Json.Num(op, "x", 0), (float)Json.Num(op, "y", 0));
+                        if (graph.states.Count == 0) state.isStart = true;
+                        graph.states.Add(state);
+                        made = state;
+                        var r = Json.Str(op, "ref");
+                        if (!string.IsNullOrEmpty(r)) refs[r] = state;
+                    }
+                    else if (kind == "connect")
+                    {
+                        var a = StateOf(Json.Str(Json.Obj(op, "from"), "node"));
+                        var b = StateOf(Json.Str(Json.Obj(op, "to"), "node"));
+                        if (a == null || b == null) problem = "State not found";
+                        else if (b is AnyState) problem = "Nothing can go into Any State";
+                        else graph.transitions.Add(FlowStateTransition.WithDefaultTrigger(a, b));
+                    }
+                    else if (kind == "disconnect")
+                    {
+                        var a = StateOf(Json.Str(Json.Obj(op, "from"), "node"));
+                        var b = StateOf(Json.Str(Json.Obj(op, "to"), "node"));
+                        var t = a != null ? a.outgoingTransitions.FirstOrDefault(x => x.destination == b) : null;
+                        if (t == null) problem = "No transition between those states";
+                        else graph.transitions.Remove(t);
+                    }
+                    else if (kind == "set")
+                    {
+                        var s = StateOf(Json.Str(op, "node"));
+                        var pin = Json.Str(op, "pin");
+                        if (s == null) problem = "State not found";
+                        else if (pin == "start")
+                        {
+                            var on = Json.Str(op, "value").ToLowerInvariant() == "true";
+                            if (on) foreach (var other in graph.states) other.isStart = false;
+                            s.isStart = on;
+                        }
+                        else if (pin == "name" || pin == "title")
+                        {
+                            var nester = s as INesterState;
+                            if (nester == null || nester.nest.graph == null) problem = "This state has no name";
+                            else ((Graph)nester.nest.graph).title = Json.Str(op, "value");
+                        }
+                        else problem = "States have \"start\" and \"name\"";
+                    }
+                    else if (kind == "move")
+                    {
+                        var s = StateOf(Json.Str(op, "node"));
+                        if (s == null) problem = "State not found";
+                        else s.position = new Vector2((float)Json.Num(op, "x", s.position.x), (float)Json.Num(op, "y", s.position.y));
+                    }
+                    else if (kind == "delete")
+                    {
+                        var s = StateOf(Json.Str(op, "node"));
+                        if (s == null) problem = "State not found";
+                        else
+                        {
+                            foreach (var t in s.transitions.ToList()) graph.transitions.Remove(t);
+                            graph.states.Remove(s);
+                        }
+                    }
+                    else problem = "Unknown operation " + kind;
+                }
+                catch (Exception e)
+                {
+                    problem = e.Message;
+                }
+                if (problem != null) failed++;
+                results.Add(Res(kind, problem, made != null ? made.guid.ToString() : null));
+            }
+            return Result(results, failed);
+        }
+
+        // --- check, save, open -----------------------------------------------------
+
+        /// <summary>Checks every flow graph in the tree: inputs without a value, broken ports, a state graph without a start (Visual Scripting has no separate compile step).</summary>
         public static Dictionary<string, object> Check(string path)
         {
-            var asset = Load(path);
-            if (asset == null) return Error("No Script Graph at " + path);
-            var messages = new List<object>();
-            foreach (var unit in asset.graph.units)
+            var target = Load(path);
+            if (target == null) return Error("No graph at " + path);
+            try
             {
-                foreach (var input in unit.valueInputs)
+                var tabs = new List<KeyValuePair<string, IGraph>>();
+                Tabs(target.Root, "", tabs);
+                var messages = new List<object>();
+                foreach (var tab in tabs)
                 {
-                    if (!input.hasValidConnection && !input.hasDefaultValue && !input.nullMeansSelf && !input.allowsNull)
-                        messages.Add(new Dictionary<string, object> { ["severity"] = "warning", ["text"] = Title(unit) + ": input " + input.key + " has no value" });
+                    var flow = tab.Value as FlowGraph;
+                    if (flow == null) continue;
+                    var where = tabs.Count > 1 ? tab.Key + ": " : "";
+                    foreach (var unit in flow.units)
+                    {
+                        foreach (var input in unit.valueInputs)
+                        {
+                            if (!input.hasValidConnection && !input.hasDefaultValue && !input.nullMeansSelf && !input.allowsNull)
+                                messages.Add(new Dictionary<string, object> { ["severity"] = "warning", ["text"] = where + Title(unit) + ": input " + input.key + " has no value" });
+                        }
+                        foreach (var port in unit.invalidInputs) messages.Add(new Dictionary<string, object> { ["severity"] = "error", ["text"] = where + Title(unit) + ": broken input " + port.key });
+                        foreach (var port in unit.invalidOutputs) messages.Add(new Dictionary<string, object> { ["severity"] = "error", ["text"] = where + Title(unit) + ": broken output " + port.key });
+                    }
                 }
-                foreach (var port in unit.invalidInputs) messages.Add(new Dictionary<string, object> { ["severity"] = "error", ["text"] = Title(unit) + ": broken input " + port.key });
-                foreach (var port in unit.invalidOutputs) messages.Add(new Dictionary<string, object> { ["severity"] = "error", ["text"] = Title(unit) + ": broken output " + port.key });
+                var states = target.Root as StateGraph;
+                if (states != null && states.states.Count > 0 && !states.states.Any(s => s.isStart))
+                    messages.Add(new Dictionary<string, object> { ["severity"] = "error", ["text"] = "No start state" });
+                return new Dictionary<string, object> { ["ok"] = !messages.OfType<Dictionary<string, object>>().Any(m => (string)m["severity"] == "error"), ["messages"] = messages };
             }
-            return new Dictionary<string, object> { ["ok"] = !messages.OfType<Dictionary<string, object>>().Any(m => (string)m["severity"] == "error"), ["messages"] = messages };
+            finally
+            {
+                target.Done();
+            }
         }
 
         public static Dictionary<string, object> Save(string path)
         {
-            var asset = Load(path);
-            if (asset == null) return Error("No Script Graph at " + path);
-            EditorUtility.SetDirty(asset);
-            AssetDatabase.SaveAssets();
-            return new Dictionary<string, object> { ["ok"] = true };
+            var target = Load(path);
+            if (target == null) return Error("No graph at " + path);
+            try
+            {
+                target.Save();
+                return new Dictionary<string, object> { ["ok"] = true };
+            }
+            finally
+            {
+                target.Done();
+            }
         }
 
         public static Dictionary<string, object> Open(string path)
         {
-            var asset = Load(path);
-            if (asset == null) return Error("No Script Graph at " + path);
-            AssetDatabase.OpenAsset(asset);
+            var hash = path.IndexOf('#');
+            var file = hash < 0 ? path : path.Substring(0, hash);
+            var asset = AssetDatabase.LoadMainAssetAtPath(file);
+            if (asset == null) return Error("Nothing at " + file);
+            if (hash < 0 || file.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)) AssetDatabase.OpenAsset(asset);
+            else
+            {
+                var scene = SceneManager.GetSceneByPath(file);
+                if (!scene.IsValid() || !scene.isLoaded) EditorSceneManager.OpenScene(file, OpenSceneMode.Additive);
+                var target = Load(path);
+                if (target != null) Selection.activeObject = target.Owner;
+            }
             return new Dictionary<string, object> { ["ok"] = true };
         }
     }

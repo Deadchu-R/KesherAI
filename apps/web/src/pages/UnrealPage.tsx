@@ -10,6 +10,9 @@ interface Status {
   editor?: { project: string; engine: string; bridge: string };
   projects: string[];
   queued: number;
+  /** Unity: whether Unity's CLI is installed, and the project shown. */
+  cli?: boolean;
+  active?: string;
   latestBridge: string;
   download: string;
 }
@@ -147,7 +150,7 @@ function InstallIntoProject() {
 }
 
 /** "Add to a project…" (this computer): copies the package into the project's Packages folder. */
-function AddUnityPackage() {
+function AddUnityPackage({ compact = false }: { compact?: boolean }) {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const bridge = desktop();
@@ -159,6 +162,7 @@ function AddUnityPackage() {
     if (!folder) return;
     try {
       setMsg((await api<{ message: string }>("/api/unity/install", { method: "POST", body: { project: folder } })).message);
+      dispatchEvent(new Event("kesher-unity-added"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -166,8 +170,8 @@ function AddUnityPackage() {
   return (
     <div className="stack ue-install">
       <div className="row">
-        <button type="button" className="primary" onClick={() => void pick()}>📁 {L("הוסף לפרויקט…", "Add to a project…")}</button>
-        <span className="muted small">{L("בחר את תיקיית הפרויקט (זו שיש בה Assets ו-Packages).", "Pick the project folder (the one with Assets and Packages).")}</span>
+        <button type="button" className={compact ? "" : "primary"} onClick={() => void pick()}>📁 {L("הוסף לפרויקט…", "Add to a project…")}</button>
+        {!compact && <span className="muted small">{L("בחר את תיקיית הפרויקט (זו שיש בה Assets ו-Packages).", "Pick the project folder (the one with Assets and Packages).")}</span>}
       </div>
       {msg && <p className="pill good">✅ {msg}</p>}
       {error && <p className="error">{error}</p>}
@@ -214,8 +218,13 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     loadStatus();
     loadList();
     loadQueue();
-    const id = setInterval(loadStatus, 5000);
-    return () => clearInterval(id);
+    const added = () => { loadStatus(); loadList(); };
+    addEventListener("kesher-unity-added", added);
+    const id = setInterval(loadStatus, unity ? 8000 : 5000);
+    return () => {
+      clearInterval(id);
+      removeEventListener("kesher-unity-added", added);
+    };
   }, []);
   // When the editor connects or leaves, read again (live or the saved copy).
   const connected = st?.connected ?? false;
@@ -273,19 +282,30 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>
       </div>
-      {outdated && <p className="pill">{L(`יש גרסה חדשה של הפלאגין (${st.latestBridge}).`, `A newer plugin is out (${st.latestBridge}).`)} <a href={st.download}>{L("הורד", "Download")}</a></p>}
+      {unity && st.projects.length > 0 && (
+        <div className="row ue-projects">
+          <select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>
+            {st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
+          </select>
+          <AddUnityPackage compact />
+          {!st.connected && <span className="muted small">{L("Unity סגור: כל פעולה תריץ את Unity ברקע (איטי יותר).", "Unity is closed: each action runs Unity in the background (slower).")}</span>}
+        </div>
+      )}
+      {outdated && !unity && <p className="pill">{L(`יש גרסה חדשה של הפלאגין (${st.latestBridge}).`, `A newer plugin is out (${st.latestBridge}).`)} <a href={st.download}>{L("הורד", "Download")}</a></p>}
 
-      {(neverConnected || !st.connected) && (
+      {(neverConnected || (!st.connected && !unity)) && (
         <section className="card stack">
           <h2>{L(`חיבור ${app}`, `Connect ${app}`)}</h2>
           {unity ? (
             <>
+              {st.cli === false && (
+                <p className="pill">{L("צריך את ה-CLI של Unity (חינם). ב-PowerShell:", "Unity's CLI is needed (free). In PowerShell:")} <code dir="ltr">irm https://unity.com/install.ps1 | iex</code></p>
+              )}
               <AddUnityPackage />
-              <p className="muted small">{L("או ב-Unity עצמו:", "Or in Unity itself:")}</p>
               <ol className="ue-steps">
-                <li>{L("Window ← Package Manager ← + ← Add package from git URL…", "Window → Package Manager → + → Add package from git URL…")}</li>
-                <li>{L("הדבק:", "Paste:")} <code dir="ltr">{st.download}</code></li>
-                <li>{L("זהו: Unity מקמפל את החבילה לבד (בלי Visual Studio), וכש-KesherAI פתוח הוא מתחבר ויופיע כאן 🟢.", "That's it: Unity compiles the package by itself (no Visual Studio), and while KesherAI runs it connects and shows 🟢 here.")}</li>
+                <li>{L("Unity 6 ומעלה, עם Visual Scripting.", "Unity 6 or newer, with Visual Scripting.")}</li>
+                <li>{L("\"הוסף לפרויקט\" מעתיק את חבילת KesherAI Bridge לפרויקט ומוסיף את חבילת ה-Pipeline של Unity דרך ה-CLI. Unity מקמפל לבד — בלי Visual Studio.", "“Add to a project” copies the KesherAI Bridge package into the project and adds Unity's Pipeline package through the CLI. Unity compiles it by itself — no Visual Studio.")}</li>
+                <li>{L("כש-Unity פתוח, השינויים קורים בו מיד (Ctrl+Z מבטל). כשהוא סגור, KesherAI מריץ את Unity ברקע, משנה ושומר — לוקח קצת יותר זמן.", "With Unity open, changes happen in it at once (Ctrl+Z undoes them). With it closed, KesherAI runs Unity in the background, changes and saves — a little slower.")}</li>
               </ol>
             </>
           ) : (
@@ -347,7 +367,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <div className="ue-canvas">{graph && <GraphView nodes={graph.nodes} />}</div>
                 <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
                   <input className="grow" dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("מה לשנות? למשל: ב-Start תדפיס Hello ללוג, ואם open אמת תזיז את הדלת", "What to change? e.g. on Start log Hello, and if open is true move the door") : L("מה לשנות? למשל: ב-BeginPlay תדפיס Hello, ואם Open אמת תפעיל את OpenDoor", "What to change? e.g. on BeginPlay print Hello, and if Open is true call OpenDoor")} />
-                  <button type="submit" className="primary" disabled={busy || !request.trim()}>{busy ? L("המודל עובד…", "Working…") : `✨ ${st.connected ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}`}</button>
+                  <button type="submit" className="primary" disabled={busy || !request.trim()}>{busy ? L("המודל עובד…", "Working…") : `✨ ${st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}`}</button>
                 </form>
                 {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}
               </>

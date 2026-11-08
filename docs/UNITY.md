@@ -1,28 +1,27 @@
 # Unity Visual Scripting in KesherAI
 
-**Create → Unity Visual Scripting** shows your Unity project's Script Graphs and changes them in words, with the chat model you chose (a local one keeps everything on your computer).
+**Create → Unity Visual Scripting** shows your Unity project's Visual Scripting graphs and changes them in words, with the chat model you chose (a local one keeps everything on your computer).
 
-It works through the **KesherAI Bridge** editor package ([integrations/unity/com.kesherai.bridge](../integrations/unity/com.kesherai.bridge)), Unity 2021.3 and newer with Visual Scripting. Unity compiles the package by itself: no Visual Studio, no build step.
+It works through **Unity's own CLI** (`unity`, from unity.com) and the project's **Pipeline** package, with the **KesherAI Bridge** package ([integrations/unity/com.kesherai.bridge](../integrations/unity/com.kesherai.bridge)) adding a few commands (`kesher_list`, `kesher_graph`, `kesher_apply`, `kesher_check`, `kesher_save`, `kesher_open`). Unity 6 or newer.
 
 ## Set up
 
-- **From KesherAI (this computer):** on the Unity page press **Add to a project…** and pick the project folder (with `Assets/` and `Packages/`). The package is copied into `Packages/com.kesherai.bridge`; no git needed.
-- **Or in Unity:** Window → Package Manager → **+** → **Add package from git URL…** →
-  `https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge` (needs git installed).
+1. Install Unity's CLI once (free). Windows PowerShell: `irm https://unity.com/install.ps1 | iex` (macOS / Linux: `curl -fsSL https://unity.com/install.sh | bash`).
+2. On the Unity page press **Add to a project…** and pick the project folder (with `Assets/` and `Packages/`). KesherAI copies the bridge package into `Packages/com.kesherai.bridge` and runs `unity pipeline install` for the Pipeline package. Unity compiles both by itself: no Visual Studio.
 
-With KesherAI running, the Unity page shows 🟢.
+## What it covers
+
+- **Script Graph** and **State Graph** assets.
+- Graphs kept **inside a Script Machine or State Machine** on a GameObject — in prefabs, and in scenes (open ones are listed; KesherAI opens a scene beside yours when it needs one).
+- A State Graph shows as tabs: **States** (states and transitions; add Flow / Super / Any states, connect them, pick the start state, rename), then the flow graph inside each state and each transition, and the states inside each Super State.
 
 ## Use
 
-- Pick a Script Graph (assets under `Assets/`). It is drawn with its units, ports and connections.
-- Write what to change, e.g. *on Start log "Hello", and if open is true move the door up*. The model turns it into operations; the editor applies them as **one undo step** (Ctrl+Z in Unity), then KesherAI checks the graph (inputs left without a value, broken ports).
-- **Open in Unity**, **Check** and **Save** do what they say. Nothing is saved to disk until you press Save.
+- Pick a graph and a tab. It is drawn with its units, ports and connections.
+- Write what to change, e.g. *on Start log "Hello", and if open is true move the door up*. The model turns it into operations; they are applied as **one undo step** and the graph is checked (inputs left without a value, broken ports, no start state).
+- **With Unity open** each step reaches the open editor in well under a second (`unity command …`), and Ctrl+Z in Unity undoes it.
+- **With Unity closed** KesherAI runs the same command in a one-shot batch editor (`unity run <project> --command …`): slower (Unity has to start), and the change is saved right away.
 
-## With Unity closed
+## Projects
 
-Like Unreal: every graph opened while Unity is connected is kept as a copy (`unity/<project>/` in KesherAI's data folder), and changes asked for with Unity closed wait under **Waiting for Unity** until the project opens.
-
-## Limits (0.1)
-
-- Script Graph assets only; graphs embedded in a Script Machine and State Graphs come later.
-- Node kinds the model can add: method calls (any public method, `Namespace.Type:Method`), events (Start, Update, OnTriggerEnter…), any unit by class name (If, Sequence, ForLoop, Wait…), variables (get/set, any kind), literals, custom events.
+Every project you add stays in the list on the page; pick which one to work on. Graphs inside prefabs are written back to the prefab when they change.
