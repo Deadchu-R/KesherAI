@@ -1356,3 +1356,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .al-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; max-height: 260px; overflow-y: auto; }
 .al-list li { padding: 6px 8px; border-radius: var(--radius-sm); background: var(--panel-2); overflow-wrap: anywhere; }
 .bad-list li { border-inline-start: 3px solid var(--bad); }
+.pl-preview { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--panel-2); }
+.pl-warn { margin: 0; padding-inline-start: 4px; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--warn); }

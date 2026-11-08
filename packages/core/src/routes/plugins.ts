@@ -5,6 +5,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join } from "node:path";
 import type { KesherServices } from "../services.js";
+import { PluginManifestSchema } from "@kesher/plugin-sdk";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -197,6 +198,54 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
     return {
       official: official.filter((x) => !!x),
       community: items.filter((r) => !officialRepos.has(r.full_name.toLowerCase())).map((r) => shape(r, false)),
+    };
+  });
+
+  /**
+   * What a plugin from GitHub would do, before it is installed: its
+   * permissions, whether it runs code, its licence and age, and whether
+   * the KesherAI project checked it. Only on this computer (it installs there).
+   */
+  app.get<{ Querystring: { source?: string } }>("/api/plugins/preview", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Plugins are installed on the computer that runs KesherAI." });
+    const src = String(req.query.source ?? "").trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
+    const m = /^([\w.-]+)\/([\w.-]+)$/.exec(src);
+    if (!m) return { repo: src, known: false, warnings: ["Not on GitHub: KesherAI cannot show what it does before installing. Install only if you trust where it comes from."] };
+    const [, owner, name] = m;
+    const gh = { accept: "application/vnd.github+json", "user-agent": "KesherAI" };
+    type Repo = { full_name: string; html_url: string; stargazers_count: number; pushed_at: string; created_at: string; license?: { spdx_id?: string } | null; archived?: boolean };
+    const [repo, raw, officialList] = await Promise.all([
+      fetch(`https://api.github.com/repos/${owner}/${name}`, { headers: gh, signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? (r.json() as Promise<Repo>) : undefined)).catch(() => undefined),
+      fetch(`https://raw.githubusercontent.com/${owner}/${name}/HEAD/kesher-plugin.json`, { signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? r.text() : undefined)).catch(() => undefined),
+      fetch("https://raw.githubusercontent.com/Deadchu-R/KesherAI/main/community/official.json", { signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? (r.json() as Promise<{ plugins?: string[] }>) : { plugins: [] })).catch(() => ({ plugins: [] as string[] })),
+    ]);
+    if (!repo) return reply.code(404).send({ error: "That GitHub repository was not found (or GitHub did not answer)." });
+    const parsed = raw ? PluginManifestSchema.safeParse((() => { try { return JSON.parse(raw) as unknown; } catch { return undefined; } })()) : undefined;
+    if (!parsed?.success) return reply.code(400).send({ error: "That repository is not a KesherAI plugin (kesher-plugin.json is missing or invalid)." });
+    const man = parsed.data;
+    const official = (officialList.plugins ?? []).some((x) => x.toLowerCase() === repo.full_name.toLowerCase());
+    const days = (Date.now() - Date.parse(repo.created_at)) / 86_400_000;
+    const warnings = [
+      ...(official ? [] : ["Not checked by the KesherAI project: anyone can publish a plugin."]),
+      ...(man.main ? ["Runs its own code on this computer, with the same access as KesherAI."] : []),
+      ...(man.permissions.includes("shell") ? ["Asks to run programs and commands."] : []),
+      ...(man.permissions.includes("network") ? ["Asks to reach the internet."] : []),
+      ...(man.permissions.includes("filesystem") ? ["Asks to read and write files."] : []),
+      ...(days < 30 ? [`The repository is new (${Math.max(1, Math.round(days))} days old).`] : []),
+      ...(!repo.license?.spdx_id || repo.license.spdx_id === "NOASSERTION" ? ["It has no licence."] : []),
+      ...(repo.archived ? ["The repository is archived (no longer kept up)."] : []),
+    ];
+    return {
+      repo: repo.full_name,
+      url: repo.html_url,
+      known: true,
+      official,
+      stars: repo.stargazers_count,
+      updatedAt: repo.pushed_at,
+      createdAt: repo.created_at,
+      license: repo.license?.spdx_id ?? null,
+      manifest: { id: man.id, name: man.name, version: man.version, author: man.author ?? null, description: man.description ?? "", permissions: man.permissions, runsCode: !!man.main, programs: man.programs.map((p) => p.name) },
+      warnings,
     };
   });
 }
