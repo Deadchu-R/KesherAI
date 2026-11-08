@@ -11,7 +11,7 @@
  * server serves from `resources/web`.
  */
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, screen as displays } from "electron";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createKesherServer, type KesherServer } from "@kesher/core";
@@ -223,7 +223,7 @@ async function createWindow(url: string): Promise<void> {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, target) => {
-    if (!target.startsWith(url)) {
+    if (!target.startsWith(`${url}/`) && target !== url) {
       event.preventDefault();
       void shell.openExternal(target);
     }
@@ -326,8 +326,28 @@ function setupTray(coreUrl: string): void {
   setInterval(() => void poll(), 4000);
 }
 
+/**
+ * Whether a request to the desktop bridge comes from KesherAI's own window:
+ * its main frame, on KesherAI's own address — never a frame inside it
+ * (ComfyUI, a plugin page) or a page it was tricked into opening.
+ */
+function fromApp(event: Electron.IpcMainInvokeEvent): boolean {
+  const frame = event.senderFrame;
+  const port = server?.services.config.port;
+  return !!frame && !!port && frame === event.sender.mainFrame && frame.url.startsWith(`http://127.0.0.1:${port}/`);
+}
+
+/** Whether a file is somewhere KesherAI's chats write programs: the outputs folder or a code session's folder. */
+function madeByKesher(path: string): boolean {
+  if (!server) return false;
+  const full = resolve(path);
+  const roots = [join(server.services.paths.root, "outputs"), ...server.services.library.listConversations().flatMap((c) => (c.workspace ? [c.workspace] : []))].map((r) => resolve(r));
+  return roots.some((r) => full === r || full.startsWith(r + sep));
+}
+
 // The folder picker for "New code session" and the sync folder setting.
 ipcMain.handle("kesher:pick-folder", async (event) => {
+  if (!fromApp(event)) return null;
   const win = BrowserWindow.fromWebContents(event.sender);
   const result = win ? await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] }) : await dialog.showOpenDialog({ properties: ["openDirectory"] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
@@ -335,6 +355,7 @@ ipcMain.handle("kesher:pick-folder", async (event) => {
 
 // The paper-clip button in a conversation: attach files for the agent to use.
 ipcMain.handle("kesher:pick-files", async (event) => {
+  if (!fromApp(event)) return [];
   const win = BrowserWindow.fromWebContents(event.sender);
   const opts = { properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections"> };
   const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
@@ -342,30 +363,30 @@ ipcMain.handle("kesher:pick-files", async (event) => {
 });
 
 // "Open folder" in a conversation's Files panel. Only folders, never files, so nothing is run.
-ipcMain.handle("kesher:open-path", async (_event, path: unknown) => {
-  if (typeof path !== "string") return;
+ipcMain.handle("kesher:open-path", async (event, path: unknown) => {
+  if (!fromApp(event) || typeof path !== "string") return;
   const st = await stat(path).catch(() => undefined);
   if (st?.isDirectory()) await shell.openPath(path);
 });
 
 // "Run" on a program the agent built. Only files inside KesherAI's outputs folder or a
 // conversation's folder reach here, and only when the user clicks.
-ipcMain.handle("kesher:run-file", async (_event, path: unknown) => {
-  if (typeof path !== "string") return;
+ipcMain.handle("kesher:run-file", async (event, path: unknown) => {
+  if (!fromApp(event) || typeof path !== "string" || !madeByKesher(path)) return;
   const st = await stat(path).catch(() => undefined);
   if (st?.isFile()) await shell.openPath(path);
 });
 
 // After an update: start the app again with the new code.
 /** Start with the computer, in the background (no window): `{ on }`, or read it. */
-ipcMain.handle("kesher:startup", (_event, on: unknown) => {
-  if (typeof on === "boolean") app.setLoginItemSettings({ openAtLogin: on, args: ["--headless"] });
+ipcMain.handle("kesher:startup", (event, on: unknown) => {
+  if (typeof on === "boolean" && fromApp(event)) app.setLoginItemSettings({ openAtLogin: on, args: ["--headless"] });
   return app.getLoginItemSettings({ args: ["--headless"] }).openAtLogin;
 });
 
 /** Saves a chat as a PDF: its print-ready page, printed in a hidden window. */
 ipcMain.handle("kesher:chat-pdf", async (event, id: unknown) => {
-  if (typeof id !== "string" || !/^[\w-]{1,80}$/.test(id) || !server) return null;
+  if (!fromApp(event) || typeof id !== "string" || !/^[\w-]{1,80}$/.test(id) || !server) return null;
   const page = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
   try {
     const url = `http://127.0.0.1:${server.services.config.port}/api/conversations/${id}/export?format=html`;
@@ -383,7 +404,8 @@ ipcMain.handle("kesher:chat-pdf", async (event, id: unknown) => {
   }
 });
 
-ipcMain.handle("kesher:restart", () => {
+ipcMain.handle("kesher:restart", (event) => {
+  if (!fromApp(event)) return;
   app.relaunch();
   app.quit();
 });

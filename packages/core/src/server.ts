@@ -90,7 +90,7 @@ import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { detectHardwareCached } from "@kesher/downloads";
-import { isLocalRequest, registerRemoteAuth } from "./auth.js";
+import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
 import { modelRoutes } from "./routes/models.js";
@@ -629,7 +629,16 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
   // The desktop window and the Vite dev server are separate origins.
-  await app.register(cors, { origin: true });
+  // Cross-origin access: the model API (/v1) for web apps of any origin (they need an access key);
+  // KesherAI's own API only for its own pages, the Android app and, for /api/browser, the extension.
+  await app.register(cors, {
+    delegator: (req, cb) => {
+      const path = (req.url ?? "").split("?")[0] ?? "";
+      const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+      const open = path.startsWith("/v1");
+      cb(null, { origin: open ? true : !!origin && allowedOrigin(origin, req.headers.host, path) });
+    },
+  });
   const apiKeys = new ApiKeys(() => config.apiKeys, persist);
   services.lastServed = () => apiKeys.lastServedAt;
   if (options.focusApp) services.focusApp = options.focusApp;
@@ -696,8 +705,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, {
       root: options.webDir,
-      setHeaders: (res, path) => {
-        if (path.endsWith(".html")) res.setHeader("content-security-policy", WEB_CSP);
+      // (@fastify/static 10 passes the reply here.)
+      setHeaders: (reply: { header(name: string, value: string): unknown }, path: string) => {
+        if (path.endsWith(".html")) reply.header("content-security-policy", WEB_CSP);
       },
     });
     app.setNotFoundHandler((req, reply) =>

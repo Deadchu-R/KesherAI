@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { hostname } from "node:os";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 /**
@@ -23,7 +24,40 @@ const FORWARDED = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded",
  * @returns `true` only for requests made on this computer.
  */
 export function isLocalRequest(request: Pick<FastifyRequest, "ip" | "headers">): boolean {
-  return isLoopback(request.ip) && !FORWARDED.some((h) => request.headers[h] !== undefined);
+  return isLoopback(request.ip) && !FORWARDED.some((h) => request.headers[h] !== undefined) && localHost(request.headers.host);
+}
+
+/**
+ * Whether the address the browser used is this computer's own name. A page
+ * on another site can make its name point at 127.0.0.1 (DNS rebinding); its
+ * requests then come from this computer but carry that site's name, so they
+ * are not trusted as local.
+ *
+ * @param host - The Host header.
+ * @returns Whether it names this computer.
+ */
+export function localHost(host: string | undefined): boolean {
+  if (host === undefined) return true;
+  const name = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+  return name === "localhost" || name.endsWith(".localhost") || name === "127.0.0.1" || name === "::1" || name === hostname().toLowerCase() || name === `${hostname().toLowerCase()}.local`;
+}
+
+/**
+ * Whether a browser page from `origin` may call KesherAI's own API (`/api`).
+ * The interface itself (same address), the Android app (http://localhost,
+ * no port) and, for /api/browser only, the browser extension. Any other
+ * website the user happens to visit cannot, even on this computer.
+ *
+ * @param origin - The Origin header.
+ * @param host - The Host header.
+ * @param path - The path asked for.
+ * @returns Whether it is allowed.
+ */
+export function allowedOrigin(origin: string, host: string | undefined, path: string): boolean {
+  if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true;
+  if (/^(https?|capacitor):\/\/localhost$/.test(origin)) return true;
+  if (/^(chrome|moz)-extension:\/\/[\w-]+$/.test(origin) && path.startsWith("/api/browser")) return true;
+  return false;
 }
 
 /**
@@ -71,10 +105,31 @@ export function registerRemoteAuth(
   keys: { verify?: (key: string | undefined) => unknown; requireLocally?: () => boolean } = {},
 ): void {
   app.addHook("onRequest", async (request, reply) => {
-    const path = request.url.split("?")[0] ?? "";
+    // Paths are compared as the router reads them: "/%61pi/…" is "/api/…".
+    let path = request.url.split("?")[0] ?? "";
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      await reply.code(400).send({ error: "Bad address" });
+      return;
+    }
+    path = path.replace(/\/{2,}/g, "/");
+    // Other websites open in the user's browser must not use this computer's KesherAI
+    // (cross-site requests, even simple form posts, are refused for /api).
+    // The same for ComfyUI's editor (its API can run any workflow) and KesherAI's MCP server (it reads your knowledge).
+    if ((path.startsWith("/api") && !path.startsWith("/api/plugin-files/")) || path.startsWith("/comfy-ui") || path === "/mcp") {
+      const origin = request.headers.origin;
+      const site = request.headers["sec-fetch-site"];
+      if ((typeof origin === "string" && origin !== "null" && !allowedOrigin(origin, request.headers.host, path)) || origin === "null" || (site === "cross-site" && !(typeof origin === "string" && allowedOrigin(origin, request.headers.host, path)))) {
+        await reply.code(403).send({ error: "Requests from other websites are not allowed." });
+        return;
+      }
+    }
     // The model APIs: apps may use their own access key instead of the remote token.
     const apiPath = path.startsWith("/v1/") || path === "/v1" || path === "/mcp";
-    if (isLocalRequest(request) && !(apiPath && keys.requireLocally?.())) return;
+    // A web page from another site may use the model API only with an access key, never as "this computer".
+    const foreignPage = apiPath && typeof request.headers.origin === "string" && !allowedOrigin(request.headers.origin, request.headers.host, path);
+    if (isLocalRequest(request) && !(apiPath && keys.requireLocally?.()) && !foreignPage) return;
     if (!path.startsWith("/api/") && path !== "/api" && !apiPath) return;
     // Pairing a phone found on the network: it asks, and the user allows it on this computer.
     if (path === "/api/hello") return;
