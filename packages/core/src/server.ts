@@ -150,6 +150,27 @@ export interface KesherServer {
 }
 
 /**
+ * The interface's Content-Security-Policy: scripts, styles, fonts, pictures
+ * and connections only from KesherAI itself (and Google's profile pictures).
+ * A theme's CSS, a chat's Markdown or a page someone tricked the model into
+ * writing cannot load anything from outside or send data away.
+ */
+export const WEB_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.googleusercontent.com",
+  "media-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-src 'self' blob: data:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+/**
  * Builds the core server. This is the one place where services are created
  * and wired together; read it top to bottom to understand start-up order:
  *
@@ -673,11 +694,16 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await pairRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {
-    await app.register(fastifyStatic, { root: options.webDir });
+    await app.register(fastifyStatic, {
+      root: options.webDir,
+      setHeaders: (res, path) => {
+        if (path.endsWith(".html")) res.setHeader("content-security-policy", WEB_CSP);
+      },
+    });
     app.setNotFoundHandler((req, reply) =>
       req.url.startsWith("/api/") || req.url.startsWith("/v1/")
         ? reply.code(404).send({ error: "Not found" })
-        : reply.sendFile("index.html"),
+        : reply.header("content-security-policy", WEB_CSP).sendFile("index.html"),
     );
   }
 

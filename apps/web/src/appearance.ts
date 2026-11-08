@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, isLight, resolveAppearance, type Appearance } from "@kesher/shared";
+import { APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, cleanAppearance, isLight, resolveAppearance, type Appearance } from "@kesher/shared";
 import { api, withToken } from "./api";
 
 /**
@@ -18,13 +18,47 @@ const FONT_FILES: Record<string, () => Promise<unknown>> = {
 };
 
 const CACHE = "kesher.look";
+
+/**
+ * The safety guard: in the first cascade layer, so its !important rules beat
+ * every look's (looks are in the later "kesher-look" layer and cleaned by
+ * cleanCss). Approvals keep the default colours and can never be hidden,
+ * faded, moved, covered or relabelled by a look.
+ */
+const GUARD = `@layer kesher-guard, kesher-look;
+@layer kesher-guard {
+  [data-guard] {
+    --bg: #121213; --panel: #18181a; --panel-2: #1f1f22; --raised: #29292d; --text: #ededee; --text-2: #c6c6cb; --muted: #94949c;
+    --accent: #98a3ff; --accent-ink: #121213; --accent-soft: rgb(152 163 255 / 0.13); --border: rgb(255 255 255 / 0.07); --border-strong: rgb(255 255 255 / 0.12);
+    visibility: visible !important; opacity: 1 !important; filter: none !important; clip-path: none !important; mask: none !important;
+    pointer-events: auto !important; color: #ededee !important; font-size: 15px !important; z-index: 100000 !important;
+  }
+  .approval[data-guard] { display: flex !important; flex-direction: column !important; position: relative !important; transform: none !important; background: #1f1b15 !important; max-height: none !important; overflow: visible !important; }
+  [data-guard] * { visibility: visible !important; opacity: 1 !important; filter: none !important; clip-path: none !important; mask: none !important; transform: none !important; order: 0 !important; text-indent: 0 !important; letter-spacing: normal !important; font-size: clamp(11px, 1em, 32px) !important; }
+  [data-guard] .row { flex-direction: row !important; }
+  [data-guard]::before, [data-guard]::after, [data-guard] *::before, [data-guard] *::after { content: none !important; }
+  [data-guard] button { color: #ededee !important; background: #29292d !important; }
+  [data-guard] button.primary { color: #121213 !important; background: #98a3ff !important; }
+}`;
+
+function setStyle(id: string, css: string): void {
+  let el = document.getElementById(id) as HTMLStyleElement | null;
+  if (!el) {
+    el = document.createElement("style");
+    el.id = id;
+    document.head.appendChild(el);
+  }
+  if (el.textContent !== css) el.textContent = css;
+}
 let current: Appearance = {};
 const listeners = new Set<(a: Appearance) => void>();
 
 const hexToRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(" ");
 
 /** @param saved - The look as saved (before its preset is applied). */
-export function applyAppearance(saved: Appearance): void {
+export function applyAppearance(input: Appearance): void {
+  // Checked again here: this browser's copy could have been changed by hand.
+  const saved = cleanAppearance(input);
   current = saved;
   const a = resolveAppearance(saved);
   const root = document.documentElement;
@@ -55,6 +89,10 @@ export function applyAppearance(saved: Appearance): void {
   if (a.fontSize) st.setProperty("font-size", `${a.fontSize}px`);
   if (a.radius !== undefined) st.setProperty("--r-scale", String(a.radius / 16));
   root.dataset.density = a.density && a.density !== "normal" ? a.density : "";
+  root.dataset.motion = a.motion ?? "subtle";
+  // The look's own CSS (already cleaned on the computer), below the safety guard.
+  setStyle("kesher-guard", GUARD);
+  setStyle("kesher-look", a.css ? `@layer kesher-look {\n${a.css}\n}` : "");
   const back = a.background;
   const veil = (dim: number) => `color-mix(in srgb, var(--bg) ${dim}%, transparent)`;
   document.body.style.background =

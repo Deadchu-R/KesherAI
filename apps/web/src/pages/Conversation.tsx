@@ -206,7 +206,7 @@ function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<
     : reasonText(ev.reason);
   const danger = /^This command .+, so it always needs your approval\.$/.test(ev.reason);
   return (
-    <div className="card approval" role="group" aria-label={headline}>
+    <div className="card approval" role="group" aria-label={headline} data-guard="">
       <strong dir="auto">{headline}</strong>
       {danger && <p className="ap-danger">⚠ {reasonText(ev.reason)}</p>}
       {ev.purpose && (

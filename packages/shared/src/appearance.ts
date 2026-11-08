@@ -44,6 +44,14 @@ export interface Appearance {
   navOrder?: string[];
   /** Menu groups to hide (their tools stay in All tools). */
   navHide?: string[];
+  /** How much moves: none, subtle (default), or lively (a slowly moving background, cards that lift). */
+  motion?: "none" | "subtle" | "lively";
+  /** Your own icon for a tool (key: its page, e.g. "#/images"): an emoji, or a picture from the library. */
+  icons?: Record<string, { emoji: string } | { assetId: string }>;
+  /** Your own CSS, cleaned by cleanCss: looks only, nothing from outside, never hiding the safety parts. */
+  css?: string;
+  /** The look's name (for theme files). */
+  name?: string;
 }
 
 /** Ready-made looks. Graphite is the default look. */
@@ -105,7 +113,7 @@ export function cleanAppearance(input: unknown): Appearance {
       const from = cleanColor(bg.from);
       const to = cleanColor(bg.to);
       if (from && to) out.background = { kind: "gradient", from, to, angle: num(bg.angle, 0, 360) ?? 160 };
-    } else if (bg.kind === "image" && typeof bg.assetId === "string" && /^[0-9a-f-]{36}$/i.test(bg.assetId)) {
+    } else if (bg.kind === "image" && typeof bg.assetId === "string" && ASSET_ID.test(bg.assetId)) {
       // Only a picture from the user's own library (an asset id), never an outside address.
       out.background = { kind: "image", assetId: bg.assetId.toLowerCase(), dim: num(bg.dim, 0, 90) ?? 55 };
     }
@@ -115,7 +123,160 @@ export function cleanAppearance(input: unknown): Appearance {
   if (order?.length) out.navOrder = order;
   const hide = groups(o.navHide);
   if (hide?.length) out.navHide = hide;
+  if (o.motion === "none" || o.motion === "subtle" || o.motion === "lively") out.motion = o.motion;
+  if (o.icons && typeof o.icons === "object") {
+    const icons: NonNullable<Appearance["icons"]> = {};
+    for (const [href, v] of Object.entries(o.icons as Record<string, unknown>).slice(0, 80)) {
+      if (!/^#\/[\w/-]{1,60}$/.test(href) || !v || typeof v !== "object") continue;
+      const e = (v as { emoji?: unknown }).emoji;
+      const a = (v as { assetId?: unknown }).assetId;
+      if (typeof e === "string" && e.trim() && [...e.trim()].length <= 4 && !/[<>"'`\\]/.test(e)) icons[href] = { emoji: e.trim() };
+      else if (typeof a === "string" && ASSET_ID.test(a)) icons[href] = { assetId: a.toLowerCase() };
+    }
+    if (Object.keys(icons).length) out.icons = icons;
+  }
+  if (typeof o.css === "string" && o.css.trim()) {
+    const css = cleanCss(o.css);
+    if (css) out.css = css;
+  }
+  if (typeof o.name === "string" && o.name.trim()) out.name = o.name.trim().replace(/[<>]/g, "").slice(0, 60);
   return out;
+}
+
+const ASSET_ID = /^[0-9a-f-]{36}$/i;
+/** The only at-rules a look may use; everything else (@import, @font-face, @layer…) is dropped. */
+const AT_KEEP = /^@(media|supports)\b/i;
+const AT_FRAMES = /^@(-webkit-)?keyframes\b/i;
+/** Values that could run code or reach outside. */
+const BAD_VALUE = /:\/\/|expression\s*\(|javascript:|vbscript:|behavior\s*:|-moz-binding|@import|image-set\s*\(|src\s*\(/i;
+/** Properties a look may not set: the safety guard's own variables. */
+const BAD_PROP = /^--guard/i;
+const MAX_CSS = 30_000;
+
+function cleanUrl(value: string): string | undefined {
+  let ok = true;
+  const out = value.replace(/url\(\s*(['"]?)([^'")]*)\1\s*\)/gi, (_m, _q, u: string) => {
+    const url = u.trim();
+    // Pictures from the user's own library, or small inline pictures; never an outside address.
+    if (/^\/api\/assets\/[0-9a-f-]{36}$/i.test(url) || /^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i.test(url)) return `url("${url}")`;
+    ok = false;
+    return "none";
+  });
+  // A url( that the pattern did not read (odd quoting) is not let through either.
+  const leftover = out.replace(/url\("[^"]*"\)/g, "");
+  return ok && !/url\s*\(/i.test(leftover) ? out : undefined;
+}
+
+/** Splits at a character outside quotes and brackets. */
+function splitOutside(text: string, ch: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quote = "";
+  let cur = "";
+  for (const c of text) {
+    if (quote) {
+      if (c === quote) quote = "";
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (c === ch && depth === 0) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+function cleanDecls(body: string, important: boolean, pseudo: boolean): string {
+  const decls: string[] = [];
+  for (const raw of splitOutside(body, ";")) {
+    const i = raw.indexOf(":");
+    if (i < 0) continue;
+    const prop = raw.slice(0, i).trim().toLowerCase();
+    let value = raw.slice(i + 1).trim().replace(/!\s*important\s*$/i, "").trim();
+    if (!/^-?-?[a-z][a-z0-9-]*$/.test(prop) || BAD_PROP.test(prop) || !value || BAD_VALUE.test(value)) continue;
+    const v = cleanUrl(value);
+    if (v === undefined) continue;
+    value = v;
+    // Nothing a look draws may sit above the safety parts: no fixed layers, z-index at most 1000,
+    // and what ::before / ::after add stays in its place (it cannot be moved over buttons).
+    if (prop === "position" && /fixed/i.test(value)) continue;
+    if (pseudo && /^(position|inset|top|left|right|bottom|transform|translate|margin.*|z-index|inset-.*)$/.test(prop)) continue;
+    if (prop === "z-index" && !(Number(value) <= 1000)) value = "1000";
+    decls.push(`${prop}: ${value}${important ? " !important" : ""}`);
+  }
+  // What a look adds with ::before / ::after is only paint: it never catches clicks.
+  if (pseudo && decls.length && !decls.some((d) => d.startsWith("pointer-events:"))) decls.push(`pointer-events: none${important ? " !important" : ""}`);
+  return decls.join("; ");
+}
+
+/** Reads one block's rules; returns them cleaned. */
+function cleanRules(text: string, inFrames: boolean): string {
+  const out: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const open = text.indexOf("{", i);
+    const semi = text.indexOf(";", i);
+    if (open < 0) break;
+    // An at-rule without a block (@import …;, @charset …;): dropped.
+    if (semi >= 0 && semi < open && text.slice(i, semi).trim().startsWith("@")) {
+      i = semi + 1;
+      continue;
+    }
+    const prelude = text.slice(i, open).trim();
+    let depth = 1;
+    let j = open + 1;
+    let quote = "";
+    for (; j < text.length && depth > 0; j++) {
+      const c = text[j]!;
+      if (quote) {
+        if (c === quote) quote = "";
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === "{") depth++;
+      else if (c === "}") depth--;
+    }
+    const body = text.slice(open + 1, j - 1);
+    i = j;
+    if (prelude.startsWith("@")) {
+      if (inFrames) continue;
+      if (AT_KEEP.test(prelude) && !/[;{}]/.test(prelude) && !BAD_VALUE.test(prelude)) {
+        const inner = cleanRules(body, false);
+        if (inner) out.push(`${prelude} { ${inner} }`);
+      } else if (AT_FRAMES.test(prelude) && /^@(-webkit-)?keyframes\s+[\w-]+$/i.test(prelude)) {
+        const inner = cleanRules(body, true);
+        if (inner) out.push(`${prelude} { ${inner} }`);
+      }
+      continue;
+    }
+    if (!prelude || /[;@]/.test(prelude) || prelude.length > 500) continue;
+    const decls = cleanDecls(body, !inFrames, /::?(before|after|backdrop)/i.test(prelude));
+    if (decls) out.push(`${prelude} { ${decls} }`);
+  }
+  return out.join("\n");
+}
+
+/**
+ * Cleans a look's own CSS: only rules, @media, @supports and @keyframes;
+ * no @import, @font-face or @layer, no outside addresses (only the user's
+ * library pictures), nothing that runs code, no backslash escapes (they hide
+ * the rest), z-index at most 1000, and ::before / ::after never catch clicks.
+ * Every declaration gets !important, and the page adds it in a cascade layer
+ * below the safety guard (see the web app's appearance.ts), so a look can
+ * restyle everything but never hide or cover approvals.
+ *
+ * @param css - The CSS as written.
+ * @returns The cleaned CSS ("" when nothing was left).
+ */
+export function cleanCss(css: string): string {
+  const text = css
+    .slice(0, MAX_CSS)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/<\/?\w[^>]*>/g, "");
+  if (/\\/.test(text)) return cleanCss(text.replace(/\\/g, ""));
+  return cleanRules(text, false);
 }
 
 /**

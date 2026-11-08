@@ -136,7 +136,7 @@ function Home() {
 function ApprovalsPill({ hidden }: { hidden: boolean }) {
   const pending = usePending();
   if (hidden || !pending.length) return null;
-  return <a className="approvals-pill" href="#/watch">✋ {t("approvalsWaiting", { n: pending.length })}</a>;
+  return <a className="approvals-pill" href="#/watch" data-guard="">✋ {t("approvalsWaiting", { n: pending.length })}</a>;
 }
 
 /** Routes by URL hash: `#/c/<id>`, `#/images`, `#/models`, `#/connections`, `#/settings`. */

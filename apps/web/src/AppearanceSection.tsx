@@ -3,8 +3,10 @@ import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_PRESETS, resolveAppeara
 import { api, withToken } from "./api";
 import { applyAppearance, saveAppearance, undoAppearance, useAppearance } from "./appearance";
 import { getLocale, t } from "./i18n";
-import { NAV_GROUPS } from "./Sidebar";
+import { NAV_GROUPS, NAV_ICONS } from "./Sidebar";
 import { toast } from "./library";
+import { exportTheme, importTheme, lookFromPicture, lookFromTokens } from "./themeFiles";
+import { ToolIcon } from "./ToolIcon";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -30,6 +32,8 @@ export function AppearanceSection() {
   const saved = useAppearance();
   const [canUndo, setCanUndo] = useState(false);
   const [words, setWords] = useState("");
+  const [cssDraft, setCssDraft] = useState<string | null>(null);
+  const [found, setFound] = useState<string[]>([]);
   const timer = useRef<number | undefined>(undefined);
   const look = resolveAppearance(saved);
 
@@ -56,22 +60,28 @@ export function AppearanceSection() {
     [o[i], o[j]] = [o[j]!, o[i]!];
     patch({ navOrder: o }, true);
   };
-  /** A picture from this computer or phone: made smaller (at most 2560 px wide) and kept in the library. */
-  const pickPicture = async (file: File | undefined) => {
-    if (!file) return;
+  /** A picture from this computer or phone: made smaller and kept in the library. Returns its id. */
+  const uploadPicture = async (file: File | undefined, max = 2560): Promise<string | undefined> => {
+    if (!file) return undefined;
     try {
       const bmp = await createImageBitmap(file);
-      const scale = Math.min(1, 2560 / Math.max(bmp.width, bmp.height));
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(bmp.width * scale);
       canvas.height = Math.round(bmp.height * scale);
       canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-      const data = canvas.toDataURL("image/jpeg", 0.86).split(",")[1]!;
-      const { assetId } = await api<{ assetId: string }>("/api/appearance/background", { method: "POST", body: { data, mimeType: "image/jpeg" } });
-      patch({ background: { kind: "image", assetId, dim: 55 } }, true);
+      // Icons keep see-through parts (PNG); backgrounds are smaller as JPEG.
+      const mimeType = max <= 512 ? "image/png" : "image/jpeg";
+      const data = canvas.toDataURL(mimeType, 0.86).split(",")[1]!;
+      return (await api<{ assetId: string }>("/api/appearance/background", { method: "POST", body: { data, mimeType } })).assetId;
     } catch (e) {
       toast((e as Error).message || L("לא הצלחתי לקרוא את התמונה.", "Could not read that picture."));
+      return undefined;
     }
+  };
+  const pickPicture = async (file: File | undefined) => {
+    const assetId = await uploadPicture(file);
+    if (assetId) patch({ background: { kind: "image", assetId, dim: 55 } }, true);
   };
   const askInWords = () => {
     const text = words.trim();
@@ -152,6 +162,18 @@ export function AppearanceSection() {
         </div>
       </div>
 
+      <div className="look-field">
+        <span>{L("תנועה", "Motion")}</span>
+        <div className="seg" role="group">
+          {(["none", "subtle", "lively"] as const).map((m) => (
+            <button key={m} type="button" className={(look.motion ?? "subtle") === m ? "on" : ""} aria-pressed={(look.motion ?? "subtle") === m} onClick={() => patch({ motion: m }, true)}>
+              {m === "none" ? L("בלי", "None") : m === "subtle" ? L("עדינה", "Subtle") : L("חיה", "Lively")}
+            </button>
+          ))}
+        </div>
+        <small className="muted">{L("\"חיה\": רקע שזז לאט, כרטיסים שמתרוממים ומעברי דפים. מי שביקש מהמערכת פחות תנועה לא יקבל אנימציות.", "\"Lively\": a slowly moving background, cards that lift and page transitions. If your system asks for less motion, there is none.")}</small>
+      </div>
+
       <h3>{L("רקע", "Background")}</h3>
       <div className="row wrap">
         <div className="seg" role="group">
@@ -194,6 +216,78 @@ export function AppearanceSection() {
           );
         })}
       </ol>
+
+      <details className="look-more">
+        <summary>{L("אייקונים משלך", "Your own icons")}</summary>
+        <p className="muted small">{L("לכל כלי: אימוג'י, או תמונה מהמחשב או מהטלפון (לשימוש שלך).", "For each tool: an emoji, or a picture from your computer or phone (for your own use).")}</p>
+        <div className="look-icons">
+          {NAV_GROUPS.flatMap((g) => g.items).map(([href, key]) => (
+            <div key={href} className="look-icon-row">
+              <span className="look-icon-now" aria-hidden="true"><ToolIcon href={href} fallback={NAV_ICONS[href] ?? "•"} /></span>
+              <span className="grow">{t(key)}</span>
+              <input className="look-emoji" aria-label={L("אימוג'י", "Emoji")} maxLength={8} placeholder="🙂" value={saved.icons?.[href] && "emoji" in saved.icons[href]! ? (saved.icons[href] as { emoji: string }).emoji : ""} onChange={(e) => {
+                const icons = { ...saved.icons };
+                if (e.target.value.trim()) icons[href] = { emoji: e.target.value.trim() };
+                else delete icons[href];
+                patch({ icons });
+              }} />
+              <label className="look-pick small">🖼<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => void uploadPicture(e.target.files?.[0], 256).then((assetId) => assetId && patch({ icons: { ...saved.icons, [href]: { assetId } } }, true))} /></label>
+              {saved.icons?.[href] && <button type="button" aria-label={L("ברירת מחדל", "Default")} onClick={() => { const icons = { ...saved.icons }; delete icons[href]; patch({ icons }, true); }}>↺</button>}
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <details className="look-more">
+        <summary>{L("CSS משלך (מתקדם)", "Your own CSS (advanced)")}</summary>
+        <p className="muted small">{L("למראה בלבד: נשמרים רק כללים, ‎@media‏ ו-‎@keyframes. נמחקים ‎@import, כתובות חיצוניות, קוד ו-position: fixed; תמונות רק מהספרייה (url(\"/api/assets/…\")). אישורים ואזהרות תמיד נשארים גלויים ובצבעים הרגילים.", "Looks only: rules, @media and @keyframes stay; @import, outside addresses, code and position: fixed are removed; pictures only from your library (url(\"/api/assets/…\")). Approvals and warnings always stay visible, in the usual colours.")}</p>
+        <textarea className="look-css" dir="ltr" spellCheck={false} rows={8} value={cssDraft ?? saved.css ?? ""} onChange={(e) => setCssDraft(e.target.value)} placeholder={".card { border-width: 2px; }\n@keyframes glow { from { opacity: .8 } to { opacity: 1 } }"} />
+        <div className="row">
+          <button type="button" className="primary" disabled={cssDraft === null} onClick={() => {
+            const next = { ...saved, css: cssDraft ?? "" };
+            void saveAppearance(next).then((u) => {
+              setCanUndo(u);
+              setCssDraft(null);
+            }, (e: Error) => toast(e.message));
+          }}>{L("החל", "Apply")}</button>
+          {saved.css && <button type="button" onClick={() => { setCssDraft(null); patch({ css: "" }, true); }}>{L("מחק את ה-CSS", "Remove the CSS")}</button>}
+        </div>
+      </details>
+
+      <h3>{L("ערכות ועיצובים", "Themes and designs")}</h3>
+      <div className="row wrap">
+        <button type="button" onClick={() => void exportTheme(saved).then((blob) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `${(saved.name ?? "kesher-look").replace(/[^\w\u0590-\u05ff-]+/g, "-")}.kesher-theme.json`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        }, (e: Error) => toast(e.message))}>{L("שמור כקובץ ערכה", "Save as a theme file")}</button>
+        <label className="look-pick">{L("פתח קובץ ערכה…", "Open a theme file…")}<input type="file" accept=".json,application/json" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          void importTheme(f).then((look) => {
+            if (look.css && !confirm(L("בערכה יש CSS משלה. הוא ינוקה (למראה בלבד) לפני שיופעל. להמשיך?", "This theme has its own CSS. It is cleaned (looks only) before it applies. Go on?"))) return;
+            change(look, true);
+          }, (err: Error) => toast(err.message));
+        }} /></label>
+        <label className="look-pick">{L("ייבוא מפיגמא (Variables / Tokens JSON)…", "Import from Figma (Variables / Tokens JSON)…")}<input type="file" accept=".json,application/json" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          void f.text().then((txt) => {
+            const r = lookFromTokens(txt);
+            if (!r.found.length) throw new Error(L("לא מצאתי בקובץ צבעים שאני מבין.", "No colours I understand in that file."));
+            setFound(r.found);
+            change({ ...saved, ...r.look, colors: { ...saved.colors, ...r.look.colors } }, true);
+          }).catch((err: Error) => toast(err.message));
+        }} /></label>
+        <label className="look-pick">{L("צבעים מתמונה של עיצוב…", "Colours from a picture of a design…")}<input type="file" accept="image/*" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void lookFromPicture(f).then((l) => change({ ...saved, preset: undefined, colors: l.colors }, true), (err: Error) => toast(err.message));
+        }} /></label>
+      </div>
+      {found.length > 0 && <p className="muted small" dir="ltr">{found.slice(0, 12).join(" · ")}</p>}
+      <small className="muted">{L("מפיגמא: ייצא את ה-Variables (למשל בתוסף \"Export/Import Variables\" או Tokens Studio) כקובץ JSON. צבעים לפי שמות כמו background, surface, text, primary.", "From Figma: export the Variables (for example with the \"Export/Import Variables\" plugin or Tokens Studio) as JSON. Colours are matched by names like background, surface, text, primary.")}</small>
     </section>
   );
 }

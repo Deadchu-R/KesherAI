@@ -1330,3 +1330,24 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .tg-log ul { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
 .telegram h3 { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
 .telegram .bad { color: var(--bad); }
+
+/* Motion (Settings → Appearance). "subtle" is the default look. */
+:root[data-motion="none"] *, :root[data-motion="none"] *::before, :root[data-motion="none"] *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-motion="lively"] .page { animation: look-in 0.35s ease-out; }
+  :root[data-motion="lively"] .card, :root[data-motion="lively"] .app-tile, :root[data-motion="lively"] .look-preset { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+  :root[data-motion="lively"] .card:hover, :root[data-motion="lively"] .app-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+  :root[data-motion="lively"] body[style*="gradient"], :root[data-motion="lively"] body[style*="url("] { background-size: 140% 140% !important; animation: look-drift 40s ease-in-out infinite alternate; }
+  @keyframes look-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes look-drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+}
+.tool-icon-img { width: 1.25em; height: 1.25em; object-fit: cover; border-radius: 4px; vertical-align: middle; }
+.look-more { border-top: 1px solid var(--border); padding-top: 8px; }
+.look-more summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.look-icons { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; }
+.look-icon-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--radius-sm); }
+.look-icon-row:hover { background: var(--panel-2); }
+.look-icon-now { width: 28px; text-align: center; font-size: 18px; }
+.look .look-emoji { width: 64px; text-align: center; }
+.look-icon-row button { height: 30px; min-width: 30px; padding: 0 6px; }
+.look-css { width: 100%; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }

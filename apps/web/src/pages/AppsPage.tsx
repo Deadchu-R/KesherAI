@@ -6,6 +6,7 @@ import { setParts, useParts } from "../parts";
 import { usePluginUi } from "../plugins";
 import { toast } from "../library";
 import { orderGroups, useAppearance } from "../appearance";
+import { ToolIcon } from "../ToolIcon";
 
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
 
@@ -63,7 +64,7 @@ export function AppsPage() {
               return (
                 <div key={i.href} className={`app-tile${off ? " off" : ""}`}>
                   <a href={off ? undefined : i.href} className="app-tile-main" aria-disabled={off || undefined} onClick={(e) => off && e.preventDefault()}>
-                    <span className="app-tile-icon" aria-hidden="true">{i.icon}</span>
+                    <span className="app-tile-icon" aria-hidden="true"><ToolIcon href={i.href} fallback={i.icon} /></span>
                     <span className="app-tile-text">
                       <b>{i.label}</b>
                       {i.desc && <small>{i.desc}</small>}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
+import { ToolIcon } from "./ToolIcon";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
@@ -241,7 +242,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           <div className="nav-pins">
             {navItems.filter((n) => pinned.includes(n.href)).map((n) => (
               <a key={n.href} href={n.href} className="nav-link nav-pin" aria-current={hash === n.href ? "page" : undefined}>
-                {NAV_ICONS[n.href] && <span className="nav-ico" aria-hidden="true">{NAV_ICONS[n.href]}</span>} {n.label}
+                {NAV_ICONS[n.href] && <span className="nav-ico" aria-hidden="true"><ToolIcon href={n.href} fallback={NAV_ICONS[n.href]!} /></span>} {n.label}
               </a>
             ))}
           </div>

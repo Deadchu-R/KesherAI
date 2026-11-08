@@ -311,7 +311,7 @@ export class ConversationManager {
     const look = this.deps.look;
     if (!look) return [];
     notes.push(
-      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background — also a picture you make first — and the order of the tool groups) when the user asks for it. For a style the user names (a film, a game, a series), choose colours, font and background that feel like it; never logos or characters. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed and that they can say \"undo\" or open Settings → Appearance.",
+      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background — also a picture you make first — and the order of the tool groups) when the user asks for it. For a style the user names (a film, a game, a series), choose colours, font, icons (emoji), motion and background that feel like it — if web search is on, look up its colour palette first; never copy logos or characters. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed and that they can say \"undo\" or open Settings → Appearance.",
     );
     const fonts = APPEARANCE_FONTS.map((f) => `${f.id}${f.hebrew ? "" : " (no Hebrew letters)"}`).join(", ");
     return [
@@ -336,6 +336,10 @@ export class ConversationManager {
               background: { type: "object", description: "{ kind: 'plain' }, { kind: 'gradient', from: '#rrggbb', to: '#rrggbb', angle: 0–360 }, or a picture: { kind: 'image', assetId: '<id of a picture made in this chat>', dim: 0–90 (how much the page colour covers it, default 55) }. For a picture background, make the picture first (generate_image, wide), then use its id." },
               navOrder: { type: "array", items: { type: "string", enum: [...APPEARANCE_NAV_GROUPS] }, description: "The tool groups top to bottom (create, work, assistant, system)." },
               navHide: { type: "array", items: { type: "string", enum: [...APPEARANCE_NAV_GROUPS] }, description: "Tool groups to hide from the menus." },
+              motion: { type: "string", enum: ["none", "subtle", "lively"], description: "How much moves: lively adds a slowly moving background, cards that lift and page transitions." },
+              icons: { type: "object", description: "Icons for tools, by page: { \"#/images\": { \"emoji\": \"🏴‍☠️\" } } or { \"assetId\": \"<id of a picture made in this chat>\" }. Pages: #/images, #/pages, #/knowledge, #/models, #/settings, #/nodes, #/unreal, #/unity, #/day, #/compare, #/pipelines, #/personas, #/memory." },
+              css: { type: "string", description: "Extra CSS for looks (replaces the previous extra CSS): rules, @media and @keyframes; no @import, no outside addresses (pictures only as url(\"/api/assets/<id>\")), no position: fixed. Classes: .card, .sidebar, .appbar, .page, .home, .greeting, .composer, .app-tile, .phone-tabs, button.primary. Keep it short." },
+              name: { type: "string", description: "A name for the look." },
               reset: { type: "boolean", description: "Back to the default look." },
               undo: { type: "boolean", description: "Go back one step." },
             },
@@ -350,7 +354,7 @@ export class ConversationManager {
           const change = cleanAppearance(input);
           if (!Object.keys(change).length) return { output: "Nothing valid to change. Colours must be #rrggbb; fonts and groups must be from the lists." };
           const cur = look.get();
-          const next: Appearance = change.preset ? { ...change } : { ...cur, ...change, colors: { ...cur.colors, ...change.colors } };
+          const next: Appearance = change.preset ? { ...change } : { ...cur, ...change, colors: { ...cur.colors, ...change.colors }, ...(change.icons ? { icons: { ...cur.icons, ...change.icons } } : {}) };
           if (!next.colors || !Object.keys(next.colors).length) delete next.colors;
           await look.set(next);
           return { output: `Changed the look: ${Object.keys(change).join(", ")}.` };
