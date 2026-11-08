@@ -53,10 +53,29 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
           key: electron-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: electron-dl-${{ runner.os }}-
+      # Windows: fetch what electron-builder needs first, file by file, with curl trying again on
+      # GitHub's 504s and going on from where a download stopped; then serve them from this
+      # machine so electron-builder's own downloader (which never retries) finds them here.
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -e
+          EV=$(node -p "require('./apps/desktop/node_modules/electron/package.json').version")
+          get() { mkdir -p "mirror/$1"; curl -fL --retry 12 --retry-all-errors --retry-delay 10 -C - -o "mirror/$1/$2" "$3/$1/$2"; }
+          E=https://github.com/electron/electron/releases/download
+          B=https://github.com/electron-userland/electron-builder-binaries/releases/download
+          get "v$EV" "electron-v$EV-win32-x64.zip" $E
+          get "v$EV" SHASUMS256.txt $E
+          for b in winCodeSign-2.6.0 nsis-3.0.4.1 nsis-resources-3.4.1; do get $b $b.7z $B; done
       # Unsigned installers (macOS, Linux, and Windows until SignPath is set up).
       - if: runner.os != 'Windows' || vars.SIGNPATH_ORGANIZATION_ID == ''
         shell: bash
         run: |
+          if [ -d mirror ]; then
+            (cd mirror && python -m http.server 8099 > ../mirror.log 2>&1 &)
+            sleep 3
+            export ELECTRON_MIRROR=http://127.0.0.1:8099/ ELECTRON_BUILDER_BINARIES_MIRROR=http://127.0.0.1:8099/
+          fi
           for attempt in 1 2 3 4; do
             pnpm --filter @kesher/desktop exec electron-builder --publish always && exit 0
             echo "Build attempt $attempt failed; trying again in $((attempt * 60)) seconds."
