@@ -1,8 +1,8 @@
 {
   "name": "kesher",
   "private": true,
-  "version": "0.5.12",
-  "description": "Local-first, open-source desktop app that runs every kind of AI model — chat, image, video, audio — in one place.",
+  "version": "0.5.13",
+  "description": "Local-first, open-source desktop app that runs every kind of AI model \u2014 chat, image, video, audio \u2014 in one place.",
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.28.0",
@@ -31,5 +31,10 @@
     "typedoc": "^0.28.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.18.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "content-disposition@3": "file:./vendor/content-disposition"
+    }
   }
 }

@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  content-disposition@3: file:./vendor/content-disposition
+
 importers:
 
   .:
@@ -2003,9 +2006,8 @@ packages:
   console-control-strings@1.1.0:
     resolution: {integrity: sha512-ty/fTekppD2fIwRvnZAVdeOiGd1c7YXEixbgJTNzqcxJWKQnjJ/V1bNEEE6hygpM3WjwHFUVK6HTjWSzV4a8sQ==}
 
-  content-disposition@3.0.0:
-    resolution: {integrity: sha512-ZH/0Xs9rMIFWCOmGdmS9eHBTF62qqQYNz4nVjQhkdIO/a0fCP4UIM3mRz/wiqL0L14YgAz/1xio4OaSY4+ON/A==}
-    engines: {node: '>=22'}
+  content-disposition@file:vendor/content-disposition:
+    resolution: {directory: vendor/content-disposition, type: directory}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -4513,7 +4515,7 @@ snapshots:
       '@fastify/accept-negotiator': 2.1.2
       '@fastify/error': 4.2.1
       '@fastify/send': 4.2.1
-      content-disposition: 3.0.0
+      content-disposition: file:vendor/content-disposition
       fastify-plugin: 6.0.1
       fastq: 1.20.3
       glob: 14.0.4
@@ -5694,7 +5696,7 @@ snapshots:
 
   console-control-strings@1.1.0: {}
 
-  content-disposition@3.0.0: {}
+  content-disposition@file:vendor/content-disposition: {}
 
   convert-source-map@2.0.0: {}
 

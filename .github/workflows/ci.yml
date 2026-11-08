@@ -23,6 +23,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm --filter @kesher/web build
+      # The desktop app runs the core in Electron's Node, which cannot require() ES modules:
+      # loading it with that switched off catches a dependency that would crash the app on start.
+      - run: pnpm -w build:packages && node --no-experimental-require-module -e "import('@kesher/core').then(() => console.log('core loads without require(esm)'))"
+        working-directory: apps/desktop
 
   # Publishes the API reference to GitHub Pages. Off until the repository
   # owner enables Pages (Settings → Pages → Source: GitHub Actions) and adds

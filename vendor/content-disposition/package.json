@@ -1,0 +1,8 @@
+{
+  "name": "content-disposition",
+  "version": "3.0.0",
+  "description": "content-disposition 3.0.0 (MIT, jshttp) as CommonJS, so @fastify/static loads in Electron's Node 20 (no require of ES modules). Same code, only the export form changed.",
+  "license": "MIT",
+  "main": "./index.js",
+  "type": "commonjs"
+}
