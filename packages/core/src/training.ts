@@ -136,7 +136,7 @@ export class Training {
     if (vram) picture.estimate = vram >= 16 ? "About 15–30 minutes (SDXL, 600 steps)." : "About 30–60 minutes (SD 1.5 is quicker than SDXL).";
     return [
       picture,
-      { id: "chat-lora", ready: false, notes: ["Step 2: make a dataset from your chats and documents now (below); training it on this computer comes next."] },
+      { id: "chat-lora", ready: vram >= 8, notes: vram >= 8 ? ["Make a dataset from your chats and documents, then train it (experimental, below)."] : ["Make a dataset from your chats and documents (below). Training it needs an NVIDIA card with 8 GB or more."] },
       { id: "voice", ready: false, notes: ["Later: a voice of your own from a few minutes of speech."] },
     ];
   }

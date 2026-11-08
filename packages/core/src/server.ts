@@ -71,7 +71,8 @@ import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
-import { Training } from "./training.js";
+import { Training, slug } from "./training.js";
+import { CHAT_BASES, ChatTrainer } from "./chat-trainer.js";
 import { applyPendingReset, cancelFullReset, fullResetPending, listBackups, requestFullReset, requestSettingsReset } from "./reset.js";
 import { DeviceKeys, type DeviceKey } from "./device-keys.js";
 import { telegramRoutes } from "./routes/telegram.js";
@@ -714,6 +715,31 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       return (await Promise.all((await pg.list()).map((p) => pg.get(p.id)))).filter((p): p is NonNullable<typeof p> => !!p).map((p) => ({ title: p.title, content: p.content }));
     },
     datasetDir: () => join(paths.root, "training", "datasets"),
+  });
+  // Step 3 (experimental): a chat-model LoRA with unsloth, in its own Python (chat-trainer.ts).
+  const chatTrainer = new ChatTrainer(join(paths.engines, "unsloth"), {
+    uv: async () => {
+      await runtimes.install("uv");
+      const dir = (await runtimes.paths()).find((p) => existsSync(join(p, process.platform === "win32" ? "uv.exe" : "uv")));
+      if (!dir) throw new Error("uv was not found after installing it.");
+      return join(dir, process.platform === "win32" ? "uv.exe" : "uv");
+    },
+    modelsDir: () => paths.models,
+  });
+  app.get("/api/training/chat", async () => ({ ...chatTrainer.status(), bases: CHAT_BASES, vramGb: Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) }));
+  app.post("/api/training/chat/install", async () => {
+    void chatTrainer.install();
+    return chatTrainer.status();
+  });
+  app.post<{ Body: { name?: string; dataset?: string; base?: string; steps?: number; rank?: number } }>("/api/training/chat", async (req, reply) => {
+    const ds = (await training.datasets()).find((d) => d.name === req.body?.dataset);
+    if (!ds) return reply.code(400).send({ error: "Choose a dataset." });
+    try {
+      await chatTrainer.train({ name: slug(String(req.body?.name ?? ds.name)), dataset: ds.file, base: String(req.body?.base ?? ""), ...(typeof req.body?.steps === "number" ? { steps: req.body.steps } : {}), ...(typeof req.body?.rank === "number" ? { rank: req.body.rank } : {}) });
+      return chatTrainer.status();
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
   });
   app.get("/api/training/datasets", async () => training.datasets());
   app.post<{ Body: { name?: string; chats?: string[]; documents?: boolean } }>("/api/training/datasets", async (req, reply) => {

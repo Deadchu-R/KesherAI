@@ -21,7 +21,8 @@ const NOTES_HE: Array<[RegExp, string]> = [
   [/too old for training/, "ה-ComfyUI ישן מדי לאימון: עדכן אותו בדף הנודים."],
   [/^Needs a base model/, "צריך מודל בסיס (checkpoint של SD 1.5 או SDXL) בתיקיית models/checkpoints של ComfyUI."],
   [/^ComfyUI did not answer/, "ComfyUI לא ענה."],
-  [/^Step 2: make a dataset/, "שלב 2: כבר אפשר להכין מאגר אימון מהצ'אטים והמסמכים שלך (למטה); האימון עצמו במחשב מגיע בהמשך."],
+  [/^Make a dataset from your chats and documents, then train/, "מכינים מאגר מהצ'אטים והמסמכים שלך, ואז מאמנים אותו (ניסיוני, למטה)."],
+  [/^Make a dataset from your chats and documents \(below\)\. Training/, "אפשר להכין מאגר מהצ'אטים והמסמכים (למטה). כדי לאמן אותו צריך כרטיס NVIDIA עם \u20668 GB\u2069 ומעלה."],
   [/^Later: a voice/, "בהמשך: קול משלך מכמה דקות של דיבור."],
 ];
 const note = (n: string) => (getLocale() === "he" ? NOTES_HE.find(([re]) => re.test(n))?.[1] ?? n : n);
@@ -58,6 +59,16 @@ export function TrainingPage() {
   const [datasets, setDatasets] = useState<Array<{ name: string; examples: number; bytes: number }>>([]);
   const loadDatasets = () => void api<typeof datasets>("/api/training/datasets").then(setDatasets, () => undefined);
   useEffect(loadDatasets, []);
+  const [chat, setChat] = useState<{ installed: boolean; phase?: string; message?: string; log: string[]; result?: string; bases: Array<{ id: string; title: string; gb: number }>; vramGb: number } | null>(null);
+  const [chatBase, setChatBase] = useState("");
+  const [chatDs, setChatDs] = useState("");
+  const [chatSteps, setChatSteps] = useState(200);
+  const loadChat = () => void api<NonNullable<typeof chat>>("/api/training/chat").then((c) => { setChat(c); setChatBase((b) => b || c.bases[0]?.id || ""); }, () => undefined);
+  useEffect(() => {
+    loadChat();
+    const t = setInterval(loadChat, 4000);
+    return () => clearInterval(t);
+  }, []);
   const buildDataset = async () => {
     try {
       const d = await api<{ examples: number; tokens: number }>("/api/training/datasets", { method: "POST", body: { name: dsName, chats: dsChats, documents: dsDocs } });
@@ -147,6 +158,25 @@ export function TrainingPage() {
         <div><button type="button" className="primary" disabled={!dsName.trim() || (!dsChats.length && !dsDocs)} onClick={() => void buildDataset()}>{L("הכן מאגר", "Make the dataset")}</button></div>
         {datasets.length > 0 && <ul className="train-jobs">{datasets.map((d) => <li key={d.name}><b>{d.name}</b> <span className="muted small">{L(`${d.examples} דוגמאות`, `${d.examples} examples`)} · {`\u2066${(d.bytes / 1024).toFixed(0)} KB\u2069`}</span></li>)}</ul>}
       </section>
+
+      {chat && chat.vramGb >= 8 && (
+        <section className="card stack">
+          <h2>{L("💬 אימון מודל צ'אט (ניסיוני)", "💬 Train a chat model (experimental)")}</h2>
+          <p className="muted small">{L("LoRA על מודל צ'אט קטן, עם unsloth (קוד פתוח), בסביבת Python משלו. בסוף המודל נשמר כ-GGUF ומופיע עם מודלי הצ'אט. הגדרה חד-פעמית: הורדה של בערך \u20664 GB\u2069 (PyTorch ו-unsloth), ועוד המודל הבסיסי.", "A LoRA on a small chat model with unsloth (open source), in its own Python. The result is saved as a GGUF with your chat models. One-time setup: about 4 GB (PyTorch, unsloth), plus the base model.")}</p>
+          {!chat.installed ? (
+            <div><button type="button" className="primary" disabled={chat.phase === "installing"} onClick={() => confirm(L("להוריד ולהתקין את סביבת האימון (בערך 4GB)?", "Download and set up the trainer (about 4 GB)?")) && void api("/api/training/chat/install", { method: "POST" }).then(loadChat)}>{chat.phase === "installing" ? L("מתקין…", "Setting up…") : L("הכן את סביבת האימון", "Set up the trainer")}</button></div>
+          ) : (
+            <div className="look-grid">
+              <label>{L("מאגר", "Dataset")}<select value={chatDs} onChange={(e) => setChatDs(e.target.value)}><option value="">{L("בחר…", "Choose…")}</option>{datasets.map((d) => <option key={d.name} value={d.name}>{d.name} ({d.examples})</option>)}</select></label>
+              <label>{L("מודל בסיס", "Base model")}<select value={chatBase} onChange={(e) => setChatBase(e.target.value)}>{chat.bases.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}</select></label>
+              <label>{L("צעדים", "Steps")} <small className="muted">{chatSteps}</small><input type="range" min={50} max={1500} step={50} value={chatSteps} onChange={(e) => setChatSteps(Number(e.target.value))} /></label>
+              <div className="look-field"><span>&nbsp;</span><button type="button" className="primary" disabled={!chatDs || chat.phase === "training"} onClick={() => void api("/api/training/chat", { method: "POST", body: { name: chatDs, dataset: chatDs, base: chatBase, steps: chatSteps } }).then(loadChat, (e: Error) => toast(e.message))}>{chat.phase === "training" ? L("מתאמן…", "Training…") : L("התחל אימון", "Start training")}</button></div>
+            </div>
+          )}
+          {chat.message && <p className={chat.phase === "error" ? "bad small" : "small"}>{chat.message}</p>}
+          {chat.log.length > 0 && <details><summary className="small">{L("יומן", "Log")}</summary><pre className="code small" dir="ltr">{chat.log.slice(-30).join("\n")}</pre></details>}
+        </section>
+      )}
 
       {jobs.length > 0 && (
         <section className="card stack">

@@ -27,7 +27,12 @@ Choose chats and, if you like, your documents (the Pages page). Then press **Mak
 
 The dataset is saved as `training/datasets/<name>.jsonl` in the common `messages` chat format, which LoRA trainers such as unsloth and axolotl read. Nothing leaves the computer. It needs at least 20 examples, and hundreds is better.
 
-## Next steps
+## Step 3 (experimental): train a chat model
 
-- **Chat:** training that dataset on this computer (a LoRA on a small chat model), with this computer's limits shown first, then the result added to the chat models.
+This needs an NVIDIA card with 8 GB or more.
+
+1. Press **Set up the trainer** once. It downloads about 4 GB (Python 3.12, PyTorch for CUDA and unsloth, which is Apache-2.0) into `engines/unsloth`, in a folder of its own.
+2. Choose a dataset from step 2, a small base model (Llama 3.2 3B, Qwen 2.5 3B or Gemma 3 4B, each under its own licence) and the number of steps.
+3. The training makes a LoRA. It is merged and saved as a q4_k_m GGUF in `models/chat`, so it shows with your chat models. If the GGUF export fails, the LoRA is still saved, and the log says where.
+4. **If the card runs out of memory:** choose a smaller base model, fewer steps or a lower rank.
 - **Voice:** a voice of your own, made from a few minutes of speech.
