@@ -339,7 +339,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       const up = await readProject(path).catch(() => undefined);
       if (up) {
         const live = s.unreal.connected ? "the editor is connected" : "open it in Unreal with the KesherAI Bridge plugin, or Unreal 5.8's MCP (Create → Unreal Blueprints)";
-        return { kind: "unreal", name, path, line: `[Unreal project: ${name}, UE ${up.engine || "?"} — ${path}; ${live}]` };
+        return { kind: "unreal", name, path, engine: up.engine, connected: s.unreal.connected, line: `[Unreal project: ${name}, UE ${up.engine || "?"} — ${path}; ${live}]` };
       }
       return { kind: "folder", name, path, line: `[${name}: ${path}]` };
     } catch (err) {

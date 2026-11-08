@@ -531,14 +531,17 @@ export function ConversationPage({ id }: { id: string }) {
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
   };
+  /** After adding an Unreal project that is not connected yet: offer the right way to connect it. */
+  const [unrealSetup, setUnrealSetup] = useState<{ path: string; engine: string; msg?: string } | null>(null);
   /** + → Project: a Unity, Unreal or any project folder, for the chat to work in. */
   const addProject = async () => {
     const folder = await desktop()?.pickFolder();
     if (!folder) return;
     try {
-      const r = await api<{ kind: string; line: string }>(`/api/conversations/${id}/project`, { method: "POST", body: { path: folder } });
+      const r = await api<{ kind: string; line: string; path: string; engine?: string; connected?: boolean }>(`/api/conversations/${id}/project`, { method: "POST", body: { path: folder } });
       setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${r.line}\n`);
       if (r.kind === "unity") dispatchEvent(new Event("kesher-unity-added"));
+      if (r.kind === "unreal" && !r.connected) setUnrealSetup({ path: r.path, engine: r.engine ?? "" });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -839,6 +842,18 @@ export function ConversationPage({ id }: { id: string }) {
                 {pluginUi.composerActions.map((a) => (
                   <button key={`${a.pluginId}/${a.id}`} type="button" className="chip-text" onClick={() => setInput(a.prompt)} title={a.prompt}>{a.label}</button>
                 ))}
+              </div>
+            )}
+            {unrealSetup && (
+              <div className="row unreal-setup small">
+                <span className="grow">🎮 {unrealSetup.msg ?? (getLocale() === "he" ? `לחבר את פרויקט ה-Unreal (UE ${unrealSetup.engine || "?"}) לצ'אט:` : `Connect the Unreal project (UE ${unrealSetup.engine || "?"}) to the chat:`)}</span>
+                {!unrealSetup.msg && (/^5\.(8|9|\d\d)/.test(unrealSetup.engine) || !/^\d/.test(unrealSetup.engine)) && (
+                  <button type="button" className="primary" onClick={() => void api<{ message: string }>("/api/unreal/mcp-setup", { method: "POST", body: { project: unrealSetup.path } }).then((r) => setUnrealSetup({ ...unrealSetup, msg: r.message }), (e: Error) => setError(e.message))}>{getLocale() === "he" ? "הפעל MCP של Unreal (5.8+)" : "Turn on Unreal's MCP (5.8+)"}</button>
+                )}
+                {!unrealSetup.msg && (
+                  <button type="button" onClick={() => void api("/api/unreal/install", { method: "POST", body: { project: unrealSetup.path } }).then(() => setUnrealSetup({ ...unrealSetup, msg: getLocale() === "he" ? "מתקין את KesherAI Bridge (בונה פעם אחת לכל גרסת מנוע; ההתקדמות בעמוד Unreal)…" : "Installing KesherAI Bridge (built once per engine version; progress on the Unreal page)…" }), (e: Error) => setError(e.message))}>{getLocale() === "he" ? "התקן KesherAI Bridge" : "Install KesherAI Bridge"}</button>
+                )}
+                <button type="button" aria-label={getLocale() === "he" ? "סגור" : "Close"} onClick={() => setUnrealSetup(null)}>✕</button>
               </div>
             )}
             <div className="box-bar">
