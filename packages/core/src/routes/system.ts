@@ -33,6 +33,14 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
    * Restarts KesherAI on this computer (also from the phone), installing a
    * downloaded update first. The interface then waits for it and reconnects.
    */
+  /** The Approve / Deny buttons on a phone or watch notification (no token: the one-time code is the key). */
+  app.post<{ Params: { code: string }; Querystring: { d?: string } }>("/api/quick-approve/:code", async (req, reply) => {
+    const d = req.query.d === "allow" ? "allow" : req.query.d === "deny" ? "deny" : undefined;
+    if (!d) return reply.code(400).send({ error: "d must be allow or deny" });
+    if (!(await s.notifier.quickDecide(req.params.code, d))) return reply.code(410).send({ error: "This button no longer works: the request was answered or is too old." });
+    return { ok: true };
+  });
+
   app.post("/api/system/restart", async (_req, reply) => {
     if (!s.restartApp) return reply.code(409).send({ error: "This copy runs from the command line: restart it there." });
     s.restarting = true;

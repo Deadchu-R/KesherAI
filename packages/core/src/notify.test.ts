@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { AgentEvent } from "@kesher/shared";
 import { Notifier } from "./notify.js";
 
-const settings = { ntfy: { enabled: true, server: "https://ntfy.example", topic: "kesher-abc" }, desktop: true, minSeconds: 0, includeText: false, waiting: true };
+const settings = { ntfy: { enabled: true, server: "https://ntfy.example", topic: "kesher-abc" }, desktop: true, minSeconds: 0, includeText: false, waiting: true, approveButtons: true, waitingSeconds: 60 };
 const ev = (e: Record<string, unknown>) => ({ seq: 1, at: "", ...e }) as AgentEvent;
 
 test("long work ends: one notification to the phone and the desktop, title only by default", async () => {
@@ -42,4 +42,49 @@ test("short work and channels that are off send nothing", async () => {
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(posts, 0);
   assert.equal(Notifier.newTopic().length > 20, true);
+});
+
+test("an approval waiting: Approve / Deny buttons that work once", async () => {
+  const posts: Array<{ url: string; body: string }> = [];
+  const decided: string[] = [];
+  const n = new Notifier(() => ({ ...settings, waitingSeconds: 0 }), {
+    publicUrl: () => "https://abc.trycloudflare.com",
+    decide: async (c, r, d) => (decided.push(`${c}/${r}/${d}`), true),
+    fetch: (async (url: string, init: RequestInit) => (posts.push({ url, body: String(init.body) }), new Response("{}"))) as unknown as typeof fetch,
+  });
+  n.onConversationEvent("c1", () => "Build", ev({ type: "approval_request", requestId: "r1", callId: "x", name: "run_command", input: {}, preview: "rm -rf build" }), () => undefined);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0]!.url, "https://ntfy.example");
+  const j = JSON.parse(posts[0]!.body) as { topic: string; message: string; actions: Array<{ label: string; url: string; method: string }> };
+  assert.equal(j.topic, "kesher-abc");
+  assert.match(j.message, /run_command/);
+  assert.doesNotMatch(j.message, /rm -rf/);
+  assert.deepEqual(j.actions.map((a) => [a.label, a.method]), [["Approve", "POST"], ["Deny", "POST"]]);
+  const code = /quick-approve\/([\w-]{32})\?d=allow$/.exec(j.actions[0]!.url)![1]!;
+  assert.equal(await n.quickDecide(code, "allow"), true);
+  assert.deepEqual(decided, ["c1/r1/allow"]);
+  // Used once: the same code (or a made-up one) does nothing.
+  assert.equal(await n.quickDecide(code, "deny"), false);
+  assert.equal(await n.quickDecide("x".repeat(32), "allow"), false);
+  n.close();
+});
+
+test("the button's address needs no token, only a code that is waiting", async () => {
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { createKesherServer } = await import("./server.js");
+  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-quick-")), autodetect: false, pluginRoots: [] });
+  try {
+    const app = server.app;
+    const bad = await app.inject({ method: "POST", url: `/api/quick-approve/${"a".repeat(32)}?d=allow`, remoteAddress: "192.168.1.9" });
+    assert.equal(bad.statusCode, 410);
+    const get = await app.inject({ method: "GET", url: `/api/quick-approve/${"a".repeat(32)}?d=allow`, remoteAddress: "192.168.1.9" });
+    assert.equal(get.statusCode, 401, "only POST is open");
+    const other = await app.inject({ method: "POST", url: "/api/system/restart", remoteAddress: "192.168.1.9" });
+    assert.equal(other.statusCode, 401);
+  } finally {
+    await server.close();
+  }
 });

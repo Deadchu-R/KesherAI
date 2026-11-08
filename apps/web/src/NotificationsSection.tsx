@@ -11,6 +11,8 @@ interface Settings {
   minSeconds: number;
   includeText: boolean;
   waiting: boolean;
+  approveButtons?: boolean;
+  waitingSeconds?: number;
   subscribeUrl: string;
   recent: Array<{ title: string; at: number; channels: string[] }>;
 }
@@ -70,7 +72,18 @@ export function NotificationsSection() {
         </div>
       )}
       <label className="check"><input type="checkbox" checked={s.desktop} onChange={(e) => void put({ desktop: e.target.checked })} /> {L("גם במחשב הזה, כשהחלון לא בחזית", "Also on this computer, when the window is not in front")}</label>
-      <label className="check"><input type="checkbox" checked={s.waiting} onChange={(e) => void put({ waiting: e.target.checked })} /> {L("כשסוכן מחכה לאישור או לתשובה יותר מדקה", "When an agent waits a minute for an approval or an answer")}</label>
+      <label className="check"><input type="checkbox" checked={s.waiting} onChange={(e) => void put({ waiting: e.target.checked })} /> {L("כשסוכן מחכה לאישור או לתשובה", "When an agent waits for an approval or an answer")}</label>
+      {s.waiting && (
+        <>
+          <label className="row small" style={{ gap: 8, paddingInlineStart: 26 }}>
+            {L("אחרי", "After")}
+            <select value={s.waitingSeconds ?? 60} onChange={(e) => void put({ waitingSeconds: Number(e.target.value) })}>
+              {[0, 30, 60, 120, 300].map((n) => <option key={n} value={n}>{n === 0 ? L("מיד", "right away") : n < 60 ? L(`${n} שניות`, `${n} seconds`) : L(`${n / 60} דקות`, `${n / 60} min`)}</option>)}
+            </select>
+          </label>
+          <label className="check" style={{ paddingInlineStart: 26 }}><input type="checkbox" checked={s.approveButtons ?? true} onChange={(e) => void put({ approveButtons: e.target.checked })} /> {L("כפתורי אשר / דחה בהתראה, גם בשעון חכם (צריך גישה \"מכל מקום\")", "Approve / Deny buttons on the notification, on a smartwatch too (needs \"Access from anywhere\")")}</label>
+        </>
+      )}
       <label className="check"><input type="checkbox" checked={s.includeText} onChange={(e) => void put({ includeText: e.target.checked })} /> {L("לכלול את תחילת התשובה בהתראה (עוברת דרך שרת ntfy)", "Include the start of the answer (it passes through the ntfy server)")}</label>
       <label className="row notify-min">
         {L("רק לעבודה שלקחה לפחות", "Only for work that took at least")}

@@ -20,7 +20,7 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     return { ...n, subscribeUrl: `${n.ntfy.server.replace(/\/$/, "")}/${topic}`, recent: s.notifier.sent.slice(-10).reverse() };
   };
   app.get("/api/notifications", { preHandler: local }, async () => view());
-  app.put<{ Body: { ntfy?: { enabled?: boolean; server?: string }; desktop?: boolean; minSeconds?: number; includeText?: boolean; waiting?: boolean; newTopic?: boolean } }>(
+  app.put<{ Body: { ntfy?: { enabled?: boolean; server?: string }; desktop?: boolean; minSeconds?: number; includeText?: boolean; waiting?: boolean; approveButtons?: boolean; waitingSeconds?: number; newTopic?: boolean } }>(
     "/api/notifications",
     { preHandler: local },
     async (req, reply) => {
@@ -35,6 +35,8 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
       if (b.desktop !== undefined) n.desktop = !!b.desktop;
       if (b.includeText !== undefined) n.includeText = !!b.includeText;
       if (b.waiting !== undefined) n.waiting = !!b.waiting;
+      if (b.approveButtons !== undefined) n.approveButtons = !!b.approveButtons;
+      if (b.waitingSeconds !== undefined) n.waitingSeconds = Math.min(3600, Math.max(0, Math.round(Number(b.waitingSeconds) || 0)));
       if (b.minSeconds !== undefined) n.minSeconds = Math.min(3600, Math.max(0, Math.round(Number(b.minSeconds) || 0)));
       await s.saveConfig();
       return view();

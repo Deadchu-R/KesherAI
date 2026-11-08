@@ -21,7 +21,12 @@ export interface Note {
   /** ntfy tags (emoji names). */
   tags?: string[];
   priority?: 1 | 2 | 3 | 4 | 5;
+  /** Buttons on the phone's notification (and a watch's): each one POSTs to its path through "Access from anywhere". */
+  actions?: Array<{ label: string; path: string }>;
 }
+
+/** How long an Approve / Deny button works. */
+const QUICK_MS = 15 * 60_000;
 
 type Settings = KesherConfig["notifications"];
 
@@ -29,6 +34,8 @@ type Settings = KesherConfig["notifications"];
 export class Notifier {
   private started = new Map<string, number>();
   private waiting = new Map<string, NodeJS.Timeout>();
+  /** One-time codes behind the Approve / Deny buttons. */
+  private quick = new Map<string, { convId: string; requestId: string; expires: number }>();
   /** Last notifications, newest last (for tests and the settings page). */
   readonly sent: Array<Note & { at: number; channels: string[] }> = [];
 
@@ -43,6 +50,8 @@ export class Notifier {
       desktop?: (n: Note) => boolean | Promise<boolean>;
       /** The address of KesherAI from anywhere, when the tunnel runs. */
       publicUrl?: () => string | undefined;
+      /** Answers an approval request (the Approve / Deny buttons). */
+      decide?: (convId: string, requestId: string, decision: "allow" | "deny") => Promise<boolean>;
       fetch?: typeof fetch;
     } = {},
   ) {}
@@ -71,9 +80,28 @@ export class Notifier {
       const headers: Record<string, string> = { Title: ascii(n.title), Priority: String(n.priority ?? 3) };
       if (n.tags?.length) headers.Tags = n.tags.join(",");
       if (base && n.path) headers.Click = `${base.replace(/\/$/, "")}/${n.path.replace(/^\//, "")}`;
-      const url = `${s.ntfy.server.replace(/\/$/, "")}/${encodeURIComponent(s.ntfy.topic)}`;
+      const server = s.ntfy.server.replace(/\/$/, "");
+      const url = `${server}/${encodeURIComponent(s.ntfy.topic)}`;
+      // With buttons: ntfy's JSON form (its headers cannot carry the buttons' addresses well).
+      const json = !!base && !!n.actions?.length;
+      const request: RequestInit =
+        json && base && n.actions
+          ? {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                topic: s.ntfy.topic,
+                title: n.title,
+                message: n.body,
+                priority: n.priority ?? 3,
+                ...(n.tags?.length ? { tags: n.tags } : {}),
+                ...(headers.Click ? { click: headers.Click } : {}),
+                actions: n.actions.map((a) => ({ action: "http", label: a.label, url: `${base.replace(/\/$/, "")}/${a.path.replace(/^\//, "")}`, method: "POST", clear: true })),
+              }),
+            }
+          : { method: "POST", headers, body: n.body };
       jobs.push(
-        (this.opts.fetch ?? fetch)(url, { method: "POST", headers, body: n.body, signal: AbortSignal.timeout(15_000) }).then(
+        (this.opts.fetch ?? fetch)(json ? server : url, { ...request, signal: AbortSignal.timeout(15_000) }).then(
           (r) => {
             if (!r.ok) throw new Error(`ntfy answered ${r.status}`);
             channels.push("phone");
@@ -126,14 +154,19 @@ export class Notifier {
       this.clearWaiting(convId);
       const t = setTimeout(() => {
         this.waiting.delete(convId);
+        const approval = e.type === "approval_request";
+        const buttons = approval && s.approveButtons && !!this.opts.decide && !!this.opts.publicUrl?.();
+        const code = buttons ? this.quickCode(convId, e.requestId) : undefined;
+        const what = approval ? (s.includeText && e.preview ? `${e.name}: ${e.preview.replace(/\s+/g, " ").slice(0, 160)}` : e.name) : "";
         void this.send({
           title: `Waiting for you: ${title()}`,
-          body: e.type === "question" ? "The agent asked you a question." : "The agent needs your approval to go on.",
-          path: e.type === "question" ? `#/c/${convId}` : "#/watch",
+          body: approval ? `The agent needs your approval to go on (${what}).` : "The agent asked you a question.",
+          path: approval ? "#/watch" : `#/c/${convId}`,
           tags: ["raised_hand"],
           priority: 4,
+          ...(code ? { actions: [{ label: "Approve", path: `api/quick-approve/${code}?d=allow` }, { label: "Deny", path: `api/quick-approve/${code}?d=deny` }] } : {}),
         }).catch(() => undefined);
-      }, 60_000);
+      }, s.waitingSeconds * 1000);
       t.unref?.();
       this.waiting.set(convId, t);
       return;
@@ -166,6 +199,29 @@ export class Notifier {
       path: "#/models",
       tags: [job.status === "done" ? "inbox_tray" : "warning"],
     }).catch(() => undefined);
+  }
+
+  private quickCode(convId: string, requestId: string): string {
+    const now = Date.now();
+    for (const [k, v] of this.quick) if (v.expires < now) this.quick.delete(k);
+    const code = randomBytes(24).toString("base64url");
+    this.quick.set(code, { convId, requestId, expires: now + QUICK_MS });
+    return code;
+  }
+
+  /**
+   * Answers an approval from a notification's button. Each code works once,
+   * for one request, for 15 minutes.
+   *
+   * @param code - The button's code.
+   * @param decision - Approve or deny.
+   * @returns Whether a waiting request was answered.
+   */
+  async quickDecide(code: string, decision: "allow" | "deny"): Promise<boolean> {
+    const q = this.quick.get(code);
+    this.quick.delete(code);
+    if (!q || q.expires < Date.now() || !this.opts.decide) return false;
+    return this.opts.decide(q.convId, q.requestId, decision);
   }
 
   private clearWaiting(convId: string) {

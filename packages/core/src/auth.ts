@@ -78,6 +78,8 @@ export function registerRemoteAuth(
     if (!path.startsWith("/api/") && path !== "/api" && !apiPath) return;
     // Pairing a phone found on the network: it asks, and the user allows it on this computer.
     if (path === "/api/hello") return;
+    // The Approve / Deny buttons on a phone or watch notification: a one-time code for one request.
+    if (request.method === "POST" && /^\/api\/quick-approve\/[\w-]{32}$/.test(path)) return;
     if (path === "/api/pair" || /^\/api\/pair\/[0-9a-f-]{36}$/.test(path)) {
       if (request.method === "POST" && path === "/api/pair") return;
       if (request.method === "GET" && path !== "/api/pair") return;

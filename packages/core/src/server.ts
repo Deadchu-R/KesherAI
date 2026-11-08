@@ -280,6 +280,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const notifier = new Notifier(() => config.notifications, {
     ...(options.notify ? { desktop: options.notify } : {}),
     publicUrl: () => tunnel.status().url,
+    // The Approve / Deny buttons on the phone's (and watch's) notification.
+    decide: async (convId, requestId, decision) => !!(await services.conversations.open(convId))?.session.approve(requestId, decision),
   });
   downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => notifier.onDownload(job));
   const devices = new Devices({
