@@ -1,6 +1,6 @@
 import { spawn, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -201,4 +201,51 @@ export async function installUnityPackage(folder: string): Promise<string> {
   await rm(dest, { recursive: true, force: true });
   await cp(source, dest, { recursive: true });
   return `Added to ${dest}. Unity loads it the next time it gets focus (Visual Scripting is added too if the project lacks it).`;
+}
+
+/**
+ * Turns on Unreal Engine's own MCP server in a project (Unreal 5.8 and
+ * newer): the ModelContextProtocol and AllToolsets plugins in the
+ * .uproject (a copy of the old file is kept next to it), and "start the
+ * server with the editor" in the project's per-user editor settings. The
+ * next time the project opens, KesherAI's chats reach the editor's tools.
+ *
+ * @param folder - The project folder (or its .uproject).
+ * @returns What changed, in words.
+ */
+export async function enableUnrealMcp(folder: string): Promise<string> {
+  const { file, dir, engine } = await readProject(folder);
+  const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
+  const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean }> };
+  const plugins = Array.isArray(j.Plugins) ? j.Plugins : [];
+  let changed = false;
+  for (const name of ["ModelContextProtocol", "AllToolsets"]) {
+    const p = plugins.find((x) => x?.Name === name);
+    if (!p) {
+      plugins.push({ Name: name, Enabled: true });
+      changed = true;
+    } else if (p.Enabled !== true) {
+      p.Enabled = true;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await writeFile(`${file}.kesher-backup`, text);
+    j.Plugins = plugins;
+    await writeFile(file, `${JSON.stringify(j, null, "\t")}\n`);
+  }
+  // Per-user editor settings (not in source control): start the MCP server with the editor.
+  const platform = process.platform === "win32" ? "WindowsEditor" : process.platform === "darwin" ? "MacEditor" : "LinuxEditor";
+  const iniDir = join(dir, "Saved", "Config", platform);
+  const ini = join(iniDir, "EditorPerProjectUserSettings.ini");
+  const section = "[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]";
+  let cur = existsSync(ini) ? await readFile(ini, "utf8") : "";
+  if (!/bAutoStartServer\s*=\s*True/i.test(cur)) {
+    if (cur.includes(section)) cur = cur.replace(section, `${section}\nbAutoStartServer=True`).replace(/\nbAutoStartServer\s*=\s*False/gi, "");
+    else cur = `${cur.trimEnd()}${cur ? "\n\n" : ""}${section}\nbAutoStartServer=True\n`;
+    await mkdir(iniDir, { recursive: true });
+    await writeFile(ini, cur);
+  }
+  const old = /^5\.[0-7](\.|$)/.test(engine) || /^4\./.test(engine);
+  return `${changed ? "Turned on the Unreal MCP and All Toolsets plugins" : "The plugins were already on"}, and the server now starts with the editor. ${old ? `This project is on Unreal ${engine}: Unreal's MCP server needs 5.8 or newer, so use the KesherAI Bridge plugin instead (Install into a project).` : "Open (or restart) the project in Unreal; KesherAI connects to it by itself."}`;
 }

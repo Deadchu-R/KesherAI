@@ -37,3 +37,13 @@ Blueprint files (`.uasset`) can be read and written safely only by the engine, s
 
 - Node kinds the model can add: function calls (any `UFUNCTION`), parent events, custom events, Branch, Sequence, variable get/set. Others (timelines, macros, casts) come later.
 - The plugin is new: if a build or a command fails in your engine version, open an issue with the message.
+
+## Unreal 5.8+: Unreal's own MCP server for every chat
+
+Create → Unreal Blueprints → "Connect chats to Unreal 5.8+ (MCP)…" picks the project folder and:
+
+- turns on the `ModelContextProtocol` and `AllToolsets` plugins in the `.uproject` (the old file is kept as `.uproject.kesher-backup`);
+- sets `bAutoStartServer=True` in `Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini` (per user, not in source control);
+- adds and turns on the "Unreal Engine" connection (http://127.0.0.1:8000/mcp).
+
+When the project is open, every chat gets the editor's tools (`list_toolsets`, `describe_toolset`, `call_tool`) with Unreal's guidance in the prompt: discover before calling, check for project skills, save before changes across assets, wait for compiles, read every result, mind Play-in-Editor. Calls that change things ask first. Projects on Unreal 5.7 or older keep using the KesherAI Bridge plugin above.

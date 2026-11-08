@@ -83,7 +83,7 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
       <button type="button" data-slide-menu className="model-chip" aria-haspopup="listbox" aria-expanded={open} aria-label={t("pickModel")} onClick={() => setOpen(!open)}>
         <span className={`where-dot ${current?.location ?? "local"}`} aria-hidden="true" />
         {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
-        <span className="model-chip-name">{current?.name ?? value}</span>
+        <span className="model-chip-name">{current?.name ?? (value || t("defaultModel"))}</span>
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
       </button>
       {open && (

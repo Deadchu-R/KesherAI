@@ -1,4 +1,5 @@
 import { GuardBanner } from "./GuardSection";
+import { ModelMenu } from "./ModelMenu";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
 import { PhoneTabs } from "./PhoneTabs";
@@ -128,10 +129,8 @@ function Home() {
             <WebToggle on={web} onChange={setWeb} />
             <Mic onText={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
             <PersonaChip value={personaId} onChange={(p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); }} />
-            <select className="model-chip" value={modelId} onChange={(e) => setModelId(e.target.value)} aria-label={t("pickModel")}>
-              {!modelId && <option value="">{t("pickModel")}</option>}
-              {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            {/* The same menu as in a chat: grouped, searchable, and "where it runs" when you have other computers. */}
+            <ModelMenu models={models} value={modelId} onChange={setModelId} />
             <span className="grow" />
             <button type="submit" className="primary send" disabled={!text.trim() || busy} aria-label={t("send")}>↑</button>
           </div>

@@ -6,7 +6,8 @@ import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { modelTurnFor } from "../conversations.js";
 import { BRIDGE_VERSION, blueprintPrompt, parseOps, unityPrompt } from "../unreal-bridge.js";
-import { BridgeInstaller, findEngines, installUnityPackage } from "../unreal-install.js";
+import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
+import { MCP_PRESETS } from "../mcp.js";
 
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
@@ -185,6 +186,26 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   }
 
   const installer = new BridgeInstaller(join(s.paths.root, "unreal", "_built"));
+
+  /**
+   * Unreal 5.8+: turns on the engine's own MCP server in a project and connects KesherAI's chats to it
+   * (the "Unreal Engine" MCP server, 127.0.0.1:8000). Only on this computer.
+   */
+  app.post<{ Body: { project?: string } }>("/api/unreal/mcp-setup", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Set up the project on the computer that runs KesherAI." });
+    if (!req.body?.project) return reply.code(400).send({ error: "Choose the project folder." });
+    try {
+      const message = await enableUnrealMcp(req.body.project);
+      await s.mcp.load();
+      const preset = MCP_PRESETS.find((p) => p.id === "unreal")!;
+      const have = s.mcp.list().find((m) => m.preset === "unreal");
+      if (!have) await s.mcp.upsert({ id: "unreal", name: preset.name, transport: "http", url: preset.url!, headers: {}, enabled: true, preset: "unreal" });
+      else if (!have.enabled) await s.mcp.upsert({ ...have, enabled: true });
+      return { message };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
 
   /** Engines on this computer and the current install (for "Install into a project"). */
   app.get("/api/unreal/engines", async () => ({ engines: await findEngines(), job: installer.status() ?? null, windows: process.platform === "win32" }));

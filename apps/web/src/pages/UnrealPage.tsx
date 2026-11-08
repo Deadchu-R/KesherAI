@@ -107,6 +107,7 @@ interface Job { state: "building" | "copying" | "done" | "failed"; project: stri
  * Blueprint-only projects too.
  */
 function InstallIntoProject() {
+  const [mcpMsg, setMcpMsg] = useState("");
   const [info, setInfo] = useState<{ engines: Array<{ version: string; path: string }>; job: Job | null; windows: boolean } | null>(null);
   const [error, setError] = useState("");
   const load = () => void api<NonNullable<typeof info>>("/api/unreal/engines").then(setInfo, () => setInfo(null));
@@ -131,8 +132,24 @@ function InstallIntoProject() {
     }
   };
   const job = info.job;
+  // Unreal 5.8+: the engine's own MCP server (hundreds of editor tools) for every chat.
+  const pickMcp = async () => {
+    setError("");
+    const folder = await bridge.pickFolder();
+    if (!folder) return;
+    try {
+      setMcpMsg((await api<{ message: string }>("/api/unreal/mcp-setup", { method: "POST", body: { project: folder } })).message);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   return (
     <div className="stack ue-install">
+      <div className="row">
+        <button type="button" onClick={() => void pickMcp()}>🤖 {L("חבר את הצ'אטים ל-Unreal 5.8+ (MCP)…", "Connect chats to Unreal 5.8+ (MCP)…")}</button>
+        <span className="muted small">{L("מפעיל בפרויקט את שרת ה-MCP הרשמי של Unreal (כלים לשחקנים, Blueprints, חומרים, Niagara, Sequencer ועוד), כך שכל צ'אט יכול לעבוד בעורך הפתוח.", "Turns on Unreal's official MCP server in the project (tools for actors, Blueprints, materials, Niagara, Sequencer and more), so any chat can work in the open editor.")}</span>
+      </div>
+      {mcpMsg && <p className="pill">{mcpMsg}</p>}
       <div className="row">
         <button type="button" className="primary" disabled={running} onClick={() => void pick()}>📁 {L("התקן לתוך פרויקט…", "Install into a project…")}</button>
         <span className="muted small">{L("עובד גם בפרויקט Blueprint בלבד, בלי C++. ", "Works in Blueprint-only projects too, no C++. ")}{info.engines.length ? `${L("נמצאו", "Found")}: UE ${info.engines.map((e) => e.version).join(", ")}` : L("לא נמצא Unreal במחשב.", "No Unreal found on this computer.")}</span>
