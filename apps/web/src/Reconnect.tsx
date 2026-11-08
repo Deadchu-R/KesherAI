@@ -53,6 +53,10 @@ export function Reconnecting() {
         away = true;
         setGone(true);
       }
+      // Inside the phone app, this address may be gone for good (a new "anywhere" link after
+      // the computer restarted): the app's start screen tries the computer's other addresses.
+      const inApp = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+      if (away && inApp && Date.now() - state.since > 75_000) location.href = "http://localhost/index.html";
       if (Date.now() - state.since > 4 * 60_000) setLate(true);
     };
     const id = setInterval(() => void tick(), 2000);

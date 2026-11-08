@@ -67,6 +67,7 @@ async function startCore(): Promise<string> {
     focusApp: () => showWindow(),
     // From the interface or the phone: restart, with a downloaded update installed first.
     restartApp: () => {
+      if (server) server.services.restarting = true;
       if (readyInstaller) {
         const { file } = readyInstaller;
         readyInstaller = undefined;
@@ -130,6 +131,8 @@ async function runInstaller(file: string): Promise<void> {
     return;
   }
   if (process.platform === "linux") await chmod(file, 0o755);
+  // The new version starts by itself: keep the tunnel so the phone's link keeps working.
+  if (server) server.services.restarting = true;
   // NSIS: /S installs without questions, --force-run opens the new version when done.
   spawn(file, process.platform === "win32" ? ["/S", "--force-run"] : [], { detached: true, stdio: "ignore" }).unref();
   setTimeout(() => {

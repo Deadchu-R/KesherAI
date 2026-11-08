@@ -108,6 +108,8 @@ export interface KesherServices {
   focusApp?: () => void;
   /** Restarts the desktop app (and installs a downloaded update); absent when run from the command line. */
   restartApp?: () => void;
+  /** Set while KesherAI restarts (the tunnel is kept for the next start). */
+  restarting?: boolean;
   /** Search by meaning (embeddings). */
   semantic: Semantic;
   /** "Access from anywhere" (Cloudflare tunnel). */

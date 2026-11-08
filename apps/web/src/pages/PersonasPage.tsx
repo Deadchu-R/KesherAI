@@ -18,6 +18,21 @@ export function PersonasPage() {
   const [templates, setTemplates] = useState<Draft[]>([]);
   const [bases, setBases] = useState<string[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [describe, setDescribe] = useState("");
+  const [building, setBuilding] = useState(false);
+  // Agent Builder: the chat model writes the assistant from a description; you review it before saving.
+  const build = async () => {
+    if (!describe.trim()) return;
+    setBuilding(true);
+    try {
+      setDraft(await api<Draft>("/api/personas/build", { method: "POST", body: { description: describe } }));
+      setDescribe("");
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBuilding(false);
+    }
+  };
   useEffect(() => {
     void api<{ templates: Draft[] }>("/api/personas").then((r) => setTemplates(r.templates), () => undefined);
     void api<{ bases: Array<{ name: string }> }>("/api/knowledge").then((r) => setBases(r.bases.map((b) => b.name)), () => undefined);
@@ -74,7 +89,17 @@ export function PersonasPage() {
           </div>
         </form>
       ) : (
+        <>
+        <form className="card stack builder" onSubmit={(e) => { e.preventDefault(); void build(); }}>
+          <strong>{L("תאר עוזר במילים", "Describe an assistant in words")}</strong>
+          <textarea rows={3} dir="auto" value={describe} onChange={(e) => setDescribe(e.target.value)} placeholder={L("למשל: עוזר שעובר על קוד Unreal C++ שלי, מסביר באגים בעברית ומציע תיקונים קצרים", "e.g. An assistant that reviews my Unreal C++ code, explains bugs simply and suggests short fixes")} />
+          <div className="row">
+            <span className="muted small grow">{L("מודל הצ'אט כותב שם, הוראות, ובוחר מודל ומאגר ידע מתאימים. תראה הכול ותוכל לשנות לפני שמירה.", "The chat model writes a name and instructions, and picks a fitting model and knowledge base. You see it all and can change it before saving.")}</span>
+            <button type="submit" className="primary" disabled={building || !describe.trim()}>{building ? L("בונה…", "Building…") : L("בנה עוזר", "Build it")}</button>
+          </div>
+        </form>
         <div className="row"><button type="button" className="primary" onClick={() => setDraft({ name: "", instructions: "" })}>{L("+ פרסונה חדשה", "+ New persona")}</button></div>
+        </>
       )}
       {personas.map((p) => (
         <section key={p.id} className="card persona-card">

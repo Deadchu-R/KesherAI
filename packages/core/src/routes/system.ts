@@ -35,6 +35,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
    */
   app.post("/api/system/restart", async (_req, reply) => {
     if (!s.restartApp) return reply.code(409).send({ error: "This copy runs from the command line: restart it there." });
+    s.restarting = true;
     setTimeout(() => s.restartApp?.(), 500);
     return { ok: true };
   });

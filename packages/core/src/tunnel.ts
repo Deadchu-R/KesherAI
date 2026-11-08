@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { chmod, mkdir, rm } from "node:fs/promises";
+import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DownloadManager } from "@kesher/downloads";
 import { extractArchive, waitForDownload } from "./llamacpp.js";
@@ -12,7 +12,10 @@ import { extractArchive, waitForDownload } from "./llamacpp.js";
  * first time and runs `cloudflared tunnel --url http://127.0.0.1:<port>`.
  * Cloudflare gives a random `https://….trycloudflare.com` address that
  * reaches this computer from any network, with no router setup and no
- * account. The address changes every time the tunnel starts.
+ * account. The address changes every time the tunnel starts, so cloudflared
+ * runs on its own (detached) and is kept running when KesherAI restarts for
+ * an update: the new KesherAI takes it over, and the phone's link keeps
+ * working.
  *
  * Everything that arrives through it is treated as remote: it needs the
  * token for every `/api` and `/v1` request (see `isLocalRequest`).
@@ -57,9 +60,21 @@ export function tunnelFailureFrom(line: string): string | undefined {
   return m ? `Could not reach Cloudflare${m[1] ? `: ${m[1].trim()}` : ""}. Check the internet connection, a VPN or a firewall.` : undefined;
 }
 
+/** Whether a process is still running. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 /** Runs and watches the cloudflared process. */
 export class Tunnel {
   private child?: ChildProcess;
+  /** A cloudflared left running by the KesherAI before a restart, taken over. */
+  private adopted?: { pid: number; watch: NodeJS.Timeout };
   private state: TunnelStatus;
   private readonly exe: string;
 
@@ -77,7 +92,7 @@ export class Tunnel {
 
   /** @returns The current state. */
   status(): TunnelStatus {
-    return { ...this.state, installed: existsSync(this.exe), running: !!this.child };
+    return { ...this.state, installed: existsSync(this.exe), running: !!this.child || !!this.adopted };
   }
 
   private async install(): Promise<void> {
@@ -95,6 +110,31 @@ export class Tunnel {
     if (process.platform !== "win32") await chmod(this.exe, 0o755);
   }
 
+  private get stateFile(): string {
+    return join(this.dir, "running.json");
+  }
+
+  /** Takes over the cloudflared that the KesherAI before a restart left running, if it is still there. */
+  private adopt(port: number): string | undefined {
+    try {
+      const j = JSON.parse(readFileSync(this.stateFile, "utf8")) as { pid: number; url: string; port: number };
+      if (j.port !== port || !j.url || !alive(j.pid)) return undefined;
+      const watch = setInterval(() => {
+        if (this.adopted && !alive(this.adopted.pid)) {
+          clearInterval(this.adopted.watch);
+          this.adopted = undefined;
+          this.state = { installed: true, running: false, error: "The tunnel stopped. Turn it on again." };
+        }
+      }, 30_000);
+      watch.unref();
+      this.adopted = { pid: j.pid, watch };
+      this.state = { installed: true, running: true, url: j.url };
+      return j.url;
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * Installs cloudflared if needed and starts the tunnel to the local server.
    *
@@ -103,35 +143,48 @@ export class Tunnel {
    * @throws Error if the download fails or Cloudflare gives no address within a minute.
    */
   async start(port: number): Promise<string> {
-    if (this.child && this.state.url) return this.state.url;
+    if ((this.child || this.adopted) && this.state.url) return this.state.url;
+    const kept = this.adopt(port);
+    if (kept) return kept;
     this.state = { installed: existsSync(this.exe), running: false };
     try {
       await this.install();
       this.state.message = "Connecting to Cloudflare…";
-      const child = spawn(this.exe, ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${port}`], { windowsHide: true });
+      // Detached, logging to a file: it outlives a restart of KesherAI (see `detach`).
+      const log = join(this.dir, "cloudflared.log");
+      const fd = openSync(log, "w");
+      const child = spawn(this.exe, ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${port}`], { windowsHide: true, detached: true, stdio: ["ignore", fd, fd] });
+      closeSync(fd);
       this.child = child;
       const url = await new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Cloudflare did not answer within a minute. Check the internet connection and try again.")), 60_000);
-        const onData = (b: Buffer) => {
-          const text = b.toString();
+        const timer = setTimeout(() => {
+          clearInterval(poll);
+          reject(new Error("Cloudflare did not answer within a minute. Check the internet connection and try again."));
+        }, 60_000);
+        const poll = setInterval(() => {
+          let text = "";
+          try {
+            text = readFileSync(log, "utf8");
+          } catch {
+            return;
+          }
           const found = tunnelUrlFrom(text);
           const failed = tunnelFailureFrom(text);
-          if (found) {
+          if (found || failed) {
             clearTimeout(timer);
-            resolve(found);
-          } else if (failed) {
-            clearTimeout(timer);
-            reject(new Error(failed));
+            clearInterval(poll);
+            if (found) resolve(found);
+            else reject(new Error(failed));
           }
-        };
-        child.stdout?.on("data", onData);
-        child.stderr?.on("data", onData);
+        }, 300);
         child.on("error", (err) => {
+          clearInterval(poll);
           clearTimeout(timer);
           reject(err);
         });
         child.on("exit", (code) => {
           clearTimeout(timer);
+          clearInterval(poll);
           reject(new Error(`cloudflared stopped (exit code ${code}).`));
         });
       });
@@ -142,6 +195,7 @@ export class Tunnel {
         }
       });
       this.state = { installed: true, running: true, url };
+      if (child.pid) await writeFile(this.stateFile, JSON.stringify({ pid: child.pid, url, port })).catch(() => undefined);
       return url;
     } catch (err) {
       this.child?.kill();
@@ -156,6 +210,27 @@ export class Tunnel {
     const c = this.child;
     this.child = undefined;
     c?.kill();
+    if (this.adopted) {
+      clearInterval(this.adopted.watch);
+      try {
+        process.kill(this.adopted.pid);
+      } catch {
+        // already gone
+      }
+      this.adopted = undefined;
+    }
+    void rm(this.stateFile, { force: true }).catch(() => undefined);
     this.state = { installed: existsSync(this.exe), running: false };
+  }
+
+  /**
+   * Leaves the tunnel running for the next KesherAI (a restart, an update):
+   * the address stays the same, so the phone reconnects through it.
+   */
+  detach(): void {
+    this.child?.unref();
+    this.child = undefined;
+    if (this.adopted) clearInterval(this.adopted.watch);
+    this.adopted = undefined;
   }
 }

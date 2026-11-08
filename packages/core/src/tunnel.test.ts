@@ -46,3 +46,25 @@ test("requests through a tunnel are remote even though they come from 127.0.0.1"
     await s.close();
   }
 });
+
+test("a restart keeps the tunnel and the next start takes it over", { skip: process.platform === "win32" }, async () => {
+  const { mkdtemp, writeFile: write, chmod: mode } = await import("node:fs/promises");
+  const { tmpdir: tmp } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { Tunnel } = await import("./tunnel.js");
+  const dir = await mkdtemp(j(tmp(), "tunnel-"));
+  await write(j(dir, "cloudflared"), "#!/bin/sh\necho 'INF |  https://brave-otter-river-mint.trycloudflare.com  |'\nexec sleep 30\n");
+  await mode(j(dir, "cloudflared"), 0o755);
+  const downloads = {} as never;
+  const first = new Tunnel(dir, downloads);
+  const url = await first.start(7999);
+  assert.equal(url, "https://brave-otter-river-mint.trycloudflare.com");
+  first.detach();
+  const second = new Tunnel(dir, downloads);
+  assert.equal(await second.start(7999), url);
+  assert.equal(second.status().running, true);
+  const { pid } = JSON.parse(await (await import("node:fs/promises")).readFile(j(dir, "running.json"), "utf8")) as { pid: number };
+  second.stop();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.throws(() => process.kill(pid, 0));
+});

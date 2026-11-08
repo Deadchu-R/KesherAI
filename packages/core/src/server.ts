@@ -564,7 +564,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${config.port}`;
     },
     async close() {
-      services.tunnel.stop();
+      // A restart (from the phone, or to install an update) keeps the tunnel, so its address stays the same.
+      if (services.restarting) services.tunnel.detach();
+      else services.tunnel.stop();
       mcp.close();
       devices.close();
       journal.close();
