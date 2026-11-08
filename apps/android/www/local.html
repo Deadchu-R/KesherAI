@@ -7,6 +7,7 @@
   <title>KesherAI · On this phone</title>
   <link rel="stylesheet" href="theme.css" />
   <style>
+    .msg img.drawn { width: 100%; max-width: 420px; border-radius: 14px; display: block; margin-top: 8px; }
     .img-out img { width: 100%; border-radius: 14px; margin-top: 10px; }
     #imgBody textarea { width: 100%; box-sizing: border-box; }
     h3.from-pc { margin: 18px 0 4px; font-size: 15px; }
@@ -170,6 +171,7 @@
       <button type="button" id="addPhoto">📷 <span data-he="צלם תמונה" data-en="Take a photo">צלם תמונה</span></button>
       <button type="button" id="addVideo">🎥 <span data-he="צלם וידאו קצר" data-en="Record a short video">צלם וידאו קצר</span></button>
       <button type="button" id="addFile">📎 <span data-he="קובץ או תמונה מהטלפון" data-en="A file or picture from the phone">קובץ או תמונה מהטלפון</span></button>
+      <button type="button" id="addDraw">🎨 <span data-he="צייר תמונה (בטלפון)" data-en="Draw a picture (on the phone)">צייר תמונה (בטלפון)</span></button>
       <button type="button" id="goLive">◉ <span data-he="שיחה חיה (קול ומצלמה)" data-en="Live conversation (voice and camera)">שיחה חיה (קול ומצלמה)</span></button>
     </div>
     <input type="file" id="filePick" multiple accept="image/*,video/*,text/*,.md,.json,.csv,.txt,.js,.ts,.py,.html,.css" hidden />
@@ -849,7 +851,7 @@
    * one; otherwise the model's latest chat (or a new one). `keep` switches
    * the model of the open chat without clearing it.
    */
-  async function openChat(item, url, { id, fresh, keep } = {}) {
+  async function openChat(item, url, { id, fresh, keep, quiet } = {}) {
     // Text shared from another app (with no computer connected) waits in the message box.
     // From the widget: start talking, or take a photo, once the chat is open.
     const act = new URLSearchParams(location.search);
@@ -867,7 +869,7 @@
       for (const m of messages) addMsg(m.role, m.content);
       history.replaceState(null, "", `local.html?c=${encodeURIComponent(chatId)}`);
     } else {
-      addMsg("note", T(`עברתי ל-${item.name}. השיחה ממשיכה.`, `Switched to ${item.name}. The chat goes on.`));
+      if (!quiet) addMsg("note", T(`עברתי ל-${item.name}. השיחה ממשיכה.`, `Switched to ${item.name}. The chat goes on.`));
       saveChat();
     }
     show("chat");
@@ -1014,6 +1016,51 @@
   // ---------- images on the phone (stable-diffusion.cpp, native) ----------
   const IMG = window.Capacitor?.Plugins?.KesherImage;
   const SD = { file: "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", url: "https://huggingface.co/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", size: 1.57 * 1024 ** 3 };
+  /** Asks the open chat's model one short question (no history). Undefined when no model is ready. */
+  async function askOnce(item, msgs) {
+    if (!item) return undefined;
+    let acc = "";
+    const onText = (d) => { acc += d; };
+    const signal = AbortSignal.timeout(90_000);
+    if (item.api) await apiAnswer(item.api, msgs, signal, onText);
+    else if (item.native) await nativeAnswer(item.native, msgs, signal, onText);
+    else if (wllama.isModelLoaded()) {
+      const r = await wllama.createChatCompletion({ messages: msgs, max_tokens: 120, temperature: 0.3, temp: 0.3 });
+      acc = r.choices?.[0]?.message?.content ?? "";
+    } else return undefined;
+    return acc.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+  }
+  /**
+   * The image model (Stable Diffusion 1.5) only understands English: a Hebrew
+   * (or other) description is turned into a short English prompt by the chat
+   * model first. Returns undefined when it is not English and no chat model is ready.
+   */
+  async function englishPrompt(text, item) {
+    if (!/[^\x00-\x7F]/.test(text.replace(/[\u2010-\u2027“”’‘]/g, ""))) return text;
+    const r = await askOnce(item, [
+      { role: "system", content: "You turn a request for a picture into a short English prompt for an image model: the subject, setting, style and lighting, comma separated, under 40 words. Reply with the prompt only." },
+      { role: "user", content: text },
+    ]).catch(() => undefined);
+    const clean = r?.split("\n").find((l) => l.trim())?.replace(/^["'`]+|["'`]+$/g, "").replace(/^prompt:\s*/i, "").trim();
+    return clean && /[a-z]/i.test(clean) ? clean.slice(0, 400) : undefined;
+  }
+  /** Draws a picture on the phone; `onStep(step, steps)` while it works. Returns PNG base64. */
+  async function drawPicture(prompt, n, onStep) {
+    // The chat model leaves the memory while the picture is made (wllama; the graphics-chip models stay).
+    if (wllama.isModelLoaded()) { await wllama.exit(); wllama.__url = ""; }
+    const sub = await IMG.addListener("progress", (e) => {
+      onStep?.(e.step, e.steps);
+      bg("img", { title: T("מצייר תמונה", "Drawing a picture"), text: `${Math.round((e.step / e.steps) * 100)}%`, progress: Math.round((e.step / e.steps) * 100) });
+    });
+    try {
+      return (await IMG.generate({ model: SD.file, prompt, negative: "blurry, low quality, deformed, text, watermark", width: n, height: n, steps: 16, cfg: 7 })).data;
+    } finally {
+      sub?.remove?.();
+      bg("img");
+    }
+  }
+  const imageReady = async () => !!IMG && !!LLM && ((await LLM.list().catch(() => ({ models: [] }))).models ?? []).some((m) => m.name === SD.file) && (await IMG.available().catch(() => ({}))).available;
+
   async function renderImages() {
     if (!IMG || !LLM) return;
     const { available } = await IMG.available().catch(() => ({ available: false }));
@@ -1073,34 +1120,31 @@
       if (!text) return prompt.focus();
       localStorage.setItem("kesherai-phone-img-prompt", text);
       localStorage.setItem("kesherai-phone-img-size", size.value);
-      // The chat model leaves the memory while the picture is made.
-      if (wllama.isModelLoaded()) { await wllama.exit(); wllama.__url = ""; }
       go.disabled = true;
       stop.hidden = false;
       bar.hidden = false;
       bar.firstElementChild.style.width = "0%";
       const started = performance.now();
-      status.textContent = T("טוען את המודל…", "Loading the model…");
-      const sub = await IMG.addListener("progress", (e) => {
-        const pct = Math.round((e.step / e.steps) * 100);
-        bar.firstElementChild.style.width = pct + "%";
-        status.textContent = `${T("שלב", "Step")} ${e.step}/${e.steps} · ${Math.round((performance.now() - started) / 1000)}s`;
-        bg("img", { title: T("מצייר תמונה", "Drawing a picture"), text: `${pct}%`, progress: pct });
-      });
+      let sub;
       try {
+        status.textContent = T("מכין את התיאור…", "Preparing the description…");
+        const english = await englishPrompt(text, current?.item);
+        if (!english) throw new Error(T("מודל התמונות מבין רק אנגלית. כתוב באנגלית, או פתח צ'אט עם מודל וכתוב שם \"צייר …\" (המודל יתרגם).", "The image model understands English only. Write in English, or open a chat with a model and write \"draw …\" there (the model translates)."));
+        if (english !== text) status.textContent = `${T("באנגלית", "In English")}: ${english}`;
         const n = Number(size.value);
-        const r = await IMG.generate({ model: SD.file, prompt: text, negative: "blurry, low quality, deformed", width: n, height: n, steps: 16, cfg: 7 });
-        const img = el("img", { src: `data:image/png;base64,${r.data}`, alt: text });
+        const data = await drawPicture(english, n, (step, steps) => {
+          bar.firstElementChild.style.width = Math.round((step / steps) * 100) + "%";
+          status.textContent = `${T("שלב", "Step")} ${step}/${steps} · ${Math.round((performance.now() - started) / 1000)}s`;
+        });
+        const img = el("img", { src: `data:image/png;base64,${data}`, alt: english });
         const save = el("button", { type: "button", textContent: T("שמור לגלריה", "Save to gallery") });
-        save.onclick = () => IMG.save({ data: r.data }).then(() => (save.textContent = T("נשמר ✓", "Saved ✓")), (e) => (save.textContent = String(e.message || e)));
+        save.onclick = () => IMG.save({ data }).then(() => (save.textContent = T("נשמר ✓", "Saved ✓")), (e) => (save.textContent = String(e.message || e)));
         out.prepend(img, save);
         status.textContent = T(`מוכן אחרי ${Math.round((performance.now() - started) / 1000)} שניות.`, `Ready after ${Math.round((performance.now() - started) / 1000)}s.`);
         doneNotice(T("התמונה מוכנה", "The picture is ready"), text.slice(0, 60));
       } catch (e) {
         status.textContent = T("לא הצלחתי: ", "Could not: ") + (e.message || e);
       } finally {
-        sub?.remove?.();
-        bg("img");
         go.disabled = false;
         stop.hidden = true;
         bar.hidden = true;
@@ -1191,6 +1235,12 @@
   }
   const plusMenu = $("plusMenu");
   $("plus").onclick = () => { plusMenu.hidden = !plusMenu.hidden; };
+  $("addDraw").onclick = async () => {
+    plusMenu.hidden = true;
+    if (!(await imageReady())) { addMsg("note", T("קודם הורד את מודל התמונות: בדף המודלים, \"תמונות בטלפון\".", "First download the image model: on the models page, \"Images on this phone\".")); return; }
+    $("input").value = T("צייר ", "Draw ") + $("input").value;
+    $("input").focus();
+  };
   const pick = (id) => () => { plusMenu.hidden = true; $(id).value = ""; $(id).click(); };
   $("addPhoto").onclick = pick("photoPick");
   $("addVideo").onclick = pick("videoPick");
@@ -1352,6 +1402,38 @@
   }
   $("input").addEventListener("input", paintSend);
 
+  /** Makes a picture from the chat and puts it in the chat (kept with the chat as a note). */
+  async function drawInChat(text) {
+    messages.push({ role: "user", content: text });
+    addMsg("user", text);
+    const out = addMsg("assistant", T("מכין תיאור לתמונה…", "Writing the picture's description…"));
+    abort = new AbortController();
+    paintSend();
+    const started = performance.now();
+    try {
+      const english = (await englishPrompt(text, current?.item)) ?? text;
+      out.textContent = `🎨 ${english}`;
+      const data = await drawPicture(english, Number(localStorage.getItem("kesherai-phone-img-size") || "384"), (step, steps) => {
+        $("status").textContent = `${T("מצייר", "Drawing")} ${step}/${steps} · ${Math.round((performance.now() - started) / 1000)}s`;
+      });
+      const img = Object.assign(document.createElement("img"), { src: `data:image/png;base64,${data}`, className: "att drawn", alt: english });
+      const save = Object.assign(document.createElement("button"), { type: "button", className: "say", textContent: T("שמור לגלריה", "Save to gallery") });
+      save.onclick = () => IMG.save({ data }).then(() => (save.textContent = T("נשמר ✓", "Saved ✓")), (e) => (save.textContent = String(e.message || e)));
+      out.append(img, save);
+      $("status").textContent = T(`התמונה מוכנה (${Math.round((performance.now() - started) / 1000)} שניות)`, `The picture is ready (${Math.round((performance.now() - started) / 1000)}s)`);
+      messages.push({ role: "assistant", content: `(I drew a picture on the phone: ${english})` });
+      saveChat();
+      doneNotice(T("התמונה מוכנה", "The picture is ready"), text.slice(0, 60));
+    } catch (e) {
+      out.textContent = T("לא הצלחתי לצייר: ", "Could not draw: ") + (e.message || e);
+    } finally {
+      abort = null;
+      paintSend();
+      // The chat model was moved out of memory for the picture: load it again for the next message.
+      if (current && !current.item.api && !current.item.native) openChat(current.item, current.url, { keep: true, quiet: true });
+    }
+  }
+
   $("composer").onsubmit = async (e) => {
     e.preventDefault();
     const typed = $("input").value.trim();
@@ -1366,6 +1448,12 @@
     const text = typed || queue.shift() || (attachments.length ? T("מה רואים כאן?", "What is in this?") : "");
     if (typed === "" && text) paintQueue();
     if (!text || (!current?.item.api && !current?.item.native && !wllama.isModelLoaded())) return;
+    // "Draw …" / "צייר …": the picture is made on the phone, from a prompt the chat model writes in English.
+    if (/^(\/draw\b|draw\b|paint\b|make (me )?(a |an )?(picture|image|drawing)|צייר|תצייר|ציירי|צור (לי )?תמונה|תיצור (לי )?תמונה|תעשה (לי )?תמונה)/i.test(text) && (await imageReady())) {
+      $("input").value = "";
+      autosize();
+      return drawInChat(text.replace(/^\/draw\s*/i, ""));
+    }
     $("input").value = "";
     autosize();
     const images = attachments.filter((a) => a.kind === "image").map((a) => a.url);

@@ -1,3 +1,4 @@
+import { modelTurnFor } from "../conversations.js";
 import type { FastifyInstance } from "fastify";
 import { randomInt } from "node:crypto";
 import { ChatRequestSchema, ImageRequestSchema, features } from "@kesher/shared";
@@ -77,6 +78,17 @@ export async function generateRoutes(app: FastifyInstance, s: KesherServices): P
       try {
         const { provider, providerModelId } = s.registry.resolve(modelId);
         if (!provider.generateImage) return reply.code(400).send({ error: `${modelId} is not an image model` });
+        // Image models read English: a Hebrew (or other non-Latin) prompt is translated by the active chat model.
+        if (/[\u0590-\u05FF\u0600-\u06FF\u0400-\u04FF]/.test(rest.prompt) && provider.id === "sdcpp" && s.config.activeModels.chat) {
+          const lora = rest.prompt.match(/<lora:[^>]+>/g) ?? [];
+          const r = await modelTurnFor(s.registry, s.config.activeModels.chat)(
+            { messages: [{ role: "system", content: "Translate the user's picture request into a short English image prompt (subject, setting, style, lighting). Reply with the prompt only." }, { role: "user", content: rest.prompt.replace(/<lora:[^>]+>/g, "") }], tools: [] },
+            AbortSignal.timeout(90_000),
+            () => undefined,
+          ).catch(() => undefined);
+          const en = r?.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim().replace(/^["'“]|["'”]$/g, "");
+          if (en && /[a-z]/i.test(en)) rest.prompt = [en.slice(0, 600), ...lora].join(" ");
+        }
         const init = png(initImage);
         const maskPng = init ? png(mask) : undefined;
         const files = await provider.generateImage({ providerModelId, seed: seed ?? randomInt(2 ** 31), ...rest, ...(init ? { initImage: init } : {}), ...(maskPng ? { mask: maskPng } : {}) });
