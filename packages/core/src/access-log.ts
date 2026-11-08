@@ -125,7 +125,8 @@ export class AccessLog {
         await mkdir(dirname(this.file), { recursive: true });
         await writeFile(this.file, JSON.stringify({ refused: this.refused, visitors: [...this.visitors.values()], requests: this.requests }));
       }).catch(() => undefined);
-    }, 5000);
+      // At most every 30 seconds: the phone asks every few seconds, and the log is not urgent.
+    }, 30_000);
     this.timer.unref?.();
   }
 

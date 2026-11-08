@@ -52,6 +52,13 @@ This review went through the code part by part. Each finding is listed with what
     - **A full request log.** It keeps the last 1000 requests from outside: time, address or device, method, path, result and time taken. It never keeps tokens, query strings or contents.
     - **Alerts.** You get one when a single address is refused 5 times in 10 minutes, and one when 40 requests are refused within an hour from any addresses.
 
+15. **Scan after 0.5.14.** It covered device keys, reset, training, the request log and the desktop rescue window.
+    - **Reset** and removing a device work only on this computer.
+    - **Device keys** are kept as hashes only and compared in constant time.
+    - **The training uploads** are limited to PNG, JPEG and WebP, and the folder name is made safe.
+    - **Faster:** the request log is now saved at most every 30 seconds instead of 5. The phone asks every few seconds.
+    - **A crash on start found here:** `@fastify/static` 10 needed an ES-module-only dependency, which Electron's Node cannot load. 0.5.13 fixed it, and CI now loads the core with `require(esm)` switched off.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA advisory on memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.
