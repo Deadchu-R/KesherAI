@@ -211,4 +211,5 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 27. Unity Visual Scripting, the same way (a small Unity editor package) ⬜
 28. A tidier menu: pages in groups (Create, Work and knowledge, Your assistant, Models and settings) that fold ✅
 29. Train models from KesherAI (future): choose what to train — fine-tune a chat model (LoRA/QLoRA on your texts and chats), a picture LoRA (style or a character from 10–30 pictures), a voice (from a few minutes of speech) — and see for each kind what this computer can train (memory needed, time, which engines: e.g. unsloth/axolotl for text, kohya/ai-toolkit or ComfyUI for pictures), and whether the result plugs into a category (chat, pictures, voice) as a model you can pick, or merges into one that is ⬜
-
+30. Microsoft 365 Copilot as a chat model (work account, Copilot Chat API) and business mode: only allowed connections stay on, enforced by the server, lockable by an administrator's policy.json ✅ (docs/COPILOT.md)
+31. Godot support (future): the same idea as Unreal — an editor plugin (GDScript/C#) so KesherAI sees scenes, nodes and scripts and changes them in words ⬜

@@ -3,6 +3,7 @@ import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { GuardSection } from "../GuardSection";
+import { BusinessSection, CopilotSection } from "../BusinessSection";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
 import { BrowserSection } from "../BrowserSection";
@@ -406,6 +407,8 @@ export function SettingsPage() {
       <PermissionsSection />
       <GoogleDriveSection />
       <OneDriveSection />
+      <CopilotSection />
+      <BusinessSection />
       <ImportChats />
       <Sync />
       <Phone />

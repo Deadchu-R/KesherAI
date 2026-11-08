@@ -12,6 +12,8 @@ import type { DriveSync } from "./drive-sync.js";
 import type { OneDrive } from "./onedrive.js";
 import type { GpuGuard } from "./gpu-guard.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
+import type { Copilot } from "./copilot.js";
+import type { BusinessPolicy } from "./business.js";
 import type { Tunnel } from "./tunnel.js";
 import type { SdEngine } from "./sdcpp.js";
 import type { BrowserBridge } from "./browser-bridge.js";
@@ -69,6 +71,14 @@ export interface KesherServices {
   guard: GpuGuard;
   /** The Unreal Editor's connection (KesherAI Bridge plugin) and saved Blueprints. */
   unreal: UnrealBridge;
+  /** Microsoft 365 Copilot sign-in. */
+  copilot: Copilot;
+  /** Business mode in force (an administrator's policy.json, else Settings). */
+  business: () => BusinessPolicy;
+  /** Whether business mode comes from policy.json (and cannot be changed in the app). */
+  businessManaged: () => boolean;
+  /** Applies business mode to the provider registry after a change. */
+  applyBusiness: () => void;
   /** The built-in image engine (stable-diffusion.cpp). */
   sd: SdEngine;
   /** The link to the KesherAI browser extension. */

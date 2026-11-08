@@ -28,7 +28,7 @@ Registering an app needs no Azure subscription. If the site asks for a payment c
   http://localhost/api/onedrive/callback
   ```
 
-  Microsoft ignores the port for `localhost`, so this works whatever port KesherAI runs on.
+  Microsoft ignores the port for `localhost`, so this works whatever port KesherAI runs on. For Microsoft 365 Copilot add a second one: `http://localhost/api/copilot/callback` ([docs/COPILOT.md](COPILOT.md)).
 
 Press **Register**.
 

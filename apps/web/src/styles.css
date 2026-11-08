@@ -1118,3 +1118,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
   .ue-ask { flex-wrap: wrap; }
   .ue-ask input { flex-basis: 100%; }
 }
+.ue-log { max-height: 180px; overflow: auto; font-size: 11px; background: #0d0e10; padding: 8px; border-radius: 8px; white-space: pre-wrap; margin: 0; }
+.biz-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+label.biz-toggle { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+label.biz-toggle .grow { flex: 1; }

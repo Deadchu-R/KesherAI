@@ -6,9 +6,13 @@ It works through the **KesherAI Bridge** editor plugin ([integrations/unreal/Kes
 
 ## Set up
 
+**Easiest (Windows, also for Blueprint-only projects):** on the Unreal page press **Install into a project…** and pick the project folder. KesherAI finds the project's engine, builds the plugin for it once with the engine's own tool (`RunUAT BuildPlugin`, a few minutes; it needs Visual Studio's free C++ tools, but not a C++ project), and copies the built plugin into `Plugins/KesherAIBridge` without its source, so Unreal loads it without asking to compile. Other projects of the same engine reuse the build.
+
+**By hand:**
+
 1. Download [KesherAIBridge.zip](https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip) (also on the Unreal page).
 2. Unzip it into `YourProject/Plugins/` so you have `YourProject/Plugins/KesherAIBridge/KesherAIBridge.uplugin`.
-3. Open the project and let Unreal build the plugin (Visual Studio or Rider with C++ game development; a Blueprint-only project needs one C++ class first).
+3. Open the project and let Unreal build the plugin (a C++ project with Visual Studio or Rider). For a Blueprint-only project use **Install into a project** instead.
 4. Keep KesherAI running: the editor connects by itself, and the Unreal page shows 🟢.
 
 ## Use

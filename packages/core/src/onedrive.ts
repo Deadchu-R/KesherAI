@@ -48,13 +48,21 @@ function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/** Settings for one Microsoft sign-in (OneDrive, Copilot). */
+export interface MicrosoftSignInConfig {
+  clientId?: string;
+  refreshToken?: string;
+  email?: string;
+  name?: string;
+  lastError?: string;
+}
+
 /**
- * Talks to Microsoft: sign-in, tokens, and KesherAI's app folder in OneDrive.
- * Items live as `<kind>/<id>.json`; each file's "modified" time is set to
- * the item's `updatedAt`, so a list tells which side is newer without
- * downloading anything.
+ * Microsoft sign-in for a desktop app (public client, PKCE): consent page,
+ * tokens, refresh. {@link OneDrive} and the Copilot connection build on it,
+ * each with its own permissions.
  */
-export class OneDrive {
+export class MicrosoftSignIn {
   private pending = new Map<string, { verifier: string; redirectUri: string; at: number }>();
   private access?: { token: string; expires: number };
 
@@ -63,16 +71,20 @@ export class OneDrive {
    * @param save - Persists the config.
    * @param endpoints - Microsoft URLs (tests pass a fake server).
    * @param defaultClientId - The project's app registration, used when the user set none.
+   * @param scopes - The permissions asked for (space-separated).
+   * @param service - Shown in messages, e.g. "OneDrive".
    */
   constructor(
-    private readonly config: OneDriveConfig,
-    private readonly save: () => Promise<void>,
-    private readonly endpoints: OneDriveEndpoints = ONEDRIVE_ENDPOINTS,
-    private readonly defaultClientId?: string,
+    protected readonly config: MicrosoftSignInConfig & { lastSync?: string },
+    protected readonly save: () => Promise<void>,
+    protected readonly endpoints: OneDriveEndpoints = ONEDRIVE_ENDPOINTS,
+    private readonly defaultClientId?: string | (() => string | undefined),
+    private readonly scopes: string = SCOPES,
+    protected readonly service: string = "OneDrive",
   ) {}
 
   private get clientId(): string | undefined {
-    return this.config.clientId || this.defaultClientId || undefined;
+    return this.config.clientId || (typeof this.defaultClientId === "function" ? this.defaultClientId() : this.defaultClientId) || undefined;
   }
 
   /** @returns Whether an application id is set (by the user or the project). */
@@ -94,7 +106,7 @@ export class OneDrive {
    */
   authUrl(redirectUri: string): string {
     const clientId = this.clientId;
-    if (!clientId) throw new Error("OneDrive sign-in needs an application id. Paste one in Settings → OneDrive (see docs/ONEDRIVE.md).");
+    if (!clientId) throw new Error(`${this.service} sign-in needs an application id. Paste one in Settings → ${this.service} (see docs/ONEDRIVE.md).`);
     const verifier = base64url(randomBytes(32));
     const state = base64url(randomBytes(16));
     this.pending.set(state, { verifier, redirectUri, at: Date.now() });
@@ -103,7 +115,7 @@ export class OneDrive {
       redirect_uri: redirectUri,
       response_type: "code",
       response_mode: "query",
-      scope: SCOPES,
+      scope: this.scopes,
       prompt: "select_account",
       state,
       code_challenge: base64url(createHash("sha256").update(verifier).digest()),
@@ -158,16 +170,16 @@ export class OneDrive {
     const res = await fetch(`${this.endpoints.login}/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ client_id: this.clientId ?? "", scope: SCOPES, ...body }),
+      body: new URLSearchParams({ client_id: this.clientId ?? "", scope: this.scopes, ...body }),
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string; error_description?: string } & Record<string, unknown>;
     if (!res.ok) throw new Error(`Microsoft sign-in failed: ${(json.error_description ?? json.error ?? res.status).toString().split("\r\n")[0]}`);
     return json as never;
   }
 
-  private async token(): Promise<string> {
+  protected async token(): Promise<string> {
     if (this.access && Date.now() < this.access.expires) return this.access.token;
-    if (!this.config.refreshToken) throw new Error("Not connected to OneDrive.");
+    if (!this.config.refreshToken) throw new Error(`Not connected to ${this.service}.`);
     const json = await this.tokenRequest({ grant_type: "refresh_token", refresh_token: this.config.refreshToken });
     // Microsoft rotates refresh tokens; keep the newest.
     if (json.refresh_token && json.refresh_token !== this.config.refreshToken) {
@@ -178,16 +190,23 @@ export class OneDrive {
     return json.access_token;
   }
 
-  private async call<T>(url: string, init: RequestInit = {}, okMissing = false): Promise<T | undefined> {
+  protected async call<T>(url: string, init: RequestInit = {}, okMissing = false): Promise<T | undefined> {
     const res = await fetch(url, { ...init, headers: { authorization: `Bearer ${await this.token()}`, ...(init.headers as Record<string, string>) } });
     if (okMissing && res.status === 404) return undefined;
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`OneDrive answered ${res.status}: ${text.slice(0, 200)}`);
+      throw new Error(`${this.service} answered ${res.status}: ${text.slice(0, 200)}`);
     }
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
+}
 
+/**
+ * KesherAI's app folder in OneDrive. Items live as `<kind>/<id>.json`; each
+ * file's "modified" time is set to the item's `updatedAt`, so a list tells
+ * which side is newer without downloading anything.
+ */
+export class OneDrive extends MicrosoftSignIn {
   private path(kind: Kind, id: string): string {
     return `${this.endpoints.graph}/me/drive/special/approot:/${kind}/${encodeURIComponent(id)}.json`;
   }

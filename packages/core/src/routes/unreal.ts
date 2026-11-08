@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
+import { join } from "node:path";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { modelTurnFor } from "../conversations.js";
 import { BRIDGE_VERSION, blueprintPrompt, parseOps } from "../unreal-bridge.js";
+import { BridgeInstaller, findEngines } from "../unreal-install.js";
 
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
@@ -92,6 +94,27 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
       }
     });
   }
+
+  const installer = new BridgeInstaller(join(s.paths.root, "unreal", "_built"));
+
+  /** Engines on this computer and the current install (for "Install into a project"). */
+  app.get("/api/unreal/engines", async () => ({ engines: await findEngines(), job: installer.status() ?? null, windows: process.platform === "win32" }));
+
+  /**
+   * Installs the plugin into a project folder (works for Blueprint-only
+   * projects): builds it once per engine version, then copies it in. Only on
+   * this computer.
+   */
+  app.post<{ Body: { project?: string } }>("/api/unreal/install", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Install the plugin on the computer that runs KesherAI." });
+    if (!req.body?.project) return reply.code(400).send({ error: "Choose the project folder." });
+    try {
+      await installer.install(req.body.project);
+      return { job: installer.status() };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
 
   app.get("/api/unreal/queue", async () => b.queue());
   app.delete<{ Params: { id: string } }>("/api/unreal/queue/:id", async (req) => ({ removed: await b.unqueue(req.params.id) }));

@@ -48,6 +48,9 @@ import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
 import { UnrealBridge } from "./unreal-bridge.js";
+import { Copilot, copilotProvider } from "./copilot.js";
+import { managedPolicy, policyCheck } from "./business.js";
+import { copilotRoutes } from "./routes/copilot.js";
 import { unrealRoutes } from "./routes/unreal.js";
 import { guardRoutes } from "./routes/guard.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
@@ -283,6 +286,14 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   );
   const onedrive = new OneDrive(config.onedrive, persist, options.onedriveEndpoints ?? ONEDRIVE_ENDPOINTS, process.env.KESHER_ONEDRIVE_CLIENT_ID || branding.onedrive.clientId || undefined);
   const onedriveSync = new DriveSync(onedrive, library, config.onedrive, persist);
+  // Microsoft 365 Copilot uses the same app registration as OneDrive unless the user set its own.
+  const copilot = new Copilot(config.copilot, persist, options.onedriveEndpoints ?? ONEDRIVE_ENDPOINTS, () => config.onedrive.clientId || process.env.KESHER_ONEDRIVE_CLIENT_ID || branding.onedrive.clientId || undefined);
+  registry.registerFactory({ type: "copilot", displayName: "Microsoft 365 Copilot", categories: ["chat"], create: () => copilotProvider(copilot) });
+  registry.add({ id: "copilot", type: "copilot", name: "Microsoft 365 Copilot", location: "cloud" });
+  // Business mode: only the allowed connections stay on (an administrator's policy.json wins).
+  const business = () => managedPolicy(paths.root) ?? config.business;
+  const applyBusiness = () => registry.setPolicy(business().enabled ? policyCheck(business()) : undefined);
+  applyBusiness();
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
@@ -507,6 +518,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     onedrive,
     onedriveSync,
     guard,
+    copilot,
+    business,
+    businessManaged: () => !!managedPolicy(paths.root),
+    applyBusiness,
     unreal: new UnrealBridge(join(paths.root, "unreal")),
     sd,
     tunnel,
@@ -577,6 +592,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
   await unrealRoutes(app, services);
+  await copilotRoutes(app, services);
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);
   await partsRoutes(app, services);

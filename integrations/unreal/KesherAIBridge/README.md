@@ -10,7 +10,9 @@ Connects the Unreal Editor to KesherAI on the same computer. In KesherAI (**Crea
 
 1. Download `KesherAIBridge.zip` from https://github.com/Deadchu-R/KesherAI/releases/tag/unreal-plugin-latest
 2. Unzip it into your project: `YourProject/Plugins/KesherAIBridge/` (the folder with `KesherAIBridge.uplugin`).
-3. Open the project. Unreal offers to build the plugin; say yes. That needs Visual Studio (or Rider) with the C++ game development workload. A Blueprint-only project first needs one C++ class (Tools → New C++ Class → None → Create).
+3. Open the project. Unreal offers to build the plugin; say yes (needs Visual Studio or Rider with C++ game development).
+
+**Blueprint-only project?** Use KesherAI → Unreal Blueprints → **Install into a project…** instead: it builds the plugin once for your engine (`RunUAT BuildPlugin`) and copies the built files in, so Unreal does not need to compile anything. Or by hand: `Engine\Build\BatchFiles\RunUAT.bat BuildPlugin -Plugin=<path>\KesherAIBridge.uplugin -Package=<out> -TargetPlatforms=Win64`, then copy `<out>` (without `Source` and `Intermediate`) into `YourProject/Plugins/KesherAIBridge`.
 4. With KesherAI running, the Unreal page shows 🟢 Connected.
 
 ## What KesherAI can ask

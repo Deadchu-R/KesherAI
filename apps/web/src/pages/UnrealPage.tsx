@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
-import { toast } from "../library";
+import { desktop, toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -92,6 +92,57 @@ function GraphView({ nodes }: { nodes: GNode[] }) {
         );
       })}
     </svg>
+  );
+}
+
+interface Job { state: "building" | "copying" | "done" | "failed"; project: string; engine: string; log: string[]; message?: string }
+
+/**
+ * Install into a project (this computer, Windows): KesherAI builds the
+ * plugin for the project's engine once and copies it in, so it works in
+ * Blueprint-only projects too.
+ */
+function InstallIntoProject() {
+  const [info, setInfo] = useState<{ engines: Array<{ version: string; path: string }>; job: Job | null; windows: boolean } | null>(null);
+  const [error, setError] = useState("");
+  const load = () => void api<NonNullable<typeof info>>("/api/unreal/engines").then(setInfo, () => setInfo(null));
+  useEffect(load, []);
+  const running = info?.job?.state === "building" || info?.job?.state === "copying";
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(load, 2000);
+    return () => clearInterval(id);
+  }, [running]);
+  const bridge = desktop();
+  if (!info?.windows || !bridge) return null;
+  const pick = async () => {
+    setError("");
+    const folder = await bridge.pickFolder();
+    if (!folder) return;
+    try {
+      await api("/api/unreal/install", { method: "POST", body: { project: folder } });
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const job = info.job;
+  return (
+    <div className="stack ue-install">
+      <div className="row">
+        <button type="button" className="primary" disabled={running} onClick={() => void pick()}>📁 {L("התקן לתוך פרויקט…", "Install into a project…")}</button>
+        <span className="muted small">{L("עובד גם בפרויקט Blueprint בלבד, בלי C++. ", "Works in Blueprint-only projects too, no C++. ")}{info.engines.length ? `${L("נמצאו", "Found")}: UE ${info.engines.map((e) => e.version).join(", ")}` : L("לא נמצא Unreal במחשב.", "No Unreal found on this computer.")}</span>
+      </div>
+      {job && (
+        <div className="stack">
+          <p className={job.state === "failed" ? "error" : job.state === "done" ? "pill good" : "muted"}>
+            {job.state === "building" ? `⚙ ${L(`בונה את הפלאגין ל-Unreal ${job.engine} (פעם אחת לכל גרסה, כמה דקות)…`, `Building the plugin for Unreal ${job.engine} (once per version, a few minutes)…`)}` : job.state === "copying" ? L("מעתיק לפרויקט…", "Copying into the project…") : job.state === "done" ? `✅ ${job.message ?? ""}` : `⛔ ${job.message ?? ""}`}
+          </p>
+          {(running || job.state === "failed") && job.log.length > 0 && <pre className="ue-log" dir="ltr">{job.log.slice(-12).join("\n")}</pre>}
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
+    </div>
   );
 }
 
@@ -195,10 +246,12 @@ export function UnrealPage() {
       {(neverConnected || !st.connected) && (
         <section className="card stack">
           <h2>{L("חיבור Unreal", "Connect Unreal")}</h2>
+          <InstallIntoProject />
+          <p className="muted small">{L("או ידנית:", "Or by hand:")}</p>
           <ol className="ue-steps">
             <li>{L("הורד את הפלאגין:", "Download the plugin:")} <a className="button primary" href={st.download}>⬇ KesherAIBridge.zip</a></li>
             <li>{L("חלץ אותו לתיקייה Plugins בתוך הפרויקט (YourProject/Plugins/KesherAIBridge).", "Unzip it into your project's Plugins folder (YourProject/Plugins/KesherAIBridge).")}</li>
-            <li>{L("פתח את הפרויקט. Unreal יבנה את הפלאגין בפעם הראשונה (צריך Visual Studio; בפרויקט Blueprint בלבד הוסף קודם מחלקת C++ אחת).", "Open the project. Unreal builds the plugin the first time (needs Visual Studio; in a Blueprint-only project add one C++ class first).")}</li>
+            <li>{L("פתח את הפרויקט. בפרויקט C++, Unreal יבנה את הפלאגין בפעם הראשונה (צריך Visual Studio). לפרויקט Blueprint בלבד — השתמש ב\"התקן לתוך פרויקט\" למעלה.", "Open the project. In a C++ project Unreal builds the plugin the first time (needs Visual Studio). For a Blueprint-only project, use “Install into a project” above.")}</li>
             <li>{L("זהו: כש-KesherAI פתוח, Unreal מתחבר לבד ויופיע כאן 🟢.", "That's it: while KesherAI runs, Unreal connects by itself and shows 🟢 here.")}</li>
           </ol>
           <p className="muted small">{L("החיבור הוא רק בתוך המחשב הזה. כל Blueprint שנפתח כאן נשמר כעותק, כדי שתוכל לראות אותו ולבקש שינויים גם כש-Unreal סגור.", "The connection stays on this computer. Every Blueprint opened here is kept as a copy, so you can see it and ask for changes with Unreal closed too.")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/UNREAL.md" target="_blank" rel="noreferrer">docs/UNREAL.md</a></p>

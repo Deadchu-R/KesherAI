@@ -33,6 +33,25 @@ export class ProviderRegistry {
   private readonly factories = new Map<string, ProviderFactory>();
   private readonly providers = new Map<string, { provider: Provider; config: ProviderConfig }>();
   private gate?: ProviderGate;
+  private allowed?: (providerId: string) => boolean;
+
+  /**
+   * Limits which providers may be used (business mode): the others' models
+   * are not listed and calls to them are refused.
+   *
+   * @param allowed - Says whether a provider may be used; undefined allows all.
+   */
+  setPolicy(allowed: ((providerId: string) => boolean) | undefined): void {
+    this.allowed = allowed;
+  }
+
+  /**
+   * @param id - Provider id.
+   * @returns Whether the current policy lets it be used.
+   */
+  permitted(id: string): boolean {
+    return !this.allowed || this.allowed(id);
+  }
 
   /**
    * Sends every local provider's work through a gate (see {@link ProviderGate}).
@@ -146,7 +165,7 @@ export class ProviderRegistry {
    * @returns All models found, and the providers that failed.
    */
   async listAllModels(timeoutMs = 5000): Promise<ModelListing> {
-    const entries = this.list();
+    const entries = this.list().filter(({ provider }) => this.permitted(provider.id));
     const results = await Promise.allSettled(
       entries.map(({ provider }) => provider.listModels(AbortSignal.timeout(timeoutMs))),
     );
@@ -170,6 +189,7 @@ export class ProviderRegistry {
     const { providerId, providerModelId } = parseModelId(modelId);
     const provider = this.get(providerId);
     if (!provider) throw new Error(`No provider "${providerId}" — add it under Connections`);
+    if (!this.permitted(providerId)) throw new Error(`${provider.name} is turned off by your organisation's business mode.`);
     return { provider, providerModelId };
   }
 }

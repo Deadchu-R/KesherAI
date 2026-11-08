@@ -113,6 +113,29 @@ export const KesherConfigSchema = z.object({
       gentle: z.boolean().default(false),
     })
     .default({}),
+  /** Microsoft 365 Copilot (work or school account with a Copilot licence). */
+  copilot: z
+    .object({
+      clientId: z.string().optional(),
+      refreshToken: z.string().optional(),
+      email: z.string().optional(),
+      name: z.string().optional(),
+      lastError: z.string().optional(),
+      web: z.boolean().default(true),
+    })
+    .default({}),
+  /**
+   * Business mode: only the listed connections may be used (e.g. only
+   * Copilot); every other model, local or cloud, is turned off. A
+   * `policy.json` in the data folder, placed by an administrator, overrides
+   * this and cannot be changed from the app.
+   */
+  business: z
+    .object({
+      enabled: z.boolean().default(false),
+      allowed: z.array(z.string()).default(["copilot"]),
+    })
+    .default({}),
   /** OneDrive sign-in (Microsoft account). The application id defaults to the one in branding.config.ts. */
   onedrive: z
     .object({
