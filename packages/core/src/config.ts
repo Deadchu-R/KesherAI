@@ -141,6 +141,8 @@ export const KesherConfigSchema = z.object({
     .object({
       /** Tell the people on the call apart (keeps the call's audio until the write-up, then deletes it). */
       speakers: z.boolean().default(true),
+      /** Keep the meeting's recording, so its transcript follows playback (off: deleted after the write-up). */
+      keepRecording: z.boolean().default(false),
     })
     .default({}),
   speech: z

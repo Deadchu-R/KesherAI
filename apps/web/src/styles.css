@@ -1028,3 +1028,10 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
   .pages-body.split { grid-template-columns: 1fr; }
   .pages-body textarea { min-height: 50vh; }
 }
+
+/* A meeting's kept recording: the transcript follows playback. */
+.meeting-player { width: 100%; margin: 6px 0; }
+.transcript li.seekable { cursor: pointer; border-radius: 6px; padding: 2px 6px; }
+.transcript li.seekable:hover { background: var(--raised, #ffffff0d); }
+.transcript li.now { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.transcript { max-height: 360px; overflow-y: auto; }

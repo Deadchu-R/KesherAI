@@ -109,6 +109,8 @@ export interface Meeting {
   /** Ids of the action items it added to the day. */
   actionIds?: string[];
   error?: string;
+  /** The kept recording (an option): when it starts (ms, like segment times) and its length. */
+  recording?: { start: number; seconds: number };
 }
 
 /** Time per app and focus figures for a day. */
@@ -849,6 +851,15 @@ export class Journal {
     m.segments.sort((a, b) => a.t - b.t);
     await this.saveMeeting(day, m);
     return m;
+  }
+
+  /** Notes the meeting's kept recording (or that it was deleted, with undefined). */
+  async setRecording(day: string, id: string, rec: Meeting["recording"]): Promise<void> {
+    const m = await this.meeting(day, id);
+    if (!m) throw new Error("No such meeting.");
+    if (rec) m.recording = rec;
+    else delete m.recording;
+    await this.saveMeeting(day, m);
   }
 
   /**

@@ -13,7 +13,7 @@ interface Capture { t: number; app: string; title: string; text?: string; frame?
 interface Observation { id: string; t0: number; t1: number; text: string; kind?: string }
 interface Action { id: string; t: number; text: string; who?: string; state: "open" | "done" | "dismissed"; day?: string }
 interface Stats { activeMinutes: number; apps: Array<{ app: string; minutes: number }>; switches: number; longestFocus: { app: string; minutes: number }; meetings: Array<{ t0: number; t1: number; title: string }>; hours: number[] }
-interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string; who?: "me" | "others"; speaker?: number }>; summary?: string; decisions?: string[]; error?: string }
+interface Meeting { id: string; title: string; t0: number; t1?: number; segments: Array<{ t: number; text: string; who?: "me" | "others"; speaker?: number }>; summary?: string; decisions?: string[]; error?: string; recording?: { start: number; seconds: number } }
 interface DayData { day: string; captures: Capture[]; meetings: Meeting[]; insights: { observations: Observation[]; actions: Action[]; summarizedTo: number; error?: string }; stats: Stats; entities: Array<{ id: string; name: string; kind: string }> }
 interface Entity { id: string; name: string; kind: "person" | "project" | "company" | "concept"; summary?: string; aliases: string[]; parent?: string; hidden?: boolean; days: string[]; lastSeen: number }
 interface SearchHit { kind: "screen" | "observation" | "entity" | "action" | "meeting"; day: string; t: number; title: string; snippet: string; frame?: string }
@@ -277,6 +277,23 @@ function DayView({ data, reload, onReplay }: { data: DayData; reload: () => void
 function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () => void }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A kept recording: the transcript follows playback, and a line jumps the player to it.
+  const player = useRef<HTMLAudioElement>(null);
+  const [now, setNow] = useState(-1);
+  const rec = m.recording;
+  const at = (t: number) => (rec ? Math.max(0, (t - rec.start) / 1000) : 0);
+  const current = rec && now >= 0 ? m.segments.reduce((best, x, i) => (at(x.t) <= now + 0.25 ? i : best), -1) : -1;
+  const list = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    if (current < 0) return;
+    list.current?.children[current]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [current]);
+  const jump = (t: number) => {
+    const a = player.current;
+    if (!a) return;
+    a.currentTime = at(t);
+    void a.play();
+  };
   return (
     <article className="meeting-card">
       <header className="row">
@@ -291,15 +308,27 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
         </>
       )}
       {m.error && <p className="error small">{m.error}</p>}
+      {rec && (
+        <audio
+          ref={player}
+          className="meeting-player"
+          controls
+          preload="metadata"
+          src={withToken(`/api/journal/meetings/${day}/${m.id}/recording`)}
+          onPlay={() => setOpen(true)}
+          onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+        />
+      )}
       <div className="row small">
         <button type="button" className="link-btn" onClick={() => setOpen(!open)}>{open ? L("הסתר תמלול", "Hide transcript") : L(`תמלול (${m.segments.length})`, `Transcript (${m.segments.length})`)}</button>
         {(m.error || !m.summary) && <button type="button" className="link-btn" disabled={busy} onClick={() => { setBusy(true); void api(`/api/journal/meetings/${day}/${m.id}/finish`, { method: "POST", body: {} }).then(reload).finally(() => setBusy(false)); }}>{busy ? L("כותב…", "Writing…") : L("סכם שוב", "Write up again")}</button>}
         {m.segments.length > 0 && <button type="button" className="link-btn" onClick={() => void askAbout(m)}>{L("שאל על הפגישה", "Ask about this meeting")}</button>}
+        {rec && <button type="button" className="link-btn" onClick={() => confirm(L("למחוק רק את ההקלטה? התמלול והסיכום נשארים.", "Delete only the recording? The transcript and write-up stay.")) && void api(`/api/journal/meetings/${day}/${m.id}/recording`, { method: "DELETE" }).then(reload)}>{L("מחק הקלטה", "Delete recording")}</button>}
         <button type="button" className="link-btn" onClick={() => void api(`/api/journal/meetings/${day}/${m.id}`, { method: "DELETE" }).then(reload)}>{L("מחק", "Delete")}</button>
       </div>
       {open && (
-        <ol className="transcript">
-          {m.segments.map((x) => <li key={`${x.t}-${x.who ?? ""}`}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.who && <strong className={`who ${x.who}${x.speaker ? ` s${(x.speaker - 1) % 6}` : ""}`}>{x.who === "me" ? L("אני", "Me") : x.speaker ? L(`דובר ${x.speaker}`, `Speaker ${x.speaker}`) : L("האחרים", "Others")}:</strong>} {x.text}</li>)}
+        <ol className="transcript" ref={list}>
+          {m.segments.map((x, i) => <li key={`${x.t}-${x.who ?? ""}`} className={`${i === current ? "now" : ""}${rec ? " seekable" : ""}`} {...(rec ? { onClick: () => jump(x.t), title: L("נגן מכאן", "Play from here") } : {})}><span className="muted small" dir="ltr">{hhmm(x.t)}</span> {x.who && <strong className={`who ${x.who}${x.speaker ? ` s${(x.speaker - 1) % 6}` : ""}`}>{x.who === "me" ? L("אני", "Me") : x.speaker ? L(`דובר ${x.speaker}`, `Speaker ${x.speaker}`) : L("האחרים", "Others")}:</strong>} {x.text}</li>)}
         </ol>
       )}
     </article>

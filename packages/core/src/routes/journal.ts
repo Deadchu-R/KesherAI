@@ -1,3 +1,4 @@
+import { buildRecording, keepRecordingPiece, recordingDir, recordingResponse } from "../meeting-recording.js";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import type { MeetingSegment } from "../journal.js";
@@ -81,6 +82,7 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
         text = (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", s.config.speech.language)).text;
       }
       if (separate && text.trim()) await keepCallPiece(meetingAudioDir(join(s.paths.root, "journal"), m.id), t, wav);
+      if (s.config.meetings.keepRecording) await keepRecordingPiece(recordingDir(join(s.paths.root, "journal"), m.id), t, who, wav);
       await s.journal.addSegment(req.params.day, req.params.id, t, text, who, parts);
       return { text };
     } catch (err) {
@@ -109,12 +111,36 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
         if (others?.length) await s.journal.replaceOthers(req.params.day, req.params.id, others);
       }
       if (dir) await rm(dir, { recursive: true, force: true });
+      // The kept recording: one file on the meeting's timeline, for playback with the transcript.
+      const rec = m && (await buildRecording(recordingDir(join(s.paths.root, "journal"), m.id)).catch(() => undefined));
+      if (rec) await s.journal.setRecording(req.params.day, req.params.id, rec);
       return await s.journal.finishMeeting(req.params.day, req.params.id);
     } catch (err) {
       return reply.code(404).send({ error: (err as Error).message });
     }
   });
+  /** The meeting's kept recording (Range requests work, so the player can jump). */
+  app.get<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id/recording", opts, async (req, reply) => {
+    const r = await recordingResponse(recordingDir(join(s.paths.root, "journal"), req.params.id), req.headers.range);
+    if (!r) return reply.code(404).send({ error: "This meeting has no kept recording." });
+    return reply.code(r.status).headers(r.headers).send(r.body);
+  });
+  /** Deletes only the recording (the transcript and write-up stay). */
+  app.delete<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id/recording", opts, async (req) => {
+    await rm(recordingDir(join(s.paths.root, "journal"), req.params.id), { recursive: true, force: true });
+    await s.journal.setRecording(req.params.day, req.params.id, undefined).catch(() => undefined);
+    return { ok: true };
+  });
+  /** Keep meeting recordings: `{ keep }`. */
+  app.put<{ Body: { keep?: boolean } }>("/api/journal/recordings", opts, async (req) => {
+    s.config.meetings.keepRecording = !!req.body?.keep;
+    await s.saveConfig();
+    return { keep: s.config.meetings.keepRecording };
+  });
+  app.get("/api/journal/recordings", opts, async () => ({ keep: s.config.meetings.keepRecording }));
+
   app.delete<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id", opts, async (req) => {
+    await rm(recordingDir(join(s.paths.root, "journal"), req.params.id), { recursive: true, force: true });
     await rm(meetingAudioDir(join(s.paths.root, "journal"), req.params.id), { recursive: true, force: true });
     await s.journal.deleteMeeting(req.params.day, req.params.id).catch(() => undefined);
     return { ok: true };

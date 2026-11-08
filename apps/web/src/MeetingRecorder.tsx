@@ -142,6 +142,7 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
           <strong>{L("הקלטת פגישה", "Record a meeting")}</strong>
           <p className="muted small">{L("מקליט את המיקרופון ואת הקול של השיחה, הופך כל חצי דקה לטקסט, ובסוף כותב סיכום, החלטות ומשימות. נשמר רק הטקסט.", "Records your microphone and the call's sound, turns each half minute into text, and at the end writes a summary, decisions and action items. Only the text is kept.")}</p>
           <SpeakersOption />
+          <RecordingOption />
           <p className="small">{L("ספר למשתתפים שאתה מקליט.", "Tell the other people you are recording.")}</p>
           <label className="stack"><span>{L("שם הפגישה", "Meeting name")}</span><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={L("למשל: סנכרון שבועי", "e.g. Weekly sync")} /></label>
           {error && <p className="error small">{error}</p>}
@@ -162,6 +163,22 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
       </span>
       {state === "recording" && <button type="button" className="primary" onClick={() => void rec.current?.stop()}>{L("עצור וסכם", "Stop and write up")}</button>}
       {error && <span className="error small">{error}</span>}
+    </div>
+  );
+}
+
+/** Keep the recording, so the transcript follows playback (off: deleted after the write-up). */
+function RecordingOption() {
+  const [keep, setKeep] = useState<boolean | null>(null);
+  useEffect(() => void api<{ keep: boolean }>("/api/journal/recordings").then((r) => setKeep(r.keep), () => undefined), []);
+  if (keep === null) return null;
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <label className="check">
+        <input type="checkbox" checked={keep} onChange={(e) => void api<{ keep: boolean }>("/api/journal/recordings", { method: "PUT", body: { keep: e.target.checked } }).then((r) => setKeep(r.keep))} />
+        {L("לשמור את ההקלטה (התמלול עוקב אחרי הניגון)", "Keep the recording (the transcript follows playback)")}
+      </label>
+      {keep && <p className="muted small">{L("ההקלטה נשמרת רק במחשב הזה, כ-115 MB לשעה. אפשר למחוק אותה בכל פגישה.", "The recording stays on this computer only, about 115 MB an hour. You can delete it from any meeting.")}</p>}
     </div>
   );
 }
