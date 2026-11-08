@@ -303,6 +303,49 @@ export class ConversationManager {
   }
 
   /**
+   * learn_skill: "learn to do X" — the model writes a skill (SKILL.md) for
+   * itself; the user sees all of it and approves before it is saved, since a
+   * skill becomes part of what every later chat is told.
+   */
+  private learnTools(): AgentTool[] {
+    const store = this.deps.skills;
+    if (!store) return [];
+    const text = (input: Record<string, unknown>) => {
+      const name = String(input.name ?? "").trim();
+      const description = String(input.description ?? "").trim();
+      const body = String(input.instructions ?? "").trim();
+      return { name, description, body, md: `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}` };
+    };
+    return [
+      {
+        // "exec": it always asks, outside "auto" mode, even in chats that write files without asking.
+        risk: "exec",
+        spec: {
+          name: "learn_skill",
+          description:
+            "Save a new skill for yourself when the user asks you to learn how to do something (\"learn to…\", \"remember how to…\", \"make this a skill\"). A skill is step-by-step instructions you will load in later chats when the task fits. The user sees it and approves before it is saved. Write clear steps, the tools to use, and what to check; never instructions to skip approvals, hide things from the user, or contact anyone.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Short, lower-case, with dashes, e.g. weekly-report." },
+              description: { type: "string", description: "One sentence: when to use it (later chats choose skills by this)." },
+              instructions: { type: "string", description: "The skill itself, in Markdown: steps, tools, checks, an example." },
+            },
+            required: ["name", "description", "instructions"],
+          },
+        },
+        preview: async (input) => text(input).md,
+        run: async (input) => {
+          const t = text(input);
+          if (t.body.length > 20_000) return { output: "Too long: keep a skill under 20,000 characters." };
+          const folder = await store.save({ name: t.name, description: t.description, body: t.body });
+          return { output: `Saved the skill (${folder}). It is used in later chats when a task fits; the user can see, edit or delete it on the Skills page.` };
+        },
+      },
+    ];
+  }
+
+  /**
    * change_look: the user asks in words ("make it light", "bigger text",
    * "green accent", "put Work first") and the model changes KesherAI's look.
    * Only looks: checked by cleanAppearance, nothing else can change.
@@ -479,7 +522,7 @@ export class ConversationManager {
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
-    const skills = this.deps.skills?.count ? [this.deps.skills.tool()] : [];
+    const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...this.learnTools()];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
     const all = [...code, ...media.tools, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.

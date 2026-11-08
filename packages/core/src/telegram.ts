@@ -75,7 +75,7 @@ interface Update {
 }
 
 /** Tools that act on the computer itself: never approved from Telegram unless the user allowed it. */
-export const COMMAND_TOOLS = /^(run_command|build_executable|computer_|browser_(click|type|open))/;
+export const COMMAND_TOOLS = /^(run_command|build_executable|learn_skill|computer_|browser_(click|type|open))/;
 
 const LIMIT = 4000;
 const PAIR_MS = 10 * 60_000;
