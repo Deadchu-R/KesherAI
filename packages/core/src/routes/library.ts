@@ -9,6 +9,7 @@ import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
 import { readExport } from "../chat-import.js";
+import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-export.js";
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
@@ -273,6 +274,21 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     for (let i = 2; existsSync(path); i++) path = join(dir, name.replace(/(\.[^.]*)?$/, ` (${i})$1`));
     await writeFile(path, body);
     return { path, name: basename(path) };
+  });
+
+  /**
+   * The chat as a file: `?format=md` (Markdown) or `html` (a print-ready page;
+   * `&print=1` opens the print dialog, to save it as a PDF). `&download=1`
+   * asks the browser to save it.
+   */
+  app.get<{ Params: { id: string }; Querystring: { format?: string; print?: string; download?: string } }>("/api/conversations/:id/export", async (req, reply) => {
+    const conv = await s.library.getConversation(req.params.id);
+    if (!conv) return reply.code(404).send({ error: "Conversation not found" });
+    const html = req.query.format === "html";
+    const name = exportFileName(conv, html ? "html" : "md");
+    if (req.query.download) reply.header("content-disposition", `attachment; filename="chat.${html ? "html" : "md"}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+    reply.type(html ? "text/html; charset=utf-8" : "text/markdown; charset=utf-8");
+    return html ? conversationHtml(conv, !!req.query.print) : conversationMarkdown(conv);
   });
 
   /** "Keep going until done": `{ goal }` sets it and sends it; an empty goal stops it. */

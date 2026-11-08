@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate } from "@kesher/shared";
 import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "../api";
-import { desktop, refreshLibrary, useLibrary } from "../library";
+import { desktop, refreshLibrary, toast, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
 import { PersonaChip } from "../Personas";
@@ -254,6 +254,28 @@ function QuestionCard({ convId, ev, pending, answer }: { convId: string; ev: Ev<
 }
 
 /** One conversation: chat or code, with live events, approvals and questions. */
+/**
+ * Saves the chat as a file: Markdown (downloaded), or PDF (the desktop app
+ * asks where to save it; a browser opens the print dialog: "Save as PDF").
+ */
+function exportChat(id: string, kind: "md" | "pdf"): void {
+  if (kind === "pdf" && desktop()?.saveChatPdf) {
+    void desktop()!.saveChatPdf!(id).then((file) => file && toast(getLocale() === "he" ? `נשמר: ${file}` : `Saved: ${file}`), (e: Error) => toast(e.message));
+    return;
+  }
+  const url = withToken(`/api/conversations/${id}/export?${kind === "md" ? "format=md&download=1" : "format=html&print=1"}`);
+  if (kind === "pdf") {
+    window.open(url, "_blank", "noopener");
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
 export function ConversationPage({ id }: { id: string }) {
   const [conv, setConv] = useState<Loaded | null>(null);
   const [editingSeq, setEditingSeq] = useState<number | null>(null);
@@ -510,7 +532,7 @@ export function ConversationPage({ id }: { id: string }) {
           </form>
         ) : (
           <div className="bar-conv">
-            <button type="button" className="bar-title" aria-haspopup="menu" aria-expanded={titleMenu} aria-label={t("convMenu")} onClick={() => setTitleMenu(!titleMenu)}>
+            <button type="button" className="bar-title" data-slide-menu aria-haspopup="menu" aria-expanded={titleMenu} aria-label={t("convMenu")} onClick={() => setTitleMenu(!titleMenu)}>
               <span className="bar-title-text" dir="auto">{conv.kind === "code" ? "</> " : ""}{title}</span>
               <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
@@ -518,6 +540,8 @@ export function ConversationPage({ id }: { id: string }) {
               <div className="bar-pop" role="menu">
                 <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); setEditingTitle(true); }}>{t("rename")}</button>
                 {info?.workspace && desktop()?.openPath && <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); void desktop()!.openPath!(info.workspace!); }}>{t("openFolder")}</button>}
+                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); exportChat(conv.id, "md"); }}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</button>
+                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); exportChat(conv.id, "pdf"); }}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</button>
                 <button type="button" role="menuitem" className="danger" onClick={() => { setTitleMenu(false); void remove(); }}>{t("delete")}</button>
               </div>
             )}

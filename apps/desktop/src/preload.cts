@@ -9,6 +9,8 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("kesherDesktop", {
+  /** Saves a chat as a PDF (asks where). Resolves with the file, or null if cancelled. */
+  saveChatPdf: (id: string): Promise<string | null> => ipcRenderer.invoke("kesher:chat-pdf", id),
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("kesher:pick-folder"),
   /** Start with the computer in the background; pass nothing to read it. */

@@ -50,6 +50,8 @@ interface DesktopBridge {
   pathOf?(file: File): string;
   /** Start with the computer in the background (no window). Missing before 0.4.28. */
   startup?(on?: boolean): Promise<boolean>;
+  /** Saves a chat as a PDF; null when cancelled. Missing before 0.4.63. */
+  saveChatPdf?(id: string): Promise<string | null>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

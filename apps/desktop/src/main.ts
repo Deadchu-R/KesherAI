@@ -12,7 +12,7 @@
  */
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, screen as displays } from "electron";
 import { join, resolve } from "node:path";
-import { chmod, readFile, stat } from "node:fs/promises";
+import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createKesherServer, type KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
@@ -361,6 +361,26 @@ ipcMain.handle("kesher:run-file", async (_event, path: unknown) => {
 ipcMain.handle("kesher:startup", (_event, on: unknown) => {
   if (typeof on === "boolean") app.setLoginItemSettings({ openAtLogin: on, args: ["--headless"] });
   return app.getLoginItemSettings({ args: ["--headless"] }).openAtLogin;
+});
+
+/** Saves a chat as a PDF: its print-ready page, printed in a hidden window. */
+ipcMain.handle("kesher:chat-pdf", async (event, id: unknown) => {
+  if (typeof id !== "string" || !/^[\w-]{1,80}$/.test(id) || !server) return null;
+  const page = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
+  try {
+    const url = `http://127.0.0.1:${server.services.config.port}/api/conversations/${id}/export?format=html`;
+    await page.loadURL(url);
+    const pdf = await page.webContents.printToPDF({ printBackground: true, pageSize: "A4", margins: { marginType: "default" } });
+    const title = page.getTitle().replace(/[\\/:*?"<>|]/g, " ").trim().slice(0, 80) || "chat";
+    const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const opts = { defaultPath: join(app.getPath("documents"), `${title}.pdf`), filters: [{ name: "PDF", extensions: ["pdf"] }] };
+    const { canceled, filePath } = parent ? await dialog.showSaveDialog(parent, opts) : await dialog.showSaveDialog(opts);
+    if (canceled || !filePath) return null;
+    await writeFile(filePath, pdf);
+    return filePath;
+  } finally {
+    page.destroy();
+  }
 });
 
 ipcMain.handle("kesher:restart", () => {
