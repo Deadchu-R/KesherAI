@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { refreshPluginUi } from "../plugins";
 import { getLocale, t } from "../i18n";
+import { toast } from "../library";
 
 interface Installed {
   id: string;
@@ -54,7 +55,11 @@ export function PluginsPage() {
       setBusy("");
     }
   };
-  const install = (src: string) => run(`install:${src}`, () => api("/api/plugins/install", { method: "POST", body: { source: src } }));
+  const install = (src: string) =>
+    run(`install:${src}`, async () => {
+      await api("/api/plugins/install", { method: "POST", body: { source: src } });
+      toast(getLocale() === "he" ? "התוסף הותקן כבוי. בדוק מה הוא מבקש, ואז הפעל אותו." : "The plugin was installed turned off. Check what it asks for, then turn it on.");
+    });
 
   const adds = (p: Installed) =>
     [
@@ -106,7 +111,12 @@ export function PluginsPage() {
               </div>
               <div className="pl-actions">
                 <label className="switch">
-                  <input type="checkbox" checked={p.status !== "disabled"} disabled={!!busy} onChange={(e) => void run(`toggle:${p.id}`, () => api(`/api/plugins/${p.id}`, { method: "PUT", body: { enabled: e.target.checked } }))} />
+                  <input type="checkbox" checked={p.status !== "disabled"} disabled={!!busy} onChange={(e) => {
+                    const on = e.target.checked;
+                    // A plugin from the internet runs its code on this computer: say so before it starts.
+                    if (on && p.removable && !confirm(getLocale() === "he" ? `להפעיל את "${p.name}"${p.author ? ` של ${p.author}` : ""}? תוסף מריץ קוד במחשב שלך עם גישה מלאה${p.permissions.length ? ` (ביקש: ${p.permissions.join(", ")})` : ""}. הפעל רק תוסף ממקור שאתה סומך עליו.` : `Turn on "${p.name}"${p.author ? ` by ${p.author}` : ""}? A plugin runs code on your computer with full access${p.permissions.length ? ` (it asked for: ${p.permissions.join(", ")})` : ""}. Only turn on plugins from people you trust.`)) return;
+                    void run(`toggle:${p.id}`, () => api(`/api/plugins/${p.id}`, { method: "PUT", body: { enabled: on } }));
+                  }} />
                   <span>{p.status === "disabled" ? t("plOff") : t("plOn")}</span>
                 </label>
                 {p.removable && <button type="button" className="link-btn" disabled={!!busy} onClick={() => void run(`rm:${p.id}`, () => api(`/api/plugins/${p.id}`, { method: "DELETE" }))}>{t("remove")}</button>}

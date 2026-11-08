@@ -135,6 +135,13 @@ test("paths outside the project are refused", async () => {
   await assert.rejects(resolveInWorkspace(workspace, "/tmp"), /outside/);
   await mkdir(join(workspace, "sub"));
   assert.equal(await resolveInWorkspace(workspace, "sub/../sub/x"), join(await import("node:fs/promises").then((f) => f.realpath(workspace)), "sub", "x"));
+  // Links that point out, also ones whose target does not exist yet, are refused.
+  const { symlink } = await import("node:fs/promises");
+  await symlink("/tmp", join(workspace, "out"));
+  await symlink(join(tmpdir(), `kesher-nowhere-${Date.now()}`), join(workspace, "dangling"));
+  await assert.rejects(resolveInWorkspace(workspace, "out/x.txt"), /outside/);
+  await assert.rejects(resolveInWorkspace(workspace, "dangling"), /outside/);
+  await assert.rejects(resolveInWorkspace(workspace, "dangling/x.txt"), /outside/);
 });
 
 test("stop ends the run and denies a pending approval", async () => {

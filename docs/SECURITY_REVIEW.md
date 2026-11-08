@@ -24,6 +24,11 @@ This review went through the code part by part. Each finding is listed with what
    - `/lock` turns the bot off, there is a rate limit, and alerts go out.
 8. **Looks** (see APPEARANCE.md). A look is data plus cleaned CSS. A safety-guard cascade layer keeps approvals visible and unchanged.
 
+9. **The agent's file tools: links that point out.** A symlink whose target does not exist yet ("dangling") has no real path. Writing through one used to create its target, which could be outside the folder. Now every link on the way is checked by where it points.
+10. **Plugins from the internet.**
+    - Installing one from Git, and turning any plugin on, work only on the computer itself.
+    - A new plugin starts turned off. Turning on a plugin you installed asks first, says that it runs code on your computer with full access, and lists the permissions it asked for. Plugins still run inside the core's process; giving each its own process with only its permissions is on the roadmap.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA advisory on memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.

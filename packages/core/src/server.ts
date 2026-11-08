@@ -628,7 +628,6 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   stopConversation = (id) => services.conversations.stop(id);
 
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
-  // The desktop window and the Vite dev server are separate origins.
   // Cross-origin access: the model API (/v1) for web apps of any origin (they need an access key);
   // KesherAI's own API only for its own pages, the Android app and, for /api/browser, the extension.
   await app.register(cors, {

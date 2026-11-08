@@ -1,3 +1,4 @@
+import { isLocalRequest } from "../auth.js";
 import { findAffinity, openInAffinity } from "../open-in-app.js";
 import type { FastifyInstance } from "fastify";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -51,9 +52,15 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
 
   /** Installs a plugin from Git. Body: `{ source }` (`https://…` or `owner/repo`). */
   app.post<{ Body: { source?: string } }>("/api/plugins/install", async (req, reply) => {
+    // Installing code that runs on this computer: only from this computer.
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Plugins are installed on the computer that runs KesherAI." });
     try {
-      const id = await s.plugins.install(String(req.body?.source ?? "").trim(), s.paths.plugins);
-      return { id };
+      const id = await s.plugins.install(String(req.body?.source ?? "").trim(), s.paths.plugins, async (newId) => {
+        // A plugin from the internet starts off: the user turns it on after seeing what it may do.
+        s.config.plugins[newId] = { enabled: false, settings: s.config.plugins[newId]?.settings ?? {} };
+        await s.saveConfig();
+      });
+      return { id, off: true };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
@@ -62,6 +69,8 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
   /** Turns a plugin on or off. Body: `{ enabled }`. */
   app.put<{ Params: { id: string }; Body: { enabled?: boolean } }>("/api/plugins/:id", async (req, reply) => {
     if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "Send { enabled: true | false }" });
+    // Turning a plugin on lets its code run: only on this computer (turning one off works from anywhere).
+    if (req.body.enabled && !isLocalRequest(req)) return reply.code(403).send({ error: "Plugins are turned on at the computer that runs KesherAI." });
     const prev = s.config.plugins[req.params.id];
     s.config.plugins[req.params.id] = { enabled: req.body.enabled, settings: prev?.settings ?? {} };
     await s.saveConfig();

@@ -227,9 +227,10 @@ export class PluginHost {
    *
    * @param source - `https://…` Git URL, or `owner/repo` for GitHub.
    * @param into - The user's plugin folder.
+   * @param beforeLoad - Runs before it loads (the server marks it off until the user turns it on).
    * @returns The plugin's id.
    */
-  async install(source: string, into: string): Promise<string> {
+  async install(source: string, into: string, beforeLoad?: (id: string) => Promise<void>): Promise<string> {
     const url = /^[\w.-]+\/[\w.-]+$/.test(source) ? `https://github.com/${source}.git` : source;
     if (!/^https:\/\/[\w.-]+\/[\w./-]+$/.test(url)) throw new Error("Give an https Git address, or owner/repo for GitHub.");
     await mkdir(into, { recursive: true });
@@ -255,6 +256,7 @@ export class PluginHost {
     }
     const { rename } = await import("node:fs/promises");
     await rename(folder, final);
+    await beforeLoad?.(manifest.id);
     await this.loadOne(final);
     return manifest.id;
   }

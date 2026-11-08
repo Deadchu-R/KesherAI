@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { lstat, readlink, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 /**
@@ -28,6 +28,16 @@ export async function resolveInWorkspace(root: string, path: string): Promise<st
       if (parent === existing) break;
       existing = parent;
     }
+  }
+  // A link whose target does not exist yet ("dangling") has no real path, and writing through it
+  // would create its target, possibly outside: check every link on the way by where it points.
+  const parts = relative(realRoot, target).split(sep).filter(Boolean);
+  let at = realRoot;
+  for (const part of parts) {
+    at = resolve(at, part);
+    const st = await lstat(at).catch(() => undefined);
+    if (!st) break;
+    if (st.isSymbolicLink()) assertInside(realRoot, resolve(dirname(at), await readlink(at)), path);
   }
   return target;
 }
