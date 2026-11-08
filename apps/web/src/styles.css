@@ -977,3 +977,4 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .transcript .who.s4 { color: #d6c25a; }
 .transcript .who.s5 { color: #6fb3e0; }
 .photo-ask { position: sticky; top: 0; z-index: 5; margin: 8px; gap: 10px; }
+.pair-code { font-size: 40px; letter-spacing: 10px; text-align: center; font-weight: 700; margin: 6px 0; }

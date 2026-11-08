@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="theme.css" />
   <title>KesherAI</title>
   <style>
+    .found { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+    .pair-code { font-size: 38px; letter-spacing: 10px; text-align: center; font-weight: 700; margin: 4px 0; }
     :root { color-scheme: dark; --bg: #121213; --panel: #18181a; --border: rgb(255 255 255 / 0.08); --text: #ededee; --muted: #94949c; --accent: #98a3ff; --bad: #ff9b9b; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: Rubik, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -97,6 +99,8 @@
   </form>
   <button class="primary" type="submit" form="form" data-he="התחבר" data-en="Connect">התחבר</button>
   <button id="scan" type="button" data-he="סרוק קוד QR" data-en="Scan QR code">סרוק קוד QR</button>
+  <button id="find" type="button" data-he="חפש מחשבים ברשת" data-en="Find computers on this network">חפש מחשבים ברשת</button>
+  <div id="found" class="found" hidden></div>
   <button id="local" type="button" class="local" data-he="בלי מחשב: מודל על הטלפון" data-en="No computer: a model on this phone">בלי מחשב: מודל על הטלפון</button>
   <p id="status"></p>
   <button id="checkUpdate" type="button" data-he="בדוק עדכונים לאפליקציה" data-en="Check for app updates">בדוק עדכונים לאפליקציה</button>
@@ -472,6 +476,70 @@
       if (!/cancel/i.test(msg)) { $("status").textContent = tr.scanFailed[lang] + msg; $("status").className = "error"; }
     }
   };
+
+  // ---------- Find KesherAI on this network, and pair by allowing it on the computer ----------
+  const Wol = window.Capacitor?.Plugins?.WakeOnLan;
+  if (!Wol?.scan) $("find").hidden = true;
+  const F = (he, en) => (lang === "he" ? he : en);
+  $("find").onclick = async () => {
+    cancelled = true;
+    const box = $("found");
+    box.hidden = false;
+    box.textContent = F("מחפש ברשת…", "Looking on the network…");
+    $("find").disabled = true;
+    try {
+      const { hosts } = await Wol.scan({ port: 7420 });
+      const computers = (await Promise.all(hosts.map(async (h) => {
+        try {
+          const r = await fetch(`http://${h}:7420/api/hello`, { signal: AbortSignal.timeout(2500) });
+          const j = await r.json();
+          return j.product === "KesherAI" ? { host: h, name: j.name || h } : null;
+        } catch { return null; }
+      }))).filter(Boolean);
+      box.replaceChildren();
+      if (!computers.length) {
+        box.textContent = F("לא נמצא מחשב. ודא ש-KesherAI פתוח, שהגישה מרחוק דלוקה (הגדרות ← טלפון), ושהטלפון באותה רשת.", "No computer found. Check that KesherAI is open, remote access is on (Settings → Phone), and the phone is on the same network.");
+        return;
+      }
+      for (const c of computers) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "primary";
+        b.textContent = `${c.name} · ${c.host}`;
+        b.onclick = () => pair(c);
+        box.append(b);
+      }
+    } catch (e) {
+      box.textContent = String(e?.message || e);
+    } finally {
+      $("find").disabled = false;
+    }
+  };
+  async function pair(c) {
+    const box = $("found");
+    const base = `http://${c.host}:7420`;
+    try {
+      const device = encodeURIComponent((navigator.userAgent.match(/;\s*([^;)]+)\s+Build\//) || [])[1] || "Phone");
+      const r = await fetch(`${base}/api/pair?device=${device}`, { method: "POST" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      box.replaceChildren(Object.assign(document.createElement("p"), { className: "pair-wait", textContent: F(`במחשב "${c.name}" לחץ "אשר". ודא שמופיע שם הקוד:`, `On "${c.name}", press Allow. Check that it shows this code:`) }), Object.assign(document.createElement("p"), { className: "pair-code", textContent: j.code }));
+      const until = Date.now() + 3 * 60_000;
+      while (Date.now() < until) {
+        await new Promise((res) => setTimeout(res, 2000));
+        const s = await fetch(`${base}/api/pair/${j.id}`).then((x) => x.json()).catch(() => ({}));
+        if (s.state === "allowed" && s.token) {
+          const link = `${base}/?token=${encodeURIComponent(s.token)}`;
+          $("url").value = link;
+          return connect(link);
+        }
+        if (s.state === "denied" || s.error) { box.textContent = F("הבקשה נדחתה במחשב.", "The computer denied the request."); return; }
+      }
+      box.textContent = F("לא אושר בזמן. נסה שוב.", "It was not allowed in time. Try again.");
+    } catch (e) {
+      box.textContent = String(e?.message || e);
+    }
+  }
 
   // ---------- App updates (published by .github/workflows/android.yml) ----------
   const Updater = window.Capacitor?.Plugins?.KesherUpdater;

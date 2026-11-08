@@ -51,6 +51,7 @@ import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcp
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
 import { browserRoutes } from "./routes/browser.js";
+import { pairRoutes } from "./routes/pair.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
 import { WhisperEngine } from "./whisper.js";
@@ -521,6 +522,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await fileRoutes(app, services);
   await googleRoutes(app, services);
   await browserRoutes(app, services);
+  await pairRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, { root: options.webDir });

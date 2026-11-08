@@ -27,6 +27,7 @@ import { useModels } from "./useModels";
 import { ConversationPage } from "./pages/Conversation";
 import { ImagesPage } from "./pages/Images";
 import { BatchImagesPage } from "./pages/BatchImages";
+import { PairPrompt } from "./PairPrompt";
 import { ModelsPage } from "./pages/Models";
 import { ConnectionsPage } from "./pages/Connections";
 import { SettingsPage } from "./pages/Settings";
@@ -177,6 +178,7 @@ export function App() {
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
+      <PairPrompt />
       <main className="main">
         {online === false && <p className="error" style={{ padding: "12px 28px" }}>{t("serverOffline")}</p>}
         {page}

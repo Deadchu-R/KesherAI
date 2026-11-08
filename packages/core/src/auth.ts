@@ -26,8 +26,13 @@ export function isLocalRequest(request: Pick<FastifyRequest, "ip" | "headers">):
   return isLoopback(request.ip) && !FORWARDED.some((h) => request.headers[h] !== undefined);
 }
 
-/** The visitor's address, for counting failed attempts: the real one behind a tunnel. */
-function clientAddress(request: Pick<FastifyRequest, "ip" | "headers">): string {
+/**
+ * The visitor's address, for counting failed attempts: the real one behind a tunnel.
+ *
+ * @param request - The request.
+ * @returns The address.
+ */
+export function clientAddress(request: Pick<FastifyRequest, "ip" | "headers">): string {
   const cf = request.headers["cf-connecting-ip"];
   return (Array.isArray(cf) ? cf[0] : cf) ?? request.ip;
 }
@@ -71,6 +76,12 @@ export function registerRemoteAuth(
     const apiPath = path.startsWith("/v1/") || path === "/v1" || path === "/mcp";
     if (isLocalRequest(request) && !(apiPath && keys.requireLocally?.())) return;
     if (!path.startsWith("/api/") && path !== "/api" && !apiPath) return;
+    // Pairing a phone found on the network: it asks, and the user allows it on this computer.
+    if (path === "/api/hello") return;
+    if (path === "/api/pair" || /^\/api\/pair\/[0-9a-f-]{36}$/.test(path)) {
+      if (request.method === "POST" && path === "/api/pair") return;
+      if (request.method === "GET" && path !== "/api/pair") return;
+    }
     const token = getToken();
     const xKey = request.headers["x-api-key"];
     const header = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? (typeof xKey === "string" ? xKey : undefined);
