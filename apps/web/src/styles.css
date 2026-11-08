@@ -1352,3 +1352,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .look-icon-row button { height: 30px; min-width: 30px; padding: 0 6px; }
 .look-css { width: 100%; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
 .show-earlier { align-self: center; margin: 6px auto 12px; height: auto; padding: 6px 14px; border-radius: 999px; font-size: 13px; }
+.access-log h3 { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.al-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; max-height: 260px; overflow-y: auto; }
+.al-list li { padding: 6px 8px; border-radius: var(--radius-sm); background: var(--panel-2); overflow-wrap: anywhere; }
+.bad-list li { border-inline-start: 3px solid var(--bad); }

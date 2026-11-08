@@ -103,7 +103,20 @@ export function registerRemoteAuth(
   app: FastifyInstance,
   getToken: () => string | undefined,
   keys: { verify?: (key: string | undefined) => unknown; requireLocally?: () => boolean } = {},
+  log?: (r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string }) => void,
 ): void {
+  // What came from outside this computer, for Settings → Phone (never tokens or query strings).
+  if (log) {
+    app.addHook("onResponse", async (request, reply) => {
+      if (isLocalRequest(request)) return;
+      const path = (request.url.split("?")[0] ?? "").slice(0, 200);
+      // Only the API: the interface's own files (scripts, pictures) would drown out the rest.
+      if (!/^\/(api|v1|mcp|comfy-ui)\b/.test(path)) return;
+      const status = reply.statusCode;
+      if (status < 400 && /^\/api\/(downloads\/events|activity|computer\/status)/.test(path)) return;
+      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] ? "tunnel" : "network", ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
+    });
+  }
   app.addHook("onRequest", async (request, reply) => {
     // Paths are compared as the router reads them: "/%61pi/…" is "/api/…".
     let path = request.url.split("?")[0] ?? "";

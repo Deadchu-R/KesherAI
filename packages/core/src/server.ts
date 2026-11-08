@@ -69,6 +69,7 @@ import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
+import { AccessLog } from "./access-log.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { Pages } from "./pages.js";
@@ -671,7 +672,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const caller = apiKeys.identify(given, isLocalRequest(request));
     reply.raw.once("finish", () => apiKeys.record({ at: new Date(started).toISOString(), caller, method: request.method, path, ...(model ? { model } : {}), status: reply.raw.statusCode, ms: Date.now() - started }));
   });
-  if (features.remote) registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally });
+  // Who came in from outside (and who was refused), for Settings → Phone.
+  const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));
+  if (features.remote) registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally }, (r) => accessLog.note(r));
+  app.get("/api/access-log", async () => accessLog.list());
+  app.delete("/api/access-log", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The log is cleared on the computer that runs KesherAI." });
+    await accessLog.clear();
+    return { ok: true };
+  });
 
   await systemRoutes(app, services);
   await modelRoutes(app, services);
