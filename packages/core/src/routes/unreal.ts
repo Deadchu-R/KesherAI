@@ -141,6 +141,15 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       }
     });
     /** Updates Unity's CLI (`unity self-update`). Only on this computer. */
+    /** Opens a window on this computer that shows every Unity CLI command live. Only on this computer. */
+    app.post(`${base}/cli/live`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Open it on the computer that runs KesherAI." });
+      try {
+        return { message: await unity.openLiveWindow() };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
     /** Installs Unity's CLI with Unity's own installer (a window shows it). Only on this computer. */
     app.post(`${base}/cli/install`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Install Unity's CLI on the computer that runs KesherAI." });

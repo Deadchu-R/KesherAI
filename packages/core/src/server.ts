@@ -488,6 +488,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   void routines.start();
   // Unity's CLI: the Unity page and the chat's Unity tools share it.
+  UnityCli.setLogFile(join(paths.root, "logs", "unity-cli.log"));
   const unityCli = new UnityCli(config.unity, persist);
   // Look for the CLI now, so the first chat already has the Unity tools.
   unityCli.cliKnown();

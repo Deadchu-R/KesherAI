@@ -1,7 +1,8 @@
 import { execFileSync, spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFile, writeFile as writeText } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 /**
  * Unity through its own CLI (`unity`, from unity.com) and the project's
@@ -54,13 +55,33 @@ export function freshPath(): string {
     // no user PATH
   }
   const seen = new Set(base.split(";").map((x) => x.toLowerCase()));
-  const extra = user.split(";").filter((x) => x && !seen.has(x.toLowerCase()));
+  // Where Unity's installer puts unity.exe (install.ps1: %LOCALAPPDATA%\Unity\bin, or UNITY_CLI_HOME\bin).
+  const own = [process.env.UNITY_CLI_HOME ? join(process.env.UNITY_CLI_HOME, "bin") : "", process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Unity", "bin") : ""];
+  const extra = [...user.split(";"), ...own].filter((x) => x && !seen.has(x.toLowerCase()));
   const value = [base, ...extra].filter(Boolean).join(";");
   pathCache = { at: Date.now(), value };
   return value;
 }
 
-const realRunner: CliRunner = (args, timeoutMs) =>
+/** Every CLI call is written here (when set), so the user can watch it live in a console window. */
+let cliLogFile: string | undefined;
+const logLine = (line: string) => {
+  if (cliLogFile) void appendFile(cliLogFile, `${line}\n`).catch(() => undefined);
+};
+const shown = (args: string[]) => args.map((a) => (a.length > 160 ? `${a.slice(0, 160)}…(${a.length} chars)` : /\s/.test(a) ? `"${a}"` : a)).join(" ");
+
+const realRunner: CliRunner = (args, timeoutMs) => {
+  const started = Date.now();
+  logLine(`\n[${new Date().toLocaleTimeString()}] > unity ${shown(args)}`);
+  return realRun(args, timeoutMs).then((r) => {
+    const out = `${r.stdout}${r.stderr ? `\n${r.stderr}` : ""}`.trim();
+    logLine(`${out.length > 3000 ? `${out.slice(0, 3000)}\n… (${out.length - 3000} more characters)` : out}`);
+    logLine(`[exit ${r.code} · ${((Date.now() - started) / 1000).toFixed(1)} s]`);
+    return r;
+  });
+};
+
+const realRun: CliRunner = (args, timeoutMs) =>
   new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
@@ -442,6 +463,31 @@ export class UnityCli {
     this.cliCache = undefined;
     pathCache = undefined;
     return "Installing Unity's CLI (a PowerShell window shows it). It takes a minute.";
+  }
+
+  /** Where every CLI call is logged (the live window reads it). */
+  static setLogFile(file: string): void {
+    mkdirSync(dirname(file), { recursive: true });
+    // Kept small: started fresh when it passed 5 MB.
+    try {
+      if (statSync(file).size > 5 * 1024 * 1024) writeFileSync(file, "");
+    } catch {
+      // not there yet
+    }
+    cliLogFile = file;
+  }
+
+  /**
+   * Opens a console window that shows every Unity CLI command KesherAI runs,
+   * with its output, live (Windows: PowerShell; elsewhere not available).
+   */
+  async openLiveWindow(): Promise<string> {
+    if (!cliLogFile) throw new Error("The Unity CLI log is not set up.");
+    if (!existsSync(cliLogFile)) await writeText(cliLogFile, "KesherAI: Unity CLI commands appear here as they run.\n");
+    if (process.platform !== "win32") return `Follow ${cliLogFile} (e.g. tail -f).`;
+    const file = cliLogFile.replace(/'/g, "''");
+    spawn("powershell.exe", ["-NoProfile", "-Command", `$Host.UI.RawUI.WindowTitle = 'KesherAI - Unity CLI live'; Get-Content -LiteralPath '${file}' -Tail 40 -Wait`], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+    return "A window now shows every Unity CLI command as it runs.";
   }
 
   /** Updates Unity's CLI (`unity self-update`). */

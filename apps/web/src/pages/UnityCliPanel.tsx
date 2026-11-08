@@ -89,6 +89,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
           </p>
           <div className="row">
             <button type="button" className="primary" disabled={!local || running} onClick={() => setShowNew((v) => !v)}>＋ {L("פרויקט חדש", "New project")}</button>
+            <button type="button" disabled={!local} title={L("חלון שמראה כל פקודת Unity CLI ש-KesherAI מריץ, בזמן אמת", "A window that shows every Unity CLI command KesherAI runs, live")} onClick={() => void api<{ message: string }>("/api/unity/cli/live", { method: "POST" }).then((r) => toast(r.message), (e: Error) => toast(e.message))}>{L("▶ חלון CLI חי", "▶ Live CLI window")}</button>
             {info.version && /beta|alpha|preview/i.test(info.version) && (
               <button type="button" disabled={!local} onClick={() => void api<{ message: string }>("/api/unity/cli/update", { method: "POST" }).then((r) => { toast(r.message); load(); }, (e: Error) => toast(e.message))}>{L("עדכן את Unity CLI", "Update Unity CLI")}</button>
             )}
