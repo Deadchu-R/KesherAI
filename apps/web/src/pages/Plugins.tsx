@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { refreshPluginUi } from "../plugins";
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 
 interface Installed {
   id: string;
@@ -11,6 +11,7 @@ interface Installed {
   author?: string;
   homepage?: string;
   permissions: string[];
+  uses?: string[];
   status: "active" | "disabled" | "error";
   error?: string;
   ui?: { pages: unknown[]; panels: unknown[]; styles: unknown[]; composerActions: unknown[] };
@@ -94,6 +95,11 @@ export function PluginsPage() {
                 {p.permissions.length > 0 && (
                   <p className="small pl-perms">
                     {t("plPermissions")} {p.permissions.map((x) => <span key={x} className="pill bad">{t(x === "shell" ? "plPermShell" : x === "network" ? "plPermNetwork" : "plPermFiles")}</span>)}
+                  </p>
+                )}
+                {(p.uses?.length ?? 0) > 0 && (
+                  <p className="small">
+                    {getLocale() === "he" ? "משתמש במודלים המקומיים:" : "Uses your local models:"} {p.uses!.map((x) => <span key={x} className="pill">{getLocale() === "he" ? ({ chat: "צ'אט", image: "תמונות", speech: "דיבור" } as Record<string, string>)[x] ?? x : x}</span>)}
                   </p>
                 )}
                 {p.status === "error" && <p className="error small">{p.error}</p>}

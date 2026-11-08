@@ -12,8 +12,8 @@ export function PluginPage({ route }: { route: string }) {
   const page = pages.find((p) => p.pluginId === pluginId && p.id === id);
   if (!page) return <div className="page"><p className="muted">{t("plPageMissing")}</p></div>;
   return (
-    <div className="plugin-page">
-      <PluginFrame pluginId={page.pluginId} file={page.file} title={page.title} />
+    <div className={page.layout === "app" ? "plugin-page plugin-app" : "plugin-page"}>
+      <PluginFrame pluginId={page.pluginId} file={page.file} title={page.title} uses={page.uses ?? []} />
     </div>
   );
 }

@@ -191,16 +191,16 @@ export class PluginHost {
    * @returns Pages, panels, styles and composer buttons, each with its plugin id.
    */
   ui(): {
-    pages: Array<{ pluginId: string; id: string; title: string; icon?: string; file: string }>;
-    panels: Array<{ pluginId: string; id: string; title: string; file: string }>;
+    pages: Array<{ pluginId: string; id: string; title: string; icon?: string; file: string; layout: "page" | "app"; uses: string[] }>;
+    panels: Array<{ pluginId: string; id: string; title: string; file: string; uses: string[] }>;
     styles: Array<{ pluginId: string; file: string }>;
     composerActions: Array<{ pluginId: string; id: string; label: string; prompt: string }>;
   } {
     const active = this.plugins.filter((p) => p.status === "active" && p.manifest.ui);
     const each = <T>(pick: (p: LoadedPlugin) => T[]) => active.flatMap((p) => pick(p).map((x) => ({ pluginId: p.manifest.id, ...x })));
     return {
-      pages: each((p) => p.manifest.ui!.pages),
-      panels: each((p) => p.manifest.ui!.panels),
+      pages: each((p) => p.manifest.ui!.pages.map((x) => ({ ...x, uses: p.manifest.uses }))),
+      panels: each((p) => p.manifest.ui!.panels.map((x) => ({ ...x, uses: p.manifest.uses }))),
       styles: each((p) => p.manifest.ui!.styles.map((file) => ({ file }))),
       composerActions: each((p) => p.manifest.ui!.composerActions),
     };

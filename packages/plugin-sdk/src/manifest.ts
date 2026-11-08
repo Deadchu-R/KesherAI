@@ -16,6 +16,15 @@ export const PLUGIN_API_VERSION = 1;
  */
 export const PluginPermissionSchema = z.enum(["network", "filesystem", "shell"]);
 
+/**
+ * The local models a plugin's pages may use through `window.kesher`
+ * (shown to the user before installing; the app refuses the others):
+ * - `chat`: the chat model (always allowed, as in API version 1).
+ * - `image`: make and edit pictures (with a mask), and enlarge them.
+ * - `speech`: speech to text and reading text aloud.
+ */
+export const PluginUseSchema = z.enum(["chat", "image", "speech"]);
+
 /** One permission; see {@link PluginPermissionSchema}. */
 export type PluginPermission = z.infer<typeof PluginPermissionSchema>;
 
@@ -46,7 +55,18 @@ const RelPath = z.string().regex(/^(?!\/)(?![a-zA-Z]:)(?!.*\.\.)[^\0]+$/, "a pat
  */
 export const PluginUiSchema = z.object({
   /** Full pages, listed in the sidebar; shown at `#/p/<plugin>/<page>`. */
-  pages: z.array(z.object({ id: z.string().regex(/^[a-z0-9-]+$/), title: z.string(), icon: z.string().max(4).optional(), file: RelPath })).default([]),
+  pages: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-z0-9-]+$/),
+        title: z.string(),
+        icon: z.string().max(4).optional(),
+        file: RelPath,
+        /** `app`: the page fills the window (an app of its own, like an image editor); `page` (default): a page with margins. */
+        layout: z.enum(["page", "app"]).default("page"),
+      }),
+    )
+    .default([]),
   /** Panels a conversation can open next to the chat (a button in its top bar). */
   panels: z.array(z.object({ id: z.string().regex(/^[a-z0-9-]+$/), title: z.string(), file: RelPath })).default([]),
   /** Stylesheets added to the whole app: themes and visual mods. They can use and override the app's CSS variables. */
@@ -91,6 +111,8 @@ export const PluginManifestSchema = z.object({
     apiVersion: z.number().int(),
   }),
   permissions: z.array(PluginPermissionSchema).default([]),
+  /** The local models its pages use; see {@link PluginUseSchema}. */
+  uses: z.array(PluginUseSchema).default([]),
   /** Interface additions (pages, panels, styles, composer buttons). Optional. */
   ui: PluginUiSchema.optional(),
   /** Programs models may start, with the user's approval. Requires the `shell` permission. */

@@ -993,3 +993,4 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .nodes-ask { padding: 8px 12px; gap: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .nodes-ask input { flex: 1 1 280px; min-width: 0; }
 .nodes-frame { flex: 1; width: 100%; border: 0; background: #202020; min-height: 0; }
+.plugin-app .plugin-frame { border: 0; border-radius: 0; }

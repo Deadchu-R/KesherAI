@@ -159,10 +159,31 @@ Pages and panels run in a **sandboxed frame**: their scripts run, but they canno
 | `conversation` | – | panels only: `{ title, messages }` of the open conversation |
 | `insertPrompt` | `{ text }` | panels only: puts text in the message box |
 | `toast` | `{ text }` | shows a short message |
+| `image.generate` | `{ prompt, width?, height?, steps?, seed?, model? }` | `uses: image` · the pictures, as `data:` URLs (default: the user's picture model) |
+| `image.edit` | `{ prompt, image, mask?, strength? }` | `uses: image` · edits a picture (`data:` URLs); with a mask, only the white part changes |
+| `image.upscale` | `{ image }` | `uses: image` · the picture four times larger |
+| `speech.transcribe` | `{ audio, language? }` | `uses: speech` · the text of a WAV recording (`data:` URL) |
+| `speech.speak` | `{ text, voice? }` | `uses: speech` · the text read aloud, as a WAV `data:` URL |
 
 ```js
 const answer = await kesher.call("chat", { messages: [{ role: "user", content: "Hi" }] });
+// Streaming: pieces arrive as they are written, then the whole answer.
+await kesher.call("chat", { messages, stream: true }, (piece) => (out.textContent += piece));
 ```
+
+### 4a. A plugin as an app
+
+A plugin can be a whole app inside KesherAI, such as an image editor or a music sketchpad. It is a page that fills the window and uses the local models through the methods above. It does not need its own models or its own server:
+
+```json
+"uses": ["image", "chat"],
+"ui": { "pages": [{ "id": "editor", "title": "Image editor", "icon": "🖌", "file": "ui/editor.html", "layout": "app" }] }
+```
+
+- `"layout": "app"` shows the page edge to edge, with no margins.
+- `"uses"` lists the local models the app needs: `chat`, `image`, `speech`. The user sees them on the Plugins page before turning the plugin on. A call to a model kind the plugin did not declare is refused (`chat` is always allowed).
+- The page stays in a sandbox, so it cannot read the app, its token or the user's files. It gets pictures and sound as `data:` URLs and saves its work with `storage.set`. It can also let the user download a file (`<a download>`) or pick one (`<input type="file">`).
+- An app is installed like any plugin: from the catalog on the Plugins page, or from a Git address.
 
 ### 5. Programs the models can start
 

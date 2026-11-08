@@ -582,7 +582,7 @@ export function ConversationPage({ id }: { id: string }) {
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
       {openPanel && (() => {
         const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);
-        return panel ? <div className="plugin-panel"><PluginFrame pluginId={panel.pluginId} file={panel.file} title={panel.title} conversationId={id} onInsertPrompt={setInput} /></div> : null;
+        return panel ? <div className="plugin-panel"><PluginFrame pluginId={panel.pluginId} file={panel.file} title={panel.title} conversationId={id} onInsertPrompt={setInput} uses={panel.uses ?? []} /></div> : null;
       })()}
       {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
       {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
