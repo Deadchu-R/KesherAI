@@ -631,6 +631,15 @@
     const saved = launch || localStorage.getItem(KEY);
     if (saved) $("url").value = saved;
     // "Switch computer" in the interface comes back here with ?switch=1: show the list, do not reconnect.
+    // "Disconnect from this computer" comes back with ?forget=<its address>: drop it from the list.
+    const forget = new URLSearchParams(location.search).get("forget");
+    if (forget) {
+      saveComputers(loadComputers().filter((c) => !c.links.some((l) => l.replace(/\/$/, "") === forget.replace(/\/$/, ""))));
+      if ((localStorage.getItem(KEY) || "").startsWith(forget)) localStorage.removeItem(KEY);
+      sessionStorage.removeItem("kesherai-connected");
+      history.replaceState(null, "", location.pathname + "?switch=1");
+      if (typeof renderComputers === "function") renderComputers();
+    }
     const cameBack = sessionStorage.getItem("kesherai-connected") === "1" || new URLSearchParams(location.search).has("switch");
     const recent = loadComputers().sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || ""))[0];
     if (launch) connect(launch);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
-import { api, appHome } from "./api";
+import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
@@ -320,6 +320,11 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           // Inside the Android app: back to its list of computers, without reconnecting.
           <button type="button" onClick={() => (location.href = `${appHome()!.replace(/\/$/, "")}/?switch=1`)}>
             {t("switchComputer")}
+          </button>
+        )}
+        {(appHome() || isRemote()) && (
+          <button type="button" className="danger" onClick={() => confirm(t("disconnectSure")) && disconnectComputer()}>
+            {t("disconnectComputer")}
           </button>
         )}
         {appHome() && (

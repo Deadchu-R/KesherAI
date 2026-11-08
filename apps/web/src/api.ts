@@ -21,6 +21,29 @@ export function appHome(): string | null {
   }
 }
 
+/** Whether this page was opened from another device (a phone) with a pairing token. */
+export function isRemote(): boolean {
+  try {
+    return !!localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Leaves this computer: forgets its token here, and in the Android app also
+ * removes it from the app's list of computers (by address, never the token).
+ */
+export function disconnectComputer(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+  const home = appHome();
+  location.href = home ? `${home.replace(/\/$/, "")}/?switch=1&forget=${encodeURIComponent(location.origin)}` : location.pathname;
+}
+
 (() => {
   const params = new URLSearchParams(location.search);
   // The Android app opens this page with ?app=<its own address>, so the menu can offer "Switch computer".
