@@ -227,7 +227,7 @@ button.on { border-color: var(--accent); }
 @media (max-width: 760px) { .files-panel { margin: 8px 12px 0; } }
 
 /* Downloads circle in the corner */
-.dl-corner { position: fixed; inset-block-end: 18px; inset-inline-end: 18px; z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.dl-corner { position: fixed; inset-block-end: max(18px, env(safe-area-inset-bottom)); inset-inline-end: 18px; z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 .dl-button { position: relative; width: 52px; height: 52px; padding: 0; border-radius: 50%; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
 .dl-track { fill: none; stroke: var(--border); stroke-width: 3; }
 .dl-ring { fill: none; stroke: var(--accent); stroke-width: 3; transform: rotate(-90deg); transform-origin: 26px 26px; transition: stroke-dashoffset .4s; }
@@ -994,3 +994,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .nodes-ask input { flex: 1 1 280px; min-width: 0; }
 .nodes-frame { flex: 1; width: 100%; border: 0; background: #202020; min-height: 0; }
 .plugin-app .plugin-frame { border: 0; border-radius: 0; }
+
+/* On a phone the circle sits above the message box (it would cover its buttons). */
+@media (max-width: 760px) { .dl-corner { inset-block-end: calc(max(18px, env(safe-area-inset-bottom)) + 120px); inset-inline-end: 12px; } }

@@ -201,3 +201,4 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 22. OneDrive sign-in, like Google ⬜
 23. Signed Windows installer through SignPath (waiting for the application) ⬜
 24. Chrome Web Store listing for the extension (a one-time $5 fee; only if it is worth it) ⬜
+25. Gentle on the graphics card: automatic limits by hardware (memory, heat, power), pause and resume of running prompts and queues, light in the background, and unloading what is not needed in steps when idle ⬜

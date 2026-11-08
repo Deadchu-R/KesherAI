@@ -13,6 +13,8 @@ const jobs = new Map<string, Job>();
 const listeners = new Set<() => void>();
 let source: EventSource | undefined;
 
+let polling: ReturnType<typeof setInterval> | undefined;
+
 function connect(): void {
   if (source) return;
   source = new EventSource(withToken("/api/downloads/events"));
@@ -21,6 +23,24 @@ function connect(): void {
     jobs.set(job.id, job);
     listeners.forEach((l) => l());
   };
+  // Some ways in (a phone through a tunnel or a proxy) hold live events back: then ask every few seconds.
+  source.onerror = () => startPolling();
+  // And while something downloads, check every few seconds anyway (cheap, and covers a stream that went quiet).
+  setInterval(() => {
+    if ([...jobs.values()].some((j) => ACTIVE.has(j.status))) void poll();
+  }, 5000);
+  setTimeout(() => void poll(), 3000);
+}
+
+async function poll(): Promise<void> {
+  const list = await api<Job[]>("/api/downloads").catch(() => undefined);
+  if (!list) return;
+  for (const j of list) jobs.set(j.id, j);
+  listeners.forEach((l) => l());
+}
+
+function startPolling(): void {
+  polling ??= setInterval(() => void poll(), 3000);
 }
 
 /** @returns All downloads, newest first. Re-renders on every change. */
