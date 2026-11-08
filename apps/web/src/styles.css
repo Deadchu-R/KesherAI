@@ -1035,3 +1035,9 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .transcript li.seekable:hover { background: var(--raised, #ffffff0d); }
 .transcript li.now { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .transcript { max-height: 360px; overflow-y: auto; }
+
+/* Inside the phone app: a new phone app version, updated without leaving the computer's page. */
+.phone-update { gap: 8px; padding: 8px 14px; background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-bottom: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
+.phone-update-pct { display: inline-flex; align-items: center; gap: 8px; min-width: 140px; }
+.phone-update-pct .bar { flex: 1; display: block; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.phone-update-pct .bar > span { display: block; height: 100%; background: var(--accent); }

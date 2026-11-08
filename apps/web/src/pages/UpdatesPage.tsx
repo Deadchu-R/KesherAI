@@ -181,3 +181,56 @@ function PhoneAppUpdates() {
     </section>
   );
 }
+
+/**
+ * Inside the Android app, on any page of the computer's interface: a line
+ * saying a new phone app is out, which updates it right there (the
+ * connection to the computer stays; Android asks to confirm the install).
+ */
+export function PhoneUpdateBanner() {
+  const up = (window as unknown as { Capacitor?: { Plugins?: { KesherUpdater?: PhoneUpdater } } }).Capacitor?.Plugins?.KesherUpdater;
+  const [info, setInfo] = useState<Awaited<ReturnType<PhoneUpdater["check"]>> | null>(null);
+  const [pct, setPct] = useState(-1);
+  const [msg, setMsg] = useState("");
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem("kesher-phone-update-later") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (up && !hidden) void up.check({ url: PHONE_VERSION_URL }).then(setInfo, () => undefined);
+  }, []);
+  if (!up || hidden || !info?.available) return null;
+  const he = getLocale() === "he";
+  const install = async () => {
+    if (!info.apkUrl) return;
+    setPct(0);
+    setMsg("");
+    const sub = await up.addListener("progress", (p) => setPct(p.percent));
+    try {
+      await up.install({ url: info.apkUrl, open: true });
+      setMsg(t("phoneUpdateInstalling"));
+    } catch (e) {
+      const m = (e as Error).message;
+      setMsg(m === "needs-permission" ? t("phoneUpdatePermission") : m);
+    } finally {
+      sub.remove();
+      setPct(-1);
+    }
+  };
+  return (
+    <div className="phone-update row">
+      <span className="grow">📱 {he ? `גרסה חדשה לאפליקציה בטלפון: ${info.latestName}` : `A new phone app: ${info.latestName}`}{msg ? ` · ${msg}` : ""}</span>
+      {pct >= 0 ? (
+        <span className="phone-update-pct"><span className="bar"><span style={{ width: `${Math.max(0, pct)}%` }} /></span> {Math.max(0, pct)}%</span>
+      ) : (
+        <>
+          <button type="button" className="primary" onClick={() => void install()}>{he ? "עדכן עכשיו" : "Update now"}</button>
+          <button type="button" onClick={() => { setHidden(true); try { sessionStorage.setItem("kesher-phone-update-later", "1"); } catch { /* fine */ } }}>{he ? "אחר כך" : "Later"}</button>
+        </>
+      )}
+    </div>
+  );
+}

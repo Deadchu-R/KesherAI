@@ -34,6 +34,7 @@ import { MemoryPage } from "./pages/MemoryPage";
 import { NodesPage } from "./pages/NodesPage";
 import { PartsPage } from "./pages/PartsPage";
 import { PagesPage } from "./pages/PagesPage";
+import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
 import { UpdatesPage } from "./pages/UpdatesPage";
 import { ModelsPage } from "./pages/Models";
@@ -207,6 +208,7 @@ export function App() {
       <PairPrompt />
       <Reconnecting />
       <main className="main">
+        <PhoneUpdateBanner />
         {online === false && (
           <p className="error row" style={{ padding: "12px 28px", gap: 10 }}>
             <span className="grow">{t("serverOffline")}</span>
