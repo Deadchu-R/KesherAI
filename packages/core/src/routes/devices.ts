@@ -22,6 +22,11 @@ export async function deviceRoutes(app: FastifyInstance, s: KesherServices): Pro
 
   /** For the phone app (it holds this computer's token): the user's other computers, to add them. */
   app.get("/api/devices/peers", async () => s.devices.peers());
+  /** Starts the update on every other computer in My devices (this one is updated by the Updates page as usual). */
+  app.post("/api/devices/update-all", async () => {
+    await s.devices.sync().catch(() => undefined);
+    return { computers: await s.devices.updateOthers() };
+  });
 
   app.post("/api/devices/sync", async () => {
     await s.devices.sync();

@@ -72,6 +72,27 @@ function Updates() {
       setChecking(false);
     }
   };
+  // "Update all my computers" (My devices, same Google account): the others start at once, this one as usual.
+  const [others, setOthers] = useState<number>(0);
+  const [allResult, setAllResult] = useState<Array<{ name: string; started: boolean; message: string }> | null>(null);
+  const [allBusy, setAllBusy] = useState(false);
+  useEffect(() => {
+    void api<{ devices: Array<{ me: boolean }> }>("/api/devices").then((d) => setOthers(d.devices.filter((x) => !x.me).length), () => undefined);
+  }, []);
+  const updateAll = async () => {
+    setAllBusy(true);
+    setError("");
+    try {
+      const r = await api<{ computers: Array<{ name: string; started: boolean; message: string }> }>("/api/devices/update-all", { method: "POST" });
+      setAllResult(r.computers);
+      const c = check ?? (await api<UpdateCheck>("/api/updates").catch(() => null));
+      if (c?.newCommits.length) await apply();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAllBusy(false);
+    }
+  };
   const apply = async () => {
     setError("");
     try {
@@ -97,6 +118,19 @@ function Updates() {
           <button type="button" className="primary" onClick={() => void apply()}>{t("installUpdate")}</button>
         )}
       </div>
+      {others > 0 && (
+        <div className="stack">
+          <div className="row">
+            <button type="button" className="primary" disabled={allBusy || !!progress?.running} onClick={() => void updateAll()}>⟳ {getLocale() === "he" ? `עדכן את כל המחשבים שלי (${others + 1})` : `Update all my computers (${others + 1})`}</button>
+            <span className="muted small">{getLocale() === "he" ? "המחשבים ב\"המכשירים שלי\" (אותו חשבון Google) מתעדכנים ונפתחים מחדש לבד, וגם המחשב הזה." : "The computers in My devices (same Google account) update and restart by themselves, and this one too."}</span>
+          </div>
+          {allResult && (
+            <ul className="small">
+              {allResult.map((c) => <li key={c.name}>{c.started ? "⟳" : "⚠"} <b>{c.name}</b>: {c.started ? (getLocale() === "he" ? "מתעדכן" : "updating") : c.message}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
       {check && check.newCommits.length === 0 && <p className="pill good" style={{ alignSelf: "flex-start" }}>{t("upToDate")}</p>}
       {check?.building && (
         <p className="muted small">{getLocale() === "he" ? `גרסה ${check.building} עדיין נבנית למחשב הזה ב-GitHub. היא תופיע כאן כשתהיה מוכנה (בדרך כלל תוך כמה דקות).` : `Version ${check.building} is still being built for this computer on GitHub. It appears here when it is ready (usually within minutes).`}</p>

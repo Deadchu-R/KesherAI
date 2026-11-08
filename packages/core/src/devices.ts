@@ -188,6 +188,49 @@ export class Devices {
   }
 
   /**
+   * "Update all my computers": starts the update on every other computer in
+   * My devices that is online (through its own token-protected address),
+   * then, when each one has the new version, restarts it so it runs. This
+   * computer is updated by the caller as usual.
+   *
+   * @returns Which computers started updating, and why the others did not.
+   */
+  async updateOthers(): Promise<Array<{ name: string; started: boolean; message: string }>> {
+    const out: Array<{ name: string; started: boolean; message: string }> = [];
+    for (const e of this.entries.filter((x) => x.id !== this.id)) {
+      const v = this.views.find((x) => x.id === e.id);
+      const url = (v?.url ?? e.urls[0])?.replace(/\/$/, "");
+      if (!v?.online || !url) {
+        out.push({ name: e.name, started: false, message: "not reachable now (off, asleep or KesherAI closed)" });
+        continue;
+      }
+      const auth = { authorization: `Bearer ${e.token}` };
+      try {
+        const r = await fetch(`${url}/api/updates/apply`, { method: "POST", headers: auth, signal: AbortSignal.timeout(20_000) });
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        if (!r.ok) {
+          out.push({ name: e.name, started: false, message: j.error ?? `answered ${r.status}` });
+          continue;
+        }
+        out.push({ name: e.name, started: true, message: "updating" });
+        // In the background: wait until it has the new version, then restart it.
+        void (async () => {
+          for (let i = 0; i < 180; i++) {
+            await new Promise((res) => setTimeout(res, 5000));
+            const p = (await fetch(`${url}/api/updates/progress`, { headers: auth, signal: AbortSignal.timeout(10_000) }).then((x) => x.json(), () => undefined)) as { running?: boolean; step?: string; error?: string; restartRequired?: boolean } | undefined;
+            if (!p || p.running) continue;
+            if (!p.error && p.restartRequired) await fetch(`${url}/api/system/restart`, { method: "POST", headers: auth, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+            return;
+          }
+        })();
+      } catch (err) {
+        out.push({ name: e.name, started: false, message: (err as Error).message });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Turns sharing this computer with the user's other devices on or off.
    * Turning it on also turns on remote access and "access from anywhere".
    */
