@@ -8,12 +8,15 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import jsdoc from "eslint-plugin-jsdoc";
 import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
   { ignores: ["**/dist/**", "**/out/**", "**/node_modules/**", "docs/api/**", "apps/android/www/vendor/**", "vendor/**"] },
   js.configs.recommended,
   { files: ["scripts/**", "apps/desktop/**"], languageOptions: { globals: globals.node } },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
+  // Hooks in the same order on every render (a hook after an early return crashes the page: React error #310).
+  { files: ["apps/web/**/*.tsx", "apps/web/**/*.ts", "plugins/**/*.tsx"], plugins: { "react-hooks": reactHooks }, rules: { "react-hooks/rules-of-hooks": "error" } },
   { files: ["apps/browser-extension/**"], languageOptions: { globals: { ...globals.browser, ...globals.serviceworker, chrome: "readonly" } } },
   ...tseslint.configs.recommended,
   {

@@ -489,6 +489,8 @@ export function ConversationPage({ id }: { id: string }) {
   }, [lastLook?.seq]);
   const answers = useMemo(() => new Map(events.filter((e): e is Ev<"answer"> => e.type === "answer").map((e) => [e.questionId, e])), [events]);
 
+  /** After adding an Unreal project that is not connected yet: offer the right way to connect it. */
+  const [unrealSetup, setUnrealSetup] = useState<{ path: string; engine: string; msg?: string } | null>(null);
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;
 
   const busy = info?.status === "running" || info?.status === "waiting";
@@ -531,8 +533,6 @@ export function ConversationPage({ id }: { id: string }) {
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
   };
-  /** After adding an Unreal project that is not connected yet: offer the right way to connect it. */
-  const [unrealSetup, setUnrealSetup] = useState<{ path: string; engine: string; msg?: string } | null>(null);
   /** + → Project: a Unity, Unreal or any project folder, for the chat to work in. */
   const addProject = async () => {
     const folder = await desktop()?.pickFolder();
