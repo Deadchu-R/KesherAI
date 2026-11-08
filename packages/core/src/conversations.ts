@@ -11,6 +11,7 @@ import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
+import { runSplit, type SplitWorker } from "./split-task.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 
@@ -347,6 +348,82 @@ export class ConversationManager {
   }
 
   /**
+   * split_across_computers: when the user has other computers in My devices,
+   * a big task that splits into independent parts runs on all of them at once.
+   */
+  private splitTools(notes: string[], conversationId?: string): AgentTool[] {
+    const registry = this.deps.registry;
+    const devices = registry.list().filter(({ provider }) => provider.id.startsWith("device-") && registry.permitted(provider.id));
+    if (!devices.length) return [];
+    notes.push(
+      `The user has other computers connected (My devices: ${devices.map(({ provider }) => provider.name.replace(/\s*\(your computer\)$/i, "")).join(", ")}). For a big task that splits into independent parts (several chapters, files, translations, research questions, variations), or when the user asks to split work across computers, use split_across_computers: give each part full instructions and the shared context; then join the parts into one answer.`,
+    );
+    const chatLike = (m: { category: string; providerModelId: string }) => (m.category === "chat" || m.category === "code") && !/embed|whisper|tts|rerank/i.test(m.providerModelId);
+    const workers = async (signal: AbortSignal): Promise<SplitWorker[]> => {
+      const out: SplitWorker[] = [];
+      const current = conversationId ? this.deps.library.summary(conversationId)?.modelId : undefined;
+      const local = this.defaultChatModel();
+      if (local && !local.startsWith("device-")) {
+        try {
+          registry.resolve(local);
+          out.push({ name: "this computer", modelId: local, turn: modelTurnFor(registry, local) });
+        } catch {
+          // no model here: the other computers do it all
+        }
+      }
+      for (const { provider } of devices) {
+        const models = await provider.listModels(AbortSignal.any([signal, AbortSignal.timeout(8000)])).catch(() => []);
+        const pick = models.find((m) => m.id === current) ?? models.find(chatLike);
+        if (pick) out.push({ name: provider.name.replace(/\s*\(your computer\)$/i, ""), modelId: pick.id, turn: modelTurnFor(registry, pick.id) });
+      }
+      return out;
+    };
+    return [
+      {
+        risk: "safe",
+        spec: {
+          name: "split_across_computers",
+          description: "Run independent parts of a big task at the same time on the user's computers (this one and those in My devices), each on that computer's own model. Returns every part's result, labelled with the computer that did it. Only the text you give is sent: no files or tools.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              parts: {
+                type: "array",
+                minItems: 2,
+                maxItems: 24,
+                items: { type: "object", properties: { title: { type: "string" }, task: { type: "string", description: "Complete instructions for this part alone." } }, required: ["title", "task"] },
+              },
+              context: { type: "string", description: "What every part needs to know (the goal, the style, the facts). Keep it under 6,000 characters." },
+            },
+            required: ["parts"],
+          },
+        },
+        preview: async (input) => {
+          const parts = Array.isArray(input.parts) ? input.parts : [];
+          return `Split into ${parts.length} parts across your computers:\n${parts.map((p, i) => `${i + 1}. ${String((p as { title?: unknown }).title ?? "")}`).join("\n")}`;
+        },
+        run: async (input, ctx) => {
+          const parts = (Array.isArray(input.parts) ? input.parts : [])
+            .map((p) => ({ title: String((p as { title?: unknown }).title ?? "").slice(0, 120), task: String((p as { task?: unknown }).task ?? "").slice(0, 8000) }))
+            .filter((p) => p.task.trim())
+            .slice(0, 24);
+          if (parts.length < 2) return { output: "Give at least two parts, each with full instructions." };
+          const w = await workers(ctx.signal);
+          if (!w.length) return { output: "None of the computers has a chat model ready right now (the other computer may be off). Do the task here instead." };
+          const results = await runSplit(parts, w, { context: typeof input.context === "string" ? input.context.slice(0, 6000) : "", signal: ctx.signal });
+          const used = [...new Set(results.filter((r) => r.ok).map((r) => r.computer))];
+          return {
+            output: [
+              `Ran ${parts.length} parts on ${used.length} computer(s): ${used.join(", ") || "none"}. Join them into one answer for the user (and say briefly which computers did the work).`,
+              ...results.map((r, i) => `\n## Part ${i + 1}: ${r.title}${r.computer ? ` (on ${r.computer}, ${Math.round(r.ms / 1000)} s)` : ""}\n${r.ok ? r.text : `FAILED: ${r.text}`}`),
+            ].join("\n"),
+          };
+        },
+      },
+    ];
+  }
+
+  /**
    * change_look: the user asks in words ("make it light", "bigger text",
    * "green accent", "put Work first") and the model changes KesherAI's look.
    * Only looks: checked by cleanAppearance, nothing else can change.
@@ -553,7 +630,8 @@ export class ConversationManager {
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
     const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...this.learnTools()];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
-    const all = [...code, ...media.tools, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
+    const split = this.splitTools(media.notes, id);
+    const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
