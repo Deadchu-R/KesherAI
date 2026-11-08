@@ -97,7 +97,7 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
       const { url } = await api<{ url: string }>("/api/google/connect", { method: "POST", body: {} });
       window.open(url, "_blank", "noopener");
     } catch {
-      location.hash = "#/settings";
+      location.hash = "#/settings/accounts";
     }
   };
 
@@ -208,7 +208,7 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
                   <small>{L("הטלפון ימצא את המחשב לבד, והפרויקטים יגובו ל-Drive.", "The phone finds this computer by itself, and projects back up to Drive.")}</small>
                 </button>
               )}
-              <button type="button" className="welcome-option" onClick={() => { void finish().then(() => (location.hash = "#/settings")); }}>
+              <button type="button" className="welcome-option" onClick={() => { void finish().then(() => (location.hash = "#/settings/phone")); }}>
                 <span aria-hidden="true">📱</span>
                 <b>{L("חבר טלפון עכשיו", "Connect a phone now")}</b>
                 <small>{L("פותח את ההגדרות עם קוד QR ואפליקציה להורדה.", "Opens Settings with a QR code and the app to download.")}</small>

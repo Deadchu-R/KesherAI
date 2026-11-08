@@ -268,7 +268,7 @@ function GoogleApps() {
             ) : g.configured ? (
               <button type="button" className="primary" onClick={() => void connect(a.id)}>{waiting === a.id ? t("driveWaiting") : t("mcpGoogleConnect")}</button>
             ) : (
-              <span className="muted small">{t("mcpGoogleNoClient")} <a href="#/settings">{t("settings")}</a></span>
+              <span className="muted small">{t("mcpGoogleNoClient")} <a href="#/settings/accounts">{t("settings")}</a></span>
             )}
           </div>
         );

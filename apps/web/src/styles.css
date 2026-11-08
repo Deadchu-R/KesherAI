@@ -1246,3 +1246,18 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: 12px; }
 @media (max-width: 760px) {
   .welcome-cats { flex-wrap: nowrap; overflow-x: auto; top: -20px; margin-inline: -18px; padding: 14px 18px 10px; scrollbar-width: none; box-shadow: 0 8px 12px -8px rgb(0 0 0 / 0.6); }
 }
+
+/* Settings in categories */
+.settings-page { max-width: 1100px; }
+.settings-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
+.settings-cats { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 2px; }
+.settings-cats a { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 10px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.settings-cats a:hover { background: var(--panel-2); color: var(--text); }
+.settings-cats a[aria-current="page"] { background: var(--accent-soft); color: var(--text); }
+.settings-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 760px) {
+  .settings-layout { grid-template-columns: 1fr; gap: 12px; }
+  .settings-cats { position: sticky; top: 0; z-index: 5; flex-direction: row; overflow-x: auto; margin-inline: -16px; padding: 8px 16px; background: var(--bg); scrollbar-width: none; }
+  .settings-cats a { flex: none; white-space: nowrap; padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; }
+}
+label.row { flex-direction: row; align-items: center; }

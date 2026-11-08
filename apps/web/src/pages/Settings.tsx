@@ -391,28 +391,40 @@ function Phone() {
   );
 }
 
-/** Settings: active models, cloud backup, version and updates, phone pairing. */
+/** The settings in categories; only the open one is drawn (and asks the computer anything). */
+const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; render: () => React.ReactNode }> = [
+  { id: "general", icon: "⚙", en: "General", he: "כללי", render: () => <><ActiveModels /><NotificationsSection /><SpeechSection /><ImportChats /></> },
+  { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", render: () => <><GpuSection /><GuardSection /><ComputerSection /><PermissionsSection /></> },
+  { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", render: () => <Phone /> },
+  { id: "accounts", icon: "☁", en: "Accounts and backup", he: "חשבונות וגיבוי", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /></> },
+  { id: "business", icon: "🏢", en: "Organisation", he: "ארגון", render: () => <><CopilotSection /><BusinessSection /></> },
+  { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", render: () => <><McpServerSection /><BrowserSection /><ApiKeysSection /></> },
+];
+
+/** Settings: categories on the side (chips on a phone), `#/settings/<category>`. */
 export function SettingsPage() {
+  const he = getLocale() === "he";
+  const fromHash = () => location.hash.replace(/^#\/settings\/?/, "").split(/[/?#]/)[0] || "general";
+  const [cat, setCat] = useState(fromHash);
+  useEffect(() => {
+    const on = () => setCat(fromHash());
+    addEventListener("hashchange", on);
+    return () => removeEventListener("hashchange", on);
+  }, []);
+  const current = SETTINGS_CATS.find((c) => c.id === cat) ?? SETTINGS_CATS[0]!;
   return (
-    <div className="page">
-      <div className="row"><h1 className="grow">{t("settings")}</h1><button type="button" onClick={openWelcome}>{getLocale() === "he" ? "הצג את מסך הפתיחה שוב" : "Show the welcome again"}</button></div>
-      <ActiveModels />
-      <GpuSection />
-      <GuardSection />
-      <NotificationsSection />
-      <McpServerSection />
-      <BrowserSection />
-      <ApiKeysSection />
-      <SpeechSection />
-      <ComputerSection />
-      <PermissionsSection />
-      <GoogleDriveSection />
-      <OneDriveSection />
-      <CopilotSection />
-      <BusinessSection />
-      <ImportChats />
-      <Sync />
-      <Phone />
+    <div className="page settings-page">
+      <div className="row"><h1 className="grow">{t("settings")}</h1><button type="button" onClick={openWelcome}>{he ? "הצג את מסך הפתיחה שוב" : "Show the welcome again"}</button></div>
+      <div className="settings-layout">
+        <nav className="settings-cats" aria-label={t("settings")}>
+          {SETTINGS_CATS.map((c) => (
+            <a key={c.id} href={`#/settings/${c.id}`} aria-current={c.id === current.id ? "page" : undefined}>
+              <span aria-hidden="true">{c.icon}</span> {he ? c.he : c.en}
+            </a>
+          ))}
+        </nav>
+        <div className="settings-body" key={current.id}>{current.render()}</div>
+      </div>
     </div>
   );
 }
