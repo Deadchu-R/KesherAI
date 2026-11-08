@@ -42,11 +42,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a/libsdcli.so
-          key: sdcpp-android-arm64-master-ff4fdbb
+          key: sdcpp-android-arm64-5f8c19f9
       - name: Build the image engine for the phone
         if: steps.sdcache.outputs.cache-hit != 'true'
         run: |
-          git clone -q --depth 1 --branch master-ff4fdbb https://github.com/leejet/stable-diffusion.cpp /tmp/sd
+          # The same engine version the desktop build was checked with.
+          git init -q /tmp/sd && git -C /tmp/sd remote add origin https://github.com/leejet/stable-diffusion.cpp
+          git -C /tmp/sd fetch -q --depth 1 origin 5f8c19f98ddb84e301bb8725b5260ec79e768e22 && git -C /tmp/sd checkout -q FETCH_HEAD
           git -C /tmp/sd submodule update --init --depth 1 ggml
           cmake -S /tmp/sd -B /tmp/sd/build-android -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" \
