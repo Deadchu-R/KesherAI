@@ -55,6 +55,8 @@ import { memoryTools } from "./memory-tools.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes } from "./routes/parts.js";
+import { pagesRoutes } from "./routes/pages.js";
+import { Pages } from "./pages.js";
 import { pairRoutes } from "./routes/pair.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
@@ -556,6 +558,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);
   await partsRoutes(app, services);
+  await pagesRoutes(app, services, new Pages(join(paths.root, "pages")));
   await pairRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {

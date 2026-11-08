@@ -154,6 +154,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const nav: Array<[string, Parameters<typeof t>[0]]> = [
     ["#/day", "dayNav"],
     ["#/compare", "compareNav"],
+    ["#/pages", "pagesNav"],
     ["#/knowledge", "knowledgeNav"],
     ["#/personas", "personasNav"],
     ["#/memory", "memoryNav"],

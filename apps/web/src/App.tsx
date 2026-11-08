@@ -33,6 +33,7 @@ import { Reconnecting } from "./Reconnect";
 import { MemoryPage } from "./pages/MemoryPage";
 import { NodesPage } from "./pages/NodesPage";
 import { PartsPage } from "./pages/PartsPage";
+import { PagesPage } from "./pages/PagesPage";
 import { useParts } from "./parts";
 import { UpdatesPage } from "./pages/UpdatesPage";
 import { ModelsPage } from "./pages/Models";
@@ -169,6 +170,7 @@ export function App() {
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/parts") page = <PartsPage />;
+  else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
   else if (hash === "#/connections") page = <ConnectionsPage />;

@@ -199,7 +199,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 **4. The rest**
 
 19. Agent groups: several personas on one task (LobeHub) ✅ (the Group button in a chat)
-20. Pages: a document written together with the agent (LobeHub) ⬜
+20. Pages: a document written together with the agent (LobeHub) ✅ (the Pages page)
 21. A meeting transcript that follows playback (keeps the recording, as an option) ⬜
 22. OneDrive sign-in, like Google ⬜
 23. Signed Windows installer through SignPath (waiting for the application) ⬜
