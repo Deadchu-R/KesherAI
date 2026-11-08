@@ -3,6 +3,7 @@ import { api, appHome } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
 import { reconnect } from "./Reconnect";
+import { useNavItems } from "./Sidebar";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -47,6 +48,7 @@ export const NEW_CODE_EVENT = "kesher:new-code";
  */
 export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { hash: string; online: boolean | null; sidebarOpen: boolean; onSidebar: () => void; onLocale: () => void }) {
   const [menu, setMenu] = useState(false);
+  const navItems = useNavItems();
   const [host, setHost] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -84,13 +86,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
               <a role="menuitem" href="#/">{t("newChat")}</a>
               <button type="button" role="menuitem" onClick={() => { setMenu(false); dispatchEvent(new Event(NEW_CODE_EVENT)); }}>{t("newCode")}</button>
               <hr />
-              <a role="menuitem" href="#/models">{t("models")}</a>
-              <a role="menuitem" href="#/images">{t("images")}</a>
-              <a role="menuitem" href="#/connections">{t("connections")}</a>
-              <a role="menuitem" href="#/usage">{t("usageNav")}</a>
-              <a role="menuitem" href="#/community">{t("communityNav")}</a>
-              <a role="menuitem" href="#/plugins">{t("pluginsNav")}</a>
-              <a role="menuitem" href="#/settings">{t("settings")}</a>
+              {navItems.filter((n) => n.href !== "#/updates").map((n) => <a key={n.href} role="menuitem" href={n.href}>{n.label}</a>)}
               <hr />
               <button type="button" role="menuitem" onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); setMenu(false); onLocale(); }}>{t("language")}</button>
               <a role="menuitem" href="#/updates">{t("checkUpdates")}</a>

@@ -119,6 +119,44 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
 }
 
 /** The left sidebar: new buttons, projects with their conversations, other screens. */
+/** The menu's pages (the sidebar, and the top bar's menu on a phone). */
+export const NAV: Array<[string, Parameters<typeof t>[0]]> = [
+    ["#/day", "dayNav"],
+  ["#/compare", "compareNav"],
+  ["#/pages", "pagesNav"],
+  ["#/knowledge", "knowledgeNav"],
+  ["#/personas", "personasNav"],
+  ["#/memory", "memoryNav"],
+  ["#/prompts", "promptsNav"],
+  ["#/pipelines", "pipelinesNav"],
+  ["#/watch", "watchNav"],
+  ["#/images", "images"],
+  ["#/batch", "batchNav"],
+  ["#/nodes", "nodesNav"],
+  ["#/models", "models"],
+  ["#/connections", "connections"],
+  ["#/usage", "usageNav"],
+  ["#/community", "communityNav"],
+  ["#/plugins", "pluginsNav"],
+  ["#/parts", "partsNav"],
+  ["#/updates", "updatesNav"],
+  ["#/settings", "settings"],
+];
+
+/**
+ * @returns The menu's pages, without the parts that are off, then the
+ *   pages plugins add (the image editor, …), as `[href, label]`.
+ */
+export function useNavItems(): Array<{ href: string; label: string }> {
+  const { parts } = useParts();
+  const { pages } = usePluginUi();
+  const off = Object.fromEntries(parts.filter((p) => !p.on).map((p) => [p.id, false]));
+  return [
+    ...NAV.filter(([h]) => !pageHidden(off, h)).map(([href, key]) => ({ href, label: t(key) })),
+    ...pages.map((p) => ({ href: `#/p/${p.pluginId}/${p.id}`, label: `${p.icon ? `${p.icon} ` : ""}${p.title}` })),
+  ];
+}
+
 export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: string; online: boolean | null; open: boolean; onLocale: () => void }) {
   const { projects, conversations } = useLibrary();
   const [dialog, setDialog] = useState<"code" | "project" | null>(null);
@@ -151,28 +189,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   }, []);
   const { parts } = useParts();
   const offParts = Object.fromEntries(parts.filter((p) => !p.on).map((p) => [p.id, false]));
-  const nav: Array<[string, Parameters<typeof t>[0]]> = [
-    ["#/day", "dayNav"],
-    ["#/compare", "compareNav"],
-    ["#/pages", "pagesNav"],
-    ["#/knowledge", "knowledgeNav"],
-    ["#/personas", "personasNav"],
-    ["#/memory", "memoryNav"],
-    ["#/prompts", "promptsNav"],
-    ["#/pipelines", "pipelinesNav"],
-    ["#/watch", "watchNav"],
-    ["#/images", "images"],
-    ["#/batch", "batchNav"],
-    ["#/nodes", "nodesNav"],
-    ["#/models", "models"],
-    ["#/connections", "connections"],
-    ["#/usage", "usageNav"],
-    ["#/community", "communityNav"],
-    ["#/plugins", "pluginsNav"],
-    ["#/parts", "partsNav"],
-    ["#/updates", "updatesNav"],
-    ["#/settings", "settings"],
-  ];
+  const nav = NAV;
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
