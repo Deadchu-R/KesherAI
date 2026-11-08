@@ -87,7 +87,7 @@ export class ComfyUIProvider implements Provider {
     };
     const names = info.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? [];
     // The models folder is shared with KesherAI's own engines: leave out video models and text encoders.
-    const images: ModelInfo[] = names.filter((f) => !/wan2[._]?[12]|umt5|t5xxl|text_encoder|[\\/]video[\\/]/i.test(f)).map((file) => ({
+    const images: ModelInfo[] = names.filter((f) => !/wan2[._]?[12]|umt5|t5xxl|text_encoder|ace_step|hunyuan3d|(^|[\\/])(video|music|3d)[\\/]/i.test(f)).map((file) => ({
       id: makeModelId(this.id, file),
       providerId: this.id,
       providerModelId: file,

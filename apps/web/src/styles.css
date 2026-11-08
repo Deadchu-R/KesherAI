@@ -993,6 +993,15 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .nodes-ask { display: flex; align-items: center; padding: 6px 10px; gap: 6px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .nodes-ask input { flex: 1 1 200px; min-width: 0; }
 .nodes-ask button { white-space: nowrap; }
+.nodes-flows { position: relative; }
+.nodes-flows .bar-pop { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 30; min-width: 280px; max-width: calc(100vw - 20px); }
+.nodes-flows .bar-pop button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: start; }
+@media (max-width: 760px) {
+  .nodes-flows { position: static; }
+  .nodes-flows .bar-pop { position: fixed; top: calc(var(--bar-h, 56px) + 62px); left: 10px; right: 10px; min-width: 0; max-width: none; }
+}
+.nodes-offer { position: absolute; z-index: 25; top: 64px; inset-inline: 12px; max-width: 460px; margin-inline: auto; box-shadow: 0 12px 40px rgb(0 0 0 / 0.5); }
+.nodes-page { position: relative; }
 .nodes-page.full { position: fixed; inset: 0; z-index: 60; }
 .nodes-full .appbar, .nodes-full .sidebar { display: none !important; }
 .nodes-float { position: absolute; z-index: 2; bottom: calc(110px + env(safe-area-inset-bottom)); right: 10px; display: flex; gap: 6px; padding: 5px; background: rgb(24 24 26 / 0.86); border: 1px solid var(--border); border-radius: 14px; backdrop-filter: blur(10px); max-width: calc(100vw - 20px); }

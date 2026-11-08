@@ -6,6 +6,18 @@ import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
+/** A ready-made flow, as `/api/comfy-ui/flows` lists it. */
+interface ReadyFlow {
+  id: string;
+  icon: string;
+  title: { en: string; he: string };
+  description: { en: string; he: string };
+  license: { name: string; url: string };
+  ready: boolean;
+  downloading: boolean;
+  missingGb: number;
+}
+
 /** The parts of ComfyUI's page the Nodes page uses (its app object, in the frame). */
 interface ComfyApp {
   graphToPrompt(): Promise<{ output: Record<string, unknown> }>;
@@ -69,6 +81,16 @@ export function NodesPage() {
   // Full screen: the editor gets the whole screen (KesherAI's bar hides), handy on a phone.
   const [full, setFull] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
+  const [flows, setFlows] = useState<ReadyFlow[]>([]);
+  const [flowMenu, setFlowMenu] = useState(false);
+  const [offer, setOffer] = useState<ReadyFlow | null>(null);
+  const loadFlows = () => void api<ReadyFlow[]>("/api/comfy-ui/flows").then(setFlows, () => undefined);
+  useEffect(() => {
+    if (state !== "ready") return;
+    loadFlows();
+    const id = setInterval(loadFlows, 15_000);
+    return () => clearInterval(id);
+  }, [state]);
   useEffect(() => {
     document.documentElement.classList.toggle("nodes-full", full);
     return () => document.documentElement.classList.remove("nodes-full");
@@ -111,6 +133,33 @@ export function NodesPage() {
       setBusy(false);
     }
   };
+  /** Loads a ready-made flow, or offers to download its models first. */
+  const chooseFlow = async (f: ReadyFlow) => {
+    setFlowMenu(false);
+    if (!f.ready) return setOffer(f);
+    const app = comfy();
+    if (!app) return toast(L("העורך עוד נטען.", "The editor is still loading."));
+    try {
+      const { output } = await app.graphToPrompt().catch(() => ({ output: {} as Record<string, unknown> }));
+      const r = await api<{ name: string; flow: Record<string, unknown> }>(`/api/comfy-ui/flows/${f.id}`);
+      if (Object.keys(output).length) setHistory((h) => [...h.slice(-19), output]);
+      await app.loadApiJson(r.flow, r.name);
+      toast(`${f.icon} ${L(f.title.he, f.title.en)}`);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  const download = async (f: ReadyFlow) => {
+    try {
+      await api(`/api/comfy-ui/flows/${f.id}/setup`, { method: "POST" });
+      setOffer(null);
+      toast(L("ההורדה התחילה — אפשר לעקוב בעיגול ההורדות.", "Downloading — follow it in the downloads circle."));
+      loadFlows();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+
   /** Closes ComfyUI's messages (e.g. "5 issues found") that cover the editor. */
   const closeMessages = () => {
     const doc = frame.current?.contentDocument;
@@ -143,10 +192,40 @@ export function NodesPage() {
       <input dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={L("מה לשנות בזרימה? למשל: תוסיף LoRA של אנימה, 30 צעדים", "What to change in the flow? e.g. add an anime LoRA, 30 steps")} aria-label={L("שינוי במילים", "Change in words")} />
       <button type="submit" className="primary" disabled={busy || !request.trim()} title={L("שנה", "Change")}>{busy ? "…" : <>✨<span className="nodes-label"> {L("שנה", "Change")}</span></>}</button>
       <button type="button" disabled={!history.length || busy} onClick={() => void undo()} title={L("בטל", "Undo")}>↶<span className="nodes-label"> {L("בטל", "Undo")}</span></button>
+      <span className="nodes-flows">
+        <button type="button" data-slide-menu aria-haspopup="menu" aria-expanded={flowMenu} onClick={() => setFlowMenu(!flowMenu)} title={L("זרימות מוכנות", "Ready-made flows")}>📂<span className="nodes-label"> {L("זרימות מוכנות", "Ready-made")}</span></button>
+        {flowMenu && (
+          <div className="bar-pop" role="menu">
+            {flows.map((f) => (
+              <button key={f.id} type="button" role="menuitem" onClick={() => void chooseFlow(f)}>
+                <span>{f.icon}</span>
+                <span className="grow">{L(f.title.he, f.title.en)}</span>
+                <span className="muted small">{f.ready ? "" : f.downloading ? L("מוריד…", "Downloading…") : `\u2066⬇ ~${f.missingGb} GB\u2069`}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </span>
       <button type="button" onClick={closeMessages} title={L("סגור הודעות", "Close messages")}>✕<span className="nodes-label"> {L("הודעות", "Messages")}</span></button>
       <button type="button" onClick={() => { setFull(!full); setAskOpen(false); }} title={full ? L("צא ממסך מלא", "Exit full screen") : L("מסך מלא", "Full screen")}>{full ? "⤡" : "⤢"}</button>
       {note && <span className="muted small nodes-note" dir="auto">{note}</span>}
     </form>
+  );
+  const offerCard = offer && (
+    <div className="nodes-offer card stack" role="dialog" aria-label={L(offer.title.he, offer.title.en)}>
+      <strong>{offer.icon} {L(offer.title.he, offer.title.en)}</strong>
+      <p className="small">{L(offer.description.he, offer.description.en)}</p>
+      <p className="muted small">
+        {offer.downloading
+          ? L("המודל כבר בהורדה. כשתסתיים, בחר שוב את הזרימה.", "The model is already downloading. When it finishes, choose the flow again.")
+          : L(`צריך להוריד את המודל (בערך \u2066${offer.missingGb} GB\u2069) לתיקיית המודלים של KesherAI. רישיון: `, `The model needs to be downloaded (about ${offer.missingGb} GB) into KesherAI's models folder. Licence: `)}
+        {!offer.downloading && <a href={offer.license.url} target="_blank" rel="noreferrer">{offer.license.name}</a>}
+      </p>
+      <div className="row">
+        {!offer.downloading && <button type="button" className="primary" onClick={() => void download(offer)}>⬇ {L("הורד", "Download")}</button>}
+        <button type="button" onClick={() => setOffer(null)}>{L("סגור", "Close")}</button>
+      </div>
+    </div>
   );
   return (
     <div className={`nodes-page${full ? " full" : ""}`}>
@@ -161,6 +240,7 @@ export function NodesPage() {
           )}
         </div>
       ) : ask}
+      {offerCard}
       <iframe ref={frame} className="nodes-frame" src="/comfy-ui/" title="ComfyUI" onLoad={() => {
         const doc = frame.current?.contentDocument;
         try {
