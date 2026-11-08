@@ -145,7 +145,7 @@ export class Updater {
   }
 
   /** Installed copies: is there a newer release on GitHub, with an installer for this system? */
-  private async checkRelease(info: VersionInfo): Promise<UpdateCheck> {
+  private async checkRelease(info: VersionInfo, force = false): Promise<UpdateCheck> {
     if (!this.packaged) throw new Error("This copy was not installed with git, so it cannot update itself here.");
     type Release = { tag_name: string; name?: string; body?: string; draft?: boolean; prerelease?: boolean; assets: Array<{ name: string; browser_download_url: string; size: number }> };
     const res = await fetchRetrying(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases?per_page=10`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
@@ -165,7 +165,7 @@ export class Updater {
     const newer = compareVersions(latestVersion, info.version) > 0;
     const file = installerFor(rel.assets.map((a) => a.name));
     const asset = rel.assets.find((a) => a.name === file);
-    this.pending = newer && asset ? { url: asset.browser_download_url, name: asset.name, size: asset.size } : undefined;
+    this.pending = (newer || force) && asset ? { url: asset.browser_download_url, name: asset.name, size: asset.size } : undefined;
     // What's new: the release notes' bullet points, shown like the git copy's list of changes.
     const notes = (rel.body ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.replace(/^[-*] /, "").replace(/\*\*/g, "")).slice(0, 12);
     const newCommits = newer ? (notes.length ? notes : [rel.name ?? `v${latestVersion}`]).map((subject, i) => ({ hash: i === 0 ? `v${latestVersion}` : "", subject })) : [];
@@ -248,6 +248,20 @@ export class Updater {
     } catch {
       return { running: existsSync(this.statusFile), step: "Working", log: [], fromSource };
     }
+  }
+
+  /**
+   * Installed copies: downloads the latest version's installer and runs it,
+   * even when it is the version already installed (a repair).
+   *
+   * @returns The initial progress.
+   */
+  async reinstall(): Promise<UpdateProgress> {
+    if (this.status().running) throw new Error("An update is already running.");
+    const info = await this.version();
+    if (info.install === "git") throw new Error("This copy runs from the source code: use git to get a fresh copy.");
+    await this.checkRelease(info, true);
+    return this.applyRelease();
   }
 
   /**

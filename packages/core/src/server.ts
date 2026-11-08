@@ -71,6 +71,7 @@ import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
 import { Training } from "./training.js";
+import { applyPendingReset, cancelFullReset, fullResetPending, listBackups, requestFullReset, requestSettingsReset } from "./reset.js";
 import { DeviceKeys, type DeviceKey } from "./device-keys.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
@@ -193,6 +194,8 @@ export const WEB_CSP = [
  */
 export async function createKesherServer(options: KesherServerOptions = {}): Promise<KesherServer> {
   const paths = dataPaths(options.dataDir);
+  // "Start over" (Settings → General): the old data folder moves aside before anything uses it.
+  const resetBackup = await applyPendingReset(paths.root).catch(() => undefined);
   const config = await loadConfig(paths);
   if (config.modelsDir) {
     paths.models = config.modelsDir;
@@ -732,6 +735,34 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   app.post("/api/training/stop", async () => {
     training.stop();
     return { ok: true };
+  });
+  // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
+  app.get("/api/reset", async () => ({ ...(await listBackups(paths.root)), pending: fullResetPending(paths.root), ...(resetBackup ? { justReset: resetBackup } : {}), canRestart: !!options.restartApp, canReinstall: !!options.updates }));
+  app.post<{ Body: { kind?: "settings" | "everything" | "reinstall" | "cancel"; keepModels?: boolean } }>("/api/reset", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Reset is done on the computer that runs KesherAI." });
+    const kind = req.body?.kind;
+    if (kind === "settings") {
+      await requestSettingsReset(paths.root);
+      if (options.restartApp) setTimeout(() => options.restartApp?.(), 600);
+      return { ok: true, restarting: !!options.restartApp };
+    }
+    if (kind === "everything") {
+      await requestFullReset(paths.root, req.body?.keepModels !== false);
+      if (options.restartApp) setTimeout(() => options.restartApp?.(), 600);
+      return { ok: true, restarting: !!options.restartApp };
+    }
+    if (kind === "cancel") {
+      await cancelFullReset(paths.root);
+      return { ok: true };
+    }
+    if (kind === "reinstall") {
+      try {
+        return await updater.reinstall();
+      } catch (e) {
+        return reply.code(400).send({ error: (e as Error).message });
+      }
+    }
+    return reply.code(400).send({ error: "Say what to reset: settings, everything, reinstall." });
   });
   // Who came in from outside (and who was refused), for Settings → Phone.
   const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));

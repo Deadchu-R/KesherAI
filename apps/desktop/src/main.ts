@@ -14,7 +14,7 @@ import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalSho
 import { join, resolve, sep } from "node:path";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { createKesherServer, type KesherServer } from "@kesher/core";
+import type { KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
 
 /**
@@ -59,6 +59,8 @@ async function startCore(): Promise<string> {
   const existing = await runningCore(branding.defaultPort);
   if (existing) return existing;
   const root = resourcesDir();
+  // Loaded here, not at the top: if the core cannot load (a broken update), the rescue window still shows.
+  const { createKesherServer } = await import("@kesher/core");
   const s = await createKesherServer({
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
     pluginRoots: [join(root, "plugins")],
@@ -437,8 +439,7 @@ app.whenReady().then(async () => {
       BrowserWindow.getAllWindows()[0]?.show();
     });
   } catch (err) {
-    dialog.showErrorBox(`${branding.productName} could not start`, err instanceof Error ? err.message : String(err));
-    app.quit();
+    await rescue(err);
   }
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length > 0) showWindow();
@@ -447,6 +448,38 @@ app.whenReady().then(async () => {
     }
   });
 });
+
+/**
+ * When KesherAI cannot start: instead of only an error, ways out — get the
+ * latest version (a fixed update), reset the settings (kept in a backup) and
+ * try again, or open the data folder.
+ */
+async function rescue(err: unknown): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  const dataDir = process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`);
+  const { response } = await dialog.showMessageBox({
+    type: "error",
+    title: `${branding.productName} could not start`,
+    message: `${branding.productName} could not start.`,
+    detail: `${message.slice(0, 900)}\n\nYour chats and files are safe. What would you like to do?`,
+    buttons: ["Download the latest version", "Reset the settings and try again", "Open the data folder", "Quit"],
+    defaultId: 0,
+    cancelId: 3,
+    noLink: true,
+  });
+  if (response === 0) await shell.openExternal("https://github.com/Deadchu-R/KesherAI/releases/latest");
+  if (response === 1) {
+    // The settings move to backups/ (nothing is deleted), and KesherAI starts with fresh ones.
+    const { mkdir, rename } = await import("node:fs/promises");
+    const backups = join(dataDir, "backups");
+    await mkdir(backups, { recursive: true }).catch(() => undefined);
+    await rename(join(dataDir, "config.json"), join(backups, `config-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`)).catch(() => undefined);
+    app.relaunch();
+  }
+  if (response === 2) await shell.openPath(dataDir);
+  quitting = true;
+  app.quit();
+}
 
 app.on("will-quit", () => globalShortcut.unregisterAll());
 
