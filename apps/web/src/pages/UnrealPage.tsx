@@ -37,7 +37,7 @@ const ROW = 19;
 const SCALE = 0.7;
 
 /** Draws one graph the way the Blueprint editor does: nodes with pins, links between them. */
-function GraphView({ nodes }: { nodes: GNode[] }) {
+function GraphView({ nodes, unity = false }: { nodes: GNode[]; unity?: boolean }) {
   const layout = useMemo(() => {
     if (!nodes.length) return null;
     const minX = Math.min(...nodes.map((n) => n.x)) * SCALE;
@@ -80,7 +80,7 @@ function GraphView({ nodes }: { nodes: GNode[] }) {
     </g>
   );
   return (
-    <svg className="ue-graph" width={layout.width} height={layout.height} role="img" aria-label={L("גרף Blueprint", "Blueprint graph")}>
+    <svg className="ue-graph" width={layout.width} height={layout.height} role="img" aria-label={unity ? L("גרף Script Graph", "Script Graph") : L("גרף Blueprint", "Blueprint graph")}>
       {layout.links.map((l, i) => <path key={i} d={l.d} stroke={l.color} strokeWidth={2} fill="none" opacity={0.85} />)}
       {layout.boxes.map((b) => {
         const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
@@ -327,8 +327,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <div className="ue-body">
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
-            <select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label="Blueprint">
-              <option value="">{L("בחר Blueprint", "Choose a Blueprint")}</option>
+            <select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label={unity ? "Script Graph" : "Blueprint"}>
+              <option value="">{unity ? L("בחר Script Graph או State Graph", "Choose a Script Graph or State Graph") : L("בחר Blueprint", "Choose a Blueprint")}</option>
               {shown.map((b) => <option key={b.path} value={b.path} disabled={!st.connected && !b.saved}>{b.name}</option>)}
             </select>
             <ul>
@@ -340,13 +340,13 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                   </button>
                 </li>
               ))}
-              {!shown.length && <li className="muted small">{L("אין Blueprints עדיין.", "No Blueprints yet.")}</li>}
+              {!shown.length && <li className="muted small">{unity ? L("אין עדיין Script Graphs או State Graphs.", "No Script Graphs or State Graphs yet.") : L("אין Blueprints עדיין.", "No Blueprints yet.")}</li>}
             </ul>
           </aside>
 
           <section className="ue-main card stack">
             {!bp ? (
-              <p className="muted">{L("בחר Blueprint מהרשימה.", "Choose a Blueprint from the list.")}</p>
+              <p className="muted">{unity ? L("בחר גרף (Script Graph או State Graph) מהרשימה.", "Choose a graph (Script Graph or State Graph) from the list.") : L("בחר Blueprint מהרשימה.", "Choose a Blueprint from the list.")}</p>
             ) : (
               <>
                 <div className="row ue-tools">
@@ -363,7 +363,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     </button>
                   ))}
                 </div>
-                <div className="ue-canvas">{graph && <GraphView nodes={graph.nodes} />}</div>
+                <div className="ue-canvas">{graph && <GraphView unity={unity} nodes={graph.nodes} />}</div>
                 <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
                   <input className="grow" dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("מה לשנות? למשל: ב-Start תדפיס Hello ללוג, ואם open אמת תזיז את הדלת", "What to change? e.g. on Start log Hello, and if open is true move the door") : L("מה לשנות? למשל: ב-BeginPlay תדפיס Hello, ואם Open אמת תפעיל את OpenDoor", "What to change? e.g. on BeginPlay print Hello, and if Open is true call OpenDoor")} />
                   <button type="submit" className="primary" disabled={busy || !request.trim()}>{busy ? L("המודל עובד…", "Working…") : `✨ ${st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}`}</button>

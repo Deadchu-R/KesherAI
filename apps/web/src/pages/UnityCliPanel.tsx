@@ -73,6 +73,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
             {hasProject && <button type="button" disabled={!local} onClick={() => void api("/api/unity/open-editor", { method: "POST" }).then(() => toast(L("Unity נפתח…", "Opening Unity…")), (e: Error) => toast(e.message))}>{L("פתח ב-Unity", "Open in Unity")}</button>}
             {!local && <span className="muted small">{L("יצירה ופתיחה של פרויקט: רק במחשב עצמו.", "Making and opening projects: on the computer itself.")}</span>}
           </div>
+          <p className="muted small">{L("אפשר גם לבקש בכל צ'אט: \"תוסיף ל-Unity קובייה אדומה\", \"תריץ את המשחק ותצלם\". המודל משתמש ב-CLI של Unity: בודק שהעורך פתוח, מוצא את הפקודה הנכונה, מריץ (אחרי אישור שלך) ומצלם כדי לבדוק.", "You can also ask in any chat: \"add a red cube in Unity\", \"run the game and take a picture\". The model uses Unity's CLI: checks the Editor is open, finds the right command, runs it (after you approve) and takes a picture to check.")}</p>
           {running && <p className="pill" aria-live="polite">⏳ {L(`יוצר את ${info.job!.name}… (כמה דקות)`, `Making ${info.job!.name}… (a few minutes)`)}</p>}
           {info.job?.state === "failed" && <p className="error small">{info.job.message}</p>}
           {showNew && (

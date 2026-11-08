@@ -487,6 +487,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     telegram: async (text) => telegram.broadcast(text),
   });
   void routines.start();
+  // Unity's CLI: the Unity page and the chat's Unity tools share it.
+  const unityCli = new UnityCli(config.unity, persist);
   const services: KesherServices = {
     browser,
     config,
@@ -533,6 +535,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         })),
       ],
       // change_look: the chat changes how the app looks (the same as Settings → Appearance).
+      unity: unityCli,
       look: {
         get: () => cleanAppearance(config.appearance),
         set: async (next) => {
@@ -637,7 +640,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       telegram.restart();
     },
     unreal: new UnrealBridge(join(paths.root, "unreal")),
-    unity: new UnityCli(config.unity, persist),
+    unity: unityCli,
     sd,
     tunnel,
     devices,

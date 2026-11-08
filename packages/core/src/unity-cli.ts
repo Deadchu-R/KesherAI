@@ -157,6 +157,33 @@ export class UnityCli {
     private readonly run: CliRunner = realRunner,
   ) {}
 
+  /** The project folder the page shows (for the chat's Unity tools). */
+  get activeProject(): string | undefined {
+    return this.path;
+  }
+
+  /** Whether the CLI was found the last time it was checked (checks again in the background once a minute). */
+  cliKnown(): boolean {
+    if (!this.cliCache || Date.now() - this.cliCache.at > 60_000) {
+      const at = Date.now();
+      this.cliCache ??= { at, found: false };
+      void this.run(["--version"], 10_000).then((r) => (this.cliCache = { at, found: r.code === 0 }), () => undefined);
+    }
+    return this.cliCache.found;
+  }
+
+  /**
+   * Runs the CLI with arguments as given (never a shell), for the chat's Unity tools.
+   *
+   * @throws Error in plain words when it fails.
+   */
+  async cli(args: string[], timeoutMs: number): Promise<string> {
+    const r = await this.run(args, timeoutMs);
+    if (r.code !== 0) throw failure(r);
+    this.statusCache = undefined;
+    return r.stdout;
+  }
+
   /** @returns The project the page shows. */
   async project(): Promise<string | undefined> {
     const p = this.config.active && this.config.projects.includes(this.config.active) ? this.config.active : this.config.projects[0];

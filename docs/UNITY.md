@@ -25,3 +25,17 @@ It works through **Unity's own CLI** (`unity`, from unity.com) and the project's
 ## Projects
 
 Every project you add stays in the list on the page; pick which one to work on. Graphs inside prefabs are written back to the prefab when they change.
+
+## Unity in any chat (Unity CLI tools)
+
+When Unity's CLI is installed, every chat gets Unity tools that follow Unity's own guidance for AI agents:
+
+| Tool | What it does | Asks first |
+| --- | --- | --- |
+| `unity_status` | Is an Editor open on the project and ready (or in Safe Mode, with its compile errors) | no |
+| `unity_find_commands` | Searches the commands the open Editor offers (`unity command --query`), with their parameters | no |
+| `unity_command` | Runs one of them in the open Editor (`unity command <group> <name> -- --flag value`), about half a second, no recompile | yes |
+| `unity_script_eval` | Runs C# in the Editor (`script eval`) for anything without a command | yes (never from Telegram) |
+| `unity_screenshot` | A picture of the Game or Scene view, for the model and the user | no |
+
+The project is the one chosen on the Unity page (Create → Unity Visual Scripting), where you can also make a new project through the CLI. Arguments go to the CLI as a list, never through a shell; command and parameter names are checked. To test a game the model turns on `editor set_auto_tick` (an unfocused Editor otherwise freezes at frame 1), starts Play mode, checks frames advance, takes a screenshot, reads the console and stops Play mode; when you are already playing it only reads.

@@ -12,6 +12,8 @@ import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import { runSplit, type SplitWorker } from "./split-task.js";
+import type { UnityCli } from "./unity-cli.js";
+import { UNITY_NOTE, unityTools } from "./unity-tools.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 
@@ -170,6 +172,8 @@ export class ConversationManager {
           signal: AbortSignal,
         ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
       };
+      /** Unity's CLI: the chat's Unity tools (when the CLI is installed). */
+      unity?: UnityCli;
       /** How the app looks: the change_look tool reads and changes it (Undo keeps the last looks). */
       look?: {
         get(): Appearance;
@@ -631,12 +635,18 @@ export class ConversationManager {
     const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...this.learnTools()];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
     const split = this.splitTools(media.notes, id);
+    // Unity through its CLI, when it is installed on this computer.
+    const unity = this.deps.unity?.cliKnown()
+      ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id)
+      : [];
+    if (unity.length) media.notes.push(UNITY_NOTE);
+    split.push(...unity);
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
       return {
-        tools: all.filter((t) => !/^(computer_|browser_)/.test(t.spec.name)),
+        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$)/.test(t.spec.name)),
         notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
       };
     }
