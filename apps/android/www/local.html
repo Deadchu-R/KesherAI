@@ -314,7 +314,9 @@
 
   let downloaded = [];
   let activeUrl = localStorage.getItem("kesherai-phone-model") || "";
+  let renderGen = 0;
   async function renderList() {
+    const gen = ++renderGen;
     downloaded = await mm.getModels().catch(() => []);
     const list = $("modelList");
     list.replaceChildren();
@@ -402,13 +404,14 @@
         });
       }
     }
-    await renderFromComputer(list);
+    // The computer's list comes in later: opening a chat must not wait for the network.
+    void renderFromComputer(list, gen).catch(() => undefined);
   }
 
   // ---------- models sent from the computer (over the home network, no internet needed) ----------
   const FROM_PC = "/api/models/phone/";
   const pcName = (url) => localStorage.getItem("kesherai-pc-model:" + url.split("?")[0]) || "";
-  async function renderFromComputer(list) {
+  async function renderFromComputer(list, gen) {
     const head = document.createElement("h3");
     head.className = "from-pc";
     head.textContent = T("מהמחשב שלך", "From your computer");
@@ -441,8 +444,9 @@
     if (!c) { note.textContent = T("התחבר פעם אחת למחשב, ותוכל להעביר ממנו מודלים לטלפון ברשת הביתית.", "Connect to your computer once, and you can send its models to the phone over your home network."); return; }
     note.textContent = T("מודלים שכבר יש במחשב ונכנסים לטלפון (עד 2GB). ההעברה עוברת ברשת, בלי אינטרנט.", "Models already on your computer that fit a phone (up to 2 GB). They come over your network, not the internet.");
     let models;
-    try { models = await getJson(`${c.base}/api/models/phone`, { Authorization: `Bearer ${c.token}` }); }
-    catch { note.textContent += " " + T("המחשב לא זמין כרגע.", "The computer is not reachable now."); return; }
+    try { models = await Promise.race([getJson(`${c.base}/api/models/phone`, { Authorization: `Bearer ${c.token}` }), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 6000))]); }
+    catch { if (gen === renderGen) note.textContent += " " + T("המחשב לא זמין כרגע.", "The computer is not reachable now."); return; }
+    if (gen !== renderGen) return; // the list was drawn again meanwhile
     const haveIds = new Set(here.map((m) => m.url.split(FROM_PC)[1]?.split("?")[0]));
     const fresh = models.filter((m) => !haveIds.has(m.id));
     if (!fresh.length && !here.length) { note.textContent += " " + T("אין במחשב מודל צ'אט קטן מספיק.", "The computer has no chat model small enough."); return; }
