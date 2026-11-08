@@ -83,8 +83,8 @@ jobs:
         shell: bash
         run: |
           if [ -d mirror ]; then
-            (cd mirror && python -m http.server 8099 > ../mirror.log 2>&1 &)
-            sleep 3
+            node scripts/serve-mirror.mjs mirror 8099 &
+            for i in $(seq 1 30); do curl -fsI "http://127.0.0.1:8099/v$(node -p "require('./apps/desktop/node_modules/electron/package.json').version")/SHASUMS256.txt" >/dev/null && break; sleep 1; done
             export ELECTRON_MIRROR=http://127.0.0.1:8099/ ELECTRON_BUILDER_BINARIES_MIRROR=http://127.0.0.1:8099/
           fi
           for attempt in 1 2 3 4; do
