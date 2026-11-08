@@ -1,6 +1,6 @@
 {
   "name": "@kesher/plugin-sdk",
-  "version": "0.4.88",
+  "version": "0.4.89",
   "description": "Everything a KesherAI plugin needs: definePlugin, the plugin context, the manifest schema.",
   "license": "Apache-2.0",
   "type": "module",

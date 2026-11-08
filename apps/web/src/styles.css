@@ -1232,3 +1232,17 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: 12px; }
 .sidebar-foot .brand.small-brand { opacity: 0.8; }
 .sidebar-foot .brand.small-brand small { font-size: 10.5px; }
 .phone-tabs button.tab { height: auto; padding: 6px 0; border: 0; background: none; }
+.phone-tabs { touch-action: none; user-select: none; -webkit-user-select: none; }
+.phone-tabs .tab.slide-hot { color: var(--text); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.welcome-cats { display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: -26px; z-index: 1; padding: 8px 0; background: var(--panel); }
+.welcome-cats a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: 13px; white-space: nowrap; }
+.welcome-cats a:hover { border-color: var(--accent); }
+.welcome-cats small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.welcome-tools-scroll { display: flex; flex-direction: column; gap: 16px; }
+.welcome-cat { scroll-margin-top: 56px; display: flex; flex-direction: column; gap: 8px; }
+.welcome-cat header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.welcome-cat h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--muted); }
+.welcome .link-btn { height: auto; padding: 2px 6px; background: none; border: 0; color: var(--accent); font-size: 12.5px; }
+@media (max-width: 760px) {
+  .welcome-cats { flex-wrap: nowrap; overflow-x: auto; top: -20px; margin-inline: -18px; padding: 14px 18px 10px; scrollbar-width: none; box-shadow: 0 8px 12px -8px rgb(0 0 0 / 0.6); }
+}

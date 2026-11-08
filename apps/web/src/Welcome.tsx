@@ -23,6 +23,15 @@ export function useRole(): RoleDefinition | undefined {
   return ROLES.find((r) => r.id === role);
 }
 
+/** The tool groups of the welcome (the same as the menu's). */
+const TOOL_GROUPS: Array<{ id: string; icon: string; title: { en: string; he: string }; parts: string[] }> = [
+  { id: "create", icon: "🎨", title: { en: "Create", he: "יצירה" }, parts: ["images", "video", "image-editor", "nodes"] },
+  { id: "games", icon: "🎮", title: { en: "Game engines", he: "מנועי משחק" }, parts: ["unreal", "unity"] },
+  { id: "work", icon: "🧠", title: { en: "Work and knowledge", he: "עבודה וידע" }, parts: ["pages", "knowledge", "day", "compare", "pipelines"] },
+  { id: "agent", icon: "🖥", title: { en: "The agent on your computer", he: "הסוכן במחשב שלך" }, parts: ["browser", "watch"] },
+  { id: "assistant", icon: "🤖", title: { en: "Voice and community", he: "קול וקהילה" }, parts: ["voice", "community"] },
+];
+
 const STEPS = ["hello", "role", "tools", "phone"] as const;
 type Step = (typeof STEPS)[number];
 
@@ -141,22 +150,47 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
           <section className="welcome-body">
             <h2>{L("עם אילו כלים להתחיל?", "Which tools to start with?")}</h2>
             <p className="welcome-lead">{L("כלי כבוי לא נטען ולא תופס זיכרון. מה שצריך הורדה יורד רק כשמשתמשים בו לראשונה.", "A tool that is off does not load or use memory. What needs a download gets it only the first time you use it.")}</p>
-            <div className="welcome-tools">
-              {parts.map((p) => (
-                <label key={p.id} className={`welcome-tool${choice[p.id] ? " on" : ""}`}>
-                  <input type="checkbox" checked={!!choice[p.id]} onChange={(e) => setChoice({ ...choice, [p.id]: e.target.checked })} />
-                  <span className="welcome-tool-icon" aria-hidden="true">{p.icon}</span>
-                  <span className="welcome-tool-text">
-                    <b>{pick(p.title)}</b>
-                    <small>{pick(p.description)}</small>
-                  </span>
-                  {p.downloadGb > 0 && <span className="welcome-tool-size">{p.downloadGb < 1 ? `${Math.round(p.downloadGb * 1000)} MB` : `${p.downloadGb} GB`}</span>}
-                </label>
-              ))}
+            <nav className="welcome-cats" aria-label={L("קטגוריות", "Categories")}>
+              {TOOL_GROUPS.map((g) => {
+                const n = g.parts.filter((id) => choice[id]).length;
+                return (
+                  <a key={g.id} href={`#wt-${g.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(`wt-${g.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+                    <span aria-hidden="true">{g.icon}</span> {pick(g.title)} <small>{n}/{g.parts.length}</small>
+                  </a>
+                );
+              })}
+            </nav>
+            <div className="welcome-tools-scroll">
+              {TOOL_GROUPS.map((g) => {
+                const items = g.parts.map((id) => parts.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p);
+                if (!items.length) return null;
+                const allOn = items.every((p) => choice[p.id]);
+                return (
+                  <section key={g.id} id={`wt-${g.id}`} className="welcome-cat">
+                    <header>
+                      <h3><span aria-hidden="true">{g.icon}</span> {pick(g.title)}</h3>
+                      <button type="button" className="link-btn" onClick={() => setChoice({ ...choice, ...Object.fromEntries(items.map((p) => [p.id, !allOn])) })}>{allOn ? L("כבה הכל", "Turn all off") : L("הפעל הכל", "Turn all on")}</button>
+                    </header>
+                    <div className="welcome-tools">
+                      {items.map((p) => (
+                        <label key={p.id} className={`welcome-tool${choice[p.id] ? " on" : ""}`}>
+                          <input type="checkbox" checked={!!choice[p.id]} onChange={(e) => setChoice({ ...choice, [p.id]: e.target.checked })} />
+                          <span className="welcome-tool-icon" aria-hidden="true">{p.icon}</span>
+                          <span className="welcome-tool-text">
+                            <b>{pick(p.title)}</b>
+                            <small>{pick(p.description)}</small>
+                          </span>
+                          {p.downloadGb > 0 && <span className="welcome-tool-size">{`\u2066${p.downloadGb < 1 ? `${Math.round(p.downloadGb * 1000)} MB` : `${p.downloadGb} GB`}\u2069`}</span>}
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
             <div className="welcome-actions">
               <button type="button" onClick={() => go("role")}>{L("חזרה", "Back")}</button>
-              <span className="grow muted small">{gb > 0 ? L(`עד כ-${gb.toFixed(1)} GB, רק כשמשתמשים`, `Up to about ${gb.toFixed(1)} GB, only when used`) : ""}</span>
+              <span className="grow muted small">{gb > 0 ? L(`עד כ-\u2066${gb.toFixed(1)} GB\u2069, רק כשמשתמשים`, `Up to about ${gb.toFixed(1)} GB, only when used`) : ""}</span>
               <button type="button" className="primary" onClick={() => go("phone")}>{L("המשך", "Continue")}</button>
             </div>
           </section>

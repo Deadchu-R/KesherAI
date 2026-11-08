@@ -24,7 +24,7 @@ export function PhoneTabs({ hash, onChats }: { hash: string; onChats: () => void
     </a>
   );
   return (
-    <nav className="phone-tabs" aria-label="Main">
+    <nav className="phone-tabs" aria-label="Main" data-slide-bar>
       <button type="button" className="tab" onClick={onChats}>
         {icon("chats")}
         <small>{t("tabChats")}</small>

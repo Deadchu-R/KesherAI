@@ -116,4 +116,54 @@ export function installSlideMenus(): void {
   };
   addEventListener("pointerup", end, true);
   addEventListener("pointercancel", end, true);
+
+  // Bars ([data-slide-bar], the phone's bottom bar): press, slide across the buttons (the one under
+  // the finger lights up), and only lifting the finger chooses — like Apple's tab bars.
+  let bar: HTMLElement | null = null;
+  let barSwallow = false;
+  const barItemAt = (x: number, y: number): HTMLElement | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    return bar && el && bar.contains(el) ? (el.closest(ITEMS) as HTMLElement | null) : null;
+  };
+  addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 0) return;
+      const b = (e.target as HTMLElement | null)?.closest("[data-slide-bar]") as HTMLElement | null;
+      if (!b) return;
+      bar = b;
+      barSwallow = true;
+      setHot(barItemAt(e.clientX, e.clientY));
+    },
+    true,
+  );
+  addEventListener(
+    "pointermove",
+    (e) => {
+      if (bar) setHot(barItemAt(e.clientX, e.clientY));
+    },
+    true,
+  );
+  const barEnd = (e: PointerEvent) => {
+    if (!bar) return;
+    const chosen = e.type === "pointerup" ? barItemAt(e.clientX, e.clientY) : null;
+    setHot(null);
+    bar = null;
+    if (chosen) setTimeout(() => chosen.click(), 0);
+  };
+  addEventListener("pointerup", barEnd, true);
+  addEventListener("pointercancel", barEnd, true);
+  // The browser's own click (on press-and-release of one button) is replaced by the one above.
+  addEventListener(
+    "click",
+    (e) => {
+      if (!barSwallow || !e.isTrusted) return;
+      if ((e.target as HTMLElement | null)?.closest("[data-slide-bar]")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      barSwallow = false;
+    },
+    true,
+  );
 }
