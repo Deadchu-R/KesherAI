@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, withToken } from "./api";
 import { desktop } from "./library";
 import { getLocale } from "./i18n";
 
@@ -30,17 +30,22 @@ export function BrowserSection() {
         )}
       </p>
       {!info.connected && (
+        <>
         <ol className="small">
           <li>{L("פתח בדפדפן (Chrome, ‏Edge או Brave) את ", "In Chrome, Edge or Brave open ")}<code dir="ltr">chrome://extensions</code>{L(" והדלק את Developer mode.", " and turn on Developer mode.")}</li>
           <li>{L("לחץ Load unpacked ובחר את תיקיית התוסף.", "Click Load unpacked and choose the extension's folder.")} {info.folder && <code dir="ltr">{info.folder}</code>}</li>
           <li>{L("לחץ על הסמל של KesherAI בסרגל, הדבק את המפתח ולחץ Connect.", "Click the KesherAI icon in the toolbar, paste the key and press Connect.")}</li>
         </ol>
+        <p className="muted small">{L("ב-Firefox: הורד את הגרסה ל-Firefox, פתח ", "In Firefox: download the Firefox version, open ")}<code dir="ltr">about:debugging#/runtime/this-firefox</code>{L(", לחץ Load Temporary Add-on ובחר את קובץ ה-zip (עד שהתוסף יהיה בחנות של Firefox).", ", click Load Temporary Add-on and choose the zip (until the extension is in Firefox's store).")}</p>
+        </>
       )}
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         <span className="muted small">{L("מפתח חיבור:", "Connection key:")}</span>
         <code dir="ltr">{info.key}</code>
         <button type="button" onClick={() => void navigator.clipboard?.writeText(info.key).then(() => setCopied(true))}>{copied ? L("הועתק", "Copied") : L("העתק", "Copy")}</button>
         {info.folder && desktop()?.openPath && <button type="button" onClick={() => void desktop()!.openPath!(info.folder!)}>{L("פתח את תיקיית התוסף", "Open the extension folder")}</button>}
+        {info.folder && <a className="button" href={withToken("/api/browser/package?for=chrome")} download>{L("הורד zip ל-Chrome / Edge / Brave", "Download zip for Chrome / Edge / Brave")}</a>}
+        {info.folder && <a className="button" href={withToken("/api/browser/package?for=firefox")} download>{L("הורד zip ל-Firefox", "Download zip for Firefox")}</a>}
       </div>
     </section>
   );
