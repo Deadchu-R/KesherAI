@@ -63,6 +63,16 @@ export function freshPath(): string {
   return value;
 }
 
+/**
+ * Opens a visible PowerShell window (Windows) running `command`, through
+ * `start`, which always makes a new console even from a windowless app.
+ * The command must not contain double quotes (callers pass fixed text).
+ */
+function openConsole(title: string, command: string): void {
+  if (/["\r\n]/.test(command) || /["\r\n]/.test(title)) throw new Error("Bad console command.");
+  spawn("cmd.exe", ["/d", "/s", "/c", `start "${title}" powershell.exe -NoProfile -NoExit -Command "${command}"`], { windowsVerbatimArguments: true, detached: true, stdio: "ignore", windowsHide: true }).unref();
+}
+
 /** Every CLI call is written here (when set), so the user can watch it live in a console window. */
 let cliLogFile: string | undefined;
 const logLine = (line: string) => {
@@ -454,9 +464,8 @@ export class UnityCli {
    */
   installCli(): string {
     if (process.platform === "win32") {
-      const ps = "irm https://unity.com/install.ps1 | iex; Write-Host ''; Write-Host 'KesherAI: Unity CLI installed. You can close this window.'; Start-Sleep -Seconds 20";
-      // detached on Windows = its own console window, so the user sees the install run.
-      spawn("powershell.exe", ["-NoProfile", "-Command", ps], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+      const ps = "irm https://unity.com/install.ps1 | iex; Write-Host ''; Write-Host 'KesherAI: Unity CLI installed. You can close this window.'";
+      openConsole("Unity CLI install", ps);
     } else {
       spawn("bash", ["-c", "curl -fsSL https://unity.com/install.sh | bash"], { detached: true, stdio: "ignore" }).unref();
     }
@@ -486,7 +495,7 @@ export class UnityCli {
     if (!existsSync(cliLogFile)) await writeText(cliLogFile, "KesherAI: Unity CLI commands appear here as they run.\n");
     if (process.platform !== "win32") return `Follow ${cliLogFile} (e.g. tail -f).`;
     const file = cliLogFile.replace(/'/g, "''");
-    spawn("powershell.exe", ["-NoProfile", "-Command", `$Host.UI.RawUI.WindowTitle = 'KesherAI - Unity CLI live'; Get-Content -LiteralPath '${file}' -Tail 40 -Wait`], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+    openConsole("KesherAI - Unity CLI live", `Get-Content -LiteralPath '${file}' -Tail 40 -Wait`);
     return "A window now shows every Unity CLI command as it runs.";
   }
 
