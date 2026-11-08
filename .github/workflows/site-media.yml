@@ -7,6 +7,9 @@ on:
     branches: [site-media]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   media:
     runs-on: ubuntu-latest
@@ -30,9 +33,14 @@ jobs:
         run: |
           mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright@1.49.1 >/dev/null && npx playwright install --with-deps chromium >/dev/null
           cd $GITHUB_WORKSPACE && NODE_PATH=/tmp/pw/node_modules node --experimental-default-type=module -e "import('/tmp/pw/node_modules/playwright/index.mjs').then(()=>0)" && cp scripts/site-media.mjs /tmp/pw/ && cd /tmp/pw && node site-media.mjs && mv site-media $GITHUB_WORKSPACE/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: site-media
-          path: site-media/
+      - name: Videos to MP4 and posters
+        run: |
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          cd site-media/video && for f in *.webm; do n="${f%.webm}"; ffmpeg -loglevel error -y -i "$f" -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p -movflags +faststart "$n.mp4"; ffmpeg -loglevel error -y -ss 2 -i "$n.mp4" -frames:v 1 -q:v 4 "$n.jpg"; rm "$f"; done; ls -la
+      # Saved on this branch (not main), so the files can be copied to the site.
+      - name: Commit the media to this branch
+        run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site-media && git commit -qm "Site media: screenshots and videos [skip ci]" && git push
       - if: always()
         run: tail -60 dev.log

@@ -7,7 +7,7 @@ const BASE = "http://localhost:5173/";
 const PAGES = [["home", "#/"], ["models", "#/models"], ["images", "#/images"], ["connections", "#/connections"], ["nodes", "#/nodes"], ["personas", "#/personas"],
   ["plugins", "#/plugins"], ["knowledge", "#/knowledge"], ["prompts", "#/prompts"], ["compare", "#/compare"], ["pipelines", "#/pipelines"], ["unreal", "#/unreal"],
   ["usage", "#/usage"], ["updates", "#/updates"], ["settings", "#/settings"], ["community", "#/community"], ["day", "#/day"], ["watch", "#/watch"]];
-const settle = async p => { await p.waitForLoadState("networkidle").catch(() => {}); await p.waitForTimeout(1800); };
+const settle = async p => { await p.waitForLoadState("domcontentloaded").catch(() => {}); await p.waitForTimeout(2200); };   // (the app polls, so "network idle" never comes)
 const closeDialogs = async p => { for (let i = 0; i < 3; i++) { const b = p.locator('button:has-text("Skip"), button:has-text("Not now"), button:has-text("Later"), button:has-text("Close"), [aria-label="Close"]').first(); if (await b.isVisible().catch(() => false)) await b.click().catch(() => {}); else break; await p.waitForTimeout(300); } };
 const b = await chromium.launch();
 // desktop screenshots
