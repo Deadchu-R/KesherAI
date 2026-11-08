@@ -1042,3 +1042,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .phone-update-pct .bar { flex: 1; display: block; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .phone-update-pct .bar > span { display: block; height: 100%; background: var(--accent); }
 .appbar-menu .bar-pop { max-height: calc(100dvh - 90px); overflow-y: auto; }
+/* Long menus scroll with a finger, without moving the page behind them. */
+.bar-pop, .model-pop, .sidebar.open { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.bar-pop { touch-action: pan-y; }

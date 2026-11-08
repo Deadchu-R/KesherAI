@@ -17,6 +17,37 @@ export function installSlideMenus(): void {
   let swallowClick = false;
   let opened: HTMLElement | null = null;
 
+  // Sliding to the top or bottom edge of a long menu scrolls it, like Apple's menus.
+  let edge: { menu: HTMLElement; speed: number } | null = null;
+  let raf = 0;
+  const scrollLoop = () => {
+    raf = 0;
+    if (!edge || !trigger) return;
+    edge.menu.scrollTop += edge.speed;
+    setHot(itemAt(last.x, last.y));
+    raf = requestAnimationFrame(scrollLoop);
+  };
+  let last = { x: 0, y: 0 };
+  const scrollableMenu = (x: number): HTMLElement | null => {
+    for (const m of document.querySelectorAll<HTMLElement>(MENUS)) {
+      const r = m.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && m.scrollHeight > m.clientHeight + 2) return m;
+    }
+    return null;
+  };
+  const followEdge = (x: number, y: number) => {
+    const menu = scrollableMenu(x);
+    edge = null;
+    if (menu) {
+      const r = menu.getBoundingClientRect();
+      const zone = Math.min(56, r.height / 4);
+      // Faster the closer to (or past) the edge.
+      if (y < r.top + zone) edge = { menu, speed: -Math.ceil(Math.min(1, (r.top + zone - y) / zone) * 14) };
+      else if (y > r.bottom - zone) edge = { menu, speed: Math.ceil(Math.min(1, (y - (r.bottom - zone)) / zone) * 14) };
+    }
+    if (edge && !raf) raf = requestAnimationFrame(scrollLoop);
+  };
+
   const setHot = (el: HTMLElement | null) => {
     if (el === hot) return;
     hot?.classList.remove("slide-hot");
@@ -66,7 +97,9 @@ export function installSlideMenus(): void {
       if (!trigger) return;
       if (!sliding && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 8) return;
       sliding = true;
+      last = { x: e.clientX, y: e.clientY };
       setHot(itemAt(e.clientX, e.clientY));
+      followEdge(e.clientX, e.clientY);
     },
     true,
   );
@@ -75,6 +108,7 @@ export function installSlideMenus(): void {
     const chosen = sliding && e.type === "pointerup" ? itemAt(e.clientX, e.clientY) : null;
     setHot(null);
     trigger = null;
+    edge = null;
     // A tap (no slide) leaves the menu open; the next click event is the tap's own.
     if (!sliding) return;
     swallowClick = false;

@@ -1,6 +1,6 @@
 {
   "name": "@kesher/providers",
-  "version": "0.4.79",
+  "version": "0.4.80",
   "description": "The Provider interface and adapters for llama.cpp, LM Studio, Ollama, ComfyUI, OpenAI-compatible APIs and Anthropic.",
   "license": "Apache-2.0",
   "type": "module",
