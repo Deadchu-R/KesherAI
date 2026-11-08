@@ -31,10 +31,12 @@ export function Reconnecting() {
   const [state, setState] = useState<{ before?: string; commit?: string; update?: boolean; error?: string; since: number } | null>(null);
   const [gone, setGone] = useState(false);
   const [late, setLate] = useState(false);
+  const [step, setStep] = useState<{ text: string; pct?: number; error?: string } | null>(null);
   useEffect(() => {
     const on = (e: Event) => {
       setGone(false);
       setLate(false);
+      setStep(null);
       setState({ ...(e as CustomEvent).detail, since: Date.now() });
     };
     addEventListener(EVENT, on);
@@ -44,6 +46,15 @@ export function Reconnecting() {
     if (!state || state.error) return;
     let away = false;
     const tick = async () => {
+      // An update: show its download percent while the computer still answers.
+      if (state.update && !away) {
+        const p = await api<{ running: boolean; step?: string; error?: string }>("/api/updates/progress").catch(() => undefined);
+        if (p?.error) setStep({ text: p.error, error: p.error });
+        else if (p?.step) {
+          const pct = /(\d+)%/.exec(p.step)?.[1];
+          setStep({ text: p.step, ...(pct ? { pct: Number(pct) } : {}) });
+        }
+      }
       try {
         const v = await api<{ version: string; commit?: string }>("/api/version");
         const changed = v.version !== state.before || v.commit !== state.commit;
@@ -70,8 +81,15 @@ export function Reconnecting() {
         <p className="muted">
           {state.error ?? (late ? L("זה לוקח יותר מהרגיל. אולי המחשב ישן או ש-KesherAI לא עלה.", "This is taking longer than usual. The computer may be asleep, or KesherAI did not start.") : gone ? L("המחשב בהפעלה מחדש. אתחבר מחדש לבד ברגע שהוא חוזר.", "The computer's app is restarting. I will reconnect by myself as soon as it is back.") : L("מחכה…", "Waiting…"))}
         </p>
-        {!state.error && !late && <div className="spinner" aria-hidden />}
-        {(late || state.error) && (
+        {state.update && !gone && step && !step.error && (
+          <div className="stack" style={{ gap: 6 }}>
+            <div className="row small"><span className="grow">{step.pct !== undefined ? L("מוריד את הגרסה החדשה", "Downloading the new version") : step.text === "Installing" ? L("מתקין…", "Installing…") : step.text}</span>{step.pct !== undefined && <strong>{step.pct}%</strong>}</div>
+            {step.pct !== undefined && <div className="bar"><div style={{ width: `${step.pct}%` }} /></div>}
+          </div>
+        )}
+        {step?.error && <p className="error">{step.error}</p>}
+        {!state.error && !late && step?.pct === undefined && <div className="spinner" aria-hidden />}
+        {(late || state.error || step?.error) && (
           <div className="row" style={{ justifyContent: "flex-end" }}>
             <button type="button" onClick={() => setState(null)}>{L("סגור", "Close")}</button>
             <button type="button" onClick={() => location.reload()}>{L("התחבר מחדש", "Reconnect")}</button>
