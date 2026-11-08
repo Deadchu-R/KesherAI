@@ -191,7 +191,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 17. Export a chat as Markdown or PDF (LM Studio) ✅
 18. Browser extension without the Chrome store: a package from Settings, and the free Edge and Firefox add-on stores ✅ (store upload: Roee)
 18a. Everything modular: a plugin can be a whole separate app inside KesherAI (its own pages and windows, its own files), that asks the local models for what it needs (chat, images, speech, vision) through a stable plugin API, and installs straight from the plugin store with one click ✅
-18b. The first official plugin, as the example for others: a Photoshop-like image editor (layers, brushes, selection, filters), with the local models inside it (generate into a layer, fill a selection, remove background, upscale) ⬜
+18b. The first official plugin, as the example for others: a Photoshop-like image editor (layers, brushes, selection, filters), with the local models inside it (generate into a layer, fill a selection, remove background, upscale) ✅
 
 **4. The rest**
 

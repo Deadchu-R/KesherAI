@@ -1,0 +1,12 @@
+{
+  "id": "image-editor",
+  "name": "Image editor",
+  "version": "0.1.0",
+  "description": "A layered image editor (brushes, selections, filters) with your local picture model: generate a layer from words, repaint a selection, enlarge. KesherAI's first official app plugin, and the example for writing your own.",
+  "author": "KesherAI contributors",
+  "kesher": { "apiVersion": 1 },
+  "uses": ["image"],
+  "ui": {
+    "pages": [{ "id": "editor", "title": "Image editor", "icon": "🖌", "file": "ui/editor.html", "layout": "app" }]
+  }
+}

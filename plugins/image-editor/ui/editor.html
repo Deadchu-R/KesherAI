@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image editor</title>
+  <link rel="stylesheet" href="editor.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <button id="new" data-t="new">New</button>
+      <button id="open" data-t="open">Open picture</button>
+      <button id="openProject" data-t="openProject">Open project</button>
+      <button id="saveProject" data-t="saveProject">Save project</button>
+      <button id="export" class="primary" data-t="export">Export PNG</button>
+      <span class="grow"></span>
+      <button id="undo" title="Ctrl+Z">↶</button>
+      <button id="redo" title="Ctrl+Y">↷</button>
+      <button id="fit" data-t="fit">Fit</button>
+      <input type="file" id="file" accept="image/*" hidden />
+      <input type="file" id="projectFile" accept=".kesherimg,application/json" hidden />
+    </header>
+
+    <nav class="tools" aria-label="Tools">
+      <button data-tool="brush" title="Brush (B)">🖌</button>
+      <button data-tool="eraser" title="Eraser (E)">⌫</button>
+      <button data-tool="rect" title="Rectangle selection (M)">▭</button>
+      <button data-tool="ellipse" title="Ellipse selection">◯</button>
+      <button data-tool="lasso" title="Lasso (L)">➰</button>
+      <button data-tool="move" title="Move layer (V)">✥</button>
+      <button data-tool="fill" title="Fill (G)">🪣</button>
+      <button data-tool="picker" title="Color picker (I)">💧</button>
+      <button data-tool="hand" title="Pan (space)">✋</button>
+    </nav>
+
+    <main class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <div class="busy" id="busy"><span id="busyText">…</span></div>
+    </main>
+
+    <aside class="side">
+      <section>
+        <h3 data-t="brushH">Brush</h3>
+        <div class="row"><input type="color" id="color" value="#8c9cff" /><span class="grow"></span><span id="sizeLabel">20 px</span></div>
+        <input type="range" id="size" min="1" max="300" value="20" aria-label="Size" />
+        <label class="field"><span data-t="hardness">Hardness</span><input type="range" id="hardness" min="0" max="100" value="80" /></label>
+        <label class="field"><span data-t="flow">Opacity</span><input type="range" id="flow" min="1" max="100" value="100" /></label>
+      </section>
+
+      <section>
+        <h3 data-t="selectionH">Selection</h3>
+        <div class="row">
+          <button id="selAll" data-t="selAll">All</button>
+          <button id="selNone" data-t="selNone">None</button>
+          <button id="selInvert" data-t="selInvert">Invert</button>
+          <button id="delete" data-t="clear">Clear</button>
+        </div>
+      </section>
+
+      <section>
+        <h3 data-t="aiH">AI (your picture model)</h3>
+        <textarea id="prompt" dir="auto" data-tp="promptPh" placeholder="Describe what to paint…"></textarea>
+        <div class="row">
+          <button id="aiLayer" class="primary" data-t="aiLayer">New layer from words</button>
+          <button id="aiInpaint" data-t="aiInpaint">Repaint the selection</button>
+        </div>
+        <label class="field"><span data-t="strength">How much to change</span><input type="range" id="strength" min="20" max="100" value="80" /></label>
+        <div class="row"><button id="aiUpscale" data-t="aiUpscale">Enlarge ×4</button></div>
+      </section>
+
+      <section>
+        <h3 data-t="filtersH">Filters (active layer)</h3>
+        <div class="row">
+          <select id="filter" class="grow">
+            <option value="brightness">Brightness</option>
+            <option value="contrast">Contrast</option>
+            <option value="saturate">Saturation</option>
+            <option value="hue-rotate">Hue</option>
+            <option value="blur">Blur</option>
+            <option value="grayscale">Black and white</option>
+            <option value="sepia">Sepia</option>
+            <option value="invert">Invert</option>
+            <option value="sharpen">Sharpen</option>
+          </select>
+        </div>
+        <input type="range" id="amount" min="0" max="200" value="120" aria-label="Amount" />
+        <div class="row"><button id="applyFilter" data-t="apply">Apply</button></div>
+      </section>
+
+      <section>
+        <div class="row"><h3 class="grow" data-t="layersH">Layers</h3><button id="addLayer" title="New layer">＋</button><button id="dupLayer" title="Duplicate">⧉</button><button id="mergeDown" title="Merge down">⤓</button></div>
+        <div class="row">
+          <select id="blend" class="grow" aria-label="Blend">
+            <option value="source-over">Normal</option>
+            <option value="multiply">Multiply</option>
+            <option value="screen">Screen</option>
+            <option value="overlay">Overlay</option>
+            <option value="darken">Darken</option>
+            <option value="lighten">Lighten</option>
+            <option value="color-dodge">Color dodge</option>
+            <option value="color-burn">Color burn</option>
+            <option value="soft-light">Soft light</option>
+            <option value="difference">Difference</option>
+            <option value="color">Color</option>
+            <option value="luminosity">Luminosity</option>
+          </select>
+        </div>
+        <label class="field"><span data-t="layerOpacity">Layer opacity</span><input type="range" id="layerOpacity" min="0" max="100" value="100" /></label>
+        <div class="layers" id="layers"></div>
+      </section>
+    </aside>
+
+    <footer class="status"><span id="docInfo"></span><span id="zoomInfo"></span><span id="msg"></span></footer>
+  </div>
+
+  <dialog id="newDialog">
+    <form method="dialog" class="row" style="flex-direction: column; align-items: stretch">
+      <strong data-t="newH">New picture</strong>
+      <div class="row"><label class="field grow"><span data-t="width">Width</span><input type="number" id="newW" value="1024" min="16" max="8192" /></label><label class="field grow"><span data-t="height">Height</span><input type="number" id="newH" value="1024" min="16" max="8192" /></label></div>
+      <label class="row"><input type="checkbox" id="newWhite" checked /> <span data-t="whiteBg">White background</span></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="create">Create</button></div>
+    </form>
+  </dialog>
+
+  <script src="kesher.js"></script>
+  <script src="editor.js"></script>
+</body>
+</html>
