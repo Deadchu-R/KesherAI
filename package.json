@@ -1,7 +1,7 @@
 {
   "name": "kesher",
   "private": true,
-  "version": "0.5.39",
+  "version": "0.5.40",
   "description": "Local-first, open-source desktop app that runs every kind of AI model — chat, image, video, audio — in one place.",
   "license": "Apache-2.0",
   "type": "module",

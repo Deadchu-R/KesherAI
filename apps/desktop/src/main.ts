@@ -121,6 +121,37 @@ async function startCore(): Promise<string> {
   }
 }
 
+/**
+ * After an update the new app can start while the old one is still closing: it then shows the old
+ * copy's server, which goes away a moment later (the window shows "Failed to fetch" and nothing
+ * works). When this app did not start its own server and the one it shows stops answering, it starts
+ * its own and reloads the window.
+ */
+function watchCore(url: string): void {
+  if (server || process.env.KESHER_DEV_URL) return;
+  let misses = 0;
+  const timer = setInterval(() => {
+    void fetch(`${url}/api/health`, { signal: AbortSignal.timeout(3000) }).then(
+      (r) => {
+        misses = r.ok ? 0 : misses + 1;
+      },
+      () => {
+        misses++;
+      },
+    ).then(async () => {
+      if (misses < 2 || server) return;
+      clearInterval(timer);
+      try {
+        const own = await startCore();
+        for (const w of BrowserWindow.getAllWindows()) void w.loadURL(own);
+        if (!server) watchCore(own);
+      } catch (err) {
+        await rescue(err);
+      }
+    });
+  }, 4000);
+}
+
 // ---------- automatic updates for installed copies ----------
 let autoUpdating = false;
 let readyInstaller: { file: string; version?: string } | undefined;
@@ -448,6 +479,7 @@ app.whenReady().then(async () => {
   try {
     const coreUrl = await startCore();
     if (!headless) await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);
+    watchCore(coreUrl);
     setupTray(coreUrl);
     // Stops computer control from anywhere, even when another app is in front.
     const stopKey = process.platform === "darwin" ? "Command+Shift+Escape" : "Control+Alt+Escape";

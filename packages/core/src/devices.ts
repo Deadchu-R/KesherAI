@@ -314,8 +314,11 @@ export class Devices {
         /* try the next address */
       }
     }
-    this.d.registry.remove(providerId);
-    return view;
+    // Not reachable now (asleep, restarting, offline): keep its connection, so a chat that uses its model
+    // still knows it and says it cannot reach the computer, and works again the moment it is back.
+    const url = x.urls[0]?.replace(/\/$/, "");
+    if (url && !this.d.registry.get(providerId)) await this.d.addProvider({ id: providerId, type: "openai-compatible", name: `${x.name} (your computer)`, location: "server", baseUrl: `${url}/v1`, apiKey: x.token }, false).catch(() => undefined);
+    return { ...view, providerId };
   }
 
   /** API keys (cloud connections) and MCP servers: the newer change wins on every computer. */
