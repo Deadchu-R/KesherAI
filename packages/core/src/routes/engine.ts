@@ -8,6 +8,7 @@ import type { KesherServices } from "../services.js";
 import { findLlamaRelease, waitForDownload } from "../llamacpp.js";
 import { insideAny, looksLikeGguf } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
+import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -192,6 +193,29 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
     void setUp(s, [model]).catch((err) => s.engine.fail(err));
     return reply.code(202).send(s.engine.status());
+  });
+
+  /**
+   * "Set it up for me" for pictures and video: picks the model that fits this
+   * computer (images: Qwen-Image or Flux; video: Wan 2.1), downloads it with
+   * its extra files in the background, and makes it the active one.
+   * Returns `{ ready }` or `{ message }` (what is downloading).
+   */
+  app.post<{ Params: { kind: string } }>("/api/models/setup/media/:kind", async (req, reply) => {
+    const d = { sd: s.sd, downloads: s.downloads, config: s.config, modelsDir: () => s.paths.models, save: () => s.saveConfig() };
+    try {
+      if (req.params.kind === "image") {
+        const r = await ensureImageModel(d);
+        return r.modelId ? { ready: true, model: r.modelId } : { ready: false, message: r.message };
+      }
+      if (req.params.kind === "video") {
+        const r = await ensureVideoModel(d);
+        return r.path ? { ready: true, model: r.path } : { ready: false, message: r.message };
+      }
+      return reply.code(400).send({ error: "image or video" });
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
   });
 
   /**

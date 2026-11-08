@@ -4,7 +4,7 @@ import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shar
 import { api } from "../api";
 import { getLocale, t } from "../i18n";
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
-import { desktop } from "../library";
+import { desktop, toast } from "../library";
 import { HubBrowser } from "../HubBrowser";
 import { useDownloads } from "../Downloads";
 
@@ -138,7 +138,7 @@ const LEVELS: ResourceLevel[] = ["conservative", "balanced", "extreme"];
 function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s: EngineStatus) => void; onError: (m: string) => void }) {
   const [level, setLevel] = useState<ResourceLevel>("balanced");
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [extras, setExtras] = useState<{ speech: boolean; meaning: boolean }>({ speech: false, meaning: false });
+  const [extras, setExtras] = useState<{ speech: boolean; meaning: boolean; image: boolean; video: boolean }>({ speech: false, meaning: false, image: false, video: false });
   const rated = props.models.map((m) => ({ ...m, rating: m.estimate.rating }));
   const picks = pickSetup(rated, level);
   useEffect(() => {
@@ -157,6 +157,12 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
       // Speech to text and search by meaning download in the background too (see the downloads circle).
       if (extras.speech) await api("/api/speech/stt/setup", { method: "POST" });
       if (extras.meaning) await api("/api/knowledge/semantic/setup", { method: "POST" });
+      // Pictures and video: the model that fits this computer, with its extra files.
+      for (const kind of ["image", "video"] as const) {
+        if (!extras[kind]) continue;
+        const r = await api<{ ready: boolean; message?: string }>(`/api/models/setup/media/${kind}`, { method: "POST" });
+        toast(r.ready ? t(kind === "image" ? "setupImageReady" : "setupVideoReady") : t(kind === "image" ? "setupImageStarted" : "setupVideoStarted"));
+      }
       if (order.length) props.onStarted(await api<EngineStatus>("/api/models/setup", { method: "POST", body: { ids: order } }));
     } catch (e) {
       props.onError((e as Error).message);
@@ -169,7 +175,7 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
           <h2>{t("setupTitle")}</h2>
           <p className="muted">{t("setupHint")}</p>
         </div>
-        <button type="button" className="primary" disabled={props.busy || (!order.length && !extras.speech && !extras.meaning)} onClick={() => void start()}>{t("setupStart")}</button>
+        <button type="button" className="primary" disabled={props.busy || (!order.length && !extras.speech && !extras.meaning && !extras.image && !extras.video)} onClick={() => void start()}>{t("setupStart")}</button>
       </div>
       <div className="row">
         <strong className="grow">{t("resourceUse")}</strong>
@@ -204,6 +210,16 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
           <input type="checkbox" checked={extras.meaning} onChange={(e) => setExtras({ ...extras, meaning: e.target.checked })} />
           <span className="grow"><strong>{t("setupMeaning")}</strong> <span className="muted">· {t("setupMeaningHint")}</span></span>
           <span className="muted mono" dir="ltr">0.64 GB</span>
+        </label>
+        <label className="row check">
+          <input type="checkbox" checked={extras.image} onChange={(e) => setExtras({ ...extras, image: e.target.checked })} />
+          <span className="grow"><strong>{t("setupImage")}</strong> <span className="muted">· {t("setupImageHint")}</span></span>
+          <span className="muted mono" dir="ltr">7–20 GB</span>
+        </label>
+        <label className="row check">
+          <input type="checkbox" checked={extras.video} onChange={(e) => setExtras({ ...extras, video: e.target.checked })} />
+          <span className="grow"><strong>{t("setupVideo")}</strong> <span className="muted">· {t("setupVideoHint")}</span></span>
+          <span className="muted mono" dir="ltr">~10 GB</span>
         </label>
       </div>
       <p className="muted" dir="auto">{t("setupTotal", { gb: total.toFixed(1) })}</p>
