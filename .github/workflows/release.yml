@@ -54,19 +54,30 @@ jobs:
           key: electron-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: electron-dl-${{ runner.os }}-
       # Windows: fetch what electron-builder needs first, file by file, with curl trying again on
-      # GitHub's 504s and going on from where a download stopped; then serve them from this
-      # machine so electron-builder's own downloader (which never retries) finds them here.
+      # GitHub's 504s; when GitHub's downloads stay down, from the npmmirror.com copy instead.
+      # Electron's zip is checked against the SHA-256 in the electron npm package (from npm, not
+      # the mirror); electron-builder checks its own tools' SHA-512. Then they are served from this
+      # machine, so electron-builder's own downloader (which never retries) finds them here.
       - if: runner.os == 'Windows'
         shell: bash
         run: |
           set -e
           EV=$(node -p "require('./apps/desktop/node_modules/electron/package.json').version")
-          get() { mkdir -p "mirror/$1"; curl -fL --retry 12 --retry-all-errors --retry-delay 10 -C - -o "mirror/$1/$2" "$3/$1/$2"; }
-          E=https://github.com/electron/electron/releases/download
-          B=https://github.com/electron-userland/electron-builder-binaries/releases/download
-          get "v$EV" "electron-v$EV-win32-x64.zip" $E
-          get "v$EV" SHASUMS256.txt $E
-          for b in winCodeSign-2.6.0 nsis-3.0.4.1 nsis-resources-3.4.1; do get $b $b.7z $B; done
+          get() {
+            mkdir -p "mirror/$1"
+            curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "mirror/$1/$2" "$3/$1/$2" && return 0
+            echo "GitHub did not give $2; using npmmirror.com"
+            curl -fsSL --retry 6 --retry-all-errors --retry-delay 5 -o "mirror/$1/$2" "$4/${5:-$1}/$2"
+          }
+          # (npmmirror keeps Electron's files under the version without the "v")
+          get "v$EV" "electron-v$EV-win32-x64.zip" https://github.com/electron/electron/releases/download https://npmmirror.com/mirrors/electron "$EV"
+          get "v$EV" SHASUMS256.txt https://github.com/electron/electron/releases/download https://npmmirror.com/mirrors/electron "$EV"
+          want=$(node -p "require('./apps/desktop/node_modules/electron/checksums.json')['electron-v$EV-win32-x64.zip']")
+          got=$(sha256sum "mirror/v$EV/electron-v$EV-win32-x64.zip" | cut -d' ' -f1)
+          [ "$want" = "$got" ] || { echo "Electron's zip does not match its checksum"; exit 1; }
+          for b in winCodeSign-2.6.0 nsis-3.0.4.1 nsis-resources-3.4.1; do
+            get $b $b.7z https://github.com/electron-userland/electron-builder-binaries/releases/download https://npmmirror.com/mirrors/electron-builder-binaries
+          done
       # Unsigned installers (macOS, Linux, and Windows until SignPath is set up).
       - if: runner.os != 'Windows' || vars.SIGNPATH_ORGANIZATION_ID == ''
         shell: bash
