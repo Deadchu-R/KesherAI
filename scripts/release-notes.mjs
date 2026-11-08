@@ -27,4 +27,4 @@ for (const entry of log.split(SEP)) {
   lines.push(subject.replace(/^\d+\.\d+\.\d+:\s*/, ""));
 }
 const unique = [...new Set(lines)].slice(0, 25);
-process.stdout.write(`### מה חדש · What's new\n\n${unique.length ? unique.map((l) => `- ${l}`).join("\n") : "- Fixes and improvements"}\n\n**Windows:** \`KesherAI-Setup-${version}.exe\` · **Mac:** \`.dmg\` · **Linux:** \`.AppImage\`\n`);
+process.stdout.write(`### מה חדש · What's new\n\n${unique.length ? unique.map((l) => `- ${l}`).join("\n") : "- Fixes and improvements"}\n\n**Windows:** \`KesherAI-Setup-${version}.exe\` · **Mac:** \`.dmg\` · **Linux:** \`.AppImage\`\n\n[Code signing policy](https://github.com/Deadchu-R/KesherAI/blob/main/docs/CODE_SIGNING.md)\n`);

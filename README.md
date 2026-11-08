@@ -110,6 +110,7 @@ Each package has its own README explaining what it owns.
 | [docs/WAKE_ON_LAN.md](docs/WAKE_ON_LAN.md) | wake the computer from the phone |
 | [docs/COMPETITORS.md](docs/COMPETITORS.md) | see what other apps do and what we build next |
 | [docs/LEGAL.md](docs/LEGAL.md) | know which licences apply |
+| [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) | see the code signing policy (who signs the Windows installer, and privacy) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | send a pull request |
 
 API reference generated from the code comments: `pnpm docs:api` (published to GitHub Pages by CI).
@@ -127,4 +128,4 @@ The detailed, prioritised list is in [docs/COMPETITORS.md](docs/COMPETITORS.md#n
 
 ## License
 
-[Apache License 2.0](LICENSE). Use it, change it, ship it, fork it.
+[Apache License 2.0](LICENSE). Use it, change it, ship it, fork it. [Code signing policy](docs/CODE_SIGNING.md).

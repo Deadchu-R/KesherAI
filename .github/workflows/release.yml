@@ -39,9 +39,62 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.KESHER_GOOGLE_CLIENT_SECRET }}
           GITHUB_CLIENT_ID: ${{ secrets.KESHER_GITHUB_CLIENT_ID }}
         run: node -e "const e=process.env;require('fs').writeFileSync('apps/desktop/dist/google-client.json', JSON.stringify({clientId:e.GOOGLE_CLIENT_ID||'',clientSecret:e.GOOGLE_CLIENT_SECRET||'',githubClientId:e.GITHUB_CLIENT_ID||''}))"
-      - run: pnpm --filter @kesher/desktop exec electron-builder --publish always
+      # Unsigned installers (macOS, Linux, and Windows until SignPath is set up).
+      - if: runner.os != 'Windows' || vars.SIGNPATH_ORGANIZATION_ID == ''
+        run: pnpm --filter @kesher/desktop exec electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Signed Windows build (docs/CODE_SIGNING.md): the app's files are signed by SignPath, then
+      # packed into the installer, which is signed too, then published. Each signing waits for an approver.
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        run: pnpm --filter @kesher/desktop exec electron-builder --win --dir --publish never
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        id: app-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned
+          path: apps/desktop/out/win-unpacked
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: KesherAI
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.app-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: apps/desktop/out/win-signed
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        run: pnpm --filter @kesher/desktop exec electron-builder --win --prepackaged out/win-signed --publish never
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        id: installer-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: apps/desktop/out/*Setup*.exe
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: KesherAI
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.installer-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: apps/desktop/out/installer-signed
+      - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        name: Publish the signed installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/signed-installer.mjs apps/desktop/out apps/desktop/out/installer-signed
+          VERSION=$(node -p "require('./package.json').version")
+          gh release view "v$VERSION" > /dev/null 2>&1 || gh release create "v$VERSION" --title "KesherAI $VERSION" --notes "" || true
+          gh release upload "v$VERSION" apps/desktop/out/*Setup*.exe apps/desktop/out/latest.yml --clobber
 
   # The "what's new" list the app shows before updating: from the commits since the last release.
   notes:
