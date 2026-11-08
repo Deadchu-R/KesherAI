@@ -396,7 +396,68 @@ export function AppearanceSection() {
         }} /></label>
       </div>
       {found.length > 0 && <p className="muted small" dir="ltr">{found.slice(0, 12).join(" · ")}</p>}
+      <FigmaLink onTokens={(json) => {
+        const r = lookFromTokens(json);
+        if (!r.found.length) return toast(L("לא מצאתי בקובץ צבעים בשמות שאני מבין (background, surface, text, primary…).", "No colours with names I understand (background, surface, text, primary…)."));
+        setFound(r.found);
+        change({ ...saved, ...r.look, colors: { ...saved.colors, ...r.look.colors } }, true);
+      }} onBackground={(assetId) => patch({ background: { kind: "image", assetId, dim: 40 } }, true)} />
       <small className="muted">{L("מפיגמא: ייצא את ה-Variables (למשל בתוסף \"Export/Import Variables\" או Tokens Studio) כקובץ JSON. צבעים לפי שמות כמו background, surface, text, primary.", "From Figma: export the Variables (for example with the \"Export/Import Variables\" plugin or Tokens Studio) as JSON. Colours are matched by names like background, surface, text, primary.")}</small>
     </section>
+  );
+}
+
+/**
+ * Figma, straight from the file: with the user's personal access token,
+ * a file link brings its Variables (or colour and text styles) into the
+ * look, and a frame link makes that frame the background.
+ */
+function FigmaLink({ onTokens, onBackground }: { onTokens: (json: string) => void; onBackground: (assetId: string) => void }) {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [token, setToken] = useState("");
+  const [link, setLink] = useState("");
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    void api<{ connected: boolean }>("/api/figma").then((r) => setConnected(r.connected), () => setConnected(false));
+  }, []);
+  const run = (what: "tokens" | "frame") => {
+    setBusy(what);
+    void api<{ tokens?: Array<{ name: string; $value: string }>; name?: string; from?: string; assetId?: string }>(`/api/figma/${what}`, { method: "POST", body: { link } })
+      .then((r) => {
+        if (what === "tokens") {
+          if (!r.tokens?.length) return toast(L("בקובץ אין Variables או סגנונות צבע.", "That file has no Variables or colour styles."));
+          toast(L(`יובאו מ-${r.name} (${r.from === "variables" ? "Variables" : "סגנונות"})`, `Imported from ${r.name} (${r.from})`));
+          onTokens(JSON.stringify(r.tokens));
+        } else if (r.assetId) onBackground(r.assetId);
+      }, (e: Error) => toast(e.message))
+      .finally(() => setBusy(""));
+  };
+  if (connected === null) return null;
+  return (
+    <div className="stack figma-link">
+      <h3>{L("פיגמא", "Figma")}</h3>
+      {!connected ? (
+        <>
+          <p className="muted small">{L("חבר פעם אחת עם טוקן אישי: בפיגמא ← Settings ← Security ← Personal access tokens ← Generate (מספיקה הרשאת קריאה לקבצים). הטוקן נשמר רק במחשב הזה.", "Connect once with a personal token: in Figma → Settings → Security → Personal access tokens → Generate (reading files is enough). The token stays on this computer.")}</p>
+          <div className="row">
+            <input className="grow mono" dir="ltr" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="figd_…" aria-label={L("טוקן של פיגמא", "Figma token")} />
+            <button type="button" className="primary" disabled={!token.trim()} onClick={() => void api<{ connected: boolean }>("/api/figma", { method: "PUT", body: { token } }).then((r) => { setConnected(r.connected); setToken(""); }, (e: Error) => toast(e.message))}>{L("חבר", "Connect")}</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="row">
+            <input className="grow mono" dir="ltr" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://www.figma.com/design/…" aria-label={L("קישור לקובץ או למסגרת בפיגמא", "Link to a Figma file or frame")} />
+          </div>
+          <div className="row">
+            <button type="button" className="primary" disabled={!link.trim() || !!busy} onClick={() => run("tokens")}>{busy === "tokens" ? "…" : L("ייבא צבעים וגופנים", "Import colours and fonts")}</button>
+            <button type="button" disabled={!/node-id=/.test(link) || !!busy} onClick={() => run("frame")} title={L("קישור למסגרת: קליק ימני עליה ← Copy link to selection", "A frame's link: right-click it → Copy link to selection")}>{busy === "frame" ? "…" : L("המסגרת כרקע", "Frame as background")}</button>
+            <span className="grow" />
+            <button type="button" className="link-btn small" onClick={() => void api("/api/figma", { method: "PUT", body: { token: "" } }).then(() => setConnected(false))}>{L("נתק", "Disconnect")}</button>
+          </div>
+          <small className="muted">{L("קישור לקובץ: מביא את ה-Variables שלו (או את סגנונות הצבע והטקסט). קישור למסגרת (עם node-id): הופך אותה לתמונת רקע.", "A file link brings its Variables (or its colour and text styles). A frame link (with node-id) makes it the background picture.")}</small>
+        </>
+      )}
+    </div>
   );
 }

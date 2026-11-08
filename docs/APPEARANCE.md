@@ -43,3 +43,12 @@ A look is data plus cleaned CSS. It holds no JavaScript and no HTML.
 - **Two checks:** the computer cleans every look, and each browser cleans its own copy again.
 - **The safety guard:** the cascade layer `kesher-guard` comes before every look's CSS. Its `!important` rules keep approvals visible, opaque and in their own place, with the default colours and labels. No look can hide, fade, move, cover or relabel the Approve and Deny buttons.
 - **The interface's Content-Security-Policy** (`WEB_CSP` in server.ts) allows scripts, fonts, pictures and connections only from KesherAI itself, plus Google profile pictures. Even if something got past the cleaning, it could not load anything from outside or send anything away. The same rule stops a chat's Markdown from loading outside pictures.
+
+## Straight from Figma
+
+Settings → Appearance → Figma: paste a personal access token once (Figma → Settings → Security → Personal access tokens; reading files is enough). It is kept in this computer's KesherAI settings and never sent to a page or the phone.
+
+- **A file link** (`figma.com/design/…`) brings the file's Variables, or, when your Figma plan does not allow the Variables API, its colour and text styles. They are matched by name (background, surface, text, primary, radius, font family) like a tokens JSON file.
+- **A frame link** (right-click a frame → Copy link to selection, with `node-id`) makes that frame the background picture (PNG, at most 12 MB).
+
+Only api.figma.com is asked, with the token in a header; the frame's picture comes over HTTPS from Figma's image hosts and is checked to be a PNG. As with every look, nothing from Figma can change what the app does — only how it looks.

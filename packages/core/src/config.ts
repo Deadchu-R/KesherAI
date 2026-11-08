@@ -124,6 +124,8 @@ export const KesherConfigSchema = z.object({
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
   appearance: z.record(z.string(), z.unknown()).default({}),
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
+  /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */
+  figma: z.object({ token: z.string().max(200).optional() }).default({}),
   /** Tool search for local models (only everyday tools in full; the rest loaded on demand). On unless false. */
   toolSearch: z.boolean().optional(),
   /** Looks the user saved by name (Settings → Appearance → My looks). */

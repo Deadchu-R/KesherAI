@@ -1,3 +1,4 @@
+import { figmaFrame, figmaTokens, parseFigmaLink } from "../figma.js";
 import { LOOK_ICON_PAGES, styleLook } from "../look-pictures.js";
 import type { FastifyInstance } from "fastify";
 import { PARTS, partOn, cleanAppearance, type Appearance } from "@kesher/shared";
@@ -100,6 +101,46 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     setAppearance(s, { ...cur, ...(got.background ? { background: got.background } : {}), ...(got.icons ? { icons: { ...cur.icons, ...got.icons } } : {}) });
     await s.saveConfig();
     return { appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0, credits: got.credits };
+  });
+
+  // ---------- Figma → the look (Settings → Appearance) ----------
+  /** Whether a Figma token is saved (never the token itself). */
+  app.get("/api/figma", async () => ({ connected: !!s.config.figma.token }));
+  /** Saves (or with an empty token removes) the user's Figma personal access token. Only on this computer. */
+  app.put<{ Body: { token?: unknown } }>("/api/figma", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Connect Figma on the computer that runs KesherAI." });
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (token && !/^[\w-]{20,200}$/.test(token)) return reply.code(400).send({ error: "That does not look like a Figma token (Figma → Settings → Security → Personal access tokens)." });
+    if (token) s.config.figma.token = token;
+    else delete s.config.figma.token;
+    await s.saveConfig();
+    return { connected: !!s.config.figma.token };
+  });
+  /** A Figma file's Variables (or colour and text styles) as design tokens. Body: `{ link }`. */
+  app.post<{ Body: { link?: unknown } }>("/api/figma/tokens", async (req, reply) => {
+    const token = s.config.figma.token;
+    if (!token) return reply.code(400).send({ error: "Connect Figma first (paste a personal access token)." });
+    const f = parseFigmaLink(String(req.body?.link ?? ""));
+    if (!f) return reply.code(400).send({ error: "Paste the link of a Figma file (figma.com/design/…)." });
+    try {
+      return await figmaTokens(token, f.key);
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+  /** A Figma frame as the background picture. Body: `{ link }` (a link to a frame, with node-id). */
+  app.post<{ Body: { link?: unknown } }>("/api/figma/frame", async (req, reply) => {
+    const token = s.config.figma.token;
+    if (!token) return reply.code(400).send({ error: "Connect Figma first (paste a personal access token)." });
+    const f = parseFigmaLink(String(req.body?.link ?? ""));
+    if (!f?.node) return reply.code(400).send({ error: "Paste the link of a frame: right-click it in Figma → Copy link to selection." });
+    try {
+      const data = await figmaFrame(token, f.key, f.node);
+      const asset = await s.assets.save(data, "image/png", { meta: { use: "background", source: "figma" } });
+      return { assetId: asset.id };
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
   });
 
   /** A picture for the background (Settings → Appearance): saved to the library; returns its id. Body: `{ data: base64, mimeType }`. */
