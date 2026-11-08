@@ -29,6 +29,11 @@ export interface Branding {
   google: { clientId: string; clientSecret: string };
   /** GitHub OAuth App client id for "Connect with GitHub" (device flow; public, no secret). */
   github: { clientId: string };
+  /**
+   * Microsoft application (client) id for "Connect OneDrive" (a public
+   * client: no secret, so it can live here). See docs/ONEDRIVE.md.
+   */
+  onedrive: { clientId: string };
 }
 
 /** The branding of upstream KesherAI. Forks replace these values. */
@@ -41,4 +46,5 @@ export const branding: Branding = {
   defaultPort: 7420,
   google: { clientId: "", clientSecret: "" },
   github: { clientId: "Ov23linxLSbmmhp313Rd" },
+  onedrive: { clientId: "" },
 };

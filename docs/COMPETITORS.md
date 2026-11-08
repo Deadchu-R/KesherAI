@@ -59,7 +59,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | --- | --- | --- | --- |
 | Projects with conversations (Bionic, Jan) | — | Projects carry a folder and instructions every conversation inherits | ✅ |
 | Cloud backup | Usually needs the vendor's cloud and an account | Any synced folder (Google Drive for desktop, OneDrive, Dropbox), no account | ✅ |
-| Google sign-in backup (Claude-style connector) | — | `drive.file` only: KesherAI sees just its own folder, never the rest of your Drive | ✅ Google · ⬜ OneDrive |
+| Google sign-in backup (Claude-style connector) | — | `drive.file` only: KesherAI sees just its own folder, never the rest of your Drive | ✅ Google · ✅ OneDrive (`Files.ReadWrite.AppFolder`: only its own app folder) |
 | Document chat with cited sources (Off Grid, AnythingLLM) | — | PDF and Word by page with page citations (also from Drive); a knowledge base over whole folders next | ✅ |
 | Search across all conversations | — | Full-text search over conversations and the day journal (My day → Search) | ✅ |
 | Second brain: Day, Replay, Reflect, Entities, Actions (Off Grid) | macOS-first; Search still "coming" | My day: opt-in screen journal kept on this computer (Windows OCR built in, no download), local model by default, skips password managers, private windows and sign-in/bank pages, delete the last 15 minutes or any day, unified search with conversations | ✅ Windows · 🟡 macOS/Linux (no OCR without tesseract) |
@@ -203,7 +203,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 19. Agent groups: several personas on one task (LobeHub) ✅ (the Group button in a chat)
 20. Pages: a document written together with the agent (LobeHub) ✅ (the Pages page)
 21. A meeting transcript that follows playback (keeps the recording, as an option) ✅ (My day → the recorder's "Keep the recording")
-22. OneDrive sign-in, like Google ⬜
+22. OneDrive sign-in, like Google ✅ (code done; the project needs its free Microsoft app id, docs/ONEDRIVE.md)
 23. Signed Windows installer through SignPath (waiting for the application) ⬜
 24. Chrome Web Store listing for the extension (a one-time $5 fee; only if it is worth it) ⬜
 25. Gentle on the graphics card: automatic limits by hardware (memory, heat, power), pause and resume of running prompts and queues, light in the background, and unloading what is not needed in steps when idle ⬜

@@ -46,6 +46,7 @@ import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
+import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
@@ -89,6 +90,7 @@ import { fileRoutes } from "./routes/files.js";
 import { terminalRoutes } from "./routes/terminal.js";
 import websocket from "@fastify/websocket";
 import { googleRoutes } from "./routes/google.js";
+import { onedriveRoutes } from "./routes/onedrive.js";
 import { loadModel } from "./routes/engine.js";
 
 /** Options for {@link createKesherServer}. All optional. */
@@ -109,6 +111,8 @@ export interface KesherServerOptions {
   googleEndpoints?: GoogleEndpoints;
   /** The project's Google OAuth client (defaults to branding.config.ts; builds pass the one from repository secrets). */
   googleClient?: { clientId: string; clientSecret: string };
+  /** Microsoft endpoints (tests point these at a fake server). */
+  onedriveEndpoints?: OneDriveEndpoints;
   /** Installed copies: update from GitHub releases (the desktop app passes its version and how to run an installer). */
   updates?: PackagedUpdates;
   /** The desktop app's screen capture for "My day" (no PowerShell, which antivirus programs block). */
@@ -268,6 +272,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   })();
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? fileClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
+  const onedrive = new OneDrive(config.onedrive, persist, options.onedriveEndpoints ?? ONEDRIVE_ENDPOINTS, process.env.KESHER_ONEDRIVE_CLIENT_ID || branding.onedrive.clientId || undefined);
+  const onedriveSync = new DriveSync(onedrive, library, config.onedrive, persist);
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
@@ -489,6 +495,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     updater,
     google,
     driveSync,
+    onedrive,
+    onedriveSync,
     sd,
     tunnel,
     devices,
@@ -555,6 +563,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await googleRoutes(app, services);
+  await onedriveRoutes(app, services);
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);
   await partsRoutes(app, services);
@@ -572,6 +581,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // Bring this computer's library up to date with Google Drive, in the background.
   if (google.connected) void driveSync.syncNow().catch(() => undefined);
+  if (onedrive.connected) void onedriveSync.syncNow().catch(() => undefined);
   // Find the user's other computers (same Google account) and keep their connections in step.
   devices.start();
 

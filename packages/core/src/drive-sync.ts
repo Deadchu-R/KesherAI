@@ -1,6 +1,25 @@
 import type { Conversation, Project } from "@kesher/shared";
-import type { GoogleConfig, GoogleDrive } from "./google.js";
+import type { RemoteItem } from "./google.js";
 import type { Library, LibraryKind } from "./library.js";
+
+/** A cloud folder the library can be kept in step with (Google Drive, OneDrive). */
+export interface CloudStore {
+  /** Whether the user is signed in. */
+  readonly connected: boolean;
+  list(): Promise<RemoteItem[]>;
+  download(fileId: string): Promise<unknown>;
+  upload(kind: LibraryKind, id: string, value: { updatedAt: string }): Promise<void>;
+  remove(kind: LibraryKind, id: string): Promise<void>;
+}
+
+/** Where the last sync's time and error are shown (a config section). */
+export interface SyncStatus {
+  lastSync?: string;
+  lastError?: string;
+}
+
+/** Compares at whole seconds: some clouds keep file times without milliseconds. */
+const sec = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
 /** Result of a full sync. */
 export interface SyncResult {
@@ -9,7 +28,7 @@ export interface SyncResult {
 }
 
 /**
- * Keeps the library and the KesherAI folder in Google Drive in step:
+ * Keeps the library and the KesherAI folder in a cloud (Google Drive, OneDrive) in step:
  * every local save is uploaded a moment later, and {@link syncNow} brings
  * both sides up to date (the newer `updatedAt` wins).
  */
@@ -18,15 +37,15 @@ export class DriveSync {
   private running?: Promise<SyncResult>;
 
   /**
-   * @param drive - The Google Drive client.
+   * @param drive - The cloud (Google Drive or OneDrive).
    * @param library - The local library.
-   * @param config - The `google` config section (for the status shown in Settings).
+   * @param config - The cloud's config section (for the status shown in Settings).
    * @param save - Persists the config.
    */
   constructor(
-    private readonly drive: GoogleDrive,
+    private readonly drive: CloudStore,
     private readonly library: Library,
-    private readonly config: GoogleConfig,
+    private readonly config: SyncStatus,
     private readonly save: () => Promise<void>,
   ) {
     library.onChange(({ kind, id, deleted }) => {
@@ -79,7 +98,7 @@ export class DriveSync {
         let uploaded = 0;
         for (const r of remote) {
           const l = local.get(`${r.kind}/${r.id}`);
-          if (!l || l.updatedAt < r.updatedAt) {
+          if (!l || sec(l.updatedAt) < sec(r.updatedAt)) {
             await this.library.applyRemote(r.kind, (await this.drive.download(r.fileId)) as Project | Conversation);
             downloaded++;
           }
@@ -87,7 +106,7 @@ export class DriveSync {
         const remoteKeys = new Map(remote.map((r) => [`${r.kind}/${r.id}`, r.updatedAt]));
         for (const [key, l] of local) {
           const r = remoteKeys.get(key);
-          if (!r || r < l.updatedAt) {
+          if (!r || sec(r) < sec(l.updatedAt)) {
             const value = await this.library.read(l.kind, l.id);
             if (value) {
               await this.drive.upload(l.kind, l.id, value);

@@ -103,6 +103,17 @@ export const KesherConfigSchema = z.object({
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
     .default({}),
+  /** OneDrive sign-in (Microsoft account). The application id defaults to the one in branding.config.ts. */
+  onedrive: z
+    .object({
+      clientId: z.string().optional(),
+      refreshToken: z.string().optional(),
+      email: z.string().optional(),
+      name: z.string().optional(),
+      lastSync: z.string().optional(),
+      lastError: z.string().optional(),
+    })
+    .default({}),
   /** "My devices": the user's computers find each other through their Google account. */
   devices: z
     .object({

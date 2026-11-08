@@ -9,6 +9,7 @@ import type { ConversationManager } from "./conversations.js";
 import type { Updater } from "./updates.js";
 import type { GoogleDrive } from "./google.js";
 import type { DriveSync } from "./drive-sync.js";
+import type { OneDrive } from "./onedrive.js";
 import type { Tunnel } from "./tunnel.js";
 import type { SdEngine } from "./sdcpp.js";
 import type { BrowserBridge } from "./browser-bridge.js";
@@ -58,6 +59,10 @@ export interface KesherServices {
   google: GoogleDrive;
   /** Keeps the library in step with Google Drive. */
   driveSync: DriveSync;
+  /** Microsoft sign-in and OneDrive access. */
+  onedrive: OneDrive;
+  /** Keeps the library in step with OneDrive. */
+  onedriveSync: DriveSync;
   /** The built-in image engine (stable-diffusion.cpp). */
   sd: SdEngine;
   /** The link to the KesherAI browser extension. */
