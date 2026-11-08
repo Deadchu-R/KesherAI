@@ -359,9 +359,9 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         const out = target.ext === "/" ? folder : join(folder, `${name}${target.ext}`);
         // The open Editor's own build command first (Pipeline `build run`): `unity build` 1.0.0-beta through
         // Pipeline 0.10 sends an option the Editor rejects. With Unity closed, `unity build` runs a batch Editor.
-        const scenes = await evalCs("var l = new System.Collections.Generic.List<string>(); foreach (var s in UnityEditor.EditorBuildSettings.scenes) if (s.enabled) l.Add(s.path); if (l.Count == 0) { var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a != \"\") l.Add(a); } return string.Join(\";\", l);").catch(() => "");
-        const list = scenes && !/^(Unity did not|C# failed)/.test(scenes) ? scenes.split(";").filter((x) => /\.unity$/.test(x)) : [];
-        let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, ...(list.length ? ["--scenes", JSON.stringify(list)] : []), "--confirm", "true"], 3_700_000);
+        // No scene in Build Settings (a new project): the open scene is added, so the build has something to build.
+        await evalCs("var list = new System.Collections.Generic.List<UnityEditor.EditorBuildSettingsScene>(UnityEditor.EditorBuildSettings.scenes); bool any = false; foreach (var s in list) if (s.enabled) any = true; if (!any) { var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a != \"\") { list.Add(new UnityEditor.EditorBuildSettingsScene(a, true)); UnityEditor.EditorBuildSettings.scenes = list.ToArray(); return \"added \" + a; } } return \"ok\";").catch(() => "");
+        let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, "--confirm", "true"], 3_700_000);
         if (r.code !== 0 && !existsSync(out)) r = await unity.cliRaw(["build", p, "--target", target.id, "--output-path", out, "--timeout", "3600", "--format", "json"], 3_700_000);
         const made = existsSync(out);
         if (r.code !== 0 || !made) return { output: `The build did NOT finish (exit ${r.code}). ${made ? "" : "No game file was made. "}Unity said:\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
