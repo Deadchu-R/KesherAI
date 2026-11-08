@@ -699,6 +699,25 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     runFlow: (flow, signal) => new ComfyUIProvider({ id: "comfyui-train", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" }).runFlow(flow, signal, 4 * 60 * 60_000),
     loraDir: () => sd.loraDir,
     interrupt: async () => void (await fetch(`${comfy.status().url}/interrupt`, { method: "POST" })),
+    chats: async () =>
+      (await Promise.all(library.listConversations().map((c) => library.getConversation(c.id)))).filter((c): c is NonNullable<typeof c> => !!c).map((c) => ({
+        id: c.id,
+        title: c.title,
+        turns: c.events.flatMap((e): Array<{ role: "user" | "assistant"; text: string }> => (e.type === "user" || e.type === "assistant" ? [{ role: e.type, text: (e as { text: string }).text }] : [])),
+      })),
+    documents: async () => {
+      const pg = new Pages(join(paths.root, "pages"));
+      return (await Promise.all((await pg.list()).map((p) => pg.get(p.id)))).filter((p): p is NonNullable<typeof p> => !!p).map((p) => ({ title: p.title, content: p.content }));
+    },
+    datasetDir: () => join(paths.root, "training", "datasets"),
+  });
+  app.get("/api/training/datasets", async () => training.datasets());
+  app.post<{ Body: { name?: string; chats?: string[]; documents?: boolean } }>("/api/training/datasets", async (req, reply) => {
+    try {
+      return await training.buildChatDataset({ name: String(req.body?.name ?? "my-texts"), chats: Array.isArray(req.body?.chats) ? req.body.chats.filter((x) => typeof x === "string") : [], documents: req.body?.documents === true });
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
   });
   app.get("/api/training", async () => ({ kinds: await training.kinds(), jobs: training.list() }));
   app.post<{ Body: { name?: string; trigger?: string; base?: string; steps?: number; rank?: number; images?: Array<{ data?: string; mimeType?: string }> } }>("/api/training/image-lora", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {

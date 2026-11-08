@@ -1379,3 +1379,4 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .al-table > div { display: grid; grid-template-columns: 120px minmax(90px, 1fr) minmax(120px, 2fr) 90px 110px; gap: 8px; padding: 4px 6px; border-radius: 6px; background: var(--panel-2); }
 .al-table > div.bad { border-inline-start: 3px solid var(--bad); }
 @media (max-width: 760px) { .al-table > div { grid-template-columns: 1fr 1fr; } }
+.train-chats { list-style: none; margin: 6px 0 0; padding: 0; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }

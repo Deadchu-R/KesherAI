@@ -55,6 +55,22 @@ export interface TrainingDeps {
   loraDir: () => string;
   /** Stops what ComfyUI is running. */
   interrupt?: () => Promise<void>;
+  /** Chats (for a chat dataset): their messages as the user saw them. */
+  chats?: () => Promise<Array<{ id: string; title: string; turns: Array<{ role: "user" | "assistant"; text: string }> }>>;
+  /** Documents (Pages) the user wrote. */
+  documents?: () => Promise<Array<{ title: string; content: string }>>;
+  /** Where datasets are saved. */
+  datasetDir?: () => string;
+}
+
+/** A dataset made for training a chat model. */
+export interface ChatDataset {
+  name: string;
+  file: string;
+  examples: number;
+  /** Roughly, at 4 characters a token. */
+  tokens: number;
+  createdAt: string;
 }
 
 /**
@@ -120,7 +136,7 @@ export class Training {
     if (vram) picture.estimate = vram >= 16 ? "About 15–30 minutes (SDXL, 600 steps)." : "About 30–60 minutes (SD 1.5 is quicker than SDXL).";
     return [
       picture,
-      { id: "chat-lora", ready: false, notes: ["Coming next: teach a chat model your writing or your notes (LoRA on your texts)."] },
+      { id: "chat-lora", ready: false, notes: ["Step 2: make a dataset from your chats and documents now (below); training it on this computer comes next."] },
       { id: "voice", ready: false, notes: ["Later: a voice of your own from a few minutes of speech."] },
     ];
   }
@@ -210,6 +226,67 @@ export class Training {
       .catch((e: Error) => Object.assign(job, { status: "error", finishedAt: new Date().toISOString(), message: /out of memory|allocation on device/i.test(e.message) ? "The graphics card ran out of memory: try SD 1.5, fewer steps or a lower rank." : e.message }))
       .finally(() => rm(dir, { recursive: true, force: true }).catch(() => undefined));
     return job;
+  }
+
+  /**
+   * Makes a dataset for teaching a chat model (step 2 of training): your
+   * chats as question → answer pairs, and your documents as "write this in
+   * my style" examples, in the common chat format (JSONL, `messages`) that
+   * LoRA trainers such as unsloth and axolotl read. Nothing leaves the computer.
+   *
+   * @param req - What goes in.
+   * @param req.name - Its name.
+   * @param req.chats - Which chats (ids); empty for none.
+   * @param req.documents - Whether to add your documents.
+   * @returns The dataset.
+   */
+  async buildChatDataset(req: { name: string; chats: string[]; documents: boolean }): Promise<ChatDataset> {
+    if (!this.deps.datasetDir) throw new Error("Datasets are not available here.");
+    const lines: string[] = [];
+    let chars = 0;
+    const add = (user: string, assistant: string) => {
+      const u = user.trim();
+      const a = assistant.trim();
+      if (u.length < 2 || a.length < 2) return;
+      lines.push(JSON.stringify({ messages: [{ role: "user", content: u }, { role: "assistant", content: a }] }));
+      chars += u.length + a.length;
+    };
+    if (req.chats.length && this.deps.chats) {
+      for (const c of (await this.deps.chats()).filter((x) => req.chats.includes(x.id))) {
+        for (let i = 0; i + 1 < c.turns.length; i++) if (c.turns[i]!.role === "user" && c.turns[i + 1]!.role === "assistant") add(c.turns[i]!.text, c.turns[i + 1]!.text);
+      }
+    }
+    if (req.documents && this.deps.documents) {
+      for (const d of await this.deps.documents()) {
+        // Long documents in parts of about 1500 characters, each "continue in my style".
+        const parts = d.content.split(/\n{2,}/).reduce<string[]>((acc, p) => {
+          const last = acc.at(-1);
+          if (last !== undefined && last.length + p.length < 1500) acc[acc.length - 1] = `${last}\n\n${p}`;
+          else acc.push(p);
+          return acc;
+        }, []);
+        for (const part of parts) add(`Write a part of "${d.title}" in my style.`, part);
+      }
+    }
+    if (lines.length < 20) throw new Error(`Only ${lines.length} examples: a chat model needs at least 20 (hundreds is better). Add more chats or documents.`);
+    const name = slug(req.name);
+    await mkdir(this.deps.datasetDir(), { recursive: true });
+    const file = join(this.deps.datasetDir(), `${name}.jsonl`);
+    await writeFile(file, `${lines.join("\n")}\n`);
+    return { name, file, examples: lines.length, tokens: Math.round(chars / 4), createdAt: new Date().toISOString() };
+  }
+
+  /** @returns The chat datasets made so far. */
+  async datasets(): Promise<Array<{ name: string; file: string; examples: number; bytes: number }>> {
+    if (!this.deps.datasetDir) return [];
+    const dir = this.deps.datasetDir();
+    const out = [];
+    for (const f of (await readdir(dir).catch(() => [] as string[])).filter((x) => x.endsWith(".jsonl"))) {
+      const st = await stat(join(dir, f));
+      const { readFile } = await import("node:fs/promises");
+      out.push({ name: f.replace(/\.jsonl$/, ""), file: join(dir, f), examples: (await readFile(join(dir, f), "utf8")).split("\n").filter(Boolean).length, bytes: st.size });
+    }
+    return out;
   }
 
   /** Stops the running training. */

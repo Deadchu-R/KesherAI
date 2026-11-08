@@ -19,7 +19,15 @@ A LoRA is a small add-on to a picture model. It teaches the model a style, a cha
 - To use it, write the trigger word in your prompt.
 - **If the card runs out of memory:** choose SD 1.5, fewer steps or a lower rank.
 
+## Step 2: a dataset for a chat model
+
+Choose chats and, if you like, your documents (the Pages page). Then press **Make the dataset**.
+- **Chats** become question → answer pairs.
+- **Documents** are cut into parts of about 1500 characters, and each part becomes a "write in my style" example.
+
+The dataset is saved as `training/datasets/<name>.jsonl` in the common `messages` chat format, which LoRA trainers such as unsloth and axolotl read. Nothing leaves the computer. It needs at least 20 examples, and hundreds is better.
+
 ## Next steps
 
-- **Chat:** a LoRA on your own texts (your writing or your notes), with this computer's limits shown first.
+- **Chat:** training that dataset on this computer (a LoRA on a small chat model), with this computer's limits shown first, then the result added to the chat models.
 - **Voice:** a voice of your own, made from a few minutes of speech.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
-import { toast } from "../library";
+import { toast, useLibrary } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -21,7 +21,7 @@ const NOTES_HE: Array<[RegExp, string]> = [
   [/too old for training/, "ה-ComfyUI ישן מדי לאימון: עדכן אותו בדף הנודים."],
   [/^Needs a base model/, "צריך מודל בסיס (checkpoint של SD 1.5 או SDXL) בתיקיית models/checkpoints של ComfyUI."],
   [/^ComfyUI did not answer/, "ComfyUI לא ענה."],
-  [/^Coming next/, "בקרוב: ללמד מודל צ'אט את הכתיבה או הפתקים שלך (LoRA על הטקסטים)."],
+  [/^Step 2: make a dataset/, "שלב 2: כבר אפשר להכין מאגר אימון מהצ'אטים והמסמכים שלך (למטה); האימון עצמו במחשב מגיע בהמשך."],
   [/^Later: a voice/, "בהמשך: קול משלך מכמה דקות של דיבור."],
 ];
 const note = (n: string) => (getLocale() === "he" ? NOTES_HE.find(([re]) => re.test(n))?.[1] ?? n : n);
@@ -51,6 +51,22 @@ export function TrainingPage() {
   const [base, setBase] = useState("");
   const [steps, setSteps] = useState(600);
   const [busy, setBusy] = useState(false);
+  const { conversations } = useLibrary();
+  const [dsName, setDsName] = useState("my-texts");
+  const [dsChats, setDsChats] = useState<string[]>([]);
+  const [dsDocs, setDsDocs] = useState(true);
+  const [datasets, setDatasets] = useState<Array<{ name: string; examples: number; bytes: number }>>([]);
+  const loadDatasets = () => void api<typeof datasets>("/api/training/datasets").then(setDatasets, () => undefined);
+  useEffect(loadDatasets, []);
+  const buildDataset = async () => {
+    try {
+      const d = await api<{ examples: number; tokens: number }>("/api/training/datasets", { method: "POST", body: { name: dsName, chats: dsChats, documents: dsDocs } });
+      toast(L(`נוצר מאגר עם ${d.examples} דוגמאות (בערך ${d.tokens.toLocaleString()} טוקנים).`, `Made a dataset with ${d.examples} examples (about ${d.tokens.toLocaleString()} tokens).`));
+      loadDatasets();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
   const load = () => void api<{ kinds: Kind[]; jobs: Job[] }>("/api/training").then((r) => { setKinds(r.kinds); setJobs(r.jobs); setBase((b) => b || r.kinds[0]?.bases?.find((x) => x.family !== "other")?.name || r.kinds[0]?.bases?.[0]?.name || ""); }, () => undefined);
   useEffect(() => {
     load();
@@ -113,6 +129,24 @@ export function TrainingPage() {
           </div>
         </section>
       )}
+
+      <section className="card stack">
+        <h2>{L("💬 מאגר אימון למודל צ'אט", "💬 A dataset for a chat model")}</h2>
+        <p className="muted small">{L("הצ'אטים שתבחר נהיים זוגות של שאלה ותשובה, והמסמכים שלך נהיים דוגמאות של \"לכתוב בסגנון שלי\". הכל נשמר במחשב בפורמט JSONL שמתאים ל-unsloth ול-axolotl. צריך לפחות 20 דוגמאות, ומאות עדיף.", "The chats you pick become question → answer pairs, and your documents become \"write in my style\" examples, saved on this computer as JSONL (the format unsloth and axolotl read). At least 20 examples; hundreds is better.")}</p>
+        <label>{L("שם", "Name")}<input value={dsName} onChange={(e) => setDsName(e.target.value)} /></label>
+        <label className="row small"><input type="checkbox" checked={dsDocs} onChange={(e) => setDsDocs(e.target.checked)} /> {L("להוסיף את המסמכים שלי (דף המסמכים)", "Add my documents (the Pages page)")}</label>
+        <details>
+          <summary>{L(`צ'אטים (${dsChats.length} נבחרו)`, `Chats (${dsChats.length} picked)`)}</summary>
+          <div className="row wrap"><button type="button" className="link-btn" onClick={() => setDsChats(conversations.map((c) => c.id))}>{L("בחר הכל", "Pick all")}</button><button type="button" className="link-btn" onClick={() => setDsChats([])}>{L("נקה", "Clear")}</button></div>
+          <ul className="train-chats">
+            {conversations.slice(0, 200).map((c) => (
+              <li key={c.id}><label className="row small"><input type="checkbox" checked={dsChats.includes(c.id)} onChange={(e) => setDsChats(e.target.checked ? [...dsChats, c.id] : dsChats.filter((x) => x !== c.id))} /> <span dir="auto">{c.title}</span></label></li>
+            ))}
+          </ul>
+        </details>
+        <div><button type="button" className="primary" disabled={!dsName.trim() || (!dsChats.length && !dsDocs)} onClick={() => void buildDataset()}>{L("הכן מאגר", "Make the dataset")}</button></div>
+        {datasets.length > 0 && <ul className="train-jobs">{datasets.map((d) => <li key={d.name}><b>{d.name}</b> <span className="muted small">{L(`${d.examples} דוגמאות`, `${d.examples} examples`)} · {`\u2066${(d.bytes / 1024).toFixed(0)} KB\u2069`}</span></li>)}</ul>}
+      </section>
 
       {jobs.length > 0 && (
         <section className="card stack">

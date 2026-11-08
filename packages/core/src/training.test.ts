@@ -50,3 +50,26 @@ test("a picture LoRA trains in ComfyUI and lands in the LoRA folder", async () =
   assert.equal(ran!["4"]!.inputs.text, "mycat");
   assert.equal(ran!["5"]!.inputs.algorithm, "LoRA");
 });
+
+test("a chat dataset is made from chats and documents, in the chat JSONL format", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-ds-"));
+  const turns = Array.from({ length: 12 }, (_, i) => [{ role: "user" as const, text: `question ${i}` }, { role: "assistant" as const, text: `answer ${i}` }]).flat();
+  const t = new Training({
+    comfy: () => ({ installed: false, running: false, url: "" }),
+    vramGb: async () => 0,
+    objectInfo: async () => ({}),
+    runFlow: async () => undefined,
+    loraDir: () => root,
+    chats: async () => [{ id: "a", title: "A", turns }, { id: "b", title: "B", turns }],
+    documents: async () => [{ title: "My essay", content: Array.from({ length: 10 }, (_, i) => `Paragraph ${i} `.repeat(30)).join("\n\n") }],
+    datasetDir: () => join(root, "datasets"),
+  });
+  await assert.rejects(t.buildChatDataset({ name: "x", chats: ["a"], documents: false }), /at least 20/);
+  const ds = await t.buildChatDataset({ name: "My Texts", chats: ["a", "b"], documents: true });
+  assert.equal(ds.name, "my-texts");
+  assert.ok(ds.examples > 24);
+  const { readFile } = await import("node:fs/promises");
+  const first = JSON.parse((await readFile(ds.file, "utf8")).split("\n")[0]!) as { messages: Array<{ role: string; content: string }> };
+  assert.deepEqual(first.messages, [{ role: "user", content: "question 0" }, { role: "assistant", content: "answer 0" }]);
+  assert.equal((await t.datasets())[0]!.examples, ds.examples);
+});
