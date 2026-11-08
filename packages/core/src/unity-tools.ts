@@ -357,7 +357,12 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         const folder = join(p, "Builds", target.folder);
         await mkdir(folder, { recursive: true });
         const out = target.ext === "/" ? folder : join(folder, `${name}${target.ext}`);
-        const r = await unity.cliRaw(["build", p, "--target", target.id, "--output-path", out, "--timeout", "3600", "--format", "json"], 3_700_000);
+        // The open Editor's own build command first (Pipeline `build run`): `unity build` 1.0.0-beta through
+        // Pipeline 0.10 sends an option the Editor rejects. With Unity closed, `unity build` runs a batch Editor.
+        const scenes = await evalCs("var l = new System.Collections.Generic.List<string>(); foreach (var s in UnityEditor.EditorBuildSettings.scenes) if (s.enabled) l.Add(s.path); if (l.Count == 0) { var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a != \"\") l.Add(a); } return string.Join(\";\", l);").catch(() => "");
+        const list = scenes && !/^(Unity did not|C# failed)/.test(scenes) ? scenes.split(";").filter((x) => /\.unity$/.test(x)) : [];
+        let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, ...(list.length ? ["--scenes", JSON.stringify(list)] : []), "--confirm", "true"], 3_700_000);
+        if (r.code !== 0 && !existsSync(out)) r = await unity.cliRaw(["build", p, "--target", target.id, "--output-path", out, "--timeout", "3600", "--format", "json"], 3_700_000);
         const made = existsSync(out);
         if (r.code !== 0 || !made) return { output: `The build did NOT finish (exit ${r.code}). ${made ? "" : "No game file was made. "}Unity said:\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
         const size = (await stat(out)).isFile() ? `${Math.round((await stat(out)).size / 1024)} KB` : "a folder";
@@ -435,13 +440,16 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         need();
         await mkdir(outputsDir, { recursive: true });
         const view = input.view === "scene" ? "scene" : "game";
-        let file = join(outputsDir, `unity-${Date.now()}.png`);
-        if (view === "game") await unity.cli(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--output", file], 60_000);
-        else {
-          // The Scene view's command saves inside the project (a project-relative path).
-          const rel = `Temp/kesher-scene-${Date.now()}.png`;
-          await unity.cli(["command", "capture", "scene_view", ...at(), "--result-only", "--", "--save_path", rel], 60_000);
-          file = join(project()!, rel);
+        const file = join(outputsDir, `unity-${view}-${Date.now()}.png`);
+        // Pipeline 0.10+: `capture screenshot --view game|scene --output-path <file>`; older: --output (game) / scene_view --save_path.
+        const r = await unity.cliRaw(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--view", view, "--output-path", file], 60_000);
+        if (r.code !== 0 || !existsSync(file)) {
+          if (view === "game") await unity.cli(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--output", file], 60_000);
+          else {
+            const rel = `Temp/kesher-scene-${Date.now()}.png`;
+            await unity.cli(["command", "capture", "scene_view", ...at(), "--result-only", "--", "--save_path", rel], 60_000);
+            await writeFile(file, await readFile(join(project()!, rel)));
+          }
         }
         const data = await readFile(file);
         const id = await saveAsset(data, "image/png");
