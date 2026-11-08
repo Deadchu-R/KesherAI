@@ -113,6 +113,8 @@ export interface KesherServerOptions {
   notify?: (n: Note) => boolean | Promise<boolean>;
   /** Brings the desktop window to the front. */
   focusApp?: () => void;
+  /** Restarts the desktop app (installing a downloaded update first, if there is one). */
+  restartApp?: () => void;
   /** The project's GitHub OAuth App client id, for "Connect with GitHub" (builds pass it from repository secrets). */
   githubClientId?: string;
 }
@@ -480,6 +482,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const apiKeys = new ApiKeys(() => config.apiKeys, persist);
   services.lastServed = () => apiKeys.lastServedAt;
   if (options.focusApp) services.focusApp = options.focusApp;
+  if (options.restartApp) services.restartApp = options.restartApp;
   // A log of model-API requests (who, which model, how long), shown in Settings.
   // preHandler (not onResponse) so streamed answers, which take over the reply, are logged too.
   app.addHook("preHandler", async (request, reply) => {

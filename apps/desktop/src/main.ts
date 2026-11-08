@@ -65,6 +65,18 @@ async function startCore(): Promise<string> {
     ...(await googleClient()),
     // "My day" takes its pictures with Electron's own screen capture (antivirus programs block a script doing it).
     focusApp: () => showWindow(),
+    // From the interface or the phone: restart, with a downloaded update installed first.
+    restartApp: () => {
+      if (readyInstaller) {
+        const { file } = readyInstaller;
+        readyInstaller = undefined;
+        void runInstaller(file);
+        return;
+      }
+      app.relaunch();
+      quitting = true;
+      app.quit();
+    },
     screen: {
       idleSec: () => powerMonitor.getSystemIdleTime(),
       shot: async () => {

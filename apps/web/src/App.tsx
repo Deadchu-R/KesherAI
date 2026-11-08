@@ -29,6 +29,7 @@ import { ImagesPage } from "./pages/Images";
 import { BatchImagesPage } from "./pages/BatchImages";
 import { PairPrompt } from "./PairPrompt";
 import { PageBoundary } from "./PageBoundary";
+import { Reconnecting } from "./Reconnect";
 import { MemoryPage } from "./pages/MemoryPage";
 import { UpdatesPage } from "./pages/UpdatesPage";
 import { ModelsPage } from "./pages/Models";
@@ -184,8 +185,14 @@ export function App() {
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />
+      <Reconnecting />
       <main className="main">
-        {online === false && <p className="error" style={{ padding: "12px 28px" }}>{t("serverOffline")}</p>}
+        {online === false && (
+          <p className="error row" style={{ padding: "12px 28px", gap: 10 }}>
+            <span className="grow">{t("serverOffline")}</span>
+            <button type="button" onClick={() => location.reload()}>{t("reconnectNow")}</button>
+          </p>
+        )}
         <PageBoundary page={hash}>{page}</PageBoundary>
       </main>
       {message && <div className="toast" role="status">{message}</div>}

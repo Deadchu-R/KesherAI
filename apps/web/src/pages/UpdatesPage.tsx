@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { desktop } from "../library";
+import { reconnect } from "../Reconnect";
 import { t } from "../i18n";
 
 interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[] }
@@ -42,7 +43,7 @@ function Updates() {
       void desktop()!.restart!();
       return;
     }
-    if (progress.restartRequired) return; // started from the command line: the user restarts it
+    if (progress.restartRequired) return void reconnect({ restart: true }); // the computer's app restarts itself
     // From source the server restarts itself; reload once it answers with the new commit.
     const before = version?.commit;
     const timer = setInterval(() => {
@@ -74,6 +75,8 @@ function Updates() {
     setError("");
     try {
       setProgress(await api<UpdateProgress>("/api/updates/apply", { method: "POST" }));
+      // From the phone (or a browser): the computer's app installs and restarts; wait for it and reconnect.
+      if (!desktop()?.restart) void reconnect({ update: true });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -82,6 +85,10 @@ function Updates() {
   return (
     <section className="card stack">
       <h2>{t("version")}</h2>
+      <p className="row muted small">
+        <span className="grow">{t("restartHint")}</span>
+        <button type="button" onClick={() => void reconnect({ restart: true })}>{t("restartComputerApp")}</button>
+      </p>
       <p className="mono">{version ? `KesherAI v${version.version}${version.commit ? ` (${version.commit})` : ""}` : "…"}</p>
       <div className="row">
         <button type="button" onClick={() => void doCheck()} disabled={checking || !!progress?.running}>{checking ? "…" : t("checkUpdates")}</button>

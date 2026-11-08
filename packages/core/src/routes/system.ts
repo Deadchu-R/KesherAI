@@ -29,6 +29,16 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
     remote: { enabled: s.config.remote.enabled },
   }));
 
+  /**
+   * Restarts KesherAI on this computer (also from the phone), installing a
+   * downloaded update first. The interface then waits for it and reconnects.
+   */
+  app.post("/api/system/restart", async (_req, reply) => {
+    if (!s.restartApp) return reply.code(409).send({ error: "This copy runs from the command line: restart it there." });
+    setTimeout(() => s.restartApp?.(), 500);
+    return { ok: true };
+  });
+
   app.get("/api/categories", async () => [...BUILT_IN_CATEGORIES, ...s.plugins.categories]);
 
   app.get("/api/hardware", async () => detectHardware());

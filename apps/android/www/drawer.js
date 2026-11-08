@@ -4,7 +4,7 @@
 // Open it with ☰, or swipe in from the right edge. Like Apple's menus you can
 // also press ☰ and keep your finger down, slide to an item (it lights up) and
 // let go to open it.
-/* global window, document, localStorage, sessionStorage, location, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event, setInterval */
+/* global window, document, localStorage, sessionStorage, location, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event, setInterval, setTimeout, fetch, AbortSignal */
 (() => {
   const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const he = lang === "he";
@@ -88,6 +88,26 @@
       // keep the raw text
     }
     item("🖥", T("הצ'אט במחשב", "Chat on my computer"), host, "index.html");
+    // When the computer's KesherAI is stuck: restart it from here, then connect again by itself.
+    const rs = document.createElement("button");
+    rs.type = "button";
+    rs.className = "kd-item";
+    rs.innerHTML = `<span class="kd-ico" aria-hidden="true">🔄</span><span><span class="kd-label"></span><small></small></span>`;
+    rs.querySelector(".kd-label").textContent = T("הפעל מחדש את KesherAI במחשב", "Restart KesherAI on the computer");
+    rs.onclick = async () => {
+      const small = rs.querySelector("small");
+      try {
+        const u = new URL(saved);
+        const token = u.searchParams.get("token") || "";
+        const r = await fetch(`${u.origin}/api/system/restart?token=${encodeURIComponent(token)}`, { method: "POST", signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || String(r.status));
+        small.textContent = T("מפעיל מחדש… אתחבר שוב בעוד רגע", "Restarting… connecting again in a moment");
+        setTimeout(() => { location.href = "index.html"; }, 15000);
+      } catch (e) {
+        small.textContent = T("המחשב לא ענה: ", "The computer did not answer: ") + (e.message || e);
+      }
+    };
+    add(rs);
   }
 
   // The phone's chats, newest first.
