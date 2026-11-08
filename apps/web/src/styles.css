@@ -1351,3 +1351,4 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .look .look-emoji { width: 64px; text-align: center; }
 .look-icon-row button { height: 30px; min-width: 30px; padding: 0 6px; }
 .look-css { width: 100%; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.show-earlier { align-self: center; margin: 6px auto 12px; height: auto; padding: 6px 14px; border-radius: 999px; font-size: 13px; }

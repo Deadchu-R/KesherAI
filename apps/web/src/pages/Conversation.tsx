@@ -329,6 +329,9 @@ export function ConversationPage({ id }: { id: string }) {
   const [editingSeq, setEditingSeq] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  // A long chat opens with its latest part drawn; earlier parts on request (a long chat stays quick).
+  const [shownBlocks, setShownBlocks] = useState(150);
+  useEffect(() => setShownBlocks(150), [id]);
   const [info, setInfo] = useState<AgentSessionInfo | null>(null);
   const [streaming, setStreaming] = useState<Record<number, string>>({});
   const [input, setInput] = useState("");
@@ -649,7 +652,13 @@ export function ConversationPage({ id }: { id: string }) {
           {events.length === 0 && (
             <p className="muted empty">{conv.kind === "code" ? t("emptyCode", { folder: info?.workspace ?? "" }) : t("emptyChat")}</p>
           )}
-          {blocks.map((b, bi) => {
+          {blocks.length > shownBlocks && (
+            <button type="button" className="show-earlier" onClick={() => setShownBlocks((n) => n + 150)}>
+              {getLocale() === "he" ? `הצג הודעות קודמות (${blocks.length - shownBlocks})` : `Show earlier messages (${blocks.length - shownBlocks})`}
+            </button>
+          )}
+          {blocks.slice(-shownBlocks).map((b, i) => {
+            const bi = Math.max(0, blocks.length - shownBlocks) + i;
             if (b.kind === "group") {
               return (
                 <ActivityGroup

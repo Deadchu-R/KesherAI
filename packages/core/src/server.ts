@@ -2,7 +2,9 @@ import type { AgentTool } from "@kesher/agent";
 import { mkdir, readFile as readFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
+import { constants as zlibConstants } from "node:zlib";
 import cors from "@fastify/cors";
+import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync } from "node:fs";
 import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
@@ -630,6 +632,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
   // Cross-origin access: the model API (/v1) for web apps of any origin (they need an access key);
   // KesherAI's own API only for its own pages, the Android app and, for /api/browser, the extension.
+  // Smaller answers over Wi-Fi and the tunnel (a long chat's JSON shrinks about tenfold). Only text:
+  // never live streams (they must arrive as they are written), models or pictures.
+  await app.register(compress, {
+    global: true,
+    threshold: 2048,
+    encodings: ["br", "gzip"],
+    brotliOptions: { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } },
+    customTypes: /^(application\/json|text\/(html|css|javascript|plain|markdown)|application\/javascript|image\/svg\+xml)(;|$)/,
+  });
   await app.register(cors, {
     delegator: (req, cb) => {
       const path = (req.url ?? "").split("?")[0] ?? "";

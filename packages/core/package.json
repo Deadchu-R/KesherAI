@@ -1,6 +1,6 @@
 {
   "name": "@kesher/core",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The local KesherAI server: model registry, chat and image routes, downloads, plugins, skills, remote access and an OpenAI-compatible API.",
   "license": "Apache-2.0",
   "type": "module",
@@ -25,6 +25,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@fastify/compress": "9.3.0",
     "@fastify/cors": "^10.0.0",
     "@fastify/http-proxy": "11.6.6",
     "@fastify/static": "^10.1.10",
