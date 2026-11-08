@@ -411,6 +411,16 @@ export class TelegramBridge {
     return chat !== undefined && this.config.chats.includes(chat) ? chat : undefined;
   }
 
+  /**
+   * Sends a message to every paired chat (a routine's result, when the user asked for it).
+   *
+   * @param text - The message.
+   */
+  async broadcast(text: string): Promise<void> {
+    if (!this.running) return;
+    for (const chat of this.config.chats) await this.say(chat, text).catch(() => undefined);
+  }
+
   /** @returns Whether a conversation belongs to a Telegram chat (it gets fewer tools). */
   isTelegramConversation(convId: string): boolean {
     return Object.values(this.config.conversations).includes(convId);

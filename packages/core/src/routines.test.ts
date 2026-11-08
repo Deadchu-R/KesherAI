@@ -41,3 +41,30 @@ test("routines run when due, notify, and remember the result", async () => {
   assert.equal((await r.list())[0]!.nextRun, null);
   r.close();
 });
+
+test("a heartbeat speaks only when something needs the user", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-hb-"));
+  const notes: string[] = [];
+  const discarded: string[] = [];
+  const sentToTelegram: string[] = [];
+  let answer = "NOTHING";
+  let asked = "";
+  const r = new Routines(join(dir, "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async (_n, prompt) => ((asked = prompt), { ok: true, message: answer, link: "#/c/abc" }),
+    notify: async (t) => void notes.push(t),
+    discard: async (l) => void discarded.push(l),
+    telegram: async (t) => void sentToTelegram.push(t),
+  });
+  const hb = await r.save({ name: "Heartbeat", schedule: { kind: "every", minutes: 30 }, action: { type: "prompt", prompt: "Check my mail", quiet: true }, telegram: true });
+  await r.runNow(hb.id);
+  assert.match(asked, /answer exactly NOTHING/);
+  assert.deepEqual(notes, []);
+  assert.deepEqual(discarded, ["#/c/abc"]);
+  assert.equal((await r.list())[0]!.lastMessage, "Nothing new.");
+  answer = "Your landlord wrote: the rent is due tomorrow.";
+  await r.runNow(hb.id);
+  assert.equal(notes.length, 1);
+  assert.equal(sentToTelegram.length, 1);
+  r.close();
+});

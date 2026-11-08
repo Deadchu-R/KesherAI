@@ -7,8 +7,8 @@ import { usePersonas } from "./Personas";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number };
-type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string };
-interface Routine { id?: string; name: string; enabled: boolean; schedule: Schedule; action: Action; notify: boolean; lastRun?: string; lastStatus?: string; lastMessage?: string; lastLink?: string; nextRun?: string | null; running?: boolean }
+type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean };
+interface Routine { id?: string; name: string; enabled: boolean; schedule: Schedule; action: Action; notify: boolean; telegram?: boolean; lastRun?: string; lastStatus?: string; lastMessage?: string; lastLink?: string; nextRun?: string | null; running?: boolean }
 
 const DAYS: Array<[string, string]> = [["א׳", "Su"], ["ב׳", "Mo"], ["ג׳", "Tu"], ["ד׳", "We"], ["ה׳", "Th"], ["ו׳", "Fr"], ["ש׳", "Sa"]];
 const when = (iso: string) => new Date(iso).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
@@ -40,6 +40,11 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
       <div className="row">
         <h2 className="grow">{L("שגרות", "Routines")}</h2>
         {!draft && <button type="button" onClick={() => setDraft({ name: "", enabled: true, notify: true, schedule: { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] }, action: { type: "prompt", prompt: "" } })}>{L("+ שגרה", "+ Routine")}</button>}
+        {!draft && (
+          <button type="button" title={L("בודק מדי פעם ומודיע רק כשמשהו צריך אותך", "Checks now and then, and tells you only when something needs you")} onClick={() => setDraft({ name: L("בדיקה תקופתית", "Heartbeat"), enabled: true, notify: true, schedule: { kind: "every", minutes: 30 }, action: { type: "prompt", quiet: true, prompt: L("בדוק את המיילים שלא נקראו ואת היומן של היום. משהו דחוף, פגישה בשעה הקרובה, או מישהו שמחכה לתשובה שלי?", "Check my unread mail and today's calendar. Anything urgent, a meeting in the next hour, or someone waiting for my answer?") } })}>
+            {L("💓 בדיקה תקופתית", "💓 Heartbeat")}
+          </button>
+        )}
       </div>
       <p className="muted small">{L("עבודה שרצה לבד לפי לוח זמנים — צינור או שאלה למודל — עם התראה כשהיא מסתיימת. רצה כש-KesherAI פועל (אפשר להפעיל אותו עם המחשב, בהגדרות).", "Work that runs by itself on a schedule — a pipeline or a question to a model — with a notification when done. Runs while KesherAI runs (it can start with the computer, in Settings).")}</p>
       {draft && (
@@ -96,7 +101,11 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
               <label key={inp.name} className="pl-field">{inp.label || inp.name}<input dir="auto" value={a.inputs?.[inp.name] ?? ""} onChange={(e) => setDraft({ ...draft, action: { ...a, inputs: { ...(a.inputs ?? {}), [inp.name]: e.target.value } } })} /></label>
             ));
           })()}
+          {draft.action.type === "prompt" && (
+            <label className="check"><input type="checkbox" checked={!!draft.action.quiet} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), quiet: e.target.checked } })} /> {L("רק כשמשהו צריך אותי (בלי צ'אט ובלי התראה כשאין כלום)", "Only when something needs me (no chat and no notification when there is nothing)")}</label>
+          )}
           <label className="check"><input type="checkbox" checked={draft.notify} onChange={(e) => setDraft({ ...draft, notify: e.target.checked })} /> {L("התראה כשהיא מסתיימת (גם לטלפון, אם מוגדר)", "Notify when done (the phone too, if set up)")}</label>
+          <label className="check"><input type="checkbox" checked={!!draft.telegram} onChange={(e) => setDraft({ ...draft, telegram: e.target.checked })} /> {L("לשלוח גם לטלגרם (לא מוצפן מקצה לקצה)", "Also send to Telegram (not end-to-end encrypted)")}</label>
           <div className="row"><button type="submit" className="primary">{L("שמירה", "Save")}</button><button type="button" onClick={() => setDraft(null)}>{L("ביטול", "Cancel")}</button></div>
         </form>
       )}

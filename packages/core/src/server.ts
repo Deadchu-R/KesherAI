@@ -463,6 +463,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       }
     },
     notify: async (title, body, path) => void (await notifier.send({ title, body: config.notifications.includeText ? body : body.length > 80 ? "Done — open KesherAI to read it." : body, path, tags: ["alarm_clock"] })),
+    discard: async (link) => {
+      const id = /^#\/c\/([\w-]+)$/.exec(link)?.[1];
+      if (id) await services.conversations.delete(id);
+    },
+    telegram: async (text) => telegram.broadcast(text),
   });
   void routines.start();
   const services: KesherServices = {

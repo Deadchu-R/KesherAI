@@ -1,0 +1,55 @@
+# Deletes GitHub releases (with their files) and their tags for versions
+# below a given one — for example the ones from before a security fix.
+# It runs only when you start it by hand: Actions → "Delete old releases" →
+# Run workflow, type the version and DELETE. Commits are never touched;
+# android-latest, unreal-plugin-latest and newer versions stay.
+name: Delete old releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      below:
+        description: "Delete every vX.Y.Z release older than this version (e.g. 0.4.98)"
+        required: true
+        default: "0.4.98"
+      confirm:
+        description: "Type DELETE to confirm (this cannot be undone)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete releases and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BELOW: ${{ inputs.below }}
+          CONFIRM: ${{ inputs.confirm }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "DELETE" ]; then echo "Not confirmed (type DELETE)."; exit 1; fi
+          if ! [[ "$BELOW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "The version looks like 0.4.98."; exit 1; fi
+          older() { [ "$1" != "$BELOW" ] && [ "$(printf '%s\n%s\n' "$1" "$BELOW" | sort -V | head -1)" = "$1" ]; }
+          deleted=0
+          for page in 1 2 3 4 5; do
+            gh api "repos/$REPO/releases?per_page=100&page=$page" -q '.[] | "\(.id) \(.tag_name)"' > page.txt
+            [ -s page.txt ] || break
+            while read -r id tag; do
+              v="${tag#v}"
+              if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && older "$v"; then
+                gh api -X DELETE "repos/$REPO/releases/$id" && echo "deleted release $tag" && deleted=$((deleted+1))
+              fi
+            done < page.txt
+          done
+          # Tags without a release (and the ones just freed).
+          gh api "repos/$REPO/git/matching-refs/tags/v" -q '.[].ref' | while read -r ref; do
+            tag="${ref#refs/tags/}"; v="${tag#v}"
+            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && older "$v"; then
+              gh api -X DELETE "repos/$REPO/git/$ref" && echo "deleted tag $tag"
+            fi
+          done
+          echo "Done: $deleted releases deleted."
