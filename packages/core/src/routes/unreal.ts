@@ -5,35 +5,61 @@ import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { modelTurnFor } from "../conversations.js";
-import { BRIDGE_VERSION, blueprintPrompt, parseOps } from "../unreal-bridge.js";
-import { BridgeInstaller, findEngines } from "../unreal-install.js";
+import { BRIDGE_VERSION, blueprintPrompt, parseOps, unityPrompt } from "../unreal-bridge.js";
+import { BridgeInstaller, findEngines, installUnityPackage } from "../unreal-install.js";
 
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
 
+/** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
+export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
+
 /**
- * The Unreal page: the editor's connection (the KesherAI Bridge plugin),
- * its Blueprints, and changing them in words.
+ * The Unreal page.
  *
  * @param app - Fastify instance.
  * @param s - Services.
  */
 export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
-  const b = s.unreal;
+  await editorRoutes(app, s, "unreal");
+}
+
+/**
+ * The Unity page (Visual Scripting).
+ *
+ * @param app - Fastify instance.
+ * @param s - Services.
+ */
+export async function unityRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
+  await editorRoutes(app, s, "unity");
+}
+
+/**
+ * An editor page (Unreal or Unity): the editor's connection (the KesherAI
+ * Bridge plugin or package), its graphs, and changing them in words.
+ *
+ * @param app - Fastify instance.
+ * @param s - Services.
+ * @param kind - Which editor.
+ */
+async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unreal" | "unity"): Promise<void> {
+  const b = kind === "unreal" ? s.unreal : s.unity;
+  const base = `/api/${kind}`;
+  const name = kind === "unreal" ? "The Unreal Editor" : "The Unity Editor";
 
   /** The editor connects here; only from this computer. */
-  app.get("/api/unreal/ws", {
+  app.get(`${base}/ws`, {
     websocket: true,
     preHandler: async (req, reply) => {
-      if (!isLocalRequest(req)) return reply.code(403).send({ error: "The Unreal Editor connects from this computer only." });
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: `${name} connects from this computer only.` });
     },
   }, (socket) => b.attach(socket as unknown as WebSocket));
 
-  app.get("/api/unreal", async () => ({ ...(await b.status()), latestBridge: BRIDGE_VERSION, download: BRIDGE_DOWNLOAD }));
+  app.get(base, async () => ({ ...(await b.status()), latestBridge: BRIDGE_VERSION, download: kind === "unreal" ? BRIDGE_DOWNLOAD : UNITY_PACKAGE_URL }));
 
-  app.get("/api/unreal/blueprints", async () => b.list());
+  app.get(`${base}/blueprints`, async () => b.list());
 
-  app.get<{ Querystring: { path?: string } }>("/api/unreal/graph", async (req, reply) => {
+  app.get<{ Querystring: { path?: string } }>(`${base}/graph`, async (req, reply) => {
     if (!req.query.path) return reply.code(400).send({ error: "Which Blueprint?" });
     try {
       return await b.graph(req.query.path);
@@ -47,7 +73,7 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
    * editor connected the change is made at once (one undo step) and the
    * Blueprint compiled; with it closed, the change waits in the queue.
    */
-  app.post<{ Body: { path?: string; graph?: string; request?: string } }>("/api/unreal/edit", async (req, reply) => {
+  app.post<{ Body: { path?: string; graph?: string; request?: string } }>(`${base}/edit`, async (req, reply) => {
     const path = String(req.body?.path ?? "");
     const request = String(req.body?.request ?? "").trim().slice(0, 2000);
     if (!path || !request) return reply.code(400).send({ error: "Choose a Blueprint and say what to change." });
@@ -57,7 +83,7 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
       const { graph: bp } = await b.graph(path);
       const graphName = req.body?.graph || bp.graphs[0]?.name || "EventGraph";
       const turn = modelTurnFor(s.registry, chat);
-      const text = (await turn({ messages: blueprintPrompt(bp, graphName, request), tools: [] }, AbortSignal.timeout(300_000), () => undefined)).text;
+      const text = (await turn({ messages: kind === "unreal" ? blueprintPrompt(bp, graphName, request) : unityPrompt(bp, request), tools: [] }, AbortSignal.timeout(300_000), () => undefined)).text;
       const { ops, note } = parseOps(text);
       if (!ops.length) return { ops, note: note || "Nothing to change.", applied: false };
       if (!b.connected) {
@@ -74,7 +100,7 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 
   /** Applies operations as given (for "Apply again" and plugins). */
-  app.post<{ Body: { path?: string; graph?: string; ops?: unknown[] } }>("/api/unreal/apply", async (req, reply) => {
+  app.post<{ Body: { path?: string; graph?: string; ops?: unknown[] } }>(`${base}/apply`, async (req, reply) => {
     const { path, graph = "", ops } = req.body ?? {};
     if (!path || !Array.isArray(ops)) return reply.code(400).send({ error: "Send the Blueprint and the operations." });
     try {
@@ -85,7 +111,7 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 
   for (const cmd of ["compile", "save", "open"] as const) {
-    app.post<{ Body: { path?: string } }>(`/api/unreal/${cmd}`, async (req, reply) => {
+    app.post<{ Body: { path?: string } }>(`${base}/${cmd}`, async (req, reply) => {
       if (!req.body?.path) return reply.code(400).send({ error: "Which Blueprint?" });
       try {
         return await b.request(cmd, { path: req.body.path }, cmd === "compile" ? 120_000 : 30_000);
@@ -93,6 +119,23 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
         return reply.code(502).send({ error: (err as Error).message });
       }
     });
+  }
+
+  app.get(`${base}/queue`, async () => b.queue());
+  app.delete<{ Params: { id: string } }>(`${base}/queue/:id`, async (req) => ({ removed: await b.unqueue(req.params.id) }));
+
+  if (kind === "unity") {
+    /** Copies the package into a Unity project's Packages folder (no git or compiler needed). Only on this computer. */
+    app.post<{ Body: { project?: string } }>(`${base}/install`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Add the package on the computer that runs KesherAI." });
+      if (!req.body?.project) return reply.code(400).send({ error: "Choose the project folder." });
+      try {
+        return { message: await installUnityPackage(req.body.project) };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+    return;
   }
 
   const installer = new BridgeInstaller(join(s.paths.root, "unreal", "_built"));
@@ -116,6 +159,4 @@ export async function unrealRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
   });
 
-  app.get("/api/unreal/queue", async () => b.queue());
-  app.delete<{ Params: { id: string } }>("/api/unreal/queue/:id", async (req) => ({ removed: await b.unqueue(req.params.id) }));
 }

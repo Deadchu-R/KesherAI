@@ -53,7 +53,7 @@ import { UnrealBridge } from "./unreal-bridge.js";
 import { Copilot, copilotProvider } from "./copilot.js";
 import { managedPolicy, policyCheck } from "./business.js";
 import { copilotRoutes } from "./routes/copilot.js";
-import { unrealRoutes } from "./routes/unreal.js";
+import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { guardRoutes } from "./routes/guard.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
@@ -555,6 +555,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     businessManaged: () => !!managedPolicy(paths.root),
     applyBusiness,
     unreal: new UnrealBridge(join(paths.root, "unreal")),
+    unity: new UnrealBridge(join(paths.root, "unity"), "Unity Editor"),
     sd,
     tunnel,
     devices,
@@ -624,6 +625,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
   await unrealRoutes(app, services);
+  await unityRoutes(app, services);
   await copilotRoutes(app, services);
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);

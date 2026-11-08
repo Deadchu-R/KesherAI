@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.4.86",
+  "version": "0.4.87",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",
@@ -51,6 +51,10 @@
       {
         "from": "../browser-extension",
         "to": "browser-extension"
+      },
+      {
+        "from": "../../integrations/unity/com.kesherai.bridge",
+        "to": "unity-package/com.kesherai.bridge"
       },
       {
         "from": "../../integrations/unreal/KesherAIBridge",

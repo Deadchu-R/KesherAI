@@ -23,7 +23,7 @@ interface Queued { id: string; path: string; graph: string; request?: string; at
 function pinColor(type: string): string {
   const t = type.split(":")[0]!.toLowerCase();
   return (
-    { exec: "#f2f2f2", bool: "#9b1c1c", real: "#9ee35a", float: "#9ee35a", double: "#9ee35a", int: "#2ad3ba", int64: "#2ad3ba", byte: "#0b6e5e", string: "#e93fe1", name: "#b38cf0", text: "#e8839b", object: "#2d8bf0", class: "#5d00c9", struct: "#1355b8", interface: "#f0f0a8", softobject: "#9edcff" } as Record<string, string>
+    { exec: "#f2f2f2", bool: "#9b1c1c", boolean: "#9b1c1c", single: "#9ee35a", int32: "#2ad3ba", vector3: "#f2c94c", vector2: "#f2c94c", gameobject: "#2d8bf0", transform: "#2d8bf0", real: "#9ee35a", float: "#9ee35a", double: "#9ee35a", int: "#2ad3ba", int64: "#2ad3ba", byte: "#0b6e5e", string: "#e93fe1", name: "#b38cf0", text: "#e8839b", object: "#2d8bf0", class: "#5d00c9", struct: "#1355b8", interface: "#f0f0a8", softobject: "#9edcff" } as Record<string, string>
   )[t] ?? "#9aa0a6";
 }
 
@@ -146,12 +146,44 @@ function InstallIntoProject() {
   );
 }
 
+/** "Add to a project…" (this computer): copies the package into the project's Packages folder. */
+function AddUnityPackage() {
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const bridge = desktop();
+  if (!bridge) return null;
+  const pick = async () => {
+    setError("");
+    setMsg("");
+    const folder = await bridge.pickFolder();
+    if (!folder) return;
+    try {
+      setMsg((await api<{ message: string }>("/api/unity/install", { method: "POST", body: { project: folder } })).message);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <div className="stack ue-install">
+      <div className="row">
+        <button type="button" className="primary" onClick={() => void pick()}>📁 {L("הוסף לפרויקט…", "Add to a project…")}</button>
+        <span className="muted small">{L("בחר את תיקיית הפרויקט (זו שיש בה Assets ו-Packages).", "Pick the project folder (the one with Assets and Packages).")}</span>
+      </div>
+      {msg && <p className="pill good">✅ {msg}</p>}
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+
 /**
  * Unreal: your project's Blueprints, seen and changed in words, through the
  * KesherAI Bridge plugin. With Unreal closed, the copy saved here is shown
  * and changes wait until the editor connects.
  */
-export function UnrealPage() {
+export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
+  const base = `/api/${kind}`;
+  const unity = kind === "unity";
+  const app = unity ? "Unity" : "Unreal";
   const [st, setSt] = useState<Status | null>(null);
   const [list, setList] = useState<{ blueprints: BpItem[]; offline: boolean; project?: string } | null>(null);
   const [path, setPath] = useState("");
@@ -163,11 +195,11 @@ export function UnrealPage() {
   const [report, setReport] = useState<string[]>([]);
   const [queue, setQueue] = useState<Queued[]>([]);
 
-  const loadStatus = () => void api<Status>("/api/unreal").then(setSt, () => undefined);
-  const loadList = () => void api<typeof list>("/api/unreal/blueprints").then(setList, () => undefined);
-  const loadQueue = () => void api<Queued[]>("/api/unreal/queue").then(setQueue, () => undefined);
+  const loadStatus = () => void api<Status>(base).then(setSt, () => undefined);
+  const loadList = () => void api<typeof list>(`${base}/blueprints`).then(setList, () => undefined);
+  const loadQueue = () => void api<Queued[]>(`${base}/queue`).then(setQueue, () => undefined);
   const loadBp = (p: string) =>
-    void api<NonNullable<typeof bp>>(`/api/unreal/graph?path=${encodeURIComponent(p)}`).then(
+    void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(p)}`).then(
       (r) => {
         setBp(r);
         setGraphName((g) => (r.graph.graphs.some((x) => x.name === g) ? g : r.graph.graphs[0]?.name ?? ""));
@@ -200,9 +232,9 @@ export function UnrealPage() {
 
   const call = async (cmd: "open" | "compile" | "save") => {
     try {
-      const r = await api<{ ok?: boolean; messages?: Array<{ severity: string; text: string }> }>(`/api/unreal/${cmd}`, { method: "POST", body: { path } });
+      const r = await api<{ ok?: boolean; messages?: Array<{ severity: string; text: string }> }>(`${base}/${cmd}`, { method: "POST", body: { path } });
       if (cmd === "compile") setReport(r.messages?.length ? r.messages.map((m) => `${m.severity === "error" ? "⛔" : "⚠"} ${m.text}`) : [L("✅ קומפל בלי שגיאות.", "✅ Compiled with no errors.")]);
-      else toast(cmd === "save" ? L("נשמר.", "Saved.") : L("נפתח ב-Unreal.", "Opened in Unreal."));
+      else toast(cmd === "save" ? L("נשמר.", "Saved.") : L(`נפתח ב-${app}.`, `Opened in ${app}.`));
     } catch (e) {
       toast((e as Error).message);
     }
@@ -211,11 +243,11 @@ export function UnrealPage() {
     setBusy(true);
     setReport([]);
     try {
-      const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>("/api/unreal/edit", { method: "POST", body: { path, graph: graphName, request } });
+      const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request } });
       const lines = [r.note || L("בוצע.", "Done.")];
-      if (r.queued) lines.push(L("⏳ Unreal סגור: השינוי ממתין ויוחל כשתפתח את הפרויקט.", "⏳ Unreal is closed: the change waits and is applied when you open the project."));
+      if (r.queued) lines.push(L(`⏳ ${app} סגור: השינוי ממתין ויוחל כשתפתח את הפרויקט.`, `⏳ ${app} is closed: the change waits and is applied when you open the project.`));
       r.result?.results.filter((x) => !x.ok).forEach((x) => lines.push(`⚠ ${x.error ?? x.op}`));
-      if (r.applied) lines.push(L("Ctrl+Z ב-Unreal מבטל את השינוי. לא נשמר לדיסק עד שתלחץ שמור.", "Ctrl+Z in Unreal undoes it. Not saved to disk until you press Save."));
+      if (r.applied) lines.push(L(`Ctrl+Z ב-${app} מבטל את השינוי. לא נשמר לדיסק עד שתלחץ שמור.`, `Ctrl+Z in ${app} undoes it. Not saved to disk until you press Save.`));
       r.compile?.messages.forEach((m) => lines.push(`${m.severity === "error" ? "⛔" : "⚠"} ${m.text}`));
       setReport(lines);
       setRequest("");
@@ -236,16 +268,28 @@ export function UnrealPage() {
   return (
     <div className="page ue-page">
       <div className="row ue-head">
-        <h1 className="grow">Unreal Blueprints</h1>
+        <h1 className="grow">{unity ? "Unity Visual Scripting" : "Unreal Blueprints"}</h1>
         <span className={`pill ${st.connected ? "good" : ""}`}>
-          {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · UE ${st.editor!.engine}` : `⚪ ${L("Unreal לא מחובר", "Unreal not connected")}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
+          {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>
       </div>
       {outdated && <p className="pill">{L(`יש גרסה חדשה של הפלאגין (${st.latestBridge}).`, `A newer plugin is out (${st.latestBridge}).`)} <a href={st.download}>{L("הורד", "Download")}</a></p>}
 
       {(neverConnected || !st.connected) && (
         <section className="card stack">
-          <h2>{L("חיבור Unreal", "Connect Unreal")}</h2>
+          <h2>{L(`חיבור ${app}`, `Connect ${app}`)}</h2>
+          {unity ? (
+            <>
+              <AddUnityPackage />
+              <p className="muted small">{L("או ב-Unity עצמו:", "Or in Unity itself:")}</p>
+              <ol className="ue-steps">
+                <li>{L("Window ← Package Manager ← + ← Add package from git URL…", "Window → Package Manager → + → Add package from git URL…")}</li>
+                <li>{L("הדבק:", "Paste:")} <code dir="ltr">{st.download}</code></li>
+                <li>{L("זהו: Unity מקמפל את החבילה לבד (בלי Visual Studio), וכש-KesherAI פתוח הוא מתחבר ויופיע כאן 🟢.", "That's it: Unity compiles the package by itself (no Visual Studio), and while KesherAI runs it connects and shows 🟢 here.")}</li>
+              </ol>
+            </>
+          ) : (
+            <>
           <InstallIntoProject />
           <p className="muted small">{L("או ידנית:", "Or by hand:")}</p>
           <ol className="ue-steps">
@@ -254,14 +298,16 @@ export function UnrealPage() {
             <li>{L("פתח את הפרויקט. בפרויקט C++, Unreal יבנה את הפלאגין בפעם הראשונה (צריך Visual Studio). לפרויקט Blueprint בלבד — השתמש ב\"התקן לתוך פרויקט\" למעלה.", "Open the project. In a C++ project Unreal builds the plugin the first time (needs Visual Studio). For a Blueprint-only project, use “Install into a project” above.")}</li>
             <li>{L("זהו: כש-KesherAI פתוח, Unreal מתחבר לבד ויופיע כאן 🟢.", "That's it: while KesherAI runs, Unreal connects by itself and shows 🟢 here.")}</li>
           </ol>
-          <p className="muted small">{L("החיבור הוא רק בתוך המחשב הזה. כל Blueprint שנפתח כאן נשמר כעותק, כדי שתוכל לראות אותו ולבקש שינויים גם כש-Unreal סגור.", "The connection stays on this computer. Every Blueprint opened here is kept as a copy, so you can see it and ask for changes with Unreal closed too.")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/UNREAL.md" target="_blank" rel="noreferrer">docs/UNREAL.md</a></p>
+            </>
+          )}
+          <p className="muted small">{L(`החיבור הוא רק בתוך המחשב הזה. כל גרף שנפתח כאן נשמר כעותק, כדי שתוכל לראות אותו ולבקש שינויים גם כש-${app} סגור.`, `The connection stays on this computer. Every graph opened here is kept as a copy, so you can see it and ask for changes with ${app} closed too.`)} <a href={`https://github.com/Deadchu-R/KesherAI/blob/main/docs/${unity ? "UNITY" : "UNREAL"}.md`} target="_blank" rel="noreferrer">{`docs/${unity ? "UNITY" : "UNREAL"}.md`}</a></p>
         </section>
       )}
 
       {!neverConnected && (
         <div className="ue-body">
           <aside className="ue-list card">
-            <input dir="auto" placeholder={L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
+            <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
             <select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label="Blueprint">
               <option value="">{L("בחר Blueprint", "Choose a Blueprint")}</option>
               {shown.map((b) => <option key={b.path} value={b.path} disabled={!st.connected && !b.saved}>{b.name}</option>)}
@@ -287,8 +333,8 @@ export function UnrealPage() {
                 <div className="row ue-tools">
                   <strong className="grow">{bp.graph.name}{bp.graph.parent ? <span className="muted small"> · {bp.graph.parent}</span> : null}</strong>
                   {bp.offline && bp.savedAt && <span className="muted small">{L("עותק מ-", "Copy from ")}{new Date(bp.savedAt).toLocaleString()}</span>}
-                  <button type="button" disabled={!st.connected} onClick={() => void call("open")}>{L("פתח ב-Unreal", "Open in Unreal")}</button>
-                  <button type="button" disabled={!st.connected} onClick={() => void call("compile")}>{L("קמפל", "Compile")}</button>
+                  <button type="button" disabled={!st.connected} onClick={() => void call("open")}>{L(`פתח ב-${app}`, `Open in ${app}`)}</button>
+                  <button type="button" disabled={!st.connected} onClick={() => void call("compile")}>{unity ? L("בדוק", "Check") : L("קמפל", "Compile")}</button>
                   <button type="button" disabled={!st.connected} onClick={() => void call("save")}>{L("שמור", "Save")}</button>
                 </div>
                 <div className="ue-tabs" role="tablist">
@@ -300,7 +346,7 @@ export function UnrealPage() {
                 </div>
                 <div className="ue-canvas">{graph && <GraphView nodes={graph.nodes} />}</div>
                 <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
-                  <input className="grow" dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={L("מה לשנות? למשל: ב-BeginPlay תדפיס Hello, ואם Open אמת תפעיל את OpenDoor", "What to change? e.g. on BeginPlay print Hello, and if Open is true call OpenDoor")} />
+                  <input className="grow" dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("מה לשנות? למשל: ב-Start תדפיס Hello ללוג, ואם open אמת תזיז את הדלת", "What to change? e.g. on Start log Hello, and if open is true move the door") : L("מה לשנות? למשל: ב-BeginPlay תדפיס Hello, ואם Open אמת תפעיל את OpenDoor", "What to change? e.g. on BeginPlay print Hello, and if Open is true call OpenDoor")} />
                   <button type="submit" className="primary" disabled={busy || !request.trim()}>{busy ? L("המודל עובד…", "Working…") : `✨ ${st.connected ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}`}</button>
                 </form>
                 {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}
@@ -312,14 +358,14 @@ export function UnrealPage() {
 
       {queue.length > 0 && (
         <section className="card stack">
-          <h2>{L("ממתין ל-Unreal", "Waiting for Unreal")} ({queue.length})</h2>
+          <h2>{L(`ממתין ל-${app}`, `Waiting for ${app}`)} ({queue.length})</h2>
           <p className="muted small">{L("יוחלו לבד כשהפרויקט ייפתח עם הפלאגין.", "Applied by themselves when the project opens with the plugin.")}</p>
           <ul className="ue-queue">
             {queue.map((q) => (
               <li key={q.id} className="row">
                 <span className="grow" dir="auto">{q.path.split(".").pop()} · {q.request ?? `${q.ops.length} ${L("פעולות", "operations")}`}</span>
                 <span className="muted small">{new Date(q.at).toLocaleString()}</span>
-                <button type="button" onClick={() => void api(`/api/unreal/queue/${q.id}`, { method: "DELETE" }).then(loadQueue)}>{L("בטל", "Cancel")}</button>
+                <button type="button" onClick={() => void api(`${base}/queue/${q.id}`, { method: "DELETE" }).then(loadQueue)}>{L("בטל", "Cancel")}</button>
               </li>
             ))}
           </ul>

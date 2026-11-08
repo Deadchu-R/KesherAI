@@ -71,6 +71,8 @@ export interface KesherServices {
   guard: GpuGuard;
   /** The Unreal Editor's connection (KesherAI Bridge plugin) and saved Blueprints. */
   unreal: UnrealBridge;
+  /** The Unity Editor's connection (KesherAI Bridge package) and saved Script Graphs. */
+  unity: UnrealBridge;
   /** Microsoft 365 Copilot sign-in. */
   copilot: Copilot;
   /** Business mode in force (an administrator's policy.json, else Settings). */

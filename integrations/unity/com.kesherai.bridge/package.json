@@ -1,0 +1,13 @@
+{
+  "name": "com.kesherai.bridge",
+  "version": "0.1.0",
+  "displayName": "KesherAI Bridge",
+  "description": "Connects the Unity Editor to KesherAI on this computer: see your Visual Scripting graphs in KesherAI and change them in words with your local model. Every change is one undo step.",
+  "unity": "2021.3",
+  "license": "Apache-2.0",
+  "documentationUrl": "https://github.com/Deadchu-R/KesherAI/blob/main/docs/UNITY.md",
+  "dependencies": {
+    "com.unity.visualscripting": "1.8.0"
+  },
+  "author": { "name": "KesherAI contributors", "url": "https://github.com/Deadchu-R/KesherAI" }
+}

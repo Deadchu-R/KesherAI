@@ -172,7 +172,8 @@ export function App() {
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/nodes") page = <NodesPage />;
-  else if (hash === "#/unreal") page = <UnrealPage />;
+  else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
+  else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/parts") page = <PartsPage />;
   else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;

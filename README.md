@@ -109,6 +109,7 @@ Each package has its own README explaining what it owns.
 | [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md) | set up Google sign-in for Drive backup |
 | [docs/ONEDRIVE.md](docs/ONEDRIVE.md) | set up Microsoft sign-in for OneDrive backup |
 | [docs/UNREAL.md](docs/UNREAL.md) | Unreal Blueprints in KesherAI (the KesherAI Bridge plugin) |
+| [docs/UNITY.md](docs/UNITY.md) | Unity Visual Scripting in KesherAI (the KesherAI Bridge package) |
 | [docs/COPILOT.md](docs/COPILOT.md) | Microsoft 365 Copilot and business mode |
 | [docs/WAKE_ON_LAN.md](docs/WAKE_ON_LAN.md) | wake the computer from the phone |
 | [docs/COMPETITORS.md](docs/COMPETITORS.md) | see what other apps do and what we build next |

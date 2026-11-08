@@ -174,3 +174,31 @@ export class BridgeInstaller {
     job.message = `Installed in ${dest}. Open (or restart) the project in Unreal ${engine.version}.`;
   }
 }
+
+/** @returns Where the Unity package's files are: bundled with the app, or in the repository. */
+export function unityPackageSource(): string | undefined {
+  const resources = (process as { resourcesPath?: string }).resourcesPath;
+  const here = dirname(fileURLToPath(import.meta.url));
+  return [resources && join(resources, "unity-package", "com.kesherai.bridge"), resolve(here, "../../../integrations/unity/com.kesherai.bridge")].find(
+    (p): p is string => !!p && existsSync(join(p, "package.json")),
+  );
+}
+
+/**
+ * Adds the KesherAI Bridge package to a Unity project, as an embedded
+ * package (`Packages/com.kesherai.bridge`): Unity compiles it by itself, and
+ * neither git nor a compiler is needed. An older copy is replaced.
+ *
+ * @param folder - The Unity project folder (the one with Assets/ and Packages/).
+ * @returns What to tell the user.
+ * @throws Error when the folder is not a Unity project or the package files are missing.
+ */
+export async function installUnityPackage(folder: string): Promise<string> {
+  if (!existsSync(join(folder, "Assets")) || !existsSync(join(folder, "Packages", "manifest.json"))) throw new Error("That is not a Unity project folder (it needs Assets/ and Packages/manifest.json).");
+  const source = unityPackageSource();
+  if (!source) throw new Error("The package's files are missing from this copy of KesherAI.");
+  const dest = join(folder, "Packages", "com.kesherai.bridge");
+  await rm(dest, { recursive: true, force: true });
+  await cp(source, dest, { recursive: true });
+  return `Added to ${dest}. Unity loads it the next time it gets focus (Visual Scripting is added too if the project lacks it).`;
+}

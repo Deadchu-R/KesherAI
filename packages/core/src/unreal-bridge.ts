@@ -59,9 +59,13 @@ export class UnrealBridge {
   private lastProject?: string;
 
   /**
-   * @param dir - Folder for saved Blueprints and the queue (`<data>/unreal`).
+   * @param dir - Folder for saved graphs and the queue (`<data>/unreal`, `<data>/unity`).
+   * @param editor - The editor's name in messages ("Unreal Editor", "Unity Editor").
    */
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly editor = "Unreal Editor",
+  ) {}
 
   /** @returns Whether an editor is connected now. */
   get connected(): boolean {
@@ -107,7 +111,7 @@ export class UnrealBridge {
       this.info = undefined;
       for (const [id, w] of this.waiting) {
         clearTimeout(w.timer);
-        w.reject(new Error("The Unreal Editor disconnected."));
+        w.reject(new Error(`The ${this.editor} disconnected.`));
         this.waiting.delete(id);
       }
       this.emit("disconnected");
@@ -136,7 +140,7 @@ export class UnrealBridge {
     this.waiting.delete(msg.id);
     clearTimeout(w.timer);
     if (msg.ok) w.resolve(msg.result);
-    else w.reject(new Error(msg.error ?? "The Unreal Editor could not do that."));
+    else w.reject(new Error(msg.error ?? `The ${this.editor} could not do that.`));
   }
 
   /** Saves the list of Blueprints, then applies changes that waited for the editor. */
@@ -166,12 +170,12 @@ export class UnrealBridge {
    */
   request<T = unknown>(cmd: string, args: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
     const socket = this.socket;
-    if (!socket || !this.connected) return Promise.reject(new Error("The Unreal Editor is not connected. Open your project with the KesherAI Bridge plugin."));
+    if (!socket || !this.connected) return Promise.reject(new Error(`The ${this.editor} is not connected. Open your project with the KesherAI Bridge plugin.`));
     const id = randomUUID();
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiting.delete(id);
-        reject(new Error("The Unreal Editor did not answer in time."));
+        reject(new Error(`The ${this.editor} did not answer in time.`));
       }, timeoutMs);
       this.waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       socket.send(JSON.stringify({ id, cmd, ...args }));
@@ -230,7 +234,7 @@ export class UnrealBridge {
    */
   async graph(path: string): Promise<{ graph: BlueprintJson; offline: boolean; savedAt?: string }> {
     const project = await this.project();
-    if (!project) throw new Error("Connect the Unreal Editor once first.");
+    if (!project) throw new Error(`Connect the ${this.editor} once first.`);
     const file = join(this.projectDir(project), "graphs", fileFor(path));
     if (this.connected) {
       try {
@@ -243,7 +247,7 @@ export class UnrealBridge {
       }
     }
     const saved = await this.readJson<{ graph: BlueprintJson; savedAt: string }>(file);
-    if (!saved) throw new Error("This Blueprint was not opened while Unreal was connected, so there is no copy of it here yet.");
+    if (!saved) throw new Error(`This graph was not opened while the ${this.editor} was connected, so there is no copy of it here yet.`);
     return { ...saved, offline: true };
   }
 
@@ -282,7 +286,7 @@ export class UnrealBridge {
   /** @returns What the page shows. */
   async status(): Promise<BridgeStatus> {
     const { readdir } = await import("node:fs/promises");
-    const projects = (await readdir(this.dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
+    const projects = (await readdir(this.dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && !e.name.startsWith("_")).map((e) => e.name);
     return { connected: this.connected, ...(this.info ? { editor: this.info } : {}), projects, queued: (await this.queue()).length };
   }
 }
@@ -375,4 +379,47 @@ export function parseOps(text: string): { ops: Array<Record<string, unknown>>; n
     }
   }
   throw new Error("The model did not answer with changes. Try again, or with a larger model.");
+}
+
+/**
+ * The instructions for turning words into Unity Visual Scripting operations.
+ *
+ * @param g - The Script Graph (same shape as a Blueprint).
+ * @param request - What the user wants.
+ * @returns Messages for the chat model.
+ */
+export function unityPrompt(g: BlueprintJson, request: string): Array<{ role: "system" | "user"; content: string }> {
+  const graph = g.graphs[0];
+  const compact = (graph?.nodes ?? []).map((n) => ({
+    id: n.id,
+    title: n.title,
+    x: n.x,
+    y: n.y,
+    ports: n.pins.map((p) => `${p.dir} ${p.name} (${p.type})${p.default !== undefined ? ` = ${p.default}` : ""}${p.links?.length ? ` -> ${p.links.join(", ")}` : ""}`),
+  }));
+  const system = [
+    "You edit Unity Visual Scripting script graphs. Answer with ONE JSON object and nothing else:",
+    '{"ops": [...], "note": "one short sentence for the user, in the language of the request"}',
+    "Operations (applied in order, as one undo step):",
+    '- {"op":"add","ref":"$s","type":"event","event":"Start"}  (Unity events: Start, Update, FixedUpdate, OnEnable, OnTriggerEnter, OnCollisionEnter, OnMouseDown…)',
+    '- {"op":"add","ref":"$l","type":"call","function":"UnityEngine.Debug:Log","args":1}  (any public method: "Namespace.Type:Method"; args = how many parameters, to pick the overload)',
+    '- {"op":"add","ref":"$i","type":"unit","unit":"If"}  (any unit by its class name: If, Sequence, SwitchOnString, ForLoop, Wait…)',
+    '- {"op":"add","ref":"$g","type":"get","variable":"health","kind":"Graph"}   {"op":"add","ref":"$v","type":"set","variable":"health","kind":"Object"}  (kind: Flow, Graph, Object, Scene, Application, Saved)',
+    '- {"op":"add","ref":"$t","type":"literal","valueType":"string","value":"Hello"}  (string, int, float, bool)',
+    '- {"op":"add","ref":"$c","type":"custom_event","name":"Opened"}',
+    '- {"op":"connect","from":{"node":"<id or $ref>","pin":"<output port>"},"to":{"node":"<id or $ref>","pin":"<input port>"}}  (control ports: event "trigger" → "enter"; a node\'s "exit" → next "enter"; If outputs "ifTrue"/"ifFalse", input "condition"; Debug.Log input "message"; a variable or literal output "value"; Set Variable input "input", output "output")',
+    '- {"op":"set","node":"<id or $ref>","pin":"<input port>","value":"<text>"}',
+    '- {"op":"move","node":"…","x":0,"y":0}   {"op":"delete","node":"…"}',
+    "Use port names exactly as listed. Place new nodes to the right of what they follow (x + 250) so nothing overlaps. Keep what the user did not ask to change.",
+  ].join("\n");
+  const user = [
+    `Script Graph ${g.name}.`,
+    `Graph variables: ${g.variables.map((v) => `${v.name} (${v.type})`).join(", ") || "none"}.`,
+    `Nodes:\n${JSON.stringify(compact)}`,
+    `Change: ${request}`,
+  ].join("\n\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
 }
