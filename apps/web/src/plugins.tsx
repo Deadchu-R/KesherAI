@@ -208,6 +208,17 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (!onInsertPrompt) throw new Error("Only panels can do this.");
           onInsertPrompt(String(p.text ?? ""));
           return true;
+        // Files shared with other apps on the computer (needs the "filesystem" permission).
+        case "files.write":
+          return api<{ path: string; mtime: number }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}`, { method: "PUT", body: { data: p.data } });
+        case "files.read":
+          return api<{ mtime: number; data: string }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}`);
+        case "files.stat":
+          return api<{ mtime: number; size: number }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}?stat=1`).catch(() => null);
+        case "files.openInAffinity":
+          return api<{ app: string }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}/open`, { method: "POST" });
+        case "apps.affinity":
+          return api<{ installed: boolean; platform: string }>("/api/apps/affinity");
         case "toast":
           toast(String(p.text ?? ""));
           return true;

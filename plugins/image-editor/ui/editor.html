@@ -7,121 +7,140 @@
   <link rel="stylesheet" href="editor.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="top">
-      <button id="new" data-t="new">New</button>
-      <button id="open" data-t="open">Open picture</button>
-      <button id="openProject" data-t="openProject">Open project</button>
-      <button id="saveProject" data-t="saveProject">Save project</button>
-      <button id="export" class="primary" data-t="export">Export PNG</button>
+  <div class="app persona-photo" id="app">
+    <!-- Menu bar (Photoshop) with personas (Affinity) on the end -->
+    <header class="menubar">
+      <nav class="menus" id="menus" aria-label="Menu"></nav>
       <span class="grow"></span>
-      <button id="undo" title="Ctrl+Z">↶</button>
-      <button id="redo" title="Ctrl+Y">↷</button>
-      <button id="fit" data-t="fit">Fit</button>
-      <input type="file" id="file" accept="image/*" hidden />
-      <input type="file" id="projectFile" accept=".kesherimg,application/json" hidden />
+      <div class="personas" role="tablist" aria-label="Personas">
+        <button data-persona="photo" class="on" title="Photo"><span>📷</span><b data-t="pPhoto">Photo</b></button>
+        <button data-persona="pixel" title="Pixel"><span>▦</span><b data-t="pPixel">Pixel</b></button>
+        <button data-persona="ai" title="AI"><span>✨</span><b data-t="pAi">AI</b></button>
+      </div>
+      <button id="affinity" class="affinity" title="Affinity"><span>◭</span> <b data-t="openAffinity">Open in Affinity</b></button>
     </header>
 
+    <!-- Context bar: the chosen tool's options (Photoshop's options bar / Affinity's context toolbar) -->
+    <div class="context" id="context">
+      <span class="ctx-tool" id="ctxTool">🖌</span>
+      <div class="ctx" data-for="brush eraser">
+        <label><span data-t="size">Size</span> <input type="range" id="size" min="1" max="400" value="24" /> <output id="sizeOut">24</output></label>
+        <label><span data-t="hardness">Hardness</span> <input type="range" id="hardness" min="0" max="100" value="80" /></label>
+        <label><span data-t="flow">Opacity</span> <input type="range" id="flow" min="1" max="100" value="100" /></label>
+      </div>
+      <div class="ctx" data-for="rect ellipse lasso">
+        <button id="selAll" data-t="selAll">Select all</button>
+        <button id="selNone" data-t="selNone">Deselect</button>
+        <button id="selInvert" data-t="selInvert">Invert</button>
+        <button id="selClear" data-t="clear">Clear</button>
+        <button id="selToAi" data-t="toAi">Repaint with AI…</button>
+      </div>
+      <div class="ctx" data-for="fill">
+        <label><span data-t="tolerance">Tolerance</span> <input type="range" id="tolerance" min="0" max="255" value="32" /></label>
+      </div>
+      <div class="ctx" data-for="move hand picker"><span class="muted" id="ctxHint"></span></div>
+      <span class="grow"></span>
+      <span class="muted" id="zoomInfo"></span>
+      <button id="fit" data-t="fit">Fit</button>
+    </div>
+
+    <!-- Tools (one column, like Photoshop), colors at the bottom -->
     <nav class="tools" aria-label="Tools">
+      <button data-tool="move" title="Move (V)">✥</button>
+      <button data-tool="rect" title="Rectangle selection (M)">⬚</button>
+      <button data-tool="ellipse" title="Ellipse selection">◌</button>
+      <button data-tool="lasso" title="Lasso (L)">➰</button>
+      <hr />
       <button data-tool="brush" title="Brush (B)">🖌</button>
       <button data-tool="eraser" title="Eraser (E)">⌫</button>
-      <button data-tool="rect" title="Rectangle selection (M)">▭</button>
-      <button data-tool="ellipse" title="Ellipse selection">◯</button>
-      <button data-tool="lasso" title="Lasso (L)">➰</button>
-      <button data-tool="move" title="Move layer (V)">✥</button>
       <button data-tool="fill" title="Fill (G)">🪣</button>
       <button data-tool="picker" title="Color picker (I)">💧</button>
-      <button data-tool="hand" title="Pan (space)">✋</button>
+      <hr />
+      <button data-tool="hand" title="Hand (H, space)">✋</button>
+      <div class="swatches" title="Colors (X swaps)">
+        <input type="color" id="color" value="#8c9cff" aria-label="Foreground" />
+        <input type="color" id="color2" value="#ffffff" aria-label="Background" />
+        <button id="swap" title="Swap (X)">⇄</button>
+      </div>
     </nav>
 
-    <main class="stage" id="stage">
-      <canvas id="view"></canvas>
-      <div class="busy" id="busy"><span id="busyText">…</span></div>
+    <!-- The document -->
+    <main class="docarea">
+      <div class="doctabs"><span class="doctab" id="docTab">Untitled</span></div>
+      <div class="stage" id="stage">
+        <canvas id="view"></canvas>
+        <div class="busy" id="busy"><span id="busyText">…</span></div>
+        <div class="linked" id="linked" hidden><span data-t="affinityChanged">Saved in Affinity.</span> <button id="bringBack" class="primary" data-t="bringBack">Bring it back as a layer</button></div>
+      </div>
     </main>
 
-    <aside class="side">
-      <section>
-        <h3 data-t="brushH">Brush</h3>
-        <div class="row"><input type="color" id="color" value="#8c9cff" /><span class="grow"></span><span id="sizeLabel">20 px</span></div>
-        <input type="range" id="size" min="1" max="300" value="20" aria-label="Size" />
-        <label class="field"><span data-t="hardness">Hardness</span><input type="range" id="hardness" min="0" max="100" value="80" /></label>
-        <label class="field"><span data-t="flow">Opacity</span><input type="range" id="flow" min="1" max="100" value="100" /></label>
-      </section>
-
-      <section>
-        <h3 data-t="selectionH">Selection</h3>
-        <div class="row">
-          <button id="selAll" data-t="selAll">All</button>
-          <button id="selNone" data-t="selNone">None</button>
-          <button id="selInvert" data-t="selInvert">Invert</button>
-          <button id="delete" data-t="clear">Clear</button>
+    <!-- Docked panels with tabs (Affinity's studio / Photoshop's panels) -->
+    <aside class="dock">
+      <section class="panel" data-panel="top">
+        <div class="tabs"><button data-tab="color" class="on" data-t="tColor">Color</button><button data-tab="adjust" data-t="tAdjust">Adjustments</button></div>
+        <div class="tabpage" data-page="color">
+          <div class="colorpad"><input type="color" id="colorBig" value="#8c9cff" aria-label="Color" /><div class="recent" id="recent"></div></div>
         </div>
-      </section>
-
-      <section>
-        <h3 data-t="aiH">AI (your picture model)</h3>
-        <textarea id="prompt" dir="auto" data-tp="promptPh" placeholder="Describe what to paint…"></textarea>
-        <div class="row">
-          <button id="aiLayer" class="primary" data-t="aiLayer">New layer from words</button>
-          <button id="aiInpaint" data-t="aiInpaint">Repaint the selection</button>
-        </div>
-        <label class="field"><span data-t="strength">How much to change</span><input type="range" id="strength" min="20" max="100" value="80" /></label>
-        <div class="row"><button id="aiUpscale" data-t="aiUpscale">Enlarge ×4</button></div>
-      </section>
-
-      <section>
-        <h3 data-t="filtersH">Filters (active layer)</h3>
-        <div class="row">
-          <select id="filter" class="grow">
-            <option value="brightness">Brightness</option>
-            <option value="contrast">Contrast</option>
-            <option value="saturate">Saturation</option>
-            <option value="hue-rotate">Hue</option>
-            <option value="blur">Blur</option>
-            <option value="grayscale">Black and white</option>
-            <option value="sepia">Sepia</option>
-            <option value="invert">Invert</option>
-            <option value="sharpen">Sharpen</option>
+        <div class="tabpage" data-page="adjust" hidden>
+          <select id="filter">
+            <option value="brightness">Brightness</option><option value="contrast">Contrast</option><option value="saturate">Saturation</option>
+            <option value="hue-rotate">Hue</option><option value="blur">Blur</option><option value="grayscale">Black and white</option>
+            <option value="sepia">Sepia</option><option value="invert">Invert</option><option value="sharpen">Sharpen</option>
           </select>
+          <input type="range" id="amount" min="0" max="200" value="120" aria-label="Amount" />
+          <div class="row"><button id="applyFilter" class="primary" data-t="apply">Apply</button><span class="muted small" data-t="adjustHint">To the active layer, inside the selection.</span></div>
         </div>
-        <input type="range" id="amount" min="0" max="200" value="120" aria-label="Amount" />
-        <div class="row"><button id="applyFilter" data-t="apply">Apply</button></div>
       </section>
 
-      <section>
-        <div class="row"><h3 class="grow" data-t="layersH">Layers</h3><button id="addLayer" title="New layer">＋</button><button id="dupLayer" title="Duplicate">⧉</button><button id="mergeDown" title="Merge down">⤓</button></div>
-        <div class="row">
-          <select id="blend" class="grow" aria-label="Blend">
-            <option value="source-over">Normal</option>
-            <option value="multiply">Multiply</option>
-            <option value="screen">Screen</option>
-            <option value="overlay">Overlay</option>
-            <option value="darken">Darken</option>
-            <option value="lighten">Lighten</option>
-            <option value="color-dodge">Color dodge</option>
-            <option value="color-burn">Color burn</option>
-            <option value="soft-light">Soft light</option>
-            <option value="difference">Difference</option>
-            <option value="color">Color</option>
-            <option value="luminosity">Luminosity</option>
-          </select>
+      <section class="panel ai-panel" data-panel="ai">
+        <div class="tabs"><button class="on" data-t="tAi">AI</button></div>
+        <div class="tabpage">
+          <textarea id="prompt" dir="auto" data-tp="promptPh" placeholder="Describe what to paint…"></textarea>
+          <div class="row">
+            <button id="aiLayer" class="primary" data-t="aiLayer">New layer from words</button>
+            <button id="aiInpaint" data-t="aiInpaint">Repaint the selection</button>
+          </div>
+          <label class="field"><span data-t="strength">How much to change</span><input type="range" id="strength" min="20" max="100" value="80" /></label>
+          <button id="aiUpscale" data-t="aiUpscale">Enlarge ×4</button>
         </div>
-        <label class="field"><span data-t="layerOpacity">Layer opacity</span><input type="range" id="layerOpacity" min="0" max="100" value="100" /></label>
-        <div class="layers" id="layers"></div>
+      </section>
+
+      <section class="panel grow-panel" data-panel="bottom">
+        <div class="tabs"><button data-tab="layers" class="on" data-t="tLayers">Layers</button><button data-tab="history" data-t="tHistory">History</button></div>
+        <div class="tabpage" data-page="layers">
+          <div class="row">
+            <select id="blend" class="grow" aria-label="Blend">
+              <option value="source-over">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option>
+              <option value="darken">Darken</option><option value="lighten">Lighten</option><option value="color-dodge">Color dodge</option><option value="color-burn">Color burn</option>
+              <option value="soft-light">Soft light</option><option value="difference">Difference</option><option value="color">Color</option><option value="luminosity">Luminosity</option>
+            </select>
+            <input type="range" id="layerOpacity" min="0" max="100" value="100" aria-label="Opacity" />
+          </div>
+          <div class="layers" id="layers"></div>
+          <div class="row layer-actions">
+            <button id="addLayer" title="New layer">＋</button>
+            <button id="dupLayer" title="Duplicate">⧉</button>
+            <button id="mergeDown" title="Merge down">⤓</button>
+            <button id="delLayer" title="Delete layer">🗑</button>
+          </div>
+        </div>
+        <div class="tabpage" data-page="history" hidden><ol class="history" id="history"></ol></div>
       </section>
     </aside>
 
-    <footer class="status"><span id="docInfo"></span><span id="zoomInfo"></span><span id="msg"></span></footer>
+    <footer class="status"><span id="docInfo"></span><span id="msg"></span></footer>
   </div>
 
   <dialog id="newDialog">
-    <form method="dialog" class="row" style="flex-direction: column; align-items: stretch">
+    <form method="dialog" class="stack">
       <strong data-t="newH">New picture</strong>
       <div class="row"><label class="field grow"><span data-t="width">Width</span><input type="number" id="newW" value="1024" min="16" max="8192" /></label><label class="field grow"><span data-t="height">Height</span><input type="number" id="newH" value="1024" min="16" max="8192" /></label></div>
       <label class="row"><input type="checkbox" id="newWhite" checked /> <span data-t="whiteBg">White background</span></label>
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="create">Create</button></div>
     </form>
   </dialog>
+  <input type="file" id="file" accept="image/*" hidden />
+  <input type="file" id="projectFile" accept=".kesherimg,application/json" hidden />
 
   <script src="kesher.js"></script>
   <script src="editor.js"></script>

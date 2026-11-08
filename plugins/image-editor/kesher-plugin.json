@@ -1,12 +1,27 @@
 {
   "id": "image-editor",
   "name": "Image editor",
-  "version": "0.1.0",
-  "description": "A layered image editor (brushes, selections, filters) with your local picture model: generate a layer from words, repaint a selection, enlarge. KesherAI's first official app plugin, and the example for writing your own.",
+  "version": "0.2.0",
+  "description": "A layered image editor after Photoshop and Affinity (menus, context bar, docked panels, personas, history) with your local picture model: generate a layer from words, repaint a selection, enlarge. Opens the picture in Affinity and brings it back. KesherAI's first official app plugin.",
   "author": "KesherAI contributors",
-  "kesher": { "apiVersion": 1 },
-  "uses": ["image"],
+  "kesher": {
+    "apiVersion": 1
+  },
+  "uses": [
+    "image"
+  ],
   "ui": {
-    "pages": [{ "id": "editor", "title": "Image editor", "icon": "🖌", "file": "ui/editor.html", "layout": "app" }]
-  }
+    "pages": [
+      {
+        "id": "editor",
+        "title": "Image editor",
+        "icon": "🖌",
+        "file": "ui/editor.html",
+        "layout": "app"
+      }
+    ]
+  },
+  "permissions": [
+    "filesystem"
+  ]
 }

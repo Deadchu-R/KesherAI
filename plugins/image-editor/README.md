@@ -1,6 +1,13 @@
 # Image editor (official KesherAI plugin)
 
-A layered image editor that runs inside KesherAI as an app plugin. It uses your local picture model.
+A layered image editor that runs inside KesherAI as an app plugin, laid out like Photoshop and Affinity. It uses your local picture model.
+
+- **Interface:**
+  - A menu bar (File, Edit, Select, Layer, Filter, AI, View). Press a menu, slide to an item and let go.
+  - A context bar with the chosen tool's options, tools in one column, and foreground and background colors (X swaps them).
+  - Docked panels with tabs: Color and Adjustments, AI, and Layers and History.
+  - Personas, like Affinity's: **Photo** shows everything, **Pixel** is for painting, and **AI** is for working with the picture model.
+- **Affinity:** *Open in Affinity* saves the picture and opens it in Affinity (the free app by Canva, or Affinity Photo 1 or 2). If Affinity is not installed, the picture opens in the system's picture app. When you export a PNG over the same file in Affinity, the editor offers to bring it back as a layer.
 
 - **Layers:** add, duplicate, merge down, reorder, hide, opacity, and 12 blend modes.
 - **Tools:** brush and eraser (size, hardness, opacity), rectangle, ellipse and lasso selection, move, fill, color picker, pan and zoom.

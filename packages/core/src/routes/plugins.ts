@@ -1,5 +1,7 @@
+import { findAffinity, openInAffinity } from "../open-in-app.js";
 import type { FastifyInstance } from "fastify";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { extname, join } from "node:path";
 import type { KesherServices } from "../services.js";
 
@@ -94,6 +96,53 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
     await writeFile(join(dir, `${req.params.key}.json`), text);
     return { ok: true };
   });
+
+  // ---------- Files a plugin page shares with other apps on this computer ----------
+  // In <data>/plugin-data/<id>/files; the plugin needs the "filesystem" permission.
+  const filesOf = (id: string) => {
+    const p = s.plugins.list().find((x) => x.manifest.id === id && x.status === "active");
+    return p?.manifest.permissions.includes("filesystem") ? join(s.paths.root, "plugin-data", id, "files") : undefined;
+  };
+  const okName = (n: string) => /^[\w][\w .()-]{0,100}\.(png|jpe?g|webp|psd|afphoto|txt|json|wav)$/i.test(n);
+
+  /** Writes a file: body `{ data }` as a data: URL. Returns its full path. */
+  app.put<{ Params: { id: string; name: string }; Body: { data?: string } }>("/api/plugins/:id/files/:name", { bodyLimit: 200 * 1024 * 1024 }, async (req, reply) => {
+    const dir = filesOf(req.params.id);
+    if (!dir) return reply.code(403).send({ error: "This plugin did not ask for the \"filesystem\" permission." });
+    if (!okName(req.params.name)) return reply.code(400).send({ error: "Bad file name" });
+    const m = /^data:[^;,]*;base64,(.*)$/s.exec(String(req.body?.data ?? ""));
+    if (!m) return reply.code(400).send({ error: "Send the file as a base64 data: URL." });
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, req.params.name);
+    await writeFile(path, Buffer.from(m[1]!, "base64"));
+    return { path, mtime: (await stat(path)).mtimeMs };
+  });
+
+  /** A file's time (`?stat=1`) or its contents as a data: URL. */
+  app.get<{ Params: { id: string; name: string }; Querystring: { stat?: string } }>("/api/plugins/:id/files/:name", async (req, reply) => {
+    const dir = filesOf(req.params.id);
+    if (!dir) return reply.code(403).send({ error: "This plugin did not ask for the \"filesystem\" permission." });
+    if (!okName(req.params.name)) return reply.code(400).send({ error: "Bad file name" });
+    const path = join(dir, req.params.name);
+    const st = await stat(path).catch(() => undefined);
+    if (!st) return reply.code(404).send({ error: "No such file" });
+    if (req.query.stat) return { mtime: st.mtimeMs, size: st.size };
+    const ext = req.params.name.split(".").pop()!.toLowerCase();
+    const type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", wav: "audio/wav", json: "application/json", txt: "text/plain" }[ext] ?? "application/octet-stream";
+    return { mtime: st.mtimeMs, data: `data:${type};base64,${(await readFile(path)).toString("base64")}` };
+  });
+
+  /** Opens one of the plugin's files in Affinity (or the system's app for it), on the computer. */
+  app.post<{ Params: { id: string; name: string } }>("/api/plugins/:id/files/:name/open", async (req, reply) => {
+    const dir = filesOf(req.params.id);
+    if (!dir) return reply.code(403).send({ error: "This plugin did not ask for the \"filesystem\" permission." });
+    if (!okName(req.params.name) || !existsSync(join(dir, req.params.name))) return reply.code(404).send({ error: "No such file" });
+    const own = s.config.plugins[req.params.id]?.settings?.affinityPath;
+    return openInAffinity(join(dir, req.params.name), typeof own === "string" ? own : undefined);
+  });
+
+  /** Whether Affinity is installed. */
+  app.get("/api/apps/affinity", async () => ({ installed: !!(await findAffinity()), platform: process.platform }));
 
   /**
    * The community store. `official`: plugins the KesherAI project publishes

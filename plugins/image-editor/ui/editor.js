@@ -2,20 +2,27 @@
 // local picture model (new layer from words, repaint a selection, enlarge).
 // A plugin page with no build step: it talks to KesherAI only through
 // window.kesher (kesher.js). Read it as an example of an app plugin.
-/* global window, document, kesher, Image, Path2D, Blob, URL, requestAnimationFrame, addEventListener, devicePixelRatio, ResizeObserver, setInterval, setTimeout */
+/* global window, document, kesher, Image, Path2D, Blob, URL, requestAnimationFrame, addEventListener, devicePixelRatio, ResizeObserver, setInterval, setTimeout, innerWidth, PointerEvent, removeEventListener */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    new: "חדש", open: "פתח תמונה", openProject: "פתח פרויקט", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
+    new: "חדש…", open: "פתח תמונה…", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
     aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
     newH: "תמונה חדשה", width: "רוחב", height: "גובה", whiteBg: "רקע לבן", cancel: "ביטול", create: "צור",
     background: "רקע", layer: "שכבה", aiWorking: "המודל מצייר… (זה יכול לקחת דקה)", upscaling: "מגדיל…", needSelection: "קודם בחר אזור (מלבן, אליפסה או לאסו).", needPrompt: "כתוב מה לצייר.",
     saved: "נשמר", done: "מוכן", noLayer: "אין שכבה פעילה",
+    pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
+    tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
+    affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
+    mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
+    undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
+    hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
+    hBrush: "מברשת", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
@@ -24,6 +31,7 @@
   const doc = { w: 1024, h: 1024, layers: [], active: 0 };
   let selection = null; // { path: Path2D, inverted: boolean } or null
   let nextId = 1;
+  let docName = "picture";
 
   function makeLayer(name, w = doc.w, h = doc.h) {
     const c = document.createElement("canvas");
@@ -57,20 +65,47 @@
     renderLayers();
     draw();
   }
-  function remember() {
-    undoStack.push(snapshot());
-    if (undoStack.length > 25) undoStack.shift();
+  // History (Photoshop's History panel): each step keeps the state before it and its name.
+  function remember(label = "Edit") {
+    const s = snapshot();
+    s.label = label;
+    undoStack.push(s);
+    if (undoStack.length > 30) undoStack.shift();
     redoStack.length = 0;
+    renderHistory();
   }
   function undo() {
     if (!undoStack.length) return;
-    redoStack.push(snapshot());
-    restore(undoStack.pop());
+    const prev = undoStack.pop();
+    const now = snapshot();
+    now.label = prev.label;
+    redoStack.push(now);
+    restore(prev);
+    renderHistory();
   }
   function redo() {
     if (!redoStack.length) return;
-    undoStack.push(snapshot());
-    restore(redoStack.pop());
+    const next = redoStack.pop();
+    const now = snapshot();
+    now.label = next.label;
+    undoStack.push(now);
+    restore(next);
+    renderHistory();
+  }
+  function renderHistory() {
+    const ol = $("history");
+    if (!ol) return;
+    ol.textContent = "";
+    const add = (text, cls, onclick) => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      li.className = cls;
+      li.onclick = onclick;
+      ol.append(li);
+    };
+    add(T("hNew", "New"), undoStack.length ? "" : "now", () => { while (undoStack.length) undo(); });
+    undoStack.forEach((st, i) => add(st.label, i === undoStack.length - 1 ? "now" : "", () => { while (undoStack.length > i + 1) undo(); }));
+    [...redoStack].reverse().forEach((st, i) => add(st.label, "future", () => { for (let k = 0; k <= i; k++) redo(); }));
   }
 
   // ---------- view ----------
@@ -183,6 +218,10 @@
   function setTool(t) {
     tool = t;
     document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
+    // The context bar shows this tool's options (Photoshop's options bar).
+    document.querySelectorAll(".ctx").forEach((c) => c.classList.toggle("show", c.dataset.for.split(" ").includes(t)));
+    $("ctxTool").textContent = document.querySelector(`[data-tool="${t}"]`)?.textContent ?? "";
+    $("ctxHint").textContent = t === "move" ? T("hMove", "Drag to move the active layer.") : t === "hand" ? T("hHand", "Drag to move the view. Wheel: zoom.") : t === "picker" ? T("hPicker", "Click the picture to take its color.") : "";
     stage.style.cursor = t === "hand" ? "grab" : t === "move" ? "move" : "crosshair";
   }
   document.querySelectorAll("[data-tool]").forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
@@ -214,7 +253,7 @@
   function commitStroke() {
     const l = active();
     if (!l || !strokePreview) return;
-    remember();
+    remember(tool === "eraser" ? T("hEraser", "Eraser") : T("hBrush", "Brush"));
     const ctx = l.ctx;
     ctx.save();
     clipToSelection(ctx, l);
@@ -228,7 +267,7 @@
   }
 
   function floodFill(l, px, py, hex) {
-    remember();
+    remember(T("hFill", "Fill"));
     const { width: w, height: h } = l.canvas;
     const x0 = Math.floor(px - l.x), y0 = Math.floor(py - l.y);
     if (x0 < 0 || y0 < 0 || x0 >= w || y0 >= h) return;
@@ -238,7 +277,7 @@
     const s = at(x0, y0);
     const target = [d[s], d[s + 1], d[s + 2], d[s + 3]];
     const fill = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16), 255];
-    const near = (i) => Math.abs(d[i] - target[0]) + Math.abs(d[i + 1] - target[1]) + Math.abs(d[i + 2] - target[2]) + Math.abs(d[i + 3] - target[3]) <= 48;
+    const near = (i) => Math.abs(d[i] - target[0]) + Math.abs(d[i + 1] - target[1]) + Math.abs(d[i + 2] - target[2]) + Math.abs(d[i + 3] - target[3]) <= +$("tolerance").value * 1.5;
     const mask = selection ? selectionMask().getContext("2d").getImageData(0, 0, doc.w, doc.h).data : null;
     const inSel = (x, y) => !mask || mask[((y + l.y) * doc.w + (x + l.x)) * 4] > 127;
     const seen = new Uint8Array(w * h);
@@ -271,7 +310,7 @@
       strokePreview = { canvas: c, ctx: c.getContext("2d") };
       stroke(p, p);
     } else if (t === "move" && l) {
-      remember();
+      remember(T("hMove2", "Move"));
       drag.lx = l.x;
       drag.ly = l.y;
     } else if (t === "fill" && l) floodFill(l, p.x, p.y, $("color").value);
@@ -366,7 +405,7 @@
       down.onclick = (e) => { e.stopPropagation(); move(i, -1); };
       const del = document.createElement("button");
       del.textContent = "✕";
-      del.onclick = (e) => { e.stopPropagation(); if (doc.layers.length > 1) { remember(); doc.layers.splice(i, 1); doc.active = Math.min(doc.active, doc.layers.length - 1); renderLayers(); draw(); } };
+      del.onclick = (e) => { e.stopPropagation(); if (doc.layers.length > 1) { remember(T("deleteLayer", "Delete layer")); doc.layers.splice(i, 1); doc.active = Math.min(doc.active, doc.layers.length - 1); renderLayers(); draw(); } };
       row.append(thumb, name, eye, up, down, del);
       row.onclick = () => { doc.active = i; renderLayers(); };
       box.append(row);
@@ -381,7 +420,7 @@
   function move(i, dir) {
     const j = i + dir;
     if (j < 0 || j >= doc.layers.length) return;
-    remember();
+    remember(T("hLayerProps", "Layer order"));
     [doc.layers[i], doc.layers[j]] = [doc.layers[j], doc.layers[i]];
     doc.active = j;
     renderLayers();
@@ -393,11 +432,11 @@
     renderLayers();
     draw();
   }
-  $("addLayer").onclick = () => { remember(); addLayer(makeLayer(`${T("layer", "Layer")} ${doc.layers.length + 1}`)); };
+  $("addLayer").onclick = () => { remember(T("newLayer", "New layer")); addLayer(makeLayer(`${T("layer", "Layer")} ${doc.layers.length + 1}`)); };
   $("dupLayer").onclick = () => {
     const l = active();
     if (!l) return;
-    remember();
+    remember(T("duplicate", "Duplicate layer"));
     const c = makeLayer(`${l.name} copy`, l.canvas.width, l.canvas.height);
     c.ctx.drawImage(l.canvas, 0, 0);
     Object.assign(c, { opacity: l.opacity, blend: l.blend, x: l.x, y: l.y });
@@ -406,7 +445,7 @@
   $("mergeDown").onclick = () => {
     const i = doc.active;
     if (i < 1) return;
-    remember();
+    remember(T("mergeDown", "Merge down"));
     const top = doc.layers[i], below = doc.layers[i - 1];
     below.ctx.save();
     below.ctx.globalAlpha = top.opacity;
@@ -418,19 +457,28 @@
     renderLayers();
     draw();
   };
-  $("blend").onchange = () => { const l = active(); if (l) { remember(); l.blend = $("blend").value; draw(); } };
+  $("blend").onchange = () => { const l = active(); if (l) { remember(T("hLayerProps", "Layer properties")); l.blend = $("blend").value; draw(); } };
   $("layerOpacity").oninput = () => { const l = active(); if (l) { l.opacity = +$("layerOpacity").value / 100; draw(); } };
-  $("layerOpacity").onpointerdown = () => remember();
+  $("layerOpacity").onpointerdown = () => remember(T("hLayerProps", "Layer properties"));
 
   // ---------- selection buttons ----------
   $("selAll").onclick = () => { const p = new Path2D(); p.rect(0, 0, doc.w, doc.h); selection = { path: p, inverted: false }; draw(); };
   $("selNone").onclick = () => { selection = null; draw(); };
   $("selInvert").onclick = () => { if (selection) { selection.inverted = !selection.inverted; draw(); } };
-  $("delete").onclick = clearSelection;
+  $("selClear").onclick = clearSelection;
+  $("selToAi").onclick = () => { setPersona("ai"); $("prompt").focus(); };
+  $("delLayer").onclick = () => {
+    if (doc.layers.length < 2) return;
+    remember(T("deleteLayer", "Delete layer"));
+    doc.layers.splice(doc.active, 1);
+    doc.active = Math.min(doc.active, doc.layers.length - 1);
+    renderLayers();
+    draw();
+  };
   function clearSelection() {
     const l = active();
     if (!l) return;
-    remember();
+    remember(T("hClear", "Clear"));
     l.ctx.save();
     if (selection) {
       clipToSelection(l.ctx, l);
@@ -459,7 +507,7 @@
   $("applyFilter").onclick = () => {
     const l = active();
     if (!l) return;
-    remember();
+    remember(`${T("hFilter", "Filter")}: ${$("filter").selectedOptions[0].textContent}`);
     const f = $("filter").value;
     const a = +$("amount").value;
     const tmp = document.createElement("canvas");
@@ -518,21 +566,21 @@
     renderLayers();
     fit();
   }
-  $("new").onclick = () => $("newDialog").showModal();
   $("newDialog").addEventListener("close", () => {
     if ($("newDialog").returnValue === "ok") newDoc(Math.max(16, Math.min(8192, +$("newW").value)), Math.max(16, Math.min(8192, +$("newH").value)), $("newWhite").checked);
   });
-  $("open").onclick = () => $("file").click();
   $("file").onchange = async () => {
     const f = $("file").files[0];
     if (!f) return;
     const img = await loadImage(URL.createObjectURL(f));
     if (!doc.layers.some((l) => !isEmpty(l))) {
+      docName = f.name.replace(/\.[^.]+$/, "");
+      $("docTab").textContent = f.name;
       newDoc(img.naturalWidth, img.naturalHeight, false);
       doc.layers[0].name = f.name;
       doc.layers[0].ctx.drawImage(img, 0, 0);
     } else {
-      remember();
+      remember(T("hOpenPic", "Open picture"));
       const l = makeLayer(f.name);
       l.ctx.drawImage(img, 0, 0);
       addLayer(l);
@@ -546,13 +594,12 @@
     for (let i = 3; i < d.length; i += 64) if (d[i] && !(d[i - 3] === 255 && d[i - 2] === 255 && d[i - 1] === 255)) return false;
     return true;
   }
-  $("export").onclick = () => flatten().toBlob((b) => download("picture.png", b), "image/png");
-  $("saveProject").onclick = () => {
+  const exportPng = () => flatten().toBlob((b) => download(`${docName}.png`, b), "image/png");
+  const saveProject = () => {
     const project = { kesherImage: 1, w: doc.w, h: doc.h, active: doc.active, layers: doc.layers.map((l) => ({ name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, png: l.canvas.toDataURL("image/png") })) };
-    download("picture.kesherimg", new Blob([JSON.stringify(project)], { type: "application/json" }));
+    download(`${docName}.kesherimg`, new Blob([JSON.stringify(project)], { type: "application/json" }));
     msg(T("saved", "Saved"));
   };
-  $("openProject").onclick = () => $("projectFile").click();
   $("projectFile").onchange = async () => {
     const f = $("projectFile").files[0];
     if (!f) return;
@@ -612,7 +659,7 @@
     ai(async () => {
       const [url] = await kesher.call("image.generate", { prompt, width: snap(doc.w), height: snap(doc.h) });
       const img = await loadImage(url);
-      remember();
+      remember(T("hAiLayer", "AI layer"));
       const l = makeLayer(prompt.slice(0, 40));
       l.ctx.drawImage(img, 0, 0, doc.w, doc.h);
       addLayer(l);
@@ -627,7 +674,7 @@
       const w = snap(doc.w), h = snap(doc.h);
       const [url] = await kesher.call("image.edit", { prompt, image: scaled(flatten(), w, h), mask: scaled(selectionMask(), w, h), strength: +$("strength").value / 100 });
       const img = await loadImage(url);
-      remember();
+      remember(T("hInpaint", "AI repaint"));
       const l = makeLayer(prompt.slice(0, 40));
       l.ctx.save();
       clipToSelection(l.ctx, l);
@@ -641,7 +688,7 @@
       busy(T("upscaling", "Enlarging…"));
       const url = await kesher.call("image.upscale", { image: flatten().toDataURL("image/png") });
       const img = await loadImage(url);
-      remember();
+      remember(T("hUpscale", "Enlarge"));
       newDoc(img.naturalWidth, img.naturalHeight, false);
       doc.layers[0].name = "×4";
       doc.layers[0].ctx.drawImage(img, 0, 0);
@@ -668,18 +715,242 @@
     if (map[k]) setTool(map[k]);
     if (k === "[") $("size").value = String(Math.max(1, +$("size").value - 5));
     if (k === "]") $("size").value = String(+$("size").value + 5);
-    $("sizeLabel").textContent = `${$("size").value} px`;
+    $("sizeOut").textContent = $("size").value;
   });
   addEventListener("keyup", (e) => { if (e.key === " ") { spaceDown = false; setTool(tool); } });
-  $("size").oninput = () => ($("sizeLabel").textContent = `${$("size").value} px`);
-  $("undo").onclick = undo;
-  $("redo").onclick = redo;
+  $("size").oninput = () => ($("sizeOut").textContent = $("size").value);
   $("fit").onclick = fit;
 
+
+  // ---------- colors: swatches (X swaps), the Color panel and recent colors ----------
+  const recent = [];
+  function setColor(hex) {
+    $("color").value = hex;
+    $("colorBig").value = hex;
+  }
+  function rememberColor(hex) {
+    const i = recent.indexOf(hex);
+    if (i >= 0) recent.splice(i, 1);
+    recent.unshift(hex);
+    recent.length = Math.min(recent.length, 18);
+    const box = $("recent");
+    box.textContent = "";
+    for (const c of recent) {
+      const b = document.createElement("button");
+      b.style.background = c;
+      b.title = c;
+      b.onclick = () => setColor(c);
+      box.append(b);
+    }
+  }
+  $("color").oninput = () => ($("colorBig").value = $("color").value);
+  $("colorBig").oninput = () => ($("color").value = $("colorBig").value);
+  $("color").onchange = $("colorBig").onchange = () => rememberColor($("color").value);
+  $("swap").onclick = () => { const a = $("color").value; setColor($("color2").value); $("color2").value = a; };
+
+  // ---------- docked panels: tabs ----------
+  document.querySelectorAll(".panel").forEach((panel) => {
+    panel.querySelectorAll(".tabs [data-tab]").forEach((b) => {
+      b.onclick = () => {
+        panel.querySelectorAll(".tabs [data-tab]").forEach((x) => x.classList.toggle("on", x === b));
+        panel.querySelectorAll(".tabpage[data-page]").forEach((p) => (p.hidden = p.dataset.page !== b.dataset.tab));
+      };
+    });
+  });
+
+  // ---------- personas (Affinity): Photo, Pixel, AI ----------
+  function setPersona(p) {
+    $("app").className = `app persona-${p}`;
+    document.querySelectorAll("[data-persona]").forEach((b) => b.classList.toggle("on", b.dataset.persona === p));
+    if (p === "pixel" && !["brush", "eraser", "fill", "picker", "hand"].includes(tool)) setTool("brush");
+    if (p === "ai" && ["brush", "eraser", "fill"].includes(tool)) setTool("lasso");
+    kesher.call("storage.set", { key: "persona", value: p }).catch(() => undefined);
+  }
+  document.querySelectorAll("[data-persona]").forEach((b) => (b.onclick = () => setPersona(b.dataset.persona)));
+
+  // ---------- menus, press-and-slide like Apple's: press a menu, slide to an item, let go ----------
+  const MENUS = () => [
+    ["mFile", "File", [
+      ["new", "New…", "Ctrl+N", () => $("newDialog").showModal()],
+      ["open", "Open picture…", "Ctrl+O", () => $("file").click()],
+      ["openProject", "Open project…", "", () => $("projectFile").click()],
+      "-",
+      ["saveProject", "Save project", "Ctrl+S", () => saveProject()],
+      ["export", "Export PNG", "Ctrl+Shift+E", () => exportPng()],
+      "-",
+      ["openAffinity", "Open in Affinity", "", () => openInAffinity()],
+    ]],
+    ["mEdit", "Edit", [
+      ["undo", "Undo", "Ctrl+Z", undo],
+      ["redo", "Redo", "Ctrl+Y", redo],
+      "-",
+      ["clear", "Clear", "Del", clearSelection],
+    ]],
+    ["mSelect", "Select", [
+      ["selAll", "Select all", "Ctrl+A", () => $("selAll").click()],
+      ["selNone", "Deselect", "Ctrl+D", () => $("selNone").click()],
+      ["selInvert", "Invert", "Ctrl+Shift+I", () => $("selInvert").click()],
+    ]],
+    ["mLayer", "Layer", [
+      ["newLayer", "New layer", "Ctrl+Shift+N", () => $("addLayer").click()],
+      ["duplicate", "Duplicate layer", "Ctrl+J", () => $("dupLayer").click()],
+      ["mergeDown", "Merge down", "Ctrl+E", () => $("mergeDown").click()],
+      ["flattenAll", "Flatten image", "", flattenAll],
+      "-",
+      ["deleteLayer", "Delete layer", "", () => $("delLayer").click()],
+    ]],
+    ["mFilter", "Filter", [...$("filter").options].map((o) => [null, o.textContent, "", () => { $("filter").value = o.value; topTab("adjust"); }])],
+    ["mAi", "AI", [
+      ["aiLayer", "New layer from words", "", () => { setPersona("ai"); $("prompt").focus(); }],
+      ["aiInpaint", "Repaint the selection", "", () => { setPersona("ai"); $("prompt").focus(); }],
+      ["aiUpscale", "Enlarge ×4", "", () => $("aiUpscale").click()],
+    ]],
+    ["mView", "View", [
+      ["zoomIn", "Zoom in", "Ctrl++", () => zoomBy(1.25)],
+      ["zoomOut", "Zoom out", "Ctrl+-", () => zoomBy(0.8)],
+      ["fit", "Fit", "Ctrl+0", fit],
+      ["actual", "Actual size", "Ctrl+1", () => zoomBy(1 / cam.scale)],
+    ]],
+  ];
+  function topTab(name) {
+    document.querySelector(`[data-panel="top"] [data-tab="${name}"]`)?.click();
+  }
+  function zoomBy(k) {
+    const r = view.getBoundingClientRect();
+    const mx = r.width / 2, my = r.height / 2;
+    const s = Math.min(32, Math.max(0.05, cam.scale * k));
+    cam.x = mx - ((mx - cam.x) * s) / cam.scale;
+    cam.y = my - ((my - cam.y) * s) / cam.scale;
+    cam.scale = s;
+    draw();
+  }
+  function flattenAll() {
+    if (doc.layers.length < 2) return;
+    remember(T("flattenAll", "Flatten image"));
+    const flat = flatten();
+    const l = makeLayer(T("background", "Background"));
+    l.ctx.drawImage(flat, 0, 0);
+    doc.layers = [l];
+    doc.active = 0;
+    renderLayers();
+    draw();
+  }
+  let pop = null;
+  function closeMenu() {
+    pop?.remove();
+    pop = null;
+    document.querySelectorAll(".menu-btn.open").forEach((b) => b.classList.remove("open"));
+  }
+  function buildMenus() {
+    const bar = $("menus");
+    bar.textContent = "";
+    for (const [key, en, items] of MENUS()) {
+      const b = document.createElement("button");
+      b.className = "menu-btn";
+      b.textContent = T(key, en);
+      const openMenu = () => {
+        closeMenu();
+        b.classList.add("open");
+        pop = document.createElement("div");
+        pop.className = "menu-pop";
+        pop.setAttribute("role", "menu");
+        for (const it of items) {
+          if (it === "-") { pop.append(document.createElement("hr")); continue; }
+          const [k, label, keys, run] = it;
+          const item = document.createElement("button");
+          item.setAttribute("role", "menuitem");
+          const name = document.createElement("span");
+          name.textContent = k ? T(k, label) : label;
+          const kbd = document.createElement("kbd");
+          kbd.textContent = keys;
+          item.append(name, kbd);
+          item.onclick = () => { closeMenu(); run(); };
+          pop.append(item);
+        }
+        const r = b.getBoundingClientRect();
+        pop.style.top = `${r.bottom + 2}px`;
+        if (he) pop.style.right = `${innerWidth - r.right}px`;
+        else pop.style.left = `${r.left}px`;
+        document.body.append(pop);
+      };
+      // Press and slide: the menu opens on press; letting go over an item runs it.
+      b.onpointerdown = (e) => {
+        e.preventDefault();
+        if (b.classList.contains("open")) return closeMenu();
+        openMenu();
+        const move = (ev) => {
+          const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".menu-pop button");
+          pop?.querySelectorAll("button").forEach((x) => x.classList.toggle("hot", x === el));
+          const other = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".menu-btn");
+          if (other && other !== b && !other.classList.contains("open")) other.dispatchEvent(new PointerEvent("pointerenter"));
+        };
+        const up = (ev) => {
+          removeEventListener("pointermove", move);
+          removeEventListener("pointerup", up);
+          const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".menu-pop button");
+          if (el) el.click();
+        };
+        addEventListener("pointermove", move);
+        addEventListener("pointerup", up);
+      };
+      // While a menu is open, moving to another title opens that one (like a desktop menu bar).
+      b.onpointerenter = () => { if (pop && !b.classList.contains("open")) openMenu(); };
+      bar.append(b);
+    }
+  }
+  addEventListener("pointerdown", (e) => { if (pop && !e.target.closest?.(".menu-pop, .menu-btn")) closeMenu(); });
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    const map = { n: () => (e.shiftKey ? $("addLayer").click() : $("newDialog").showModal()), o: () => $("file").click(), s: saveProject, j: () => $("dupLayer").click(), e: () => (e.shiftKey ? exportPng() : $("mergeDown").click()), 0: fit, 1: () => zoomBy(1 / cam.scale), "=": () => zoomBy(1.25), "+": () => zoomBy(1.25), "-": () => zoomBy(0.8), i: () => (e.shiftKey ? $("selInvert").click() : undefined) };
+    if (map[k]) { e.preventDefault(); map[k](); }
+  });
+
+  // ---------- Affinity: open the picture there, bring the exported file back ----------
+  let linked = null; // { name, mtime }
+  async function openInAffinity() {
+    const name = `${docName.replace(/[^\w .()-]/g, "_") || "picture"}.png`;
+    try {
+      const w = await kesher.call("files.write", { name, data: flatten().toDataURL("image/png") });
+      const r = await kesher.call("files.openInAffinity", { name });
+      linked = { name, mtime: w.mtime };
+      msg(r.app === "affinity" ? T("affinityOpened", "Opened in Affinity. When you are done: File → Export → PNG, and save over the same file.") : T("affinityDefault", "Affinity is not on this computer, so the file opened in the usual picture app."));
+    } catch (e) {
+      msg(e.message, true);
+    }
+  }
+  $("affinity").onclick = openInAffinity;
+  setInterval(async () => {
+    if (!linked) return;
+    const st = await kesher.call("files.stat", { name: linked.name }).catch(() => null);
+    if (st && st.mtime > linked.mtime + 500) $("linked").hidden = false;
+  }, 2000);
+  $("bringBack").onclick = async () => {
+    if (!linked) return;
+    try {
+      const f = await kesher.call("files.read", { name: linked.name });
+      const img = await loadImage(f.data);
+      remember(T("hFromAffinity", "From Affinity"));
+      const l = makeLayer(`Affinity · ${linked.name}`, img.naturalWidth, img.naturalHeight);
+      l.ctx.drawImage(img, 0, 0);
+      addLayer(l, doc.layers.length);
+      linked.mtime = f.mtime;
+      $("linked").hidden = true;
+    } catch (e) {
+      msg(e.message, true);
+    }
+  };
+
   // ---------- start ----------
+  buildMenus();
+  renderHistory();
+  kesher.call("storage.get", { key: "persona" }).then((p) => p && setPersona(p)).catch(() => undefined);
   kesher.call("info").then((i) => {
     he = i.locale === "he";
     if (!he) return;
+    buildMenus();
+    renderHistory();
     document.documentElement.dir = "rtl";
     document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent)));
     document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder)));
