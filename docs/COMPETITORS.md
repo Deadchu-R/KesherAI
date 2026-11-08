@@ -171,12 +171,12 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 7. One-click setup for video, like chat and speech ✅ ("Set it up for me" also offers pictures and video)
 8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ✅ (English voices; Hebrew stays with the system voice)
 9. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ✅ (Images page: start from a picture, paint what to change, strength)
-10. Music generation, as a tool the chat can call (LU) ⬜
+10. Music generation, as a tool the chat can call (LU) ⬜ (later: acestep.cpp, MIT, ~7.7 GB of models, has no stable prebuilt release; we would build it)
 11. Hardware benchmark: tokens per second for each model on this computer (LU, PocketPal) ✅ ("Measure speed" next to each chat model; the phone already measures)
 
 **3. High-importance features**
 
-12. Personal memory you can see and edit (LobeHub, LU) ⬜
+12. Personal memory you can see and edit (LobeHub, LU) ✅ (Memory page; "remember" and "forget" in chats)
 13. Long chats summarize their older part automatically (LU) ⬜
 14. "Keep going until done": a goal checked by a reviewer pass before the agent stops (OpenCode `/goal`) ⬜
 15. Agent Builder: describe an assistant in words, get a persona with tools and knowledge (LobeHub) ⬜

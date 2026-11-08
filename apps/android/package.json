@@ -1,6 +1,6 @@
 {
   "name": "@kesher/android",
-  "version": "0.4.51",
+  "version": "0.4.52",
   "private": true,
   "description": "Android app: connects to KesherAI running on your computer. Built into an APK by GitHub Actions (.github/workflows/android.yml).",
   "license": "Apache-2.0",

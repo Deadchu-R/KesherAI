@@ -28,6 +28,7 @@ import { ConversationPage } from "./pages/Conversation";
 import { ImagesPage } from "./pages/Images";
 import { BatchImagesPage } from "./pages/BatchImages";
 import { PairPrompt } from "./PairPrompt";
+import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/Models";
 import { ConnectionsPage } from "./pages/Connections";
 import { SettingsPage } from "./pages/Settings";
@@ -158,6 +159,7 @@ export function App() {
   if (hash.startsWith("#/c/")) page = <ConversationPage key={hash} id={hash.slice(4)} />;
   else if (hash === "#/images") page = <ImagesPage />;
   else if (hash === "#/batch") page = <BatchImagesPage />;
+  else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/models") page = <ModelsPage />;
   else if (hash === "#/connections") page = <ConnectionsPage />;
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;

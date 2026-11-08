@@ -159,6 +159,8 @@ export class ConversationManager {
       mcpTools?(): AgentTool[];
       /** Notes the coach learned about how the user works, added to every system prompt. */
       userNotes?(): Promise<string[]>;
+      /** The remember / forget tools for the user's memory (none when memory is off). */
+      memoryTools?(): AgentTool[];
       /** Saved personas. */
       personas?: Personas;
       /** SKILL.md skills, listed in the prompt and loaded with use_skill. */
@@ -300,7 +302,7 @@ export class ConversationManager {
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
     const skills = this.deps.skills?.count ? [this.deps.skills.tool()] : [];
-    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools(), ...skills, ...(this.deps.mcpTools?.() ?? [])], notes: media.notes };
+    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])], notes: media.notes };
   }
 
   private teamCache = new Map<string, Teammate[]>();
@@ -359,7 +361,7 @@ export class ConversationManager {
 
   private async learnedNotes(): Promise<string[]> {
     const learned = (await this.deps.userNotes?.().catch(() => [])) ?? [];
-    return learned.length ? [`About this user (learned from how they use KesherAI; follow it unless they say otherwise): ${learned.join("; ")}`] : [];
+    return learned.length ? [`About this user (their memory in KesherAI, which they can see and edit; follow it unless they say otherwise): ${learned.join("; ")}`] : [];
   }
 
   /**

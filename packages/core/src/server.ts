@@ -51,6 +51,7 @@ import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcp
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
+import { memoryTools } from "./memory-tools.js";
 import { browserRoutes } from "./routes/browser.js";
 import { pairRoutes } from "./routes/pair.js";
 import { Coach } from "./coach.js";
@@ -435,6 +436,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         generate: (path, req) => sd.generateVideo(path, req),
       },
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
+      memoryTools: () => (config.coach?.learn === false ? [] : memoryTools(coach)),
     }),
     coach,
     computer,

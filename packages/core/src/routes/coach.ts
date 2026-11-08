@@ -81,6 +81,25 @@ export async function coachRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
 
+  /** Memory: add a note in your own words (`{ text }`), or change one (`PUT …/:index`). */
+  app.post<{ Body: { text?: string } }>("/api/coach/profile", async (req, reply) => {
+    const text = String(req.body?.text ?? "").trim().slice(0, 300);
+    if (!text) return reply.code(400).send({ error: "Write what to remember." });
+    const p = await s.coach.profile();
+    if (!p.notes.some((n) => n.toLowerCase() === text.toLowerCase())) p.notes.push(text);
+    await s.coach.save({ ...p, notes: p.notes.slice(-60), updatedAt: new Date().toISOString() });
+    return s.coach.profile();
+  });
+  app.put<{ Params: { index: string }; Body: { text?: string } }>("/api/coach/profile/:index", async (req, reply) => {
+    const p = await s.coach.profile();
+    const i = Number(req.params.index);
+    const text = String(req.body?.text ?? "").trim().slice(0, 300);
+    if (!Number.isInteger(i) || !p.notes[i] || !text) return reply.code(400).send({ error: "No such note, or empty text." });
+    p.notes[i] = text;
+    await s.coach.save({ ...p, updatedAt: new Date().toISOString() });
+    return s.coach.profile();
+  });
+
   /** Removes one learned note (by index), or all of them (no index). */
   app.delete<{ Querystring: { index?: string } }>("/api/coach/profile", async (req) => {
     const p = await s.coach.profile();
