@@ -170,8 +170,12 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 **2. Every kind of model on the computer, and downloading it**
 
 7. One-click setup for video, like chat and speech ✅ ("Set it up for me" also offers pictures and video)
-7a. The Models page shows every kind of model: video, speech to text, text to speech, search by meaning, music and 3D, each with its state, one-click setup and download percent ✅; video also through ComfyUI (Wan 2.1) ✅
-7b. Nodes: ComfyUI's node editor inside KesherAI (also from the phone), and changing the flow in words with the local chat model (checked against the nodes ComfyUI has; Undo) ✅
+7a. The Models page shows every kind of model: video, speech to text, text to speech, search by meaning, music and 3D, each with its state, one-click setup and download percent ✅
+7b. Video through ComfyUI too (Wan 2.1, sharing the model file with the built-in engine; the Video tab picks which one makes videos) ✅
+7c. A node viewer inside KesherAI: ComfyUI's own editor on the Nodes page, to see and work with the nodes (also from the phone, behind the access token) ✅
+7d. Editing the nodes with prompts to the local model: a line above the editor changes the flow in words, checked against the nodes ComfyUI has, with Undo ✅
+7e. Tried against a real ComfyUI on Roee's computer ⏳ (tested with automated tests and a stand-in server)
+7f. Ready-made flows for music (ACE-Step) and 3D (Hunyuan3D) to load on the Nodes page ⬜
 8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ✅ (English voices; Hebrew stays with the system voice)
 9. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ✅ (Images page: start from a picture, paint what to change, strength)
 10. Music generation, as a tool the chat can call (LU) ⬜ (later: acestep.cpp, MIT, ~7.7 GB of models, has no stable prebuilt release; we would build it)
