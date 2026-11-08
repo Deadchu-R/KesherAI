@@ -48,6 +48,16 @@ public class KesherUpdaterPlugin extends Plugin {
         return "https".equals(u.getScheme()) && "github.com".equals(u.getHost());
     }
 
+    private static String readText(File f) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (InputStream in = new java.io.FileInputStream(f)) {
+            byte[] buf = new byte[256];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+        return out.toString("UTF-8").trim();
+    }
+
     /** Follows GitHub's redirect to its download host. */
     private static HttpURLConnection open(String url) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -56,6 +66,34 @@ public class KesherUpdaterPlugin extends Plugin {
         c.setReadTimeout(30000);
         c.setRequestProperty("User-Agent", "KesherAI-Android");
         return c;
+    }
+
+    /**
+     * Like {@link #open}, but tries again when GitHub's download servers are
+     * briefly unwell (502/503/504, a dropped connection), waiting 2, 4, 8
+     * and 16 seconds between tries.
+     */
+    private static HttpURLConnection openRetrying(String url) throws Exception {
+        return openRetrying(url, 0);
+    }
+
+    /** {@link #openRetrying(String)} that asks for the file from byte {@code from} on (to resume a download). */
+    private static HttpURLConnection openRetrying(String url, long from) throws Exception {
+        Exception last = null;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (attempt > 0) Thread.sleep(2000L << (attempt - 1));
+            try {
+                HttpURLConnection c = open(url);
+                if (from > 0) c.setRequestProperty("Range", "bytes=" + from + "-");
+                int code = c.getResponseCode();
+                if (code < 500 || attempt == 4) return c;
+                c.disconnect();
+                last = new Exception("GitHub answered " + code);
+            } catch (java.io.IOException e) {
+                last = e;
+            }
+        }
+        throw last != null ? last : new Exception("GitHub did not answer");
     }
 
     private long installedVersionCode() throws Exception {
@@ -76,8 +114,8 @@ public class KesherUpdaterPlugin extends Plugin {
         }
         new Thread(() -> {
             try {
-                HttpURLConnection c = open(url);
-                if (c.getResponseCode() != 200) throw new Exception("GitHub answered " + c.getResponseCode());
+                HttpURLConnection c = openRetrying(url);
+                if (c.getResponseCode() != 200) throw new Exception("GitHub answered " + c.getResponseCode() + ". Try again in a few minutes.");
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 try (InputStream in = c.getInputStream()) {
                     byte[] buf = new byte[8192];
@@ -141,17 +179,45 @@ public class KesherUpdaterPlugin extends Plugin {
                 File apk = new File(dir, "KesherAI-update.apk");
                 File part = new File(dir, "KesherAI-update.apk.part");
                 // While a new build is being published, GitHub briefly has no file there (404): wait and try again.
-                HttpURLConnection c = open(url);
+                // A download cut off earlier (the phone's connection dropped) goes on where it stopped.
+                File sizeFile = new File(dir, "KesherAI-update.size");
+                long done = part.exists() && sizeFile.exists() ? part.length() : 0;
+                HttpURLConnection c = openRetrying(url, done);
                 for (int attempt = 0; c.getResponseCode() == 404 && attempt < 6; attempt++) {
                     c.disconnect();
                     Thread.sleep(10000);
-                    c = open(url);
+                    c = openRetrying(url, done);
                 }
                 if (c.getResponseCode() == 404) throw new Exception("GitHub is publishing a new build right now. Try again in a minute.");
-                if (c.getResponseCode() != 200) throw new Exception("GitHub answered " + c.getResponseCode());
-                long total = c.getContentLengthLong();
-                long done = 0;
-                try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
+                int code = c.getResponseCode();
+                if (code == 416) {
+                    // The kept piece does not fit this file (a newer build): start over.
+                    c.disconnect();
+                    part.delete();
+                    done = 0;
+                    c = openRetrying(url, 0);
+                    code = c.getResponseCode();
+                }
+                boolean resumed = code == 206;
+                if (resumed) {
+                    // Only a piece of the same build is continued (a new build has another size).
+                    String range = c.getHeaderField("Content-Range");
+                    String kept = readText(sizeFile);
+                    if (range == null || !range.endsWith("/" + kept)) {
+                        c.disconnect();
+                        part.delete();
+                        resumed = false;
+                        done = 0;
+                        c = openRetrying(url, 0);
+                        code = c.getResponseCode();
+                    }
+                }
+                if (!resumed) done = 0;
+                if (code != 200 && code != 206) throw new Exception("GitHub answered " + code + ". Try again in a few minutes.");
+                long length = c.getContentLengthLong();
+                long total = length >= 0 ? length + done : -1;
+                if (!resumed && total > 0) try (FileOutputStream o = new FileOutputStream(sizeFile)) { o.write(String.valueOf(total).getBytes("UTF-8")); }
+                try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part, resumed)) {
                     byte[] buf = new byte[65536];
                     int read;
                     int lastPercent = -1;
@@ -169,6 +235,8 @@ public class KesherUpdaterPlugin extends Plugin {
                         }
                     }
                 }
+                if (total > 0 && part.length() != total) throw new Exception("The download stopped early. Tap update again to go on from where it stopped.");
+                sizeFile.delete();
                 if (apk.exists()) apk.delete();
                 if (!part.renameTo(apk)) throw new Exception("Could not save the update.");
                 Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".kesher.updates", apk);
