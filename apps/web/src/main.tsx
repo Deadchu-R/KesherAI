@@ -23,6 +23,20 @@ setLocale(getLocale());
 // The look the user picked (Settings → Appearance, or "make it light" in a chat).
 loadAppearance();
 
+// After an update the server has the new version's files while this page is still the old one:
+// a part that loads later is gone. Load the page again once (not in a loop) instead of showing an error.
+window.addEventListener("vite:preloadError", (e) => {
+  try {
+    const last = Number(sessionStorage.getItem("kesher-reloaded") ?? 0);
+    if (Date.now() - last < 30_000) return;
+    sessionStorage.setItem("kesher-reloaded", String(Date.now()));
+  } catch {
+    // no storage: still load again once
+  }
+  e.preventDefault();
+  location.reload();
+});
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

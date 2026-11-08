@@ -1295,6 +1295,9 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .look-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
 .look-preset { display: flex; flex-direction: column; gap: 8px; height: auto; padding: 8px; text-align: start; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); }
 .look-preset.on { border-color: var(--accent); }
+.look-mine { position: relative; display: inline-flex; }
+.look-mine .look-preset { width: 100%; }
+.look-mine-del { position: absolute; top: 4px; inset-inline-end: 4px; width: 26px; height: 26px; min-height: 0; padding: 0; border-radius: 50%; font-size: 12px; background: var(--panel); opacity: 0.85; }
 .look-swatch { position: relative; height: 58px; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; }
 .look-swatch i { position: absolute; bottom: 8px; height: 14px; border-radius: 4px; }
 .look-swatch i:first-child { inset-inline-start: 8px; width: 46%; }

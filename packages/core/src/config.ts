@@ -124,6 +124,8 @@ export const KesherConfigSchema = z.object({
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
   appearance: z.record(z.string(), z.unknown()).default({}),
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
+  /** Looks the user saved by name (Settings → Appearance → My looks). */
+  savedLooks: z.array(z.object({ name: z.string().max(60), appearance: z.record(z.string(), z.unknown()) })).max(40).default([]),
   /** The first-run welcome: whether it was finished, and the role the user picked (shapes suggestions). */
   onboarding: z
     .object({

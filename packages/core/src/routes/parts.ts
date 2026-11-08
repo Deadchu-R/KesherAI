@@ -51,6 +51,28 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0 };
   });
 
+  /** Looks the user saved by name. Only looks, so the phone may use them too. */
+  const looksView = () => ({ looks: s.config.savedLooks.map((l) => ({ name: l.name, appearance: cleanAppearance(l.appearance) })) });
+  app.get("/api/appearance/saved", async () => looksView());
+
+  /** Body: `{ name }`: saves the look in use under that name (the same name is replaced). */
+  app.post<{ Body: { name?: unknown } }>("/api/appearance/saved", async (req, reply) => {
+    const name = typeof req.body?.name === "string" ? [...req.body.name].filter((c) => c >= " ").join("").trim().slice(0, 60) : "";
+    if (!name) return reply.code(400).send({ error: "Give the look a name." });
+    const rest = s.config.savedLooks.filter((l) => l.name !== name);
+    if (rest.length >= 40) return reply.code(400).send({ error: "You can keep up to 40 looks; delete one first." });
+    s.config.savedLooks = [...rest, { name, appearance: cleanAppearance(s.config.appearance) as Record<string, unknown> }];
+    await s.saveConfig();
+    return looksView();
+  });
+
+  /** Deletes a saved look by name (`?name=`). */
+  app.delete<{ Querystring: { name?: string } }>("/api/appearance/saved", async (req) => {
+    s.config.savedLooks = s.config.savedLooks.filter((l) => l.name !== req.query.name);
+    await s.saveConfig();
+    return looksView();
+  });
+
   /** A picture for the background (Settings → Appearance): saved to the library; returns its id. Body: `{ data: base64, mimeType }`. */
   app.post<{ Body: { data?: string; mimeType?: string } }>("/api/appearance/background", { bodyLimit: 12 * 1024 * 1024 }, async (req, reply) => {
     const mime = req.body?.mimeType ?? "";

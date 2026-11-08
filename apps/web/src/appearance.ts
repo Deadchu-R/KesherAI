@@ -63,7 +63,7 @@ export function applyAppearance(input: Appearance): void {
   const a = resolveAppearance(saved);
   const root = document.documentElement;
   const st = root.style;
-  for (const p of [...st]) if (p.startsWith("--") || p === "font-family" || p === "font-size" || p === "color-scheme") st.removeProperty(p);
+  for (const p of [...st]) if (p.startsWith("--") || p === "font-family" || p === "font-size" || p === "color-scheme" || p === "dynamic-range-limit") st.removeProperty(p);
   for (const [k, v] of Object.entries(a.colors ?? {})) if (v) st.setProperty(`--${k}`, v);
   const bg = a.colors?.bg;
   const light = !!bg && isLight(bg);
@@ -80,6 +80,18 @@ export function applyAppearance(input: Appearance): void {
   if (accent) {
     st.setProperty("--accent-soft", `rgb(${hexToRgb(accent)} / ${light ? 0.14 : 0.13})`);
     st.setProperty("--accent-ink", isLight(accent) ? "#121213" : "#ffffff");
+  }
+  // Full dark: true black for OLED and night. On an HDR screen the accent uses the wider (P3) colours,
+  // and bright HDR pictures are held near normal white so they do not glare out of the black.
+  root.dataset.preset = a.preset ?? "";
+  if (a.preset === "fulldark") {
+    st.setProperty("color-scheme", "dark");
+    st.setProperty("--border", "rgb(255 255 255 / 0.06)");
+    st.setProperty("--border-strong", "rgb(255 255 255 / 0.11)");
+    st.setProperty("--shadow-1", "none");
+    st.setProperty("--shadow-2", "0 0 0 1px rgb(255 255 255 / 0.08)");
+    st.setProperty("dynamic-range-limit", "constrained");
+    if (!saved.colors?.accent && matchMedia("(dynamic-range: high)").matches) st.setProperty("--accent", "color(display-p3 0.43 0.48 1)");
   }
   const font = APPEARANCE_FONTS.find((f) => f.id === a.font);
   if (font && font.id !== "rubik") {

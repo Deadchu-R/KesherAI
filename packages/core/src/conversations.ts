@@ -10,6 +10,7 @@ import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
+import { picturesForStyle } from "./look-pictures.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 
@@ -84,6 +85,9 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
     return { text, toolCalls: [] };
   };
 }
+
+/** The tools that get a picture icon when the chat designs a look from a named style. */
+const LOOK_ICON_PAGES = ["#/images", "#/pages", "#/knowledge", "#/models", "#/day", "#/memory"] as const;
 
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
@@ -354,7 +358,7 @@ export class ConversationManager {
     const look = this.deps.look;
     if (!look) return [];
     notes.push(
-      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background — also a picture you make first — and the order of the tool groups) when the user asks for it. For a style the user names (a film, a game, a series), choose colours, font, icons (emoji), motion and background that feel like it — if web search is on, look up its colour palette first; never copy logos or characters. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed and that they can say \"undo\" or open Settings → Appearance.",
+      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background, icons, motion and the order of the tool groups) when the user asks for it. When the user names a style (a series, a film, a game, a place: \"like One Piece\"), ALWAYS pass style with its name in English — change_look then finds free pictures of it on the web by itself and puts one as the background and others as tool icons — and in the same call give colours, font and motion that feel like it. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed (and the picture credits it gives) and that they can say \"undo\" or open Settings → Appearance.",
     );
     const fonts = APPEARANCE_FONTS.map((f) => `${f.id}${f.hebrew ? "" : " (no Hebrew letters)"}`).join(", ");
     return [
@@ -382,6 +386,8 @@ export class ConversationManager {
               motion: { type: "string", enum: ["none", "subtle", "lively"], description: "How much moves: lively adds a slowly moving background, cards that lift and page transitions." },
               icons: { type: "object", description: "Icons for tools, by page: { \"#/images\": { \"emoji\": \"🏴‍☠️\" } } or { \"assetId\": \"<id of a picture made in this chat>\" }. Pages: #/images, #/pages, #/knowledge, #/models, #/settings, #/nodes, #/unreal, #/unity, #/day, #/compare, #/pipelines, #/personas, #/memory." },
               css: { type: "string", description: "Extra CSS for looks (replaces the previous extra CSS): rules, @media and @keyframes; no @import, no outside addresses (pictures only as url(\"/api/assets/<id>\")), no position: fixed. Classes: .card, .sidebar, .appbar, .page, .home, .greeting, .composer, .app-tile, .phone-tabs, button.primary. Keep it short." },
+              style: { type: "string", description: "A style the user named, in English (\"One Piece\", \"Studio Ghibli\", \"cyberpunk city\"): finds free pictures of it on the web (Wikimedia Commons) for the background and the tool icons, unless background or icons are given too." },
+              pictures: { type: "string", enum: ["both", "background", "icons", "none"], description: "With style: which pictures to look for (default both)." },
               name: { type: "string", description: "A name for the look." },
               homeOrder: { type: "array", items: { type: "string", enum: ["ideas", "recent", "pins"] }, description: "The start screen under the message box, top to bottom: ideas, recent chats, pinned tools." },
               homeHide: { type: "array", items: { type: "string", enum: ["ideas", "recent", "pins"] }, description: "Start-screen parts to hide." },
@@ -391,19 +397,48 @@ export class ConversationManager {
             },
           },
         },
-        run: async (input) => {
+        run: async (input, ctx) => {
           if (input.undo === true) return { output: (await look.undo()) ? "Went back to the previous look." : "There is nothing to undo." };
           if (input.reset === true) {
             await look.set({});
             return { output: "Back to the default look." };
           }
-          const change = cleanAppearance(input);
-          if (!Object.keys(change).length) return { output: "Nothing valid to change. Colours must be #rrggbb; fonts and groups must be from the lists." };
+          const credits: string[] = [];
+          let found = "";
+          const style = typeof input.style === "string" ? input.style.trim().slice(0, 80) : "";
+          const want = typeof input.pictures === "string" ? input.pictures : "both";
+          const pics: Record<string, unknown> = {};
+          if (style && want !== "none") {
+            const bg = want !== "icons" && !input.background;
+            const ic = want !== "background" && !input.icons;
+            try {
+              const r = await picturesForStyle(style, { background: bg, icons: ic ? LOOK_ICON_PAGES.length : 0, signal: ctx.signal });
+              if (r.background) {
+                const a = await this.deps.assets.save(r.background.data, r.background.mimeType, { meta: { use: "background", style, source: r.background.page, license: r.background.license, artist: r.background.artist } });
+                pics.background = { kind: "image", assetId: a.id, dim: 60 };
+                credits.push(`background: ${r.background.artist} (${r.background.license}) ${r.background.page}`);
+              }
+              if (r.icons.length) {
+                const icons: Record<string, { assetId: string }> = {};
+                for (const [i, p] of r.icons.entries()) {
+                  const a = await this.deps.assets.save(p.data, p.mimeType, { meta: { use: "icon", style, source: p.page, license: p.license, artist: p.artist } });
+                  icons[LOOK_ICON_PAGES[i]!] = { assetId: a.id };
+                }
+                pics.icons = icons;
+                credits.push(`${r.icons.length} icons from Wikimedia Commons`);
+              }
+              found = r.background || r.icons.length ? "" : ` Found no free pictures of "${style}" on the web; use emoji icons and a gradient background that fit instead (call again with icons and background).`;
+            } catch (err) {
+              found = ` Could not search for pictures (${(err as Error).message}); use emoji icons and a gradient instead.`;
+            }
+          }
+          const change = cleanAppearance({ ...input, ...pics });
+          if (!Object.keys(change).length) return { output: `Nothing valid to change. Colours must be #rrggbb; fonts and groups must be from the lists.${found}` };
           const cur = look.get();
           const next: Appearance = change.preset ? { ...change } : { ...cur, ...change, colors: { ...cur.colors, ...change.colors }, ...(change.icons ? { icons: { ...cur.icons, ...change.icons } } : {}) };
           if (!next.colors || !Object.keys(next.colors).length) delete next.colors;
           await look.set(next);
-          return { output: `Changed the look: ${Object.keys(change).join(", ")}.` };
+          return { output: `Changed the look: ${Object.keys(change).join(", ")}.${credits.length ? ` Pictures (free licences): ${credits.join("; ")}.` : ""}${found}` };
         },
       },
     ];

@@ -40,9 +40,35 @@ export function AppearanceSection() {
   const timer = useRef<number | undefined>(undefined);
   const look = resolveAppearance(saved);
 
+  const [myLooks, setMyLooks] = useState<Array<{ name: string; appearance: Appearance }>>([]);
+  const [lookName, setLookName] = useState("");
+
   useEffect(() => {
     void api<{ canUndo: boolean }>("/api/appearance").then((r) => setCanUndo(r.canUndo), () => undefined);
+    void api<{ looks: Array<{ name: string; appearance: Appearance }> }>("/api/appearance/saved").then((r) => setMyLooks(r.looks), () => undefined);
   }, []);
+  const saveLook = () => {
+    const name = lookName.trim() || saved.name || L("המראה שלי", "My look");
+    void api<{ looks: Array<{ name: string; appearance: Appearance }> }>("/api/appearance/saved", { method: "POST", body: { name } }).then((r) => {
+      setMyLooks(r.looks);
+      setLookName("");
+      toast(L(`נשמר: ${name}`, `Saved: ${name}`));
+    }, (e: Error) => toast(e.message));
+  };
+  const deleteLook = (name: string) =>
+    void api<{ looks: Array<{ name: string; appearance: Appearance }> }>(`/api/appearance/saved?name=${encodeURIComponent(name)}`, { method: "DELETE" }).then((r) => setMyLooks(r.looks), (e: Error) => toast(e.message));
+  const swatch = (a: Appearance) => {
+    const c = { ...DEFAULTS, ...APPEARANCE_PRESETS.find((p) => p.id === (a.preset ?? "graphite"))?.look.colors, ...a.colors };
+    const bg = a.background;
+    const background = bg?.kind === "gradient" ? `linear-gradient(${bg.angle ?? 160}deg, ${bg.from}, ${bg.to})` : bg?.kind === "image" ? `center / cover url("${withToken(`/api/assets/${bg.assetId}`)}"), ${c.bg}` : c.bg;
+    return (
+      <span className="look-swatch" style={{ background }}>
+        <i style={{ background: c.panel }} />
+        <i style={{ background: c.accent }} />
+        <b style={{ color: c.text }}>Aa</b>
+      </span>
+    );
+  };
 
   /** Shows a change at once; saves it a moment later (sliders and colour pickers send many). */
   const change = (next: Appearance, now = false) => {
@@ -107,8 +133,10 @@ export function AppearanceSection() {
       <div className="row">
         <h2 className="grow">{L("מראה", "Appearance")}</h2>
         <button type="button" disabled={!canUndo} onClick={() => void undoAppearance().then(setCanUndo, (e: Error) => toast(e.message))}>{L("בטל שינוי", "Undo")}</button>
-        <button type="button" onClick={() => change({}, true)}>{L("חזרה לברירת המחדל", "Default look")}</button>
+        <button type="button" onClick={() => { change({}, true); toast(L("העיצוב אופס לברירת המחדל. \"בטל שינוי\" מחזיר.", "Back to the default look. Undo brings yours back.")); }}>↺ {L("איפוס עיצוב לברירת מחדל", "Reset to the default look")}</button>
       </div>
+
+      <small className="muted">{L("כל שינוי כאן חל מיד ונשמר לבד, בלי כפתור אישור. \"בטל שינוי\" מחזיר צעד אחורה.", "Every change here applies at once and saves itself; no Apply button needed. Undo goes back a step.")}</small>
 
       <div className="look-words">
         <label htmlFor="look-words">{L("תגיד במילים, והמודל המקומי ישנה", "Say it in words, and the local model changes it")}</label>
@@ -118,6 +146,27 @@ export function AppearanceSection() {
         </div>
         <small className="muted">{L("למשל: \"עצב בסגנון וואן פיס\" או \"תצייר רקע של ים בשקיעה ותשים אותו\". נפתח צ'אט עם הבקשה. אפשר גם לבקש בכל צ'אט, ולהגיד \"בטל\" כדי לחזור.", "Opens a chat with the request. You can also ask in any chat, and say \"undo\" to go back.")}</small>
       </div>
+
+      <h3>{L("המראות שלי", "My looks")}</h3>
+      <div className="row">
+        <input className="grow" dir="auto" maxLength={60} value={lookName} onChange={(e) => setLookName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveLook()} placeholder={saved.name ?? L("שם למראה, למשל: וואן פיס", "A name, e.g. One Piece")} aria-label={L("שם למראה", "Look name")} />
+        <button type="button" className="primary" onClick={saveLook}>{L("שמור את המראה הנוכחי", "Save this look")}</button>
+      </div>
+      {myLooks.length > 0 ? (
+        <div className="look-presets">
+          {myLooks.map((l) => (
+            <span key={l.name} className="look-mine">
+              <button type="button" className="look-preset" onClick={() => change(l.appearance, true)} title={L("החל", "Apply")}>
+                {swatch(l.appearance)}
+                <span>{l.name}</span>
+              </button>
+              <button type="button" className="look-mine-del" aria-label={L(`מחק את ${l.name}`, `Delete ${l.name}`)} onClick={() => deleteLook(l.name)}>✕</button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <small className="muted">{L("עוד לא שמרת מראות. עצב כמו שאתה אוהב ושמור בשם, כדי לחזור אליו בלחיצה.", "No saved looks yet. Make one you like and save it by name to come back to it in one tap.")}</small>
+      )}
 
       <h3>{L("מראות מוכנים", "Ready-made looks")}</h3>
       <div className="look-presets">

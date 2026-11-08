@@ -1,14 +1,14 @@
 {
   "name": "@kesher/web",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "private": true,
   "description": "The KesherAI interface. The desktop app shows it in a window; phones open it from the core server.",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit && node --max-old-space-size=6144 node_modules/vite/bin/vite.js build",
+    "typecheck": "node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -35,6 +35,7 @@
     "@xterm/xterm": "^6.0.0",
     "codemirror": "^6.0.2",
     "fflate": "^0.8.3",
+    "monaco-editor": "^0.57.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
