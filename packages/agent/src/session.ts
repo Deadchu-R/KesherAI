@@ -71,7 +71,16 @@ export interface AgentSessionOptions {
   contextTokens?: number;
   /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
   team?: () => TeamMember[];
+  /**
+   * Tool search (for small local models with many tools): only these tools are
+   * sent in full; the others are listed by name in `find_tools`, which loads
+   * them when the model needs them. Read on every request; empty = off.
+   */
+  toolSearch?: () => readonly string[] | undefined;
 }
+
+/** The tool that loads the others when tool search is on. */
+export const FIND_TOOLS_TOOL = "find_tools";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** What the model reads on its next turn, for the context explorer. */
@@ -129,6 +138,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly changes: Array<{ path: string; before: string | null }> = [];
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
+  private readonly toolSearch?: () => readonly string[] | undefined;
+  /** Tools the model loaded with find_tools in this conversation. */
+  private readonly loadedTools = new Set<string>();
   /** Messages sent while the agent was busy, in order; the owner (the conversation manager) drains it. */
   queued: Array<{ id: string; text: string; data?: unknown }> = [];
   /** Set after Stop: the queue waits until the user sends again. */
@@ -158,6 +170,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
+    this.toolSearch = opts.toolSearch;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
     this.turn = this.events.reduce((n, e) => (e.type === "assistant" ? Math.max(n, e.turn) : n), 0);
@@ -530,7 +543,21 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private specs(): ToolSpec[] {
     if (this.toolsUnsupported) return [];
-    return [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...[...this.tools.values()].map((t) => t.spec)];
+    const all = [...this.tools.values()].map((t) => t.spec);
+    const core = this.toolSearch?.();
+    const base = [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : [])];
+    if (!core?.length) return [...base, ...all];
+    // Tool search: the core tools and the ones loaded so far in full; the rest by name only.
+    const full = all.filter((t) => core.includes(t.name) || this.loadedTools.has(t.name));
+    const rest = all.filter((t) => !full.includes(t));
+    if (!rest.length) return [...base, ...full];
+    const short = (d: string) => (d.split(/(?<=\.)\s/)[0] ?? d).slice(0, 90);
+    const find: ToolSpec = {
+      name: FIND_TOOLS_TOOL,
+      description: `Load more tools before using them (their full instructions come with the next step). Available: ${rest.map((t) => `${t.name} (${short(t.description)})`).join("; ")}`,
+      inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" }, description: "Tool names from the list." } }, required: ["names"] },
+    };
+    return [...base, ...full, find];
   }
 
   private async run(): Promise<void> {
@@ -627,6 +654,13 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     };
     if (typeof call.arguments._invalidJson === "string") return fail("Your tool arguments were not valid JSON. Send them again as a JSON object.");
 
+    if (call.name === FIND_TOOLS_TOOL) {
+      const names = (Array.isArray(call.arguments.names) ? call.arguments.names : [call.arguments.names]).map(String).filter((n) => this.tools.has(n));
+      for (const n of names) this.loadedTools.add(n);
+      const output = names.length ? `Loaded: ${names.join(", ")}. Use them now.` : "None of those names is a tool; use names from the list.";
+      this.push({ type: "tool_result", callId: call.id, name: call.name, ok: names.length > 0, output });
+      return output;
+    }
     if (call.name === ASK_USER_TOOL) {
       const question = typeof call.arguments.question === "string" ? call.arguments.question : "";
       if (!question) return fail('ask_user needs a "question".');

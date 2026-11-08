@@ -92,6 +92,13 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
   };
 }
 
+/**
+ * The tools a local model always gets in full when tool search is on; the
+ * others are listed by name and loaded with find_tools when needed (fewer
+ * tokens on every message, faster answers on the computer).
+ */
+const CORE_TOOLS = ["read_file", "write_file", "edit_file", "list_files", "search", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member"] as const;
+
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
   /** @param category - The category that needs a model, e.g. `chat`. */
@@ -875,6 +882,18 @@ export class ConversationManager {
       contextTokens: this.contextFor(conversation.modelId),
       // Read on every request, so adding or removing a teammate applies to the next message.
       team: () => this.teamOf(id),
+      // Tool search for local models with many tools: the everyday tools in full, the rest loaded on demand.
+      toolSearch: () => {
+        const c = this.deps.library.summary(id);
+        const model = c?.modelId ?? "";
+        let local = true;
+        try {
+          local = this.deps.registry.resolve(model).provider.location !== "cloud";
+        } catch {
+          local = true;
+        }
+        return local && this.deps.config.toolSearch !== false ? CORE_TOOLS : undefined;
+      },
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(
           (r) =>

@@ -342,3 +342,20 @@ test("plan mode: reading works, changes are refused, present_plan shows the plan
   assert.equal(await readFile(join(workspace, "a.ts"), "utf8"), "export const a = 1;\n", "nothing changed");
   assert.ok(!session.events.some((e) => e.type === "approval_request"));
 });
+
+test("tool search: only core tools in full, find_tools loads the others for the next step", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-ts-"));
+  const { model, seen } = scripted([
+    { calls: [{ name: "find_tools", arguments: { names: ["write_file", "nope"] } }] },
+    { calls: [{ name: "write_file", arguments: { path: "a.txt", content: "hi" } }] },
+    { text: "done" },
+  ]);
+  const session = new AgentSession({ id: "t", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", toolSearch: () => ["read_file"] });
+  session.send("make a.txt");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  const names = (i: number) => seen[i]!.tools.map((t) => t.name);
+  assert.ok(names(0).includes("read_file") && names(0).includes("find_tools") && !names(0).includes("write_file"));
+  assert.match(seen[0]!.tools.find((t) => t.name === "find_tools")!.description, /write_file \(/);
+  assert.ok(names(1).includes("write_file"), "loaded for the next step");
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "hi");
+});
