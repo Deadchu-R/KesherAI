@@ -103,6 +103,13 @@ export const KesherConfigSchema = z.object({
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
     .default({}),
+  /** The first-run welcome: whether it was finished, and the role the user picked (shapes suggestions). */
+  onboarding: z
+    .object({
+      done: z.boolean().default(false),
+      role: z.string().max(40).optional(),
+    })
+    .default({}),
   /** Protecting the graphics card: temperature limit, unloading idle models, low priority (see gpu-guard.ts). */
   guard: z
     .object({

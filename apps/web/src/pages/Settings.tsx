@@ -4,6 +4,7 @@ import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { GuardSection } from "../GuardSection";
 import { BusinessSection, CopilotSection } from "../BusinessSection";
+import { openWelcome } from "../Welcome";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
 import { BrowserSection } from "../BrowserSection";
@@ -394,7 +395,7 @@ function Phone() {
 export function SettingsPage() {
   return (
     <div className="page">
-      <h1>{t("settings")}</h1>
+      <div className="row"><h1 className="grow">{t("settings")}</h1><button type="button" onClick={openWelcome}>{getLocale() === "he" ? "הצג את מסך הפתיחה שוב" : "Show the welcome again"}</button></div>
       <ActiveModels />
       <GpuSection />
       <GuardSection />

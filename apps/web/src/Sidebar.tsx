@@ -127,6 +127,51 @@ export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typ
   { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "connections"], ["#/plugins", "pluginsNav"], ["#/parts", "partsNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
 
+/** An icon for each menu page (the sidebar's pins, the Tools page, the phone's bar). */
+export const NAV_ICONS: Record<string, string> = {
+  "#/images": "🖼", "#/batch": "🗂", "#/nodes": "🧩", "#/unreal": "🎮", "#/unity": "🕹",
+  "#/pages": "📝", "#/knowledge": "📚", "#/day": "📅", "#/compare": "⚖", "#/pipelines": "⛓", "#/watch": "🖥",
+  "#/personas": "🎭", "#/memory": "🧠", "#/prompts": "💬", "#/community": "👥", "#/usage": "📊",
+  "#/models": "📦", "#/connections": "🔌", "#/plugins": "🧷", "#/parts": "🎛", "#/updates": "⬆", "#/settings": "⚙",
+};
+
+const PIN_KEY = "kesher.pins";
+const DEFAULT_PINS = ["#/images", "#/pages", "#/knowledge", "#/models"];
+let pins: string[] | null = null;
+const pinListeners = new Set<() => void>();
+
+/**
+ * The pages pinned to the top of the sidebar (remembered on this device).
+ *
+ * @returns The pinned pages and a toggle.
+ */
+export function usePins(): [string[], (href: string) => void] {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const on = () => tick((n) => n + 1);
+    pinListeners.add(on);
+    return () => void pinListeners.delete(on);
+  }, []);
+  if (!pins) {
+    try {
+      pins = JSON.parse(localStorage.getItem(PIN_KEY) ?? "null") as string[] | null;
+    } catch {
+      pins = null;
+    }
+    pins ??= DEFAULT_PINS;
+  }
+  const toggle = (href: string) => {
+    pins = pins!.includes(href) ? pins!.filter((x) => x !== href) : [...pins!, href];
+    try {
+      localStorage.setItem(PIN_KEY, JSON.stringify(pins));
+    } catch {
+      // only for this visit
+    }
+    pinListeners.forEach((l) => l());
+  };
+  return [pins, toggle];
+}
+
 /** Every menu page, in menu order. */
 export const NAV: Array<[string, Parameters<typeof t>[0]]> = NAV_GROUPS.flatMap((g) => g.items);
 
@@ -145,26 +190,6 @@ export function useNavItems(): Array<{ href: string; label: string; group: strin
   ]);
 }
 
-/** Which menu groups are open; remembered on this device. The group of the page you are on is always open. */
-function useOpenGroups(): [Record<string, boolean>, (id: string, on: boolean) => void] {
-  const [open, setOpen] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("kesher.navGroups") ?? "{}") as Record<string, boolean>;
-    } catch {
-      return {};
-    }
-  });
-  const set = (id: string, on: boolean) => {
-    const next = { ...open, [id]: on };
-    setOpen(next);
-    try {
-      localStorage.setItem("kesher.navGroups", JSON.stringify(next));
-    } catch {
-      // private window: only for this visit
-    }
-  };
-  return [open, set];
-}
 
 export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: string; online: boolean | null; open: boolean; onLocale: () => void }) {
   const { projects, conversations } = useLibrary();
@@ -196,7 +221,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
     );
   }, []);
   const navItems = useNavItems();
-  const [groups, setGroup] = useOpenGroups();
+  const [pinned] = usePins();
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
@@ -209,28 +234,18 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         <button type="button" className="nav-link as-link" onClick={() => setDialog("code")}>
           <span className="plus" aria-hidden>{"</>"}</span> {t("newCode")}
         </button>
-        {NAV_GROUPS.map((g) => {
-          const items = navItems.filter((n) => n.group === g.id);
-          if (!items.length) return null;
-          const here = items.some((n) => n.href === hash);
-          const expanded = here || (groups[g.id] ?? g.id === "create");
-          return (
-            <div key={g.id} className="nav-group">
-              <button type="button" className="nav-group-head" aria-expanded={expanded} onClick={() => setGroup(g.id, !expanded)}>
-                <span aria-hidden="true">{g.icon}</span>
-                <span className="grow">{t(g.label)}</span>
-                {g.id === "system" && newVersion && !expanded && <span className="update-dot" title={t("updateAvailable", { n: 1 })}>●</span>}
-                <span className="nav-group-arrow" aria-hidden="true">{expanded ? "▾" : "▸"}</span>
-              </button>
-              {expanded && items.map((n) => (
-                <a key={n.href} href={n.href} className={`nav-link nav-sub${n.href.startsWith("#/p/") ? " plugin-nav" : ""}`} aria-current={hash === n.href ? "page" : undefined}>
-                  {n.label}
-                  {n.href === "#/updates" && newVersion && <span className="update-dot" title={t("updateAvailable", { n: 1 })}> v{newVersion}</span>}
-                </a>
-              ))}
-            </div>
-          );
-        })}
+        <a className="nav-link" href="#/apps" aria-current={hash === "#/apps" ? "page" : undefined}>
+          <span className="nav-ico" aria-hidden="true">▦</span> {t("allTools")}
+        </a>
+        {navItems.filter((n) => pinned.includes(n.href)).length > 0 && (
+          <div className="nav-pins">
+            {navItems.filter((n) => pinned.includes(n.href)).map((n) => (
+              <a key={n.href} href={n.href} className="nav-link nav-pin" aria-current={hash === n.href ? "page" : undefined}>
+                {NAV_ICONS[n.href] && <span className="nav-ico" aria-hidden="true">{NAV_ICONS[n.href]}</span>} {n.label}
+              </a>
+            ))}
+          </div>
+        )}
       </div>}
 
       <div className="sidebar-scroll">
@@ -278,7 +293,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       </div>
 
       <div className="sidebar-foot">
-      <AccountButton />
+      <div className="foot-row">
+        <AccountButton />
+        <a className="icon-btn foot-btn" href="#/updates" title={t("updatesNav")} aria-label={t("updatesNav")}>⬆{newVersion && <span className="update-dot" aria-hidden="true">●</span>}</a>
+        <button type="button" className="icon-btn foot-btn" title={t("language")} aria-label={t("language")} onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{getLocale() === "he" ? "EN" : "ע"}</button>
+        <a className="icon-btn foot-btn" href="#/settings" title={t("settings")} aria-label={t("settings")} aria-current={hash.startsWith("#/settings") ? "page" : undefined}>⚙</a>
+      </div>
       <div className="brand small-brand">
         {/* The knot: two rings linked, one passing over the other. */}
         <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="knot">
@@ -290,15 +310,6 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         <span>{branding.productName}<small dir="ltr"><span style={{ color: online ? "var(--good)" : "var(--bad)" }}>●</span> {location.host} · {version}</small></span>
       </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setLocale(getLocale() === "he" ? "en" : "he");
-            onLocale();
-          }}
-        >
-          {t("language")}
-        </button>
         {appHome() && (
           // Inside the Android app: the chat with a model on the phone itself.
           <button type="button" onClick={() => (location.href = `${appHome()!.replace(/\/$/, "")}/local.html?chat=1`)}>

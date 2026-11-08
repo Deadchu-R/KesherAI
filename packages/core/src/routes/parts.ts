@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { PARTS, partOn } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { ensureVideoModel } from "../sdcpp.js";
+import { isLocalRequest } from "../auth.js";
 
 /**
  * Settings → Parts: turning parts of KesherAI on and off. Off: its pages
@@ -16,6 +17,26 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
   const view = () => ({ parts: PARTS.map((p) => ({ ...p, on: partOn(s.config.parts, p.id) })) });
 
   app.get("/api/parts", async () => view());
+
+  /**
+   * The first-run welcome. It shows once, on this computer, to someone who
+   * has not chatted yet (an update never shows it to an existing user).
+   */
+  app.get("/api/onboarding", async (req) => ({
+    ...s.config.onboarding,
+    show: !s.config.onboarding.done && isLocalRequest(req) && s.library.items().length === 0,
+    google: { configured: s.google.configured, connected: s.google.connected },
+    remote: { enabled: s.config.remote.enabled },
+  }));
+
+  /** Body: `{ done?, role? }`. */
+  app.put<{ Body: { done?: boolean; role?: string } }>("/api/onboarding", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The welcome runs on the computer that runs KesherAI." });
+    if (typeof req.body?.done === "boolean") s.config.onboarding.done = req.body.done;
+    if (typeof req.body?.role === "string") s.config.onboarding.role = req.body.role.slice(0, 40);
+    await s.saveConfig();
+    return s.config.onboarding;
+  });
 
   /** Body: `{ parts: { <id>: true | false } }`, or `{ preset: "chat" | "all" }`. */
   app.put<{ Body: { parts?: Record<string, boolean>; preset?: "chat" | "all" } }>("/api/parts", async (req, reply) => {

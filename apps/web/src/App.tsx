@@ -1,47 +1,53 @@
 import { GuardBanner } from "./GuardSection";
+import { Welcome, useRole } from "./Welcome";
+import { PhoneTabs } from "./PhoneTabs";
 import { AppBar } from "./AppBar";
 import { WebToggle, useWebSearch } from "./WebToggle";
 import { Mic } from "./Mic";
 import { ComputerBanner } from "./ComputerSection";
-import { UsagePage } from "./pages/Usage";
-import { DayPage } from "./pages/Day";
-import { KnowledgePage } from "./pages/Knowledge";
-import { PersonasPage } from "./pages/PersonasPage";
 import { PersonaChip } from "./Personas";
 import { PromptTextarea, expandSlash } from "./SlashMenu";
-import { PromptsPage } from "./pages/PromptsPage";
-import { WatchPage, usePending } from "./pages/WatchPage";
-import { PipelinesPage } from "./pages/PipelinesPage";
-import { ComparePage } from "./pages/ComparePage";
-import { PluginsPage } from "./pages/Plugins";
-import { CommunityPage } from "./pages/Community";
-import { PluginPage } from "./pages/PluginPage";
+import { usePending } from "./pages/WatchPage";
 import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
 import { Sidebar } from "./Sidebar";
 import { createConversation, refreshLibrary, toast, useToast } from "./library";
 import { useModels } from "./useModels";
-import { ConversationPage } from "./pages/Conversation";
-import { ImagesPage } from "./pages/Images";
-import { BatchImagesPage } from "./pages/BatchImages";
 import { PairPrompt } from "./PairPrompt";
 import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
-import { MemoryPage } from "./pages/MemoryPage";
-import { NodesPage } from "./pages/NodesPage";
-import { UnrealPage } from "./pages/UnrealPage";
-import { PartsPage } from "./pages/PartsPage";
-import { PagesPage } from "./pages/PagesPage";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
-import { UpdatesPage } from "./pages/UpdatesPage";
-import { ModelsPage } from "./pages/Models";
-import { ConnectionsPage } from "./pages/Connections";
-import { SettingsPage } from "./pages/Settings";
+
+/* Pages load only when opened, so starting KesherAI (and a part that is off) costs nothing. */
+const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
+const DayPage = lazy(() => import("./pages/Day").then((m) => ({ default: m.DayPage })));
+const KnowledgePage = lazy(() => import("./pages/Knowledge").then((m) => ({ default: m.KnowledgePage })));
+const PersonasPage = lazy(() => import("./pages/PersonasPage").then((m) => ({ default: m.PersonasPage })));
+const PromptsPage = lazy(() => import("./pages/PromptsPage").then((m) => ({ default: m.PromptsPage })));
+const PipelinesPage = lazy(() => import("./pages/PipelinesPage").then((m) => ({ default: m.PipelinesPage })));
+const ComparePage = lazy(() => import("./pages/ComparePage").then((m) => ({ default: m.ComparePage })));
+const PluginsPage = lazy(() => import("./pages/Plugins").then((m) => ({ default: m.PluginsPage })));
+const CommunityPage = lazy(() => import("./pages/Community").then((m) => ({ default: m.CommunityPage })));
+const PluginPage = lazy(() => import("./pages/PluginPage").then((m) => ({ default: m.PluginPage })));
+const ConversationPage = lazy(() => import("./pages/Conversation").then((m) => ({ default: m.ConversationPage })));
+const ImagesPage = lazy(() => import("./pages/Images").then((m) => ({ default: m.ImagesPage })));
+const BatchImagesPage = lazy(() => import("./pages/BatchImages").then((m) => ({ default: m.BatchImagesPage })));
+const MemoryPage = lazy(() => import("./pages/MemoryPage").then((m) => ({ default: m.MemoryPage })));
+const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
+const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
+const PartsPage = lazy(() => import("./pages/PartsPage").then((m) => ({ default: m.PartsPage })));
+const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
+const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
+const ConnectionsPage = lazy(() => import("./pages/Connections").then((m) => ({ default: m.ConnectionsPage })));
+const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
+const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
+const WatchPage = lazy(() => import("./pages/WatchPage").then((m) => ({ default: m.WatchPage })));
+const UpdatesPage = lazy(() => import("./pages/UpdatesPage").then((m) => ({ default: m.UpdatesPage })));
 
 function useHash(): string {
   const [hash, setHash] = useState(location.hash || "#/");
@@ -84,7 +90,8 @@ function Home() {
       setBusy(false);
     }
   };
-  const ideas = [t("ideaExe"), t("ideaImage"), t("ideaCode"), t("ideaExplain")];
+  const role = useRole();
+  const ideas = role ? role.ideas[getLocale() === "he" ? "he" : "en"] : [t("ideaExe"), t("ideaImage"), t("ideaCode"), t("ideaExplain")];
   return (
     <div className="home">
       <h1 className="greeting">{greeting}</h1>
@@ -175,6 +182,7 @@ export function App() {
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/parts") page = <PartsPage />;
+  else if (hash === "#/apps") page = <AppsPage />;
   else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
@@ -220,7 +228,7 @@ export function App() {
             <button type="button" onClick={() => location.reload()}>{t("reconnectNow")}</button>
           </p>
         )}
-        <PageBoundary page={hash}>{page}</PageBoundary>
+        <PageBoundary page={hash}><Suspense fallback={<div className="page-loading" aria-busy="true" />}>{page}</Suspense></PageBoundary>
       </main>
       {message && <div className="toast" role="status">{message}</div>}
       <ComputerBanner />
@@ -228,6 +236,8 @@ export function App() {
       <ModelPickerHost />
       <PluginStyles />
       <DownloadsButton />
+      <PhoneTabs hash={hash} onChats={() => setMenuOpen(true)} />
+      <Welcome onLocale={() => rerender((n) => n + 1)} />
     </div>
   );
 }
