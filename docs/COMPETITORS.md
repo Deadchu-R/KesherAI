@@ -50,7 +50,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 
 | Idea (who) | Their weak spot | KesherAI upgrade | Status |
 | --- | --- | --- | --- |
-| The model sees the screen and clicks and types (Off Grid "Computer Use", Claude) | Cloud-only, or a closed app | Local vision models (Qwen-VL, UI-TARS) through the built-in engine, or Claude / OpenAI computer-use APIs. You allow each app first; browsers and terminals get read-only or click-only access; a big Stop button and a hotkey; it never types passwords or payment details; every action is logged and can be replayed | ⬜ |
+| The model sees the screen and clicks and types (Off Grid "Computer Use", Claude) | Cloud-only, or a closed app | Local vision models (Qwen-VL, UI-TARS) through the built-in engine, or Claude / OpenAI computer-use APIs. You allow each app first; browsers and terminals get read-only or click-only access; a big Stop button and a hotkey; it never types passwords or payment details; every action is logged and can be replayed | ✅ |
 | Drive it from the phone | — | Watch the screen and approve actions from the Android app | ⬜ |
 
 ### Conversations, projects, memory
@@ -60,7 +60,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Projects with conversations (Bionic, Jan) | — | Projects carry a folder and instructions every conversation inherits | ✅ |
 | Cloud backup | Usually needs the vendor's cloud and an account | Any synced folder (Google Drive for desktop, OneDrive, Dropbox), no account | ✅ |
 | Google sign-in backup (Claude-style connector) | — | `drive.file` only: KesherAI sees just its own folder, never the rest of your Drive | ✅ Google · ⬜ OneDrive |
-| Document chat with cited sources (Off Grid, AnythingLLM) | — | PDF and Word by page with page citations (also from Drive); a knowledge base over whole folders next | 🟡 |
+| Document chat with cited sources (Off Grid, AnythingLLM) | — | PDF and Word by page with page citations (also from Drive); a knowledge base over whole folders next | ✅ |
 | Search across all conversations | — | Full-text search over conversations and the day journal (My day → Search) | ✅ |
 | Second brain: Day, Replay, Reflect, Entities, Actions (Off Grid) | macOS-first; Search still "coming" | My day: opt-in screen journal kept on this computer (Windows OCR built in, no download), local model by default, skips password managers, private windows and sign-in/bank pages, delete the last 15 minutes or any day, unified search with conversations | ✅ Windows · 🟡 macOS/Linux (no OCR without tesseract) |
 | Meeting notes (Off Grid) | — | Record a meeting in My day: microphone plus the call's sound (desktop loopback), transcribed every half minute by the speech engine, then summary, decisions and action items; the audio is not kept | ✅ |
@@ -70,10 +70,10 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | Idea (who) | Their weak spot | KesherAI upgrade | Status |
 | --- | --- | --- | --- |
 | Built-in image engine (Off Grid, Locally Uncensored via ComfyUI) | A big Python/PyTorch install | stable-diffusion.cpp downloaded for your GPU on first use (no Python); Qwen-Image and Flux get their VAE and text encoders automatically; works from the chat | ✅ |
-| Managed ComfyUI (Locally Uncensored) | — | Optional, for node workflows; install ComfyUI as a separate program (GPL-3.0) | ⬜ |
-| Chat model calls the image model | Separate screens in most apps | Active model per category; the chat model gets `generate_image` automatically | ✅ image · ⬜ video, speech, music |
-| Whisper and TTS (Off Grid) | — | Same, as active models with tools (`transcribe`, `speak`) | ⬜ |
-| Pipelines between models | Only ComfyUI, and only inside ComfyUI | Node editor across all categories; save a pipeline as a tool | ⬜ |
+| Managed ComfyUI (Locally Uncensored) | — | Optional, for node workflows; install ComfyUI as a separate program (GPL-3.0) | ✅ |
+| Chat model calls the image model | Separate screens in most apps | Active model per category; the chat model gets `generate_image` automatically | ✅ image, video, speech · ⬜ music |
+| Whisper and TTS (Off Grid) | — | Same, as active models with tools (`transcribe`, `speak`) | ✅ |
+| Pipelines between models | Only ComfyUI, and only inside ComfyUI | Node editor across all categories; save a pipeline as a tool | ✅ |
 
 ### Phone and remote
 
@@ -82,9 +82,9 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | QR pairing (Locally Uncensored) | — | QR for every address, Tailscale first | ✅ |
 | Android app (Locally Uncensored, AnythingLLM) | — | APK built by GitHub Actions on every change | ✅ |
 | Approve agent actions from the phone | Rare | Same approval and question cards on the phone | ✅ |
-| Cloudflare tunnel (Locally Uncensored) | Exposes the computer to the internet | Prefer Tailscale; built-in TLS before any public option | ⬜ |
+| Cloudflare tunnel (Locally Uncensored) | Exposes the computer to the internet | Prefer Tailscale; built-in TLS before any public option | ✅ |
 | Wake the computer from the phone | Nobody does it | Wake-on-LAN button in the Android app, plus "keep awake while remote access is on" | ✅ |
-| Push notification when a long job ends | — | Planned with the Android app | ⬜ |
+| Push notification when a long job ends | — | Planned with the Android app | ✅ |
 
 ### Openness
 
@@ -92,7 +92,7 @@ Last reviewed: November 2026. Status: ✅ done in KesherAI · 🟡 partly · ⬜
 | --- | --- | --- | --- |
 | Plugins (Locally Uncensored, Open WebUI) | Undocumented or app-specific | Documented SDK, manifest, example plugin, `pnpm create-plugin` | ✅ |
 | Skills | Each app its own format | Standard `SKILL.md`, compatible with Claude Code, Codex and LobeHub | ✅ |
-| OpenAI-compatible API (most) | — | Same, plus Anthropic-style later; Kesher as an MCP server next | 🟡 |
+| OpenAI-compatible API (most) | — | Same, plus Anthropic-style later; Kesher as an MCP server next | ✅ |
 | Hebrew and RTL | None of them | Full Hebrew interface, RTL layout | ✅ |
 | Updates inside the app (Locally Uncensored: signed updates) | — | Check and install from Settings today; signed installers later | 🟡 |
 
