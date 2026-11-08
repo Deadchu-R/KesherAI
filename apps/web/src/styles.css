@@ -1122,3 +1122,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .biz-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 label.biz-toggle { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 label.biz-toggle .grow { flex: 1; }
+.activity-audio { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.audio-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.audio-card audio { width: min(420px, 100%); }

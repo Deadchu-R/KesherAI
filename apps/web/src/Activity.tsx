@@ -42,9 +42,11 @@ export function stepLabel(step: Step): string {
     web_fetch: "stepWebFetch",
     download_file: "stepDownload",
     generate_image: "stepImage",
+    make_music: "stepMusic",
+    make_3d: "stepModel3d",
     request_access: "stepAccess",
   };
-  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason") || (n === "list_files" ? t("theFolder") : "");
+  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image") || (n === "list_files" ? t("theFolder") : "");
   const key = keyFor[n];
   return key ? t(key, { what }) : `${n}${what ? `: ${what}` : ""}`;
 }
@@ -81,6 +83,7 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   const images = steps.flatMap((s) => s.result?.assetIds ?? []);
   const videos = steps.flatMap((s) => s.result?.videoIds ?? []);
+  const sounds = steps.flatMap((s) => s.result?.audioIds ?? []);
   // Older builds only said "Built dist/x.exe." in their output.
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
@@ -107,6 +110,16 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
       )}
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
+      {sounds.length > 0 && (
+        <div className="activity-audio">
+          {sounds.map((id) => (
+            <div key={id} className="audio-card">
+              <audio src={withToken(`/api/assets/${id}`)} controls preload="metadata" />
+              <a href={withToken(`/api/assets/${id}`)} download={`kesher-music-${id.slice(0, 8)}.mp3`}>{t("download")}</a>
+            </div>
+          ))}
+        </div>
+      )}
       {videos.length > 0 && (
         <div className="activity-images">
           {videos.map((id) => (

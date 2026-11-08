@@ -131,6 +131,8 @@ export type AgentEvent = EventBase &
         assetIds?: string[];
         /** Video assets produced (shown as players). */
         videoIds?: string[];
+        /** Sound assets produced (music), shown as players. */
+        audioIds?: string[];
         /** Files made for the user, relative to the conversation's folder (e.g. a built .exe). */
         files?: string[];
       }

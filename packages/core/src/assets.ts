@@ -10,6 +10,9 @@ const EXTENSIONS: Record<string, string> = {
   "video/mp4": "mp4",
   "audio/wav": "wav",
   "audio/mpeg": "mp3",
+  "audio/flac": "flac",
+  "audio/ogg": "ogg",
+  "model/gltf-binary": "glb",
   "text/plain": "txt",
 };
 

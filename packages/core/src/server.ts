@@ -47,6 +47,8 @@ import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
+import { ComfyUIProvider } from "@kesher/providers";
+import { flowState, readyFlows, setupFlow, withCheckpoints } from "./comfy-flows.js";
 import { UnrealBridge } from "./unreal-bridge.js";
 import { Copilot, copilotProvider } from "./copilot.js";
 import { managedPolicy, policyCheck } from "./business.js";
@@ -466,6 +468,36 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           },
         })),
       ],
+      // Music and 3D from the chat: the ready-made ComfyUI flows (comfy-flows.ts).
+      flows: {
+        state: (id: string) => {
+          const flow = readyFlows().find((f) => f.id === id);
+          if (!flow) throw new Error(`No flow ${id}`);
+          return { ...flowState(flow, paths.models, downloads), installed: comfy.status().installed, allowed: registry.permitted("comfyui") };
+        },
+        setup: async (id: string) => {
+          const flow = readyFlows().find((f) => f.id === id)!;
+          await setupFlow(flow, paths.models, downloads);
+        },
+        run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal) => {
+          if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
+          const flow = readyFlows().find((f) => f.id === id)!;
+          if (!comfy.status().running) {
+            const up = await fetch(`${comfy.status().url}/system_stats`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
+            if (!up) await comfy.start();
+          }
+          const names = await fetch(`${comfy.status().url}/models/checkpoints`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
+          const graph = withCheckpoints(flow, names);
+          const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
+          await edit(graph, (data, name) => provider.uploadImage(data, name));
+          await guard.before("comfyui", signal);
+          try {
+            return await provider.runFlow(graph, signal);
+          } finally {
+            guard.after();
+          }
+        },
+      },
       video: {
         // A video model from a connection (ComfyUI's Wan) when that is the active one, else the built-in engine.
         ensure: async () => {

@@ -156,6 +156,16 @@ export class ConversationManager {
         ensure(): Promise<{ path?: string; message?: string }>;
         generate(path: string, req: { prompt: string; negativePrompt?: string; seconds?: number; seed: number }): Promise<{ data: Uint8Array; mimeType: string; meta?: Record<string, unknown> }>;
       };
+      /** The ready-made ComfyUI flows (music, 3D), run from the chat. */
+      flows?: {
+        state(id: string): { ready: boolean; downloading: boolean; missingGb: number; installed: boolean; allowed: boolean };
+        setup(id: string): Promise<void>;
+        run(
+          id: string,
+          edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string) => Promise<string>) => Promise<void> | void,
+          signal: AbortSignal,
+        ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
+      };
       /** Computer-control tools for a conversation (empty when the user has not turned it on). */
       computerTools?(conversationId: string): AgentTool[];
       /** Tools from connected apps: Gmail and Calendar (Google sign-in) and MCP servers. */
@@ -279,7 +289,101 @@ export class ConversationManager {
         },
       });
     }
+    tools.push(...this.flowTools(notes));
     return { tools, notes };
+  }
+
+  /**
+   * make_music and make_3d: the ready-made ComfyUI flows, from the chat.
+   * A missing model (several GB) is downloaded only after the user agrees.
+   */
+  private flowTools(notes: string[]): AgentTool[] {
+    const flows = this.deps.flows;
+    if (!flows || this.deps.config.parts?.nodes === false) return [];
+    const gate = (id: string, download: unknown): string | undefined => {
+      const st = flows.state(id);
+      if (!st.allowed) return "ComfyUI is turned off by the organisation's business mode.";
+      if (!st.installed) return "ComfyUI is not installed. Tell the user to install it once on the Nodes page (Install ComfyUI), then ask again.";
+      if (st.ready) return undefined;
+      if (st.downloading) return `The model is still downloading (about ${st.missingGb} GB left in total); the user can follow it in the downloads circle. ${WAIT_NOTE}`;
+      if (download === true) {
+        void flows.setup(id).catch(() => undefined);
+        return `Started downloading the model (about ${st.missingGb} GB); tell the user to follow it in the downloads circle and ask again when it is done.`;
+      }
+      return `This needs a model download of about ${st.missingGb} GB first. Ask the user whether to download it; only if they agree, call again with download: true.`;
+    };
+    notes.push(
+      "make_music writes a song (style tags and lyrics) with ACE-Step in ComfyUI, and make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
+    );
+    const music: AgentTool = {
+      risk: "safe",
+      spec: {
+        name: "make_music",
+        description: "Make a song or a piece of music from style tags and lyrics (ACE-Step in ComfyUI). The user gets a player. Slow (minutes).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            tags: { type: "string", description: "Style, comma-separated English words: genre, mood, instruments, voice, tempo. E.g. 'pop, upbeat, female vocals, piano, 120 bpm'." },
+            lyrics: { type: "string", description: "Lyrics with [verse], [chorus], [bridge] markers, in English letters (other languages written in Latin letters, with [he] or [ja] at the start of the line). For music without singing use [instrumental]." },
+            seconds: { type: "number", description: "Length in seconds, 10–240 (default 60)." },
+            download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing." },
+          },
+          required: ["tags"],
+        },
+      },
+      run: async (input, ctx) => {
+        const blocked = gate("music-ace-step", input.download);
+        if (blocked) return { output: blocked };
+        const files = await flows.run("music-ace-step", (flow) => {
+          flow["2"]!.inputs.tags = String(input.tags ?? "");
+          flow["2"]!.inputs.lyrics = String(input.lyrics ?? "[instrumental]");
+          flow["4"]!.inputs.seconds = Math.min(240, Math.max(10, Number(input.seconds ?? 60) || 60));
+          flow["8"]!.inputs.seed = randomInt(2 ** 31);
+        }, ctx.signal);
+        const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
+        if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
+        const assets = await Promise.all(audio.map((f) => this.deps.assets.save(f.data, f.mimeType, { sourceModelId: "comfyui/ace-step", meta: { tags: input.tags, lyrics: input.lyrics } })));
+        return { output: "Made the song; the user can play and download it.", audioIds: assets.map((a) => a.id) };
+      },
+    };
+    const model3d: AgentTool = {
+      risk: "safe",
+      spec: {
+        name: "make_3d",
+        description: "Turn a picture of one object (plain background) into a 3D model (GLB, shape only, no colors) with Hunyuan3D 2 in ComfyUI. The user gets the file. Slow (minutes).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            image: { type: "string", description: "The picture: the path the user attached it as (\"[Attached: …]\"), a file in this chat's folder." },
+            download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing." },
+          },
+          required: ["image"],
+        },
+      },
+      run: async (input, ctx) => {
+        const blocked = gate("3d-hunyuan3d", input.download);
+        if (blocked) return { output: blocked };
+        const rel = String(input.image ?? "").replace(/^\[?Attached:\s*/i, "").replace(/\]$/, "").trim();
+        if (!ctx.workspace) return { output: "There is no folder for this chat to read the picture from." };
+        const { resolve: resolvePath, relative, join: joinPath, dirname, basename } = await import("node:path");
+        const { readFile, writeFile, mkdir } = await import("node:fs/promises");
+        const file = resolvePath(ctx.workspace, rel);
+        if (relative(ctx.workspace, file).startsWith("..")) return { output: "The picture must be one attached to this chat." };
+        const data = await readFile(file).catch(() => undefined);
+        if (!data) return { output: `No picture at ${rel}. Ask the user to attach it.` };
+        const files = await flows.run("3d-hunyuan3d", async (flow, upload) => {
+          flow["2"]!.inputs.image = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
+          flow["7"]!.inputs.seed = randomInt(2 ** 31);
+        }, ctx.signal);
+        const glb = files.find((f) => /\.glb$/i.test(f.filename) || f.mimeType === "model/gltf-binary");
+        if (!glb) return { output: "ComfyUI finished but saved no 3D model." };
+        const out = joinPath("3d", `${basename(file).replace(/\.[^.]+$/, "")}-${Date.now().toString(36)}.glb`);
+        await mkdir(dirname(joinPath(ctx.workspace, out)), { recursive: true });
+        await writeFile(joinPath(ctx.workspace, out), glb.data);
+        return { output: `Made the 3D model ${out} (GLB, shape only); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
+      },
+    };
+    return [music, model3d];
   }
 
   private pluginTools(): AgentTool[] {

@@ -177,6 +177,45 @@ export class ComfyUIProvider implements Provider {
     return files;
   }
 
+  /**
+   * Runs any flow in ComfyUI's API format (music, 3D, …) and returns every
+   * file it saved: pictures, sound, 3D models.
+   *
+   * @param flow - The flow.
+   * @param signal - Cancels the wait.
+   * @param timeoutMs - How long to wait (default 30 minutes).
+   * @returns The saved files with their names.
+   */
+  async runFlow(flow: ComfyWorkflow, signal?: AbortSignal, timeoutMs = 30 * 60_000): Promise<Array<GeneratedFile & { filename: string }>> {
+    const queued = await fetchOk(`${this.baseUrl}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ prompt: flow, client_id: randomUUID() }) });
+    const { prompt_id: promptId, node_errors: nodeErrors } = (await queued.json()) as { prompt_id: string; node_errors?: Record<string, unknown> };
+    if (nodeErrors && Object.keys(nodeErrors).length > 0) throw new Error(`ComfyUI rejected the flow: ${JSON.stringify(nodeErrors).slice(0, 500)}`);
+    const outputs = await this.waitForOutputs(promptId, signal, timeoutMs);
+    const files: Array<GeneratedFile & { filename: string }> = [];
+    for (const o of outputs) {
+      const params = new URLSearchParams({ filename: o.filename, subfolder: o.subfolder, type: o.type });
+      const res = await fetchOk(`${this.baseUrl}/view?${params}`, { signal });
+      files.push({ data: new Uint8Array(await res.arrayBuffer()), mimeType: mimeFor(o.filename, res.headers.get("content-type")), filename: o.filename, meta: { comfyPromptId: promptId } });
+    }
+    return files;
+  }
+
+  /**
+   * Puts a picture into ComfyUI's input folder (for a Load Image node).
+   *
+   * @param data - The picture.
+   * @param name - Its file name.
+   * @returns The name to put in the Load Image node.
+   */
+  async uploadImage(data: Uint8Array, name: string): Promise<string> {
+    const form = new FormData();
+    form.append("image", new Blob([new Uint8Array(data)]), name);
+    form.append("overwrite", "true");
+    const res = await fetchOk(`${this.baseUrl}/upload/image`, { method: "POST", body: form });
+    const j = (await res.json()) as { name: string; subfolder?: string };
+    return j.subfolder ? `${j.subfolder}/${j.name}` : j.name;
+  }
+
   private buildWorkflow(request: ProviderImageRequest): ComfyWorkflow {
     const custom = this.options.workflow as ComfyWorkflow | undefined;
     if (!custom) return defaultTextToImageWorkflow(request);
@@ -201,18 +240,29 @@ export class ComfyUIProvider implements Provider {
         string,
         {
           status?: { status_str?: string; completed?: boolean };
-          outputs?: Record<string, { images?: Array<{ filename: string; subfolder: string; type: string }> }>;
+          outputs?: Record<string, Record<string, unknown>>;
         }
       >;
       const entry = history[promptId];
       if (entry?.status?.status_str === "error") throw new Error("ComfyUI reported an error while running the workflow");
       if (entry?.status?.completed) {
-        return Object.values(entry.outputs ?? {}).flatMap((o) => o.images ?? []).filter((i) => i.type === "output");
+        // Pictures are under "images", sound under "audio", 3D models under "3d" (and so on): take every saved file.
+        return Object.values(entry.outputs ?? {})
+          .flatMap((o) => Object.values(o).flatMap((v) => (Array.isArray(v) ? v : [])))
+          .filter((i): i is { filename: string; subfolder: string; type: string } => !!i && typeof i === "object" && typeof (i as { filename?: unknown }).filename === "string")
+          .filter((i) => i.type === "output");
       }
       await new Promise((r) => setTimeout(r, 1000));
     }
     throw new Error(`Timed out waiting for ComfyUI prompt ${promptId}`);
   }
+}
+
+/** A file's type from its name, when ComfyUI does not say. */
+function mimeFor(name: string, header: string | null): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const known: Record<string, string> = { mp3: "audio/mpeg", flac: "audio/flac", wav: "audio/wav", opus: "audio/ogg", ogg: "audio/ogg", glb: "model/gltf-binary", gltf: "model/gltf+json", obj: "model/obj", png: "image/png", jpg: "image/jpeg", webp: "image/webp", mp4: "video/mp4", webm: "video/webm" };
+  return known[ext] ?? (header && header !== "application/octet-stream" ? header.split(";")[0]! : "application/octet-stream");
 }
 
 /** Factory for {@link ComfyUIProvider}. */
