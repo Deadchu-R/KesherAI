@@ -140,6 +140,28 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(400).send({ error: (err as Error).message });
       }
     });
+    /** Unity's CLI with no project needed: its version, the editors installed, and a project being made. */
+    app.get(`${base}/cli`, async () => unity.cliInfo());
+    /** Makes a new project with Unity's CLI (in the background). Only on this computer. */
+    app.post<{ Body: { name?: string; parent?: string; editor?: string; template?: string; open?: boolean } }>(`${base}/create`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Make the project on the computer that runs KesherAI." });
+      try {
+        unity.createProject({ name: String(req.body?.name ?? ""), parent: String(req.body?.parent ?? ""), ...(req.body?.editor ? { editor: String(req.body.editor) } : {}), ...(req.body?.template ? { template: String(req.body.template) } : {}), open: req.body?.open === true }, installUnityPackage);
+        return unity.cliInfo();
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+    /** Opens the shown project in the Unity editor. Only on this computer. */
+    app.post(`${base}/open-editor`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Open Unity on the computer that runs KesherAI." });
+      try {
+        await unity.openProject();
+        return { ok: true };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
     /** Adds a project folder, or picks which one the page shows. Only on this computer. */
     app.put<{ Body: { project?: string } }>(`${base}/project`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Choose the project on the computer that runs KesherAI." });

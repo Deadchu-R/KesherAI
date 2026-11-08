@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { basename, isAbsolute, join, resolve } from "node:path";
 
 /**
  * Unity through its own CLI (`unity`, from unity.com) and the project's
@@ -233,6 +233,86 @@ export class UnityCli {
   /** @returns Never: the CLI runs changes at once. */
   async enqueue(): Promise<never> {
     throw new Error("Unity changes run at once through the CLI.");
+  }
+
+  private createJob?: { name: string; path: string; state: "running" | "done" | "failed"; message?: string; startedAt: number };
+
+  /**
+   * The CLI itself, with no project needed: its version and the Unity
+   * editors installed (for "New project").
+   */
+  async cliInfo(): Promise<{ cli: boolean; version?: string; editors: string[]; job?: UnityCli["createJob"] }> {
+    const v = await this.run(["--version"], 10_000);
+    if (v.code !== 0) return { cli: false, editors: [], ...(this.createJob ? { job: this.createJob } : {}) };
+    const e = await this.run(["editors", "--installed", "--format", "json"], 30_000);
+    let editors: string[] = [];
+    try {
+      const items = (JSON.parse(e.stdout) as { data?: { items?: Array<{ version?: string }> } }).data?.items ?? [];
+      editors = [...new Set(items.map((i) => String(i.version ?? "")).filter((x) => /^[\w.]{3,30}$/.test(x)))];
+    } catch {
+      editors = [];
+    }
+    return { cli: true, version: v.stdout.trim().split(/\s+/).pop()?.slice(0, 40), editors, ...(this.createJob ? { job: this.createJob } : {}) };
+  }
+
+  /**
+   * Makes a new Unity project with Unity's CLI (`unity projects create`),
+   * with no Unity Cloud link; it already has Unity's Pipeline package. Runs
+   * in the background (minutes); \`cliInfo().job\` says how it went. When it is
+   * made, KesherAI's bridge package is added and the project is shown here.
+   *
+   * @param opts.name - The project's name (letters, numbers, spaces, - and _).
+   * @param opts.parent - The folder to make it in (it must exist).
+   * @param opts.editor - An installed editor version (default: Unity's default).
+   * @param opts.template - 3d (URP), 2d, or a template id.
+   * @param opts.open - Open it in Unity when it is made.
+   */
+  createProject(opts: { name: string; parent: string; editor?: string; template?: string; open?: boolean }, copyPackage: (folder: string) => Promise<string>): void {
+    if (this.createJob?.state === "running") throw new Error("A project is being made already.");
+    const name = opts.name.trim();
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]{0,59}$/u.test(name)) throw new Error("Use a name with letters, numbers, spaces, - or _ (up to 60).");
+    const parent = resolve(opts.parent.trim());
+    if (!isAbsolute(opts.parent.trim()) || !existsSync(parent) || !statSync(parent).isDirectory()) throw new Error("Choose a folder that exists for the new project.");
+    const path = join(parent, name);
+    if (existsSync(path)) throw new Error(`There is already a folder named ${name} there.`);
+    if (opts.editor && !/^[\w.]{3,30}$/.test(opts.editor)) throw new Error("That is not an editor version.");
+    const template = opts.template === "2d" ? "2d" : opts.template && /^[\w.-]{2,80}$/.test(opts.template) ? opts.template : "3d";
+    const args = ["projects", "create", name, "--path", parent, "--template", template, "--no-cloud", "--format", "json", ...(opts.editor ? ["--editor-version", opts.editor] : [])];
+    this.createJob = { name, path, state: "running", startedAt: Date.now() };
+    const job = this.createJob;
+    void (async () => {
+      const r = await this.run(args, 20 * 60_000);
+      if (r.code !== 0) {
+        job.state = "failed";
+        job.message = failure(r).message;
+        return;
+      }
+      let made = path;
+      try {
+        made = String((JSON.parse(r.stdout) as { data?: { path?: string } }).data?.path ?? path);
+      } catch {
+        // keep the folder we asked for
+      }
+      job.path = made;
+      try {
+        await copyPackage(made);
+        await this.addProject(made);
+        job.message = "The project is ready, with KesherAI's bridge.";
+      } catch (err) {
+        job.message = `The project was made, but adding KesherAI's bridge failed: ${(err as Error).message}`;
+      }
+      job.state = "done";
+      if (opts.open) await this.openProject(made).catch(() => undefined);
+    })();
+  }
+
+  /** Opens a project (the one shown, by default) in the Unity editor. */
+  async openProject(folder = this.path): Promise<void> {
+    if (!folder) throw new Error("Add or make a Unity project first.");
+    if (!this.config.projects.includes(folder)) throw new Error("That project is not on the list.");
+    const r = await this.run(["open", folder, "--format", "json"], 120_000);
+    if (r.code !== 0) throw failure(r);
+    this.statusCache = undefined;
   }
 
   /**

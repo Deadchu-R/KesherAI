@@ -30,6 +30,8 @@ const WEIGHTS = /\.(gguf|safetensors|ckpt|bin|pt|pth|onnx)$/i;
 
 const gb = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.round(b / 1024 ** 2)} MB`);
 const compact = (n: number) => new Intl.NumberFormat(getLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(n);
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+
 function ago(iso?: string): string {
   if (!iso) return "";
   const days = Math.round((Date.now() - Date.parse(iso)) / 86_400_000);
@@ -57,26 +59,35 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const [onlyRuns, setOnlyRuns] = useState(() => {
+  // What to show: everything, what runs here, or only what runs fast (fits the graphics card).
+  const [fitFilter, setFitFilter] = useState<"all" | "runs" | "fast">(() => {
     try {
-      return localStorage.getItem("kesher-only-runs") !== "0";
+      const v = localStorage.getItem("kesher-fit-filter");
+      if (v === "all" || v === "runs" || v === "fast") return v;
+      return localStorage.getItem("kesher-only-runs") === "0" ? "all" : "runs";
     } catch {
-      return true;
+      return "runs";
     }
   });
+  const onlyRuns = fitFilter !== "all";
   const [hw, setHw] = useState<Hw | null>(null);
   useEffect(() => {
     void api<Hw>("/api/hardware").then(setHw).catch(() => undefined);
   }, []);
-  const toggleOnlyRuns = (v: boolean) => {
-    setOnlyRuns(v);
+  const chooseFilter = (v: "all" | "runs" | "fast") => {
+    setFitFilter(v);
     try {
-      localStorage.setItem("kesher-only-runs", v ? "1" : "0");
+      localStorage.setItem("kesher-fit-filter", v);
     } catch {
       // only a convenience
     }
   };
-  const shown = results && onlyRuns && hw ? results.filter((m) => runsHere(m, hw, category)) : results;
+  const shown = results && hw && fitFilter !== "all"
+    ? results.filter((m) => {
+        const f = fitOf(m, hw, category).fit;
+        return fitFilter === "fast" ? f === "fast" : f !== "no";
+      })
+    : results;
 
   const label = (id: string) => {
     const c = BUILT_IN_CATEGORIES.find((x) => x.id === id);
@@ -119,24 +130,31 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
         </select>
         <button type="submit" className="primary">{t("search")}</button>
       </form>
-      <label className="check small">
-        <input type="checkbox" checked={onlyRuns} onChange={(e) => toggleOnlyRuns(e.target.checked)} />
-        {t("onlyRuns")}
-      </label>
+      <div className="row hub-fit-filter" role="group" aria-label={L("לפי החומרה שלך", "By your hardware")}>
+        <span className="muted small">{L("מה להראות:", "Show:")}</span>
+        <div className="segmented">
+          {(["fast", "runs", "all"] as const).map((v) => (
+            <button key={v} type="button" className={fitFilter === v ? "on" : ""} aria-pressed={fitFilter === v} onClick={() => chooseFilter(v)}>
+              {v === "fast" ? L("🟢 ירוץ מהר", "🟢 Runs fast") : v === "runs" ? L("🟡 ירוץ", "🟡 Runs") : L("הכול", "All")}
+            </button>
+          ))}
+        </div>
+        {hw && <span className="muted small grow" dir="auto">{L("זוהה", "Detected")}: {hw.gpus.length ? hw.gpus.map((g) => `${g.name ?? "GPU"} ${(g.vramTotal / 1024 ** 3).toFixed(0)} GB`).join(", ") : L("בלי כרטיס מסך", "no graphics card")} · RAM {(hw.ramTotal / 1024 ** 3).toFixed(0)} GB</span>}
+      </div>
       {format === "gguf" && <p className="muted small">{t("ggufHint")}</p>}
       {error && <p className="error">{error}</p>}
       {loading && !results && <p className="muted">{t("loading")}</p>}
       {shown && shown.length === 0 && <p className="muted">{results?.length ? t("noneRunHere", { n: results.length }) : t("noResults")}</p>}
       <div className="hub-list">
         {shown?.map((m) => (
-          <HubRow key={m.repo} m={m} open={open === m.repo} onlyRuns={onlyRuns} onToggle={() => setOpen(open === m.repo ? null : m.repo)} label={label} {...(onDownloaded ? { onDownloaded } : {})} />
+          <HubRow key={m.repo} m={m} fit={hw ? fitOf(m, hw, category) : undefined} open={open === m.repo} onlyRuns={onlyRuns} onToggle={() => setOpen(open === m.repo ? null : m.repo)} label={label} {...(onDownloaded ? { onDownloaded } : {})} />
         ))}
       </div>
     </section>
   );
 }
 
-function HubRow({ m, open, onToggle, label, onDownloaded, onlyRuns }: { m: HubModel; open: boolean; onToggle: () => void; label: (id: string) => string; onDownloaded?: () => void; onlyRuns: boolean }) {
+function HubRow({ m, fit, open, onToggle, label, onDownloaded, onlyRuns }: { m: HubModel; fit?: Fit; open: boolean; onToggle: () => void; label: (id: string) => string; onDownloaded?: () => void; onlyRuns: boolean }) {
   const [summary, setSummary] = useState<string | null>(null);
   const [files, setFiles] = useState<HubFile[] | null>(null);
   const [error, setError] = useState("");
@@ -184,6 +202,7 @@ function HubRow({ m, open, onToggle, label, onDownloaded, onlyRuns }: { m: HubMo
           {m.lastModified && <span title={t("sort-modified")}>{ago(m.lastModified)}</span>}
         </span>
         <span className="hub-facts muted">
+          {fit && <FitBadge fit={fit} />}
           {facts.join(" · ")}
           {m.gated ? <span className="pill warn">{t("gated")}</span> : null}
         </span>
@@ -269,30 +288,46 @@ function PlanBox({ plan, onCancel, onConfirm }: { plan?: Plan; onCancel: () => v
   );
 }
 
-interface Hw { platform: string; ramTotal: number; gpus: Array<{ vramTotal: number }>; unifiedMemory: boolean }
+interface Hw { platform: string; ramTotal: number; gpus: Array<{ name?: string; vramTotal: number }>; unifiedMemory: boolean }
 
 const MLX = /(^|[-_./ ])mlx([-_./ ]|$)/i;
 
+/** How a model fits this computer: fast (in the graphics card), runs (slower, partly in system memory), no, or unknown size. */
+type Fit = { fit: "fast" | "ok" | "no" | "unknown"; why: string };
+
 /**
- * Whether a Hugging Face model can run on this computer, judged from its
- * name and tags: not an Apple-only MLX build elsewhere, in a format the
- * built-in engines run, and small enough for the memory (a 4-bit file is
- * about 0.6 GB per billion parameters).
+ * Whether a Hugging Face model runs on this computer, and how well, judged
+ * from its size (parameters, or the "7B" in its name) and the memory here:
+ * a 4-bit file is about 0.6 GB per billion parameters, plus room to work.
+ * Not an Apple-only MLX build elsewhere, and a format the engines run.
  */
-function runsHere(m: HubModel, hw: Hw, category: string): boolean {
+function fitOf(m: HubModel, hw: Hw, category: string): Fit {
   const mac = hw.platform === "darwin";
-  if (!mac && (MLX.test(m.repo) || m.library === "mlx" || m.tags.includes("mlx"))) return false;
-  if (category === "chat" && !m.tags.includes("gguf") && m.library !== "gguf") return false;
-  const p = /^(\d+(?:\.\d+)?)([BM])$/.exec(m.parameters ?? "");
-  if (p) {
-    const billions = Number(p[1]) / (p[2] === "M" ? 1000 : 1);
-    const needGb = billions * 0.6 + 0.5;
-    const vram = Math.max(0, ...hw.gpus.map((g) => g.vramTotal)) / 1024 ** 3;
-    const ram = hw.ramTotal / 1024 ** 3;
-    // The engines can spill from the GPU into system memory, more slowly.
-    if (needGb > (hw.unifiedMemory ? ram * 0.75 : vram + ram * 0.6)) return false;
+  if (!mac && (MLX.test(m.repo) || m.library === "mlx" || m.tags.includes("mlx"))) return { fit: "no", why: L("גרסת MLX: רק למק", "An MLX build: Mac only") };
+  if (category === "chat" && !m.tags.includes("gguf") && m.library !== "gguf") return { fit: "no", why: L("לא בפורמט GGUF שהמנוע מריץ", "Not GGUF, which the engine runs") };
+  const p = /^(\d+(?:\.\d+)?)([BM])$/.exec(m.parameters ?? "") ?? /(?:^|[-_ /])(\d+(?:\.\d+)?)([BM])(?:[-_ ]|$)/i.exec(m.repo.replace(/-A\d+(?:\.\d+)?B/i, ""));
+  if (!p) return { fit: "unknown", why: L("הגודל לא ידוע: פתח כדי לראות כל קובץ", "Size unknown: open it to see each file") };
+  const billions = Number(p[1]) / (p[2]!.toUpperCase() === "M" ? 1000 : 1);
+  const needGb = billions * 0.6 + 0.8;
+  const vram = Math.max(0, ...hw.gpus.map((g) => g.vramTotal)) / 1024 ** 3;
+  const ram = hw.ramTotal / 1024 ** 3;
+  const need = `~${needGb.toFixed(1)} GB`;
+  if (hw.unifiedMemory) {
+    if (needGb <= ram * 0.6) return { fit: "fast", why: L(`צריך ${need}; נכנס בזיכרון`, `Needs ${need}; fits in memory`) };
+    if (needGb <= ram * 0.75) return { fit: "ok", why: L(`צריך ${need}; צפוף בזיכרון`, `Needs ${need}; tight in memory`) };
+    return { fit: "no", why: L(`צריך ${need}; יותר מהזיכרון`, `Needs ${need}; more than the memory`) };
   }
-  return true;
+  if (vram && needGb <= vram * 0.92) return { fit: "fast", why: L(`צריך ${need}; נכנס בכרטיס המסך (${vram.toFixed(0)} GB)`, `Needs ${need}; fits the graphics card (${vram.toFixed(0)} GB)`) };
+  // The engines can spill from the graphics card into system memory, more slowly.
+  if (needGb <= vram + ram * 0.6) return { fit: "ok", why: L(`צריך ${need}; חלק בזיכרון הרגיל, איטי יותר`, `Needs ${need}; partly in system memory, slower`) };
+  return { fit: "no", why: L(`צריך ${need}; יותר ממה שיש במחשב`, `Needs ${need}; more than this computer has`) };
+}
+
+/** 🟢 / 🟡 / 🔴 on a search result, with the reason. */
+function FitBadge({ fit }: { fit: Fit }) {
+  const [icon, text, cls] =
+    fit.fit === "fast" ? ["🟢", L("ירוץ מהר", "Runs fast"), "good"] : fit.fit === "ok" ? ["🟡", L("ירוץ, לאט יותר", "Runs, slower"), "warn"] : fit.fit === "no" ? ["🔴", L("לא ירוץ כאן", "Will not run here"), "bad"] : ["⚪", L("לא ידוע", "Unknown"), ""];
+  return <span className={`pill ${cls} hub-fit`} title={fit.why}>{icon} {text}</span>;
 }
 
 /** Whether one file of a model runs here: not too big, not MLX, not a pickle-only format. */

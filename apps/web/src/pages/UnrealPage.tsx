@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { UnityCliPanel } from "./UnityCliPanel";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { desktop, toast } from "../library";
@@ -282,6 +283,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>
       </div>
+      {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
       {unity && st.projects.length > 0 && (
         <div className="row ue-projects">
           <select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>
@@ -298,9 +300,6 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           <h2>{L(`חיבור ${app}`, `Connect ${app}`)}</h2>
           {unity ? (
             <>
-              {st.cli === false && (
-                <p className="pill">{L("צריך את ה-CLI של Unity (חינם). ב-PowerShell:", "Unity's CLI is needed (free). In PowerShell:")} <code dir="ltr">irm https://unity.com/install.ps1 | iex</code></p>
-              )}
               <AddUnityPackage />
               <ol className="ue-steps">
                 <li>{L("Unity 6 ומעלה, עם Visual Scripting.", "Unity 6 or newer, with Visual Scripting.")}</li>
