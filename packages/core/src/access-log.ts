@@ -7,6 +7,7 @@ import { dirname } from "node:path";
  * only their own devices came in. Never addresses' contents: no tokens, no
  * query strings, no bodies.
  *
+ * - Every request, one by one (the last 1000): time, address, device, method, path, result, time taken.
  * - Successful visits are counted per address (first and last time, how many).
  * - Refused ones (wrong token, other websites) are kept one by one (the last 200).
  * - Five refused tries from one address in ten minutes raise an alert.
@@ -21,6 +22,19 @@ export interface Refused {
   /** 401 wrong token, 403 other website, 429 too many tries. */
   status: number;
   via: "tunnel" | "network";
+}
+
+/** One request from outside, for the full request log. */
+export interface RequestEntry {
+  at: string;
+  address: string;
+  method: string;
+  path: string;
+  status: number;
+  via: "tunnel" | "network";
+  /** The paired device's name, when it came in with its own key. */
+  device?: string;
+  ms?: number;
 }
 
 /** Visits that got in, per address. */
@@ -39,6 +53,8 @@ const PATH_KEEP = /^\/(api|v1|mcp|comfy-ui)(\/[\w.-]{0,40}){0,3}/;
 /** Keeps the log, in memory and in access-log.json. */
 export class AccessLog {
   private refused: Refused[] = [];
+  private requests: RequestEntry[] = [];
+  private refusedTimes: number[] = [];
   private visitors = new Map<string, Visitor>();
   private timer?: NodeJS.Timeout;
   private loaded: Promise<void>;
@@ -54,8 +70,9 @@ export class AccessLog {
   ) {
     this.loaded = readFile(file, "utf8")
       .then((t) => {
-        const j = JSON.parse(t) as { refused?: Refused[]; visitors?: Visitor[] };
+        const j = JSON.parse(t) as { refused?: Refused[]; visitors?: Visitor[]; requests?: RequestEntry[] };
         this.refused = j.refused ?? [];
+        this.requests = j.requests ?? [];
         for (const v of j.visitors ?? []) this.visitors.set(v.address, v);
       })
       .catch(() => undefined);
@@ -72,8 +89,11 @@ export class AccessLog {
    * @param r.via - Through the tunnel or the home network.
    * @param r.agent - The User-Agent header.
    */
-  note(r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string }): void {
+  note(r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string; device?: string; ms?: number }): void {
     const at = new Date().toISOString();
+    // Every request, one by one (the last 1000): when, who, what, how it went.
+    this.requests.unshift({ at, address: r.address, method: r.method, path: PATH_KEEP.exec(r.path)?.[0] ?? "/", status: r.status, via: r.via, ...(r.device ? { device: r.device } : {}), ...(r.ms !== undefined ? { ms: r.ms } : {}) });
+    this.requests.length = Math.min(this.requests.length, 1000);
     const agent = r.agent ? r.agent.replace(/[^\w ./;()-]/g, "").slice(0, 80) : undefined;
     if (r.status < 400) {
       const v = this.visitors.get(r.address);
@@ -87,6 +107,9 @@ export class AccessLog {
       const times = (this.bursts.get(r.address) ?? []).filter((t) => now - t < 10 * 60_000);
       times.push(now);
       this.bursts.set(r.address, times);
+      // Many refusals from many addresses (someone spreading guesses): one alert an hour.
+      this.refusedTimes = [...this.refusedTimes.filter((x) => now - x < 3_600_000), now];
+      if (this.refusedTimes.length === 40) this.alert("Many refused tries on KesherAI", "40 requests were refused in the last hour, from several addresses. Your key is long and cannot be guessed, but if this goes on, turn on \"only paired devices through the internet link\" or make a new token (Settings → Phone).");
       if (times.length === 5) {
         this.alert("Someone tried to get into KesherAI", `${r.address} was refused 5 times in 10 minutes (${r.via === "tunnel" ? "through the internet link" : "on your network"}). If it was not you, turn off remote access or make a new token (Settings → Phone).`);
       }
@@ -100,22 +123,23 @@ export class AccessLog {
       this.timer = undefined;
       void this.loaded.then(async () => {
         await mkdir(dirname(this.file), { recursive: true });
-        await writeFile(this.file, JSON.stringify({ refused: this.refused, visitors: [...this.visitors.values()] }, null, 1));
+        await writeFile(this.file, JSON.stringify({ refused: this.refused, visitors: [...this.visitors.values()], requests: this.requests }));
       }).catch(() => undefined);
     }, 5000);
     this.timer.unref?.();
   }
 
   /** @returns The log for Settings, newest first. */
-  async list(): Promise<{ visitors: Visitor[]; refused: Refused[] }> {
+  async list(): Promise<{ visitors: Visitor[]; refused: Refused[]; requests: RequestEntry[] }> {
     await this.loaded;
-    return { visitors: [...this.visitors.values()].sort((a, b) => b.last.localeCompare(a.last)), refused: this.refused };
+    return { visitors: [...this.visitors.values()].sort((a, b) => b.last.localeCompare(a.last)), refused: this.refused, requests: this.requests };
   }
 
   /** Empties the log. */
   async clear(): Promise<void> {
     await this.loaded;
     this.refused = [];
+    this.requests = [];
     this.visitors.clear();
     this.save();
   }

@@ -56,7 +56,9 @@ export async function pairRoutes(app: FastifyInstance, s: KesherServices): Promi
     if (!r || r.from !== clientAddress(req)) return reply.code(404).send({ error: "No such request (it may have expired)." });
     if (r.state === "allowed") {
       r.delivered = true;
-      return { state: r.state, token: s.config.remote.token, port: s.config.port, computer: hostname() };
+      // A key of its own for this device (removable alone, and named in the request log).
+      const token = s.deviceKeys ? await s.deviceKeys.issue(r.device) : s.config.remote.token;
+      return { state: r.state, token, port: s.config.port, computer: hostname() };
     }
     return { state: r.state };
   });

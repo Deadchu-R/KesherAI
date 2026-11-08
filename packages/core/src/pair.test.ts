@@ -26,7 +26,20 @@ test("pairing: a phone on the network asks, the user allows it here, the phone g
     assert.equal((await s.app.inject({ method: "POST", url: `/api/pair/${id}`, payload: { allow: true } })).statusCode, 200);
     const got = (await s.app.inject({ method: "GET", url: `/api/pair/${id}`, ...phone })).json() as { state: string; token?: string };
     assert.equal(got.state, "allowed");
-    assert.equal(got.token, s.services.config.remote.token);
+    // A key of its own for this device (not the shared token), which works, and can be removed alone.
+    assert.match(got.token!, /^kd_/);
+    assert.notEqual(got.token, s.services.config.remote.token);
+    const asPhone = { ...phone, headers: { ...(phone as { headers?: Record<string, string> }).headers, authorization: `Bearer ${got.token}` } };
+    assert.equal((await s.app.inject({ method: "GET", url: "/api/conversations", ...asPhone })).statusCode, 200);
+    assert.equal(s.services.config.remote.devices[0]!.name, "Pixel 9");
+    assert.ok(!JSON.stringify(s.services.config.remote.devices).includes(got.token!), "only a hash is kept");
+    // Through the internet link with "only paired devices", the shared token is refused and the device key is not.
+    s.services.config.remote.anywhereDevicesOnly = true;
+    const tunnel = { remoteAddress: "127.0.0.1", headers: { host: "x.trycloudflare.com", "cf-connecting-ip": "203.0.113.9" } };
+    assert.equal((await s.app.inject({ method: "GET", url: "/api/conversations", ...tunnel, headers: { ...tunnel.headers, authorization: `Bearer ${s.services.config.remote.token}` } })).statusCode, 403);
+    assert.equal((await s.app.inject({ method: "GET", url: "/api/conversations", ...tunnel, headers: { ...tunnel.headers, authorization: `Bearer ${got.token}` } })).statusCode, 200);
+    await s.services.deviceKeys!.remove(s.services.config.remote.devices[0]!.id);
+    assert.equal((await s.app.inject({ method: "GET", url: "/api/conversations", ...asPhone })).statusCode, 401, "a removed device is out at once");
     // Only once.
     assert.equal((await s.app.inject({ method: "GET", url: `/api/pair/${id}`, ...phone })).statusCode, 404);
     // Not through the public tunnel.

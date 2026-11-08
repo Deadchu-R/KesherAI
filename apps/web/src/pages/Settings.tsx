@@ -1,7 +1,7 @@
 import { ImportChats } from "../ImportChats";
 import { AppearanceSection } from "../AppearanceSection";
 import { TelegramSection } from "../TelegramSection";
-import { AccessLogSection } from "../AccessLogSection";
+import { AccessLogSection, DeviceKeysSection } from "../AccessLogSection";
 import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
@@ -399,7 +399,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; r
   { id: "general", icon: "⚙", en: "General", he: "כללי", render: () => <><ActiveModels /><NotificationsSection /><SpeechSection /><ImportChats /></> },
   { id: "appearance", icon: "🎨", en: "Appearance", he: "מראה", render: () => <AppearanceSection /> },
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", render: () => <><GpuSection /><GuardSection /><ComputerSection /><PermissionsSection /></> },
-  { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", render: () => <><Phone /><TelegramSection /><AccessLogSection /></> },
+  { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", render: () => <><Phone /><DeviceKeysSection /><TelegramSection /><AccessLogSection /></> },
   { id: "accounts", icon: "☁", en: "Accounts and backup", he: "חשבונות וגיבוי", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /></> },
   { id: "business", icon: "🏢", en: "Organisation", he: "ארגון", render: () => <><CopilotSection /><BusinessSection /></> },
   { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", render: () => <><McpServerSection /><BrowserSection /><ApiKeysSection /></> },

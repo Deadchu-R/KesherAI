@@ -71,6 +71,7 @@ import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
 import { Training } from "./training.js";
+import { DeviceKeys, type DeviceKey } from "./device-keys.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { Pages } from "./pages.js";
@@ -715,7 +716,29 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   // Who came in from outside (and who was refused), for Settings → Phone.
   const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));
-  if (features.remote) registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally }, (r) => accessLog.note(r));
+  const deviceKeys = new DeviceKeys(() => config.remote.devices, persist);
+  if (features.remote) {
+    registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally }, (r) => accessLog.note(r), {
+      find: (k) => deviceKeys.find(k),
+      seen: (d, a) => deviceKeys.seen(d as DeviceKey, a),
+      devicesOnly: () => config.remote.anywhereDevicesOnly,
+      idleDays: () => config.remote.anywhereIdleDays,
+    });
+  }
+  services.deviceKeys = deviceKeys;
+  // Paired devices (their own keys) and how the internet link lets them in: Settings → Phone.
+  app.get("/api/remote/devices", async () => ({ devices: deviceKeys.devices(), devicesOnly: config.remote.anywhereDevicesOnly, idleDays: config.remote.anywhereIdleDays }));
+  app.delete<{ Params: { id: string } }>("/api/remote/devices/:id", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Devices are removed on the computer that runs KesherAI." });
+    return { ok: await deviceKeys.remove(req.params.id) };
+  });
+  app.put<{ Body: { devicesOnly?: boolean; idleDays?: number } }>("/api/remote/devices", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "This is set on the computer that runs KesherAI." });
+    if (typeof req.body?.devicesOnly === "boolean") config.remote.anywhereDevicesOnly = req.body.devicesOnly;
+    if (typeof req.body?.idleDays === "number") config.remote.anywhereIdleDays = Math.max(0, Math.min(365, Math.round(req.body.idleDays)));
+    await persist();
+    return { devices: deviceKeys.devices(), devicesOnly: config.remote.anywhereDevicesOnly, idleDays: config.remote.anywhereIdleDays };
+  });
   app.get("/api/access-log", async () => accessLog.list());
   app.delete("/api/access-log", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "The log is cleared on the computer that runs KesherAI." });

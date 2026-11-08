@@ -1372,3 +1372,10 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .train-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius-sm); }
 .train-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .train-jobs li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-2); }
+.al-requests summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
+.al-requests .seg { display: inline-flex; gap: 4px; margin: 6px 0; }
+.al-requests .seg button { height: 30px; padding: 0 10px; }
+.al-table { display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow: auto; font-size: 12.5px; }
+.al-table > div { display: grid; grid-template-columns: 120px minmax(90px, 1fr) minmax(120px, 2fr) 90px 110px; gap: 8px; padding: 4px 6px; border-radius: 6px; background: var(--panel-2); }
+.al-table > div.bad { border-inline-start: 3px solid var(--bad); }
+@media (max-width: 760px) { .al-table > div { grid-template-columns: 1fr 1fr; } }

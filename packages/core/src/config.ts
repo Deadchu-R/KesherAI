@@ -205,6 +205,12 @@ export const KesherConfigSchema = z.object({
       keepAwake: z.boolean().default(false),
       /** "Access from anywhere": run a Cloudflare tunnel while KesherAI runs. */
       anywhere: z.boolean().default(false),
+      /** A key of its own for each paired device (only a hash is kept), so one can be removed without the others. */
+      devices: z.array(z.object({ id: z.string(), name: z.string(), hash: z.string(), createdAt: z.string(), lastSeen: z.string().optional(), lastAddress: z.string().optional() })).default([]),
+      /** Through the internet link, only devices with their own key (not the shared token, which the QR code and other computers use). */
+      anywhereDevicesOnly: z.boolean().default(false),
+      /** Through the internet link, a device key not used for this many days stops working (0 = never). */
+      anywhereIdleDays: z.number().int().min(0).max(365).default(30),
     })
     .default({}),
   /** Speech: how the microphone button turns speech into text. */

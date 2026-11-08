@@ -106,8 +106,10 @@ export function registerRemoteAuth(
   app: FastifyInstance,
   getToken: () => string | undefined,
   keys: { verify?: (key: string | undefined) => unknown; requireLocally?: () => boolean } = {},
-  log?: (r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string }) => void,
+  log?: (r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string; device?: string; ms?: number }) => void,
+  devices?: DeviceAuth,
 ): void {
+  const deviceOf = new WeakMap<object, string>();
   // What came from outside this computer, for Settings → Phone (never tokens or query strings).
   if (log) {
     app.addHook("onResponse", async (request, reply) => {
@@ -117,7 +119,8 @@ export function registerRemoteAuth(
       if (!/^\/(api|v1|mcp|comfy-ui)\b/.test(path)) return;
       const status = reply.statusCode;
       if (status < 400 && /^\/api\/(downloads\/events|activity|computer\/status)/.test(path)) return;
-      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] ? "tunnel" : "network", ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
+      const device = deviceOf.get(request.raw);
+      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] ? "tunnel" : "network", ms: Math.round(reply.elapsedTime), ...(device ? { device } : {}), ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
     });
   }
   app.addHook("onRequest", async (request, reply) => {
@@ -170,10 +173,38 @@ export function registerRemoteAuth(
       await reply.code(429).send({ error: "Too many wrong tokens. Try again in a few minutes." });
       return;
     }
-    if (!token || !given || !safeEqual(given, token)) {
+    // Through the internet link (Cloudflare connects from this computer and says who is behind it).
+    const viaTunnel = isLoopback(request.ip) && request.headers["cf-connecting-ip"] !== undefined;
+    const device = devices?.find(given);
+    const shared = !!token && !!given && safeEqual(given, token);
+    if (device) {
+      const idle = devices!.idleDays();
+      if (viaTunnel && idle > 0 && device.lastSeen && Date.now() - Date.parse(device.lastSeen) > idle * 86_400_000) {
+        await reply.code(403).send({ error: `This device was not used for over ${idle} days, so it cannot come in through the internet link. Use it once on the home network, or pair it again.` });
+        return;
+      }
+      devices!.seen(device, who);
+      deviceOf.set(request.raw, device.name);
+      return;
+    }
+    if (shared && viaTunnel && devices?.devicesOnly()) {
+      await reply.code(403).send({ error: "Through the internet link, only paired devices with their own key can come in. Pair this device on the home network first." });
+      return;
+    }
+    if (!shared) {
       const fresh = !f || Date.now() - f.since >= WINDOW_MS;
       failures.set(who, { count: fresh ? 1 : f.count + 1, since: fresh ? Date.now() : f.since });
       await reply.code(401).send({ error: "Remote access needs a valid token" });
     }
   });
+}
+
+/** Device keys, for registerRemoteAuth (see device-keys.ts). */
+export interface DeviceAuth {
+  find(key: string | undefined): { name: string; lastSeen?: string } | undefined;
+  seen(device: { name: string; lastSeen?: string }, address: string): void;
+  /** Through the internet link, only device keys (not the shared token). */
+  devicesOnly(): boolean;
+  /** Through the internet link, a device key unused this many days stops working (0 = never). */
+  idleDays(): number;
 }

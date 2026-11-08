@@ -124,6 +124,8 @@ export interface KesherServices {
   routines: Routines;
   /** KesherAI's managed ComfyUI. */
   comfy: ComfyManager;
+  /** Paired devices' own keys (set once the server is built). */
+  deviceKeys?: import("./device-keys.js").DeviceKeys;
   /** Search across conversations. */
   conversationSearch: ConversationSearch;
   /** When the model APIs last answered another app or device (ms), for staying awake while serving. */
