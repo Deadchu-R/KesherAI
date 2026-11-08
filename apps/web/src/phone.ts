@@ -36,6 +36,19 @@ export function takeOpening(id: string): Opening | undefined {
     return undefined;
   }
 }
+/**
+ * Opens a conversation with a line ready in its message box (e.g. "Open in chat" on the Unity page).
+ *
+ * @param id - The conversation.
+ * @param draft - What to put in the box.
+ */
+export function openWithDraft(id: string, draft: string): void {
+  setOpening(id, { draft });
+  location.hash = `#/c/${id}`;
+  // Already showing that chat: tell it.
+  setTimeout(() => dispatchEvent(new CustomEvent("kesher-opening", { detail: id })), 50);
+}
+
 function setOpening(id: string, o: Opening): void {
   try {
     sessionStorage.setItem(`${OPENING}:${id}`, JSON.stringify(o));

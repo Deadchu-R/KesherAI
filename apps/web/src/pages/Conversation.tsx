@@ -489,6 +489,7 @@ export function ConversationPage({ id }: { id: string }) {
   }, [lastLook?.seq]);
   const answers = useMemo(() => new Map(events.filter((e): e is Ev<"answer"> => e.type === "answer").map((e) => [e.questionId, e])), [events]);
 
+  const uploadInput = useRef<HTMLInputElement>(null);
   /** After adding an Unreal project that is not connected yet: offer the right way to connect it. */
   const [unrealSetup, setUnrealSetup] = useState<{ path: string; engine: string; msg?: string } | null>(null);
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;
@@ -532,6 +533,18 @@ export function ConversationPage({ id }: { id: string }) {
       }
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
+  };
+  /** + → Files without the desktop app: uploads them to this chat's folder on the computer. */
+  const uploadFiles = async (files: FileList | null) => {
+    const lines: string[] = [];
+    for (const f of Array.from(files ?? [])) {
+      try {
+        lines.push(`[${t("attached")}: ${await uploadToConversation(id, f.name, f)}]`);
+      } catch (e) {
+        setError(`${f.name}: ${(e as Error).message}`);
+      }
+    }
+    if (lines.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${lines.join("\n")}\n`);
   };
   /** + → Project: a Unity, Unreal or any project folder, for the chat to work in. */
   const addProject = async () => {
@@ -857,7 +870,13 @@ export function ConversationPage({ id }: { id: string }) {
               </div>
             )}
             <div className="box-bar">
-              {desktop()?.pickFiles && <AddMenu onFiles={() => void desktop()!.pickFiles!().then((f) => attach(f))} onProject={() => void addProject()} />}
+              {desktop()?.pickFiles ? (
+                <AddMenu onFiles={() => void desktop()!.pickFiles!().then((f) => attach(f))} onProject={() => void addProject()} />
+              ) : (
+                // In a browser, the phone, or another computer's window: files are sent to this chat's folder on the computer.
+                <AddMenu onFiles={() => uploadInput.current?.click()} />
+              )}
+              <input ref={uploadInput} type="file" multiple hidden onChange={(e) => void uploadFiles(e.target.files).finally(() => { if (uploadInput.current) uploadInput.current.value = ""; })} />
               <WebToggle on={web} onChange={setWeb} />
               <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
               {voicePart && <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />}
@@ -898,7 +917,7 @@ export function ConversationPage({ id }: { id: string }) {
 }
 
 /** The message box's +: files, or a project (Unity, Unreal or any folder) for the chat to work in. */
-function AddMenu({ onFiles, onProject }: { onFiles: () => void; onProject: () => void }) {
+function AddMenu({ onFiles, onProject }: { onFiles: () => void; onProject?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -916,8 +935,14 @@ function AddMenu({ onFiles, onProject }: { onFiles: () => void; onProject: () =>
       {open && (
         <div className="model-pop" role="menu">
           <button type="button" role="menuitem" onClick={() => { setOpen(false); onFiles(); }}>📎 {he ? "קבצים…" : "Files…"}</button>
-          <button type="button" role="menuitem" onClick={() => { setOpen(false); onProject(); }}>🎮 {he ? "פרויקט: Unity, Unreal או תיקייה…" : "Project: Unity, Unreal or a folder…"}</button>
-          <p className="muted small" style={{ margin: "4px 8px" }}>{he ? "פרויקט Unity נהיה הפרויקט של הצ'אט (דרך ה-CLI). פרויקט Unreal נפתח לכלי הקבצים ול-Blueprints." : "A Unity project becomes the chat's project (through the CLI); an Unreal project opens to the file tools and Blueprints."}</p>
+          {onProject ? (
+            <>
+              <button type="button" role="menuitem" onClick={() => { setOpen(false); onProject(); }}>🎮 {he ? "פרויקט: Unity, Unreal או תיקייה…" : "Project: Unity, Unreal or a folder…"}</button>
+              <p className="muted small" style={{ margin: "4px 8px" }}>{he ? "פרויקט Unity נהיה הפרויקט של הצ'אט (דרך ה-CLI). פרויקט Unreal נפתח לכלי הקבצים ול-Blueprints." : "A Unity project becomes the chat's project (through the CLI); an Unreal project opens to the file tools and Blueprints."}</p>
+            </>
+          ) : (
+            <p className="muted small" style={{ margin: "4px 8px" }}>{he ? "פרויקטים (Unity, Unreal) מוסיפים במחשב עצמו, או דרך 🕹 Unity." : "Projects (Unity, Unreal) are added on the computer itself, or through 🕹 Unity."}</p>
+          )}
         </div>
       )}
     </div>
