@@ -1,3 +1,4 @@
+import { GuardBanner } from "./GuardSection";
 import { AppBar } from "./AppBar";
 import { WebToggle, useWebSearch } from "./WebToggle";
 import { Mic } from "./Mic";
@@ -209,6 +210,7 @@ export function App() {
       <Reconnecting />
       <main className="main">
         <PhoneUpdateBanner />
+        <GuardBanner />
         {online === false && (
           <p className="error row" style={{ padding: "12px 28px", gap: 10 }}>
             <span className="grow">{t("serverOffline")}</span>

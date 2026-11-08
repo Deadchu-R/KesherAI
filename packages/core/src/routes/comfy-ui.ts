@@ -63,6 +63,7 @@ export async function comfyUiRoutes(app: FastifyInstance, s: KesherServices): Pr
 
   const guard = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!allowed(req)) return reply.code(401).send("Open ComfyUI from KesherAI's Nodes page.");
+    s.guard.touch("comfyui");
     if (!(await up())) {
       return reply.code(503).type("text/html; charset=utf-8").send("<p style='font:15px sans-serif;padding:24px'>ComfyUI is not running. Start it on KesherAI's Models page (Pictures → ComfyUI).</p>");
     }

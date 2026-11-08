@@ -232,6 +232,11 @@ export class LlamaEngine {
     };
   }
 
+  /** @returns The running server's process id, if any. */
+  get pid(): number | undefined {
+    return this.proc && this.proc.exitCode === null ? this.proc.pid : undefined;
+  }
+
   /** Slots the running server has (fewer than asked when memory was short). */
   private runningParallel = 0;
 

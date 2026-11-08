@@ -9,6 +9,20 @@ export interface ModelListing {
 }
 
 /**
+ * Holds local work (chat, image and video calls of providers that run on
+ * this computer) until it may start — e.g. while the graphics card cools.
+ */
+export interface ProviderGate {
+  /** Resolves when the call may start; may throw (cancelled, failed to load). */
+  before(providerId: string, signal?: AbortSignal): Promise<void>;
+  /** Called once when the call ends. */
+  after(): void;
+}
+
+/** Methods that put a local model to work; the argument after the request is the abort signal. */
+const GATED = new Set(["chat", "chatWithTools", "generateImage", "generateVideo"]);
+
+/**
  * Keeps the live providers and routes a global model id to the provider
  * that serves it.
  *
@@ -18,6 +32,52 @@ export interface ModelListing {
 export class ProviderRegistry {
   private readonly factories = new Map<string, ProviderFactory>();
   private readonly providers = new Map<string, { provider: Provider; config: ProviderConfig }>();
+  private gate?: ProviderGate;
+
+  /**
+   * Sends every local provider's work through a gate (see {@link ProviderGate}).
+   *
+   * @param gate - The gate, or undefined to remove it.
+   */
+  setGate(gate: ProviderGate | undefined): void {
+    this.gate = gate;
+  }
+
+  /** Wraps a local provider so its work passes the gate (read at call time). */
+  private gated(provider: Provider): Provider {
+    return new Proxy(provider, {
+      get: (target, prop, receiver) => {
+        const value = Reflect.get(target, prop, receiver) as unknown;
+        if (typeof prop !== "string" || !GATED.has(prop) || typeof value !== "function") return value;
+        const fn = value as (...args: unknown[]) => unknown;
+        const id = target.id;
+        if (prop === "chat") {
+          // eslint-disable-next-line @typescript-eslint/no-this-alias
+          const registry = this;
+          return async function* (...args: unknown[]) {
+            const gate = registry.gate;
+            if (!gate) return yield* fn.apply(target, args) as AsyncIterable<unknown>;
+            await gate.before(id, args[1] as AbortSignal | undefined);
+            try {
+              yield* fn.apply(target, args) as AsyncIterable<unknown>;
+            } finally {
+              gate.after();
+            }
+          };
+        }
+        return async (...args: unknown[]) => {
+          const gate = this.gate;
+          if (!gate) return fn.apply(target, args);
+          await gate.before(id, args[1] as AbortSignal | undefined);
+          try {
+            return await fn.apply(target, args);
+          } finally {
+            gate.after();
+          }
+        };
+      },
+    });
+  }
 
   /**
    * Makes a provider `type` available.
@@ -49,7 +109,8 @@ export class ProviderRegistry {
     }
     const factory = this.factories.get(config.type);
     if (!factory) throw new Error(`Unknown provider type "${config.type}"`);
-    const provider = factory.create(config);
+    const created = factory.create(config);
+    const provider = created.location === "local" ? this.gated(created) : created;
     this.providers.set(config.id, { provider, config });
     return provider;
   }

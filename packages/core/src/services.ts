@@ -10,6 +10,7 @@ import type { Updater } from "./updates.js";
 import type { GoogleDrive } from "./google.js";
 import type { DriveSync } from "./drive-sync.js";
 import type { OneDrive } from "./onedrive.js";
+import type { GpuGuard } from "./gpu-guard.js";
 import type { Tunnel } from "./tunnel.js";
 import type { SdEngine } from "./sdcpp.js";
 import type { BrowserBridge } from "./browser-bridge.js";
@@ -63,6 +64,8 @@ export interface KesherServices {
   onedrive: OneDrive;
   /** Keeps the library in step with OneDrive. */
   onedriveSync: DriveSync;
+  /** Protects the graphics card: temperature limit, pause, unloading idle models. */
+  guard: GpuGuard;
   /** The built-in image engine (stable-diffusion.cpp). */
   sd: SdEngine;
   /** The link to the KesherAI browser extension. */

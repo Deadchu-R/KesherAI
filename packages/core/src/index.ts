@@ -14,6 +14,7 @@ export { Library, SYNC_SUBFOLDER } from "./library.js";
 export { ConversationManager, modelTurnFor, type NewConversation } from "./conversations.js";
 export { Updater, type VersionInfo, type UpdateCheck, type UpdateProgress } from "./updates.js";
 export { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleConfig, type GoogleEndpoints, type RemoteItem } from "./google.js";
+export { GpuGuard, GUARD_DEFAULTS, parseSmi, shouldCool, type GpuReading, type GuardConfig, type GuardStatus } from "./gpu-guard.js";
 export { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveConfig, type OneDriveEndpoints } from "./onedrive.js";
 export { DriveSync, type SyncResult } from "./drive-sync.js";
 export { isLoopback, isLocalRequest } from "./auth.js";

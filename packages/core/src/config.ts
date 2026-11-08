@@ -103,6 +103,16 @@ export const KesherConfigSchema = z.object({
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
     .default({}),
+  /** Protecting the graphics card: temperature limit, unloading idle models, low priority (see gpu-guard.ts). */
+  guard: z
+    .object({
+      enabled: z.boolean().default(true),
+      maxTemp: z.number().int().min(60).max(95).default(83),
+      resumeTemp: z.number().int().min(50).max(90).default(75),
+      unloadAfterMinutes: z.number().int().min(0).max(1440).default(20),
+      gentle: z.boolean().default(false),
+    })
+    .default({}),
   /** OneDrive sign-in (Microsoft account). The application id defaults to the one in branding.config.ts. */
   onedrive: z
     .object({

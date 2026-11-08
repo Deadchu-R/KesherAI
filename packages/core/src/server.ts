@@ -46,6 +46,8 @@ import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { DriveSync } from "./drive-sync.js";
+import { GpuGuard } from "./gpu-guard.js";
+import { guardRoutes } from "./routes/guard.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
@@ -272,6 +274,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   })();
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? fileClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
+  const guard = new GpuGuard(
+    () => config.guard,
+    undefined,
+    (text) => void notifier.send({ title: "Graphics card", body: text, path: "#/settings", tags: ["thermometer"] }).catch(() => undefined),
+  );
   const onedrive = new OneDrive(config.onedrive, persist, options.onedriveEndpoints ?? ONEDRIVE_ENDPOINTS, process.env.KESHER_ONEDRIVE_CLIENT_ID || branding.onedrive.clientId || undefined);
   const onedriveSync = new DriveSync(onedrive, library, config.onedrive, persist);
 
@@ -497,6 +504,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     driveSync,
     onedrive,
     onedriveSync,
+    guard,
     sd,
     tunnel,
     devices,
@@ -564,6 +572,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await fileRoutes(app, services);
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
+  await guardRoutes(app, services);
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);
   await partsRoutes(app, services);
@@ -584,6 +593,35 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (onedrive.connected) void onedriveSync.syncNow().catch(() => undefined);
   // Find the user's other computers (same Google account) and keep their connections in step.
   devices.start();
+
+  // Protect the graphics card: hold local work while it is too hot or paused, unload idle models.
+  let comfyUsed = false;
+  guard.add({
+    name: "chat model",
+    providers: ["llamacpp"],
+    loaded: () => engine.status().running,
+    unload: () => engine.stop(),
+    reload: async () => {
+      const path = config.engines.lastModel;
+      if (path && existsSync(path) && engine.status().installed) await loadModel(services, path);
+    },
+    pids: () => (engine.pid ? [engine.pid] : []),
+  });
+  guard.add({
+    name: "ComfyUI models",
+    providers: ["comfyui"],
+    loaded: () => comfyUsed && comfy.status().running,
+    // Frees ComfyUI's memory without stopping it; the next flow loads what it needs.
+    unload: async () => {
+      comfyUsed = false;
+      await fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) });
+    },
+    used: () => void (comfyUsed = true),
+    pids: () => (comfy.pid ? [comfy.pid] : []),
+  });
+  registry.setGate(guard);
+  guard.start();
+  app.addHook("onClose", async () => guard.stop());
 
   // Bring back the model that was loaded last time, without delaying start-up.
   const last = config.engines.lastModel;

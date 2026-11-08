@@ -2,6 +2,7 @@ import { ImportChats } from "../ImportChats";
 import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
+import { GuardSection } from "../GuardSection";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
 import { BrowserSection } from "../BrowserSection";
@@ -395,6 +396,7 @@ export function SettingsPage() {
       <h1>{t("settings")}</h1>
       <ActiveModels />
       <GpuSection />
+      <GuardSection />
       <NotificationsSection />
       <McpServerSection />
       <BrowserSection />

@@ -205,6 +205,11 @@ export class ComfyManager {
     }
   }
 
+  /** @returns ComfyUI's process id while KesherAI runs it. */
+  get pid(): number | undefined {
+    return this.child && this.child.exitCode === null ? this.child.pid : undefined;
+  }
+
   /** Stops ComfyUI. */
   async stop(): Promise<void> {
     const c = this.child;
