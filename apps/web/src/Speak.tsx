@@ -34,6 +34,25 @@ export function speakable(text: string): string {
 }
 
 let current: { stop: () => void } | null = null;
+/** Changes every time reading starts or stops, so a voice that was still loading does not start after Stop. */
+let gen = 0;
+let loading: AbortController | null = null;
+const speakingListeners = new Set<(on: boolean) => void>();
+let speakingNow = false;
+const setSpeaking = (on: boolean) => {
+  speakingNow = on;
+  for (const l of speakingListeners) l(on);
+};
+
+/** @returns Whether something is being read aloud (or getting ready to be). */
+export function useSpeaking(): boolean {
+  const [on, setOn] = useState(speakingNow);
+  useEffect(() => {
+    speakingListeners.add(setOn);
+    return () => void speakingListeners.delete(setOn);
+  }, []);
+  return on;
+}
 
 /** The Android app's own voice (the page's speechSynthesis has no voices inside the app). */
 type NativeVoice = {
@@ -45,8 +64,15 @@ const nativeVoice = (): NativeVoice | undefined => (window as unknown as { Capac
 
 /** Stops whatever is being read aloud. */
 export function stopSpeaking(): void {
-  current?.stop();
+  gen++;
+  loading?.abort();
+  loading = null;
+  const c = current;
   current = null;
+  c?.stop();
+  if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+  void nativeVoice()?.stopSpeaking().catch(() => undefined);
+  setSpeaking(false);
 }
 
 /**
@@ -57,34 +83,44 @@ export function stopSpeaking(): void {
  * @param text - What to say.
  * @param onEnd - Called when it finishes or stops.
  */
-export async function speak(text: string, onEnd?: () => void): Promise<void> {
+export async function speak(text: string, done?: () => void): Promise<void> {
   stopSpeaking();
   const say = speakable(text);
-  if (!say) return onEnd?.();
+  if (!say) return done?.();
+  const my = ++gen;
+  const stale = () => my !== gen;
+  loading = new AbortController();
+  const signal = loading.signal;
+  let ended = false;
+  const onEnd = () => {
+    if (ended) return;
+    ended = true;
+    if (!stale()) setSpeaking(false);
+    done?.();
+  };
+  setSpeaking(true);
+  // Stop pressed while the voice was still loading: end here.
+  const playAudio = async (res: Response) => {
+    const blob = await res.blob();
+    if (stale()) return onEnd();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    current = { stop: () => { audio.pause(); URL.revokeObjectURL(url); onEnd(); } };
+    audio.onended = () => { URL.revokeObjectURL(url); current = null; onEnd(); };
+    await audio.play().catch(() => onEnd());
+  };
   const voice = read(VOICE_KEY);
   // The natural voice on this computer (Kokoro) speaks English; Hebrew goes to the system's voice.
   if (voice.startsWith("local:") && !/[֐-׿]/.test(say)) {
-    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "local", voice: voice.slice(6) }) }).catch(() => undefined);
-    if (res?.ok) {
-      const url = URL.createObjectURL(await res.blob());
-      const audio = new Audio(url);
-      current = { stop: () => { audio.pause(); URL.revokeObjectURL(url); onEnd?.(); } };
-      audio.onended = () => { URL.revokeObjectURL(url); current = null; onEnd?.(); };
-      await audio.play();
-      return;
-    }
+    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "local", voice: voice.slice(6) }), signal }).catch(() => undefined);
+    if (stale()) return onEnd();
+    if (res?.ok) return playAudio(res);
   }
   if (voice.startsWith("cloud:")) {
     const [, provider, name] = voice.split(":");
-    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider, voice: name }) });
-    if (res.ok) {
-      const url = URL.createObjectURL(await res.blob());
-      const audio = new Audio(url);
-      current = { stop: () => { audio.pause(); URL.revokeObjectURL(url); onEnd?.(); } };
-      audio.onended = () => { URL.revokeObjectURL(url); current = null; onEnd?.(); };
-      await audio.play();
-      return;
-    }
+    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider, voice: name }), signal }).catch(() => undefined);
+    if (stale()) return onEnd();
+    if (res?.ok) return playAudio(res);
     // Fall back to the computer's voice if the cloud fails.
   }
   const nv = nativeVoice();
@@ -96,7 +132,7 @@ export async function speak(text: string, onEnd?: () => void): Promise<void> {
       done = true;
       current = null;
       void Promise.resolve(sub).then((x) => x.remove());
-      onEnd?.();
+      onEnd();
     };
     const sub = nv.addListener("spoken", (e) => {
       if (!said.id || !e.id || e.id === said.id) finish();
@@ -105,17 +141,37 @@ export async function speak(text: string, onEnd?: () => void): Promise<void> {
     said.id = (await nv.speak({ text: say, language: /[֐-׿]/.test(say) ? "he-IL" : "en-US" }).catch(() => ({ id: undefined }))).id;
     return;
   }
-  if (typeof speechSynthesis === "undefined" || typeof SpeechSynthesisUtterance === "undefined") return onEnd?.();
+  if (typeof speechSynthesis === "undefined" || typeof SpeechSynthesisUtterance === "undefined") return onEnd();
   const u = new SpeechSynthesisUtterance(say);
   const voices = speechSynthesis.getVoices();
   const chosen = voice.startsWith("system:") ? voices.find((v) => v.voiceURI === voice.slice(7)) : undefined;
   const hebrew = /[֐-׿]/.test(say);
   u.voice = chosen ?? voices.find((v) => (hebrew ? /^he|^iw/i.test(v.lang) : v.lang.startsWith(getLocale() === "he" ? "en" : "en"))) ?? null;
   u.lang = u.voice?.lang ?? (hebrew ? "he-IL" : "en-US");
-  u.onend = () => { current = null; onEnd?.(); };
-  u.onerror = () => { current = null; onEnd?.(); };
-  current = { stop: () => { speechSynthesis.cancel(); onEnd?.(); } };
+  u.onend = () => { current = null; onEnd(); };
+  u.onerror = () => { current = null; onEnd(); };
+  current = { stop: () => { speechSynthesis.cancel(); onEnd(); } };
   speechSynthesis.speak(u);
+}
+
+/**
+ * A Stop button that shows while anything is read aloud (an answer, the
+ * automatic reading, voice mode), on every page. Esc stops it too.
+ */
+export function StopSpeakingBar() {
+  const on = useSpeaking();
+  useEffect(() => {
+    if (!on) return;
+    const key = (e: KeyboardEvent) => e.key === "Escape" && stopSpeaking();
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, [on]);
+  if (!on) return null;
+  return (
+    <button type="button" className="stop-speaking" onClick={stopSpeaking} aria-label={t("ttsStop")}>
+      <span aria-hidden="true">■</span> {t("ttsStop")}
+    </button>
+  );
 }
 
 /** Whether answers are read aloud as they arrive. */

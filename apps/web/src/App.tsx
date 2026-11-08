@@ -1,4 +1,5 @@
 import { GuardBanner } from "./GuardSection";
+import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
 import { PhoneTabs } from "./PhoneTabs";
 import { AppBar } from "./AppBar";
@@ -265,6 +266,7 @@ export function App() {
       <ModelPickerHost />
       <PluginStyles />
       <DownloadsButton />
+      <StopSpeakingBar />
       <PhoneTabs hash={hash} onChats={() => setMenuOpen(true)} />
       <Welcome onLocale={() => rerender((n) => n + 1)} />
     </div>

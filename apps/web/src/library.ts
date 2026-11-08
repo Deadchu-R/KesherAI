@@ -52,6 +52,11 @@ interface DesktopBridge {
   startup?(on?: boolean): Promise<boolean>;
   /** Saves a chat as a PDF; null when cancelled. Missing before 0.4.63. */
   saveChatPdf?(id: string): Promise<string | null>;
+  /** Other computers this app connects to. Missing before 0.5.19. */
+  computers?(): Promise<Array<{ name: string; origin: string }>>;
+  connectComputer?(link: string): Promise<{ name?: string; error?: string }>;
+  openComputer?(origin: string): Promise<{ error?: string }>;
+  forgetComputer?(origin: string): Promise<void>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

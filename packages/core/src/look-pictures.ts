@@ -11,6 +11,8 @@
 const API = "https://commons.wikimedia.org/w/api.php";
 const PICTURE_HOST = "upload.wikimedia.org";
 const MAX_BYTES = 8 * 1024 * 1024;
+/** Left out of every search: a background or an icon is not the place for these. */
+const SAFE = "-nude -naked -nudity -erotic -sexy -lingerie -bikini -swimsuit -swimwear -underwear -porn -gore -corpse -blood";
 const UA = "KesherAI/0.5 (https://github.com/Deadchu-R/KesherAI; local app)";
 
 /** One found picture, with where it is from (shown to the user as credit). */
@@ -47,8 +49,10 @@ export function parseCommons(json: unknown): FoundPicture[] {
     .flatMap((p) => {
       const info = p.imageinfo?.[0];
       if (!info) return [];
-      const url = String(info.thumburl ?? info.url ?? "");
-      if (!/^image\/(png|jpeg|webp)$/.test(String(info.mime ?? ""))) return [];
+      const mime = String(info.mime ?? "");
+      // Drawings (SVG) come as Commons' PNG copy, never as SVG (which can carry scripts).
+      const url = String(mime === "image/svg+xml" ? (info.thumburl ?? "") : (info.thumburl ?? info.url ?? ""));
+      if (!/^image\/(png|jpeg|webp)$/.test(mime) && !(mime === "image/svg+xml" && /\.png$/i.test(url))) return [];
       try {
         const u = new URL(url);
         if (u.protocol !== "https:" || u.hostname !== PICTURE_HOST) return [];
@@ -74,14 +78,15 @@ export function parseCommons(json: unknown): FoundPicture[] {
  * @param opts.width - The width of the copy to get (1920 for a background, 256 for icons).
  * @param opts.wide - Only pictures wider than tall (backgrounds).
  */
-export async function findPictures(query: string, opts: { width: number; wide?: boolean; signal?: AbortSignal; fetchImpl?: typeof fetch }): Promise<FoundPicture[]> {
-  const q = query.replace(/\s+/g, " ").trim().slice(0, 120);
+export async function findPictures(query: string, opts: { width: number; wide?: boolean; drawings?: boolean; signal?: AbortSignal; fetchImpl?: typeof fetch }): Promise<FoundPicture[]> {
+  const q = query.replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
   if (!q) return [];
   const params = new URLSearchParams({
     action: "query",
     format: "json",
     generator: "search",
-    gsrsearch: `filetype:bitmap ${q}`,
+    // The words as a phrase first ("One Piece", not every page with "one" and "piece"), nothing unsuitable for a screen.
+    gsrsearch: `filetype:${opts.drawings ? "drawing" : "bitmap"} "${q}" ${SAFE}`,
     gsrnamespace: "6",
     gsrlimit: "24",
     prop: "imageinfo",
@@ -135,7 +140,9 @@ export async function picturesForStyle(style: string, opts: { icons: number; bac
     }
   }
   if (opts.icons > 0) {
-    const small = await findPictures(style, { width: 256, ...opts });
+    // Icons: drawings first (logos-free symbols, emblems), then photos.
+    const drawings = await findPictures(style, { width: 256, drawings: true, ...opts }).catch(() => []);
+    const small = [...drawings, ...(drawings.length >= opts.icons ? [] : await findPictures(style, { width: 256, ...opts }))];
     const skip = out.background?.page;
     for (const p of small.filter((x) => x.page !== skip).slice(0, opts.icons + 4)) {
       if (out.icons.length >= opts.icons) break;
@@ -145,6 +152,33 @@ export async function picturesForStyle(style: string, opts: { icons: number; bac
         // skip it
       }
     }
+  }
+  return out;
+}
+
+/** The tools that get a picture icon when a look is made from a named style. */
+export const LOOK_ICON_PAGES = ["#/images", "#/pages", "#/knowledge", "#/models", "#/day", "#/memory"] as const;
+
+/**
+ * Finds pictures for a named style and keeps them in the library: the
+ * background, and icons for the given tool pages (in order).
+ *
+ * @param save - Saves a picture in the library; returns its id.
+ */
+export async function styleLook(
+  style: string,
+  opts: { background: boolean; iconPages: readonly string[]; save: (p: LookPicture, use: "background" | "icon") => Promise<string>; signal?: AbortSignal; fetchImpl?: typeof fetch },
+): Promise<{ background?: { kind: "image"; assetId: string; dim: number }; icons?: Record<string, { assetId: string }>; credits: string[] }> {
+  const r = await picturesForStyle(style, { background: opts.background, icons: opts.iconPages.length, ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
+  const out: { background?: { kind: "image"; assetId: string; dim: number }; icons?: Record<string, { assetId: string }>; credits: string[] } = { credits: [] };
+  if (r.background) {
+    out.background = { kind: "image", assetId: await opts.save(r.background, "background"), dim: 55 };
+    out.credits.push(`background: ${r.background.artist} (${r.background.license}) ${r.background.page}`);
+  }
+  if (r.icons.length) {
+    out.icons = {};
+    for (const [i, p] of r.icons.entries()) out.icons[opts.iconPages[i]!] = { assetId: await opts.save(p, "icon") };
+    out.credits.push(`${r.icons.length} icons from Wikimedia Commons (free licences)`);
   }
   return out;
 }

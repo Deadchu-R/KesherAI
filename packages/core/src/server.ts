@@ -817,6 +817,19 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     }
     return { token: await deviceKeys.issue(String(req.body?.device ?? "Device")) };
   });
+  /**
+   * A link for another device of the user's (a laptop's KesherAI, a browser): a key of its own, through
+   * the internet link. Any signed-in device may ask (the user is often away from the computer), and every
+   * new key is announced on the computer and the phone, and can be removed alone.
+   */
+  app.post<{ Body: { device?: string } }>("/api/remote/devices/invite", async (req, reply) => {
+    const url = tunnel.status().url;
+    if (!url) return reply.code(409).send({ error: "Turn on access from anywhere first (Settings → Phone)." });
+    const name = String(req.body?.device ?? "Device").replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device";
+    const key = await deviceKeys.issue(name);
+    void notifier.send({ title: "A new device key was made", body: `"${name}" can now connect to KesherAI through the internet link${isLocalRequest(req) ? "" : " (made from a connected device)"}. If it was not you, remove it in Settings → Phone.`, path: "#/settings/phone", tags: ["key"], priority: 4 }).catch(() => undefined);
+    return { link: `${url.replace(/\/$/, "")}/?token=${encodeURIComponent(key)}`, name };
+  });
   app.delete<{ Params: { id: string } }>("/api/remote/devices/:id", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Devices are removed on the computer that runs KesherAI." });
     return { ok: await deviceKeys.remove(req.params.id) };

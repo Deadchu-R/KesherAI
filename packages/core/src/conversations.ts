@@ -10,7 +10,7 @@ import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
-import { picturesForStyle } from "./look-pictures.js";
+import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 
@@ -85,9 +85,6 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
     return { text, toolCalls: [] };
   };
 }
-
-/** The tools that get a picture icon when the chat designs a look from a named style. */
-const LOOK_ICON_PAGES = ["#/images", "#/pages", "#/knowledge", "#/models", "#/day", "#/memory"] as const;
 
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
@@ -405,29 +402,23 @@ export class ConversationManager {
           }
           const credits: string[] = [];
           let found = "";
-          const style = typeof input.style === "string" ? input.style.trim().slice(0, 80) : "";
+          // Small models often give the look a name but forget style: a name with no pictures of its own counts as the style.
+          const named = typeof input.name === "string" && !input.background && !input.icons ? input.name.replace(/[-_]+/g, " ").replace(/\b(style|theme|look|inspired|design)\b/gi, "").trim() : "";
+          const style = (typeof input.style === "string" ? input.style : named).trim().slice(0, 80);
           const want = typeof input.pictures === "string" ? input.pictures : "both";
           const pics: Record<string, unknown> = {};
           if (style && want !== "none") {
-            const bg = want !== "icons" && !input.background;
-            const ic = want !== "background" && !input.icons;
             try {
-              const r = await picturesForStyle(style, { background: bg, icons: ic ? LOOK_ICON_PAGES.length : 0, signal: ctx.signal });
-              if (r.background) {
-                const a = await this.deps.assets.save(r.background.data, r.background.mimeType, { meta: { use: "background", style, source: r.background.page, license: r.background.license, artist: r.background.artist } });
-                pics.background = { kind: "image", assetId: a.id, dim: 60 };
-                credits.push(`background: ${r.background.artist} (${r.background.license}) ${r.background.page}`);
-              }
-              if (r.icons.length) {
-                const icons: Record<string, { assetId: string }> = {};
-                for (const [i, p] of r.icons.entries()) {
-                  const a = await this.deps.assets.save(p.data, p.mimeType, { meta: { use: "icon", style, source: p.page, license: p.license, artist: p.artist } });
-                  icons[LOOK_ICON_PAGES[i]!] = { assetId: a.id };
-                }
-                pics.icons = icons;
-                credits.push(`${r.icons.length} icons from Wikimedia Commons`);
-              }
-              found = r.background || r.icons.length ? "" : ` Found no free pictures of "${style}" on the web; use emoji icons and a gradient background that fit instead (call again with icons and background).`;
+              const r = await styleLook(style, {
+                background: want !== "icons" && !input.background,
+                iconPages: want !== "background" && !input.icons ? LOOK_ICON_PAGES : [],
+                save: async (p, use) => (await this.deps.assets.save(p.data, p.mimeType, { meta: { use, style, source: p.page, license: p.license, artist: p.artist } })).id,
+                signal: ctx.signal,
+              });
+              if (r.background) pics.background = r.background;
+              if (r.icons) pics.icons = r.icons;
+              credits.push(...r.credits);
+              found = r.background || r.icons ? "" : ` Found no free pictures of "${style}" on the web; use emoji icons and a gradient background that fit instead (call again with icons and background).`;
             } catch (err) {
               found = ` Could not search for pictures (${(err as Error).message}); use emoji icons and a gradient instead.`;
             }

@@ -16,6 +16,7 @@ import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type { KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
+import { connectComputer, forgetComputer, listComputers, openComputer } from "./computers.js";
 
 /**
  * The project's Google and GitHub sign-in clients. Release builds get it from the
@@ -404,6 +405,15 @@ ipcMain.handle("kesher:chat-pdf", async (event, id: unknown) => {
   } finally {
     page.destroy();
   }
+});
+
+// Another computer with KesherAI (Settings → Phone → "Connect this app to another computer").
+const appIcon = () => join(app.isPackaged ? join(resourcesDir(), "web") : join(resourcesDir(), "apps/web/dist"), "icon-192.png");
+ipcMain.handle("kesher:computers", async (event) => (fromApp(event) ? listComputers() : []));
+ipcMain.handle("kesher:computer-connect", async (event, link: unknown) => (fromApp(event) && typeof link === "string" && link.length < 2000 ? connectComputer(link, appIcon()) : { error: "Not allowed." }));
+ipcMain.handle("kesher:computer-open", async (event, origin: unknown) => (fromApp(event) && typeof origin === "string" ? openComputer(origin, appIcon()) : { error: "Not allowed." }));
+ipcMain.handle("kesher:computer-forget", async (event, origin: unknown) => {
+  if (fromApp(event) && typeof origin === "string") await forgetComputer(origin);
 });
 
 ipcMain.handle("kesher:restart", (event) => {

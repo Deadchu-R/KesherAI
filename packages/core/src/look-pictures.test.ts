@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { downloadPicture, parseCommons, picturesForStyle, sniffPicture } from "./look-pictures.js";
+import { downloadPicture, findPictures, parseCommons, picturesForStyle, sniffPicture } from "./look-pictures.js";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
 const page = (i: number, over: Record<string, unknown> = {}) => ({
@@ -16,7 +16,7 @@ describe("look pictures", () => {
   });
 
   it("keeps only bitmaps from the picture host", () => {
-    const got = parseCommons({ query: { pages: { a: page(2), b: page(1, { thumburl: "https://evil.example/x.png" }), c: page(3, { mime: "image/svg+xml" }) } } });
+    const got = parseCommons({ query: { pages: { a: page(2), b: page(1, { thumburl: "https://evil.example/x.png" }), c: page(3, { mime: "image/gif" }) } } });
     assert.deepEqual(got.map((p) => p.url), ["https://upload.wikimedia.org/x/2.png"]);
     assert.equal(got[0]!.artist, "Someone");
   });
@@ -36,4 +36,20 @@ describe("look pictures", () => {
     assert.equal(r.background?.mimeType, "image/png");
     assert.equal(r.icons.length, 2);
   });
+});
+
+it("takes drawings only as their PNG copy", () => {
+  const got = parseCommons({ query: { pages: { a: page(1, { mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/x/1.svg" }), b: page(2, { mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/x/2.svg.png" }) } } });
+  assert.deepEqual(got.map((p) => p.url), ["https://upload.wikimedia.org/x/2.svg.png"]);
+});
+
+it("searches the words as a phrase, without unsuitable pictures", async () => {
+  let asked = "";
+  const f = (async (u: string | URL) => {
+    asked = new URL(String(u)).searchParams.get("gsrsearch") ?? "";
+    return Response.json({});
+  }) as unknown as typeof fetch;
+  await findPictures('One "Piece', { width: 256, fetchImpl: f });
+  assert.match(asked, /^filetype:bitmap "One Piece" /);
+  assert.match(asked, /-swimsuit/);
 });

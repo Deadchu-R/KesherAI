@@ -1,3 +1,4 @@
+import { LOOK_ICON_PAGES, styleLook } from "../look-pictures.js";
 import type { FastifyInstance } from "fastify";
 import { PARTS, partOn, cleanAppearance, type Appearance } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
@@ -71,6 +72,27 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     s.config.savedLooks = s.config.savedLooks.filter((l) => l.name !== req.query.name);
     await s.saveConfig();
     return looksView();
+  });
+
+  /**
+   * "Find pictures on the web" (Settings → Appearance): a background and tool icons for a named style,
+   * free pictures from Wikimedia Commons, put in the look at once. Body: `{ style, background?, icons? }`.
+   */
+  app.post<{ Body: { style?: unknown; background?: boolean; icons?: boolean } }>("/api/appearance/pictures", async (req, reply) => {
+    const style = typeof req.body?.style === "string" ? [...req.body.style].filter((c) => c >= " ").join("").trim().slice(0, 80) : "";
+    if (!style) return reply.code(400).send({ error: "Say what to look for, e.g. One Piece." });
+    const r = await styleLook(style, {
+      background: req.body?.background !== false,
+      iconPages: req.body?.icons === false ? [] : LOOK_ICON_PAGES,
+      save: async (p, use) => (await s.assets.save(p.data, p.mimeType, { meta: { use, style, source: p.page, license: p.license, artist: p.artist } })).id,
+    }).catch((err: Error) => reply.code(502).send({ error: `Could not search for pictures: ${err.message}` }));
+    if (reply.sent) return reply;
+    const got = r as Awaited<ReturnType<typeof styleLook>>;
+    if (!got.background && !got.icons) return reply.code(404).send({ error: `Found no free pictures of "${style}". Try other words in English (a place, a character's ship, an object from it).` });
+    const cur = cleanAppearance(s.config.appearance);
+    setAppearance(s, { ...cur, ...(got.background ? { background: got.background } : {}), ...(got.icons ? { icons: { ...cur.icons, ...got.icons } } : {}) });
+    await s.saveConfig();
+    return { appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0, credits: got.credits };
   });
 
   /** A picture for the background (Settings → Appearance): saved to the library; returns its id. Body: `{ data: base64, mimeType }`. */

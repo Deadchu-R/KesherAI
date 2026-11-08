@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { desktop } from "./library";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
@@ -96,6 +97,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
               <a role="menuitem" href="#/updates">{t("checkUpdates")}</a>
               <button type="button" role="menuitem" onClick={() => { setMenu(false); void reconnect({ restart: true }); }}>{t("restartComputerApp")}</button>
               {appHome() && <a role="menuitem" href={`${appHome()!.replace(/\/$/, "")}/?switch=1`}>{t("switchComputer")}</a>}
+              {desktop()?.connectComputer && !isRemote() && <a role="menuitem" href="#/settings/phone">{getLocale() === "he" ? "התחבר למחשב אחר" : "Connect to another computer"}</a>}
               {(appHome() || isRemote()) && <button type="button" role="menuitem" className="danger" onClick={() => { setMenu(false); if (confirm(t("disconnectSure"))) disconnectComputer(); }}>{t("disconnectComputer")}</button>}
             </div>
           )}

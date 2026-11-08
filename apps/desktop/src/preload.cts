@@ -25,4 +25,12 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke("kesher:pick-files"),
   /** The full path of a file dropped on the window. */
   pathOf: (file: File): string => webUtils.getPathForFile(file),
+  /** Other computers this app connects to (names and addresses; keys never leave the main process). */
+  computers: (): Promise<Array<{ name: string; origin: string }>> => ipcRenderer.invoke("kesher:computers"),
+  /** Connects to another computer from its link and opens it in its own window. */
+  connectComputer: (link: string): Promise<{ name?: string; error?: string }> => ipcRenderer.invoke("kesher:computer-connect", link),
+  /** Opens a saved computer in its own window. */
+  openComputer: (origin: string): Promise<{ error?: string }> => ipcRenderer.invoke("kesher:computer-open", origin),
+  /** Forgets a saved computer (its key and its window's storage). */
+  forgetComputer: (origin: string): Promise<void> => ipcRenderer.invoke("kesher:computer-forget", origin),
 });

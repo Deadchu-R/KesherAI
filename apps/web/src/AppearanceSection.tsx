@@ -42,6 +42,20 @@ export function AppearanceSection() {
 
   const [myLooks, setMyLooks] = useState<Array<{ name: string; appearance: Appearance }>>([]);
   const [lookName, setLookName] = useState("");
+  const [picStyle, setPicStyle] = useState("");
+  const [picBusy, setPicBusy] = useState(false);
+  const findPictures = () => {
+    const style = picStyle.trim();
+    if (!style || picBusy) return;
+    setPicBusy(true);
+    void api<{ appearance: Appearance; canUndo: boolean; credits: string[] }>("/api/appearance/pictures", { method: "POST", body: { style } })
+      .then((r) => {
+        applyAppearance(r.appearance);
+        setCanUndo(r.canUndo);
+        toast(L(`נמצאו תמונות חופשיות (Wikimedia Commons). ${r.credits.join(" · ")}`, `Found free pictures (Wikimedia Commons). ${r.credits.join(" · ")}`));
+      }, (e: Error) => toast(e.message))
+      .finally(() => setPicBusy(false));
+  };
 
   useEffect(() => {
     void api<{ canUndo: boolean }>("/api/appearance").then((r) => setCanUndo(r.canUndo), () => undefined);
@@ -146,6 +160,13 @@ export function AppearanceSection() {
         </div>
         <small className="muted">{L("למשל: \"עצב בסגנון וואן פיס\" או \"תצייר רקע של ים בשקיעה ותשים אותו\". נפתח צ'אט עם הבקשה. אפשר גם לבקש בכל צ'אט, ולהגיד \"בטל\" כדי לחזור.", "Opens a chat with the request. You can also ask in any chat, and say \"undo\" to go back.")}</small>
       </div>
+
+      <h3>{L("רקע ואייקונים מהאינטרנט", "Background and icons from the web")}</h3>
+      <div className="row">
+        <input className="grow" dir="auto" maxLength={80} value={picStyle} onChange={(e) => setPicStyle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && findPictures()} placeholder={L("באנגלית, למשל: One Piece, Thousand Sunny, Tokyo night", "e.g. One Piece, Thousand Sunny, Tokyo night")} aria-label={L("מה לחפש", "What to look for")} />
+        <button type="button" className="primary" disabled={picBusy || !picStyle.trim()} onClick={findPictures}>{picBusy ? L("מחפש…", "Searching…") : L("מצא ושים", "Find and use")}</button>
+      </div>
+      <small className="muted">{L("KesherAI מחפש תמונות ואייקונים ברישיון חופשי ב-Wikimedia Commons, שם אחת כרקע ואחרות כאייקונים לכלים. \"בטל שינוי\" מחזיר. אפשר גם להעלות תמונה משלך למטה.", "KesherAI looks for free-licence pictures and icons on Wikimedia Commons, puts one as the background and others as tool icons. Undo brings back the previous look. You can also upload your own picture below.")}</small>
 
       <h3>{L("המראות שלי", "My looks")}</h3>
       <div className="row">
