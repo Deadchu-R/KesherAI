@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelInfo } from "./api";
 import { t } from "./i18n";
+import { refreshComputers } from "./computers";
+import { toast } from "./library";
 
 /**
  * The composer's model chooser: a searchable menu grouped by where the model
@@ -29,6 +31,7 @@ async function loadProviderNames(fresh = false): Promise<Record<string, string>>
  */
 export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [finding, setFinding] = useState(false);
   const [q, setQ] = useState("");
   const [names, setNames] = useState<Record<string, string>>(providerNames ?? {});
   const ref = useRef<HTMLDivElement>(null);
@@ -125,6 +128,10 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
               </div>
             ))}
           </div>
+          <button type="button" className="model-pop-foot small" disabled={finding} onClick={() => {
+            setFinding(true);
+            void refreshComputers().then((msg) => { toast(msg); return loadProviderNames(true).then(setNames); }, (e: Error) => toast(e.message)).finally(() => setFinding(false));
+          }}>{finding ? "⟳ …" : `⟳ ${t("findComputers")}`}</button>
           {!devices.length && <a className="model-pop-foot small" href="#/connections">{t("runOnOtherComputer")}</a>}
           <a className="model-pop-foot" href="#/connections">{t("connectMoreModels")}</a>
         </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { refreshComputers } from "./computers";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -14,6 +15,7 @@ export function AccountButton() {
   const [d, setD] = useState<Devices | null>(null);
   const [open, setOpen] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const [finding, setFinding] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const load = () => {
     void api<Google>("/api/google").then(setG, () => undefined);
@@ -105,7 +107,13 @@ export function AccountButton() {
                     <span>{L("המכשירים שלי יכולים להשתמש במחשב הזה", "My devices can use this computer")}</span>
                   </label>
                   <div className="account-devices">
-                    <span className="muted small">{L("המכשירים שלי", "My devices")}</span>
+                    <span className="row muted small">
+                      <span className="grow">{L("המכשירים שלי", "My devices")}</span>
+                      <button type="button" className="link-btn small" disabled={finding} onClick={() => {
+                        setFinding(true);
+                        void refreshComputers().then((msg) => { toast(msg); void api<Devices>("/api/devices").then(setD); }, (e: Error) => toast(e.message)).finally(() => setFinding(false));
+                      }}>{finding ? "⟳ …" : `⟳ ${L("רענן", "Refresh")}`}</button>
+                    </span>
                     {others.length === 0 && <span className="muted small">{L("עוד אין — התחבר עם אותו חשבון במחשב או בטלפון השני.", "None yet — sign in with the same account on your other computer or phone.")}</span>}
                     {others.map((x) => <span key={x.id} className="small"><span style={{ color: x.online ? "var(--good)" : "var(--muted)" }}>●</span> {x.name}</span>)}
                   </div>

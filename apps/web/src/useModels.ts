@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ModelInfo, type ModelListing } from "./api";
+import { COMPUTERS_EVENT } from "./computers";
 
 /**
  * Loads every model from `/api/models`, optionally filtered by category.
@@ -24,5 +25,10 @@ export function useModels(category?: string) {
   };
 
   useEffect(reload, [category]);
+  // After "find my computers": another computer's models may have come or gone.
+  useEffect(() => {
+    addEventListener(COMPUTERS_EVENT, reload);
+    return () => removeEventListener(COMPUTERS_EVENT, reload);
+  }, [category]);
   return { models, errors, loading, reload };
 }
