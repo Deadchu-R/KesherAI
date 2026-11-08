@@ -86,12 +86,18 @@ export function placePopup(pop: HTMLElement, anchor: HTMLElement): Side {
 }
 
 const open = new Map<HTMLElement, HTMLElement>();
+const watchers = new Map<HTMLElement, ResizeObserver>();
+const forget = (pop: HTMLElement) => {
+  open.delete(pop);
+  watchers.get(pop)?.disconnect();
+  watchers.delete(pop);
+};
 let raf = 0;
 const replaceAll = () => {
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(() => {
     for (const [pop, anchor] of open) {
-      if (!pop.isConnected || !anchor.isConnected) open.delete(pop);
+      if (!pop.isConnected || !anchor.isConnected) forget(pop);
       else placePopup(pop, anchor);
     }
   });
@@ -108,7 +114,9 @@ function track(pop: HTMLElement): void {
   open.set(pop, anchor);
   placePopup(pop, anchor);
   // Its content can change size (search results, loading): place it again.
-  new ResizeObserver(replaceAll).observe(pop);
+  const ro = new ResizeObserver(replaceAll);
+  ro.observe(pop);
+  watchers.set(pop, ro);
 }
 
 /** Starts placing every popup menu that opens in the page. Call once. */
@@ -118,7 +126,11 @@ export function startPlacement(): void {
     root.querySelectorAll?.<HTMLElement>(POPUP).forEach(track);
   };
   new MutationObserver((records) => {
-    for (const r of records) for (const n of r.addedNodes) if (n instanceof HTMLElement) scan(n);
+    for (const r of records) {
+      for (const n of r.addedNodes) if (n instanceof HTMLElement) scan(n);
+      // A closed menu: stop watching it.
+      if (r.removedNodes.length) for (const pop of [...open.keys()]) if (!pop.isConnected) forget(pop);
+    }
   }).observe(document.body, { childList: true, subtree: true });
   scan(document.body);
   addEventListener("resize", replaceAll);

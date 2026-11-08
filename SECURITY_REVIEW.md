@@ -29,3 +29,11 @@
 - analyze_chat reads only files inside the chat's folder or folders the user attached (resolveForTool), at most 20 MB, and never sends the chat anywhere.
 - + → Project: local only; it opens the chosen folder to the chat's file tools, as attaching files does. Switching the chat's Unity project from the phone works only among projects already added on the computer.
 - Tool search changes which tool descriptions the model reads, not what may run: every tool keeps its own risk and approvals.
+
+## Scan after 0.5.40 (0.5.42)
+
+- Figma: the token is saved only on this computer (local-only route, format checked), never returned by any API (GET /api/figma says only whether one is saved), not part of the settings sync between computers, and sent only to api.figma.com in a header. Frame pictures: HTTPS from Figma's image hosts only, no redirects, 12 MB, PNG bytes checked.
+- Menu placement keeps every popup at z-index 1000, below the protected approval cards (100000); it changes only position and size.
+- Desktop watchdog: starts this app's own server only when the one it shows stops answering twice; it never attaches to another address.
+- My devices: an unreachable computer keeps its connection (same address and token as before), so nothing new is exposed.
+- Performance: popup watchers are disconnected when a menu closes.
