@@ -682,6 +682,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const caller = apiKeys.identify(given, isLocalRequest(request));
     reply.raw.once("finish", () => apiKeys.record({ at: new Date(started).toISOString(), caller, method: request.method, path, ...(model ? { model } : {}), status: reply.raw.statusCode, ms: Date.now() - started }));
   });
+  // Pages the API itself answers with (sign-in results, printable chats): nothing from outside, no connections.
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (request.url.startsWith("/api/") && String(reply.getHeader("content-type") ?? "").startsWith("text/html") && !reply.getHeader("content-security-policy")) {
+      reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; script-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+    }
+    return payload;
+  });
   // Who came in from outside (and who was refused), for Settings → Phone.
   const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));
   if (features.remote) registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally }, (r) => accessLog.note(r));

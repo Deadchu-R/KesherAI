@@ -289,6 +289,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const name = exportFileName(conv, html ? "html" : "md");
     if (req.query.download) reply.header("content-disposition", `attachment; filename="chat.${html ? "html" : "md"}"; filename*=UTF-8''${encodeURIComponent(name)}`);
     reply.type(html ? "text/html; charset=utf-8" : "text/markdown; charset=utf-8");
+    // The printable page: its own styles and pictures only; a script only for the print dialog.
+    if (html) reply.header("content-security-policy", `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; script-src ${req.query.print ? "'unsafe-inline'" : "'none'"}; base-uri 'none'; form-action 'none'`);
     return html ? conversationHtml(conv, !!req.query.print) : conversationMarkdown(conv);
   });
 

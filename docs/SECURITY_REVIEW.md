@@ -39,6 +39,12 @@ This review went through the code part by part. Each finding is listed with what
       - the access log (it keeps no tokens, query strings or contents)
 12. **Access log** (Settings → Phone → "Who came in from outside"). It shows every address that came in from outside and every refused try. Five refusals in ten minutes send an alert.
 
+13. **Scan after 0.5.8.** It covered the plugin preview, the start screen, and Telegram pictures and voice.
+    - **The plugin preview** fetches only from GitHub, with owner/repo checked first.
+    - **Telegram files** come only from Telegram's file address. The path Telegram gives is checked, files are capped at 20 MB, and KesherAI makes up the file names itself.
+    - **The web interface** has no `innerHTML` and no `dangerouslySetInnerHTML`.
+    - **New: pages the API answers with get a strict Content-Security-Policy.** These are the sign-in result pages and the printable chats and documents. They load nothing from outside and make no connections. A printable chat gets a script only when it opens the print dialog.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA advisory on memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.
