@@ -67,6 +67,9 @@ export function allowedOrigin(origin: string, host: string | undefined, path: st
  * @returns The address.
  */
 export function clientAddress(request: Pick<FastifyRequest, "ip" | "headers">): string {
+  // Only the tunnel (which connects from this computer) may say who is behind it; anyone on the
+  // network could send that header to look like someone else and dodge the limit on wrong tokens.
+  if (!isLoopback(request.ip)) return request.ip;
   const cf = request.headers["cf-connecting-ip"];
   return (Array.isArray(cf) ? cf[0] : cf) ?? request.ip;
 }

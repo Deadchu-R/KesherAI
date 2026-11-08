@@ -29,6 +29,16 @@ This review went through the code part by part. Each finding is listed with what
     - Installing one from Git, and turning any plugin on, work only on the computer itself.
     - A new plugin starts turned off. Turning on a plugin you installed asks first, says that it runs code on your computer with full access, and lists the permissions it asked for. Plugins still run inside the core's process; giving each its own process with only its permissions is on the roadmap.
 
+11. **Scan after 0.5.4.** Every 5 changes the new code is scanned for security and speed.
+    - **Fixed:** the tunnel's "who is behind me" header (`cf-connecting-ip`) was trusted from anyone. A device on the home network could send it with a different address on each try and so dodge the limit on wrong tokens. It is now trusted only from the tunnel itself, which connects from this computer.
+    - **Changed:** the global request size went from 50 MB to 25 MB. Routes that take more set their own limit.
+    - **Checked, no problems found:**
+      - compression (it never touches live streams)
+      - heartbeat routines (a quiet run removes only the chat it made)
+      - `learn_skill` (the name becomes a safe folder name, it always asks first, and from Telegram it can be approved only on the computer)
+      - the access log (it keeps no tokens, query strings or contents)
+12. **Access log** (Settings → Phone → "Who came in from outside"). It shows every address that came in from outside and every refused try. Five refusals in ten minutes send an alert.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA advisory on memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.

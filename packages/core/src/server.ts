@@ -635,7 +635,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   };
   stopConversation = (id) => services.conversations.stop(id);
 
-  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
+  // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
+  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
   // Cross-origin access: the model API (/v1) for web apps of any origin (they need an access key);
   // KesherAI's own API only for its own pages, the Android app and, for /api/browser, the extension.
   // Smaller answers over Wi-Fi and the tunnel (a long chat's JSON shrinks about tenfold). Only text:
