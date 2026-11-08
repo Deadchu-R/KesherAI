@@ -1403,3 +1403,9 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .nav-pin { -webkit-touch-callout: none; user-select: none; }
 .nav-pins.reordering .nav-pin { transition: transform .12s ease; }
 .nav-pin.dragging { background: var(--raised); outline: 1px dashed var(--accent); transform: scale(1.03); box-shadow: var(--shadow-1); cursor: grabbing; }
+
+/* Model menu: which computer runs the chat. */
+.model-where { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.model-where button { flex: 1 1 auto; font-size: 13px; padding: 6px 10px; }
+.model-where-note { margin: 0 2px 6px; }
+.model-chip-device { color: var(--accent); white-space: nowrap; margin-inline-end: 4px; }

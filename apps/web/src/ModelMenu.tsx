@@ -14,8 +14,8 @@ type Group = { key: string; label: string; where: ModelInfo["location"]; models:
 const WHERE_ORDER: Record<string, number> = { local: 0, server: 1, cloud: 2 };
 
 let providerNames: Record<string, string> | undefined;
-async function loadProviderNames(): Promise<Record<string, string>> {
-  if (!providerNames) {
+async function loadProviderNames(fresh = false): Promise<Record<string, string>> {
+  if (!providerNames || fresh) {
     const list = await api<Array<{ id: string; name?: string }>>("/api/providers").catch(() => []);
     providerNames = Object.fromEntries(list.map((p) => [p.id, p.name ?? p.id]));
   }
@@ -36,6 +36,10 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
   useEffect(() => {
     void loadProviderNames().then(setNames);
   }, []);
+  // Another computer of the user's (My devices) can appear while the app is open.
+  useEffect(() => {
+    if (open) void loadProviderNames(true).then(setNames);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
@@ -50,17 +54,27 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
   }, [open]);
 
   const current = models.find((m) => m.id === value);
+  /** The user's other computers (My devices): each is a connection "device-…". */
+  const deviceName = (providerId: string) => (names[providerId] ?? providerId).replace(/\s*\(your computer\)\s*$/i, "");
+  const devices = useMemo(() => [...new Set(models.map((m) => m.providerId).filter((p) => p.startsWith("device-")))], [models]);
+  const onDevice = current?.providerId.startsWith("device-") ? current.providerId : "";
+  // Which computer runs the chat: this one ("") or one of My devices.
+  const [where, setWhere] = useState<string>(onDevice);
+  useEffect(() => {
+    if (open) setWhere(onDevice);
+  }, [open]);
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const map = new Map<string, Group>();
     for (const m of models) {
+      if (devices.length && (where ? m.providerId !== where : m.providerId.startsWith("device-"))) continue;
       if (needle && !`${m.name} ${m.providerModelId} ${names[m.providerId] ?? m.providerId}`.toLowerCase().includes(needle)) continue;
       const key = m.providerId || "?";
       if (!map.has(key)) map.set(key, { key, label: names[key] ?? key, where: m.location, models: [] });
       map.get(key)!.models.push(m);
     }
     return [...map.values()].sort((a, b) => (WHERE_ORDER[a.where] ?? 3) - (WHERE_ORDER[b.where] ?? 3) || a.label.localeCompare(b.label));
-  }, [models, q, names]);
+  }, [models, q, names, where, devices]);
 
   const whereLabel = (w: ModelInfo["location"]) => (w === "cloud" ? t("whereCloud") : w === "server" ? t("whereServer") : t("whereLocal"));
 
@@ -68,11 +82,21 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
     <div className="model-menu" ref={ref}>
       <button type="button" data-slide-menu className="model-chip" aria-haspopup="listbox" aria-expanded={open} aria-label={t("pickModel")} onClick={() => setOpen(!open)}>
         <span className={`where-dot ${current?.location ?? "local"}`} aria-hidden="true" />
+        {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
         <span className="model-chip-name">{current?.name ?? value}</span>
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
       </button>
       {open && (
         <div className="model-pop" role="listbox" aria-label={t("pickModel")}>
+          {devices.length > 0 && (
+            <div className="segmented model-where" role="group" aria-label={t("runWhere")}>
+              <button type="button" className={where === "" ? "on" : ""} aria-pressed={where === ""} onClick={() => setWhere("")}>💻 {t("thisComputer")}</button>
+              {devices.map((d) => (
+                <button key={d} type="button" className={where === d ? "on" : ""} aria-pressed={where === d} onClick={() => setWhere(d)}>🖥 {deviceName(d)}</button>
+              ))}
+            </div>
+          )}
+          {where && <p className="muted small model-where-note">{t("runsOnNote", { name: deviceName(where) })}</p>}
           <input autoFocus placeholder={t("searchModels")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("searchModels")} />
           <div className="model-pop-list">
             {groups.length === 0 && <p className="muted small">{t("noModelsMatch")}</p>}
@@ -101,6 +125,7 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
               </div>
             ))}
           </div>
+          {!devices.length && <a className="model-pop-foot small" href="#/connections">{t("runOnOtherComputer")}</a>}
           <a className="model-pop-foot" href="#/connections">{t("connectMoreModels")}</a>
         </div>
       )}

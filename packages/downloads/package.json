@@ -1,6 +1,6 @@
 {
   "name": "@kesher/downloads",
-  "version": "0.5.23",
+  "version": "0.5.24",
   "description": "Hugging Face model search, a resumable verified download queue, and hardware detection.",
   "license": "Apache-2.0",
   "type": "module",
