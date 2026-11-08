@@ -185,7 +185,7 @@ public class KesherUpdaterPlugin extends Plugin {
                     .setAutoCancel(true)
                     .build();
                 try { nm.notify(NOTE, ready); } catch (SecurityException ignored) { /* see above */ }
-                if (openWhenDone && getActivity() != null && !getActivity().isFinishing()) {
+                if (openWhenDone && inFront) {
                     ctx.startActivity(intent);
                     nm.cancel(NOTE);
                 }
@@ -197,6 +197,21 @@ public class KesherUpdaterPlugin extends Plugin {
                 call.reject(e.getMessage());
             }
         }).start();
+    }
+
+    /** Whether the app is on screen (the installer opens by itself only then). */
+    private volatile boolean inFront = true;
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        inFront = true;
+    }
+
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        inFront = false;
     }
 
     private static final String CHANNEL = "kesher-updates";
