@@ -14,3 +14,11 @@
 - Unity: project names, folders, editor versions and template ids are checked before the CLI runs (arguments, never a shell); `self-update`, create and open are local-only.
 - Sidebar reorder: local storage only; no new requests.
 - Performance: the model menu reloads the connection names only when it opens; the split runs one part at a time per computer, so no computer is overloaded.
+
+## Scan after 0.5.29 (0.5.30)
+
+- Unity chat tools: the CLI gets arguments as a list (no shell); command names `[a-z0-9_.-]` words (≤ 4), parameter names checked, the command's own flags after the `--` fence; unity_command and unity_script_eval ask first; unity_script_eval is never offered to Telegram chats; screenshots are written to the chat's own outputs folder or the project's Temp/.
+- Unreal MCP setup: local only; the .uproject is backed up before it changes; only the two plugin entries and the per-user auto-start line are written; the connection is 127.0.0.1:8000.
+- Graph tools: changes are `write` risk (asked in "ask" mode), the model's operations are checked by parseOps before the bridge applies them, one undo step in the editor.
+- Update all my computers: each computer is reached through its own token-protected address from My devices; updates come only from the project's GitHub releases (the same path as "Install update"); results are reported per computer.
+- Performance: the Unity CLI check runs at most once a minute in the background; tool lists are built per message as before.
