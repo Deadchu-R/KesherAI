@@ -489,6 +489,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void routines.start();
   // Unity's CLI: the Unity page and the chat's Unity tools share it.
   const unityCli = new UnityCli(config.unity, persist);
+  // Look for the CLI now, so the first chat already has the Unity tools.
+  unityCli.cliKnown();
   const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));
   const services: KesherServices = {
     browser,

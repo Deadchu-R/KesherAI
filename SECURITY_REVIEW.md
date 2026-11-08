@@ -37,3 +37,11 @@
 - Desktop watchdog: starts this app's own server only when the one it shows stops answering twice; it never attaches to another address.
 - My devices: an unreachable computer keeps its connection (same address and token as before), so nothing new is exposed.
 - Performance: popup watchers are disconnected when a menu closes.
+
+## Unity chat tools (0.5.46)
+
+- Paths: every Unity file tool resolves the path against the project, refuses `..`, absolute paths outside it and roots other than the allowed ones (writes: `Assets/` only), and follows symbolic links on the existing part of the path to make sure it still lands inside the project.
+- Writes: code files only (no .dll, .exe, scenes or prefabs), 300,000 characters at most, recorded for KesherAI's Undo, risk "write" (the user's approval setting applies; never offered to Telegram chats). An Editor script can run code inside Unity, so this is treated like run_command in the docs.
+- C# built by the tools: user and model text enters only as escaped C# string literals (backslash and quote escaped, control characters dropped); component type names must match a strict identifier pattern; numbers must be finite. Tested with an injection attempt in a GameObject name.
+- The CLI is run with an argument list, never a shell; `recompile` and `logs --console` take only fixed flags plus the project path.
+- Performance: the CLI check starts when the server starts (so the first chat has the tools) and is cached for a minute; file listing stops at 500 files and 12 folder levels; hierarchy at 400 objects.

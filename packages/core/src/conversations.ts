@@ -13,7 +13,7 @@ import type { AssetStore } from "./assets.js";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import { runSplit, type SplitWorker } from "./split-task.js";
 import type { UnityCli } from "./unity-cli.js";
-import { UNITY_NOTE, unityTools } from "./unity-tools.js";
+import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { graphTools } from "./graph-edit.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
@@ -649,8 +649,8 @@ export class ConversationManager {
     const split = this.splitTools(media.notes, id);
     // The numbers of an exported chat between people (the relationship analyst persona uses it).
     split.push(analyzeChatTool);
-    // Unity through its CLI, when it is installed on this computer.
-    const unity = this.deps.unity?.cliKnown()
+    // Unity through its CLI: when it is installed here, or a Unity project was added (then unity_status explains a missing CLI).
+    const unity = this.deps.unity && (this.deps.unity.cliKnown() || this.deps.unity.activeProject)
       ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id)
       : [];
     if (unity.length) media.notes.push(UNITY_NOTE);
@@ -676,7 +676,7 @@ export class ConversationManager {
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
       return {
-        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$)/.test(t.spec.name)),
+        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$)/.test(t.spec.name)),
         notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
       };
     }
@@ -892,7 +892,9 @@ export class ConversationManager {
         } catch {
           local = true;
         }
-        return local && this.deps.config.toolSearch !== false ? CORE_TOOLS : undefined;
+        if (!(local && this.deps.config.toolSearch !== false)) return undefined;
+        // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
+        return this.deps.unity?.activeProject ? [...CORE_TOOLS, ...UNITY_TOOL_NAMES] : CORE_TOOLS;
       },
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(

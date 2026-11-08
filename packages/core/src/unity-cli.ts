@@ -184,6 +184,22 @@ export class UnityCli {
     return r.stdout;
   }
 
+  /**
+   * Runs the CLI and returns its exit code and output as they are (for commands
+   * whose failure carries data, like `recompile` with compile errors).
+   */
+  async cliRaw(args: string[], timeoutMs: number): Promise<CliRun> {
+    const r = await this.run(args, timeoutMs);
+    if (r.stderr === "ENOENT") throw failure(r);
+    this.statusCache = undefined;
+    return r;
+  }
+
+  /** The CLI's plain-words error for a failed run. */
+  explain(r: CliRun): string {
+    return failure(r).message;
+  }
+
   /** @returns The project the page shows. */
   async project(): Promise<string | undefined> {
     const p = this.config.active && this.config.projects.includes(this.config.active) ? this.config.active : this.config.projects[0];
