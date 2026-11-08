@@ -27,6 +27,8 @@ export interface UpdateCheck extends VersionInfo {
   /** Files changed locally, which can block an update. */
   localChanges: string[];
   checkedAt: string;
+  /** A newer version whose installer for this computer is not published yet (still being built). */
+  building?: string;
 }
 
 /** Progress of an update being applied. */
@@ -145,12 +147,20 @@ export class Updater {
   /** Installed copies: is there a newer release on GitHub, with an installer for this system? */
   private async checkRelease(info: VersionInfo): Promise<UpdateCheck> {
     if (!this.packaged) throw new Error("This copy was not installed with git, so it cannot update itself here.");
-    const res = await fetchRetrying(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases/latest`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
+    type Release = { tag_name: string; name?: string; body?: string; draft?: boolean; prerelease?: boolean; assets: Array<{ name: string; browser_download_url: string; size: number }> };
+    const res = await fetchRetrying(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases?per_page=10`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
     if (res.status === 404) return { ...info, newCommits: [], localChanges: [], checkedAt: new Date().toISOString() };
-    let rel: { tag_name: string; name?: string; body?: string; assets: Array<{ name: string; browser_download_url: string; size: number }> };
-    if (res.ok) rel = (await res.json()) as typeof rel;
-    else if (res.status === 403 || res.status === 429) rel = await this.releaseFromFeed();
+    let releases: Release[];
+    if (res.ok) releases = ((await res.json()) as Release[]).filter((r) => !r.draft && !r.prerelease && /^v?\d+\.\d+\.\d+$/.test(r.tag_name));
+    else if (res.status === 403 || res.status === 429) releases = [await this.releaseFromFeed()];
     else throw new Error(`GitHub answered ${res.status} while looking for a new version.`);
+    releases.sort((a, b) => compareVersions(b.tag_name.replace(/^v/, ""), a.tag_name.replace(/^v/, "")));
+    // The newest release that has an installer for this computer (a newer one may still be building).
+    const usable = releases.find((r) => installerFor(r.assets.map((a) => a.name)));
+    const newest = releases[0];
+    const building = newest && newest !== usable && compareVersions(newest.tag_name.replace(/^v/, ""), info.version) > 0 ? newest.tag_name.replace(/^v/, "") : undefined;
+    if (!usable) return { ...info, newCommits: [], localChanges: [], checkedAt: new Date().toISOString(), ...(building ? { building } : {}) };
+    const rel = usable;
     const latestVersion = rel.tag_name.replace(/^v/, "");
     const newer = compareVersions(latestVersion, info.version) > 0;
     const file = installerFor(rel.assets.map((a) => a.name));
@@ -159,7 +169,7 @@ export class Updater {
     // What's new: the release notes' bullet points, shown like the git copy's list of changes.
     const notes = (rel.body ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.replace(/^[-*] /, "").replace(/\*\*/g, "")).slice(0, 12);
     const newCommits = newer ? (notes.length ? notes : [rel.name ?? `v${latestVersion}`]).map((subject, i) => ({ hash: i === 0 ? `v${latestVersion}` : "", subject })) : [];
-    return { ...info, newCommits, latestVersion, localChanges: [], checkedAt: new Date().toISOString() };
+    return { ...info, newCommits, latestVersion, localChanges: [], checkedAt: new Date().toISOString(), ...(building ? { building } : {}) };
   }
 
   /**

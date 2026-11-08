@@ -18,9 +18,13 @@ test("versions and installers", () => {
 test("an installed copy finds a newer release, downloads the installer and runs it", async () => {
   const srv = createServer((req, res) => {
     const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
-    if (req.url === "/repos/o/r/releases/latest") {
+    if (req.url === "/repos/o/r/releases?per_page=10") {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(JSON.stringify({ tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "### New\n- **Google:** Drive files\n- Fixes", assets: ["KesherAI-Setup-0.4.2.exe", "KesherAI-0.4.2-arm64.dmg", "KesherAI-0.4.2-x64.dmg", "KesherAI-0.4.2.AppImage"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) }));
+      // 0.4.3 is still being built: no installers yet.
+      return res.end(JSON.stringify([
+        { tag_name: "v0.4.3", name: "KesherAI 0.4.3", body: "", assets: [] },
+        { tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "### New\n- **Google:** Drive files\n- Fixes", assets: ["KesherAI-Setup-0.4.2.exe", "KesherAI-0.4.2-arm64.dmg", "KesherAI-0.4.2-x64.dmg", "KesherAI-0.4.2.AppImage"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) },
+      ]));
     }
     if (req.url?.startsWith("/dl/")) return res.end("hello");
     res.writeHead(404).end();
@@ -32,6 +36,7 @@ test("an installed copy finds a newer release, downloads the installer and runs 
   assert.equal((await u.version()).version, "0.4.1");
   const c = await u.check();
   assert.equal(c.latestVersion, "0.4.2");
+  assert.equal(c.building, "0.4.3");
   assert.deepEqual(c.newCommits.map((x) => x.subject), ["Google: Drive files", "Fixes"]);
   await u.apply();
   for (let i = 0; i < 50 && u.status().running; i++) await new Promise((r) => setTimeout(r, 20));
@@ -39,7 +44,9 @@ test("an installed copy finds a newer release, downloads the installer and runs 
   assert.equal(await readFile(installed, "utf8"), "hello");
   // Up to date: nothing to install.
   const same = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.2", repo: "o/r", api, install: async () => undefined });
-  assert.equal((await same.check()).newCommits.length, 0);
+  const sameCheck = await same.check();
+  assert.equal(sameCheck.newCommits.length, 0);
+  assert.equal(sameCheck.building, "0.4.3");
   srv.closeAllConnections();
   srv.close();
 });

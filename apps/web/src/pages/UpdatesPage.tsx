@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { desktop } from "../library";
 import { reconnect } from "../Reconnect";
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 
-interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[] }
+interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[]; building?: string }
 interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; fromSource?: boolean; finishedAt?: string }
 
 /** Updates, from the side menu: this version, what is new, and installing it. */
@@ -98,6 +98,9 @@ function Updates() {
         )}
       </div>
       {check && check.newCommits.length === 0 && <p className="pill good" style={{ alignSelf: "flex-start" }}>{t("upToDate")}</p>}
+      {check?.building && (
+        <p className="muted small">{getLocale() === "he" ? `גרסה ${check.building} עדיין נבנית למחשב הזה ב-GitHub. היא תופיע כאן כשתהיה מוכנה (בדרך כלל תוך כמה דקות).` : `Version ${check.building} is still being built for this computer on GitHub. It appears here when it is ready (usually within minutes).`}</p>
+      )}
       {check && check.newCommits.length > 0 && (
         <>
           <p>{t("updateAvailable", { n: check.newCommits.length })}{check.latestVersion && check.latestVersion !== check.version ? ` · v${check.latestVersion}` : ""}</p>
