@@ -38,8 +38,8 @@ export interface Appearance {
   radius?: number;
   /** Space between things. */
   density?: "compact" | "normal" | "roomy";
-  /** Behind everything: plain, or a soft gradient of two colours. */
-  background?: { kind: "plain" } | { kind: "gradient"; from: string; to: string; angle?: number };
+  /** Behind everything: plain, a soft gradient of two colours, or a picture from the library (dimmed so text stays readable). */
+  background?: { kind: "plain" } | { kind: "gradient"; from: string; to: string; angle?: number } | { kind: "image"; assetId: string; dim?: number };
   /** The menu's groups, top to bottom (missing ones keep their place after these). */
   navOrder?: string[];
   /** Menu groups to hide (their tools stay in All tools). */
@@ -105,6 +105,9 @@ export function cleanAppearance(input: unknown): Appearance {
       const from = cleanColor(bg.from);
       const to = cleanColor(bg.to);
       if (from && to) out.background = { kind: "gradient", from, to, angle: num(bg.angle, 0, 360) ?? 160 };
+    } else if (bg.kind === "image" && typeof bg.assetId === "string" && /^[0-9a-f-]{36}$/i.test(bg.assetId)) {
+      // Only a picture from the user's own library (an asset id), never an outside address.
+      out.background = { kind: "image", assetId: bg.assetId.toLowerCase(), dim: num(bg.dim, 0, 90) ?? 55 };
     }
   }
   const groups = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string" && (APPEARANCE_NAV_GROUPS as readonly string[]).includes(x)))] : undefined);

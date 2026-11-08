@@ -220,4 +220,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 36. From OpenClaw: a heartbeat — the assistant checks in on a schedule (mail, calendar, a folder, a page) and writes only when something needs you ⬜
 37. From OpenClaw: the assistant writes a new skill for itself when asked ("learn to do X"), shown to the user and approved before it is saved ⬜
 38. From OpenClaw's skill-store troubles (skills that stole keys): every community plugin and skill shows what it may touch, runs with only that, and the store marks reviewed ones ⬜
+39. Deeper looks: animations, a background picture (made in the chat or uploaded), your own icons for each tool, theme files to share, Figma variables and design screenshots turned into a look — looks only (data and cleaned CSS, no code, nothing loaded from outside) ⬜
+40. A full security review of every part, and a performance pass (start time, memory, bundle size, long lists) ⬜
+41. Remote desktop (future, a separate plugin from the store): see and control this computer from the phone or another computer, like Google Remote Desktop, each monitor in its own window; WebRTC (encrypted), only through KesherAI's pairing, approved on the computer each time, a clear "someone is in control" bar with Stop ⬜
 

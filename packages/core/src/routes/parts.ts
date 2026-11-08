@@ -51,6 +51,16 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0 };
   });
 
+  /** A picture for the background (Settings → Appearance): saved to the library; returns its id. Body: `{ data: base64, mimeType }`. */
+  app.post<{ Body: { data?: string; mimeType?: string } }>("/api/appearance/background", { bodyLimit: 12 * 1024 * 1024 }, async (req, reply) => {
+    const mime = req.body?.mimeType ?? "";
+    if (!/^image\/(png|jpeg|webp)$/.test(mime) || typeof req.body?.data !== "string") return reply.code(400).send({ error: "Send a PNG, JPEG or WebP picture." });
+    const data = Buffer.from(req.body.data, "base64");
+    if (!data.length) return reply.code(400).send({ error: "The picture is empty." });
+    const asset = await s.assets.save(data, mime, { meta: { use: "background" } });
+    return { assetId: asset.id };
+  });
+
   /** Body: `{ parts: { <id>: true | false } }`, or `{ preset: "chat" | "all" }`. */
   app.put<{ Body: { parts?: Record<string, boolean>; preset?: "chat" | "all" } }>("/api/parts", async (req, reply) => {
     const next: Record<string, boolean> = { ...s.config.parts };

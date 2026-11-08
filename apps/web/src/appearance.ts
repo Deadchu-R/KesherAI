@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, isLight, resolveAppearance, type Appearance } from "@kesher/shared";
-import { api } from "./api";
+import { api, withToken } from "./api";
 
 /**
  * Applies the saved look (Settings → Appearance, or the chat's change_look)
@@ -55,7 +55,14 @@ export function applyAppearance(saved: Appearance): void {
   if (a.fontSize) st.setProperty("font-size", `${a.fontSize}px`);
   if (a.radius !== undefined) st.setProperty("--r-scale", String(a.radius / 16));
   root.dataset.density = a.density && a.density !== "normal" ? a.density : "";
-  document.body.style.background = a.background?.kind === "gradient" ? `linear-gradient(${a.background.angle ?? 160}deg, ${a.background.from}, ${a.background.to}) fixed` : "";
+  const back = a.background;
+  const veil = (dim: number) => `color-mix(in srgb, var(--bg) ${dim}%, transparent)`;
+  document.body.style.background =
+    back?.kind === "gradient"
+      ? `linear-gradient(${back.angle ?? 160}deg, ${back.from}, ${back.to}) fixed`
+      : back?.kind === "image"
+        ? `linear-gradient(${veil(back.dim ?? 55)}, ${veil(back.dim ?? 55)}), url("${withToken(`/api/assets/${back.assetId}`)}") center / cover fixed`
+        : "";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg ?? "#121213");
   try {
     localStorage.setItem(CACHE, JSON.stringify(saved));

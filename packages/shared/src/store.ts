@@ -38,6 +38,8 @@ export interface Conversation {
   personaId?: string;
   /** For a branch: the conversation and event it was branched from. */
   branchOf?: { id: string; seq: number; title: string };
+  /** Where the chat is written from: `telegram` chats ask before every change and get no computer or browser control. */
+  source?: "telegram";
   /** For a chat imported from another assistant: which one. */
   importedFrom?: "chatgpt" | "claude" | "gemini";
   /** What the model sees. */

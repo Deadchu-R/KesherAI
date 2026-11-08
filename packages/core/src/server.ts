@@ -321,7 +321,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => notifier.onDownload(job));
   // Telegram: the user's own bot; each paired chat has its own conversation (telegram.ts).
   const telegram = new TelegramBridge(config.telegram, persist, {
-    newConversation: async (title) => (await services.conversations.create({ kind: "chat", title })).id,
+    newConversation: async (title) => (await services.conversations.create({ kind: "chat", title, source: "telegram" })).id,
     send: async (convId, text) => void (await services.conversations.send(convId, text)),
     decide: async (convId, requestId, decision) => !!(await services.conversations.open(convId))?.session.approve(requestId, decision),
     answer: async (convId, questionId, text) => !!(await services.conversations.open(convId))?.session.answer(questionId, text),
@@ -329,6 +329,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       const a = await assets.get(id);
       return a && a.asset.mimeType.startsWith("image/") ? { data: a.data, mimeType: a.asset.mimeType } : undefined;
     },
+    alert: (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["warning"], priority: 4 }).catch(() => undefined),
+    allowed: () => registry.permitted("telegram"),
   });
   const devices = new Devices({
     config: config.devices,
@@ -585,7 +587,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     copilot,
     business,
     businessManaged: () => !!managedPolicy(paths.root),
-    applyBusiness,
+    applyBusiness: () => {
+      applyBusiness();
+      telegram.restart();
+    },
     unreal: new UnrealBridge(join(paths.root, "unreal")),
     unity: new UnityCli(config.unity, persist),
     sd,

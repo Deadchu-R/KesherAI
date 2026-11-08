@@ -116,7 +116,9 @@ export const KesherConfigSchema = z.object({
       enabled: z.boolean().default(false),
       token: z.string().optional(),
       chats: z.array(z.number()).default([]),
+      chatInfo: z.record(z.string(), z.object({ name: z.string(), pairedAt: z.string() })).default({}),
       conversations: z.record(z.string(), z.string()).default({}),
+      approveCommands: z.boolean().default(false),
     })
     .default({}),
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */

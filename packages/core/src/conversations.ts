@@ -22,6 +22,8 @@ export interface NewConversation {
   workspace?: string;
   title?: string;
   personaId?: string;
+  /** `telegram`: written from Telegram (fewer tools, always asks). */
+  source?: "telegram";
 }
 
 let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
@@ -259,7 +261,7 @@ export class ConversationManager {
           const assets = await Promise.all(
             files.map((f) => this.deps.assets.save(f.data, f.mimeType, { sourceModelId: imageModel, ...(f.meta ? { meta: f.meta } : {}) })),
           );
-          return { output: `Generated ${assets.length} image(s); the user can see them.${switched}`, assetIds: assets.map((a) => a.id) };
+          return { output: `Generated ${assets.length} image(s); the user can see them (ids: ${assets.map((a) => a.id).join(", ")}).${switched}`, assetIds: assets.map((a) => a.id) };
         },
       });
     }
@@ -309,7 +311,7 @@ export class ConversationManager {
     const look = this.deps.look;
     if (!look) return [];
     notes.push(
-      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background, the order of the tool groups) when the user asks for it. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed and that they can say \"undo\" or open Settings → Appearance.",
+      "change_look changes how KesherAI itself looks (colours, font, text size, corners, spacing, background — also a picture you make first — and the order of the tool groups) when the user asks for it. For a style the user names (a film, a game, a series), choose colours, font and background that feel like it; never logos or characters. Pass only what should change; undo: true goes back one step. After it, tell the user in one line what changed and that they can say \"undo\" or open Settings → Appearance.",
     );
     const fonts = APPEARANCE_FONTS.map((f) => `${f.id}${f.hebrew ? "" : " (no Hebrew letters)"}`).join(", ");
     return [
@@ -331,7 +333,7 @@ export class ConversationManager {
               fontSize: { type: "number", description: "Text size in px, 12–20 (default 15)." },
               radius: { type: "number", description: "Corner roundness in px, 0 (square) – 28 (very round); default 16." },
               density: { type: "string", enum: ["compact", "normal", "roomy"] },
-              background: { type: "object", description: "{ kind: 'plain' } or { kind: 'gradient', from: '#rrggbb', to: '#rrggbb', angle: 0–360 }." },
+              background: { type: "object", description: "{ kind: 'plain' }, { kind: 'gradient', from: '#rrggbb', to: '#rrggbb', angle: 0–360 }, or a picture: { kind: 'image', assetId: '<id of a picture made in this chat>', dim: 0–90 (how much the page colour covers it, default 55) }. For a picture background, make the picture first (generate_image, wide), then use its id." },
               navOrder: { type: "array", items: { type: "string", enum: [...APPEARANCE_NAV_GROUPS] }, description: "The tool groups top to bottom (create, work, assistant, system)." },
               navHide: { type: "array", items: { type: "string", enum: [...APPEARANCE_NAV_GROUPS] }, description: "Tool groups to hide from the menus." },
               reset: { type: "boolean", description: "Back to the default look." },
@@ -475,7 +477,16 @@ export class ConversationManager {
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
     const skills = this.deps.skills?.count ? [this.deps.skills.tool()] : [];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
-    return { tools: [...code, ...media.tools, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])], notes: [...media.notes, ...group.notes] };
+    const all = [...code, ...media.tools, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
+    // A chat written from Telegram never controls the screen or the browser, whatever else is on.
+    const telegram = id ? this.deps.library.listConversations().find((c) => c.id === id)?.source === "telegram" : false;
+    if (telegram) {
+      return {
+        tools: all.filter((t) => !/^(computer_|browser_)/.test(t.spec.name)),
+        notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
+      };
+    }
+    return { tools: all, notes: [...media.notes, ...group.notes] };
   }
 
   private teamCache = new Map<string, Teammate[]>();
@@ -632,10 +643,12 @@ export class ConversationManager {
       projectId,
       title: opts.title ?? (opts.kind === "code" ? "New code session" : "New chat"),
       ...(persona ? { personaId: persona.id } : {}),
+      ...(opts.source ? { source: opts.source } : {}),
       kind: opts.kind,
       modelId,
       // A chat writes only into its own outputs folder, so file edits need no approval there; commands still ask.
-      mode: opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit"),
+      // Telegram chats always ask (a message from far away should not change files by itself).
+      mode: opts.source === "telegram" ? "ask" : (opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit")),
       ...(opts.workspace ? { workspace: opts.workspace } : {}),
       messages: [],
       events: [],

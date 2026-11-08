@@ -1284,6 +1284,7 @@ body:has(.page h1) .bar-page { display: none; }
 :root[data-density="roomy"] .sidebar a, :root[data-density="roomy"] .sidebar button { padding-block: 11px; }
 body { background-attachment: fixed; }
 /* With a gradient behind everything, the page itself is see-through. */
+/* With a gradient or a picture behind everything, the page itself is see-through. */
 body[style*="gradient"] .main, body[style*="gradient"] .app { background: transparent; }
 body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%, transparent); }
 
@@ -1318,3 +1319,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .tg-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 4px; }
 .tg-pair { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--radius); background: var(--accent-soft); }
 .tg-code { align-self: flex-start; font-size: 20px; padding: 6px 12px; border-radius: var(--radius-sm); background: var(--panel); letter-spacing: 0.04em; user-select: all; }
+.look .look-pick { display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--panel-2); cursor: pointer; font-size: 14px; color: var(--text); flex-direction: row; }
+.look .look-pick.on { border-color: var(--accent); }
+.look-thumb { width: 96px; height: 54px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.look .look-dim { min-width: 200px; }
+.tg-warn { padding: 12px 14px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 9%, transparent); }
+.tg-warn ul { margin: 6px 0 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.tg-chats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tg-chats li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-2); }
+.tg-log ul { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
+.telegram h3 { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.telegram .bad { color: var(--bad); }

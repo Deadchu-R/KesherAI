@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_PRESETS, resolveAppearance, type Appearance, type AppearanceColor } from "@kesher/shared";
-import { api } from "./api";
+import { api, withToken } from "./api";
 import { applyAppearance, saveAppearance, undoAppearance, useAppearance } from "./appearance";
 import { getLocale, t } from "./i18n";
 import { NAV_GROUPS } from "./Sidebar";
@@ -56,6 +56,23 @@ export function AppearanceSection() {
     [o[i], o[j]] = [o[j]!, o[i]!];
     patch({ navOrder: o }, true);
   };
+  /** A picture from this computer or phone: made smaller (at most 2560 px wide) and kept in the library. */
+  const pickPicture = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 2560 / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL("image/jpeg", 0.86).split(",")[1]!;
+      const { assetId } = await api<{ assetId: string }>("/api/appearance/background", { method: "POST", body: { data, mimeType: "image/jpeg" } });
+      patch({ background: { kind: "image", assetId, dim: 55 } }, true);
+    } catch (e) {
+      toast((e as Error).message || L("לא הצלחתי לקרוא את התמונה.", "Could not read that picture."));
+    }
+  };
   const askInWords = () => {
     const text = words.trim();
     if (!text) return;
@@ -76,7 +93,7 @@ export function AppearanceSection() {
           <input id="look-words" className="grow" dir="auto" value={words} onChange={(e) => setWords(e.target.value)} onKeyDown={(e) => e.key === "Enter" && askInWords()} placeholder={L("למשל: בהיר וחמים, טקסט גדול יותר, פינות מרובעות, עבודה למעלה", "e.g. light and warm, bigger text, square corners, Work on top")} />
           <button type="button" className="primary" disabled={!words.trim()} onClick={askInWords}>{L("שנה", "Change")}</button>
         </div>
-        <small className="muted">{L("נפתח צ'אט עם הבקשה. אפשר גם לבקש בכל צ'אט, ולהגיד \"בטל\" כדי לחזור.", "Opens a chat with the request. You can also ask in any chat, and say \"undo\" to go back.")}</small>
+        <small className="muted">{L("למשל: \"עצב בסגנון וואן פיס\" או \"תצייר רקע של ים בשקיעה ותשים אותו\". נפתח צ'אט עם הבקשה. אפשר גם לבקש בכל צ'אט, ולהגיד \"בטל\" כדי לחזור.", "Opens a chat with the request. You can also ask in any chat, and say \"undo\" to go back.")}</small>
       </div>
 
       <h3>{L("מראות מוכנים", "Ready-made looks")}</h3>
@@ -139,8 +156,21 @@ export function AppearanceSection() {
       <div className="row wrap">
         <div className="seg" role="group">
           <button type="button" className={look.background?.kind !== "gradient" ? "on" : ""} onClick={() => patch({ background: { kind: "plain" } }, true)}>{L("אחיד", "Plain")}</button>
+          <label className={`look-pick${look.background?.kind === "image" ? " on" : ""}`}>
+            {L("תמונה…", "Picture…")}
+            <input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => void pickPicture(e.target.files?.[0])} />
+          </label>
           <button type="button" className={look.background?.kind === "gradient" ? "on" : ""} onClick={() => patch({ background: { kind: "gradient", from: "#1c1d2b", to: look.colors?.bg ?? DEFAULTS.bg, angle: 160 } }, true)}>{L("מעבר צבע", "Gradient")}</button>
         </div>
+        {look.background?.kind === "image" && (
+          <>
+            <img className="look-thumb" src={withToken(`/api/assets/${look.background.assetId}`)} alt="" />
+            <label className="look-dim">
+              {L("כמה לעמעם", "How much to dim")} <small className="muted">{`\u2066${look.background.dim ?? 55}%\u2069`}</small>
+              <input type="range" min={0} max={90} value={look.background.dim ?? 55} onChange={(e) => look.background?.kind === "image" && patch({ background: { ...look.background, dim: Number(e.target.value) } })} />
+            </label>
+          </>
+        )}
         {look.background?.kind === "gradient" && (
           <>
             <label className="look-color"><input type="color" value={look.background.from} onChange={(e) => look.background?.kind === "gradient" && patch({ background: { ...look.background, from: e.target.value } })} /><span>{L("מ-", "From")}</span></label>
