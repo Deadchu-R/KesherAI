@@ -1,0 +1,41 @@
+name: Site media (screenshots & videos)
+
+# Only on the "site-media" branch: starts KesherAI (core + UI) and records screenshots and short videos of it
+# for the project page at roeetal.com/KesherAI. The files are uploaded as the "site-media" artifact.
+on:
+  push:
+    branches: [site-media]
+  workflow_dispatch:
+
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: pnpm build:packages
+      - name: Start KesherAI (core + UI)
+        run: |
+          nohup pnpm dev > dev.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf http://localhost:5173/ >/dev/null && curl -s http://127.0.0.1:7420/ >/dev/null && break; sleep 2; done
+          sleep 8; tail -20 dev.log
+      - name: Record
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright@1.49.1 >/dev/null && npx playwright install --with-deps chromium >/dev/null
+          cd $GITHUB_WORKSPACE && NODE_PATH=/tmp/pw/node_modules node --experimental-default-type=module -e "import('/tmp/pw/node_modules/playwright/index.mjs').then(()=>0)" && cp scripts/site-media.mjs /tmp/pw/ && cd /tmp/pw && node site-media.mjs && mv site-media $GITHUB_WORKSPACE/
+      - name: Videos to MP4
+        run: |
+          cd site-media/video && for f in *.webm; do ffmpeg -loglevel error -y -i "$f" -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p -movflags +faststart "${f%.webm}.mp4"; done; ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-media
+          path: site-media/
+      - if: always()
+        run: tail -60 dev.log
