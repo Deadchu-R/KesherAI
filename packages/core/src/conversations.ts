@@ -1096,7 +1096,8 @@ export class ConversationManager {
     let context: string | undefined;
     let note: string | undefined;
     if (opts.web) {
-      const query = text.replace(/\s+/g, " ").slice(0, 200);
+      // The words the user typed, without the "[Unity project: …]" header a project adds.
+      const query = text.replace(/^\s*\[[^\]\n]{1,300}\]\s*/, "").replace(/\s+/g, " ").trim().slice(0, 200);
       try {
         const r = await webSearchTool.run({ query }, { signal: AbortSignal.timeout(20_000), recordChange: () => undefined });
         context = `Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}`;

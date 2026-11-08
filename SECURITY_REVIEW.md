@@ -51,3 +51,9 @@
 - `POST /api/devices/presence` sits behind the normal access token (a computer only reaches another with the token that one published in the user's own devices.json); it accepts only a known device id and "asleep"/"awake", and only changes whether this computer waits on that one's models. `POST /api/devices/announce` is local only (the desktop app on suspend, shutdown, resume and quit).
 - Addresses of a computer are tried at once (first answer wins, 8 s each) instead of one by one; another computer's model list is served from the last answer (up to 10 minutes old) and refreshed in the background, so opening a chat never waits on it.
 - Reading answers aloud by itself now starts off (new setting key), under Settings → Accessibility.
+
+## Scan after 0.5.45 (0.5.48)
+
+- `/v1/chat/completions` now passes `tools`, assistant `tool_calls` and `tool` results to the model and returns its tool calls. Nothing runs on the computer that serves the model: tool calls go back to the caller, which runs them under its own approvals. The endpoint stays behind the access token; tool arguments that are not valid JSON objects become `{}`; pictures are read only from `data:` URLs.
+- The composer's web search no longer sends the "[Unity project: …]" header (a local folder path) to the search engine.
+- Reviewed since 0.5.43: Unity code tools (path checks, escaping), device presence (token, known ids only), registry caching (no new data exposed). No new findings.
