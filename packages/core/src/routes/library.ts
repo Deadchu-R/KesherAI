@@ -8,6 +8,7 @@ import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } 
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
+import { readExport } from "../chat-import.js";
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
@@ -72,6 +73,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
 
   /** One search across chats, knowledge bases and (on this computer) "My day" and meetings. */
+  /**
+   * Imports chats exported from ChatGPT, Claude or Gemini. Body: `{ data }`,
+   * the parsed `conversations.json` or `MyActivity.json` (the page takes it
+   * out of the export's zip), and optionally `projectId`.
+   */
+  app.post<{ Body: { data?: unknown; projectId?: string | null } }>("/api/import/chats", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
+    try {
+      const { source, chats } = readExport(req.body?.data);
+      if (!chats.length) return reply.code(400).send({ error: "The export has no chats with text in them." });
+      const projectId = req.body?.projectId ?? null;
+      if (projectId && !s.library.getProject(projectId)) return reply.code(400).send({ error: "That project does not exist." });
+      return { source, found: chats.length, ...(await s.conversations.importChats(chats, projectId)) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   app.get<{ Querystring: { q?: string } }>("/api/search", async (req) => {
     const q = String(req.query.q ?? "").trim();
     if (!q) return { chats: [], knowledge: [], day: [] };

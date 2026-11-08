@@ -36,6 +36,8 @@ export interface Conversation {
   personaId?: string;
   /** For a branch: the conversation and event it was branched from. */
   branchOf?: { id: string; seq: number; title: string };
+  /** For a chat imported from another assistant: which one. */
+  importedFrom?: "chatgpt" | "claude" | "gemini";
   /** What the model sees. */
   messages: AgentMessage[];
   /** What the user sees. */

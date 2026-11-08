@@ -1,7 +1,8 @@
 import type { Checkpoints } from "./checkpoints.js";
 import { personaPrompt, type Personas } from "./personas.js";
 import type { SkillStore } from "./skill-store.js";
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
+import type { ImportedChat } from "./chat-import.js";
 import { mkdir, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
@@ -754,6 +755,56 @@ export class ConversationManager {
     });
     if (edit?.trim()) await this.send(created.id, edit.trim());
     return created;
+  }
+
+  /**
+   * Saves chats imported from another assistant (see `chat-import.ts`) as
+   * KesherAI chats you can read and continue. A chat imported before is
+   * skipped (its id comes from where it came from).
+   *
+   * @param chats - The chats.
+   * @param projectId - A project to put them in, or none.
+   * @returns How many were added and how many were there already.
+   */
+  async importChats(chats: ImportedChat[], projectId: string | null = null): Promise<{ added: number; skipped: number }> {
+    const modelId = this.defaultChatModel() ?? "";
+    let added = 0;
+    let skipped = 0;
+    for (const chat of chats) {
+      const h = createHash("sha256").update(`${chat.source}:${chat.originalId}`).digest("hex");
+      const id = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+      if (await this.deps.library.getConversation(id)) {
+        skipped++;
+        continue;
+      }
+      const events: AgentEvent[] = [];
+      const messages: AgentMessage[] = [];
+      let turn = 0;
+      for (const m of chat.messages) {
+        const at = m.at ?? chat.createdAt;
+        if (m.role === "user") events.push({ seq: events.length + 1, at, type: "user", text: m.text });
+        else events.push({ seq: events.length + 1, at, type: "assistant", turn: ++turn, text: m.text });
+        const last = messages.at(-1);
+        if (last && last.role === m.role && typeof last.content === "string") last.content = `${last.content}\n\n${m.text}`;
+        else messages.push({ role: m.role, content: m.text } as AgentMessage);
+      }
+      const updatedAt = chat.messages.at(-1)?.at ?? chat.createdAt;
+      await this.deps.library.saveConversation({
+        id,
+        projectId,
+        title: chat.title.slice(0, 120),
+        kind: "chat",
+        modelId,
+        mode: "auto-edit",
+        importedFrom: chat.source,
+        messages,
+        events,
+        createdAt: chat.createdAt,
+        updatedAt,
+      });
+      added++;
+    }
+    return { added, skipped };
   }
 
   /**

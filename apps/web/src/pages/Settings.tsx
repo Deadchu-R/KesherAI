@@ -1,3 +1,4 @@
+import { ImportChats } from "../ImportChats";
 import { SpeechSection } from "../SpeechSection";
 import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
@@ -327,6 +328,7 @@ export function SettingsPage() {
       <ComputerSection />
       <PermissionsSection />
       <GoogleDriveSection />
+      <ImportChats />
       <Sync />
       <Phone />
     </div>

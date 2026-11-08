@@ -180,7 +180,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 13. Long chats summarize their older part automatically (LU) ✅ (it already did: the context explorer shows the summary)
 14. "Keep going until done": a goal checked by a reviewer pass before the agent stops (OpenCode `/goal`) ✅ (type /goal … in a chat)
 15. Agent Builder: describe an assistant in words, get a persona with tools and knowledge (LobeHub) ✅
-16. Import chats from ChatGPT, Claude and Gemini exports (LU) ⬜
+16. Import chats from ChatGPT, Claude and Gemini exports (LU) ✅
 17. Export a chat as Markdown or PDF (LM Studio) ⬜
 18. Browser extension without the Chrome store: a package from Settings, and the free Edge and Firefox add-on stores ⬜
 18a. Everything modular: a plugin can be a whole separate app inside KesherAI (its own pages and windows, its own files), that asks the local models for what it needs (chat, images, speech, vision) through a stable plugin API, and installs straight from the plugin store with one click ⬜

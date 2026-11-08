@@ -595,7 +595,7 @@ export function ConversationPage({ id }: { id: string }) {
                     </div>
                   </form>
                 ) : (
-                  <div key={e.seq} className="msg user">
+                  <div key={e.seq} className="msg user" dir="auto">
                     {e.text}
                     {!busy && <span className="msg-tools"><button type="button" className="msg-tool" title={t("editMessage")} aria-label={t("editMessage")} onClick={() => { setEditingSeq(e.seq); setEditText(e.text.replace(/\n*\[[^\]\n]+: [^\]\n]+\]\s*$/g, "")); }}>✎</button></span>}
                   </div>
