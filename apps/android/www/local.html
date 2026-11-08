@@ -7,6 +7,8 @@
   <title>KesherAI · On this phone</title>
   <link rel="stylesheet" href="theme.css" />
   <style>
+    .img-out img { width: 100%; border-radius: 14px; margin-top: 10px; }
+    #imgBody textarea { width: 100%; box-sizing: border-box; }
     h3.from-pc { margin: 18px 0 4px; font-size: 15px; }
     body { height: 100dvh; display: flex; flex-direction: column; }
     header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--border); background: var(--panel); }
@@ -119,6 +121,11 @@
       <div id="fastList"></div>
     </section>
     <div id="modelList"></div>
+    <section class="api" id="imgSection" hidden>
+      <h2 data-he="תמונות בטלפון" data-en="Images on this phone">תמונות בטלפון</h2>
+      <p class="intro" data-he="יוצר תמונות על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה), עם Stable Diffusion 1.5. לוקח כמה דקות לתמונה; קטן יותר = מהיר יותר." data-en="Makes pictures on the phone itself, with no computer and no internet (after the download), with Stable Diffusion 1.5. A picture takes a few minutes; smaller is faster.">יוצר תמונות על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה), עם Stable Diffusion 1.5. לוקח כמה דקות לתמונה; קטן יותר = מהיר יותר.</p>
+      <div id="imgBody"></div>
+    </section>
     <section class="api" id="apiSection">
       <h2 data-he="מודלים דרך האינטרנט (API)" data-en="Models over the internet (API)">מודלים דרך האינטרנט (API)</h2>
       <p class="intro" data-he="חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב." data-en="Connect Claude, Gemini, OpenAI and more with an API key. Connections sync with your computer: what you connected there shows here, and what you add here goes there.">חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב.</p>
@@ -1002,6 +1009,105 @@
       : T(`כיוונון (${secs} שניות): ${best.layers >= best.total ? "הכול על הכרטיס הגרפי" : `${best.layers} מתוך ${best.total} שכבות על הכרטיס הגרפי, השאר על המעבד`}, נבדק שהתשובות נכונות (~${best.tps.toFixed(1)} טוקנים/שנייה).`, `Tuned in ${secs}s: ${best.layers >= best.total ? "all on the graphics chip" : `${best.layers} of ${best.total} layers on the graphics chip, the rest on the processor`}, checked for correct answers (~${best.tps.toFixed(1)} tokens/s).`));
     return best;
   }
+
+
+  // ---------- images on the phone (stable-diffusion.cpp, native) ----------
+  const IMG = window.Capacitor?.Plugins?.KesherImage;
+  const SD = { file: "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", url: "https://huggingface.co/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", size: 1.57 * 1024 ** 3 };
+  async function renderImages() {
+    if (!IMG || !LLM) return;
+    const { available } = await IMG.available().catch(() => ({ available: false }));
+    if (!available) return;
+    $("imgSection").hidden = false;
+    const body = $("imgBody");
+    body.replaceChildren();
+    const have = ((await LLM.list().catch(() => ({ models: [] }))).models ?? []).some((m) => m.name === SD.file);
+    const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+    if (!have) {
+      const bar = el("div", { className: "bar", hidden: true });
+      bar.append(el("span"));
+      const dl = el("button", { type: "button", className: "primary", textContent: T("הורד את המודל", "Download the model") + ` (${gb(SD.size)})` });
+      dl.onclick = async () => {
+        dl.disabled = true;
+        bar.hidden = false;
+        const sub = await LLM.addListener("progress", (e) => {
+          if (e.name !== SD.file) return;
+          const pct = e.total ? Math.round((e.received / e.total) * 100) : 0;
+          bar.firstElementChild.style.width = pct + "%";
+          dl.textContent = `${T("מוריד", "Downloading")} ${pct}%`;
+          bg(`dl:${SD.file}`, { title: T("מוריד מודל תמונות", "Downloading the image model"), text: `${pct}%`, progress: pct });
+        });
+        try {
+          await LLM.download({ url: SD.url, name: SD.file });
+          doneNotice(T("ההורדה הסתיימה", "Download finished"), "Stable Diffusion 1.5");
+          renderImages();
+        } catch (e) {
+          dl.disabled = false;
+          dl.textContent = T("נסה שוב", "Try again");
+          body.append(el("p", { className: "intro error", textContent: String(e.message || e) }));
+        } finally {
+          sub?.remove?.();
+          bg(`dl:${SD.file}`);
+        }
+      };
+      body.append(dl, bar);
+      return;
+    }
+    const prompt = el("textarea", { rows: 2, placeholder: T("מה לצייר? (באנגלית עובד הכי טוב)", "What to draw? (English works best)") });
+    prompt.value = localStorage.getItem("kesherai-phone-img-prompt") || "";
+    const size = el("select");
+    for (const [v, he, en] of [[256, "קטן (256) · הכי מהיר", "Small (256) · fastest"], [384, "בינוני (384)", "Medium (384)"], [512, "רגיל (512) · איטי", "Normal (512) · slow"]]) size.append(el("option", { value: String(v), textContent: T(he, en) }));
+    size.value = localStorage.getItem("kesherai-phone-img-size") || "384";
+    const go = el("button", { type: "button", className: "primary", textContent: T("צייר", "Draw") });
+    const stop = el("button", { type: "button", textContent: T("עצור", "Stop"), hidden: true });
+    const bar = el("div", { className: "bar", hidden: true });
+    bar.append(el("span"));
+    const status = el("p", { className: "intro small" });
+    const out = el("div", { className: "img-out" });
+    const row = el("div", { className: "row" });
+    row.append(size, go, stop);
+    body.append(prompt, row, bar, status, out);
+    stop.onclick = () => IMG.stop();
+    go.onclick = async () => {
+      const text = prompt.value.trim();
+      if (!text) return prompt.focus();
+      localStorage.setItem("kesherai-phone-img-prompt", text);
+      localStorage.setItem("kesherai-phone-img-size", size.value);
+      // The chat model leaves the memory while the picture is made.
+      if (wllama.isModelLoaded()) { await wllama.exit(); wllama.__url = ""; }
+      go.disabled = true;
+      stop.hidden = false;
+      bar.hidden = false;
+      bar.firstElementChild.style.width = "0%";
+      const started = performance.now();
+      status.textContent = T("טוען את המודל…", "Loading the model…");
+      const sub = await IMG.addListener("progress", (e) => {
+        const pct = Math.round((e.step / e.steps) * 100);
+        bar.firstElementChild.style.width = pct + "%";
+        status.textContent = `${T("שלב", "Step")} ${e.step}/${e.steps} · ${Math.round((performance.now() - started) / 1000)}s`;
+        bg("img", { title: T("מצייר תמונה", "Drawing a picture"), text: `${pct}%`, progress: pct });
+      });
+      try {
+        const n = Number(size.value);
+        const r = await IMG.generate({ model: SD.file, prompt: text, negative: "blurry, low quality, deformed", width: n, height: n, steps: 16, cfg: 7 });
+        const img = el("img", { src: `data:image/png;base64,${r.data}`, alt: text });
+        const save = el("button", { type: "button", textContent: T("שמור לגלריה", "Save to gallery") });
+        save.onclick = () => IMG.save({ data: r.data }).then(() => (save.textContent = T("נשמר ✓", "Saved ✓")), (e) => (save.textContent = String(e.message || e)));
+        out.prepend(img, save);
+        status.textContent = T(`מוכן אחרי ${Math.round((performance.now() - started) / 1000)} שניות.`, `Ready after ${Math.round((performance.now() - started) / 1000)}s.`);
+        doneNotice(T("התמונה מוכנה", "The picture is ready"), text.slice(0, 60));
+      } catch (e) {
+        status.textContent = T("לא הצלחתי: ", "Could not: ") + (e.message || e);
+      } finally {
+        sub?.remove?.();
+        bg("img");
+        go.disabled = false;
+        stop.hidden = true;
+        bar.hidden = true;
+      }
+    };
+  }
+  renderImages();
 
   // ---------- web search (DuckDuckGo, through the app's native HTTP so websites' CORS rules do not block it) ----------
   const webOn = () => localStorage.getItem("kesherai-phone-web") === "1";

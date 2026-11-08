@@ -1,6 +1,6 @@
 {
   "name": "@kesher/android",
-  "version": "0.4.46",
+  "version": "0.4.47",
   "private": true,
   "description": "Android app: connects to KesherAI running on your computer. Built into an APK by GitHub Actions (.github/workflows/android.yml).",
   "license": "Apache-2.0",
@@ -18,6 +18,7 @@
     "@wllama/wllama": "3.8.1",
     "capacitor-kesher-background": "file:./plugins/background",
     "capacitor-kesher-google": "file:./plugins/google",
+    "capacitor-kesher-image": "file:./plugins/image",
     "capacitor-kesher-llm": "file:./plugins/llm",
     "capacitor-kesher-screen": "file:./plugins/screen",
     "capacitor-kesher-share": "file:./plugins/share",

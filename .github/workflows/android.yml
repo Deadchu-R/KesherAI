@@ -34,6 +34,28 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # (Before pnpm install: it copies the plugin folders, files included.)
+      # Images on the phone: stable-diffusion.cpp (MIT) built for Android arm64, shipped as a native file
+      # (lib…so so Android unpacks it where it may run). Cached per engine version.
+      - name: Image engine for the phone (cache)
+        id: sdcache
+        uses: actions/cache@v4
+        with:
+          path: apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a/libsdcli.so
+          key: sdcpp-android-arm64-master-ff4fdbb
+      - name: Build the image engine for the phone
+        if: steps.sdcache.outputs.cache-hit != 'true'
+        run: |
+          git clone -q --depth 1 --branch master-ff4fdbb https://github.com/leejet/stable-diffusion.cpp /tmp/sd
+          git -C /tmp/sd submodule update --init --depth 1 ggml
+          cmake -S /tmp/sd -B /tmp/sd/build-android -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
+            -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16
+          cmake --build /tmp/sd/build-android --target sd-cli -j4
+          mkdir -p apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a
+          "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip -o apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a/libsdcli.so /tmp/sd/build-android/bin/sd-cli
+          ls -la apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a
       - run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
@@ -87,6 +109,8 @@ jobs:
               buildTypes {
                   debug { signingConfig signingConfigs.kesher }
               }
+              // The image engine runs as a program from the app's native folder, so it must be unpacked there.
+              packaging { jniLibs { useLegacyPackaging true } }
           }
           GRADLE
       - name: Build the APK

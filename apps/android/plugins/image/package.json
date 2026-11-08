@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-image",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Makes images on the phone itself with stable-diffusion.cpp (MIT), built for Android by the app's workflow.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}
