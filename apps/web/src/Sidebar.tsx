@@ -5,6 +5,8 @@ import { createConversation, desktop, refreshLibrary, toast, useActivity, useLib
 import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
 import { usePluginUi } from "./plugins";
+import { pageHidden } from "@kesher/shared";
+import { useParts } from "./parts";
 import { QuickMenu } from "./QuickMenu";
 import { AccountButton } from "./AccountButton";
 
@@ -147,6 +149,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       () => undefined,
     );
   }, []);
+  const { parts } = useParts();
+  const offParts = Object.fromEntries(parts.filter((p) => !p.on).map((p) => [p.id, false]));
   const nav: Array<[string, Parameters<typeof t>[0]]> = [
     ["#/day", "dayNav"],
     ["#/compare", "compareNav"],
@@ -164,6 +168,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
     ["#/usage", "usageNav"],
     ["#/community", "communityNav"],
     ["#/plugins", "pluginsNav"],
+    ["#/parts", "partsNav"],
     ["#/updates", "updatesNav"],
     ["#/settings", "settings"],
   ];
@@ -179,7 +184,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         <button type="button" className="nav-link as-link" onClick={() => setDialog("code")}>
           <span className="plus" aria-hidden>{"</>"}</span> {t("newCode")}
         </button>
-        {nav.map(([h, label]) => (
+        {nav.filter(([h]) => !pageHidden(offParts, h)).map(([h, label]) => (
           <a key={h} href={h} className="nav-link" aria-current={hash === h ? "page" : undefined}>
             {t(label)}
             {h === "#/updates" && newVersion && <span className="update-dot" title={t("updateAvailable", { n: 1 })}> v{newVersion}</span>}

@@ -54,6 +54,7 @@ import { Kokoro } from "./kokoro.js";
 import { memoryTools } from "./memory-tools.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
+import { partsRoutes } from "./routes/parts.js";
 import { pairRoutes } from "./routes/pair.js";
 import { Coach } from "./coach.js";
 import { ComputerControl } from "./computer.js";
@@ -354,7 +355,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       if (!registry.get("comfyui")) registry.add({ id: "comfyui", type: "comfyui", name: "ComfyUI (KesherAI)", location: "local", baseUrl: url });
     },
   });
-  if (config.comfyui.autoStart) void comfy.start().catch(() => undefined);
+  if (config.comfyui.autoStart && config.parts.nodes !== false) void comfy.start().catch(() => undefined);
   semantic = new Semantic({
     config,
     registry,
@@ -417,12 +418,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       skills,
       onEvent: (convId, e, title, lastAnswer) => notifier.onConversationEvent(convId, title, e, lastAnswer),
       ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
-      computerTools: (id) => computer.tools(id),
+      // Parts the user turned off (Settings → Parts) give no tools.
+      computerTools: (id) => (config.parts.watch === false ? [] : computer.tools(id)),
       mcpTools: () => [
         ...googleTools(google),
-        ...knowledgeTools(knowledge),
-        ...browserTools(browser),
-        ...speechTools({ whisper, speech: () => config.speech, providers: () => config.providers }),
+        ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
+        ...(config.parts.browser === false ? [] : browserTools(browser)),
+        ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers })),
         ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
           spec,
           // Tools that only read run without asking; the rest ask, like any command.
@@ -553,6 +555,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await googleRoutes(app, services);
   await browserRoutes(app, services);
   await comfyUiRoutes(app, services);
+  await partsRoutes(app, services);
   await pairRoutes(app, services);
 
   if (options.webDir && existsSync(options.webDir)) {

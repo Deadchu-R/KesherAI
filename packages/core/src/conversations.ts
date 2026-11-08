@@ -192,7 +192,8 @@ export class ConversationManager {
       }
     };
     const active = this.deps.config.activeModels.image;
-    if (usable(active) || this.deps.ensureImageModel) {
+    const on = (part: string) => this.deps.config.parts?.[part] !== false;
+    if (on("images") && (usable(active) || this.deps.ensureImageModel)) {
       notes.push(
         usable(active)
           ? `generate_image uses the user's active image model (${active}). Write the prompt in English.`
@@ -246,7 +247,7 @@ export class ConversationManager {
         },
       });
     }
-    if (this.deps.video) {
+    if (this.deps.video && on("video")) {
       const video = this.deps.video;
       notes.push("generate_video makes a short video clip (about 2 seconds) from an English description with the built-in video engine; it takes a few minutes. If the model is still downloading, tell the user and stop.");
       tools.push({

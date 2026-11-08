@@ -14,6 +14,7 @@ import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
 import { Mic } from "../Mic";
 import { VoiceMode } from "../VoiceMode";
+import { useParts } from "../parts";
 import { takeOpening, uploadToConversation } from "../phone";
 import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
@@ -292,6 +293,8 @@ export function ConversationPage({ id }: { id: string }) {
   const [contextOpen, setContextOpen] = useState(false);
   const [web, setWeb] = useWebSearch();
   const [voice, setVoice] = useState(false);
+  // Voice (Settings → Parts): the microphone, voice mode and reading aloud.
+  const voicePart = useParts().on("voice");
   const [askPhoto, setAskPhoto] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   // Opened from the phone (shared from another app, or a widget button): a draft, voice mode, or the camera.
@@ -628,7 +631,7 @@ export function ConversationPage({ id }: { id: string }) {
                 return (
                   <div key={e.seq} className="msg">
                     <RichText text={e.text} />
-                    <SpeakButton text={e.text} />
+                    {voicePart && <SpeakButton text={e.text} />}
                     {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}>⑂</button>}
                   </div>
                 );
@@ -768,10 +771,12 @@ export function ConversationPage({ id }: { id: string }) {
                 <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>
               )}
               <WebToggle on={web} onChange={setWeb} />
-              <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
-              <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
-                <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              </button>
+              {voicePart && <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />}
+              {voicePart && (
+                <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
+                  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                </button>
+              )}
               {conv.kind === "chat" && <PersonaChip value={conv.personaId} onChange={(p) => void patch({ personaId: p?.id ?? null })} />}
               <ModelMenu models={modelOptions} value={conv.modelId} onChange={(id) => void patch({ modelId: id })} />
               <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>

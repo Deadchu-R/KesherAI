@@ -194,7 +194,7 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 18b. The first official plugin, as the example for others: a Photoshop-like image editor (layers, brushes, selection, filters), with the local models inside it (generate into a layer, fill a selection, remove background, upscale) ✅
 18c. The image editor's interface after Photoshop and Affinity: a menu bar, a context bar for the chosen tool, docked panels with tabs (Layers, Adjustments, History, Color, AI), and personas like Affinity's ✅
 18d. Working with Affinity: open the picture in Affinity in one click and bring the saved file back as a layer ✅ (Affinity found on Windows and macOS; not tried on Roee's computer yet)
-18e. Everything as official plugins you turn on or off: KesherAI can be only a chat (and take no memory for the rest); each part (image editor, Nodes/ComfyUI, pictures and video, My day and meetings, voice, the browser, pipelines…) is an official plugin that downloads and updates itself when turned on ⬜
+18e. Everything as official plugins you turn on or off: KesherAI can be only a chat (and take no memory for the rest); each part (image editor, Nodes/ComfyUI, pictures and video, My day and meetings, voice, the browser, pipelines…) is an official plugin that downloads and updates itself when turned on ✅ (Settings → Parts of KesherAI)
 
 **4. The rest**
 

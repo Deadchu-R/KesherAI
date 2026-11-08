@@ -191,6 +191,8 @@ export const KesherConfigSchema = z.object({
       waitingSeconds: z.number().int().min(0).max(3600).default(60),
     })
     .default({}),
+  /** Parts of KesherAI turned off (Settings → Parts); see PARTS in @kesher/shared. Missing = on. */
+  parts: z.record(z.string(), z.boolean()).default({}),
   /** Per-plugin settings, keyed by plugin id. */
   plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).default({}) })).default({}),
 });

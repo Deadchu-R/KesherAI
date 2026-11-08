@@ -997,3 +997,10 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 
 /* On a phone the circle sits above the message box (it would cover its buttons). */
 @media (max-width: 760px) { .dl-corner { inset-block-end: calc(max(18px, env(safe-area-inset-bottom)) + 120px); inset-inline-end: 12px; } }
+
+/* Settings → Parts */
+.parts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+.part { display: flex; flex-direction: column; gap: 6px; cursor: pointer; opacity: .72; }
+.part.on { opacity: 1; border-color: var(--accent); }
+.part-icon { font-size: 20px; }
+.part input[role="switch"] { width: 18px; height: 18px; accent-color: var(--accent); }

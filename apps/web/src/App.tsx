@@ -20,7 +20,7 @@ import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { Sidebar } from "./Sidebar";
 import { createConversation, refreshLibrary, toast, useToast } from "./library";
 import { useModels } from "./useModels";
@@ -32,6 +32,8 @@ import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
 import { MemoryPage } from "./pages/MemoryPage";
 import { NodesPage } from "./pages/NodesPage";
+import { PartsPage } from "./pages/PartsPage";
+import { useParts } from "./parts";
 import { UpdatesPage } from "./pages/UpdatesPage";
 import { ModelsPage } from "./pages/Models";
 import { ConnectionsPage } from "./pages/Connections";
@@ -159,12 +161,14 @@ export function App() {
     api("/api/health").then(() => setOnline(true), () => setOnline(false));
   }, []);
 
+  const { parts } = useParts();
   let page: React.ReactNode;
   if (hash.startsWith("#/c/")) page = <ConversationPage key={hash} id={hash.slice(4)} />;
   else if (hash === "#/images") page = <ImagesPage />;
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/nodes") page = <NodesPage />;
+  else if (hash === "#/parts") page = <PartsPage />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
   else if (hash === "#/connections") page = <ConnectionsPage />;
@@ -181,6 +185,18 @@ export function App() {
   else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;
   else page = <Home />;
+  // A page of a part the user turned off (Settings → Parts): say so, with a way to turn it on.
+  const offPart = parts.find((p) => !p.on && p.pages.some((x) => hash === x || hash.startsWith(`${x}/`)));
+  if (offPart) {
+    const he = getLocale() === "he";
+    page = (
+      <div className="page">
+        <h1>{offPart.icon} {he ? offPart.title.he : offPart.title.en}</h1>
+        <p className="muted">{he ? "החלק הזה כבוי." : "This part is off."} {he ? offPart.description.he : offPart.description.en}</p>
+        <div className="row"><a className="button" href="#/parts">{he ? "חלקי KesherAI" : "Parts of KesherAI"}</a></div>
+      </div>
+    );
+  }
 
   return (
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>

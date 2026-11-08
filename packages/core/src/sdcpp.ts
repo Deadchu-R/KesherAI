@@ -410,6 +410,11 @@ export class SdEngine {
   }
 
   /** Downloads the engine the first time. */
+  /** Installs the engine (stable-diffusion.cpp) without a model, e.g. when Pictures is turned on. */
+  installEngine(): Promise<string> {
+    return this.install();
+  }
+
   private install(): Promise<string> {
     this.installing ??= (async () => {
       const exe = process.platform === "win32" ? "sd-cli.exe" : "sd-cli";
