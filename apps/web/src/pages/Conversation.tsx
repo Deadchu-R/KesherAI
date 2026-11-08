@@ -452,10 +452,45 @@ export function ConversationPage({ id }: { id: string }) {
   }, [events]);
   const approvalResults = useMemo(() => new Map(events.filter((e): e is Ev<"approval_result"> => e.type === "approval_result").map((e) => [e.requestId, e])), [events]);
   // The agent's tool calls between two messages are folded into one "activity" line, like Claude's.
+  // Answer versions ("another answer"): each user message's answers, split where it was written again; one is shown.
+  const [chosenVersion, setChosenVersion] = useState<Record<number, number>>({});
+  const versions = useMemo(() => {
+    const total = new Map<number, number>();
+    let user = 0;
+    for (const e of events) {
+      if (e.type === "user") {
+        user = e.seq;
+        total.set(user, 1);
+      } else if (e.type === "regenerated" && e.ofUser === user) total.set(user, (total.get(user) ?? 1) + 1);
+    }
+    const shown: AgentEvent[] = [];
+    const lastAnswerOf = new Map<number, number>(); // user seq → seq of the last answer shown for it
+    const turnOf = new Map<number, number>(); // answer seq → its user seq
+    user = 0;
+    let seg = 0;
+    for (const e of events) {
+      if (e.type === "user") {
+        user = e.seq;
+        seg = 0;
+      } else if (e.type === "regenerated") {
+        if (e.ofUser === user) seg++;
+        continue;
+      }
+      const want = user ? (chosenVersion[user] ?? (total.get(user) ?? 1) - 1) : 0;
+      if (e.type !== "user" && user && seg !== want) continue;
+      shown.push(e);
+      if (e.type === "assistant" && user) {
+        lastAnswerOf.set(user, e.seq);
+        turnOf.set(e.seq, user);
+      }
+    }
+    const lastUser = [...events].reverse().find((e) => e.type === "user")?.seq ?? 0;
+    return { shown, total, lastAnswerOf, turnOf, lastUser };
+  }, [events, chosenVersion]);
   const blocks = useMemo(() => {
     const out: Array<{ kind: "event"; e: AgentEvent } | { kind: "group"; key: number; steps: Step[] }> = [];
     let group: Step[] | null = null;
-    for (const e of events) {
+    for (const e of versions.shown) {
       if (e.type === "tool_call") {
         if (e.name === "ask_user" || e.name === "request_access") continue; // their question card shows instead
         if (!group) {
@@ -471,7 +506,7 @@ export function ConversationPage({ id }: { id: string }) {
       out.push({ kind: "event", e });
     }
     return out;
-  }, [events, byCall]);
+  }, [versions, byCall]);
 
   // Every finished tool may have changed files: refresh the Files count, and open the panel when a program was built.
   const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result").length, [events]);
@@ -724,6 +759,31 @@ export function ConversationPage({ id }: { id: string }) {
                     <RichText text={e.text} />
                     {voicePart && <SpeakButton text={e.text} />}
                     {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}>⑂</button>}
+                    {(() => {
+                      const u = versions.turnOf.get(e.seq);
+                      if (!u || versions.lastAnswerOf.get(u) !== e.seq) return null;
+                      const total = versions.total.get(u) ?? 1;
+                      const cur = chosenVersion[u] ?? total - 1;
+                      return (
+                        <span className="answer-versions">
+                          {total > 1 && (
+                            <>
+                              <button type="button" className="say-btn" disabled={cur === 0} aria-label={t("prevVersion")} onClick={() => setChosenVersion({ ...chosenVersion, [u]: cur - 1 })}>‹</button>
+                              <span className="muted small" dir="ltr">{cur + 1}/{total}</span>
+                              <button type="button" className="say-btn" disabled={cur === total - 1} aria-label={t("nextVersion")} onClick={() => setChosenVersion({ ...chosenVersion, [u]: cur + 1 })}>›</button>
+                            </>
+                          )}
+                          {!busy && u === versions.lastUser && (
+                            <button type="button" className="say-btn" title={t("anotherAnswer")} aria-label={t("anotherAnswer")} onClick={() => {
+                              const next = { ...chosenVersion };
+                              delete next[u];
+                              setChosenVersion(next);
+                              void api(`/api/conversations/${id}/regenerate`, { method: "POST" }).catch((err: Error) => setError(err.message));
+                            }}>↻</button>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </div>
                 );
               case "approval_request":

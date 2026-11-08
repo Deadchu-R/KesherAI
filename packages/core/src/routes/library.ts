@@ -347,6 +347,16 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
+  /** "Another answer": the last answer is written again; the earlier one stays as a version. */
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/regenerate", async (req, reply) => {
+    try {
+      await s.conversations.regenerate(req.params.id);
+      return { ok: true };
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/conversations/:id/stop", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });

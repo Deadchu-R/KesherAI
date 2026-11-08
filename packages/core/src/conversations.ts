@@ -1260,6 +1260,22 @@ export class ConversationManager {
   }
 
   /**
+   * "Another answer": writes the last answer again with the conversation's
+   * current tools and prompt; the earlier answer stays as a version.
+   *
+   * @param id - Conversation.
+   */
+  async regenerate(id: string): Promise<void> {
+    const opened = await this.open(id);
+    if (!opened) throw new Error("Conversation not found");
+    const { session, conversation } = opened;
+    const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
+    session.setTools(tools);
+    session.systemPrompt = await this.promptFor(conversation, notes);
+    session.regenerate();
+  }
+
+  /**
    * Stops a conversation's work (like pressing Stop in it).
    *
    * @param id - Conversation.

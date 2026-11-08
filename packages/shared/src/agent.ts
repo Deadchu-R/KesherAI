@@ -118,6 +118,8 @@ export type AgentEvent = EventBase &
     | { type: "queue" }
     /** The session may now read and change files under `path` (given by the user, or approved when the agent asked). */
     | { type: "access"; path: string }
+    /** "Another answer": the answer to the user message `ofUser` (its seq) is written again; earlier ones stay, as versions. */
+    | { type: "regenerated"; ofUser: number }
     | { type: "answer"; questionId: string; text: string }
     | {
         type: "tool_result";

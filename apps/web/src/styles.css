@@ -1412,3 +1412,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 
 /* After adding an Unreal project to a chat: connect it. */
 .unreal-setup { gap: 8px; padding: 8px 10px; margin: 0 0 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); flex-wrap: wrap; }
+
+/* Answer versions: ‹ 2/3 › and ↻ under the last answer of a message. */
+.answer-versions { display: inline-flex; align-items: center; gap: 2px; margin-inline-start: 4px; }

@@ -267,6 +267,29 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * Writes the last answer again ("another answer"). The model sees the
+   * conversation up to the user's last message; the earlier answer stays in
+   * the events, so the user can switch between versions.
+   */
+  regenerate(): void {
+    if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
+    const user = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
+    if (!user) throw new Error("There is no message to answer again.");
+    let at = -1;
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const m = this.messages[i]!;
+      if (m.role === "user" && typeof m.content === "string" && m.content.startsWith(user.text)) {
+        at = i;
+        break;
+      }
+    }
+    if (at < 0) throw new Error("That answer is too far back to write again.");
+    this.messages.splice(at + 1);
+    this.push({ type: "regenerated", ofUser: user.seq });
+    void this.run();
+  }
+
+  /**
    * Answers an approval request.
    *
    * @param requestId - From the `approval_request` event.

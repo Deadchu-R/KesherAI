@@ -359,3 +359,16 @@ test("tool search: only core tools in full, find_tools loads the others for the 
   assert.ok(names(1).includes("write_file"), "loaded for the next step");
   assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "hi");
 });
+
+test("another answer: the model sees the conversation up to the last message; the old answer stays", async () => {
+  const { session, seen } = await makeSession([{ text: "first" }, { text: "second" }, { text: "third" }]);
+  session.send("hi");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  const before = session.events.filter((e) => e.type === "assistant").length;
+  const asked = seen.length;
+  session.regenerate();
+  const mark = session.events.find((e) => e.type === "regenerated")!;
+  await waitFor(session, (e) => e.type === "assistant" && e.seq > mark.seq);
+  assert.deepEqual(seen[asked]!.messages.filter((m) => m.role !== "system").map((m) => m.role), ["user"], "only the user's message, not the first answer");
+  assert.ok(session.events.filter((e) => e.type === "assistant").length > before, "the old answer stays in the events");
+});
