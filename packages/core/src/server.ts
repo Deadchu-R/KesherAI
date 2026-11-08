@@ -70,6 +70,7 @@ import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
+import { Training } from "./training.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { Pages } from "./pages.js";
@@ -688,6 +689,29 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; script-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
     }
     return payload;
+  });
+  // Training models from KesherAI: a picture LoRA through ComfyUI's training nodes (training.ts).
+  const training = new Training({
+    comfy: () => comfy.status(),
+    vramGb: async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)),
+    objectInfo: async () => (await fetch(`${comfy.status().url}/object_info`, { signal: AbortSignal.timeout(15_000) })).json() as Promise<Record<string, { input?: { required?: Record<string, unknown[]> } }>>,
+    runFlow: (flow, signal) => new ComfyUIProvider({ id: "comfyui-train", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" }).runFlow(flow, signal, 4 * 60 * 60_000),
+    loraDir: () => sd.loraDir,
+    interrupt: async () => void (await fetch(`${comfy.status().url}/interrupt`, { method: "POST" })),
+  });
+  app.get("/api/training", async () => ({ kinds: await training.kinds(), jobs: training.list() }));
+  app.post<{ Body: { name?: string; trigger?: string; base?: string; steps?: number; rank?: number; images?: Array<{ data?: string; mimeType?: string }> } }>("/api/training/image-lora", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+    const b = req.body ?? {};
+    const images = (b.images ?? []).filter((i) => typeof i.data === "string" && /^image\/(png|jpeg|webp)$/.test(i.mimeType ?? "")).map((i) => ({ data: Buffer.from(i.data!, "base64"), mimeType: i.mimeType! }));
+    try {
+      return await training.startImageLora({ name: String(b.name ?? ""), trigger: String(b.trigger ?? ""), base: String(b.base ?? ""), images, ...(typeof b.steps === "number" ? { steps: b.steps } : {}), ...(typeof b.rank === "number" ? { rank: b.rank } : {}) });
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
+  });
+  app.post("/api/training/stop", async () => {
+    training.stop();
+    return { ok: true };
   });
   // Who came in from outside (and who was refused), for Settings → Phone.
   const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));

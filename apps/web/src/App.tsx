@@ -42,6 +42,7 @@ const ImagesPage = lazy(() => import("./pages/Images").then((m) => ({ default: m
 const BatchImagesPage = lazy(() => import("./pages/BatchImages").then((m) => ({ default: m.BatchImagesPage })));
 const MemoryPage = lazy(() => import("./pages/MemoryPage").then((m) => ({ default: m.MemoryPage })));
 const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
+const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
 const PartsPage = lazy(() => import("./pages/PartsPage").then((m) => ({ default: m.PartsPage })));
 const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
@@ -208,6 +209,7 @@ export function App() {
   else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
+  else if (hash === "#/training") page = <TrainingPage />;
   else if (hash === "#/parts") page = <PartsPage />;
   else if (hash === "#/apps") page = <AppsPage />;
   else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;

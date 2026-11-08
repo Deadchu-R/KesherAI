@@ -1362,3 +1362,13 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .home-recent, .home-pins { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 720px; margin: 14px auto 0; }
 .home-recent a, .home-pins a { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; padding: 7px 14px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-2); text-decoration: none; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-recent a:hover, .home-pins a:hover { border-color: var(--accent); color: var(--text); }
+/* Train models */
+.train-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.train-kind h2 { font-size: 16px; margin: 0 0 4px; }
+.train-kind.ready { border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.training .good { color: var(--good); }
+.training .bad { color: var(--bad); }
+.train-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.train-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius-sm); }
+.train-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.train-jobs li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-2); }
