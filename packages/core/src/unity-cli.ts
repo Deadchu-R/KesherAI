@@ -105,6 +105,8 @@ function failure(run: CliRun): Error {
 /** Unity projects through the CLI. Same calls as the Unreal bridge, so the page is shared. */
 export class UnityCli {
   private statusCache?: { at: number; ready: boolean; project?: string };
+  /** Whether the CLI is installed (checked at most once a minute: the page asks every few seconds). */
+  private cliCache?: { at: number; found: boolean };
 
   /**
    * @param config - The `unity` config section.
@@ -203,8 +205,8 @@ export class UnityCli {
 
   /** The page's status. */
   async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; cli: boolean; active?: string }> {
-    const cli = await this.run(["--version"], 10_000);
-    const found = cli.code === 0;
+    if (!this.cliCache || Date.now() - this.cliCache.at > 60_000) this.cliCache = { at: Date.now(), found: (await this.run(["--version"], 10_000)).code === 0 };
+    const found = this.cliCache.found;
     const ready = found ? await this.editorReady() : false;
     const path = this.path;
     return {

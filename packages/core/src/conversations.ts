@@ -483,7 +483,7 @@ export class ConversationManager {
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
     const all = [...code, ...media.tools, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
-    const telegram = id ? this.deps.library.listConversations().find((c) => c.id === id)?.source === "telegram" : false;
+    const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
       return {
         tools: all.filter((t) => !/^(computer_|browser_)/.test(t.spec.name)),
@@ -701,7 +701,7 @@ export class ConversationManager {
     });
     this.sessions.set(id, session);
     if (this.deps.onEvent) {
-      const title = () => this.deps.library.listConversations().find((c) => c.id === id)?.title ?? conversation.title;
+      const title = () => this.deps.library.summary(id)?.title ?? conversation.title;
       const lastAnswer = () => [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant")?.text;
       session.on("event", (e: AgentEvent) => this.deps.onEvent?.(id, e, title, lastAnswer));
     }

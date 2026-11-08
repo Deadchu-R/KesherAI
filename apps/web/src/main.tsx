@@ -12,6 +12,14 @@ import { installSlideMenus } from "./slideMenus";
 import { loadAppearance } from "./appearance";
 
 setLocale(getLocale());
+// Pages refresh themselves every few seconds; in a hidden tab (or the phone app in the background)
+// those refreshes wait until it shows again, which saves battery and the computer's work.
+// Short timers (one second, like a recording's clock) keep running.
+{
+  const every = window.setInterval.bind(window);
+  window.setInterval = ((fn: TimerHandler, ms?: number, ...args: unknown[]) =>
+    typeof fn === "function" && (ms ?? 0) >= 1500 ? every(() => !document.hidden && (fn as (...a: unknown[]) => void)(...args), ms) : every(fn, ms, ...args)) as typeof window.setInterval;
+}
 // The look the user picked (Settings → Appearance, or "make it light" in a chat).
 loadAppearance();
 

@@ -1,6 +1,6 @@
 {
   "name": "@kesher/shared",
-  "version": "0.4.98",
+  "version": "0.4.99",
   "description": "Types, zod schemas, branding and feature flags shared by every KesherAI package.",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,8 +13,11 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "zod": "^3.24.0"
-  }
+  },
+  "sideEffects": false
 }

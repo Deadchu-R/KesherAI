@@ -255,6 +255,14 @@ export class Library {
 
   /**
    * @param id - Conversation id.
+   * @returns Its summary (no disk read), or `undefined`.
+   */
+  summary(id: string): ConversationSummary | undefined {
+    return this.summaries.get(id);
+  }
+
+  /**
+   * @param id - Conversation id.
    * @returns The full conversation, or `undefined`.
    */
   async getConversation(id: string): Promise<Conversation | undefined> {
