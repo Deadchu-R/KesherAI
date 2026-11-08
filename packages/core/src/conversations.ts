@@ -15,6 +15,7 @@ import { runSplit, type SplitWorker } from "./split-task.js";
 import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, unityTools } from "./unity-tools.js";
 import { graphTools } from "./graph-edit.js";
+import { analyzeChatTool } from "./chat-stats.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
@@ -639,6 +640,8 @@ export class ConversationManager {
     const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...this.learnTools()];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
     const split = this.splitTools(media.notes, id);
+    // The numbers of an exported chat between people (the relationship analyst persona uses it).
+    split.push(analyzeChatTool);
     // Unity through its CLI, when it is installed on this computer.
     const unity = this.deps.unity?.cliKnown()
       ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id)

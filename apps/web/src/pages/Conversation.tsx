@@ -13,6 +13,7 @@ import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
+import { UnityChip } from "../UnityChip";
 import { Mic } from "../Mic";
 import { VoiceMode } from "../VoiceMode";
 import { useParts } from "../parts";
@@ -833,6 +834,7 @@ export function ConversationPage({ id }: { id: string }) {
                 <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} onClick={() => void desktop()!.pickFiles!().then((f) => attach(f))}>+</button>
               )}
               <WebToggle on={web} onChange={setWeb} />
+              <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
               {voicePart && <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />}
               {voicePart && (
                 <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>

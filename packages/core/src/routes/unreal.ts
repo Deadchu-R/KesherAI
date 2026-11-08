@@ -161,7 +161,8 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     });
     /** Adds a project folder, or picks which one the page shows. Only on this computer. */
     app.put<{ Body: { project?: string } }>(`${base}/project`, async (req, reply) => {
-      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Choose the project on the computer that runs KesherAI." });
+      // From the phone: switching between projects already added is fine; adding a new folder is on the computer.
+      if (!isLocalRequest(req) && !s.config.unity.projects.includes(String(req.body?.project ?? ""))) return reply.code(403).send({ error: "Add a new project on the computer that runs KesherAI." });
       try {
         await unity.addProject(String(req.body?.project ?? ""));
         return unity.status();
