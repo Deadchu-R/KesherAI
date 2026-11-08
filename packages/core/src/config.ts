@@ -110,6 +110,15 @@ export const KesherConfigSchema = z.object({
       active: z.string().optional(),
     })
     .default({}),
+  /** Talking to KesherAI from Telegram through the user's own bot (telegram.ts). */
+  telegram: z
+    .object({
+      enabled: z.boolean().default(false),
+      token: z.string().optional(),
+      chats: z.array(z.number()).default([]),
+      conversations: z.record(z.string(), z.string()).default({}),
+    })
+    .default({}),
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
   appearance: z.record(z.string(), z.unknown()).default({}),
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),

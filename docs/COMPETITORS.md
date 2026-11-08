@@ -214,6 +214,10 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 30. Microsoft 365 Copilot as a chat model (work account, Copilot Chat API) and business mode: only allowed connections stay on, enforced by the server, lockable by an administrator's policy.json ✅ (docs/COPILOT.md)
 31. Godot support (future): the same idea as Unreal — an editor plugin (GDScript/C#) so KesherAI sees scenes, nodes and scripts and changes them in words ⬜
 32. Music and 3D from the chat: make_music (ACE-Step) and make_3d (Hunyuan3D 2) run the ready-made ComfyUI flows; a song player and a GLB to download in the chat; a missing model downloads only after the user agrees ✅
-33. Make it yours (future, like SteamOS): the user arranges what is on top and what below (menu, start screen, bars), and picks background, fonts, colors — the whole look — saved as themes ⬜
+33. Make it yours (like SteamOS): looks, colours, fonts, sizes, spacing, background and the order of the tool groups, in Settings → Appearance or in words to the local model (change_look) ✅ (docs/APPEARANCE.md); still to come: arranging the start screen and the bars, saved themes to share ⬜
 34. First-run welcome (role, starting tools, phone account), pages that load only when opened, and a tidier layout on computer and phone ✅
+35. From OpenClaw (openclaw.ai, MIT, a personal agent you talk to through chat apps): talk to KesherAI from Telegram (a bot of your own, free) and later other chat apps, with approvals as buttons there ⬜
+36. From OpenClaw: a heartbeat — the assistant checks in on a schedule (mail, calendar, a folder, a page) and writes only when something needs you ⬜
+37. From OpenClaw: the assistant writes a new skill for itself when asked ("learn to do X"), shown to the user and approved before it is saved ⬜
+38. From OpenClaw's skill-store troubles (skills that stole keys): every community plugin and skill shows what it may touch, runs with only that, and the store marks reviewed ones ⬜
 

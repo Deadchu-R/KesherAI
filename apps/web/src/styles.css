@@ -1311,3 +1311,10 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .row.wrap { flex-wrap: wrap; }
 .look .seg { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .look .seg button { height: 34px; padding: 0 12px; }
+
+/* Settings → Phone → Telegram */
+.telegram .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.telegram .dot.on { background: var(--good); }
+.tg-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 4px; }
+.tg-pair { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--radius); background: var(--accent-soft); }
+.tg-code { align-self: flex-start; font-size: 20px; padding: 6px 12px; border-radius: var(--radius-sm); background: var(--panel); letter-spacing: 0.04em; user-select: all; }
