@@ -41,7 +41,8 @@ jobs:
         run: node -e "const e=process.env;require('fs').writeFileSync('apps/desktop/dist/google-client.json', JSON.stringify({clientId:e.GOOGLE_CLIENT_ID||'',clientSecret:e.GOOGLE_CLIENT_SECRET||'',githubClientId:e.GITHUB_CLIENT_ID||''}))"
       # Electron and electron-builder's tools come from GitHub's release downloads, which answer
       # 504 at times: keep them between runs, and try the build again (what was downloaded stays).
-      - uses: actions/cache@v4
+      - id: dlcache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/electron
@@ -50,7 +51,7 @@ jobs:
             ~/Library/Caches/electron-builder
             ~/AppData/Local/electron/Cache
             ~/AppData/Local/electron-builder/Cache
-          key: electron-dl-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: electron-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: electron-dl-${{ runner.os }}-
       # Unsigned installers (macOS, Linux, and Windows until SignPath is set up).
       - if: runner.os != 'Windows' || vars.SIGNPATH_ORGANIZATION_ID == ''
@@ -64,6 +65,19 @@ jobs:
           exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Saved even when the build failed: what did download is not fetched again on the next try.
+      - if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # Signed Windows build (docs/CODE_SIGNING.md): the app's files are signed by SignPath, then
       # packed into the installer, which is signed too, then published. Each signing waits for an approver.
