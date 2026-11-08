@@ -155,31 +155,40 @@ Later (priority to be decided):
 
 ## Third review, November 2026 (OpenCode 2.2, LobeHub 2.2, LM Studio 0.4 and Bionic, Locally Uncensored 3.0.8, Off Grid AI, and phone apps)
 
-The app stays free: nothing on this list needs a paid service.
+The app stays free: nothing on this list needs a paid service. One list, in order of priority.
 
-Next, in this order:
+**1. The phone app**
 
-1. Personal memory you can see and edit: what the agent learned about you, shown and changeable (LobeHub, LU) ⬜
-2. Kokoro text to speech on this computer: a natural local voice for reading answers and for voice conversations, instead of the system voices (Off Grid) ⬜
-3. Phone: share to KesherAI from any app, a home-screen widget, and a voice call mode (Conduit, PocketPal, Layla) ⬜
-4. Phone: find computers on the network by scanning, and pair with a QR code from the computer (Off Grid "Scan Network", LU QR pairing) ⬜
-5. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ⬜
-6. "Keep going until done": a goal the agent works toward, checked by a reviewer pass before it stops (OpenCode `/goal`) ⬜
-7. Agent Builder: describe an assistant in words and get a persona with the right tools and knowledge (LobeHub) ⬜
-8. Import chats from ChatGPT, Claude and Gemini exports (LU) ⬜
-9. Long chats summarize their older part automatically to stay within the context (LU) ⬜
-10. Watch and approve the agent's computer use from the phone ⬜
-11. Hardware benchmark: tokens per second for each model on this computer, shown next to the model (LU, PocketPal) ⬜
-12. Export a chat as Markdown or PDF (LM Studio) ⬜
-13. Browser extension without a store: an installable package in Settings for Edge and Firefox add-on stores (both free), and "Load unpacked" for Chrome ⬜
+1. Share to KesherAI from any app (text, links, images, files) ⬜
+2. A home-screen widget: new chat, talk, photo (Conduit, PocketPal) ⬜
+3. Voice call mode on the phone: talk and hear the answer, hands-free (Conduit, Layla) ⬜
+4. Find computers on the network by scanning, and pair with a QR code shown on the computer (Off Grid "Scan Network", LU QR pairing) ⬜
+5. Watch and approve the agent's computer use from the phone ⬜
+6. Image generation on the phone itself (Layla: Stable Diffusion 1.5) ⬜
 
-Later:
+**2. Every kind of model on the computer, and downloading it**
 
-- Agent groups: several personas on one task, in turns or in parallel (LobeHub)
-- Pages: a document written together with the agent, next to the chat (LobeHub)
-- Music generation as a tool the chat can call (LU)
-- A transcript that follows playback in meetings (needs the recording kept, as an option)
-- One-click setup for video, like chat and speech
-- OneDrive sign-in, like Google
-- Image generation on the phone (Layla: Stable Diffusion 1.5 on the NPU)
-- Chrome Web Store listing for the extension (a one-time $5 fee; until then the free routes above)
+7. One-click setup for video, like chat and speech ⬜
+8. Kokoro text to speech on this computer: a natural local voice for answers and voice conversations (Off Grid) ⬜
+9. Images: edit with a mask (inpainting) and image to image (LU, Off Grid) ⬜
+10. Music generation, as a tool the chat can call (LU) ⬜
+11. Hardware benchmark: tokens per second for each model on this computer (LU, PocketPal) ⬜
+
+**3. High-importance features**
+
+12. Personal memory you can see and edit (LobeHub, LU) ⬜
+13. Long chats summarize their older part automatically (LU) ⬜
+14. "Keep going until done": a goal checked by a reviewer pass before the agent stops (OpenCode `/goal`) ⬜
+15. Agent Builder: describe an assistant in words, get a persona with tools and knowledge (LobeHub) ⬜
+16. Import chats from ChatGPT, Claude and Gemini exports (LU) ⬜
+17. Export a chat as Markdown or PDF (LM Studio) ⬜
+18. Browser extension without the Chrome store: a package from Settings, and the free Edge and Firefox add-on stores ⬜
+
+**4. The rest**
+
+19. Agent groups: several personas on one task (LobeHub) ⬜
+20. Pages: a document written together with the agent (LobeHub) ⬜
+21. A meeting transcript that follows playback (keeps the recording, as an option) ⬜
+22. OneDrive sign-in, like Google ⬜
+23. Signed Windows installer through SignPath (waiting for the application) ⬜
+24. Chrome Web Store listing for the extension (a one-time $5 fee; only if it is worth it) ⬜
