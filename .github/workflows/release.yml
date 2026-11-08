@@ -39,9 +39,29 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.KESHER_GOOGLE_CLIENT_SECRET }}
           GITHUB_CLIENT_ID: ${{ secrets.KESHER_GITHUB_CLIENT_ID }}
         run: node -e "const e=process.env;require('fs').writeFileSync('apps/desktop/dist/google-client.json', JSON.stringify({clientId:e.GOOGLE_CLIENT_ID||'',clientSecret:e.GOOGLE_CLIENT_SECRET||'',githubClientId:e.GITHUB_CLIENT_ID||''}))"
+      # Electron and electron-builder's tools come from GitHub's release downloads, which answer
+      # 504 at times: keep them between runs, and try the build again (what was downloaded stays).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-dl-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-dl-${{ runner.os }}-
       # Unsigned installers (macOS, Linux, and Windows until SignPath is set up).
       - if: runner.os != 'Windows' || vars.SIGNPATH_ORGANIZATION_ID == ''
-        run: pnpm --filter @kesher/desktop exec electron-builder --publish always
+        shell: bash
+        run: |
+          for attempt in 1 2 3 4; do
+            pnpm --filter @kesher/desktop exec electron-builder --publish always && exit 0
+            echo "Build attempt $attempt failed; trying again in $((attempt * 60)) seconds."
+            sleep $((attempt * 60))
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
