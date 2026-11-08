@@ -14,7 +14,8 @@ You can write to KesherAI from Telegram, from anywhere, through a bot of your ow
 - **Messages:** write anything. Each paired chat has its own conversation, which also appears in the app. `/new` starts a fresh one.
 - **Approvals:** when the agent needs approval, Telegram shows **Approve / Deny** buttons. A button works once, for that one request, and only from the paired chat.
 - **Questions:** when the agent asks a question that has options, the options come as buttons.
-- **Pictures:** pictures the chat makes come back as photos. Pictures and voice messages you send to the bot are not supported yet.
+- **Pictures:** pictures the chat makes come back as photos. A picture you send, with or without a caption, is saved in the chat's own folder, and the model looks at it. For example, send a photo with "what breed is this?".
+- **Voice messages:** they are written down on your computer (Settings → Speech) and sent to the chat as text. The bot shows you what it heard first. Files over 20 MB are refused.
 
 ## Safety
 

@@ -1,5 +1,5 @@
 import type { AgentTool } from "@kesher/agent";
-import { mkdir, readFile as readFileFs } from "node:fs/promises";
+import { mkdir, readFile as readFileFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { constants as zlibConstants } from "node:zlib";
@@ -355,6 +355,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     alert: (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["warning"], priority: 4 }).catch(() => undefined),
     allowed: () => registry.permitted("telegram"),
+    saveFile: async (convId, name, data) => {
+      const conv = await library.getConversation(convId);
+      const folder = conv ? services.conversations.workspaceOf(conv) : undefined;
+      if (!folder) throw new Error("This chat has no folder.");
+      await mkdir(join(folder, "shared"), { recursive: true });
+      await writeFileFs(join(folder, "shared", name), data);
+      return `shared/${name}`;
+    },
+    transcribe: async (data, ext) => (await transcribeWith({ whisper, speech: () => config.speech, providers: () => config.providers }, Buffer.from(data), ext, config.speech.language)).text,
   });
   const devices = new Devices({
     config: config.devices,

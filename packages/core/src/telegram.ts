@@ -55,7 +55,14 @@ export interface TelegramDeps {
   alert(title: string, body: string): void;
   /** Whether Telegram is allowed (business mode can forbid it). */
   allowed(): boolean;
+  /** Saves a file from the chat in the conversation's folder; returns its path there (for the model). */
+  saveFile?(conversationId: string, name: string, data: Uint8Array): Promise<string>;
+  /** Speech to text on this computer (Settings → Speech). */
+  transcribe?(data: Uint8Array, ext: string): Promise<string>;
 }
+
+/** The most a bot may download from Telegram (its own limit is 20 MB). */
+const MAX_FILE = 20 * 1024 * 1024;
 
 type Fetch = typeof fetch;
 interface Update {
@@ -65,8 +72,10 @@ interface Update {
     from?: { first_name?: string; last_name?: string; username?: string; is_bot?: boolean };
     text?: string;
     caption?: string;
-    photo?: unknown[];
-    voice?: unknown;
+    photo?: Array<{ file_id: string; file_size?: number }>;
+    voice?: { file_id: string; file_size?: number; duration?: number };
+    audio?: { file_id: string; file_size?: number; file_name?: string };
+    document?: { file_id: string; file_size?: number; file_name?: string; mime_type?: string };
     forward_origin?: unknown;
     forward_from?: unknown;
     via_bot?: unknown;
@@ -358,19 +367,36 @@ export class TelegramBridge {
       await this.say(chat, "Connected to KesherAI. Write anything.\n/new — a fresh chat\n/lock — turn the bot off at once (only the computer turns it on again)");
       return;
     }
-    if (!text) {
-      await this.say(chat, m.photo ? "Pictures from Telegram are not supported yet; write it in words." : "Only text messages for now.");
+    const picture = m.photo?.at(-1) ?? (m.document && /^image\/(png|jpeg|webp)$/.test(m.document.mime_type ?? "") ? m.document : undefined);
+    const sound = m.voice ?? m.audio;
+    if (!text && !picture && !sound) {
+      await this.say(chat, "Text, pictures and voice messages work here.");
       return;
     }
     let convId = this.config.conversations[String(chat)];
     try {
       if (!convId) {
-        convId = await this.deps.newConversation(`Telegram: ${text.slice(0, 40)}`);
+        convId = await this.deps.newConversation(`Telegram: ${(text || (picture ? "picture" : "voice message")).slice(0, 40)}`);
         this.config.conversations[String(chat)] = convId;
         await this.save();
       }
       await this.call("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => undefined);
-      await this.deps.send(convId, text);
+      let message = text;
+      if (sound) {
+        // A voice message: written down on this computer, then sent as text (and shown back, so you can check it).
+        if (!this.deps.transcribe) throw new Error("Speech to text is not available.");
+        const heard = (await this.deps.transcribe(await this.download(sound.file_id, sound.file_size), ".ogg")).trim();
+        if (!heard) throw new Error("Could not make out any words.");
+        await this.say(chat, `🎙 ${heard}`);
+        message = [text, heard].filter(Boolean).join("\n\n");
+      }
+      if (picture) {
+        if (!this.deps.saveFile) throw new Error("Pictures are not available.");
+        const ext = m.document?.mime_type === "image/png" ? "png" : m.document?.mime_type === "image/webp" ? "webp" : "jpg";
+        const path = await this.deps.saveFile(convId, `telegram-${Date.now()}.${ext}`, await this.download(picture.file_id, picture.file_size));
+        message = `${message || "What is in this picture?"}\n\n(The user sent a picture from Telegram: ${path} — look at it with your file tools.)`;
+      }
+      await this.deps.send(convId, message);
     } catch (e) {
       if (/not found/i.test((e as Error).message)) {
         delete this.config.conversations[String(chat)];
@@ -378,6 +404,25 @@ export class TelegramBridge {
       }
       await this.say(chat, `Could not send that: ${(e as Error).message}`);
     }
+  }
+
+  /**
+   * Downloads a file the chat sent (only from Telegram's own file address, at most 20 MB).
+   *
+   * @param fileId - Telegram's file id.
+   * @param size - Its size, if Telegram said.
+   * @returns The bytes.
+   */
+  private async download(fileId: string, size?: number): Promise<Uint8Array> {
+    if (size && size > MAX_FILE) throw new Error("That file is too big (over 20 MB).");
+    const f = await this.call<{ file_path?: string; file_size?: number }>("getFile", { file_id: fileId });
+    if (!f.file_path || !/^[\w./-]+$/.test(f.file_path) || f.file_path.includes("..")) throw new Error("Telegram did not give the file.");
+    if (f.file_size && f.file_size > MAX_FILE) throw new Error("That file is too big (over 20 MB).");
+    const r = await this.http(`https://api.telegram.org/file/bot${this.config.token}/${f.file_path}`, { signal: AbortSignal.timeout(60_000) });
+    if (!r.ok) throw new Error(`Telegram answered ${r.status}`);
+    const data = new Uint8Array(await r.arrayBuffer());
+    if (data.length > MAX_FILE) throw new Error("That file is too big (over 20 MB).");
+    return data;
   }
 
   /** An unknown chat: only `/start <the code>` while pairing is open pairs it; everything else gets no answer. */

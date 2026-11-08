@@ -92,3 +92,35 @@ test("splitText keeps messages under Telegram's limit", () => {
   const parts = splitText(`${"a ".repeat(3000)}\n\n${"b ".repeat(3000)}`, 4000);
   assert.ok(parts.length >= 2 && parts.every((p) => p.length <= 4000));
 });
+
+test("pictures and voice messages from Telegram reach the chat", async () => {
+  const http = (async (url: string, init?: { body?: string }) => {
+    if (url.includes("/file/bot")) return new Response(new Uint8Array([1, 2, 3]));
+    const method = url.split("/").pop()!;
+    const result = method === "getMe" ? { username: "b" } : method === "getFile" ? { file_path: "photos/file_1.jpg", file_size: 3 } : method === "getUpdates" ? [] : true;
+    void init;
+    return new Response(JSON.stringify({ ok: true, result }));
+  }) as unknown as typeof fetch;
+  const config: TelegramConfig = { enabled: false, chats: [42], conversations: { "42": "c1" } };
+  const sent: string[] = [];
+  const saved: string[] = [];
+  const bridge = new TelegramBridge(config, async () => undefined, {
+    newConversation: async () => "c1",
+    send: async (_c, t) => void sent.push(t),
+    decide: async () => true,
+    answer: async () => true,
+    image: async () => undefined,
+    alert: () => undefined,
+    allowed: () => true,
+    saveFile: async (_c, name, data) => (saved.push(`${name}:${data.length}`), `shared/${name}`),
+    transcribe: async () => "  turn on the lights  ",
+  }, http);
+  config.token = "123456789:AAbbccddeeffgghhiijjkkllmmnnooppqq";
+  await bridge.handle({ update_id: 1, message: { chat: { id: 42, type: "private" }, caption: "what breed?", photo: [{ file_id: "small" }, { file_id: "big", file_size: 3 }] } });
+  assert.match(sent[0]!, /^what breed\?\n\n\(The user sent a picture from Telegram: shared\/telegram-\d+\.jpg/);
+  assert.equal(saved.length, 1);
+  await bridge.handle({ update_id: 2, message: { chat: { id: 42, type: "private" }, voice: { file_id: "v", file_size: 3 } } });
+  assert.equal(sent[1], "turn on the lights");
+  await bridge.handle({ update_id: 3, message: { chat: { id: 42, type: "private" }, photo: [{ file_id: "huge", file_size: 30 * 1024 * 1024 }] } });
+  assert.equal(sent.length, 2, "a file over 20 MB is refused");
+});
