@@ -138,7 +138,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ...summary, session: opened.session.info(), events: opened.session.events };
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; personaId?: string | null } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -146,6 +146,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       if (b.team && (!Array.isArray(b.team) || b.team.some((m) => !m || typeof m.modelId !== "string" || (m.role !== "planner" && m.role !== "reviewer")))) {
         return reply.code(400).send({ error: "A teammate needs a modelId and the role planner or reviewer." });
       }
+      if (b.group && (!Array.isArray(b.group) || b.group.some((x) => typeof x !== "string") || b.group.length > 8)) return reply.code(400).send({ error: "A group is a list of up to 8 persona ids." });
       const c = await s.conversations.update(req.params.id, b);
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;

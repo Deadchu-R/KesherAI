@@ -6,7 +6,7 @@ import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
-import { PersonaChip } from "../Personas";
+import { PersonaChip, usePersonas } from "../Personas";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
@@ -48,6 +48,21 @@ function summary(name: string, input: Record<string, unknown>): string {
 
 function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<"tool_result"> }) {
   if (call.name === "ask_user") return null;
+  // Agent group: a member's part, shown as that member's answer.
+  if (call.name === "ask_member") {
+    const head = result?.ok ? result.output.split("\n")[0] ?? "" : "";
+    const body = result?.ok ? result.output.slice(head.length + 1) : result?.output ?? "";
+    return (
+      <details className="teammate member" open={!!result}>
+        <summary>
+          <span className="mate-role">{head || `👤 ${String(call.input.member ?? "")}`}</span>
+          {!result && <span className="muted small">{getLocale() === "he" ? "עובד…" : "working…"}</span>}
+        </summary>
+        <p className="muted small" dir="auto">{String(call.input.task ?? "")}</p>
+        {result && <div className="mate-body"><RichText text={body} /></div>}
+      </details>
+    );
+  }
   const state = !result ? "pending" : result.ok ? "ok" : "fail";
   return (
     <details className={`tool ${state}`}>
@@ -61,6 +76,37 @@ function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<"tool_r
       ))}
       {result && !result.diff && <pre className="code" dir="ltr">{result.output}</pre>}
     </details>
+  );
+}
+
+/**
+ * Agent group: personas this chat's model leads. It splits a request between
+ * them (each answers with its own instructions and model) and puts it together.
+ */
+function GroupButton({ group, onChange }: { group: string[]; onChange: (group: string[]) => void }) {
+  const personas = usePersonas();
+  const [open, setOpen] = useState(false);
+  const he = getLocale() === "he";
+  const toggle = (id: string) => onChange(group.includes(id) ? group.filter((x) => x !== id) : [...group, id].slice(0, 8));
+  return (
+    <div className="team">
+      <button type="button" className={group.length ? "on" : ""} aria-expanded={open} onClick={() => setOpen(!open)} title={he ? "קבוצת סוכנים: כמה פרסונות עובדות יחד על משימה" : "Agent group: several personas work on one task together"}>
+        {he ? "קבוצה" : "Group"}{group.length ? ` (${group.length})` : ""}
+      </button>
+      {open && (
+        <div className="team-pop" role="dialog" aria-label={he ? "קבוצה" : "Group"}>
+          <p className="muted small">{he ? "המודל של הצ'אט מוביל את הקבוצה: הוא מחלק את הבקשה בין החברים, כל אחד עונה עם ההוראות והמודל שלו, והוא מאחד את התשובות." : "The chat's model leads the group: it splits the request between the members, each answers with its own instructions and model, and it puts their work together."}</p>
+          {personas.length === 0 && <p className="small">{he ? "אין עדיין פרסונות. " : "No personas yet. "}<a href="#/personas">{he ? "צור פרסונה" : "Make one"}</a></p>}
+          {personas.map((p) => (
+            <label key={p.id} className="row" style={{ gap: 8 }}>
+              <input type="checkbox" checked={group.includes(p.id)} onChange={() => toggle(p.id)} />
+              <span>{p.icon ?? "👤"} {p.name}</span>
+              {p.modelId && <span className="muted small" dir="ltr">{p.modelId.split("/").pop()}</span>}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -475,7 +521,7 @@ export function ConversationPage({ id }: { id: string }) {
     }
     if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; personaId: string | null }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
     const { personaId, ...rest } = body;
     const next = { ...conv, ...rest };
@@ -554,6 +600,7 @@ export function ConversationPage({ id }: { id: string }) {
       )}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
         <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />
+        {conv.kind === "chat" && <GroupButton group={conv.group ?? []} onChange={(group) => void patch({ group })} />}
         {pluginUi.panels.map((x) => {
           const key = `${x.pluginId}/${x.id}`;
           return <button key={key} type="button" className={openPanel === key ? "on" : ""} aria-pressed={openPanel === key} onClick={() => setOpenPanel(openPanel === key ? "" : key)}>{x.title}</button>;

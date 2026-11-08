@@ -306,10 +306,65 @@ export class ConversationManager {
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
     const skills = this.deps.skills?.count ? [this.deps.skills.tool()] : [];
-    return { tools: [...code, ...media.tools, ...computer, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])], notes: media.notes };
+    const group = id ? this.groupTools(id) : { tools: [], notes: [] };
+    return { tools: [...code, ...media.tools, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])], notes: [...media.notes, ...group.notes] };
   }
 
   private teamCache = new Map<string, Teammate[]>();
+  private groupCache = new Map<string, string[]>();
+
+  /**
+   * Agent group (LobeHub's agent groups): the chat's model leads a group of
+   * personas. It asks each member for its part with `ask_member`; the member
+   * answers with its own instructions and model; the lead puts it together.
+   */
+  private groupTools(id: string): { tools: AgentTool[]; notes: string[] } {
+    const members = (this.groupCache.get(id) ?? []).flatMap((pid) => {
+      const p = this.deps.personas?.get(pid);
+      return p ? [p] : [];
+    });
+    if (!members.length) return { tools: [], notes: [] };
+    const conv = () => this.sessions.get(id);
+    const tool: AgentTool = {
+      spec: {
+        name: "ask_member",
+        description: `Give one member of your group a part of the task and get its answer. Members: ${members.map((m) => m.name).join(", ")}.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            member: { type: "string", enum: members.map((m) => m.name), description: "Which member." },
+            task: { type: "string", description: "What this member should do: its part, with everything it needs to know (it does not see the chat)." },
+          },
+          required: ["member", "task"],
+        },
+      },
+      risk: "read",
+      preview: async (input) => `${String(input.member)}: ${String(input.task)}`,
+      run: async (input, ctx) => {
+        const member = members.find((m) => m.name === input.member) ?? members.find((m) => m.name.toLowerCase() === String(input.member).toLowerCase());
+        if (!member) throw new Error(`No member named ${String(input.member)}. Members: ${members.map((m) => m.name).join(", ")}.`);
+        const modelId = member.modelId ?? conv()?.modelId ?? this.deps.config.activeModels.chat;
+        if (!modelId) throw new Error("No chat model for this member.");
+        const r = await modelTurnFor(this.deps.registry, modelId)(
+          {
+            messages: [
+              { role: "system", content: `${personaPrompt(member)}\n\nYou are ${member.name}, one member of a group working on the user's request. The group's lead gives you a part of it: do that part well and answer with your result only, in the user's language. You do not see the rest of the chat.` },
+              { role: "user", content: String(input.task ?? "") },
+            ],
+            tools: [],
+          },
+          ctx.signal,
+          () => undefined,
+        );
+        const text = r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+        return { output: `${member.icon ?? "👤"} ${member.name} (${modelId.split("/").pop()}):\n${text}` };
+      },
+    };
+    const notes = [
+      `You lead a group of assistants: ${members.map((m) => `${m.name}${m.instructions ? ` (${m.instructions.replace(/\s+/g, " ").slice(0, 140)})` : ""}`).join("; ")}. For a request that fits their skills, split it: call ask_member once for each member's part (you can call several at once), with everything that member needs, since they do not see the chat. Then answer the user yourself, combining their work, and say briefly who did what. For small talk or a request no member fits, just answer.`,
+    ];
+    return { tools: [tool], notes };
+  }
 
   /**
    * @param id - Conversation id.
@@ -431,6 +486,7 @@ export class ConversationManager {
     const conversation = await this.deps.library.getConversation(id);
     if (!conversation) return undefined;
     this.teamCache.set(id, conversation.team ?? []);
+    this.groupCache.set(id, conversation.group ?? []);
     const live = this.sessions.get(id);
     if (live) return { session: live, conversation };
     const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
@@ -676,7 +732,7 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team">> & { personaId?: string | null }): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group">> & { personaId?: string | null }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
@@ -688,6 +744,14 @@ export class ConversationManager {
       session.systemPrompt = await this.promptFor(next, this.toolsFor(next.kind, next.id).notes);
     }
     if (patch.team) this.teamCache.set(id, patch.team);
+    if (patch.group) {
+      await this.deps.personas?.load();
+      // A new group: new tools, and the lead's instructions say who is in it.
+      this.groupCache.set(id, patch.group);
+      const { tools, notes } = this.toolsFor(next.kind, id);
+      session.setTools(tools);
+      session.systemPrompt = await this.promptFor(next, notes);
+    }
     if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId));
     if (patch.mode) session.setMode(patch.mode);
     return this.deps.library.saveConversation({

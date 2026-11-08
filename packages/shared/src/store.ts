@@ -32,6 +32,8 @@ export interface Conversation {
   workspace?: string;
   /** Other models that plan or review alongside the main one. */
   team?: Teammate[];
+  /** Agent group: personas the chat's model leads, asking each for its part of a task. */
+  group?: string[];
   /** The persona this chat talks as (its instructions join the system prompt). */
   personaId?: string;
   /** For a branch: the conversation and event it was branched from. */
