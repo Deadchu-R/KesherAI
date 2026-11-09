@@ -230,7 +230,7 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
  * @param state - Holds the chat's current Unreal project (shared with the page).
  * @param logsDir - Where the build and package logs go.
  */
-export function unrealTools(state: { project?: string }, logsDir: string, jobs?: JobStore): AgentTool[] {
+export function unrealTools(state: { project?: string }, logsDir: string, jobs?: JobStore, onProject?: () => void): AgentTool[] {
   /**
    * A long build as a job that survives a KesherAI restart (update, closing the app): a job with the same key
    * that is still running is joined instead of starting a second one, so "continue" after a restart picks up the
@@ -310,6 +310,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         await mkdir(join(dir, "Content"), { recursive: true });
         const mcp = /^5\.[0-7]/.test(e.version) ? "" : ` ${await enableUnrealMcp(dir).catch(() => "")}`;
         state.project = dir;
+        onProject?.();
         return { output: `Made ${dir} for Unreal ${e.version}: Source/${name}/ (module, ${name}GameMode), Config/ set for phones, the game starts with ${name}GameMode on the engine's empty map.${mcp}\nNext: write the game's C++ with unreal_write_source, then unreal_compile.` };
       },
     },
@@ -319,6 +320,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
       run: async (input) => {
         const p = await readProject(String(input.path ?? ""));
         state.project = p.dir;
+        onProject?.();
         return { output: `Now working on ${p.file} (Unreal ${p.engine || "?"}).` };
       },
     },

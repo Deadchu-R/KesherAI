@@ -699,7 +699,9 @@ export class ConversationManager {
     const unity = this.deps.unity && (this.deps.unity.cliKnown() || this.deps.unity.activeProject)
       ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id)
       : [];
-    if (unity.length) media.notes.push(UNITY_NOTE);
+    // Fewer tokens: the long Unity guide and every Unity tool only while a Unity project is in use.
+    if (unity.length && this.deps.unity?.activeProject) media.notes.push(UNITY_NOTE);
+    else if (unity.length) media.notes.push("Unity's CLI is installed here: for Unity work, ask the user to pick or create a Unity project (+ → Project, or the Unity page); unity_status shows what is ready.");
     // Graphs in words from any chat: Unity Script/State Graphs, and Unreal Blueprints (KesherAI Bridge plugin).
     const chatModel = () => this.defaultChatModel();
     if (unity.length && this.deps.unity?.activeProject) {
@@ -716,12 +718,18 @@ export class ConversationManager {
         "Unreal Editor tools (Unreal's own MCP server): first list_toolsets, then describe_toolset on the one you need to read its tools' exact arguments, then call_tool with toolset_name, tool_name and arguments — never guess tool names. Check for project skills with AgentSkillToolset.ListSkills and follow a relevant one. Ask the user to save before a change that touches several assets. Wait for compiles to finish (LiveCodingToolset.CompileLiveCoding for C++). Read every result: anything that is not an explicit success is a stop. If Play-in-Editor is running, asset tools behave differently: stop it first or tell the user.",
       );
     }
-    split.push(...unity);
+    split.push(...(this.deps.unity?.activeProject ? unity : unity.filter((t) => t.spec.name === "unity_status")));
     // Unreal: when an engine is installed here (checked in the background, at most every 5 minutes) or a project is in use.
     this.checkUnreal();
-    if (this.unrealState.project || this.unrealEngines) {
-      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs()));
+    // Fewer tokens: with no Unreal project in use, only the three entry tools and one line go to the model
+    // (the full set and its long guide come once a project is created or opened); every message carried ~1,500
+    // tokens of Unreal guidance before, also in chats that had nothing to do with Unreal.
+    if (this.unrealState.project) {
+      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id)));
       media.notes.push(UNREAL_NOTE);
+    } else if (this.unrealEngines) {
+      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id)).filter((t) => /^unreal_(status|create_project|use_project)$/.test(t.spec.name)));
+      media.notes.push("Unreal Engine is installed here: for Unreal work start with unreal_status, then unreal_create_project or unreal_use_project (the other Unreal tools and their guide come after that).");
     }
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
@@ -1130,6 +1138,20 @@ export class ConversationManager {
     session.queued = session.queued.filter((q) => q.id !== queuedId);
     if (session.queued.length !== before) session.queueChanged();
     return session.queued.length !== before;
+  }
+
+  /**
+   * Gives a running session its tools and prompt again, mid-answer (an Unreal project was just created or
+   * opened, so its full tools come now, not only from the next message).
+   */
+  private async refreshTools(id?: string): Promise<void> {
+    if (!id) return;
+    const session = this.sessions.get(id);
+    const conversation = this.deps.library.summary(id);
+    if (!session || !conversation) return;
+    const { tools, notes } = this.toolsFor(conversation.kind, id);
+    session.setTools(tools);
+    session.systemPrompt = await this.promptFor(conversation, notes);
   }
 
   private async sendNow(id: string, text: string, opts: { web?: boolean }): Promise<void> {
