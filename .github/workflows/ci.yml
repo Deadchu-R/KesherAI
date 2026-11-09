@@ -73,7 +73,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       # High and critical advisories in what ships in the app block the release (docs/SECURITY_REVIEW.md lists the known ones).
       - run: pnpm audit --prod --audit-level high
       # Reported, not blocking, until a first full scan of the history has been looked at.

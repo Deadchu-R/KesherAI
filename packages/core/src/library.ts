@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Conversation, ConversationSummary, Project } from "@kesher/shared";
 
@@ -21,7 +21,20 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   const tmp = `${path}.${randomUUID()}.tmp`;
   const text = JSON.stringify(value);
   await writeFile(tmp, text.length > COMPRESS_ABOVE ? gzipSync(text, { level: 6 }) : text);
-  await rename(tmp, path);
+  // Windows: a reader or a virus scanner holding the file makes the rename fail for a moment; try again.
+  for (let i = 0; ; i++) {
+    try {
+      await rename(tmp, path);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (i >= 8 || (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY")) {
+        await unlink(tmp).catch(() => undefined);
+        throw e;
+      }
+      await new Promise((r) => setTimeout(r, 25 * (i + 1)));
+    }
+  }
 }
 
 /** Reads a library file, plain or gzip-compressed (recognised by its first two bytes). */
