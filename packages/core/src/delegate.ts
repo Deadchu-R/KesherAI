@@ -102,7 +102,7 @@ export function delegateTool(o: DelegateOptions): AgentTool {
     risk: "safe",
     spec: {
       name: "delegate",
-      description: `Hand independent parts of a job to helper models that run at the same time, each with read-only tools (read and search files, web search, knowledge), and get their reports back. Use it for legwork that would fill your context: finding where something is in a big project, reading many files, researching several questions. Give each part everything it needs (helpers do not see the chat). Up to 4 parts. A part may name a model (e.g. a small fast one for searching)${models.length ? `: ${models.join(", ")}` : ""}; otherwise your own model does it. Helpers never change anything: you do the changes yourself after.`,
+      description: `Hand independent parts of a job to helper models that run at the same time, each with read-only tools (read and search files, web search, knowledge), and get their reports back. Use it for legwork that would fill your context: finding where something is in a big project, reading many files, researching several questions. Give each part everything it needs (helpers do not see the chat). Up to 4 parts. A part may name a model (e.g. a small fast one for searching)${models.length ? `: ${models.join(", ")}` : ""}; otherwise your own model does it. Helpers never change anything: you do the changes yourself after. They all run on this computer: to split work across the user's other computers (My devices), use split_across_computers instead.`,
       inputSchema: {
         type: "object",
         properties: {

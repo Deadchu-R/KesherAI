@@ -126,7 +126,10 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
  * others are listed by name and loaded with find_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
-const CORE_TOOLS = ["read_file", "write_file", "edit_file", "list_files", "search", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate"] as const;
+const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "search", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
+
+/** The Blueprint tools: always in full while the Unreal Editor is connected (so a model never misses the Test tool). */
+const UNREAL_GRAPH_TOOLS = ["unreal_list_graphs", "unreal_read_graph", "unreal_change_graph", "unreal_test_blueprint"];
 
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
@@ -994,7 +997,7 @@ export class ConversationManager {
         }
         if (!(local && this.deps.config.toolSearch !== false)) return undefined;
         // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
-        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project || this.deps.unity?.activeProject ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : [])];
+        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project || this.deps.unity?.activeProject ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.connected ? UNREAL_GRAPH_TOOLS : [])];
       },
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(

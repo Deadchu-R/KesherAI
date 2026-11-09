@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hostname, networkInterfaces } from "node:os";
+import { createSocket, type Socket } from "node:dgram";
 import type { ProviderConfig, ProviderRegistry } from "@kesher/providers";
 import type { GoogleDrive } from "./google.js";
 import type { McpManager, McpServerConfig } from "./mcp.js";
@@ -69,6 +70,9 @@ interface SettingsFile {
 }
 
 const UNITY_RELAY = "<unity-relay>";
+/** The home-network "I'm here" signal (UDP broadcast): it only says "check me now", never an address to trust. */
+export const BEACON_PORT = 7421;
+const BEACON_TAG = "kesher-here";
 const hash = (v: unknown) => createHash("sha1").update(JSON.stringify(v)).digest("hex");
 const isLocalUrl = (u?: string) => !!u && /^https?:\/\/(localhost|127\.|\[::1\]|0\.0\.0\.0)/i.test(u);
 
@@ -119,6 +123,11 @@ export class Devices {
   /** While looking: what is happening now, and each computer's state (shown live in the menus). */
   private step?: string;
   private checking = new Map<string, { name: string; state: "checking" | "online" | "offline" | "asleep" }>();
+  /** Re-checking the computers that did not answer: soon at first, then less often (20 s, 40 s, 80 s … up to the 3-minute round). */
+  private retry?: NodeJS.Timeout;
+  private retryStep = 0;
+  private beacon?: Socket;
+  private beaconTimer?: NodeJS.Timeout;
 
   /**
    * @param d - What it works with.
@@ -155,12 +164,124 @@ export class Devices {
     this.timer = setInterval(() => void this.sync().catch(() => undefined), 3 * 60_000);
     this.timer.unref?.();
     // At start: look, then tell the others this computer is back (it may have said "asleep" before a restart or an update).
-    setTimeout(() => void this.sync().then(() => this.announce("awake", false), () => undefined), 15_000).unref?.();
+    setTimeout(() => void this.sync().then(() => this.announce("awake", false), () => undefined), 5_000).unref?.();
+    this.startBeacon();
   }
 
   /** Stops checking. */
   close(): void {
     clearInterval(this.timer);
+    clearTimeout(this.retry);
+    clearInterval(this.beaconTimer);
+    try {
+      this.beacon?.close();
+    } catch {
+      // already closed
+    }
+    this.beacon = undefined;
+  }
+
+  /**
+   * The home-network signal: this computer says "I'm here" (its id only) by UDP
+   * broadcast when it starts and every minute; a computer that hears one of the
+   * user's other computers it cannot reach checks it again at once, at the
+   * addresses that computer published itself (never at the sender's address,
+   * so a stranger on the network cannot pose as one of them).
+   */
+  private startBeacon(): void {
+    if (this.beacon || process.env.KESHER_NO_BEACON) return;
+    try {
+      const sock = createSocket({ type: "udp4", reuseAddr: true });
+      sock.on("error", () => {
+        try {
+          sock.close();
+        } catch {
+          // closed
+        }
+        if (this.beacon === sock) this.beacon = undefined;
+      });
+      sock.on("message", (buf) => this.heard(buf.toString("utf8")));
+      sock.bind(BEACON_PORT, () => {
+        try {
+          sock.setBroadcast(true);
+        } catch {
+          // no broadcast here: listening still works
+        }
+        this.say();
+      });
+      sock.unref();
+      this.beacon = sock;
+      this.beaconTimer = setInterval(() => this.say(), 60_000);
+      this.beaconTimer.unref?.();
+    } catch {
+      // no UDP here: Google Drive still finds the computers
+    }
+  }
+
+  /** Sends "I'm here" to the home network (only when this computer is shared). */
+  private say(): void {
+    if (!this.beacon || !this.d.config.share) return;
+    const msg = Buffer.from(JSON.stringify({ t: BEACON_TAG, id: this.id }));
+    for (const list of Object.values(networkInterfaces())) {
+      for (const a of list ?? []) {
+        if (a.family !== "IPv4" || a.internal || !a.netmask) continue;
+        const ip = a.address.split(".").map(Number);
+        const mask = a.netmask.split(".").map(Number);
+        const bcast = ip.map((x, i) => (x & (mask[i] ?? 0)) | (~(mask[i] ?? 0) & 255)).join(".");
+        this.beacon.send(msg, BEACON_PORT, bcast, () => undefined);
+      }
+    }
+  }
+
+  /**
+   * Another computer said "I'm here". If it is one of the user's computers that
+   * is not reachable now, it is checked again at once.
+   *
+   * @param text - The datagram.
+   * @returns Whether a check started.
+   */
+  heard(text: string): boolean {
+    let m: { t?: unknown; id?: unknown };
+    try {
+      m = JSON.parse(text.slice(0, 500)) as typeof m;
+    } catch {
+      return false;
+    }
+    if (m.t !== BEACON_TAG || typeof m.id !== "string" || m.id === this.id) return false;
+    const e = this.entries.find((x) => x.id === m.id);
+    if (!e) {
+      // A computer not known yet (just turned on sharing): read the list again, at most once a minute.
+      if (!this.lastHeardSync || Date.now() - this.lastHeardSync > 60_000) {
+        this.lastHeardSync = Date.now();
+        void this.sync().catch(() => undefined);
+        return true;
+      }
+      return false;
+    }
+    const v = this.views.find((x) => x.id === e.id);
+    if (v?.online && !v.asleepSince) return false;
+    void this.useDevice(e).then((nv) => (this.views = this.views.map((x) => (x.id === e.id ? nv : x))), () => undefined);
+    return true;
+  }
+  private lastHeardSync?: number;
+
+  /** After a round: the computers that did not answer are tried again soon, then less often. */
+  private planRetry(): void {
+    clearTimeout(this.retry);
+    const missing = this.entries.filter((e) => e.id !== this.id && !this.views.find((v) => v.id === e.id)?.online);
+    if (!missing.length) {
+      this.retryStep = 0;
+      return;
+    }
+    const wait = Math.min(160_000, 20_000 * 2 ** this.retryStep);
+    if (wait >= 160_000) return; // the 3-minute round takes over
+    this.retryStep++;
+    this.retry = setTimeout(() => {
+      void Promise.all(missing.map((e) => this.useDevice(e).then((nv) => (this.views = this.views.map((x) => (x.id === e.id ? nv : x))))))
+        .catch(() => undefined)
+        .finally(() => this.planRetry());
+    }, wait);
+    this.retry.unref?.();
   }
 
   /** @returns The settings page's view. */
@@ -368,6 +489,8 @@ export class Devices {
       const [views] = await Promise.all([Promise.all(devices.map((x) => this.useDevice(x))), this.d.google.writeJson("devices.json", { devices })]);
       this.entries = devices;
       this.views = views;
+      this.retryStep = 0;
+      this.planRetry();
       if (this.d.config.syncSettings) await this.syncSettings();
       this.lastError = undefined;
     } catch (e) {
