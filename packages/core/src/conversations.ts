@@ -429,8 +429,11 @@ export class ConversationManager {
       `The user has other computers connected (My devices: ${devices.map(({ provider }) => provider.name.replace(/\s*\(your computer\)$/i, "")).join(", ")}). For a big task that splits into independent parts (several chapters, files, translations, research questions, variations), or when the user asks to split work across computers, use split_across_computers: give each part full instructions and the shared context; then join the parts into one answer.`,
     );
     const chatLike = (m: { category: string; providerModelId: string }) => (m.category === "chat" || m.category === "code") && !/embed|whisper|tts|rerank/i.test(m.providerModelId);
+    // Computers that could not take parts this time, and why (said in the result, so nobody wonders why only one computer worked).
+    let skipped: string[] = [];
     const workers = async (signal: AbortSignal): Promise<SplitWorker[]> => {
       const out: SplitWorker[] = [];
+      skipped = [];
       const current = conversationId ? this.deps.library.summary(conversationId)?.modelId : undefined;
       const local = this.defaultChatModel();
       if (local && !local.startsWith("device-")) {
@@ -442,8 +445,12 @@ export class ConversationManager {
         }
       }
       for (const { provider } of devices) {
-        const models = await provider.listModels(AbortSignal.any([signal, AbortSignal.timeout(8000)])).catch(() => []);
+        const name = provider.name.replace(/\s*\(your computer\)$/i, "");
+        const away = registry.awayReason(provider.id);
+        let failed = "";
+        const models = away ? [] : await provider.listModels(AbortSignal.any([signal, AbortSignal.timeout(8000)])).catch((e: Error) => ((failed = e.message), []));
         const pick = models.find((m) => m.id === current) ?? models.find(chatLike);
+        if (!pick) skipped.push(`${name}: ${away ? "asleep or turned off" : failed ? "not reachable (asleep, off, or KesherAI closed)" : "no chat model loaded"}`);
         if (pick) out.push({ name: provider.name.replace(/\s*\(your computer\)$/i, ""), modelId: pick.id, turn: modelTurnFor(registry, pick.id) });
       }
       return out;
@@ -480,11 +487,12 @@ export class ConversationManager {
           if (parts.length < 2) return { output: "Give at least two parts, each with full instructions." };
           const w = await workers(ctx.signal);
           if (!w.length) return { output: "None of the computers has a chat model ready right now (the other computer may be off). Do the task here instead." };
-          const results = await runSplit(parts, w, { context: typeof input.context === "string" ? input.context.slice(0, 6000) : "", signal: ctx.signal });
+          if (skipped.length) ctx.progress?.(`Not used: ${skipped.join("; ")}\n`);
+          const results = await runSplit(parts, w, { context: typeof input.context === "string" ? input.context.slice(0, 6000) : "", signal: ctx.signal, onStep: (line) => ctx.progress?.(`${line}\n`) });
           const used = [...new Set(results.filter((r) => r.ok).map((r) => r.computer))];
           return {
             output: [
-              `Ran ${parts.length} parts on ${used.length} computer(s): ${used.join(", ") || "none"}. Join them into one answer for the user (and say briefly which computers did the work).`,
+              `Ran ${parts.length} parts on ${used.length} computer(s): ${used.join(", ") || "none"}.${skipped.length ? ` Not used: ${skipped.join("; ")}.` : ""} Join them into one answer for the user (and say briefly which computers did the work, and which could not be used and why).`,
               ...results.map((r, i) => `\n## Part ${i + 1}: ${r.title}${r.computer ? ` (on ${r.computer}, ${Math.round(r.ms / 1000)} s)` : ""}\n${r.ok ? r.text : `FAILED: ${r.text}`}`),
             ].join("\n"),
           };

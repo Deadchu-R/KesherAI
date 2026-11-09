@@ -51,7 +51,7 @@ const WORKER_PROMPT =
 export async function runSplit(
   parts: SplitPart[],
   workers: SplitWorker[],
-  opts: { context?: string; signal: AbortSignal; perPartMs?: number; onProgress?: (done: number, total: number) => void },
+  opts: { context?: string; signal: AbortSignal; perPartMs?: number; onProgress?: (done: number, total: number) => void; onStep?: (line: string) => void },
 ): Promise<SplitResult[]> {
   if (!workers.length) throw new Error("No computer is available.");
   const results: SplitResult[] = new Array(parts.length);
@@ -88,7 +88,9 @@ export async function runSplit(
         const at = waiting.findIndex((i) => !failedBy.get(i)?.has(w.name));
         if (at < 0) return;
         const i = waiting.splice(at, 1)[0]!;
+        opts.onStep?.(`▶ ${parts[i]!.title} → ${w.name} (${w.modelId.split("/").pop()})`);
         const r = await one(w, i);
+        opts.onStep?.(`${r.ok ? "✓" : "✗"} ${parts[i]!.title} — ${w.name}, ${Math.round(r.ms / 1000)} s${r.ok ? "" : `: ${r.text.slice(0, 120)}`}`);
         // A failed part goes back for another computer, once per computer.
         if (!r.ok) {
           const by = failedBy.get(i) ?? new Set<string>();
