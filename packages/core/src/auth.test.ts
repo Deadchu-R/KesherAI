@@ -51,3 +51,11 @@ test("allowedOrigin", () => {
   assert.ok(allowedOrigin("chrome-extension://abcdef", "localhost:7420", "/api/browser/connect"));
   assert.ok(!allowedOrigin("chrome-extension://abcdef", "localhost:7420", "/api/conversations"));
 });
+
+test("the Unreal Editor's socket may send a bare loopback Origin; nothing else may", async () => {
+
+  assert.equal(allowedOrigin("127.0.0.1", "127.0.0.1:7420", "/api/unreal/ws"), true);
+  assert.equal(allowedOrigin("http://127.0.0.1", "127.0.0.1:7420", "/api/unreal/ws"), true);
+  assert.equal(allowedOrigin("127.0.0.1", "127.0.0.1:7420", "/api/conversations"), false);
+  assert.equal(allowedOrigin("https://evil.example", "127.0.0.1:7420", "/api/unreal/ws"), false);
+});

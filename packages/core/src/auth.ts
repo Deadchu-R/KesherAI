@@ -57,6 +57,10 @@ export function allowedOrigin(origin: string, host: string | undefined, path: st
   if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true;
   if (/^(https?|capacitor):\/\/localhost$/.test(origin)) return true;
   if (/^(chrome|moz)-extension:\/\/[\w-]+$/.test(origin) && path.startsWith("/api/browser")) return true;
+  // The Unreal Editor's WebSocket (libwebsockets) sends the address it connects to as its Origin, often
+  // without a scheme or a port ("127.0.0.1"): accepted for the editor's own socket only (found testing the
+  // bridge: every connection was refused with 403).
+  if (path === "/api/unreal/ws" && /^((https?|wss?):\/\/)?(127\.0\.0\.1|localhost|\[::1\]|::1)(:\d+)?$/i.test(origin)) return true;
   return false;
 }
 

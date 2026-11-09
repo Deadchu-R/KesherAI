@@ -424,9 +424,16 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         const script = join(dir, "run.py");
         await writeFile(script, String(input.code ?? ""));
         const cmd = join(e.path, "Engine", "Binaries", "Win64", "UnrealEditor-Cmd.exe");
-        const r = await runProgram(cmd, [p.file, "-run=pythonscript", `-script=${script}`, "-unattended", "-nop4", "-nosplash", "-stdout", "-FullStdOutLogOutput"], { timeoutMs: 900_000 });
-        const py = r.out.split(/\r?\n/).filter((l) => /LogPython|Error|Traceback/i.test(l)).map((l) => l.replace(/^\[[^\]]*\]\[\s*\d+\]/, ""));
-        return { output: `${r.code === 0 ? "Ran." : `Exit ${r.code}.`}\n${cut((py.length ? py : r.out.split("\n").slice(-40)).join("\n"))}` };
+        // Forward slashes: Unreal's command line reads "\r" in "C:\Users\user" as a line break (found on the user's PC:
+        // "Could not load Python file 'C:/Usersoeet/…'").
+        const r = await runProgram(cmd, [p.file, "-run=pythonscript", `-script=${script.replace(/\\/g, "/")}`, "-unattended", "-nop4", "-nosplash", "-stdout", "-FullStdOutLogOutput"], { timeoutMs: 900_000 });
+        // Only what the script said: Unreal's own start-up lines (hundreds of "registering …") are left out.
+        const lines = r.out.split(/\r?\n/);
+        const from = Math.max(0, lines.findIndex((l) => /Running Python script/i.test(l)));
+        const py = [...new Set(lines.slice(from).filter((l) => /LogPython|Error|Traceback/i.test(l) && !/registering <class|Running start-up script|^\s*LogInit: Display: LogPython/i.test(l)).map((l) => l.replace(/^\[[^\]]*\]\[\s*\d+\]/, "").trim()))];
+        // Unreal exits 0 even when the script failed: its own words say so.
+        const failed = r.code !== 0 || /Python script executed with errors|Could not load Python file|Traceback \(most recent call last\)/i.test(r.out);
+        return { output: `${failed ? `The script FAILED${r.code !== 0 ? ` (exit ${r.code})` : ""}: fix it and run again.` : "Ran."}\n${cut((py.length ? py : lines.slice(-40)).join("\n"))}`, ...(failed ? { isError: true } : {}) };
       },
     },
     {
