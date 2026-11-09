@@ -77,9 +77,12 @@ export async function fastDownload(
             clearTimeout(timer);
             if (opts.signal?.aborted) throw new Error("Stopped.");
             const why = stall.signal.aborted ? `no data for ${Math.round(stallMs / 1000)} s` : (err as Error).message;
-            if (attempt >= 6 || /does not resume/.test(why)) throw new Error(`Part ${i + 1} failed: ${why}.`);
-            log(`part ${i + 1}: ${why}; trying again from ${Math.round((from + got[i]!) / 1048576)} MB (attempt ${attempt + 1})`);
-            await new Promise((r) => setTimeout(r, 1000 * attempt));
+            // GitHub's download servers answer 5xx in bursts that last a minute or two: wait longer for those.
+            const busy = /answered 5\d\d/.test(why);
+            if (attempt >= (busy ? 10 : 6) || /does not resume/.test(why)) throw new Error(`Part ${i + 1} failed: ${why}.`);
+            const wait = busy ? Math.min(30_000, 2000 * 2 ** (attempt - 1)) : 1000 * attempt;
+            log(`part ${i + 1}: ${why}; trying again from ${Math.round((from + got[i]!) / 1048576)} MB in ${Math.round(wait / 1000)} s (attempt ${attempt + 1})`);
+            await new Promise((r) => setTimeout(r, wait));
           }
         }
       }),
