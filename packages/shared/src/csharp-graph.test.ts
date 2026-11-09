@@ -112,7 +112,7 @@ test("variables: add, change (type, value, Inspector, tooltip), rename everywher
   assert.match(t.slice(c.fields[0]!.start, c.fields[0]!.end), /^\[SerializeField\] private float speed = 5f;$/);
 
   t = addField(t, c, { type: "bool", name: "canJump", value: "true", shown: true, tooltip: "Can the player jump" });
-  assert.match(t, /private Rigidbody rb; \/\/ set in Start\n    \[Tooltip\("Can the player jump"\)\] public bool canJump = true;\n/);
+  assert.match(t, /private Rigidbody rb; \/\/ set in Start\n {4}\[Tooltip\("Can the player jump"\)\] public bool canJump = true;\n/);
   c = parseCSharp(t)[0]!;
   assert.deepEqual(c.fields.at(-1), { ...c.fields.at(-1)!, name: "canJump", type: "bool", value: "true", shown: true, tooltip: "Can the player jump", isPublic: true });
   assert.throws(() => addField(t, c, { type: "int", name: "health", shown: true }), /already used/);
