@@ -4,6 +4,7 @@ import { modelTurnFor } from "./conversations.js";
 import { blueprintPrompt, parseOps, unityPrompt, type UnrealBridge } from "./unreal-bridge.js";
 import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import type { UnityCli } from "./unity-cli.js";
+import { describeRun, runBlueprintTest } from "./blueprint-test.js";
 
 type Bridge = UnrealBridge | UnityCli;
 
@@ -52,10 +53,10 @@ export async function editGraph(
  * (Unreal Blueprints through the KesherAI Bridge plugin; Unity Script and
  * State Graphs through Unity's CLI and the KesherAI Bridge package).
  */
-export function graphTools(kind: "unreal" | "unity", b: Bridge, registry: ProviderRegistry, modelId: () => string | undefined): AgentTool[] {
+export function graphTools(kind: "unreal" | "unity", b: Bridge, registry: ProviderRegistry, modelId: () => string | undefined, saveImage?: (png: Buffer) => Promise<string>): AgentTool[] {
   const what = kind === "unreal" ? "Unreal Blueprint" : "Unity Script Graph or State Graph";
   const pre = kind === "unreal" ? "unreal" : "unity";
-  return [
+  const tools: AgentTool[] = [
     {
       risk: "read",
       spec: {
@@ -105,4 +106,23 @@ export function graphTools(kind: "unreal" | "unity", b: Bridge, registry: Provid
       },
     },
   ];
+  if (kind === "unreal") {
+    tools.push({
+      risk: "write",
+      spec: {
+        name: "unreal_test_blueprint",
+        description:
+          "Test a Blueprint by running the game in the open Unreal Editor (Play In Editor) for a few seconds: it is compiled, an Actor Blueprint is placed in front of the player (in the play world only; the level is not changed), then you get what the game wrote (Print String, warnings, Blueprint errors such as Accessed None) and a picture of the game view. Use it after changing a Blueprint to check it works, and fix what it shows. Overlap/input events run only when triggered, so their silence is not a failure.",
+        inputSchema: { type: "object", properties: { path: { type: "string", description: "The Blueprint's path (empty: just play the level)." }, seconds: { type: "number", description: "How long to play, 1–30 (default 6)." }, place: { type: "boolean", description: "Place an Actor Blueprint in front of the player (default true)." } } },
+      },
+      preview: async (input) => `Play the game in Unreal for ${Number(input.seconds ?? 6)} s to test ${String(input.path ?? "the level")}`,
+      run: async (input, ctx) => {
+        const path = String(input.path ?? "");
+        const run = await runBlueprintTest(b as UnrealBridge, path, { seconds: Math.min(30, Number(input.seconds ?? 6)), place: input.place !== false, signal: ctx.signal });
+        const id = run.picture && saveImage ? await saveImage(run.picture) : undefined;
+        return { output: describeRun(run, path).slice(0, 8000), ...(id ? { assetIds: [id] } : {}), ...(run.picture ? { images: [{ mimeType: "image/png", data: run.picture.toString("base64") }] } : {}) };
+      },
+    });
+  }
+  return tools;
 }

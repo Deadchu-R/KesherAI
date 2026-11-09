@@ -5,6 +5,7 @@
 #include "Editor.h"
 #include "IWebSocket.h"
 #include "KesherGraph.h"
+#include "KesherPlay.h"
 #include "KesherWidget.h"
 #include "Misc/App.h"
 #include "Misc/EngineVersion.h"
@@ -21,7 +22,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.7");
+static const TCHAR* BridgeVersion = TEXT("0.1.8");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -33,6 +34,7 @@ void FKesherAIBridgeModule::StartupModule()
 void FKesherAIBridgeModule::ShutdownModule()
 {
 	FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+	KesherPlay::Shutdown();
 	if (GEditor) GEditor->OnBlueprintCompiled().Remove(CompiledHandle);
 	if (Socket.IsValid())
 	{
@@ -161,6 +163,14 @@ void FKesherAIBridgeModule::OnMessage(const FString& Text)
 		Result->SetBoolField(TEXT("ok"), bSaved);
 		if (bSaved) FPlatformMisc::RequestExit(false);
 	}
+	else if (Cmd == TEXT("play"))
+	{
+		bool bPlace = true;
+		In->TryGetBoolField(TEXT("place"), bPlace);
+		Result = KesherPlay::Start(Path, bPlace);
+	}
+	else if (Cmd == TEXT("play_status")) Result = KesherPlay::Status();
+	else if (Cmd == TEXT("play_stop")) Result = KesherPlay::Stop();
 	else if (Cmd == TEXT("ping"))
 	{
 		Result = MakeShared<FJsonObject>();

@@ -7,6 +7,7 @@ import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
+import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
@@ -96,6 +97,35 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       return reply.code(502).send({ error: (err as Error).message });
     }
   });
+
+  // "Test": play the game in the editor for a few seconds, then a model says whether the Blueprint did what it should.
+  if (kind === "unreal") {
+    let testing = false;
+    app.post<{ Body: { path?: string; seconds?: number; goal?: string; model?: string; judge?: boolean } }>(`${base}/test`, async (req, reply) => {
+      const path = String(req.body?.path ?? "");
+      if (testing) return reply.code(409).send({ error: "A test is already running." });
+      testing = true;
+      try {
+        const run = await runBlueprintTest(s.unreal, path, { seconds: Number(req.body?.seconds ?? 6) });
+        const pictureId = run.picture ? (await s.assets.save(run.picture, "image/png", { meta: { use: "unreal-test" } })).id : undefined;
+        let verdict = "";
+        if (req.body?.judge !== false) {
+          const picked = typeof req.body?.model === "string" ? req.body.model : "";
+          const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
+          if (chat && path) {
+            const { graph } = await b.graph(path);
+            verdict = await judgeRun(s.registry, chat, graph, path, run, String(req.body?.goal ?? "").slice(0, 1000), AbortSignal.timeout(180_000)).catch((e: Error) => `(The model could not check the run: ${e.message})`);
+          }
+        }
+        const { picture: _p, ...rest } = run;
+        return { ...rest, ...(pictureId ? { pictureId } : {}), summary: describeRun(run, path), verdict };
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      } finally {
+        testing = false;
+      }
+    });
+  }
 
   /** Applies operations as given (for "Apply again" and plugins). */
   app.post<{ Body: { path?: string; graph?: string; ops?: unknown[] } }>(`${base}/apply`, async (req, reply) => {

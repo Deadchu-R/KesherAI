@@ -26,6 +26,7 @@ import { FilesPanel } from "../FilesPanel";
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
 import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { getLocale, t } from "../i18n";
+import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../BlueprintChatPanel";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -401,6 +402,13 @@ export function ConversationPage({ id }: { id: string }) {
   }, [titleMenu]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [ideOpen, setIdeOpen] = useState<boolean | null>(null);
+  // An Unreal Blueprint connected to this chat (the 🔷 Blueprint panel).
+  const [bpPath, setBpPath] = useState(() => chatBlueprint(id));
+  const [bpOpen, setBpOpen] = useState(false);
+  const [hasUnreal, setHasUnreal] = useState(false);
+  useEffect(() => {
+    void api<{ connected: boolean; projects: string[] }>("/api/unreal").then((r) => setHasUnreal(r.connected || r.projects.length > 0), () => setHasUnreal(false));
+  }, []);
   const [dragging, setDragging] = useState(false);
   const [fileCount, setFileCount] = useState(0);
   const { models } = useModels("chat");
@@ -584,7 +592,7 @@ export function ConversationPage({ id }: { id: string }) {
     setInput("");
     setError("");
     try {
-      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text, ...(web ? { web: true } : {}) } });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}`, ...(web ? { web: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -719,6 +727,11 @@ export function ConversationPage({ id }: { id: string }) {
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
         )}
+        {(hasUnreal || bpPath) && (
+          <button type="button" className={bpOpen ? "on" : ""} aria-pressed={bpOpen} onClick={() => setBpOpen(!bpOpen)} title={getLocale() === "he" ? "חיבור Blueprint של Unreal לצ'אט: לראות, לשנות ולבדוק" : "Connect an Unreal Blueprint to this chat: see, change and test it"}>
+            🔷 Blueprint{bpPath ? ` · ${bpPath.split(".").pop()}` : ""}
+          </button>
+        )}
         <button type="button" className={showIde ? "on" : ""} aria-pressed={showIde} onClick={() => setIdeOpen(!showIde)} title={t("workspaceHint")}>
           {t("workspace")}
         </button>
@@ -742,6 +755,15 @@ export function ConversationPage({ id }: { id: string }) {
         const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);
         return panel ? <div className="plugin-panel"><PluginFrame pluginId={panel.pluginId} file={panel.file} title={panel.title} conversationId={id} onInsertPrompt={setInput} uses={panel.uses ?? []} /></div> : null;
       })()}
+      {bpOpen && (
+        <BlueprintChatPanel
+          convId={id}
+          busy={busy}
+          refresh={busy ? 0 : events.length}
+          onChange={setBpPath}
+          onSend={(text) => void api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}` } }).catch((e: Error) => setError(e.message))}
+        />
+      )}
       {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
       {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
 

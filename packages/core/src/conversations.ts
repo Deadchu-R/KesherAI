@@ -714,8 +714,8 @@ export class ConversationManager {
       media.notes.push("unity_list_graphs, unity_read_graph and unity_change_graph see and change the project's Visual Scripting graphs (Script Graphs and State Graphs) in words; prefer them for graph logic.");
     }
     if (this.deps.unreal?.connected) {
-      split.push(...graphTools("unreal", this.deps.unreal, this.deps.registry, chatModel));
-      media.notes.push("The user's Unreal Editor is connected (KesherAI Bridge): unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled).");
+      split.push(...graphTools("unreal", this.deps.unreal, this.deps.registry, chatModel, async (png) => (await this.deps.assets.save(png, "image/png", { meta: { use: "unreal-test" } })).id));
+      media.notes.push("The user's Unreal Editor is connected (KesherAI Bridge): unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled); unreal_test_blueprint plays the game in the editor for a few seconds and returns the log and a picture, to check a change works.");
     }
     // Unreal 5.8's own MCP server (the "Unreal Engine" connection): how to use it well.
     if ((this.deps.mcpTools?.() ?? []).some((t) => /(^|_)(list_toolsets|describe_toolset)$/.test(t.spec.name))) {

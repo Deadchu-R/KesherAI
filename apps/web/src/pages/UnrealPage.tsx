@@ -3,7 +3,7 @@ import { UnityCliPanel } from "./UnityCliPanel";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
 import { BlueprintCode } from "../BlueprintCode";
 import { WidgetDesigner } from "../WidgetDesigner";
-import { api } from "../api";
+import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, desktop, toast, useLibrary } from "../library";
 import { openWithDraft } from "../phone";
@@ -250,7 +250,26 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   };
   const [flash, setFlash] = useState<{ id: string; n: number }>();
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [chat, setChat] = useState<Array<{ who: "you" | "ai"; lines: string[] }>>([]);
+  const [chat, setChat] = useState<Array<{ who: "you" | "ai"; lines: string[]; picture?: string; log?: string[]; link?: string }>>([]);
+  // The bubble can be connected to a regular chat: then its messages go there (the chat's agent and tools, kept in the chat list).
+  const { conversations } = useLibrary();
+  const [linked, setLinked] = useState(() => {
+    try {
+      return localStorage.getItem("kesher.ue.chat") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const link = (id: string) => {
+    setLinked(id);
+    try {
+      localStorage.setItem("kesher.ue.chat", id);
+    } catch {
+      // private window: not remembered
+    }
+  };
+  const linkedTitle = conversations.find((c) => c.id === linked)?.title;
+  const [testing, setTesting] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: "nearest" });
@@ -323,6 +342,16 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     const full = !given && earlier.length ? `${asked}\n\n(Earlier in this conversation, already applied: ${earlier.map((e, i) => `${i + 1}) ${e}`).join(" ")})` : asked;
     setChat((c) => [...c, { who: "you", lines: [shown ?? asked] }]);
     if (!given) setRequest("");
+    if (linked && !unity) {
+      try {
+        await viaChat(asked);
+      } catch (e) {
+        setChat((c) => [...c, { who: "ai", lines: [`⛔ ${(e as Error).message}`] }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request: full, ...(model ? { model } : {}) } });
       const lines = [r.note || L("בוצע.", "Done.")];
@@ -337,6 +366,51 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       setChat((c) => [...c, { who: "ai", lines: [`⛔ ${(e as Error).message}`] }]);
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Sends the request to the connected chat, with what is shown here, and shows the chat's answer in the bubble. */
+  const viaChat = async (asked: string) => {
+    type Conv = { session: { status: string }; events: Array<{ type: string; text?: string; seq?: number }> };
+    const before = await api<Conv>(`/api/conversations/${linked}`);
+    const last = before.events.at(-1)?.seq ?? 0;
+    const context = `[From the Unreal Blueprints page: the user is looking at the Blueprint ${path}${graphName ? `, graph ${graphName}` : ""}. Use unreal_read_graph, unreal_change_graph and unreal_test_blueprint on it.]`;
+    await api(`/api/conversations/${linked}/messages`, { method: "POST", body: { text: `${asked}\n\n${context}` } });
+    const open = `#/c/${linked}`;
+    for (let i = 0; i < 900; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const c = await api<Conv>(`/api/conversations/${linked}`);
+      const fresh = c.events.filter((e) => (e.seq ?? 0) > last);
+      const said = fresh.filter((e) => e.type === "assistant" && e.text).map((e) => e.text!);
+      if (c.session.status === "waiting") {
+        setChat((x) => [...x, { who: "ai", lines: [...said, L("⏸ הצ'אט מחכה לאישור שלך — פתחו אותו לאשר.", "⏸ The chat is waiting for your approval — open it to approve.")], link: open }]);
+        return;
+      }
+      if (fresh.length && c.session.status !== "running") {
+        setChat((x) => [...x, { who: "ai", lines: said.length ? said : [L("בוצע.", "Done.")], link: open }]);
+        loadBp(path);
+        return;
+      }
+    }
+  };
+
+  /** "Test": plays the game in Unreal for a few seconds and a model says whether the Blueprint does what it should. */
+  const test = async () => {
+    if (!path || testing) return;
+    const goal = request.trim();
+    setBubble(true);
+    setTesting(true);
+    setRequest("");
+    setChat((c) => [...c, { who: "you", lines: [goal ? `🧪 ${L("בדיקה", "Test")}: ${goal}` : `🧪 ${L("בדיקה", "Test")}`] }]);
+    try {
+      const r = await api<{ played: boolean; reason?: string; compile: string[]; log: Array<{ kind: string; category: string; text: string }>; pictureId?: string; placed?: string; seconds: number; verdict: string; summary: string }>(`${base}/test`, { method: "POST", body: { path, seconds: 6, goal, ...(model ? { model } : {}) } });
+      const lines = r.verdict ? r.verdict.split("\n").filter((l) => l.trim()) : [r.summary];
+      if (!r.played && r.reason) lines.unshift(`⛔ ${r.reason}`);
+      setChat((c) => [...c, { who: "ai", lines, ...(r.pictureId ? { picture: r.pictureId } : {}), log: [...r.compile.map((x) => `⚠ ${x}`), ...r.log.map((l) => `${l.kind === "error" ? "⛔ " : l.kind === "warning" ? "⚠ " : ""}${l.text}`)] }]);
+    } catch (e) {
+      setChat((c) => [...c, { who: "ai", lines: [`⛔ ${(e as Error).message}`] }]);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -430,6 +504,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                   <button type="button" disabled={!st.connected} onClick={() => void call("open")}>{L(`פתח ב-${app}`, `Open in ${app}`)}</button>
                   <button type="button" disabled={!st.connected} onClick={() => void call("compile")}>{unity ? L("בדוק", "Check") : L("קמפל", "Compile")}</button>
                   <button type="button" disabled={!st.connected} onClick={() => void call("save")}>{L("שמור", "Save")}</button>
+                  {!unity && <button type="button" className="primary" disabled={!st.connected || testing} onClick={() => void test()} title={L("מריץ את המשחק ב-Unreal כמה שניות, אוסף את הלוג ותמונה, והמודל בודק אם ה-Blueprint עובד", "Plays the game in Unreal for a few seconds, collects the log and a picture, and the model checks whether the Blueprint works")}>{testing ? L("בודק…", "Testing…") : `🧪 ${L("בדיקה", "Test")}`}</button>}
                 </div>
                 <div className="ue-tabs" role="tablist">
                   {bp.graph.graphs.map((g) => (
@@ -477,18 +552,39 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                         )}
                         <button type="button" className="icon-btn" onClick={() => setBubble(false)} aria-label={L("סגור", "Close")}>✕</button>
                       </div>
+                      {!unity && (
+                        <div className="row ue-bubble-link">
+                          <select value={linked} onChange={(e) => (e.target.value === "+" ? void createConversation({ kind: "chat" }).then((id) => id && link(id), (er: Error) => toast(er.message)) : link(e.target.value))} aria-label={L("לאן הבקשות הולכות", "Where requests go")} title={L("חיבור לצ'אט רגיל: הבקשות הולכות לצ'אט (עם כל הכלים שלו) ונשמרות ברשימת הצ'אטים", "Connect to a regular chat: requests go to that chat (with all its tools) and are kept in the chat list")}>
+                            <option value="">{L("✨ עריכה מהירה (בלי צ'אט)", "✨ Quick edit (no chat)")}</option>
+                            {linked && !linkedTitle && <option value={linked}>{L("💬 הצ'אט המחובר", "💬 The connected chat")}</option>}
+                            {conversations.slice(0, 15).map((c) => <option key={c.id} value={c.id}>💬 {c.title}</option>)}
+                            <option value="+">＋ {L("צ'אט חדש מחובר", "New connected chat")}</option>
+                          </select>
+                          {linked && <a className="small" href={`#/c/${linked}`}>{L("פתח", "Open")}</a>}
+                        </div>
+                      )}
                       <div className="ue-bubble-log" aria-live="polite">
                         {chat.length === 0 && <p className="muted small" dir="auto">{L("כתבו מה לשנות ב-Blueprint שמוצג. השינוי מוחל בעורך כצעד אחד (Ctrl+Z מבטל) ומקומפל; אפשר להמשיך: \"עכשיו גם…\".", "Say what to change in the Blueprint shown. It is applied in the editor as one step (Ctrl+Z undoes it) and compiled; you can follow up: \"now also…\".")}</p>}
                         {chat.map((c, i) => (
                           <div key={i} className={`ue-msg ${c.who}`} dir="auto">
                             {c.lines.map((l, k) => <div key={k}>{l}</div>)}
+                            {c.picture && <a href={withToken(`/api/assets/${c.picture}`)} target="_blank" rel="noreferrer"><img className="ue-test-pic" src={withToken(`/api/assets/${c.picture}`)} alt={L("המשחק בסוף הבדיקה", "The game at the end of the test")} /></a>}
+                            {c.log && c.log.length > 0 && (
+                              <details className="ue-test-log">
+                                <summary>{L(`הלוג (${c.log.length} שורות)`, `The log (${c.log.length} lines)`)}</summary>
+                                <pre dir="ltr">{c.log.join("\n")}</pre>
+                              </details>
+                            )}
+                            {c.link && <a className="small" href={c.link}>{L("פתח את הצ'אט", "Open the chat")}</a>}
                           </div>
                         ))}
-                        {busy && <div className="ue-msg ai muted">{L("המודל עובד…", "Working…")}</div>}
+                        {busy && <div className="ue-msg ai muted">{linked && !unity ? L("הצ'אט עובד…", "The chat is working…") : L("המודל עובד…", "Working…")}</div>}
+                        {testing && <div className="ue-msg ai muted">{L("🧪 מריץ את המשחק ב-Unreal ובודק…", "🧪 Playing the game in Unreal and checking…")}</div>}
                         <div ref={chatEnd} />
                       </div>
                       <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
                         <input className="grow" dir="auto" autoFocus value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("למשל: ב-Start תדפיס Hello ללוג", "e.g. on Start log Hello") : L("למשל: ב-BeginPlay תדפיס Hello", "e.g. on BeginPlay print Hello")} />
+                        {!unity && <button type="button" disabled={!st.connected || testing || busy} onClick={() => void test()} aria-label={L("בדיקה: הטקסט (אם יש) הוא מה שאמור לקרות", "Test: the text (if any) is what should happen")} title={L("בדיקה: הטקסט (אם יש) הוא מה שאמור לקרות", "Test: the text (if any) is what should happen")}>🧪</button>}
                         <button type="submit" className="primary" disabled={busy || !request.trim()} aria-label={st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}>{busy ? "…" : "↑"}</button>
                       </form>
                     </div>

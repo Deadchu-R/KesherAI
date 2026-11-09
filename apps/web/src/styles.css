@@ -1533,3 +1533,12 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .add-sub-link { padding: 6px 8px; color: inherit; }
 .resume-card { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; border-color: var(--accent, #9aa4ff); margin: 8px 0; }
 .resume-card .grow { min-width: 0; flex-basis: 220px; }
+.ue-bubble-link { gap: 6px; align-items: center; padding: 0 10px 6px; }
+.ue-bubble-link select { flex: 1; min-width: 0; font-size: 0.85em; }
+.ue-test-pic { display: block; width: 100%; max-width: 360px; border-radius: 8px; margin-top: 6px; }
+.ue-test-log { margin-top: 6px; font-size: 0.85em; }
+.ue-test-log pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; }
+.bp-chat-panel { margin: 8px 12px; padding: 10px 12px; gap: 8px; display: flex; flex-direction: column; }
+.bp-chat-head { gap: 8px; align-items: center; flex-wrap: wrap; }
+.bp-chat-head select { min-width: 0; flex: 1 1 140px; }
+.ue-canvas.bp-chat-canvas { height: min(42dvh, 380px); min-height: 220px; }
