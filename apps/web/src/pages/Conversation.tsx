@@ -441,8 +441,24 @@ export function ConversationPage({ id }: { id: string }) {
     };
   }, [id]);
 
+  // Follow new messages and steps while the user is at the bottom (reading further up stays put). The composer is
+  // sticky over the end of the list, so the marker keeps a margin of its height (else it counts as already visible).
+  const following = useRef(true);
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "nearest" });
+    const el = bottom.current;
+    if (!el) return;
+    let scroller: HTMLElement | null = el.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    const target: HTMLElement | Window = scroller ?? window;
+    const onScroll = () => {
+      const s = scroller ?? document.documentElement;
+      following.current = s.scrollHeight - s.scrollTop - s.clientHeight < 320;
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, [id]);
+  useEffect(() => {
+    if (following.current) bottom.current?.scrollIntoView({ block: "end" });
   }, [events.length, streaming]);
 
   const byCall = useMemo(() => {
@@ -863,7 +879,7 @@ export function ConversationPage({ id }: { id: string }) {
             <p className="muted status-line">{info?.status === "waiting" ? t("waitingForYou") : t("working")}</p>
           )}
           {error && <p className="error">{error}</p>}
-          <div ref={bottom} />
+          <div ref={bottom} style={{ scrollMarginBottom: "240px" }} />
         </div>
         <form
           className={`composer ${dragging ? "dragging" : ""}`}

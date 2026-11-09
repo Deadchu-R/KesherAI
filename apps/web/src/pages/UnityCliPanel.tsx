@@ -93,6 +93,20 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
             {info.version && /beta|alpha|preview/i.test(info.version) && (
               <button type="button" disabled={!local} onClick={() => void api<{ message: string }>("/api/unity/cli/update", { method: "POST" }).then((r) => { toast(r.message); load(); }, (e: Error) => toast(e.message))}>{L("עדכן את Unity CLI", "Update Unity CLI")}</button>
             )}
+            {hasProject && (
+              <select disabled={!local} value="" aria-label={L("הוסף פלטפורמת בילד", "Add a build platform")} onChange={(e) => {
+                const platform = e.target.value;
+                if (!platform || !confirm(L(`להוריד ולהוסיף את ${platform} ל-Unity? (כמה GB; Windows יבקש אישור)`, `Download and add ${platform} to Unity? (a few GB; Windows asks for permission)`))) return;
+                void api<{ message: string }>("/api/unity/cli/platform", { method: "POST", body: { platform } }).then((r) => toast(r.message), (er: Error) => toast(er.message));
+              }}>
+                <option value="">{L("＋ פלטפורמת בילד…", "＋ Build platform…")}</option>
+                <option value="android">Android</option>
+                <option value="ios">iOS</option>
+                <option value="webgl">WebGL</option>
+                <option value="linux">Linux</option>
+                <option value="mac">macOS</option>
+              </select>
+            )}
             {hasProject && <button type="button" disabled={!local} onClick={() => void api("/api/unity/open-editor", { method: "POST" }).then(() => toast(L("Unity נפתח…", "Opening Unity…")), (e: Error) => toast(e.message))}>{L("פתח ב-Unity", "Open in Unity")}</button>}
             {!local && <span className="muted small">{L("יצירה ופתיחה של פרויקט: רק במחשב עצמו.", "Making and opening projects: on the computer itself.")}</span>}
           </div>

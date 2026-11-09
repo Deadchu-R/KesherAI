@@ -150,6 +150,15 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(400).send({ error: (err as Error).message });
       }
     });
+    /** Adds a build platform (Android…) to the project's Unity version, in a window. Only on this computer. */
+    app.post<{ Body: { platform?: string } }>(`${base}/cli/platform`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Do this on the computer that runs KesherAI." });
+      try {
+        return { message: await unity.installPlatform(String(req.body?.platform ?? "")) };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
     /** Installs Unity's CLI with Unity's own installer (a window shows it). Only on this computer. */
     app.post(`${base}/cli/install`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Install Unity's CLI on the computer that runs KesherAI." });

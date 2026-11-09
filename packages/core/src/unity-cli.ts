@@ -517,6 +517,27 @@ export class UnityCli {
     return "A window now shows every Unity CLI command as it runs.";
   }
 
+  /**
+   * Adds a build platform (Android, iOS, WebGL…) to the shown project's Unity version, in a visible
+   * PowerShell window: Windows asks for administrator permission (the Editor is in Program Files), and
+   * the user answers it there. Unity's module licences are accepted as part of the install they asked for.
+   */
+  async installPlatform(platform: string): Promise<string> {
+    const module = ({ android: "android", ios: "ios", webgl: "webgl", linux: "linux-mono", mac: "mac-mono" } as Record<string, string>)[platform];
+    if (!module) throw new Error("Pick android, ios, webgl, linux or mac.");
+    const path = this.path;
+    if (!path) throw new Error("Add or make a Unity project first.");
+    const version = /m_EditorVersion:\s*([\w.]+)/.exec(readFileSync(join(path, "ProjectSettings", "ProjectVersion.txt"), "utf8"))?.[1];
+    if (!version) throw new Error("Could not tell the project's Unity version.");
+    if (process.platform !== "win32") {
+      const r = await this.run(["install-modules", "--editor-version", version, "--module", module, "--child-modules", "--yes", "--accept-eula"], 3 * 3_600_000);
+      if (r.code !== 0) throw failure(r);
+      return `Added ${module} to Unity ${version}.`;
+    }
+    openConsole(`Unity: add ${module}`, `unity install-modules --editor-version ${version} --module ${module} --child-modules --yes --accept-eula; Write-Host ''; Write-Host 'KesherAI: done. You can close this window.'`);
+    return `Adding ${module} to Unity ${version} in a PowerShell window. Windows asks for permission: press Yes. It takes a while (a few GB).`;
+  }
+
   /** Updates Unity's CLI (`unity self-update`). */
   async selfUpdate(): Promise<string> {
     const r = await this.run(["self-update", "--format", "json"], 300_000);
