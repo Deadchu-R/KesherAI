@@ -413,6 +413,8 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         }
         if (!/^[\w.]+$/.test(version)) return { output: "Could not tell the project's Unity version (ProjectSettings/ProjectVersion.txt)." };
         const r = await unity.cliRaw(["install-modules", "--editor-version", version, "--module", module, "--child-modules", "--yes", "--accept-eula", "--format", "json"], 3 * 3_600_000);
+        if (/ELEVATION_CANCELLED|elevation/i.test(`${r.stdout}${r.stderr}`))
+          return { output: `The ${module} install did NOT start: Windows asked for administrator permission (the Unity Editor is in Program Files) and nobody answered in time. Tell the user to run it again and press "Yes" on the Windows permission window that opens on the computer.` };
         return { output: r.code === 0 ? `Installed ${module} for Unity ${version}. Building for it works now.\n${cut(r.stdout.trim())}` : `The ${module} install did NOT finish (exit ${r.code}):\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
       },
     },
