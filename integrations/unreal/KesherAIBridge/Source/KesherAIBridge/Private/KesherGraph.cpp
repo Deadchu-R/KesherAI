@@ -319,6 +319,8 @@ namespace KesherGraph
 			FBlueprintEditorUtils::GetBlueprintVariableMetaData(BP, V.VarName, nullptr, FBlueprintMetadata::MD_Tooltip, Tip);
 			J->SetStringField(TEXT("tooltip"), Tip);
 			J->SetStringField(TEXT("category"), V.Category.ToString());
+			FString Priv;
+			J->SetBoolField(TEXT("private"), FBlueprintEditorUtils::GetBlueprintVariableMetaData(BP, V.VarName, nullptr, FBlueprintMetadata::MD_Private, Priv) && Priv == TEXT("true"));
 			Vars.Add(MakeShared<FJsonValueObject>(J));
 		}
 		Out->SetArrayField(TEXT("variables"), Vars);
@@ -631,6 +633,13 @@ namespace KesherGraph
 				{
 					if (Text.IsEmpty()) FBlueprintEditorUtils::RemoveBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Tooltip);
 					else FBlueprintEditorUtils::SetBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Tooltip, Text);
+				}
+				// Private: other Blueprints cannot read or change it (the Details panel's "Private").
+				bool bPrivate = false;
+				if (Op->TryGetBoolField(TEXT("private"), bPrivate))
+				{
+					if (bPrivate) FBlueprintEditorUtils::SetBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Private, TEXT("true"));
+					else FBlueprintEditorUtils::RemoveBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Private);
 				}
 				if (Op->TryGetStringField(TEXT("category"), Text)) FBlueprintEditorUtils::SetBlueprintVariableCategory(BP, Name, nullptr, FText::FromString(Text.IsEmpty() ? TEXT("Default") : Text), true);
 				if (Op->TryGetStringField(TEXT("default"), Text) && Kind == TEXT("change")) Defaults.Add(Name, Text);

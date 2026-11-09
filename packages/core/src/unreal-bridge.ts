@@ -388,7 +388,7 @@ export interface BlueprintJson {
   name: string;
   parent?: string;
   /** ptype…category: plugin 0.1.9+ / Unity package 0.2.2+ (the variables panel). */
-  variables: Array<{ name: string; type: string; ptype?: string; default?: string; editable?: boolean; tooltip?: string; category?: string }>;
+  variables: Array<{ name: string; type: string; ptype?: string; default?: string; editable?: boolean; tooltip?: string; category?: string; private?: boolean }>;
   graphs: Array<{
     name: string;
     kind: "event" | "function" | "macro";

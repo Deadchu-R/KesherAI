@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsClass, type CsStmt } from "@kesher/shared";
+import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsAccess, type CsClass, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
@@ -151,8 +151,8 @@ export function ScriptNodes() {
     if (!now) throw new Error(L("לא נמצאה מחלקה בסקריפט.", "No class in this script."));
     setText(f(out, now));
   };
-  const vars: PanelVar[] = (cls?.fields ?? []).map((f) => ({ name: f.name, type: f.type, value: plainValue(f.type, f.value), shown: f.shown, ...(f.tooltip ? { tooltip: f.tooltip } : {}), ...(f.locked ? { locked: true } : {}) }));
-  const spec = (v: PanelVar) => ({ type: v.type, name: v.name, value: csValue(v.type, v.value), shown: v.shown, ...(v.tooltip ? { tooltip: v.tooltip } : {}) });
+  const vars: PanelVar[] = (cls?.fields ?? []).map((f) => ({ name: f.name, type: f.type, value: plainValue(f.type, f.value), shown: f.shown, access: f.access, ...(f.tooltip ? { tooltip: f.tooltip } : {}), ...(f.locked ? { locked: true } : {}) }));
+  const spec = (v: PanelVar) => ({ type: v.type, name: v.name, value: csValue(v.type, v.value), shown: v.shown, ...(v.access ? { access: v.access as CsAccess } : {}), ...(v.tooltip ? { tooltip: v.tooltip } : {}) });
   const types: PanelType[] = [
     ...UNITY_TYPES,
     ...[...new Set((scripts ?? []).map((s) => s.split("/").pop()!.replace(/\.cs$/, "")))].filter((n) => /^[A-Za-z_]\w*$/.test(n) && n !== cls?.name).sort().map((n): PanelType => ({ value: n, label: n, input: "none", group: L("הסקריפטים של הפרויקט", "This project's scripts") })),
@@ -162,6 +162,11 @@ export function ScriptNodes() {
       vars={vars}
       types={types}
       shownLabel={L("מוצג ב-Inspector", "Shown in the Inspector")}
+      access={[
+        { value: "public", label: L("Public: סקריפטים אחרים יכולים להשתמש בו", "Public: other scripts can use it") },
+        { value: "private", label: L("Private: רק הסקריפט הזה", "Private: this script only") },
+        { value: "protected", label: L("Protected: הסקריפט הזה ומי שיורש ממנו", "Protected: this script and ones that inherit it") },
+      ]}
       busy={saving}
       actions={{
         add: (v) => onVars((t, c) => addField(t, c, spec(v))),

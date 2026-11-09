@@ -6,7 +6,7 @@ import { VariablesPanel, type PanelType, type PanelVar } from "../VariablesPanel
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 /** A Blueprint variable as the plugin reads it (ptype…category: plugin 0.1.9+). */
-export interface BpVar { name: string; type: string; ptype?: string; default?: string; editable?: boolean; tooltip?: string; category?: string }
+export interface BpVar { name: string; type: string; ptype?: string; default?: string; editable?: boolean; tooltip?: string; category?: string; private?: boolean }
 
 /** Types a Blueprint variable can have, as the plugin names them; the project's Blueprints are added. */
 const UNREAL_TYPES: PanelType[] = [
@@ -46,7 +46,7 @@ export function BlueprintVariables(p: { base: string; path: string; vars: BpVar[
   const old = p.vars.length > 0 && p.vars.every((v) => v.ptype === undefined);
   const vars: PanelVar[] = p.vars.map((v) => {
     const t = v.ptype ?? v.type;
-    return { name: v.name, type: t, value: p.unity ? (v.default ?? "") : fromUnreal(t, v.default), shown: v.editable ?? false, ...(v.tooltip ? { tooltip: v.tooltip } : {}), ...(v.category && v.category !== "Default" ? { category: v.category } : {}), ...(old ? { locked: true } : {}) };
+    return { name: v.name, type: t, value: p.unity ? (v.default ?? "") : fromUnreal(t, v.default), shown: v.editable ?? false, ...(v.tooltip ? { tooltip: v.tooltip } : {}), ...(v.category && v.category !== "Default" ? { category: v.category } : {}), ...(p.unity ? {} : { access: v.private ? "private" : "public" }), ...(old ? { locked: true } : {}) };
   });
   const types: PanelType[] = p.unity ? UNITY_GRAPH_TYPES : [
     ...UNREAL_TYPES,
@@ -58,7 +58,7 @@ export function BlueprintVariables(p: { base: string; path: string; vars: BpVar[
     if (r.graph) p.onGraph(r.graph);
     if (r.failed) throw new Error(r.results.filter((x) => !x.ok).map((x) => x.error).join(" · "));
   };
-  const fields = (v: PanelVar) => (p.unity ? { type: v.type, default: v.value.trim() } : { type: v.type, default: toUnreal(v.type, v.value), editable: v.shown, tooltip: v.tooltip ?? "", category: v.category ?? "" });
+  const fields = (v: PanelVar) => (p.unity ? { type: v.type, default: v.value.trim() } : { type: v.type, default: toUnreal(v.type, v.value), editable: v.shown, tooltip: v.tooltip ?? "", category: v.category ?? "", private: v.access === "private" });
   return (
     <>
       {old && <p className="muted small">{p.unity ? L("כדי לשנות משתנים מכאן צריך את חבילת KesherAI ל-Unity 0.2.2: עדכנו אותה מהעמוד הזה.", "Changing variables here needs the KesherAI Unity package 0.2.2: update it from this page.") : L("כדי לשנות משתנים מכאן צריך את התוסף 0.1.9: \"עדכון אוטומטי\" בראש העמוד.", "Changing variables here needs plugin 0.1.9: \"Update automatically\" at the top of the page.")}</p>}
@@ -66,6 +66,7 @@ export function BlueprintVariables(p: { base: string; path: string; vars: BpVar[
         vars={vars}
         types={types}
         categories={!p.unity}
+        {...(p.unity ? {} : { access: [{ value: "public", label: L("Public: Blueprints אחרים יכולים לקרוא ולשנות", "Public: other Blueprints can read and change it") }, { value: "private", label: L("Private: רק ה-Blueprint הזה", "Private: this Blueprint only") }] })}
         {...(p.unity ? {} : { shownLabel: L("Instance Editable (משתנה בכל עותק בשלב)", "Instance Editable") })}
         actions={{
           add: (v) => send([{ op: "add", name: v.name, ...fields(v) }]),

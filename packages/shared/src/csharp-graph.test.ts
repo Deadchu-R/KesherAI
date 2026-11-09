@@ -137,6 +137,12 @@ test("variables: add, change (type, value, Inspector, tooltip), rename everywher
   assert.equal(c.fields.find((f) => f.name === "health")!.shown, false);
   u = updateField(u, c, "rb", { type: "Rigidbody", name: "rb", shown: true });
   assert.match(u, /\[SerializeField\] private Rigidbody rb; \/\/ set in Start/);
+  // Public ↔ private: a private variable shown in the Inspector gets [SerializeField], a public one hidden gets [HideInInspector].
+  c = parseCSharp(u)[0]!;
+  assert.equal(c.fields.find((f) => f.name === "rb")!.access, "private");
+  assert.match(updateField(u, c, "rb", { type: "Rigidbody", name: "rb", shown: true, access: "public" }), /\n {4}public Rigidbody rb; \/\/ set in Start/);
+  assert.match(updateField(u, c, "rb", { type: "Rigidbody", name: "rb", shown: false, access: "protected" }), /\n {4}protected Rigidbody rb;/);
+  assert.match(addField(u, c, { type: "int", name: "lives", value: "3", shown: true, access: "private" }), /\[SerializeField\] private int lives = 3;/);
 
   // Remove: the whole line goes; the rest of the file is untouched.
   c = parseCSharp(t)[0]!;

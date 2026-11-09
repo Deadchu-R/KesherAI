@@ -16,6 +16,8 @@ export interface PanelVar {
   tooltip?: string;
   /** Unreal: the group it sits in. */
   category?: string;
+  /** Who can use it from other scripts or Blueprints (public, private…), when the engine has it. */
+  access?: string;
   /** Shown but not changed here (const, static, several names on one line…). */
   locked?: boolean;
 }
@@ -56,7 +58,7 @@ const typeLabel = (types: PanelType[], t: string) => {
  * designer sees it, a + to add one, and below it the chosen variable's
  * details (name, type, list or single, starting value, tooltip, shown).
  */
-export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean }) {
+export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Public/private choices (the first is a new variable's). */ access?: Array<{ value: string; label: string }>; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean }) {
   const [sel, setSel] = useState("");
   const [adding, setAdding] = useState(false);
   const chosen = p.vars.find((v) => v.name === sel);
@@ -80,8 +82,9 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
       {adding && (
         <VarForm
           key="new"
-          v={{ name: newName(), type: p.types[0]?.value ?? "bool", value: "", shown: true }}
+          v={{ name: newName(), type: p.types[0]?.value ?? "bool", value: "", shown: true, ...(p.access?.[0] ? { access: p.access[0].value } : {}) }}
           types={p.types}
+          access={p.access}
           shownLabel={p.shownLabel}
           categories={p.categories}
           submit={L("הוסף", "Add")}
@@ -96,6 +99,7 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
               <button type="button" className="vars-row" onClick={() => setSel(v.name === sel ? "" : v.name)} aria-expanded={v.name === sel} dir="ltr">
                 <span className="vars-dot" style={{ background: pinColor(v.type.replace(ARRAY, "")) }} aria-hidden />
                 <span className="grow vars-name">{v.name}{ARRAY.test(v.type) ? " [ ]" : ""}</span>
+                {v.access && v.access !== "public" && <span className="vars-lock" title={p.access?.find((a) => a.value === v.access)?.label ?? v.access} aria-label={v.access}>🔒</span>}
                 <span className="muted vars-type" title={v.type}>{typeLabel(p.types, v.type)}</span>
               </button>
               {p.shownLabel && <button type="button" className="vars-eye" disabled={v.locked || p.busy} aria-pressed={v.shown} title={`${p.shownLabel}: ${v.shown ? L("כן", "yes") : L("לא", "no")}`} onClick={() => void run(() => p.actions.change(v.name, { ...v, shown: !v.shown }))}>{v.shown ? "👁" : "◌"}</button>}
@@ -109,6 +113,7 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
             key={chosen.name}
             v={chosen}
             types={p.types}
+            access={p.access}
             shownLabel={p.shownLabel}
             categories={p.categories}
             submit={L("שמור משתנה", "Save variable")}
@@ -127,7 +132,7 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
 }
 
 /** The details of one variable (a new one or the chosen one). */
-function VarForm(p: { v: PanelVar; types: PanelType[]; shownLabel?: string; categories?: boolean; submit: string; onSubmit: (v: PanelVar) => void; onCancel?: () => void; onRemove?: () => void; onSetInGraph?: () => void }) {
+function VarForm(p: { v: PanelVar; types: PanelType[]; access?: Array<{ value: string; label: string }> | undefined; shownLabel?: string; categories?: boolean; submit: string; onSubmit: (v: PanelVar) => void; onCancel?: () => void; onRemove?: () => void; onSetInGraph?: () => void }) {
   const [v, setV] = useState(p.v);
   // Starts again only when the variable itself changed (a page that reloads often must not wipe what is typed).
   const was = JSON.stringify(p.v);
@@ -164,6 +169,14 @@ function VarForm(p: { v: PanelVar; types: PanelType[]; shownLabel?: string; cate
           <span>{L("רשימה", "List")}</span>
         </label>
       </div>
+      {p.access && (
+        <label className="stack">
+          <span className="muted">{L("גישה", "Access")}</span>
+          <select value={v.access ?? p.access[0]!.value} onChange={(e) => setV({ ...v, access: e.target.value })}>
+            {p.access.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+          </select>
+        </label>
+      )}
       {input === "bool" ? (
         <label className="row vars-check">
           <input type="checkbox" checked={v.value === "true"} onChange={(e) => setV({ ...v, value: e.target.checked ? "true" : "false" })} />

@@ -1670,3 +1670,4 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .ue-split.both .ue-graph-row { grid-template-columns: minmax(0, 1fr); }
 .ue-vars { min-width: 0; }
 @media (max-width: 1100px) { .ue-graph-row { grid-template-columns: minmax(0, 1fr); } }
+.vars-lock { font-size: 11px; opacity: .7; }

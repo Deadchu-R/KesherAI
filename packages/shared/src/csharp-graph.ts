@@ -37,6 +37,9 @@ export interface CsMethod {
   body: CsStmt[];
 }
 
+/** Who can use a variable from other scripts. */
+export type CsAccess = "public" | "private" | "protected" | "internal";
+
 /** A field of a class: one of the script's variables. */
 export interface CsField {
   type: string;
@@ -49,6 +52,8 @@ export interface CsField {
   tooltip?: string;
   /** Written as `public`. */
   isPublic?: boolean;
+  /** Who can use it from other scripts: public, private (C#'s default), protected or internal. */
+  access: CsAccess;
   /** const / static / readonly / event, or several names in one line: shown, not edited here. */
   locked?: boolean;
   /** Where the declaration (its attributes … the `;`) is in the file. */
@@ -372,6 +377,7 @@ export function parseCSharp(text: string): CsClass[] {
             shown: (isPublic && !/HideInInspector/.test(f[1]!)) || /SerializeField/.test(f[1]!),
             ...(tip ? { tooltip: tip[1]!.replace(/\\(.)/g, "$1") } : {}),
             ...(isPublic ? { isPublic } : {}),
+            access: isPublic ? "public" : /\bprotected\b/.test(f[2]!) ? "protected" : /\binternal\b/.test(f[2]!) ? "internal" : "private",
             ...(/\b(const|static|readonly)\b/.test(f[2]!) || /\b(event|delegate)\b/.test(type) || topComma(type) ? { locked: true } : {}),
             start, end: i + 1,
           });
@@ -574,6 +580,8 @@ export interface FieldSpec {
   value?: string;
   shown: boolean;
   tooltip?: string;
+  /** Who can use it from other scripts; a new variable shown in the Inspector is public, a hidden one private. */
+  access?: CsAccess;
 }
 
 const IDENT = /^[A-Za-z_]\w*$/;
@@ -589,14 +597,15 @@ export function fieldNameProblem(cls: CsClass, name: string, except?: string): s
 }
 
 /** Writes a field's declaration (attributes, access, type, name, value). */
-function writeField(f: FieldSpec, wasPublic: boolean | undefined, keep: string, rename?: string): string {
-  const pub = wasPublic ?? f.shown;
+function writeField(f: FieldSpec, was: CsAccess | undefined, keep: string, rename?: string): string {
+  const access = f.access ?? was ?? (f.shown ? "public" : "private");
+  const pub = access === "public";
   const attrs: string[] = keep ? [keep] : [];
   if (rename && f.shown) attrs.push(`[UnityEngine.Serialization.FormerlySerializedAs("${rename}")]`);
   if (f.tooltip?.trim()) attrs.push(`[Tooltip("${f.tooltip.trim().replace(/["\\]/g, "\\$&")}")]`);
   if (f.shown && !pub) attrs.push("[SerializeField]");
   if (!f.shown && pub) attrs.push("[HideInInspector]");
-  return `${attrs.length ? `${attrs.join(" ")} ` : ""}${pub ? "public" : "private"} ${f.type.trim()} ${f.name}${f.value?.trim() ? ` = ${f.value.trim()}` : ""};`;
+  return `${attrs.length ? `${attrs.join(" ")} ` : ""}${access} ${f.type.trim()} ${f.name}${f.value?.trim() ? ` = ${f.value.trim()}` : ""};`;
 }
 
 /** Attributes of a declaration that the panel does not manage (kept as they are). */
@@ -687,7 +696,7 @@ export function updateField(text: string, cls: CsClass, name: string, f: FieldSp
   const keep = otherAttrs(decl);
   // An earlier rename's attribute stays, so values from before it are kept too.
   const prior = /FormerlySerializedAs\s*\(\s*"(\w+)"/.exec(decl)?.[1];
-  const next = writeField(f, old.isPublic ?? false, keep, renamed && old.shown ? name : prior);
+  const next = writeField(f, old.access, keep, renamed && old.shown ? name : prior);
   // Rename uses from the end so earlier offsets stay right; the declaration is replaced in between.
   let out = text;
   const edits: Array<[number, number, string]> = [[old.start, old.end, next], ...uses.map((u): [number, number, string] => [u, u + name.length, f.name])];
