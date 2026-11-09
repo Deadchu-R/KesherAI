@@ -20,6 +20,11 @@ jobs:
   check:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
+    # ci.yml's docs job asks for these (it is skipped here): a called workflow may not ask for more than its caller gives.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
   build:
     needs: check
