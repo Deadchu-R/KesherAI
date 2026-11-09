@@ -372,3 +372,10 @@ test("another answer: the model sees the conversation up to the last message; th
   assert.deepEqual(seen[asked]!.messages.filter((m) => m.role !== "system").map((m) => m.role), ["user"], "only the user's message, not the first answer");
   assert.ok(session.events.filter((e) => e.type === "assistant").length > before, "the old answer stays in the events");
 });
+
+test("reminds the model of the user's language when it is not English", async () => {
+  const { languageNote } = await import("./session.js");
+  assert.match(languageNote("סבב 5: תריץ check_code ותענה בעברית"), /Hebrew/);
+  assert.equal(languageNote("run check_code please"), "");
+  assert.equal(languageNote("look at `שלום` only"), "", "a quoted word is not the user's language");
+});

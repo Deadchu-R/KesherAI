@@ -558,6 +558,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * The stored conversation is never changed.
    */
   private async fitContext(signal: AbortSignal): Promise<AgentMessage[]> {
+    const out = await this.fitContextRaw(signal);
+    // Local models drift into English after long tool runs: say the user's language again, last thing in the instructions.
+    const note = languageNote([...this.messages].reverse().find((m) => m.role === "user")?.content ?? "");
+    if (note && out[0]?.role === "system") out[0] = { ...out[0], content: `${out[0].content}\n\n${note}` };
+    return out;
+  }
+
+  private async fitContextRaw(signal: AbortSignal): Promise<AgentMessage[]> {
     const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
     const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - 2000;
     const msgs = shortenOldToolOutputs(this.messages);
@@ -825,4 +833,32 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       return fail(err instanceof Error ? err.message : String(err));
     }
   }
+}
+
+/**
+ * A reminder of the language the user wrote their last message in, when it is
+ * not English (by its script): Hebrew, Arabic, Russian, Greek, Chinese,
+ * Japanese, Korean, Hindi, Thai.
+ *
+ * @param text - The user's last message.
+ * @returns The line for the instructions, or "" for English and other Latin-script text.
+ */
+export function languageNote(text: string): string {
+  const scripts: Array<[RegExp, string]> = [
+    [/\p{Script=Hebrew}/u, "Hebrew"],
+    [/\p{Script=Arabic}/u, "Arabic"],
+    [/\p{Script=Cyrillic}/u, "Russian (or the Cyrillic-script language they use)"],
+    [/\p{Script=Greek}/u, "Greek"],
+    [/\p{Script=Hangul}/u, "Korean"],
+    [/[\p{Script=Hiragana}\p{Script=Katakana}]/u, "Japanese"],
+    [/\p{Script=Han}/u, "Chinese"],
+    [/\p{Script=Devanagari}/u, "Hindi"],
+    [/\p{Script=Thai}/u, "Thai"],
+  ];
+  const letters = text.replace(/```[\s\S]*?```|`[^`]*`|\[[^\]]*\]/g, "");
+  for (const [re, name] of scripts) {
+    const count = (letters.match(new RegExp(re.source, "gu")) ?? []).length;
+    if (count >= 3) return `The user writes in ${name}: write everything you say to them in ${name} (code, commands, file names and tool arguments stay as they are).`;
+  }
+  return "";
 }
