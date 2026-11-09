@@ -127,7 +127,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
  * others are listed by name and loaded with find_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
-const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "search", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
+const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
 
 /** The Blueprint tools: always in full while the Unreal Editor is connected (so a model never misses the Test tool). */
 const UNREAL_GRAPH_TOOLS = ["unreal_list_graphs", "unreal_read_graph", "unreal_change_graph", "unreal_test_blueprint"];
