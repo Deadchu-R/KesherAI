@@ -47,3 +47,22 @@ test("scripts are found by name in the chat's folders, skipping generated ones",
   const all = await findScripts([root], "");
   assert.equal(all.length, 3);
 });
+
+test("finds Unity projects Unity Hub does not list, two levels deep in the usual folders", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const home = await mkdtemp(join(tmpdir(), "home-"));
+  const mk = async (p: string, version = "6000.6.8f1") => {
+    await mkdir(join(p, "Assets"), { recursive: true });
+    await mkdir(join(p, "ProjectSettings"), { recursive: true });
+    await writeFile(join(p, "ProjectSettings", "ProjectVersion.txt"), `m_EditorVersion: ${version}\n`);
+  };
+  await mk(join(home, "source", "repos", "Tetris"));
+  await mk(join(home, "Documents", "Games", "Racer"), "2022.3.40f1");
+  await mk(join(home, "Documents", "a", "b", "TooDeep"));
+  await mkdir(join(home, "source", "repos", "NotUnity", "Assets"), { recursive: true });
+  const found = (await findGameProjects({ home })).filter((p) => p.kind === "unity");
+  assert.deepEqual(found.map((p) => p.name).sort(), ["Racer", "Tetris"]);
+  assert.equal(found.find((p) => p.name === "Racer")!.engine, "2022.3.40f1");
+});

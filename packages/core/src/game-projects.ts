@@ -58,6 +58,8 @@ export async function findGameProjects(extra: { unity?: string[]; unrealFile?: s
   };
   for (const u of extra.unity ?? []) if (isUnity(u)) await add({ kind: "unity", name: basename(u), path: resolve(u) });
   for (const u of await unityHubProjects(home)) if (isUnity(u.path)) await add(u);
+  // Unity projects Unity Hub does not list: the usual places, two folder levels deep (like Unreal's "Unreal Projects").
+  for (const dir of await unityFolders(home)) await add({ kind: "unity", name: basename(dir), path: resolve(dir), ...(await unityVersion(dir)) });
   const unreal = new Set<string>();
   if (extra.unrealFile) unreal.add(dirname(extra.unrealFile));
   for (const root of [join(home, "Documents", "Unreal Projects"), join(home, "Unreal Projects"), join(home, "OneDrive", "Documents", "Unreal Projects")]) {
@@ -68,6 +70,37 @@ export async function findGameProjects(extra: { unity?: string[]; unrealFile?: s
     if (p) await add({ kind: "unreal", name: basename(p.file, ".uproject"), path: resolve(p.dir), ...(p.engine ? { engine: p.engine } : {}) });
   }
   return [...found.values()].sort((a, b) => b.at - a.at).slice(0, 60).map(({ at: _at, ...p }) => p);
+}
+
+/** Where people keep Unity projects (checked two levels deep). */
+const UNITY_ROOTS = ["Unity Projects", "UnityProjects", "Documents", join("Documents", "Unity Projects"), join("source", "repos"), "repos", "Projects", "Desktop", "dev", "Dev", "GitHub", join("Documents", "GitHub"), join("OneDrive", "Documents")];
+
+/**
+ * Unity projects in the usual folders (a folder with Assets/ and
+ * ProjectSettings/), two levels deep, at most 3,000 folders looked at.
+ *
+ * @param home - The home folder.
+ */
+export async function unityFolders(home: string): Promise<string[]> {
+  const out: string[] = [];
+  let seen = 0;
+  const look = async (dir: string, depth: number) => {
+    for (const d of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (!d.isDirectory() || d.name.startsWith(".") || /^(node_modules|Library|Temp|Logs|obj|Builds?|AppData)$/i.test(d.name) || ++seen > 3000) continue;
+      const full = join(dir, d.name);
+      if (isUnity(full)) out.push(full);
+      else if (depth > 1) await look(full, depth - 1);
+    }
+  };
+  for (const r of UNITY_ROOTS) await look(join(home, r), 2);
+  return out;
+}
+
+/** The editor version a Unity project was made with (ProjectSettings/ProjectVersion.txt). */
+async function unityVersion(dir: string): Promise<{ engine?: string }> {
+  const t = await readFile(join(dir, "ProjectSettings", "ProjectVersion.txt"), "utf8").catch(() => "");
+  const v = /m_EditorVersion:\s*(\S+)/.exec(t)?.[1];
+  return v ? { engine: v } : {};
 }
 
 /** File types a chat can attach as "a script". */

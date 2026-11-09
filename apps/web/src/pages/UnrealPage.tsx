@@ -3,6 +3,7 @@ import { UnityCliPanel } from "./UnityCliPanel";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
 import { BlueprintCode, type Lang } from "../BlueprintCode";
 import { ScriptNodes } from "../ScriptNodes";
+import { FoundUnityProjects } from "../FoundUnityProjects";
 import { WidgetDesigner } from "../WidgetDesigner";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
@@ -459,6 +460,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         </span>
       </div>
       {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
+      {unity && <FoundUnityProjects onAdded={() => { loadStatus(); loadList(); }} />}
       {unity && st.projects.length > 0 && (
         <div className="row ue-projects">
           <select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>

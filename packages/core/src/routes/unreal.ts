@@ -446,9 +446,14 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       }
     });
 
+    // Unity projects found on this computer (Unity Hub's list and the usual folders) that are not added yet.
+    const foundUnity = async () => (await findGameProjects({ unity: s.config.unity.projects })).filter((p) => p.kind === "unity");
+    app.get(`${base}/found`, async () => ({ projects: (await foundUnity()).filter((p) => !s.config.unity.projects.includes(p.path)) }));
+
     app.put<{ Body: { project?: string } }>(`${base}/project`, async (req, reply) => {
-      // From the phone: switching between projects already added is fine; adding a new folder is on the computer.
-      if (!isLocalRequest(req) && !s.config.unity.projects.includes(String(req.body?.project ?? ""))) return reply.code(403).send({ error: "Add a new project on the computer that runs KesherAI." });
+      // From the phone: projects already added, or ones found on the computer; any other folder is chosen on the computer.
+      const want = String(req.body?.project ?? "");
+      if (!isLocalRequest(req) && !s.config.unity.projects.includes(want) && !(await foundUnity()).some((p) => p.path === want)) return reply.code(403).send({ error: "Add a new project on the computer that runs KesherAI." });
       try {
         await unity.addProject(String(req.body?.project ?? ""));
         return unity.status();
