@@ -131,6 +131,23 @@ export class OpenAICompatibleProvider implements Provider {
     signal?: AbortSignal,
     onText?: (delta: string) => void,
   ): Promise<ProviderToolChatResult> {
+    try {
+      return await this.toolTurn(request, signal, onText);
+    } catch (err) {
+      // A model without vision rejects the whole turn when a message carries a picture (e.g. a screenshot a
+      // tool took): send it again with the pictures left out, so the work goes on.
+      const hasImages = request.messages.some((m) => m.images?.length);
+      if (!hasImages || !/image|vision|multimodal/i.test((err as Error).message) || signal?.aborted) throw err;
+      const messages = request.messages.map((m) => (m.images?.length ? { ...m, images: undefined, content: `${m.content}\n(A picture was attached here, but this model cannot see pictures.)` } : m));
+      return this.toolTurn({ ...request, messages }, signal, onText);
+    }
+  }
+
+  private async toolTurn(
+    request: ProviderToolChatRequest,
+    signal?: AbortSignal,
+    onText?: (delta: string) => void,
+  ): Promise<ProviderToolChatResult> {
     const res = await fetchOk(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: this.headers,
