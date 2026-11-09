@@ -417,7 +417,9 @@ export class BridgeInstaller {
             "/d",
             "/s",
             "/c",
-            `"${uat}" BuildPlugin -Plugin="${join(source, "KesherAIBridge.uplugin")}" -Package="${built}" -TargetPlatforms=Win64`,
+            // The whole line in one more pair of quotes: "cmd /s /c" removes the first and the last quote, and
+            // without the outer pair it took them from the paths and failed ("cannot find the path specified").
+            `""${uat}" BuildPlugin -Plugin="${join(source, "KesherAIBridge.uplugin")}" -Package="${built}" -TargetPlatforms=Win64"`,
           ],
           { windowsHide: true, windowsVerbatimArguments: true },
         );
