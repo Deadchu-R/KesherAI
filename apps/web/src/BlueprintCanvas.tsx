@@ -26,7 +26,7 @@ const SCALE = 0.7;
 
 interface Box { n: GNode; x: number; y: number; h: number; ins: Pin[]; outs: Pin[] }
 type Drag =
-  | { kind: "pan"; sx: number; sy: number; moved: boolean; right: boolean }
+  | { kind: "pan"; sx: number; sy: number; moved: boolean; right: boolean; onNode?: boolean }
   | { kind: "move"; sx: number; sy: number; moved: boolean }
   | { kind: "marquee"; sx: number; sy: number; ex: number; ey: number; add: boolean }
   | { kind: "wire"; node: string; pin: string; dir: "in" | "out"; type: string; ax: number; ay: number; ex: number; ey: number };
@@ -211,7 +211,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       if (e.ctrlKey || e.shiftKey) setSelected((s) => new Set(s.has(id) ? [...s].filter((x) => x !== id) : [...s, id]));
       else if (!selected.has(id)) setSelected(new Set([id]));
       if (editable) return setDrag({ kind: "move", sx: p.x, sy: p.y, moved: false });
-      return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false });
+      // Read-only: dragging a node pans, and a click on it keeps it selected.
+      return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false, onNode: true });
     }
     if (touch || !editable) return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false });
     setDrag({ kind: "marquee", sx: p.x, sy: p.y, ex: p.x, ey: p.y, add: e.ctrlKey || e.shiftKey });
@@ -258,7 +259,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     const p = local(e);
     if (d.kind === "pan") {
       if (d.right && !d.moved) openMenu(p);
-      else if (!d.moved && !d.right && e.pointerType !== "touch") setSelected(new Set());
+      else if (!d.moved && !d.right && !d.onNode && e.pointerType !== "touch") setSelected(new Set());
     } else if (d.kind === "move" && d.moved) {
       const ops = boxes.filter((b) => selected.has(b.n.id)).map((b) => ({ op: "move", node: b.n.id, x: Math.round(b.x / SCALE), y: Math.round(b.y / SCALE) }));
       if (ops.length) void apply(ops);

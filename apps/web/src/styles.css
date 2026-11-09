@@ -1590,3 +1590,17 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .scope-menu .ap-only input[type="text"], .scope-menu .ap-only input:not([type]) { flex: 1 1 140px; min-width: 0; font-family: var(--mono, monospace); }
 
 .bp-code-empty { padding: 16px 12px; }
+
+/* Unity C# scripts as nodes. */
+.script-nodes .ue-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 70vh; overflow: auto; }
+.script-nodes .ue-list li button { width: 100%; text-align: start; background: transparent; border: 0; padding: 6px 8px; border-radius: 6px; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.script-nodes .ue-list li button.on { background: var(--hover, rgba(127,127,127,.15)); }
+.script-methods button.on { background: var(--accent); color: var(--on-accent, #fff); }
+.script-graph { display: grid; grid-template-columns: 1fr 280px; gap: 12px; min-height: 420px; }
+.script-canvas { position: relative; min-height: 420px; border-radius: 10px; overflow: hidden; }
+.script-edit { display: flex; flex-direction: column; gap: 10px; }
+.script-edit textarea, .script-edit input { width: 100%; font-family: var(--mono, monospace); }
+@media (max-width: 760px) {
+  .script-graph { grid-template-columns: 1fr; }
+  .script-canvas { min-height: 340px; }
+}

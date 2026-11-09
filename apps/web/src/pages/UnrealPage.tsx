@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { UnityCliPanel } from "./UnityCliPanel";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
 import { BlueprintCode, type Lang } from "../BlueprintCode";
+import { ScriptNodes } from "../ScriptNodes";
 import { WidgetDesigner } from "../WidgetDesigner";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
@@ -256,6 +257,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   // The AI bubble over the node view: a short chat about the Blueprint shown (follow-ups know what came before).
   const [bubble, setBubble] = useState(false);
   // Graph, code, or both side by side (remembered); a line clicked in the code flashes its node.
+  // Unity: Visual Scripting graphs, or C# scripts shown as nodes.
+  const [source, setSource] = useState<"graphs" | "scripts">("graphs");
   const [view, setView] = useState<"graph" | "code" | "both" | "design">(() => {
     try {
       const v = localStorage.getItem("kesher.bpView");
@@ -462,6 +465,10 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
             {st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
           </select>
           <AddUnityPackage compact />
+          <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
+            <button type="button" role="tab" aria-selected={source === "graphs"} className={source === "graphs" ? "on" : ""} onClick={() => setSource("graphs")}>{L("גרפים", "Graphs")}</button>
+            <button type="button" role="tab" aria-selected={source === "scripts"} className={source === "scripts" ? "on" : ""} onClick={() => setSource("scripts")} title={L("סקריפטי C# כנודים, לעבודה בלי קוד", "C# scripts as nodes, to work without code")}>{L("סקריפטים C#", "C# scripts")}</button>
+          </span>
           {!st.connected && <span className="muted small">{L("Unity סגור: כל פעולה תריץ את Unity ברקע (איטי יותר).", "Unity is closed: each action runs Unity in the background (slower).")}</span>}
         </div>
       )}
@@ -495,7 +502,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         </section>
       )}
 
-      {!neverConnected && (
+      {unity && source === "scripts" && st.active && <ScriptNodes key={st.active} />}
+      {!neverConnected && !(unity && source === "scripts") && (
         <div className={`ue-body${view === "both" || view === "design" ? " wide" : ""}`}>
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />

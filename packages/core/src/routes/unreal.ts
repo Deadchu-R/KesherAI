@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import type WebSocket from "ws";
@@ -11,10 +11,11 @@ import { modelTurnFor } from "../conversations.js";
 import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { runUnityTest } from "../unity-test.js";
+import { projectPath } from "../unity-tools.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
@@ -391,6 +392,60 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       }
     });
     /** Adds a project folder, or picks which one the page shows. Only on this computer. */
+    // C# scripts as nodes: list the project's scripts, read one, write it back (only .cs inside Assets/, and only
+    // when the file did not change meanwhile; the old text is kept in KesherAI's folder first).
+    app.get(`${base}/scripts`, async (_req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      const out: string[] = [];
+      const stack = [join(project, "Assets")];
+      let seen = 0;
+      while (stack.length && out.length < 2000 && seen < 50_000) {
+        const dir = stack.pop()!;
+        for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+          seen++;
+          if (e.name.startsWith(".") || e.name === "Plugins" || e.name.startsWith("TextMesh Pro")) continue;
+          if (e.isDirectory()) stack.push(join(dir, e.name));
+          else if (e.name.endsWith(".cs")) out.push(relative(project, join(dir, e.name)).replace(/\\/g, "/"));
+        }
+      }
+      return { scripts: out.sort() };
+    });
+    app.get<{ Querystring: { path?: string } }>(`${base}/script`, async (req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      try {
+        const { abs, rel } = projectPath(project, String(req.query.path ?? ""), ["Assets"]);
+        if (!rel.endsWith(".cs")) return reply.code(400).send({ error: "Only C# scripts (.cs)." });
+        const st = await stat(abs);
+        if (st.size > 400_000) return reply.code(400).send({ error: "The script is too big to show as nodes." });
+        return { path: rel, text: await readFileFs(abs, "utf8"), mtime: st.mtimeMs };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+    app.put<{ Body: { path?: string; text?: string; mtime?: number } }>(`${base}/script`, async (req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      try {
+        const { abs, rel } = projectPath(project, String(req.body?.path ?? ""), ["Assets"]);
+        const text = String(req.body?.text ?? "");
+        if (!rel.endsWith(".cs") || !text.trim() || text.length > 400_000) return reply.code(400).send({ error: "Send a C# script (.cs) under 400 KB." });
+        const st = await stat(abs);
+        if (req.body?.mtime && Math.abs(st.mtimeMs - Number(req.body.mtime)) > 1) return reply.code(409).send({ error: "The script changed since it was opened (in Unity or a chat). Open it again." });
+        const before = await readFileFs(abs, "utf8");
+        const backups = join(s.paths.root, "unity-backups");
+        await mkdir(backups, { recursive: true });
+        await writeFile(join(backups, `${rel.replace(/[\\/]/g, "_")}-${Date.now()}.cs`), before);
+        await writeFile(abs, text);
+        // Unity compiles it when it notices; ask now when its CLI is there (a failure is fine).
+        void unity.cliRaw(["recompile", "--project-path", project], 120_000).catch(() => undefined);
+        return { path: rel, mtime: (await stat(abs)).mtimeMs };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+
     app.put<{ Body: { project?: string } }>(`${base}/project`, async (req, reply) => {
       // From the phone: switching between projects already added is fine; adding a new folder is on the computer.
       if (!isLocalRequest(req) && !s.config.unity.projects.includes(String(req.body?.project ?? ""))) return reply.code(403).send({ error: "Add a new project on the computer that runs KesherAI." });
