@@ -426,7 +426,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                         {models.length > 1 && (
                           <select value={model} onChange={(e) => chooseModel(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
                             <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
-                            {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            {models.map((m) => <option key={m.id} value={m.id}>{models.filter((x) => x.name === m.name).length > 1 ? `${m.name} · ${m.id.split("/")[0]}` : m.name}</option>)}
                           </select>
                         )}
                         <button type="button" className="icon-btn" onClick={() => setBubble(false)} aria-label={L("סגור", "Close")}>✕</button>

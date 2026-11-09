@@ -105,4 +105,8 @@ test("blueprintPrompt shows the graph compactly and parseOps reads the model's a
   assert.equal(ops.length, 2);
   assert.equal(note, "Prints hello.");
   assert.throws(() => parseOps("no json here"), /did not answer/);
+  // Pins copied whole from the prompt's pin lines still name the pin.
+  const copied = parseOps('{"ops":[{"op":"connect","from":{"node":"AAA","pin":"out then (exec)"},"to":{"node":"$p","pin":"in execute (exec)"}},{"op":"set","node":"$p","pin":"in InString \\"In String\\" (string) = Hi"}]}');
+  assert.deepEqual(copied.ops[0], { op: "connect", from: { node: "AAA", pin: "then" }, to: { node: "$p", pin: "execute" } });
+  assert.equal(copied.ops[1]!.pin, "InString");
 });

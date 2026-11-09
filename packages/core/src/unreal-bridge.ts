@@ -371,6 +371,37 @@ export function blueprintPrompt(bp: BlueprintJson, graphName: string, request: s
 }
 
 /**
+ * A pin's name as the model may have copied it from the prompt's pin line
+ * (`out then (exec)`, `in InString "In String" (string) = Hi`): just the name.
+ * Found testing on the real editor: a small model wrote "out then (exec)" and
+ * the connection failed with "Pin not found".
+ *
+ * @param s - What the model wrote.
+ * @returns The pin name.
+ */
+export function pinName(s: string): string {
+  return s
+    .trim()
+    .replace(/^(in|out)\s+/i, "")
+    .replace(/\s*->.*$/, "")
+    .replace(/\s*=.*$/, "")
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .replace(/\s+"[^"]*"\s*$/, "")
+    .trim();
+}
+
+/** The pins of one operation, cleaned with {@link pinName}. */
+function cleanPins(op: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...op };
+  for (const k of ["from", "to"] as const) {
+    const end = out[k] as { pin?: unknown } | undefined;
+    if (end && typeof end === "object" && typeof end.pin === "string") out[k] = { ...end, pin: pinName(end.pin) };
+  }
+  if (typeof out.pin === "string") out.pin = pinName(out.pin);
+  return out;
+}
+
+/**
  * Reads the model's answer.
  *
  * @param text - What the model wrote.
@@ -383,7 +414,7 @@ export function parseOps(text: string): { ops: Array<Record<string, unknown>>; n
   for (let end = cleaned.lastIndexOf("}"); start >= 0 && end > start; end = cleaned.lastIndexOf("}", end - 1)) {
     try {
       const j = JSON.parse(cleaned.slice(start, end + 1)) as { ops?: unknown; note?: unknown };
-      if (Array.isArray(j.ops)) return { ops: j.ops.filter((o): o is Record<string, unknown> => !!o && typeof o === "object" && typeof (o as { op?: unknown }).op === "string"), note: typeof j.note === "string" ? j.note : "" };
+      if (Array.isArray(j.ops)) return { ops: j.ops.filter((o): o is Record<string, unknown> => !!o && typeof o === "object" && typeof (o as { op?: unknown }).op === "string").map(cleanPins), note: typeof j.note === "string" ? j.note : "" };
     } catch {
       // try a shorter slice
     }
