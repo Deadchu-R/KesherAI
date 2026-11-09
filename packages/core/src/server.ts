@@ -31,6 +31,7 @@ import { Prompts } from "./prompts.js";
 import { Notifier, type Note } from "./notify.js";
 import { speechTools } from "./speech-tools.js";
 import { mcpServerRoutes } from "./routes/mcp-server.js";
+import { phoneRoutes } from "./routes/phones.js";
 import { anthropicRoutes } from "./routes/anthropic.js";
 import { apiKeyRoutes } from "./routes/api-keys.js";
 import { ApiKeys } from "./api-keys.js";
@@ -930,6 +931,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await comfyRoutes(app, services);
   await notificationRoutes(app, services);
   await mcpServerRoutes(app, services);
+  await phoneRoutes(app, services);
   await githubRoutes(app, services);
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);

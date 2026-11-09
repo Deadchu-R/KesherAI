@@ -13,6 +13,7 @@ import { BusinessSection, CopilotSection } from "../BusinessSection";
 import { openWelcome } from "../Welcome";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
+import { PhoneTargetsSection } from "../PhoneTargetsSection";
 import { AnywhereMode, type TunnelInfo } from "../AnywhereMode";
 import { BrowserSection } from "../BrowserSection";
 import { ApiKeysSection } from "../ApiKeysSection";
@@ -416,7 +417,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; r
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", render: () => <><Phone /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },
   { id: "accounts", icon: "☁", en: "Accounts and backup", he: "חשבונות וגיבוי", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /></> },
   { id: "business", icon: "🏢", en: "Organisation", he: "ארגון", render: () => <><CopilotSection /><BusinessSection /></> },
-  { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", render: () => <><McpServerSection /><BrowserSection /><ApiKeysSection />{isRemote() && <section className="card"><p className="muted small">{getLocale() === "he" ? "מפתחות גישה לאפליקציות ומפתח התוסף לדפדפן מוצגים רק במחשב עצמו: הם סודות שפותחים את KesherAI." : "App access keys and the browser extension's key are shown only on the computer itself: they are secrets that open KesherAI."}</p></section>}</> },
+  { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", render: () => <><McpServerSection /><PhoneTargetsSection /><BrowserSection /><ApiKeysSection />{isRemote() && <section className="card"><p className="muted small">{getLocale() === "he" ? "מפתחות גישה לאפליקציות ומפתח התוסף לדפדפן מוצגים רק במחשב עצמו: הם סודות שפותחים את KesherAI." : "App access keys and the browser extension's key are shown only on the computer itself: they are secrets that open KesherAI."}</p></section>}</> },
 ];
 
 /** Settings: categories on the side (chips on a phone), `#/settings/<category>`. */

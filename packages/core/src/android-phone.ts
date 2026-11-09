@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
 import { androidTools } from "./unreal-tools.js";
+import { maxFps, parseGetprop, phoneFromProps, type Phone } from "./phones.js";
 
 /**
  * Runs a game on the user's Android phone over USB and reads why it closed.
@@ -106,6 +107,29 @@ export function crashSummary(lines: string[]): string[] {
 }
 
 /** The phone tools for a chat with a game project in use. */
+/**
+ * Reads the phone plugged in by USB (USB debugging on): its model, chip,
+ * GPU, Android version, screen and refresh rate, for "Target phones".
+ * Read-only `getprop` / `wm size` / `dumpsys`; nothing is installed.
+ *
+ * @returns The phone, or what the user has to do on the phone first.
+ */
+export async function readPluggedPhone(): Promise<{ phone?: Phone; problem?: string }> {
+  const bin = adbPath((await androidTools()).sdk);
+  const dev = await adb(bin, ["devices"], 20_000);
+  if (dev.code !== 0 && !dev.out.includes("List of devices")) return { problem: "adb was not found: the Android SDK's platform-tools are needed (Unity's Android module or Android Studio has them)." };
+  const rows = dev.out.split(/\r?\n/).slice(1).map((l) => l.trim().split(/\s+/)).filter((r) => r.length >= 2 && r[0]);
+  if (!rows.length) return { problem: "No phone found. On the phone: Settings → About phone → tap Build number 7 times; then Developer options → USB debugging on; connect the cable and tap Allow." };
+  if (rows.some((r) => r[1] === "unauthorized")) return { problem: "Unlock the phone and tap Allow on the USB debugging question." };
+  const serial = rows.find((r) => r[1] === "device")?.[0];
+  if (!serial) return { problem: "The phone is not ready yet." };
+  const sh = (...args: string[]) => adb(bin, ["-s", serial, "shell", ...args], 20_000).then((r) => r.out);
+  const [props, size, sf, disp, mem] = await Promise.all([sh("getprop"), sh("wm", "size"), sh("dumpsys", "SurfaceFlinger"), sh("dumpsys", "display"), sh("cat", "/proc/meminfo")]);
+  const memKb = Number(/MemTotal:\s+(\d+)/.exec(mem)?.[1]) || undefined;
+  return { phone: phoneFromProps(parseGetprop(props), /Override size:\s*(\d+x\d+)/.exec(size)?.[1] ? size.replace(/Physical size:[^\n]*\n/, "") : size, sf, memKb, maxFps(disp)) };
+}
+
+/** The tool that runs a game on the phone plugged in and reads why it closed. */
 export function androidPhoneTools(): AgentTool[] {
   return [
     {

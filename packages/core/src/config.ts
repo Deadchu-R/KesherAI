@@ -293,6 +293,32 @@ export const KesherConfigSchema = z.object({
     .prefault({}),
   /** Parts of KesherAI turned off (Settings → Parts); see PARTS in @kesher/shared. Missing = on. */
   parts: z.record(z.string(), z.boolean()).prefault({}),
+  /** Target phones for builds (Settings → For developers → Target phones). */
+  phones: z
+    .object({
+      /** Ids from the catalog (phones.ts) or of phones read over USB. */
+      targets: z.array(z.string().max(80)).max(40).default([]),
+      /** Phones read from a phone plugged in by USB (exact values). */
+      custom: z
+        .array(
+          z.object({
+            id: z.string().max(80),
+            brand: z.string().max(60),
+            name: z.string().max(120),
+            soc: z.string().max(120),
+            gpu: z.string().max(120),
+            gpuFamily: z.enum(["adreno", "mali", "immortalis", "xclipse", "powervr", "other"]),
+            android: z.number().int().min(0).max(99),
+            screen: z.object({ w: z.number().int().min(0).max(20000), h: z.number().int().min(0).max(20000), hz: z.number().int().min(0).max(1000) }),
+            ramGb: z.number().int().min(0).max(1024).optional(),
+            tier: z.enum(["high", "mid", "low"]),
+            detected: z.boolean().optional(),
+          }),
+        )
+        .max(20)
+        .default([]),
+    })
+    .prefault({}),
   /** Per-plugin settings, keyed by plugin id. */
   plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).prefault({}) })).prefault({}),
 });

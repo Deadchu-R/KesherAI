@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
 import { readResult, type UnityCli } from "./unity-cli.js";
+import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
 
 /**
  * Unity in the chat, through Unity's own CLI (`unity`), the way Unity
@@ -104,7 +105,7 @@ function compileReport(code: number, out: string, err: string): string {
  * @param outputsDir - Where screenshots are saved for the user.
  * @param saveAsset - Keeps a picture in the library; returns its id.
  */
-export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>): AgentTool[] {
+export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>, targetPhones: () => Phone[] = () => []): AgentTool[] {
   const project = () => unity.activeProject;
   const at = (): string[] => (project() ? ["--project-path", project()!] : []);
   const need = () => {
@@ -378,6 +379,20 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         // The game starts in the scene the user works in: the open scene becomes the first one in Build Settings
         // (a new project lists the template's SampleScene, so the build started there and showed none of the work).
         await evalCs("var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a == \"\") return \"unsaved\"; var list = new System.Collections.Generic.List<UnityEditor.EditorBuildSettingsScene>(); list.Add(new UnityEditor.EditorBuildSettingsScene(a, true)); foreach (var s in UnityEditor.EditorBuildSettings.scenes) if (s.path != a) list.Add(s); UnityEditor.EditorBuildSettings.scenes = list.ToArray(); return \"first scene: \" + a;").catch(() => "");
+        // Target phones chosen: Android games ask for their frame rate (Unity runs them at 30 fps otherwise).
+        let phoneNote = "";
+        const phones = target.id === "Android" ? targetPhones() : [];
+        if (phones.length) {
+          const file = join(p, "Assets", "KesherAI", "KesherTargetPhones.cs");
+          const text = unityFrameRateScript(phones);
+          const before = await readFile(file, "utf8").catch(() => "");
+          if (before !== text) {
+            await mkdir(dirname(file), { recursive: true });
+            await writeFile(file, text);
+            await unity.cliRaw(["recompile", ...at(), "--format", "json"], 300_000).catch(() => undefined);
+          }
+          phoneNote = `\nFor the target phones (${phones.map((x) => x.name).join(", ")}): Assets/KesherAI/KesherTargetPhones.cs asks for ${targetFps(phones)} fps.`;
+        }
         let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, "--confirm", "true"], 3_700_000);
         // The Editor queues the build and answers at once ("status: queued"): wait for it with `build status`.
         if (r.code === 0 && /queued|running|building|in.?progress/i.test(r.stdout)) {
@@ -407,7 +422,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         const made = existsSync(out);
         if (r.code !== 0 || !made) return { output: `The build did NOT finish (exit ${r.code}). ${made ? "" : "No game file was made. "}Unity said:\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
         const size = (await stat(out)).isFile() ? `${Math.round((await stat(out)).size / 1024)} KB` : "a folder";
-        return { output: `Built ${target.id}: ${out} (${size}). The user can run it from there.\n${cut(r.stdout.trim())}` };
+        return { output: `Built ${target.id}: ${out} (${size}). The user can run it from there.${phoneNote}\n${cut(r.stdout.trim())}` };
       },
     },
     {

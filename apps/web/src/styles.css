@@ -1114,6 +1114,17 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-comment { fill: #c9c9a0; font: 11px system-ui, sans-serif; }
 .ue-empty { padding: 30px; text-align: center; }
 .ue-ask { gap: 8px; }
+.ue-stage { position: relative; }
+.ue-stage .ue-canvas { min-height: 380px; }
+.ue-ai-fab { position: absolute; inset-block-end: 12px; inset-inline-start: 12px; width: 44px; height: 44px; border-radius: 50%; font-size: 1.2rem; padding: 0; box-shadow: 0 4px 14px rgb(0 0 0 / 0.45); }
+.ue-bubble { position: absolute; inset-block-end: 12px; inset-inline-start: 12px; width: min(360px, calc(100% - 24px)); max-height: calc(100% - 24px); display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--panel, #1b1c20); border: 1px solid var(--border, #2c2d33); border-radius: 16px; box-shadow: var(--shadow-2, 0 10px 30px rgb(0 0 0 / 0.5)); }
+.ue-bubble-head { gap: 6px; align-items: center; }
+.ue-bubble-head select { max-width: 150px; }
+.ue-bubble-log { overflow: auto; min-height: 60px; max-height: 260px; display: flex; flex-direction: column; gap: 6px; }
+.ue-msg { padding: 6px 10px; border-radius: 12px; max-width: 90%; font-size: 0.92em; overflow-wrap: anywhere; }
+.ue-msg.you { align-self: flex-end; background: var(--accent, #7c7cff); color: var(--accent-ink, #fff); }
+.ue-msg.ai { align-self: flex-start; background: var(--panel-2, #26272c); }
+.ue-bubble .ue-ask button { min-width: 40px; }
 .ue-report, .ue-queue { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
 .ue-queue { list-style: none; padding: 0; }
 @media (max-width: 760px) {

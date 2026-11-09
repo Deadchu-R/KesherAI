@@ -236,6 +236,11 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   };
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<string[]>([]);
+  // The AI bubble over the node view: a short chat about the Blueprint shown (follow-ups know what came before).
+  const [bubble, setBubble] = useState(false);
+  const [chat, setChat] = useState<Array<{ who: "you" | "ai"; lines: string[] }>>([]);
+  const chatEnd = useRef<HTMLDivElement>(null);
+  useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [chat, busy]);
   const [queue, setQueue] = useState<Queued[]>([]);
 
   const loadStatus = () => void api<Status>(base).then(setSt, () => undefined);
@@ -274,6 +279,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   }, [connected]);
   useEffect(() => {
     if (path) loadBp(path);
+    setChat([]);
   }, [path]);
 
   if (!st) return <div className="page"><p className="muted">{L("בודק…", "Checking…")}</p></div>;
@@ -288,21 +294,27 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     }
   };
   const edit = async () => {
+    const asked = request.trim();
+    if (!asked) return;
     setBusy(true);
     setReport([]);
+    // Earlier requests in this bubble, so "now make it red" knows what "it" is (they are already applied).
+    const earlier = chat.filter((c) => c.who === "you").slice(-4).map((c) => c.lines[0]);
+    const full = earlier.length ? `${asked}\n\n(Earlier in this conversation, already applied: ${earlier.map((e, i) => `${i + 1}) ${e}`).join(" ")})` : asked;
+    setChat((c) => [...c, { who: "you", lines: [asked] }]);
+    setRequest("");
     try {
-      const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request, ...(model ? { model } : {}) } });
+      const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request: full, ...(model ? { model } : {}) } });
       const lines = [r.note || L("בוצע.", "Done.")];
       if (r.queued) lines.push(L(`⏳ ${app} סגור: השינוי ממתין ויוחל כשתפתח את הפרויקט.`, `⏳ ${app} is closed: the change waits and is applied when you open the project.`));
       r.result?.results.filter((x) => !x.ok).forEach((x) => lines.push(`⚠ ${x.error ?? x.op}`));
       if (r.applied) lines.push(L(`Ctrl+Z ב-${app} מבטל את השינוי. לא נשמר לדיסק עד שתלחץ שמור.`, `Ctrl+Z in ${app} undoes it. Not saved to disk until you press Save.`));
       r.compile?.messages.forEach((m) => lines.push(`${m.severity === "error" ? "⛔" : "⚠"} ${m.text}`));
-      setReport(lines);
-      setRequest("");
+      setChat((c) => [...c, { who: "ai", lines }]);
       loadQueue();
       if (r.applied) loadBp(path);
     } catch (e) {
-      toast((e as Error).message);
+      setChat((c) => [...c, { who: "ai", lines: [`⛔ ${(e as Error).message}`] }]);
     } finally {
       setBusy(false);
     }
@@ -402,17 +414,40 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     </button>
                   ))}
                 </div>
-                <div className="ue-canvas">{graph && <GraphView unity={unity} nodes={graph.nodes} />}</div>
-                <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
-                  <input className="grow" dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("מה לשנות? למשל: ב-Start תדפיס Hello ללוג, ואם open אמת תזיז את הדלת", "What to change? e.g. on Start log Hello, and if open is true move the door") : L("מה לשנות? למשל: ב-BeginPlay תדפיס Hello, ואם Open אמת תפעיל את OpenDoor", "What to change? e.g. on BeginPlay print Hello, and if Open is true call OpenDoor")} />
-                  {models.length > 1 && (
-                    <select value={model} onChange={(e) => chooseModel(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
-                      <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
-                      {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                <div className="ue-stage">
+                  <div className="ue-canvas">{graph && <GraphView unity={unity} nodes={graph.nodes} />}</div>
+                  {!bubble && (
+                    <button type="button" className="ue-ai-fab primary" onClick={() => setBubble(true)} aria-label={L("עריכה עם AI", "Edit with AI")} title={L("עריכה עם AI", "Edit with AI")}>✨</button>
                   )}
-                  <button type="submit" className="primary" disabled={busy || !request.trim()}>{busy ? L("המודל עובד…", "Working…") : `✨ ${st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}`}</button>
-                </form>
+                  {bubble && (
+                    <div className="ue-bubble" role="dialog" aria-label={L("עריכה עם AI", "Edit with AI")}>
+                      <div className="row ue-bubble-head">
+                        <strong className="grow" dir="auto">✨ {bp?.graph.name ?? ""}{graph ? ` · ${graph.name}` : ""}</strong>
+                        {models.length > 1 && (
+                          <select value={model} onChange={(e) => chooseModel(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
+                            <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
+                            {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                          </select>
+                        )}
+                        <button type="button" className="icon-btn" onClick={() => setBubble(false)} aria-label={L("סגור", "Close")}>✕</button>
+                      </div>
+                      <div className="ue-bubble-log" aria-live="polite">
+                        {chat.length === 0 && <p className="muted small" dir="auto">{L("כתבו מה לשנות ב-Blueprint שמוצג. השינוי מוחל בעורך כצעד אחד (Ctrl+Z מבטל) ומקומפל; אפשר להמשיך: \"עכשיו גם…\".", "Say what to change in the Blueprint shown. It is applied in the editor as one step (Ctrl+Z undoes it) and compiled; you can follow up: \"now also…\".")}</p>}
+                        {chat.map((c, i) => (
+                          <div key={i} className={`ue-msg ${c.who}`} dir="auto">
+                            {c.lines.map((l, k) => <div key={k}>{l}</div>)}
+                          </div>
+                        ))}
+                        {busy && <div className="ue-msg ai muted">{L("המודל עובד…", "Working…")}</div>}
+                        <div ref={chatEnd} />
+                      </div>
+                      <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
+                        <input className="grow" dir="auto" autoFocus value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("למשל: ב-Start תדפיס Hello ללוג", "e.g. on Start log Hello") : L("למשל: ב-BeginPlay תדפיס Hello", "e.g. on BeginPlay print Hello")} />
+                        <button type="submit" className="primary" disabled={busy || !request.trim()} aria-label={st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}>{busy ? "…" : "↑"}</button>
+                      </form>
+                    </div>
+                  )}
+                </div>
                 {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}
               </>
             )}

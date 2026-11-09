@@ -19,6 +19,7 @@ import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
 import { delegateTool } from "./delegate.js";
 import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
+import { chosenPhones, phoneNote, type Phone } from "./phones.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
@@ -701,7 +702,7 @@ export class ConversationManager {
     split.push(analyzeChatTool);
     // Unity through its CLI: when it is installed here, or a Unity project was added (then unity_status explains a missing CLI).
     const unity = this.deps.unity && (this.deps.unity.cliKnown() || this.deps.unity.activeProject)
-      ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id)
+      ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id, () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[]))
       : [];
     // Fewer tokens: the long Unity guide and every Unity tool only while a Unity project is in use.
     if (unity.length && this.deps.unity?.activeProject) media.notes.push(UNITY_NOTE);
@@ -739,6 +740,9 @@ export class ConversationManager {
     if (this.unrealState.project || this.deps.unity?.activeProject) {
       split.push(...androidPhoneTools());
       media.notes.push(BUILD_RESEARCH_NOTE);
+      // The phones the user builds for (Settings → For developers → Target phones): one short line.
+      const phones = chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[]);
+      if (phones.length) media.notes.push(phoneNote(phones));
     }
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
