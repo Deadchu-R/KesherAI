@@ -856,7 +856,7 @@ export function ConversationPage({ id }: { id: string }) {
                       title={t("cpHint")}
                       onClick={() => {
                         if (!confirm(t("cpConfirm"))) return;
-                        void api(`/api/conversations/${id}/checkpoints/${e.id}/restore`, { method: "POST" }).catch((err: Error) => setError(err.message));
+                        void api(`/api/conversations/${id}/checkpoints/${encodeURIComponent(e.id)}/restore`, { method: "POST" }).catch((err: Error) => setError(err.message));
                       }}
                     >
                       ↺ {t("cpRestore")}

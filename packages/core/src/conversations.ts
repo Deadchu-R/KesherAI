@@ -5,6 +5,7 @@ import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
 import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, branding, cleanAppearance, type Appearance, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
@@ -905,6 +906,28 @@ export class ConversationManager {
     return c.workspace ?? (c.projectId ? this.deps.library.getProject(c.projectId)?.workspace : undefined);
   }
 
+  /**
+   * The folders a chat's checkpoints cover: a coding session's folder, and the
+   * Unity or Unreal projects given to the chat (so "restore to here" also undoes
+   * what the agent changed in the game project).
+   *
+   * @returns Each folder with the key of its checkpoint store.
+   */
+  checkpointFolders(c: Pick<Conversation, "id" | "kind" | "workspace" | "projectId">, grants: string[]): Array<{ key: string; folder: string }> {
+    const out: Array<{ key: string; folder: string }> = [];
+    if (c.kind === "code") {
+      const ws = this.workspaceOf(c);
+      if (ws) out.push({ key: c.id, folder: ws });
+    }
+    const game = (dir: string) =>
+      (existsSync(join(dir, "Assets")) && existsSync(join(dir, "ProjectSettings"))) || (existsSync(dir) && statSync(dir).isDirectory() && readdirSync(dir).some((f) => f.toLowerCase().endsWith(".uproject")));
+    for (const g of grants.slice(-3)) {
+      if (out.some((o) => o.folder === g) || !game(g)) continue;
+      out.push({ key: `${c.id}-g${createHash("sha1").update(g.toLowerCase()).digest("hex").slice(0, 10)}`, folder: g });
+    }
+    return out;
+  }
+
   private async promptFor(c: Pick<Conversation, "id" | "kind" | "workspace" | "projectId" | "personaId">, notes: string[]): Promise<string> {
     const project = c.projectId ? this.deps.library.getProject(c.projectId) : undefined;
     const persona = this.deps.personas?.get(c.personaId);
@@ -1153,11 +1176,21 @@ export class ConversationManager {
   async restoreCheckpoint(id: string, checkpoint: string): Promise<void> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
-    const ws = this.workspaceOf(opened.conversation);
-    if (!ws || !this.deps.checkpoints) throw new Error("This conversation has no project folder.");
+    const folders = this.checkpointFolders(opened.conversation, opened.session.grants);
+    if (!folders.length || !this.deps.checkpoints) throw new Error("This conversation has no project folder.");
     if (opened.session.busy) throw new Error("Stop the agent first.");
-    await this.deps.checkpoints.restore(id, ws, checkpoint);
-    opened.session.note("Restored the project folder to this checkpoint.");
+    // One message may have saved several folders ("a+b"): each is restored in its own store.
+    let restored = 0;
+    for (const part of checkpoint.split("+")) {
+      for (const t of folders) {
+        if (!(await this.deps.checkpoints.has(t.key, part))) continue;
+        await this.deps.checkpoints.restore(t.key, t.folder, part);
+        restored++;
+        break;
+      }
+    }
+    if (!restored) throw new Error("No such checkpoint.");
+    opened.session.note(restored > 1 ? "Restored the project folders to this checkpoint." : "Restored the project folder to this checkpoint.");
   }
 
   /** Sends the next queued message, if the agent is free and the queue is not paused. */
@@ -1272,11 +1305,15 @@ export class ConversationManager {
         context = `(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;
       }
     }
-    // Coding sessions: save the folder first, so this point can be restored with one click.
-    const ws = conversation.kind === "code" ? this.workspaceOf(conversation) : undefined;
-    if (ws && this.deps.checkpoints && !session.busy) {
-      const cp = await this.deps.checkpoints.snapshot(conversation.id, ws, text).catch(() => undefined);
-      if (cp) session.checkpoint(cp.id, cp.files);
+    // Save the folders first (a coding session's folder, and a chat's Unity/Unreal projects), so this point can be restored with one click.
+    if (this.deps.checkpoints && !session.busy) {
+      let first: { id: string; files: number } | undefined;
+      for (const t of this.checkpointFolders(conversation, session.grants)) {
+        const cp = await this.deps.checkpoints.snapshot(t.key, t.folder, text).catch(() => undefined);
+        if (cp && !first) first = cp;
+        else if (cp && first) first = { id: `${first.id}+${cp.id}`, files: first.files + cp.files };
+      }
+      if (first) session.checkpoint(first.id, first.files);
     }
     session.send(text, context, note);
   }

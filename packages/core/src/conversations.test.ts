@@ -350,3 +350,29 @@ test("a chat working when KesherAI closes can continue after the restart", async
     await again.close();
   }
 });
+
+test("a chat's Unity/Unreal project is saved before each message and can be restored", async () => {
+  const { server } = await setup();
+  const app = server.app;
+  try {
+    const game = await mkdtemp(join(tmpdir(), "kesher-game-"));
+    const { mkdir: mk, writeFile: wf } = await import("node:fs/promises");
+    await wf(join(game, "Door.uproject"), JSON.stringify({ EngineAssociation: "5.8" }));
+    await mk(join(game, "Source", "Door"), { recursive: true });
+    await wf(join(game, "Source", "Door", "Door.cpp"), "// first");
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "fake/m" } })).json() as { id: string };
+    assert.equal((await app.inject({ method: "POST", url: `/api/conversations/${c.id}/project`, payload: { path: game } })).statusCode, 200);
+    await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "hello" } });
+    const cp = await until(async () => {
+      const r = (await app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { events: Array<{ type: string; id?: string }>; session: { status: string } };
+      const e = r.events.find((x) => x.type === "checkpoint");
+      return e && r.session.status !== "running" ? e.id : undefined;
+    }, 15_000);
+    await wf(join(game, "Source", "Door", "Door.cpp"), "// broken by the agent");
+    const back = await app.inject({ method: "POST", url: `/api/conversations/${c.id}/checkpoints/${encodeURIComponent(cp!)}/restore` });
+    assert.equal(back.statusCode, 200, back.body);
+    assert.equal(await readFile(join(game, "Source", "Door", "Door.cpp"), "utf8"), "// first");
+  } finally {
+    await server.close();
+  }
+});

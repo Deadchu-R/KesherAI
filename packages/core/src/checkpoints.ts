@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
 
 /**
  * Checkpoints for coding sessions: before each message, KesherAI saves the
@@ -43,6 +43,36 @@ const EXCLUDES = [
   "*.tmp",
 ];
 
+/** Files bigger than this are left out (huge textures, videos, cooked builds): checkpoints stay fast and small. */
+const BIG_FILE = 50 * 1024 * 1024;
+const SKIP_DIRS = new Set(EXCLUDES.filter((e) => e.endsWith("/")).map((e) => e.slice(0, -1).toLowerCase()));
+
+/**
+ * The big files in a project (over 50 MB), as exclude lines, so a game
+ * project's first checkpoint does not copy gigabytes of art.
+ *
+ * @param root - The project folder.
+ * @returns Paths relative to it, with "/" separators.
+ */
+export async function bigFiles(root: string, limit = 200_000): Promise<string[]> {
+  const out: string[] = [];
+  const stack = [root];
+  let seen = 0;
+  while (stack.length && seen < limit) {
+    const dir = stack.pop()!;
+    for (const d of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      seen++;
+      const full = join(dir, d.name);
+      if (d.isDirectory()) {
+        if (!SKIP_DIRS.has(d.name.toLowerCase())) stack.push(full);
+      } else if (d.isFile() && ((await stat(full).catch(() => undefined))?.size ?? 0) > BIG_FILE) {
+        out.push("/" + relative(root, full).split(sep).join("/"));
+      }
+    }
+  }
+  return out.slice(0, 5000);
+}
+
 function git(args: string[], env: Record<string, string>, timeout = 120_000): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile("git", args, { env: { ...process.env, ...env }, timeout, windowsHide: true, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -72,6 +102,16 @@ export class Checkpoints {
     return join(this.dir, `${convId.replace(/[^a-zA-Z0-9-]/g, "")}.git`);
   }
 
+  /**
+   * Whether a checkpoint is in a store (a chat can have one store per game project).
+   *
+   * @param key - The store's key.
+   * @param id - The checkpoint.
+   */
+  async has(key: string, id: string): Promise<boolean> {
+    return (await this.index(key)).some((c) => c.id === id);
+  }
+
   private env(convId: string, workspace: string): Record<string, string> {
     return { GIT_DIR: this.store(convId), GIT_WORK_TREE: workspace, GIT_AUTHOR_NAME: "KesherAI", GIT_AUTHOR_EMAIL: "checkpoints@kesher.local", GIT_COMMITTER_NAME: "KesherAI", GIT_COMMITTER_EMAIL: "checkpoints@kesher.local" };
   }
@@ -85,7 +125,7 @@ export class Checkpoints {
       await git(["config", "core.autocrlf", "false"], env);
       await git(["config", "core.quotepath", "false"], env);
       await mkdir(join(store, "info"), { recursive: true });
-      await writeFile(join(store, "info", "exclude"), EXCLUDES.join("\n") + "\n");
+      await writeFile(join(store, "info", "exclude"), [...EXCLUDES, ...(await bigFiles(workspace))].join("\n") + "\n");
     }
     return env;
   }
