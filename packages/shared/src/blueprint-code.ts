@@ -21,6 +21,8 @@ export interface CodeLine { text: string; node?: string; depth: number }
 
 const ident = (s: string) => s.split("\n")[0]!.replace(/^Event\s+/, "").replace(/[^\w]+/g, "") || "Node";
 const isExec = (p: CodePin) => p.type === "exec";
+/** An event's "Output Delegate" pin (for binding it elsewhere): not a value the code uses. */
+const isDelegate = (p: CodePin) => /^delegate/i.test(p.type) || /OutputDelegate/.test(p.name);
 const label = (p: CodePin) => (p.label ?? p.name).replace(/\s+/g, "");
 const literal = (v: string, type: string) => (/^(string|text|name)/i.test(type) ? JSON.stringify(v) : v);
 
@@ -53,7 +55,7 @@ export function blueprintToCode(nodes: CodeNode[]): CodeLine[] {
   };
   const args = (n: CodeNode, depth = 0) =>
     n.pins
-      .filter((p) => p.dir === "in" && !isExec(p))
+      .filter((p) => p.dir === "in" && !isExec(p) && !isDelegate(p))
       .map((p) => {
         const s = source.get(`${n.id}:${p.name}`);
         if (s) return `${label(p)}=${expr(s, depth)}`;
@@ -72,7 +74,7 @@ export function blueprintToCode(nodes: CodeNode[]): CodeLine[] {
         return;
       }
       done.add(n.id);
-      const results = n.pins.filter((p) => p.dir === "out" && !isExec(p) && p.links?.length).map(label);
+      const results = n.pins.filter((p) => p.dir === "out" && !isExec(p) && !isDelegate(p) && p.links?.length).map(label);
       out.push({ text: `${results.length ? `${results.join(", ")} = ` : ""}${ident(n.title)}(${args(n)})${n.comment ? `  // ${n.comment.split("\n")[0]}` : ""}`, node: n.id, depth });
       const execOuts = n.pins.filter((p) => p.dir === "out" && isExec(p));
       const next = (p: CodePin) => p.links?.[0]?.slice(0, p.links[0].lastIndexOf(":"));
@@ -95,7 +97,7 @@ export function blueprintToCode(nodes: CodeNode[]): CodeLine[] {
   const entries = nodes.filter((n) => !hasExecIn(n) && n.pins.some((p) => isExec(p) && p.dir === "out")).sort((a, b) => a.y - b.y || a.x - b.x);
   for (const e of entries) {
     done.add(e.id);
-    const params = e.pins.filter((p) => p.dir === "out" && !isExec(p)).map(label);
+    const params = e.pins.filter((p) => p.dir === "out" && !isExec(p) && !isDelegate(p)).map(label);
     out.push({ text: `on ${ident(e.title)}(${params.join(", ")}):${e.comment ? `  // ${e.comment.split("\n")[0]}` : ""}`, node: e.id, depth: 0 });
     const first = e.pins.find((p) => isExec(p) && p.dir === "out" && p.links?.length);
     const to = first?.links?.[0];

@@ -6,7 +6,7 @@ const exec = (dir: "in" | "out", name: string, links?: string[]) => ({ name, dir
 
 test("a Blueprint graph reads as code, line by line with its node", () => {
   const nodes: CodeNode[] = [
-    { id: "E", title: "Event BeginPlay", class: "K2Node_Event", x: 0, y: 0, pins: [exec("out", "then", ["B:execute"])] },
+    { id: "E", title: "Event BeginPlay", class: "K2Node_Event", x: 0, y: 0, pins: [{ name: "OutputDelegate", dir: "out", type: "delegate" }, exec("out", "then", ["B:execute"])] },
     { id: "B", title: "Branch", class: "K2Node_IfThenElse", x: 300, y: 0, pins: [exec("in", "execute"), { name: "Condition", dir: "in", type: "bool" }, exec("out", "then", ["P:execute"]), exec("out", "else")] },
     { id: "G", title: "Get IsOpen", class: "K2Node_VariableGet", x: 100, y: 200, pins: [{ name: "IsOpen", dir: "out", type: "bool", links: ["B:Condition"] }] },
     { id: "P", title: "Print String", class: "K2Node_CallFunction", x: 600, y: 0, pins: [exec("in", "execute"), { name: "InString", label: "In String", dir: "in", type: "string", default: "Open!" }, { name: "bPrintToScreen", label: "Print to Screen", dir: "in", type: "bool", default: "true" }, exec("out", "then")] },
