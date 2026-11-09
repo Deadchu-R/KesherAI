@@ -33,3 +33,26 @@ test("a small model's widget operations are made right before they reach the edi
   assert.equal(ops[4]!.property, "BrushColor");
   assert.equal(ops[5]!.property, "fontSize");
 });
+
+test("a style operation in plain words becomes the exact Unreal settings", () => {
+  const ops = cleanWidgetOps(
+    [
+      { op: "add", class: "TextBlock", parent: "Root", name: "Title" },
+      { op: "style", widget: "Title", text: "MY GAME", fontSize: 96, color: "orange", place: "top", size: [900, 140], offset: [0, 120], align: "center" },
+      { op: "style", widget: "Start", background: "blue", place: "bottom-right", offset: [40, 40] },
+    ],
+    (n) => ({ Root: "CanvasPanel", Start: "Button" })[n],
+    (n) => (n === "Start" ? "CanvasPanel" : undefined),
+  );
+  const v = (w: string, p: string) => ops.find((o) => o.widget === w && o.property === p)?.value;
+  assert.equal(v("Title", "Text"), "MY GAME");
+  assert.equal(v("Title", "fontSize"), "96");
+  assert.match(String(v("Title", "ColorAndOpacity")), /^\(SpecifiedColor=\(R=1\.0000,G=0\.268/);
+  assert.equal(v("Title", "slot.anchors"), "0.5,0,0.5,0");
+  assert.equal(v("Title", "slot.alignment"), "0.5,0");
+  assert.equal(v("Title", "slot.position"), "0,120");
+  assert.equal(v("Title", "slot.size"), "900,140");
+  assert.equal(v("Title", "Justification"), "Center");
+  assert.match(String(v("Start", "BackgroundColor")), /^\(R=/);
+  assert.equal(v("Start", "slot.position"), "-40,-40", "offsets go inward from the bottom-right");
+});
