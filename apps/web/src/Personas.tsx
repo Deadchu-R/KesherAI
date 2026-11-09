@@ -35,7 +35,14 @@ export function usePersonas(): Persona[] {
  */
 export function PersonaChip({ value, onChange }: { value?: string | undefined; onChange: (p: Persona | null) => void }) {
   const personas = usePersonas();
-  if (!personas.length && !value) return null;
+  // No personas yet: still visible, so it is clear a chat can have one (it opens the page that makes them).
+  if (!personas.length && !value) {
+    return (
+      <button type="button" className="model-chip" onClick={() => (location.hash = "#/personas")} title={L("פרסונה: הוראות, מודל ומאגר ידע שמורים. אין עדיין פרסונות: לחצו כדי ליצור אחת.", "Persona: saved instructions, model and knowledge base. None yet: click to make one.")}>
+        🎭 {L("פרסונה", "Persona")}
+      </button>
+    );
+  }
   return (
     <select
       className="model-chip"

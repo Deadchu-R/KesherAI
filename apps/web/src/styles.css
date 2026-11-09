@@ -1607,3 +1607,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .script-add { gap: 6px; align-items: center; }
 .script-add button { padding: 4px 8px; font-size: 13px; }
 .self-work-log ol { margin: 6px 0 0; padding-inline-start: 18px; max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 3px; word-break: break-word; }
+
+/* The shared task board (self-work panel). */
+.task-board { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.task-head { display: flex; gap: 8px; align-items: center; width: 100%; text-align: start; background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; color: inherit; font: inherit; }
+.task.done .task-head { opacity: .6; }
+.task-body { padding: 6px 8px; display: flex; flex-direction: column; gap: 6px; }
+.task-body p { margin: 0; white-space: pre-wrap; }
+.pill.claimed { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.pill.blocked { background: color-mix(in srgb, #e5484d 25%, transparent); }
+.task-notes ol { margin: 6px 0 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 3px; max-height: 200px; overflow: auto; }

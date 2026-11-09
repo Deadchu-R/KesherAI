@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { TaskBoardView } from "./TaskBoardView";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -125,6 +126,7 @@ export function SelfWorkPanel(p: { folder: string }) {
               </div>
             </>
           )}
+          <TaskBoardView />
         </div>
       )}
     </section>
