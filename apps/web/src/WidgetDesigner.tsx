@@ -268,6 +268,7 @@ export function WidgetDesigner({ path, editable, model }: { path: string; editab
           <button type="submit" className="primary" disabled={!editable || busy || !ask.trim()}>{busy ? "…" : "✨"}</button>
         </form>
         {note && <p className="small" dir="auto" style={{ whiteSpace: "pre-wrap" }}>{note}</p>}
+        {editable && <FigmaImport path={path} parent={chosen && /Panel|Box|Overlay|Border|SizeBox/.test(chosen.class) ? chosen.name : ""} onDone={load} />}
       </div>
     </div>
   );
@@ -331,6 +332,51 @@ function Details({ w, parentClass, editable, onApply }: { w: WNode; parentClass?
           {parentClass && <button type="button" onClick={() => onApply([{ op: "remove", widget: w.name }])}>{L("מחק", "Delete")}</button>}
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * Figma → Unreal: the link of a Figma frame becomes widgets inside the chosen
+ * panel (auto layout as boxes, text, colours, positions). Uses the Figma
+ * token saved in Settings → Appearance.
+ */
+function FigmaImport({ path, parent, onDone }: { path: string; parent: string; onDone: () => void }) {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [link, setLink] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    void api<{ connected: boolean }>("/api/figma").then((r) => setConnected(r.connected), () => setConnected(false));
+  }, []);
+  const go = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ added: number; notes: string[]; result: { failed: number; results: Array<{ ok: boolean; error?: string }> } }>("/api/unreal/widget/figma", { method: "POST", body: { path, link, ...(parent ? { parent } : {}) } });
+      setMsg([L(`נוספו ${r.added} ווידג'טים מ-Figma.`, `Added ${r.added} widgets from Figma.`), ...r.notes.slice(0, 6), ...r.result.results.filter((x) => !x.ok).slice(0, 4).map((x) => `⚠ ${x.error ?? ""}`)].join("\n"));
+      setLink("");
+      onDone();
+    } catch (e) {
+      setMsg(`⛔ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (connected === null) return null;
+  return (
+    <section className="wd-details">
+      <h3 className="small">{L("ייבוא מ-Figma", "Import from Figma")}</h3>
+      {!connected ? (
+        <p className="small muted">{L("חברו את Figma בהגדרות ← מראה ← Figma (טוקן גישה אישי), ואז הדביקו כאן קישור למסגרת.", "Connect Figma in Settings → Appearance → Figma (a personal access token), then paste a frame's link here.")} <a href="#/settings/appearance">{L("להגדרות", "Settings")}</a></p>
+      ) : (
+        <form className="row wd-ask" onSubmit={(e) => { e.preventDefault(); void go(); }}>
+          <input className="grow" dir="ltr" value={link} onChange={(e) => setLink(e.target.value)} placeholder={L("קישור למסגרת ב-Figma", "Link to a Figma frame")} />
+          <button type="submit" disabled={busy || !link.trim()}>{busy ? "…" : L("ייבא", "Import")}</button>
+        </form>
+      )}
+      {connected && <p className="small muted">{parent ? L(`ייכנס לתוך ${parent}.`, `Goes into ${parent}.`) : L("בחרו בהיררכיה את הפאנל שהעיצוב ייכנס אליו (או ריק: יהיה השורש).", "Pick the panel it goes into in the Hierarchy (empty Blueprint: it becomes the root).")} {L("ב-Figma: קליק ימני על המסגרת ← Copy link to selection.", "In Figma: right-click the frame → Copy link to selection.")}</p>}
+      {msg && <p className="small" dir="auto" style={{ whiteSpace: "pre-wrap" }}>{msg}</p>}
     </section>
   );
 }

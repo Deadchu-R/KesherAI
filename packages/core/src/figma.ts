@@ -100,3 +100,16 @@ export async function figmaFrame(token: string, key: string, node: string, f: ty
   if (!(data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47)) throw new Error("Figma's answer was not a picture.");
   return data;
 }
+
+/**
+ * One node of a Figma file with everything inside it (for Figma → Unreal widgets).
+ *
+ * @returns The node's document JSON (figma-umg.ts reads it).
+ */
+export async function figmaNodeTree(token: string, key: string, node: string, f: typeof fetch = fetch): Promise<unknown> {
+  const r = await get<{ nodes?: Record<string, { document?: unknown } | null> }>(`/files/${key}/nodes?ids=${encodeURIComponent(node)}`, token, f);
+  if (r.status === 404) throw new Error("Figma has no such file, or this token cannot open it.");
+  const doc = r.body?.nodes?.[node]?.document;
+  if (!doc) throw new Error("That frame was not found: in Figma right-click the frame → Copy link to selection, and paste that link.");
+  return doc;
+}

@@ -6,7 +6,9 @@ import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
-import { editWidget } from "../widget-edit.js";
+import { editWidget, type WidgetNode } from "../widget-edit.js";
+import { figmaNodeTree, parseFigmaLink } from "../figma.js";
+import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
 
@@ -142,6 +144,38 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(502).send({ error: (err as Error).message });
       }
     });
+    /**
+     * Figma → Unreal widgets: a frame's link (with the user's Figma token, Settings → Appearance) becomes
+     * widgets in the Widget Blueprint, inside the chosen panel (or as the root when it is empty).
+     */
+    app.post<{ Body: { path?: string; link?: string; parent?: string } }>(`${base}/widget/figma`, async (req, reply) => {
+      const token = s.config.figma.token;
+      if (!token) return reply.code(400).send({ error: "Connect Figma first: Settings → Appearance → Figma (a personal access token)." });
+      const f = parseFigmaLink(String(req.body?.link ?? ""));
+      if (!f?.node) return reply.code(400).send({ error: "Paste the link of a frame: in Figma right-click it → Copy link to selection." });
+      const path = String(req.body?.path ?? "");
+      if (!path) return reply.code(400).send({ error: "Which Widget Blueprint?" });
+      try {
+        const tree = await unreal.request<{ root?: WidgetNode }>("widget", { path }, 30_000);
+        const names: string[] = [];
+        const walk = (w?: WidgetNode) => {
+          if (!w) return;
+          names.push(w.name);
+          (w.children ?? []).forEach(walk);
+        };
+        walk(tree.root);
+        const findW = (w: WidgetNode | undefined, n: string): WidgetNode | undefined => (!w ? undefined : w.name === n ? w : (w.children ?? []).map((c) => findW(c, n)).find(Boolean));
+        const parent = String(req.body?.parent ?? "") || (tree.root && /Panel|Box|Overlay/.test(tree.root.class) ? tree.root.name : "");
+        if (tree.root && !parent) return reply.code(400).send({ error: "Choose the panel the design goes into (in the Hierarchy)." });
+        const doc = (await figmaNodeTree(token, f.key, f.node)) as FigmaNode;
+        const { ops, notes } = figmaToWidgetOps(doc, parent, names, 300, /CanvasPanel/.test(findW(tree.root, parent)?.class ?? ""));
+        const result = await unreal.request<{ results: Array<{ ok: boolean; error?: string }>; failed: number }>("widget_apply", { path, ops }, 60_000);
+        return { added: ops.filter((o) => o.op === "add").length, notes, result };
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+
     /** A Widget Blueprint changed in words (the Designer's AI bubble). */
     app.post<{ Body: { path?: string; request?: string; selected?: string; model?: string } }>(`${base}/widget/edit`, async (req, reply) => {
       const path = String(req.body?.path ?? "");
