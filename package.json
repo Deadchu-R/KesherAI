@@ -28,6 +28,7 @@
     "eslint-plugin-jsdoc": "^50.6.0",
     "eslint-plugin-react-hooks": "5.2.0",
     "globals": "^15.15.0",
+    "playwright": "1.63.0",
     "tsx": "^4.19.0",
     "typedoc": "^0.28.0",
     "typescript": "^5.7.0",

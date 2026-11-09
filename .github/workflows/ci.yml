@@ -31,6 +31,15 @@ jobs:
         working-directory: apps/desktop
       # The real server, started empty: it answers, serves the interface, and refuses foreign websites.
       - run: node scripts/smoke.mjs
+      # The interface on every version: every main screen at computer and phone width, no page errors,
+      # nothing wider than the screen. The pictures are kept when it fails.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: node scripts/ui-check.mjs ui-check
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-check
+          path: ui-check
 
   # Windows: tests and the smoke test where Windows-only things live (cmd quoting, paths with spaces, .bat jobs).
   # Blocking: a release waits for it (green on Windows since 0.5.9x).
