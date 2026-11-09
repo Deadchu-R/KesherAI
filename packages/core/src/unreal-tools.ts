@@ -58,7 +58,7 @@ export const UNREAL_NOTE =
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
-function runProgram(file: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number; log?: string }): Promise<Run> {
+export function runProgram(file: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number; log?: string }): Promise<Run> {
   return new Promise((res) => {
     let out = "";
     // Node on Windows will not start a .bat/.cmd directly (spawn EINVAL since the 2024 fix): run it through cmd.exe,

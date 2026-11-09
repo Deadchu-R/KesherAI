@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsAccess, type CsClass, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
+import { CodeAiBubble } from "./CodeAiBubble";
+import type { CodeProblem } from "./ide/CodeEditor";
+// The code editor (VS Code's) is big: loaded when the C# tab first opens.
+const CodeEditor = lazy(() => import("./ide/CodeEditor"));
 import { VariablesPanel, type PanelType, type PanelVar } from "./VariablesPanel";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
@@ -56,12 +60,21 @@ export function ScriptNodes() {
   const [show, setShow] = useState<"nodes" | "code">("nodes");
   const [tick, setTick] = useState(0);
   const [saving, setSaving] = useState(false);
+  /** Unity's compile errors for this script (file, line, column), and whether a check is running. */
+  const [problems, setProblems] = useState<Array<CodeProblem & { file: string }>>([]);
+  const [checking, setChecking] = useState(false);
+  /** The script before the AI's last change (one click puts it back). */
+  const [beforeAi, setBeforeAi] = useState<string | null>(null);
 
   useEffect(() => {
     loadScripts();
   }, []);
 
   const open = (p: string) => {
+    if (p !== path) {
+      setProblems([]);
+      setBeforeAi(null);
+    }
     setPath(p);
     setSel("");
     void api<{ text: string; mtime: number }>(`/api/unity/script?path=${encodeURIComponent(p)}`).then((r) => {
@@ -129,13 +142,43 @@ export function ScriptNodes() {
     setSel(id);
     setTick((t) => t + 1);
   };
+  /** Unity compiles the scripts now; this script's errors are marked on their lines. */
+  const check = async (quiet = false) => {
+    setChecking(true);
+    try {
+      const r = await api<{ ok: boolean; offline?: boolean; note?: string; errors: Array<CodeProblem & { file: string }> }>("/api/unity/scripts/compile", { method: "POST" });
+      const mine = r.errors.filter((e) => e.file.replace(/\\/g, "/").toLowerCase() === path.toLowerCase());
+      setProblems(mine);
+      if (r.offline) toast(r.note ?? L("Unity לא פתוח, אז הקוד לא קומפל.", "Unity is not open, so nothing was compiled."));
+      else if (!r.ok && !r.errors.length) toast(L(`Unity לא הצליח לקמפל: ${r.note ?? "סיבה לא ידועה"}`, `Unity could not compile: ${r.note ?? "unknown reason"}`));
+      else if (!quiet || !r.ok) {
+        const others = r.errors.filter((e) => e.severity === "error").length - mine.filter((e) => e.severity === "error").length;
+        toast(r.ok ? L("✅ מתקמפל בלי שגיאות.", "✅ Compiles with no errors.") : L(`${mine.filter((e) => e.severity === "error").length} שגיאות בסקריפט הזה${others ? `, ${others} בסקריפטים אחרים` : ""}.`, `${mine.filter((e) => e.severity === "error").length} errors in this script${others ? `, ${others} in others` : ""}.`));
+      }
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
+  /** The AI changes the script as asked (or fixes the errors); it is not saved until the user saves. */
+  const askAi = async (request: string, fix: boolean) => {
+    const r = await api<{ code: string; note: string }>("/api/unity/script/ai", { method: "POST", body: { path, text: out, request, ...(fix || problems.length ? { errors: problems } : {}) } });
+    if (r.code.trim() === out.trim()) return L("ה-AI לא שינה כלום.", "The AI changed nothing.");
+    setBeforeAi(out);
+    setText(r.code);
+    if (fix) setProblems([]);
+    return r.note;
+  };
   const save = async () => {
     if (!file) return;
     setSaving(true);
     try {
       await api(`/api/unity/script`, { method: "PUT", body: { path, text: out, mtime: file.mtime } });
-      toast(L("נשמר. Unity מקמפל את הסקריפט.", "Saved. Unity is compiling the script."));
+      toast(L("נשמר. Unity מקמפל את הסקריפט…", "Saved. Unity is compiling the script…"));
       open(path);
+      setBeforeAi(null);
+      void check(true);
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -227,11 +270,28 @@ export function ScriptNodes() {
               ))}
             </div>
             {show === "code" ? (
-              <textarea className="script-code" dir="ltr" spellCheck={false} value={out} onChange={(e) => setText(e.target.value)} aria-label={L("הקוד של הסקריפט", "The script's code")} />
+              <Fullscreen className="script-fs" label={L("הקוד במסך מלא", "The code, full screen")}>
+              <div className="script-code-wrap">
+                <div className="row wrap script-code-bar">
+                  <button type="button" disabled={checking} onClick={() => void check()} title={L("Unity מקמפל את כל הסקריפטים ומסמן את השגיאות בשורות", "Unity compiles every script and the errors are marked on their lines")}>{checking ? L("בודק…", "Checking…") : L("🔎 בדוק קומפילציה", "🔎 Check compile")}</button>
+                  <span className="muted small">{L("Ctrl+Space: השלמה · Ctrl+.: תיקון מהיר · Ctrl+S: שמירה", "Ctrl+Space: suggestions · Ctrl+.: quick fix · Ctrl+S: save")}</span>
+                </div>
+                <Suspense fallback={<p className="muted">…</p>}>
+                  <CodeEditor path={path} value={out} onChange={setText} language="csharp" problems={problems} projectTypes={types.filter((t) => t.group !== "Unity" && t.input === "none").map((t) => t.value)} onSave={() => changed && void save()} />
+                </Suspense>
+                {problems.length > 0 && (
+                  <ul className="code-problems">
+                    {problems.map((e, i) => <li key={i} className={e.severity} dir="ltr"><span className="mono">{e.line}:{e.column}</span> {e.code} {e.message}</li>)}
+                  </ul>
+                )}
+                <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: תוסיף קפיצה עם רווח", "e.g. add a jump on Space")} />
+              </div>
+              </Fullscreen>
             ) : (
               <Fullscreen className="script-fs" label={L("הסקריפט במסך מלא", "The script, full screen")}>
               <div className="script-graph">
                 <div className="script-canvas">
+                  <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: כשהשחקן נוגע במטבע תוסיף נקודה", "e.g. when the player touches a coin add a point")} />
                   {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable={false} unity onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
                 <div className="script-side">

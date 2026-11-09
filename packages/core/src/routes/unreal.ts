@@ -13,6 +13,7 @@ import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { runUnityTest } from "../unity-test.js";
 import { projectPath } from "../unity-tools.js";
 import { connectUnityAssistant } from "../unity-assistant.js";
+import { codeEditPrompt, codeFromAnswer, parseCodeErrors, type CodeError } from "../code-errors.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
@@ -148,6 +149,13 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   // The Blueprint in Verse (Unreal 6 / UEFN), translated by the chosen model from the graph as code and the first draft.
   // The graph in a real language, translated by the chosen model from the graph as code (and a first draft):
   // Unreal → C++ or Verse (Unreal 6 / UEFN); Unity → C#. Read-only: for reading, porting and learning.
+  /** The chat model a request picked (when it is a chat model here), else the active one. */
+  const chatModel = async (picked?: unknown) => {
+    const want = typeof picked === "string" ? picked : "";
+    const chat = want && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === want && m.category === "chat") ? want : s.config.activeModels.chat;
+    if (!chat) throw Object.assign(new Error("Choose a chat model first (Models & downloads)."), { code: 400 });
+    return chat;
+  };
   const translate = async (req: { body?: { path?: string; graph?: string; draft?: string; model?: string } }, lang: string) => {
     const path = String(req.body?.path ?? "");
     const picked = typeof req.body?.model === "string" ? req.body.model : "";
@@ -466,6 +474,35 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return { path: rel, mtime: (await stat(abs)).mtimeMs };
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+
+    // The code editor: Unity compiles the scripts now and its errors come back with file, line and column.
+    app.post(`${base}/scripts/compile`, async (_req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      const r = await unity.cliRaw(["recompile", "--project-path", project, "--format", "json"], 240_000).catch((e: Error) => ({ code: -1, stdout: "", stderr: e.message }));
+      const text = `${r.stdout}\n${r.stderr}`;
+      const errors = parseCodeErrors(text, project);
+      const offline = r.code === 7 || /EDITOR_NOT_RUNNING|no (running|open) editor|could not connect|not connected/i.test(text);
+      return { ok: r.code === 0 && !errors.some((e) => e.severity === "error"), offline, errors, ...(offline ? { note: "Unity is not open, so the scripts were not compiled. Open the project in Unity." } : r.code !== 0 && !errors.length ? { note: text.trim().slice(-600) } : {}) };
+    });
+    // The AI bubble in the script editor: the model changes the whole script as asked (or fixes the errors); the page shows the change before saving.
+    app.post<{ Body: { path?: string; text?: string; request?: string; errors?: CodeError[]; model?: string } }>(`${base}/script/ai`, async (req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      try {
+        const { rel } = projectPath(project, String(req.body?.path ?? ""), ["Assets"]);
+        const text = String(req.body?.text ?? "");
+        if (!rel.endsWith(".cs") || text.length > 400_000) return reply.code(400).send({ error: "Send a C# script under 400 KB." });
+        const chat = await chatModel(req.body?.model);
+        const prompt = codeEditPrompt({ language: "csharp", engine: "unity", path: rel, text, request: String(req.body?.request ?? "").slice(0, 4000), errors: Array.isArray(req.body?.errors) ? req.body.errors.slice(0, 30) : [] });
+        const r = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: prompt }], tools: [] }, AbortSignal.timeout(300_000), () => undefined);
+        const code = codeFromAnswer(r.text);
+        const note = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```[\s\S]*?```/g, "").trim().split("\n").filter(Boolean).pop() ?? "";
+        return { code, note: note.slice(0, 400), model: chat };
+      } catch (err) {
+        return reply.code((err as { code?: number }).code === 400 ? 400 : 502).send({ error: (err as Error).message });
       }
     });
 

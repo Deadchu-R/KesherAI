@@ -152,3 +152,12 @@ Phase 0 is the MVP: local chat that works after one install. Each phase opens on
 There are no dates: the pace depends on how many people join. Phases 3 and 4 can run in parallel if there are contributors.
 
 **Status (v0.2):** phases 0–3 are in, except MCP, git checkpoints and managed ComfyUI. The prioritised list of what comes next, drawn from what other apps do, is in [COMPETITORS.md](COMPETITORS.md#next-up-in-order).
+
+## Far-future plans (from Roee)
+
+Not scheduled; kept here so they are not lost.
+
+- **Game builds from KesherAI, in the background:** build Unity and Unreal games (Windows, Android, and the other targets each engine has) from the page, while the user keeps working: a queue, progress and logs, the finished build in the library, and a phone notification when it is done.
+- **Minecraft modding:** tools for Fabric/Forge/NeoForge mods (project setup, building, running a test client).
+- **Roblox:** Luau scripts and Roblox Studio (further out).
+- **Game modding in general:** tools for modding other games.

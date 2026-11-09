@@ -1671,3 +1671,13 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .ue-vars { min-width: 0; }
 @media (max-width: 1100px) { .ue-graph-row { grid-template-columns: minmax(0, 1fr); } }
 .vars-lock { font-size: 11px; opacity: .7; }
+/* The script's code editor (VS Code's) with its checks and the AI bubble. */
+.script-code-wrap { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.script-code-bar { gap: 10px; align-items: center; }
+.code-editor { height: min(70dvh, 760px); min-height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border, #2c2d33); }
+.fs-box.fs-on .code-editor { height: calc(100dvh - 120px); }
+.code-problems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; max-height: 160px; overflow: auto; }
+.code-problems li.error { color: var(--danger, #ff7b7b); }
+.code-problems li.warning { color: var(--warn, #e6c35c); }
+.script-code-wrap > .ue-ai-fab, .script-code-wrap > .ue-bubble { inset-block-end: 56px; }
+.script-canvas > .ue-ai-fab, .script-canvas > .ue-bubble { z-index: 5; }
