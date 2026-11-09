@@ -20,14 +20,17 @@ export interface ShellResult {
  * @param cwd - Working folder.
  * @param timeoutMs - Time limit.
  * @param signal - Abort to stop it.
+ * @param onOutput - Gets the output as it comes (for a live view).
  * @returns Output and exit code.
  */
-export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal): Promise<ShellResult> {
+export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void): Promise<ShellResult> {
   return new Promise<ShellResult>((resolvePromise) => {
     const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, CI: "1", FORCE_COLOR: "0" } });
     let out = "";
     const onData = (b: Buffer) => {
-      out += b.toString();
+      const text = b.toString();
+      out += text;
+      onOutput?.(text);
       if (out.length > MAX_OUTPUT * 4) out = out.slice(-MAX_OUTPUT * 2);
     };
     child.stdout?.on("data", onData);

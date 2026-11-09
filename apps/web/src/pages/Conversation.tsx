@@ -335,6 +335,8 @@ export function ConversationPage({ id }: { id: string }) {
   useEffect(() => setShownBlocks(150), [id]);
   const [info, setInfo] = useState<AgentSessionInfo | null>(null);
   const [streaming, setStreaming] = useState<Record<number, string>>({});
+  /** Live output of running tools (builds, commands), by call id. */
+  const [liveOut, setLiveOut] = useState<Record<string, string>>({});
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
@@ -405,6 +407,7 @@ export function ConversationPage({ id }: { id: string }) {
     setConv(null);
     setEvents([]);
     setStreaming({});
+    setLiveOut({});
     setError("");
     api<Loaded>(`/api/conversations/${id}`)
       .then((c) => {
@@ -421,6 +424,11 @@ export function ConversationPage({ id }: { id: string }) {
             const { type: _t, ...rest } = e;
             setInfo(rest);
             if (rest.status === "idle") void refreshLibrary().catch(() => undefined);
+            return;
+          }
+          if (e.type === "tool_output") {
+            // Live output of a running build or command: kept only while the page is open (the result has the rest).
+            setLiveOut((o) => ({ ...o, [e.callId]: ((o[e.callId] ?? "") + e.text).slice(-8000) }));
             return;
           }
           if (e.type === "assistant_delta") {
@@ -747,6 +755,7 @@ export function ConversationPage({ id }: { id: string }) {
                   live={busy && bi === blocks.length - 1}
                   convId={id}
                   renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} />}
+                  liveOutput={liveOut}
                 />
               );
             }

@@ -78,7 +78,7 @@ export function groupSummary(steps: Step[]): string {
  * @param props.live - Whether the agent is still working on this group.
  * @param props.renderStep - Draws one step when the group is open.
  */
-export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string }) {
+export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string; liveOutput?: Record<string, string> }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   const images = steps.flatMap((s) => s.result?.assetIds ?? []);
@@ -122,6 +122,7 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
           {stepLabel(current)}
         </p>
       )}
+      {current && !current.result && liveOutput?.[current.call.callId] && <LiveOutput text={liveOutput[current.call.callId]!} />}
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {sounds.length > 0 && (
@@ -150,6 +151,20 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The last lines of a running build or command, like a small terminal under the step (as Claude, Cursor
+ * and Codex show a command's output while it runs). Open it to see more.
+ */
+function LiveOutput({ text }: { text: string }) {
+  const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim());
+  return (
+    <details className="live-output" open>
+      <summary className="small muted">{t("liveOutput")}</summary>
+      <pre dir="ltr">{lines.slice(-12).join("\n")}</pre>
+    </details>
   );
 }
 

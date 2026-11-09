@@ -40,6 +40,8 @@ export interface ToolContext {
    * Pass `null` for a file that did not exist.
    */
   recordChange(absolutePath: string, before: string | null): void;
+  /** Shows live output of a long tool while it runs (builds, commands). Optional. */
+  progress?(text: string): void;
 }
 
 /**
@@ -332,7 +334,7 @@ const runCommandTool: AgentTool = {
     const cwd = workspaceOf(ctx);
     const command = str(input, "command");
     const timeoutMs = Math.min(600, Math.max(1, Number(input.timeout_seconds ?? 120))) * 1000;
-    const r = await runShell(command, cwd, timeoutMs, ctx.signal);
+    const r = await runShell(command, cwd, timeoutMs, ctx.signal, ctx.progress);
     return { output: truncate(`${r.output.trim() || "(no output)"}\n\n${r.status}`) };
   },
 };

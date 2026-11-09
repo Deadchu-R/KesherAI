@@ -236,7 +236,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
    * that is still running is joined instead of starting a second one, so "continue" after a restart picks up the
    * build where it is. Stop in the chat stops the job; KesherAI quitting does not.
    */
-  const longRun = async (key: string, file: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeoutMs: number; log: string; signal?: AbortSignal }): Promise<Run & { note: string }> => {
+  const longRun = async (key: string, file: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeoutMs: number; log: string; signal?: AbortSignal; progress?: (text: string) => void }): Promise<Run & { note: string }> => {
     if (!jobs) return { ...(await runProgram(file, args, { env: opts.env, timeoutMs: opts.timeoutMs, log: opts.log })), note: "" };
     const old = await jobs.find(key);
     const rec = old?.state === "running" ? old : await jobs.start(key, file, args, { env: opts.env });
@@ -244,7 +244,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
     const onAbort = () => jobs.stop(rec);
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     try {
-      const st = await jobs.wait(rec, { timeoutMs: opts.timeoutMs, signal: opts.signal });
+      const st = await jobs.wait(rec, { timeoutMs: opts.timeoutMs, signal: opts.signal, ...(opts.progress ? { onOutput: opts.progress } : {}) });
       await writeFile(opts.log, st.output).catch(() => undefined);
       if (st.state === "running") return { code: -2, out: st.output, note: `${note}Still running after ${Math.round(opts.timeoutMs / 60000)} minutes; call this tool again to keep waiting for it. ` };
       if (st.state === "stopped") return { code: -1, out: st.output, note: `${note}The build stopped before it finished (KesherAI or the computer was closed, or it was stopped). Call the tool again to run it again; Unreal continues from what was already built. ` };
@@ -378,7 +378,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         await mkdir(logsDir, { recursive: true });
         const log = join(logsDir, "unreal-build.log");
         await writeFile(log, `> Build.bat ${name}Editor Win64 Development\n`);
-        const r = await longRun(`unreal-compile:${p.file}`, join(e.path, "Engine", "Build", "BatchFiles", "Build.bat"), [`${name}Editor`, "Win64", "Development", `-Project=${p.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000, log, signal: ctx?.signal });
+        const r = await longRun(`unreal-compile:${p.file}`, join(e.path, "Engine", "Build", "BatchFiles", "Build.bat"), [`${name}Editor`, "Win64", "Development", `-Project=${p.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000, log, signal: ctx?.signal, progress: ctx?.progress });
         if (r.code === 0) return { output: `${r.note}Compiled with no errors.\n${cut(r.out.split("\n").filter((l) => /warning/i.test(l)).join("\n"))}` };
         const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|fatal/i.test(l));
         const why = /SDK validation failed|Sdk: not found/i.test(r.out)
@@ -442,7 +442,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         }
         const args = ["BuildCookRun", `-project=${p.file}`, "-noP4", `-platform=${android ? "Android" : "Win64"}`, ...(android ? ["-cookflavor=ASTC"] : []), "-clientconfig=Development", "-build", "-cook", "-stage", "-pak", "-iostore", "-package", "-archive", `-archivedirectory=${out}`, "-unattended", "-utf8output"];
         await writeFile(log, `> RunUAT ${args.join(" ")}\n`);
-        const r = await longRun(`unreal-package:${p.file}:${android ? "android" : "windows"}`, join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat"), args, { env, timeoutMs: 3 * 3_600_000, log, signal: ctx?.signal });
+        const r = await longRun(`unreal-package:${p.file}:${android ? "android" : "windows"}`, join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat"), args, { env, timeoutMs: 3 * 3_600_000, log, signal: ctx?.signal, progress: ctx?.progress });
         const made: string[] = [];
         const walk = async (d: string, depth: number) => {
           for (const x of await readdir(d, { withFileTypes: true }).catch(() => [])) {

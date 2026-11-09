@@ -81,6 +81,11 @@ export type AgentEvent = EventBase &
     | { type: "assistant_delta"; turn: number; text: string }
     | { type: "assistant"; turn: number; text: string }
     | { type: "tool_call"; callId: string; name: string; input: Record<string, unknown> }
+    /**
+     * Live output of a tool that is still running (a build, a command), as it comes. Not saved: the
+     * result has the output that matters. Clients show the last lines under the running step.
+     */
+    | { type: "tool_output"; callId: string; text: string }
     | {
         type: "approval_request";
         requestId: string;

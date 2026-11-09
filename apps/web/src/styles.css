@@ -283,6 +283,8 @@ button.on { border-color: var(--accent); }
 .activity-now { margin: 0; font-size: 13px; color: var(--muted); padding-inline-start: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .activity-fails { margin: 2px 0 0; padding-inline-start: 24px; list-style: none; font-size: 12.5px; color: var(--bad, #e5534b); }
 .activity-fails li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-output { margin: 4px 0 0; padding-inline-start: 24px; }
+.live-output pre { margin: 4px 0 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.12)); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 .activity-images { display: flex; flex-wrap: wrap; gap: 8px; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

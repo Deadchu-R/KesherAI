@@ -358,6 +358,24 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.push({ type: "checkpoint", id, files });
   }
 
+  /**
+   * Live output of one running tool, sent to the clients at most every half second (not saved), and at most
+   * the last 4000 characters of each batch, so a chatty build does not flood the page.
+   */
+  private liveOutput(callId: string): (text: string) => void {
+    let pending = "";
+    let timer: NodeJS.Timeout | undefined;
+    return (text: string) => {
+      pending = (pending + text).slice(-4000);
+      timer ??= setTimeout(() => {
+        timer = undefined;
+        const t = pending;
+        pending = "";
+        if (t) this.push({ type: "tool_output", callId, text: t }, false);
+      }, 500);
+    };
+  }
+
   private push(e: NewEvent, persist = true): AgentEvent {
     const event = { ...e, seq: persist ? this.events.length + 1 : 0, at: new Date().toISOString() } as AgentEvent;
     if (persist) this.events.push(event);
@@ -752,6 +770,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       extraRoots: this.grants,
       signal,
       recordChange: (path, before) => this.changes.push({ path, before }),
+      progress: this.liveOutput(call.id),
     };
     const always = this.alwaysAllowed.has(tool.spec.name) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId);
     const verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
