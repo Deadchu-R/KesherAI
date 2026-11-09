@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { lstat, readlink, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /**
  * Resolves a path the model gave against the workspace and refuses anything
@@ -107,6 +108,22 @@ export function globToRegExp(glob: string): RegExp {
  */
 export async function resolveForTool(workspace: string | undefined, extraRoots: readonly string[], path: string): Promise<string> {
   let firstError: Error | undefined;
+  // A relative path whose first folder is in a folder the user gave (e.g. "Assets/Scripts/Player.cs" with a
+  // Unity project open in the chat) and not in the workspace means that folder: otherwise the file tools
+  // would write a copy in the chat's own folder while the project keeps the old file.
+  if (!isAbsolute(path) && extraRoots.length) {
+    const first = path.replace(/\\/g, "/").replace(/^\.\//, "").split("/")[0] ?? "";
+    if (first && first !== ".." && !(workspace && existsSync(join(workspace, first)))) {
+      for (const root of extraRoots) {
+        if (!existsSync(join(root, first))) continue;
+        try {
+          return await resolveInWorkspace(root, path);
+        } catch {
+          // try the next one
+        }
+      }
+    }
+  }
   if (workspace) {
     try {
       return await resolveInWorkspace(workspace, path);

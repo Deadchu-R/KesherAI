@@ -39,11 +39,12 @@ export const UNITY_TOOL_NAMES = [
   "unity_script_eval",
   "unity_screenshot",
   "unity_build",
+  "unity_install_platform",
 ] as const;
 
 /** The workflow, for the model (Unity's own guidance for agents, in short). */
 export const UNITY_NOTE =
-  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look. 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene). At the end, list exactly what changed (files and scene objects).";
+  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look. 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. At the end, list exactly what changed (files and scene objects).";
 
 const MAX_TEXT = 300_000;
 const CODE_EXT = /\.(cs|shader|hlsl|cginc|compute|uss|uxml|tss|asmdef|asmref)$/i;
@@ -389,6 +390,30 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         if (r.code !== 0 || !made) return { output: `The build did NOT finish (exit ${r.code}). ${made ? "" : "No game file was made. "}Unity said:\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
         const size = (await stat(out)).isFile() ? `${Math.round((await stat(out)).size / 1024)} KB` : "a folder";
         return { output: `Built ${target.id}: ${out} (${size}). The user can run it from there.\n${cut(r.stdout.trim())}` };
+      },
+    },
+    {
+      risk: "exec",
+      spec: {
+        name: "unity_install_platform",
+        description: "Install a build platform for the project's Unity Editor version (e.g. android before building an APK; it adds the Android SDK, NDK and OpenJDK, several GB, so it takes a while). Only when the user asked for that platform. Unity's module licences are accepted as part of the install the user asked for.",
+        inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["android", "ios", "webgl", "linux", "mac", "windows-il2cpp"] } }, required: ["platform"] },
+      },
+      preview: async (input) => `unity install-modules --module ${String(input.platform ?? "")} (for the project's Unity version; large download)`,
+      run: async (input) => {
+        need();
+        const module = { android: "android", ios: "ios", webgl: "webgl", linux: "linux-mono", mac: "mac-mono", "windows-il2cpp": "windows-il2cpp" }[String(input.platform)] ;
+        if (!module) return { output: "Name a platform: android, ios, webgl, linux, mac or windows-il2cpp." };
+        // The project's own Editor version.
+        let version = "";
+        try {
+          version = /m_EditorVersion:\s*(\S+)/.exec(await readFile(join(project()!, "ProjectSettings", "ProjectVersion.txt"), "utf8"))?.[1] ?? "";
+        } catch {
+          // no version file
+        }
+        if (!/^[\w.]+$/.test(version)) return { output: "Could not tell the project's Unity version (ProjectSettings/ProjectVersion.txt)." };
+        const r = await unity.cliRaw(["install-modules", "--editor-version", version, "--module", module, "--child-modules", "--yes", "--accept-eula", "--format", "json"], 3 * 3_600_000);
+        return { output: r.code === 0 ? `Installed ${module} for Unity ${version}. Building for it works now.\n${cut(r.stdout.trim())}` : `The ${module} install did NOT finish (exit ${r.code}):\n${cut(`${r.stdout}\n${r.stderr}`.trim())}` };
       },
     },
     {
