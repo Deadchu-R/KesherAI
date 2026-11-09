@@ -104,7 +104,12 @@ export class JobStore {
     const output = await readFile(rec.log, "utf8").catch(() => "");
     const m = EXIT.exec(output);
     if (m) return { ...rec, state: "done", code: Number(m[1]), output: output.replace(EXIT, "").trimEnd() };
-    return { ...rec, state: alive(rec.pid) ? "running" : "stopped", output };
+    if (alive(rec.pid)) return { ...rec, state: "running", output };
+    // It may have written the marker and exited between reading the log and checking the process: read again.
+    const last = await readFile(rec.log, "utf8").catch(() => "");
+    const m2 = EXIT.exec(last);
+    if (m2) return { ...rec, state: "done", code: Number(m2[1]), output: last.replace(EXIT, "").trimEnd() };
+    return { ...rec, state: "stopped", output: last };
   }
 
   /** The newest job with this key, if any. */
