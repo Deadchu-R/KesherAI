@@ -46,6 +46,7 @@ test("the home-network signal only makes a known, unreachable computer be checke
   assert.equal(d.heard(JSON.stringify({ t: "other", id: "laptop" })), false);
   assert.equal(d.heard(JSON.stringify({ t: "kesher-here", id: "me" })), false, "itself");
   assert.equal(d.heard(JSON.stringify({ t: "kesher-here", id: "laptop" })), true, "known and unreachable: checked again");
+  assert.equal(d.heard(JSON.stringify({ t: "kesher-here", id: "laptop" })), false, "a second datagram within 10 s: no second check");
   inner.views = [{ id: "laptop", online: true }];
   assert.equal(d.heard(JSON.stringify({ t: "kesher-here", id: "laptop" })), false, "already reachable");
   assert.equal(d.heard(JSON.stringify({ t: "kesher-here", id: "new-pc" })), true, "a new computer: read the list again");

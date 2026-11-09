@@ -132,6 +132,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Fixed:** effects in the web app returned values by accident; newer Chrome returns a Promise from `scrollIntoView`, which React then called (the Blueprint page crashed). All effects now use block bodies, and a lint rule keeps it so.
     - **Dependencies:** `pnpm audit --prod` checked again.
 
+29. **Scan after 0.6.19** (computers finding each other, memory/processor/temperature limits, the split choosing models by hardware, one-click plugin install, startup routines with a folder, view_image, checkpoints of game projects, Verse).
+    - **Fixed:** an "I'm here" datagram that named one of the user's computers started a check of that computer each time; a flood of them (from anyone on the network) made this computer call out without limit. Now at most one check per computer every 10 seconds. The check still goes only to the addresses that computer published, never to the sender.
+    - **Checked:** a routine's folder can be set only on the computer, only inside the home folder (not the home folder itself); saving a routine from the phone with a folder is refused, and a phone edit replaces the action, so it cannot keep or add one.
+    - **Checked:** one-click plugin install from the phone takes only a project found on the computer; the plugin is written only into that project's `Plugins/KesherAIBridge`.
+    - **Checked:** `view_image` reads only through the chat's own folders (the same resolver as the file tools), picture types only, at most 8 MB. The split asks another computer's `/api/guard` with that computer's own device key and uses only that computer's own models. The temperature read runs a fixed command (no input). Checkpoints of Unreal/Unity projects skip generated folders and files over 50 MB. The Verse translation takes only a model listed here and caps the code it sends.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

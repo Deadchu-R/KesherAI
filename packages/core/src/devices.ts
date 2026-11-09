@@ -260,10 +260,15 @@ export class Devices {
     }
     const v = this.views.find((x) => x.id === e.id);
     if (v?.online && !v.asleepSince) return false;
+    // At most one check per computer every 10 s, however many datagrams arrive (a flood cannot make this computer call out).
+    const last = this.heardAt.get(e.id) ?? 0;
+    if (Date.now() - last < 10_000) return false;
+    this.heardAt.set(e.id, Date.now());
     void this.useDevice(e).then((nv) => (this.views = this.views.map((x) => (x.id === e.id ? nv : x))), () => undefined);
     return true;
   }
   private lastHeardSync?: number;
+  private readonly heardAt = new Map<string, number>();
 
   /** After a round: the computers that did not answer are tried again soon, then less often. */
   private planRetry(): void {
