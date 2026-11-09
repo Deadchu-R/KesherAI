@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ModelMenu } from "../ModelMenu";
+import { AddMenu } from "../AddMenu";
+import { useChatAttach } from "../ChatAttach";
+import { WebToggle, useWebSearch } from "../WebToggle";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { api } from "../api";
 import { getLocale } from "../i18n";
@@ -52,6 +55,7 @@ export function CodeHome() {
     }
   });
   const [typing, setTyping] = useState(false);
+  const setDraftIdRef = useRef<((v: string | undefined) => void) | undefined>(undefined);
   useEffect(() => {
     if (!folder && recent[0]) setFolder(recent[0]);
   }, [recent]);
@@ -59,6 +63,8 @@ export function CodeHome() {
     void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setModelId((m) => m || s.activeModels.code || s.activeModels.chat || ""), () => undefined);
   }, []);
   const choose = (f: string) => {
+    // Another folder: the next attachment makes a new session there.
+    if (f !== folder) setDraftIdRef.current?.(undefined);
     setFolder(f);
     setTyping(false);
     try {
@@ -67,6 +73,22 @@ export function CodeHome() {
       // private window: not remembered
     }
   };
+  const [web, setWeb] = useWebSearch();
+  // The same + menu as every chat box: the session is made in the chosen folder on the first thing added.
+  const [draftId, setDraftId] = useState<string>();
+  setDraftIdRef.current = setDraftId;
+  const ensure = async () => {
+    if (draftId) return draftId;
+    if (!folder.trim()) {
+      setTyping(true);
+      toast(L("בחרו תיקייה לעבוד בה.", "Choose a folder to work in."));
+      return undefined;
+    }
+    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}) }, { open: false });
+    if (id) setDraftId(id);
+    return id;
+  };
+  const attachments = useChatAttach({ ensure, insert: (txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`), onError: (m) => toast(m) });
   const start = async () => {
     const value = expandSlash(text.trim());
     if (!value || busy) return;
@@ -77,10 +99,11 @@ export function CodeHome() {
     }
     setBusy(true);
     try {
-      const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}) });
+      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}) }));
       if (!id) return;
+      if (draftId) location.hash = `#/c/${id}`;
       choose(folder.trim());
-      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value } });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value, ...(web ? { web: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
       toast((e as Error).message);
@@ -109,6 +132,9 @@ export function CodeHome() {
             }}
           />
           <div className="box-bar">
+            <AddMenu {...attachments.menu} onInsert={(txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)} web={web} onWeb={setWeb} />
+            {attachments.elements}
+            <WebToggle on={web} onChange={setWeb} />
             {typing ? (
               <span className="row code-folder-edit">
                 <input dir="ltr" autoFocus value={folder} placeholder={L("נתיב תיקייה במחשב", "A folder on the computer")} onChange={(e) => setFolder(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); choose(folder.trim()); } }} />
