@@ -53,7 +53,16 @@ type Run = { code: number; out: string };
 function runProgram(file: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number; log?: string }): Promise<Run> {
   return new Promise((res) => {
     let out = "";
-    const child = spawn(file, args, { cwd: opts.cwd, env: opts.env ?? process.env, windowsHide: true });
+    // Node on Windows will not start a .bat/.cmd directly (spawn EINVAL since the 2024 fix): run it through cmd.exe,
+    // each argument quoted. Arguments with quotes or cmd's special characters are refused rather than escaped.
+    const bat = process.platform === "win32" && /\.(bat|cmd)$/i.test(file);
+    if (bat && [file, ...args].some((a) => /["%^&|<>\r\n]/.test(a))) {
+      res({ code: -1, out: "A path or argument has a character Windows' command line cannot pass safely (\" % ^ & | < >)." });
+      return;
+    }
+    const child = bat
+      ? spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `"${[file, ...args].map((a) => `"${a}"`).join(" ")}"`], { cwd: opts.cwd, env: opts.env ?? process.env, windowsHide: true, windowsVerbatimArguments: true })
+      : spawn(file, args, { cwd: opts.cwd, env: opts.env ?? process.env, windowsHide: true });
     const add = (b: Buffer) => {
       const s = b.toString("utf8");
       out = (out + s).slice(-400_000);
