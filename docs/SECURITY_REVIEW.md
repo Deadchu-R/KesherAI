@@ -113,6 +113,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** the editor's `projectFile` is kept only when it is a real `.uproject` on this computer, and a chat takes it only when its name matches the project the page named; the editor socket stays computer-only. The Blueprint edit's `model` must be a chat model listed here. Target phone ids must be in the catalog or read over USB. The Unity frame-rate script is written only into the project, only for an Android build the user approved, and only with target phones chosen.
     - **Dependencies:** zod 4 (0.5.96) removed the last audit exception; `pnpm audit --prod` is clean.
 
+26. **Scan after 0.6.2** (the code start screen, the Blueprint editor, the code view, the plugin's own update).
+    - **Checked:** "Update automatically" closes Unreal only through the plugin, which first asks on the computer to save unsaved work (Cancel keeps it open); the editor that is opened again is the engine's own `UnrealEditor.exe` from the engine folder found on this computer, with the `.uproject` the plugin reported (kept only when it is a real file here). The plugin's files are replaced only inside the project's `Plugins/KesherAIBridge` (the old one removed, as Install does).
+    - **Checked:** the Blueprint editor's actions go through the same `/api/unreal/apply` (one undo step in the editor); the right-click search sends only words to the editor (no paths or code); undo/redo are the editor's own. The editor socket stays computer-only.
+    - **Checked:** the code view's "Apply" is a request to the model like the AI bubble (capped at 8,000 characters); the code start screen opens a code session only in a folder that exists (`assertFolder`), as the old dialog did.
+    - **Faster:** `unreal_read_graph` / `unity_read_graph` now answer with the graph as code (much shorter than every node, pin and link).
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

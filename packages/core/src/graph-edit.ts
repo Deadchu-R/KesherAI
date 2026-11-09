@@ -2,6 +2,7 @@ import type { ProviderRegistry } from "@kesher/providers";
 import type { AgentTool } from "@kesher/agent";
 import { modelTurnFor } from "./conversations.js";
 import { blueprintPrompt, parseOps, unityPrompt, type UnrealBridge } from "./unreal-bridge.js";
+import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import type { UnityCli } from "./unity-cli.js";
 
 type Bridge = UnrealBridge | UnityCli;
@@ -73,12 +74,13 @@ export function graphTools(kind: "unreal" | "unity", b: Bridge, registry: Provid
       risk: "read",
       spec: {
         name: `${pre}_read_graph`,
-        description: `Read one ${what}: its graphs, nodes and links, compactly.`,
+        description: `Read one ${what} as code: each event a block, its nodes in the order they run, wired values as arguments (much shorter than a node list).`,
         inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
       },
       run: async (input) => {
         const { graph: g, offline } = await b.graph(String(input.path ?? ""));
-        const lines = g.graphs.map((gr) => `## ${gr.name}${gr.kind ? ` (${gr.kind})` : ""}\n${gr.nodes.slice(0, 120).map((n) => `- ${n.title} [${n.id}]${n.pins.some((p) => p.links?.length) ? ` → ${n.pins.flatMap((p) => p.links ?? []).join(", ")}` : ""}`).join("\n")}`);
+        // The graph as code (the page's Code view): fewer tokens than every node, pin and link, and easier to follow.
+        const lines = g.graphs.map((gr) => `## ${gr.name}${gr.kind ? ` (${gr.kind})` : ""}\n${codeText(blueprintToCode(gr.nodes as CodeNode[]))}`);
         const vars = g.variables?.length ? `Variables: ${g.variables.map((v) => `${v.name}: ${v.type}`).join(", ")}\n` : "";
         const out = `${vars}${lines.join("\n")}${offline ? "\n(saved copy: the editor is closed)" : ""}`;
         return { output: out.length > 9000 ? `${out.slice(0, 9000)}\n… (cut)` : out };

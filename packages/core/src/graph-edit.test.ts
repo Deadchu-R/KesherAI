@@ -15,7 +15,7 @@ test("graph tools list and read a project's graphs; changes need a model", async
   assert.match((await tools.unreal_list_graphs!.run({ filter: "door" }, ctx)).output, /\/Game\/BP_Door \(Actor\)/);
   const read = (await tools.unreal_read_graph!.run({ path: "/Game/BP_Door" }, ctx)).output;
   assert.match(read, /Open: bool/);
-  assert.match(read, /Event BeginPlay \[n1\] → n2\.execute/);
+  assert.match(read, /on BeginPlay\(\):/, "read as code");
   assert.match((await tools.unreal_change_graph!.run({ path: "/Game/BP_Door", request: "x" }, ctx)).output, /No chat model/);
   assert.equal(tools.unreal_change_graph!.risk, "write");
 });
