@@ -30,7 +30,7 @@
 
 namespace
 {
-	TSharedRef<FJsonObject> Error(const FString& Message)
+	TSharedRef<FJsonObject> MakeError(const FString& Message)
 	{
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetStringField(TEXT("error"), Message);
@@ -201,7 +201,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Read(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return Error(TEXT("No Blueprint at ") + Path);
+		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetStringField(TEXT("path"), Path);
 		Out->SetStringField(TEXT("name"), BP->GetName());
@@ -242,9 +242,9 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Apply(const FString& Path, const FString& GraphName, const TArray<TSharedPtr<FJsonValue>>& Ops)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return Error(TEXT("No Blueprint at ") + Path);
+		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
 		UEdGraph* Graph = FindGraph(BP, GraphName);
-		if (!Graph) return Error(TEXT("No graph named ") + GraphName);
+		if (!Graph) return MakeError(TEXT("No graph named ") + GraphName);
 		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
 
 		FScopedTransaction Transaction(LOCTEXT("Edit", "KesherAI edit"));
@@ -453,7 +453,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Compile(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return Error(TEXT("No Blueprint at ") + Path);
+		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
 		FCompilerResultsLog Log;
 		FKismetEditorUtilities::CompileBlueprint(BP, EBlueprintCompileOptions::None, &Log);
 		TArray<TSharedPtr<FJsonValue>> Messages;
@@ -475,7 +475,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Save(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return Error(TEXT("No Blueprint at ") + Path);
+		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
 		TArray<UPackage*> Packages = { BP->GetPackage() };
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), UEditorLoadingAndSavingUtils::SavePackages(Packages, false));
@@ -485,7 +485,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Open(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return Error(TEXT("No Blueprint at ") + Path);
+		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
 		if (GEditor) GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(BP);
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), true);

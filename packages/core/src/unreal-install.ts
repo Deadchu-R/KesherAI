@@ -435,10 +435,14 @@ export class BridgeInstaller {
       });
       if (code !== 0 || !existsSync(join(built, "Binaries"))) {
         const text = job.log.join("\n");
+        // The compiler's own errors first (the log shown is only its end); "Visual Studio" alone is in every log.
+        const errors = [...new Set(text.split("\n").filter((l) => /\berror [A-Z]+\d+:|: fatal error|\): error/.test(l)).map((l) => l.replace(/^.*[\\/](Source[\\/])/, "$1")))].slice(0, 8);
         throw new Error(
-          /visual studio|msvc|toolchain|compiler/i.test(text)
-            ? "Building needs Visual Studio's C++ tools (free): install Visual Studio 2022 Community with “Game development with C++”, then try again."
-            : `Unreal's build tool stopped (code ${code}). The last lines are in the log below.`,
+          errors.length
+            ? `The plugin did not compile for Unreal ${engine.version}:\n${errors.join("\n")}`
+            : /(visual studio|msvc|toolchain|compiler)[^\n]{0,80}(not (be )?found|not installed|unable to find)|unable to find[^\n]{0,60}(toolchain|compiler|visual studio)/i.test(text)
+              ? "Building needs Visual Studio's C++ tools (free): install Visual Studio 2022 Community with “Game development with C++”, then try again."
+              : `Unreal's build tool stopped (code ${code}). The last lines are in the log below.`,
         );
       }
     }
