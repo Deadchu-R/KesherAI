@@ -33,11 +33,10 @@ jobs:
       - run: node scripts/smoke.mjs
 
   # Windows: tests and the smoke test where Windows-only things live (cmd quoting, paths with spaces, .bat jobs).
-  # Not blocking yet: the suite has only run on Linux so far; it becomes blocking once it is green here.
+  # Blocking: a release waits for it (green on Windows since 0.5.9x).
   windows:
     name: Windows tests and smoke test
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
