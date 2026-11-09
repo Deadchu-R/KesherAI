@@ -242,7 +242,10 @@ export class ConversationManager {
       /** Every event of every open conversation (for notifications). */
       onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
     },
-  ) {}
+  ) {
+    // Know at start whether Unreal is installed, so the first chat already has the Unreal tools.
+    this.checkUnreal();
+  }
 
   /**
    * Tools for the active non-chat models. Today that is `generate_image`
@@ -935,7 +938,7 @@ export class ConversationManager {
         }
         if (!(local && this.deps.config.toolSearch !== false)) return undefined;
         // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
-        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : [])];
+        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : [])];
       },
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(

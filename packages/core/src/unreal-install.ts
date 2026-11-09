@@ -89,6 +89,20 @@ export function manifestEngines(texts: string[]): UnrealEngine[] {
   return out;
 }
 
+/** Launcher engines registered under HKLM\SOFTWARE\EpicGames\Unreal Engine\<version> (InstalledDirectory). */
+async function registeredEngines(): Promise<UnrealEngine[]> {
+  const out = await new Promise<string>((res) => execFile("reg", ["query", "HKLM\\SOFTWARE\\EpicGames\\Unreal Engine", "/s", "/v", "InstalledDirectory"], { windowsHide: true }, (_e, o) => res(o ?? "")));
+  const found: UnrealEngine[] = [];
+  let version = "";
+  for (const line of out.split(/\r?\n/)) {
+    const key = /\\Unreal Engine\\(\d+\.\d+)\s*$/i.exec(line);
+    if (key) version = key[1]!;
+    const dir = /^\s+InstalledDirectory\s+REG_SZ\s+(.+)$/.exec(line);
+    if (dir && version) found.push({ version, path: dir[1]!.trim(), kind: "launcher" });
+  }
+  return found;
+}
+
 /** @returns Every engine found on this computer (newest first, each folder once). */
 export async function findEngines(): Promise<UnrealEngine[]> {
   if (process.platform !== "win32") return [];
@@ -105,7 +119,7 @@ export async function findEngines(): Promise<UnrealEngine[]> {
     .filter((e): e is { m: RegExpExecArray; path: string } => !!e.m)
     .map((e) => ({ version: e.m[1]!, path: e.path, kind: "launcher" as const }));
   const seen = new Set<string>();
-  return [...launcher, ...manifests, ...folders, ...(await sourceEngines().catch(() => []))]
+  return [...launcher, ...manifests, ...(await registeredEngines().catch(() => [])), ...folders, ...(await sourceEngines().catch(() => []))]
     .filter((e) => existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")))
     .filter((e) => {
       const k = resolve(e.path).toLowerCase();
