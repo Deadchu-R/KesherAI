@@ -625,17 +625,27 @@ export async function avoidShaderLibraryBug(
   enginePath: string,
 ): Promise<string> {
   const v = await engineVersion(enginePath);
-  if (!v || v[0] !== 5 || v[1] !== 8 || v[2] >= 4) return "";
+  if (!v || v[0] !== 5 || v[1] < 8) return "";
   const ini = join(projectDir, "Config", "DefaultGame.ini");
   const before = existsSync(ini) ? await readFile(ini, "utf8") : "";
   const section = "[/Script/UnrealEd.ProjectPackagingSettings]";
-  let after = setIniKey(before, section, "bShareMaterialShaderCode", "False");
-  after = setIniKey(after, section, "bSharedMaterialNativeLibraries", "False");
-  if (after === before) return "";
-  if (before && !existsSync(`${ini}.kesher-backup`))
-    await writeFile(`${ini}.kesher-backup`, before);
+  // The shared-library bug is only in 5.8.0–5.8.3.
+  const buggy = v[1] === 8 && v[2] < 4;
+  let after = buggy ? setIniKey(before, section, "bShareMaterialShaderCode", "False") : before;
+  if (buggy) after = setIniKey(after, section, "bSharedMaterialNativeLibraries", "False");
+  // Mobile HDR off (an older KesherAI template): Android Vulkan then stops at start on 5.8. Turned back on.
+  const eini = join(projectDir, "Config", "DefaultEngine.ini");
+  const ebefore = existsSync(eini) ? await readFile(eini, "utf8") : "";
+  let hdr = "";
+  if (/^\s*r\.MobileHDR\s*=\s*(False|0)\s*$/im.test(ebefore)) {
+    if (!existsSync(`${eini}.kesher-backup`)) await writeFile(`${eini}.kesher-backup`, ebefore);
+    await writeFile(eini, ebefore.replace(/^(\s*)r\.MobileHDR\s*=\s*(False|0)\s*$/im, "$1r.MobileHDR=True"));
+    hdr = `Mobile HDR was off in ${eini}: turned back on (with it off, Unreal 5.8 on Android Vulkan stops at start with "Null Unordered Access View … FMobileBasePassUniformParameters").`;
+  }
+  if (after === before) return hdr;
+  if (before && !existsSync(`${ini}.kesher-backup`)) await writeFile(`${ini}.kesher-backup`, before);
   await writeFile(ini, after);
-  return `Unreal ${v.join(".")} has a bug (UE-396689, fixed in 5.8.4) where a shared shader library makes the Android game quit right after the logo: the shared shader library is now off in ${ini}.`;
+  return `${hdr ? `${hdr} ` : ""}Unreal ${v.join(".")} has a bug (UE-396689, fixed in 5.8.4) where a shared shader library makes the Android game quit right after the logo: the shared shader library is now off in ${ini}.`;
 }
 
 /**

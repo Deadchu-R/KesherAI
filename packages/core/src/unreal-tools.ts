@@ -207,7 +207,8 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
       "r.ReflectionMethod=0",
       "r.Shadow.Virtual.Enable=0",
       "r.GenerateMeshDistanceFields=False",
-      "r.MobileHDR=False",
+      // Mobile HDR stays on (Unreal's default): with it off, Unreal 5.8 on Android Vulkan stops at start
+      // ("Null Unordered Access View … FMobileBasePassUniformParameters"), found on the user's phone.
       "",
       "[/Script/AndroidRuntimeSettings.AndroidRuntimeSettings]",
       `PackageName=com.kesherai.${name.toLowerCase()}`,
