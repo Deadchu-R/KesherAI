@@ -8,6 +8,8 @@
 #include "Misc/App.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/Paths.h"
+#include "FileHelpers.h"
+#include "HAL/PlatformProcess.h"
 #include "Modules/ModuleManager.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
@@ -18,7 +20,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.3");
+static const TCHAR* BridgeVersion = TEXT("0.1.4");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -64,6 +66,8 @@ void FKesherAIBridgeModule::Connect()
 		Hello->SetStringField(TEXT("bridge"), BridgeVersion);
 		// Where the project is, so KesherAI's chat works on the project open in this editor.
 		Hello->SetStringField(TEXT("projectFile"), FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()));
+		// For the plugin's own update: KesherAI waits for this process to end before replacing the plugin's files.
+		Hello->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
 		Send(Hello);
 	});
 	Socket->OnConnectionError().AddLambda([this](const FString&)
@@ -120,6 +124,22 @@ void FKesherAIBridgeModule::OnMessage(const FString& Text)
 	else if (Cmd == TEXT("compile")) Result = KesherGraph::Compile(Path);
 	else if (Cmd == TEXT("save")) Result = KesherGraph::Save(Path);
 	else if (Cmd == TEXT("open")) Result = KesherGraph::Open(Path);
+	else if (Cmd == TEXT("actions"))
+	{
+		FString Query;
+		In->TryGetStringField(TEXT("query"), Query);
+		Result = KesherGraph::Actions(Path, Query);
+	}
+	else if (Cmd == TEXT("undo") || Cmd == TEXT("redo")) Result = KesherGraph::Undo(Cmd == TEXT("redo"));
+	else if (Cmd == TEXT("quit_for_update"))
+	{
+		// The user pressed "Update the plugin": the editor asks to save unsaved work (the user's choice), then closes;
+		// KesherAI replaces the plugin and opens the project again.
+		const bool bSaved = FEditorFileUtils::SaveDirtyPackages(true, true, true);
+		Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("ok"), bSaved);
+		if (bSaved) FPlatformMisc::RequestExit(false);
+	}
 	else if (Cmd == TEXT("ping"))
 	{
 		Result = MakeShared<FJsonObject>();

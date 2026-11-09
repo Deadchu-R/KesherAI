@@ -18,6 +18,8 @@
 #include "K2Node_Variable.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
+#include "UObject/UObjectIterator.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -419,6 +421,19 @@ namespace KesherGraph
 				if (UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node")))) FBlueprintEditorUtils::RemoveNode(BP, N, true);
 				else Problem = TEXT("Node not found");
 			}
+			else if (Kind == TEXT("disconnect"))
+			{
+				// Alt+click on a pin in Unreal: break all its links.
+				UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node")));
+				UEdGraphPin* Pin = N ? FindPin(N, JsonStr(Op, TEXT("pin")), EGPD_Input) : nullptr;
+				if (N && !Pin) Pin = FindPin(N, JsonStr(Op, TEXT("pin")), EGPD_Output);
+				if (!Pin) Problem = TEXT("Pin not found: ") + JsonStr(Op, TEXT("pin"));
+				else
+				{
+					N->Modify();
+					Schema->BreakPinLinks(*Pin, true);
+				}
+			}
 			else if (Kind == TEXT("comment"))
 			{
 				if (UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node"))))
@@ -479,6 +494,86 @@ namespace KesherGraph
 		TArray<UPackage*> Packages = { BP->GetPackage() };
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), UEditorLoadingAndSavingUtils::SavePackages(Packages, false));
+		return Out;
+	}
+
+	TSharedRef<FJsonObject> Actions(const FString& Path, const FString& Query)
+	{
+		UBlueprint* BP = LoadBlueprint(Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
+		TArray<FString> Words;
+		Query.ToLower().ParseIntoArrayWS(Words);
+		auto Matches = [&](const FString& A, const FString& B, const FString& C)
+		{
+			const FString All = (A + TEXT(" ") + B + TEXT(" ") + C).ToLower();
+			for (const FString& W : Words)
+			{
+				if (!All.Contains(W)) return false;
+			}
+			return true;
+		};
+		TArray<TSharedPtr<FJsonValue>> Items;
+		const int32 Max = 60;
+		auto Add = [&](const FString& Title, const FString& Category, const FString& Type, const FString& Field, const FString& Value)
+		{
+			TSharedRef<FJsonObject> J = MakeShared<FJsonObject>();
+			J->SetStringField(TEXT("title"), Title);
+			J->SetStringField(TEXT("category"), Category);
+			J->SetStringField(TEXT("type"), Type);
+			if (!Field.IsEmpty()) J->SetStringField(Field, Value);
+			Items.Add(MakeShared<FJsonValueObject>(J));
+		};
+		// Flow control first, like Unreal's own menu.
+		if (Matches(TEXT("Branch"), TEXT("if"), TEXT("Flow Control"))) Add(TEXT("Branch"), TEXT("Flow Control"), TEXT("branch"), TEXT(""), TEXT(""));
+		if (Matches(TEXT("Sequence"), TEXT(""), TEXT("Flow Control"))) Add(TEXT("Sequence"), TEXT("Flow Control"), TEXT("sequence"), TEXT(""), TEXT(""));
+		if (Matches(TEXT("Add Custom Event"), TEXT(""), TEXT("Add Event"))) Add(TEXT("Add Custom Event…"), TEXT("Add Event"), TEXT("custom_event"), TEXT("name"), TEXT("NewEvent"));
+		// The Blueprint's variables.
+		for (const FBPVariableDescription& V : BP->NewVariables)
+		{
+			const FString Name = V.VarName.ToString();
+			if (Items.Num() < Max && Matches(TEXT("Get ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Get ") + Name, TEXT("Variables"), TEXT("get"), TEXT("variable"), Name);
+			if (Items.Num() < Max && Matches(TEXT("Set ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Set ") + Name, TEXT("Variables"), TEXT("set"), TEXT("variable"), Name);
+		}
+		auto Usable = [](const UFunction* F)
+		{
+			return F->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure) && !F->HasMetaData(TEXT("BlueprintInternalUseOnly")) && !F->HasMetaData(TEXT("DeprecatedFunction"));
+		};
+		// Events the parent class lets Blueprints implement, then its callable functions.
+		if (UClass* Parent = BP->ParentClass)
+		{
+			for (TFieldIterator<UFunction> It(Parent, EFieldIteratorFlags::IncludeSuper); It && Items.Num() < Max; ++It)
+			{
+				UFunction* F = *It;
+				const FString Title = F->GetDisplayNameText().ToString();
+				if (F->HasAnyFunctionFlags(FUNC_BlueprintEvent) && !F->GetReturnProperty() && Matches(TEXT("Event ") + Title, F->GetName(), TEXT("Add Event")))
+					Add(TEXT("Event ") + Title, TEXT("Add Event"), TEXT("event"), TEXT("event"), F->GetName());
+				else if (Usable(F) && Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
+					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), F->GetOwnerClass()->GetName() + TEXT(":") + F->GetName());
+			}
+		}
+		// Function libraries (Print String, math, Gameplay Statics…).
+		for (TObjectIterator<UClass> C; C && Items.Num() < Max; ++C)
+		{
+			if (!C->IsChildOf(UBlueprintFunctionLibrary::StaticClass()) || C->HasAnyClassFlags(CLASS_Deprecated | CLASS_NewerVersionExists | CLASS_Abstract)) continue;
+			for (TFieldIterator<UFunction> It(*C, EFieldIteratorFlags::ExcludeSuper); It && Items.Num() < Max; ++It)
+			{
+				UFunction* F = *It;
+				if (!Usable(F)) continue;
+				const FString Title = F->GetDisplayNameText().ToString();
+				if (Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
+					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), C->GetName() + TEXT(":") + F->GetName());
+			}
+		}
+		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetArrayField(TEXT("actions"), Items);
+		return Out;
+	}
+
+	TSharedRef<FJsonObject> Undo(bool bRedo)
+	{
+		const bool bOk = GEditor && (bRedo ? GEditor->RedoTransaction() : GEditor->UndoTransaction());
+		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetBoolField(TEXT("ok"), bOk);
 		return Out;
 	}
 

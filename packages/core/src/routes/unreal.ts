@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -77,7 +77,8 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
    */
   app.post<{ Body: { path?: string; graph?: string; request?: string; model?: string } }>(`${base}/edit`, async (req, reply) => {
     const path = String(req.body?.path ?? "");
-    const request = String(req.body?.request ?? "").trim().slice(0, 2000);
+    // Up to 8,000 characters: the code view sends the graph's code before and after.
+    const request = String(req.body?.request ?? "").trim().slice(0, 8000);
     if (!path || !request) return reply.code(400).send({ error: "Choose a Blueprint and say what to change." });
     // The model the page picked (a chat model that exists here), else the active chat model.
     const picked = typeof req.body?.model === "string" ? req.body.model : "";
@@ -110,6 +111,28 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(502).send({ error: (err as Error).message });
       }
     });
+  }
+
+  if (kind === "unreal") {
+    /** Unreal's right-click menu: nodes that can be added, matching the words typed (plugin 0.1.4+). */
+    app.get<{ Querystring: { path?: string; q?: string } }>(`${base}/actions`, async (req, reply) => {
+      if (!req.query.path) return reply.code(400).send({ error: "Which Blueprint?" });
+      try {
+        return await unreal.request("actions", { path: req.query.path, query: String(req.query.q ?? "").slice(0, 100) }, 20_000);
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+    /** Ctrl+Z / Ctrl+Y in the page: the editor's own undo and redo. */
+    for (const cmd of ["undo", "redo"] as const) {
+      app.post(`${base}/${cmd}`, async (_req, reply) => {
+        try {
+          return await unreal.request(cmd, {}, 15_000);
+        } catch (err) {
+          return reply.code(502).send({ error: (err as Error).message });
+        }
+      });
+    }
   }
 
   app.get(`${base}/queue`, async () => b.queue());
@@ -215,6 +238,23 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       if (!have) await s.mcp.upsert({ id: "unreal", name: preset.name, transport: "http", url: preset.url!, headers: {}, enabled: true, preset: "unreal" });
       else if (!have.enabled) await s.mcp.upsert({ ...have, enabled: true });
       return { message };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * The plugin updates itself (the page's "Update the plugin"): builds the new
+   * version while Unreal is open, asks Unreal to close (it offers to save
+   * first), replaces the plugin and opens the project again. From the phone
+   * too: the save question shows on the computer.
+   */
+  app.post("/api/unreal/update-plugin", async (_req, reply) => {
+    const file = unreal.projectFile;
+    if (!file) return reply.code(409).send({ error: "Open the project in Unreal first (with the plugin connected), or use Install into a project." });
+    try {
+      await installer.update(dirname(file), () => unreal.closeForUpdate(), file);
+      return { job: installer.status() };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }

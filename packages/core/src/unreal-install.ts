@@ -1,7 +1,7 @@
 import { spawn, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
@@ -31,7 +31,7 @@ export interface UnrealEngine {
 
 /** The current install, shown on the Unreal page. */
 export interface InstallJob {
-  state: "building" | "copying" | "done" | "failed";
+  state: "building" | "waiting" | "copying" | "done" | "failed";
   project: string;
   engine: string;
   log: string[];
@@ -352,7 +352,7 @@ export class BridgeInstaller {
   async install(folder: string): Promise<void> {
     if (
       this.job &&
-      (this.job.state === "building" || this.job.state === "copying")
+      (this.job.state === "building" || this.job.state === "copying" || this.job.state === "waiting")
     )
       throw new Error("An install is already running.");
     if (process.platform !== "win32")
@@ -383,6 +383,8 @@ export class BridgeInstaller {
     void this.run(job, engine, source, project.dir).catch((err: Error) => {
       job.state = "failed";
       job.message = err.message;
+      this.beforeCopy = undefined;
+      this.afterCopy = undefined;
     });
   }
 
@@ -446,9 +448,22 @@ export class BridgeInstaller {
         );
       }
     }
+    if (this.beforeCopy) {
+      job.state = "waiting";
+      await this.beforeCopy(job);
+    }
     job.state = "copying";
     const dest = join(projectDir, "Plugins", "KesherAIBridge");
-    await rm(dest, { recursive: true, force: true });
+    // Right after the editor closes Windows may still hold its files for a moment: try again for up to 2 minutes.
+    for (let i = 0; ; i++) {
+      try {
+        await rm(dest, { recursive: true, force: true });
+        break;
+      } catch (err) {
+        if (i >= 60) throw new Error(`The old plugin's files are still in use (${(err as Error).message}). Close Unreal and press Update again.`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
     await mkdir(dest, { recursive: true });
     // Without Source/ and Intermediate/: Unreal loads the built files and never asks to compile.
     for (const part of [
@@ -462,6 +477,47 @@ export class BridgeInstaller {
     }
     job.state = "done";
     job.message = `Installed in ${dest}. Open (or restart) the project in Unreal ${engine.version}.`;
+    if (this.afterCopy) await this.afterCopy(job, engine).catch(() => undefined);
+  }
+
+  /** Set during {@link update}: closes the editor before the files are replaced. */
+  private beforeCopy?: (job: InstallJob) => Promise<void>;
+  /** Set during {@link update}: opens the project again. */
+  private afterCopy?: (job: InstallJob, engine: UnrealEngine) => Promise<void>;
+
+  /**
+   * The plugin updates itself: the new version is built while Unreal stays
+   * open; then the editor is asked to close (it offers to save unsaved work
+   * first, the user's choice), the plugin's files are replaced when it has
+   * closed, and the project opens again.
+   *
+   * @param folder - The project folder.
+   * @param closeEditor - Asks the editor to close; resolves once it has (rejects when the user cancelled).
+   * @param projectFile - The .uproject to open again afterwards (none: not reopened).
+   * @returns When the job has started (follow {@link status}).
+   */
+  async update(folder: string, closeEditor: () => Promise<void>, projectFile?: string): Promise<void> {
+    this.beforeCopy = async (job) => {
+      job.log.push("Built. Asking Unreal to close (save your work if it asks)…");
+      await closeEditor();
+      job.log.push("Unreal closed. Replacing the plugin…");
+    };
+    this.afterCopy = async (job, engine) => {
+      this.beforeCopy = undefined;
+      this.afterCopy = undefined;
+      if (!projectFile) return;
+      const exe = join(engine.path, "Engine", "Binaries", "Win64", "UnrealEditor.exe");
+      if (!existsSync(exe)) return;
+      spawn(exe, [projectFile], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+      job.message = `Updated. Opening ${basename(projectFile)} again…`;
+    };
+    try {
+      await this.install(folder);
+    } catch (err) {
+      this.beforeCopy = undefined;
+      this.afterCopy = undefined;
+      throw err;
+    }
   }
 }
 

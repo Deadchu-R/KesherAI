@@ -1125,8 +1125,44 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-canvas { overflow: hidden; height: min(62dvh, 640px); min-height: 320px; background: #111214 radial-gradient(#26272b 1px, transparent 1px) 0 0 / 18px 18px; border-radius: calc(10px * var(--r-scale, 1)); direction: ltr; }
 .ue-frame { position: relative; width: 100%; height: 100%; touch-action: none; cursor: grab; user-select: none; }
 .ue-frame:active { cursor: grabbing; }
-.ue-zoom { position: absolute; inset-block-start: 10px; inset-inline-end: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; background: rgb(27 28 32 / 0.9); border: 1px solid var(--border); border-radius: 10px; }
+.ue-zoom { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; max-width: calc(100% - 16px); display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; padding: 4px; background: rgb(27 28 32 / 0.9); border: 1px solid var(--border); border-radius: 10px; }
 .ue-zoom button { width: 36px; height: 36px; padding: 0; font-size: 18px; line-height: 1; }
+.ue-frame:focus { outline: none; }
+.bp-flash { animation: bp-flash 0.6s ease-in-out 4; pointer-events: none; }
+@keyframes bp-flash { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bp-flash { animation: none; } }
+.ue-views { display: flex; gap: 4px; }
+.plugin-update { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; }
+.ue-views button { padding: 4px 10px; border-radius: 999px; }
+.ue-views button.on { background: var(--accent); color: var(--accent-ink, #000); }
+.ue-split { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.ue-split.both { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+/* Side by side: the Blueprint list becomes the drop-down, so the two views get the width. */
+.ue-body.wide { grid-template-columns: minmax(0, 1fr); }
+.ue-body.wide .ue-list { max-height: none; }
+.ue-body.wide .ue-list ul, .ue-body.wide .ue-list > input { display: none; }
+.ue-body.wide .ue-select { display: block; width: 100%; }
+@media (max-width: 900px) { .ue-split.both { grid-template-columns: minmax(0, 1fr); } .ue-split.both .bp-code-lines, .ue-split.both .bp-code-edit { max-height: 32dvh; } }
+.bp-code { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bp-code-bar { gap: 6px; align-items: center; }
+.bp-code-lines { list-style: none; margin: 0; padding: 6px 0; max-height: min(62dvh, 640px); overflow: auto; background: #111214; border-radius: 10px; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.bp-code-lines li { display: flex; gap: 10px; padding: 0 10px; white-space: pre; }
+.bp-code-lines li.link { cursor: pointer; }
+.bp-code-lines li.link:hover { background: #1c1d22; }
+.bp-code-lines li.on { background: rgb(240 168 48 / 0.16); }
+.bp-code-lines .ln { color: #5b5e66; min-width: 2.5ch; text-align: end; user-select: none; }
+.bp-code-lines code { color: #d6d7db; font: inherit; }
+.bp-code-edit { width: 100%; min-height: min(62dvh, 640px); font: 12.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; background: #111214; color: #d6d7db; border-radius: 10px; padding: 8px; white-space: pre; tab-size: 4; }
+.ue-frame:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ue-frame.editable .bp-node { cursor: move; }
+.ue-frame .bp-pin { cursor: crosshair; }
+.bp-find { position: absolute; inset-block-start: 10px; inset-inline-start: 10px; gap: 6px; align-items: center; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-2); direction: rtl; }
+.bp-find input { width: min(220px, 50vw); }
+.bp-menu { position: absolute; width: min(300px, calc(100% - 16px)); display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-2); z-index: 5; direction: rtl; }
+.bp-menu ul { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 1px; }
+.bp-menu li button { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: start; padding: 5px 8px; background: none; border: 0; border-radius: 6px; }
+.bp-menu li button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+@media (max-width: 600px) { .bp-menu { left: 8px !important; right: 8px; width: auto; top: auto !important; bottom: 8px; } }
 .ue-graph { display: block; }
 .ue-title { fill: #fff; font: 600 12px system-ui, sans-serif; }
 .ue-pin { fill: #d6d7db; font: 11px system-ui, sans-serif; }

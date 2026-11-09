@@ -35,6 +35,12 @@ namespace KesherGraph
 	/** Saves a Blueprint's package to disk. */
 	TSharedRef<FJsonObject> Save(const FString& Path);
 
+	/** Nodes that can be added to a Blueprint, matching the words of a search (Unreal's right-click menu). */
+	TSharedRef<FJsonObject> Actions(const FString& Path, const FString& Query);
+
+	/** The editor's own Undo (Ctrl+Z) or Redo (Ctrl+Y). */
+	TSharedRef<FJsonObject> Undo(bool bRedo);
+
 	/** Opens a Blueprint in its editor. */
 	TSharedRef<FJsonObject> Open(const FString& Path);
 }

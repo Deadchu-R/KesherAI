@@ -70,7 +70,12 @@ test("the editor connects, its Blueprints are kept, and work with Unreal closed 
     const g = await get(`/api/unreal/graph?path=${encodeURIComponent(BP.path)}`);
     assert.equal((g.graph as BlueprintJson).name, "BP_Door");
 
-    ws.close();
+    // The plugin's own update: the editor is asked to close, and KesherAI waits until it has.
+    ws.on("message", (d) => {
+      if ((JSON.parse(String(d)) as { cmd: string }).cmd === "quit_for_update") setTimeout(() => ws.close(), 50);
+    });
+    await server.services.unreal.closeForUpdate(10_000);
+    assert.ok(calls.includes("quit_for_update"));
     await until(async () => (await get("/api/unreal")).connected === false);
     // Unreal closed: the saved copy is shown.
     const off = await get(`/api/unreal/graph?path=${encodeURIComponent(BP.path)}`);

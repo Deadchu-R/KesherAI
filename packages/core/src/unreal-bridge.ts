@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.3";
+export const BRIDGE_VERSION = "0.1.4";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -25,6 +25,8 @@ export interface EditorInfo {
   bridge: string;
   /** The project's .uproject on this computer (plugin 0.1.3+). */
   projectFile?: string;
+  /** The editor's process (plugin 0.1.4+). */
+  pid?: number;
   connectedAt: string;
 }
 
@@ -73,6 +75,36 @@ export class UnrealBridge {
   /** @returns The connected editor's project file, when the plugin said it. */
   get projectFile(): string | undefined {
     return this.connected ? this.info?.projectFile : undefined;
+  }
+
+  /**
+   * Asks the connected editor to close for the plugin's update (it offers to
+   * save first) and waits until it has closed. An older plugin without that
+   * command: waits for the user to close Unreal.
+   *
+   * @param timeoutMs - How long to wait for it to close.
+   * @throws Error when the user cancelled the save, or it did not close in time.
+   */
+  async closeForUpdate(timeoutMs = 15 * 60_000): Promise<void> {
+    const pid = this.info?.pid;
+    if (this.connected) {
+      const r = await this.request<{ ok?: boolean }>("quit_for_update", {}, 10 * 60_000).catch((err: Error) => (/Unknown command/.test(err.message) ? { ok: true, manual: true } : Promise.reject(err)));
+      if (r.ok === false) throw new Error("Unreal stayed open (saving was cancelled). Press Update again when ready.");
+    }
+    const alive = () => {
+      if (!pid) return this.connected;
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const until = Date.now() + timeoutMs;
+    while (alive() || this.connected) {
+      if (Date.now() > until) throw new Error("Unreal did not close. Close it, then press Update again.");
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   }
 
   /** @returns Whether an editor is connected now. */
@@ -127,7 +159,7 @@ export class UnrealBridge {
   }
 
   private async onMessage(socket: WebSocket, text: string): Promise<void> {
-    let msg: { id?: string; ok?: boolean; result?: unknown; error?: string; event?: string; project?: string; engine?: string; bridge?: string; projectFile?: string };
+    let msg: { id?: string; ok?: boolean; result?: unknown; error?: string; event?: string; project?: string; engine?: string; bridge?: string; projectFile?: string; pid?: number };
     try {
       msg = JSON.parse(text) as typeof msg;
     } catch {
@@ -136,7 +168,8 @@ export class UnrealBridge {
     if (msg.event === "hello" && socket === this.socket) {
       // Only a real .uproject on this computer is kept (the chat's Unreal tools then work on that project).
       const pf = typeof msg.projectFile === "string" && /\.uproject$/i.test(msg.projectFile) && existsSync(msg.projectFile) ? msg.projectFile : undefined;
-      this.info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), connectedAt: new Date().toISOString() };
+      const pid = typeof msg.pid === "number" && Number.isInteger(msg.pid) && msg.pid > 0 ? msg.pid : undefined;
+      this.info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), ...(pid ? { pid } : {}), connectedAt: new Date().toISOString() };
       this.lastProject = this.info.project;
       await mkdir(this.dir, { recursive: true });
       await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: this.info.project }));

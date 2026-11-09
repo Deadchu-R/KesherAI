@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UnityCliPanel } from "./UnityCliPanel";
+import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
+import { BlueprintCode } from "../BlueprintCode";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, desktop, toast, useLibrary } from "../library";
@@ -19,172 +21,34 @@ interface Status {
   download: string;
 }
 interface BpItem { path: string; name: string; parent?: string; saved?: boolean }
-interface Pin { name: string; label?: string; dir: "in" | "out"; type: string; default?: string; links?: string[] }
-interface GNode { id: string; title: string; class: string; x: number; y: number; comment?: string; pins: Pin[] }
 interface Blueprint { path: string; name: string; parent?: string; variables: Array<{ name: string; type: string }>; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
 interface Queued { id: string; path: string; graph: string; request?: string; at: string; ops: unknown[] }
 
-/** Pin colors as in Unreal, so the picture reads the same. */
-function pinColor(type: string): string {
-  const t = type.split(":")[0]!.toLowerCase();
-  return (
-    { exec: "#f2f2f2", bool: "#9b1c1c", boolean: "#9b1c1c", single: "#9ee35a", int32: "#2ad3ba", vector3: "#f2c94c", vector2: "#f2c94c", gameobject: "#2d8bf0", transform: "#2d8bf0", real: "#9ee35a", float: "#9ee35a", double: "#9ee35a", int: "#2ad3ba", int64: "#2ad3ba", byte: "#0b6e5e", string: "#e93fe1", name: "#b38cf0", text: "#e8839b", object: "#2d8bf0", class: "#5d00c9", struct: "#1355b8", interface: "#f0f0a8", softobject: "#9edcff" } as Record<string, string>
-  )[t] ?? "#9aa0a6";
-}
+interface Job { state: "building" | "waiting" | "copying" | "done" | "failed"; project: string; engine: string; log: string[]; message?: string }
 
-const W = 230;
-const HEAD = 26;
-const ROW = 19;
-const SCALE = 0.7;
-
-/** Draws one graph the way the Blueprint editor does: nodes with pins, links between them. */
-function GraphView({ nodes, unity = false }: { nodes: GNode[]; unity?: boolean }) {
-  const layout = useMemo(() => {
-    if (!nodes.length) return null;
-    const minX = Math.min(...nodes.map((n) => n.x)) * SCALE;
-    const minY = Math.min(...nodes.map((n) => n.y)) * SCALE;
-    const boxes = nodes.map((n) => {
-      const ins = n.pins.filter((p) => p.dir === "in");
-      const outs = n.pins.filter((p) => p.dir === "out");
-      const h = HEAD + Math.max(ins.length, outs.length, 1) * ROW + 8;
-      return { n, x: n.x * SCALE - minX + 20, y: n.y * SCALE - minY + 20, h, ins, outs };
-    });
-    // Nodes that sit on top of each other (a new node placed where another is) move right until they are clear,
-    // so every node and pin can be read (found on the phone: a new PrintString covered BeginPlay).
-    const hit = (a: (typeof boxes)[number], b: (typeof boxes)[number]) => a.x < b.x + W + 12 && b.x < a.x + W + 12 && a.y < b.y + b.h + 12 && b.y < a.y + a.h + 12;
-    for (let i = 1; i < boxes.length; i++) {
-      for (let guard = 0; guard < 50; guard++) {
-        const other = boxes.slice(0, i).find((b) => hit(b, boxes[i]!));
-        if (!other) break;
-        boxes[i]!.x = other.x + W + 40;
-      }
-    }
-    const at = new Map<string, { x: number; y: number }>();
-    for (const b of boxes) {
-      b.ins.forEach((p, i) => at.set(`${b.n.id}:${p.name}`, { x: b.x, y: b.y + HEAD + i * ROW + ROW / 2 }));
-      b.outs.forEach((p, i) => at.set(`${b.n.id}:${p.name}`, { x: b.x + W, y: b.y + HEAD + i * ROW + ROW / 2 }));
-    }
-    const links: Array<{ d: string; color: string }> = [];
-    for (const b of boxes) {
-      for (const p of b.outs) {
-        const a = at.get(`${b.n.id}:${p.name}`)!;
-        for (const l of p.links ?? []) {
-          const z = at.get(l);
-          if (!z) continue;
-          const dx = Math.max(40, Math.abs(z.x - a.x) / 2);
-          links.push({ d: `M${a.x},${a.y} C${a.x + dx},${a.y} ${z.x - dx},${z.y} ${z.x},${z.y}`, color: pinColor(p.type) });
-        }
-      }
-    }
-    const width = Math.max(...boxes.map((b) => b.x + W)) + 40;
-    const height = Math.max(...boxes.map((b) => b.y + b.h)) + 40;
-    return { boxes, links, width, height };
-  }, [nodes]);
-
-  // Zoom and pan, like Unreal's graph editor and React Flow: wheel or pinch to zoom, drag to move,
-  // buttons for + / − / fit. It opens fitted to the frame, so the whole graph shows on a phone too.
-  const frame = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const pinch = useRef<{ d: number; k: number } | null>(null);
-  const fit = () => {
-    const el = frame.current;
-    if (!el || !layout) return;
-    const r = el.getBoundingClientRect();
-    const k = Math.min(1.5, Math.max(0.15, Math.min(r.width / layout.width, r.height / layout.height)));
-    setView({ k, x: (r.width - layout.width * k) / 2, y: (r.height - layout.height * k) / 2 });
-  };
-  useEffect(fit, [layout]);
-  const zoomAt = (factor: number, cx?: number, cy?: number) =>
-    setView((v) => {
-      const r = frame.current?.getBoundingClientRect();
-      const px = cx ?? (r ? r.width / 2 : 0);
-      const py = cy ?? (r ? r.height / 2 : 0);
-      const k = Math.min(3, Math.max(0.1, v.k * factor));
-      return { k, x: px - ((px - v.x) * k) / v.k, y: py - ((py - v.y) * k) / v.k };
-    });
+/**
+ * The plugin updates itself: one press builds the new version while Unreal
+ * is open, Unreal asks to save and closes, the plugin is replaced, and the
+ * project opens again (from the phone too; the save question shows on the computer).
+ */
+function PluginUpdate({ latest, now, download }: { latest: string; now: string; download: string }) {
+  const [job, setJob] = useState<Job | null>(null);
+  const running = job?.state === "building" || job?.state === "waiting" || job?.state === "copying";
   useEffect(() => {
-    const el = frame.current;
-    if (!el) return;
-    // Not passive, so the page does not scroll while the graph zooms.
-    const wheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const r = el.getBoundingClientRect();
-      zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
-    };
-    el.addEventListener("wheel", wheel, { passive: false });
-    return () => el.removeEventListener("wheel", wheel);
-  }, [layout]);
-  const local = (e: React.PointerEvent) => {
-    const r = frame.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
-  const down = (e: React.PointerEvent) => {
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    pointers.current.set(e.pointerId, local(e));
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      pinch.current = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), k: view.k };
-    }
-  };
-  const move = (e: React.PointerEvent) => {
-    const prev = pointers.current.get(e.pointerId);
-    if (!prev) return;
-    const now = local(e);
-    pointers.current.set(e.pointerId, now);
-    if (pointers.current.size === 2 && pinch.current) {
-      const [a, b] = [...pointers.current.values()];
-      const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-      const target = Math.min(3, Math.max(0.1, (pinch.current.k * d) / Math.max(1, pinch.current.d)));
-      zoomAt(target / view.k, (a!.x + b!.x) / 2, (a!.y + b!.y) / 2);
-    } else if (pointers.current.size === 1) setView((v) => ({ ...v, x: v.x + now.x - prev.x, y: v.y + now.y - prev.y }));
-  };
-  const up = (e: React.PointerEvent) => {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinch.current = null;
-  };
-
-  if (!layout) return <p className="muted ue-empty">{L("הגרף ריק.", "This graph is empty.")}</p>;
-  const pinRow = (p: Pin, i: number, x: number, y: number, side: "in" | "out") => (
-    <g key={`${side}${i}`}>
-      <circle cx={side === "in" ? x : x + W} cy={y + HEAD + i * ROW + ROW / 2} r={p.type === "exec" ? 4.5 : 4} fill={p.links?.length ? pinColor(p.type) : "none"} stroke={pinColor(p.type)} strokeWidth={1.6} />
-      <text x={side === "in" ? x + 10 : x + W - 10} y={y + HEAD + i * ROW + ROW / 2 + 4} textAnchor={side === "in" ? "start" : "end"} className="ue-pin">
-        {p.type === "exec" && !p.label ? "" : p.label ?? p.name}
-        {side === "in" && p.default !== undefined && !p.links?.length ? ` = ${p.default.length > 18 ? `${p.default.slice(0, 18)}…` : p.default}` : ""}
-      </text>
-    </g>
-  );
+    if (!running) return;
+    const id = setInterval(() => void api<{ job: Job | null }>("/api/unreal/engines").then((r) => setJob(r.job), () => undefined), 2000);
+    return () => clearInterval(id);
+  }, [running]);
+  const start = () => void api<{ job: Job }>("/api/unreal/update-plugin", { method: "POST" }).then((r) => setJob(r.job), (e: Error) => toast(e.message));
+  const step = job ? { building: L("בונה את הגרסה החדשה (Unreal נשאר פתוח)…", "Building the new version (Unreal stays open)…"), waiting: L("Unreal נסגר — אם הוא שואל אם לשמור, ענה במחשב…", "Closing Unreal — if it asks to save, answer on the computer…"), copying: L("מחליף את הפלאגין…", "Replacing the plugin…"), done: job.message ?? L("עודכן.", "Updated."), failed: job.message ?? L("נכשל.", "Failed.") }[job.state] : "";
   return (
-    <div className="ue-frame" ref={frame} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={fit}>
-      <svg className="ue-graph" width="100%" height="100%" role="img" aria-label={unity ? L("גרף Script Graph", "Script Graph") : L("גרף Blueprint", "Blueprint graph")}>
-        <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-          {layout.links.map((l, i) => <path key={i} d={l.d} stroke={l.color} strokeWidth={2} fill="none" opacity={0.85} />)}
-          {layout.boxes.map((b) => {
-            const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
-            return (
-              <g key={b.n.id}>
-                {b.n.comment && <text x={b.x} y={b.y - 6} className="ue-comment">💬 {b.n.comment.length > 40 ? `${b.n.comment.slice(0, 40)}…` : b.n.comment}</text>}
-                <rect x={b.x} y={b.y} width={W} height={b.h} rx={7} fill="#1b1c20" stroke="#000" opacity={0.96} />
-                <path d={`M${b.x},${b.y + 7} a7,7 0 0 1 7,-7 h${W - 14} a7,7 0 0 1 7,7 v${HEAD - 7} h-${W} z`} fill={head} />
-                <text x={b.x + 9} y={b.y + 17} className="ue-title">{b.n.title.split("\n")[0]!.slice(0, 30)}</text>
-                {b.ins.map((p, i) => pinRow(p, i, b.x, b.y, "in"))}
-                {b.outs.map((p, i) => pinRow(p, i, b.x, b.y, "out"))}
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-      <div className="ue-zoom" onPointerDown={(e) => e.stopPropagation()}>
-        <button type="button" onClick={() => zoomAt(1.25)} aria-label={L("הגדל", "Zoom in")} title={L("הגדל", "Zoom in")}>+</button>
-        <button type="button" onClick={() => zoomAt(0.8)} aria-label={L("הקטן", "Zoom out")} title={L("הקטן", "Zoom out")}>−</button>
-        <button type="button" onClick={fit} aria-label={L("הכל במסך", "Fit to screen")} title={L("הכל במסך", "Fit to screen")}>⤢</button>
-        <span className="muted small">{Math.round(view.k * 100)}%</span>
-      </div>
+    <div className="card row plugin-update">
+      <span className="grow small">{L(`גרסה חדשה של הפלאגין: ${latest} (מותקנת ${now}).`, `A newer plugin: ${latest} (installed ${now}).`)} {step && <strong dir="auto">{step}</strong>}</span>
+      {!running && job?.state !== "done" && <button type="button" className="primary" onClick={start}>{L("עדכן אוטומטית", "Update automatically")}</button>}
+      <a className="small" href={download}>{L("הורדה ידנית", "Download")}</a>
     </div>
   );
 }
-
-interface Job { state: "building" | "copying" | "done" | "failed"; project: string; engine: string; log: string[]; message?: string }
 
 /**
  * Install into a project (this computer, Windows): KesherAI builds the
@@ -322,6 +186,25 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const [report, setReport] = useState<string[]>([]);
   // The AI bubble over the node view: a short chat about the Blueprint shown (follow-ups know what came before).
   const [bubble, setBubble] = useState(false);
+  // Graph, code, or both side by side (remembered); a line clicked in the code flashes its node.
+  const [view, setView] = useState<"graph" | "code" | "both">(() => {
+    try {
+      const v = localStorage.getItem("kesher.bpView");
+      return v === "code" || v === "both" ? v : "graph";
+    } catch {
+      return "graph";
+    }
+  });
+  const chooseView = (v: "graph" | "code" | "both") => {
+    setView(v);
+    try {
+      localStorage.setItem("kesher.bpView", v);
+    } catch {
+      // private window: not remembered
+    }
+  };
+  const [flash, setFlash] = useState<{ id: string; n: number }>();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [chat, setChat] = useState<Array<{ who: "you" | "ai"; lines: string[] }>>([]);
   const chatEnd = useRef<HTMLDivElement>(null);
   useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [chat, busy]);
@@ -377,16 +260,18 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       toast((e as Error).message);
     }
   };
-  const edit = async () => {
-    const asked = request.trim();
+  /** A change in words (the bubble), or a full request from the code view (shown in the bubble by its short name). */
+  const edit = async (given?: string, shown?: string) => {
+    const asked = (given ?? request).trim();
     if (!asked) return;
     setBusy(true);
     setReport([]);
+    if (given) setBubble(true);
     // Earlier requests in this bubble, so "now make it red" knows what "it" is (they are already applied).
     const earlier = chat.filter((c) => c.who === "you").slice(-4).map((c) => c.lines[0]);
-    const full = earlier.length ? `${asked}\n\n(Earlier in this conversation, already applied: ${earlier.map((e, i) => `${i + 1}) ${e}`).join(" ")})` : asked;
-    setChat((c) => [...c, { who: "you", lines: [asked] }]);
-    setRequest("");
+    const full = !given && earlier.length ? `${asked}\n\n(Earlier in this conversation, already applied: ${earlier.map((e, i) => `${i + 1}) ${e}`).join(" ")})` : asked;
+    setChat((c) => [...c, { who: "you", lines: [shown ?? asked] }]);
+    if (!given) setRequest("");
     try {
       const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request: full, ...(model ? { model } : {}) } });
       const lines = [r.note || L("בוצע.", "Done.")];
@@ -428,7 +313,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           {!st.connected && <span className="muted small">{L("Unity סגור: כל פעולה תריץ את Unity ברקע (איטי יותר).", "Unity is closed: each action runs Unity in the background (slower).")}</span>}
         </div>
       )}
-      {outdated && !unity && <p className="pill">{L(`יש גרסה חדשה של הפלאגין (${st.latestBridge}).`, `A newer plugin is out (${st.latestBridge}).`)} <a href={st.download}>{L("הורד", "Download")}</a></p>}
+      {outdated && !unity && <PluginUpdate latest={st.latestBridge} now={st.editor!.bridge} download={st.download} />}
 
       {(neverConnected || (!st.connected && !unity)) && (
         <section className="card stack">
@@ -459,7 +344,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       )}
 
       {!neverConnected && (
-        <div className="ue-body">
+        <div className={`ue-body${view === "both" ? " wide" : ""}`}>
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
             <select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label={unity ? "Script Graph" : "Blueprint"}>
@@ -498,8 +383,29 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     </button>
                   ))}
                 </div>
-                <div className="ue-stage">
-                  <div className="ue-canvas">{graph && <GraphView unity={unity} nodes={graph.nodes} />}</div>
+                <div className="ue-views" role="tablist" aria-label={L("תצוגה", "View")}>
+                  {(["graph", "code", "both"] as const).map((v) => (
+                    <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => chooseView(v)}>
+                      {v === "graph" ? L("גרף", "Graph") : v === "code" ? L("קוד", "Code") : L("זה לצד זה", "Side by side")}
+                    </button>
+                  ))}
+                </div>
+                <div className={`ue-split${view === "both" ? " both" : ""}`}>
+                {view !== "graph" && graph && (
+                  <BlueprintCode
+                    nodes={graph.nodes}
+                    selected={picked}
+                    editable={st.connected || unity}
+                    busy={busy}
+                    onPick={(id) => {
+                      if (view === "code") chooseView("both");
+                      setFlash((f) => ({ id, n: (f?.n ?? 0) + 1 }));
+                    }}
+                    onApply={(code, before) => void edit(`Change this graph so it does exactly what this code says. The code is the graph written as text (one line per node, in the order the exec wires run; "x = Node(...)" names a node's outputs; indented blocks under "then:" / "else:" are those exec outputs). Make only the differences.\n\nBEFORE:\n${before.slice(0, 3000)}\n\nAFTER:\n${code.slice(0, 3000)}`, L("עדכון הגרף לפי הקוד", "Update the graph from the code"))}
+                  />
+                )}
+                <div className="ue-stage" hidden={view === "code"}>
+                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={!unity && st.connected && !bp.offline} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
                   {!bubble && (
                     <button type="button" className="ue-ai-fab primary" onClick={() => setBubble(true)} aria-label={L("עריכה עם AI", "Edit with AI")} title={L("עריכה עם AI", "Edit with AI")}>✨</button>
                   )}
@@ -531,6 +437,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                       </form>
                     </div>
                   )}
+                </div>
                 </div>
                 {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}
               </>
