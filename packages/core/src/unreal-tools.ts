@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/p
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
-import { findEngines, readProject, enableUnrealMcp, type UnrealEngine } from "./unreal-install.js";
+import { addEngineFolders, findEngines, readProject, enableUnrealMcp, type UnrealEngine } from "./unreal-install.js";
 import { projectPath } from "./unity-tools.js";
 
 /**
@@ -222,8 +222,13 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
   return [
     {
       risk: "read",
-      spec: { name: "unreal_status", description: "What is ready for Unreal work: installed engines (and whether they can build for Android), the chat's project, Visual Studio's C++ tools, the Android SDK/NDK/JDK, and whether the editor's MCP server answers.", inputSchema: { type: "object", properties: {} } },
-      run: async () => {
+      spec: {
+        name: "unreal_status",
+        description: "What is ready for Unreal work: installed engines (and whether they can build for Android), the chat's project, Visual Studio's C++ tools, the Android SDK/NDK/JDK, and whether the editor's MCP server answers. If the user says where an engine is installed, pass engine_folder.",
+        inputSchema: { type: "object", properties: { engine_folder: { type: "string", description: "Where an engine is installed, e.g. D:\\Epic Games\\UE_5.8 (optional)." } } },
+      },
+      run: async (input) => {
+        if (typeof input.engine_folder === "string" && input.engine_folder.trim()) addEngineFolders([input.engine_folder]);
         const engines = await findEngines();
         const vs = await visualStudio();
         const a = await androidTools();

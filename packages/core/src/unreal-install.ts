@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 
 /**
  * Puts the KesherAI Bridge plugin into an Unreal project — also a
@@ -103,6 +104,13 @@ async function registeredEngines(): Promise<UnrealEngine[]> {
   return found;
 }
 
+/** Folders the user pointed to (an engine folder like D:\\UE_5.8, or a folder that holds UE_x.y folders). */
+const extraEngineFolders = new Set<string>();
+/** Adds folders to look in for engines (Settings or unreal_status's engine_folder). */
+export function addEngineFolders(folders: Iterable<string>): void {
+  for (const f of folders) if (f && f.trim()) extraEngineFolders.add(f.trim());
+}
+
 /** @returns Every engine found on this computer (newest first, each folder once). */
 export async function findEngines(): Promise<UnrealEngine[]> {
   if (process.platform !== "win32") return [];
@@ -112,12 +120,20 @@ export async function findEngines(): Promise<UnrealEngine[]> {
   const manDir = join(data, "Epic", "EpicGamesLauncher", "Data", "Manifests");
   const items = (await readdir(manDir).catch(() => [] as string[])).filter((f) => f.endsWith(".item"));
   const manifests = manifestEngines(await Promise.all(items.map((f) => readFile(join(manDir, f), "utf8").catch(() => ""))));
-  // The launcher's default folder, in case neither list has it.
-  const pf = join(process.env.ProgramFiles ?? "C:\\Program Files", "Epic Games");
-  const folders = (await readdir(pf).catch(() => [] as string[]))
-    .map((f) => ({ m: /^UE_(\d+\.\d+)$/.exec(f), path: join(pf, f) }))
-    .filter((e): e is { m: RegExpExecArray; path: string } => !!e.m)
-    .map((e) => ({ version: e.m[1]!, path: e.path, kind: "launcher" as const }));
+  // Common folders on every drive (the new launcher keeps no list KesherAI can read), and the user's own folders.
+  const parents = new Set<string>([join(process.env.ProgramFiles ?? "C:\\Program Files", "Epic Games"), ...extraEngineFolders]);
+  for (const d of "CDEFGH") for (const sub of ["Epic Games", "Program Files\\Epic Games", "UnrealEngine", "Unreal Engine", "Epic"]) parents.add(`${d}:\\${sub}`);
+  for (const sub of ["UnrealEngine", "Unreal Engine", "Epic Games", join("source", "repos")]) parents.add(join(homedir(), sub));
+  const folders: UnrealEngine[] = [];
+  for (const parent of parents) {
+    // A folder that is itself an engine (e.g. D:\UE_5.8 given by the user).
+    const own = /UE_(\d+\.\d+)$/i.exec(parent);
+    if (own) folders.push({ version: own[1]!, path: parent, kind: "launcher" });
+    for (const f of await readdir(parent).catch(() => [] as string[])) {
+      const m = /^UE_(\d+\.\d+)$/i.exec(f);
+      if (m) folders.push({ version: m[1]!, path: join(parent, f), kind: "launcher" });
+    }
+  }
   const seen = new Set<string>();
   return [...launcher, ...manifests, ...(await registeredEngines().catch(() => [])), ...folders, ...(await sourceEngines().catch(() => []))]
     .filter((e) => existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")))
