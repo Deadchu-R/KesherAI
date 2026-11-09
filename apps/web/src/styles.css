@@ -1557,3 +1557,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .annot-notes li { gap: 8px; align-items: center; }
 .annot-n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #000; font-weight: 700; flex: none; }
 .annot-hint { margin: 0; }
+.ue-found { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ue-found li { gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; background: var(--panel-2, #26272c); }
+.ue-found li .grow { min-width: 0; overflow-wrap: anywhere; }

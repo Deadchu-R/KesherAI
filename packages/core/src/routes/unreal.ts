@@ -15,6 +15,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
+import { findGameProjects } from "../game-projects.js";
+import { readFile as readFileFs } from "node:fs/promises";
 
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
@@ -405,9 +407,31 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
    * projects): builds it once per engine version, then copies it in. Only on
    * this computer.
    */
+  // The Unreal projects found on this computer, each with the KesherAI Bridge version in it (if any): one click installs or updates it.
+  const unrealProjects = async () => (await findGameProjects({ ...(s.unreal.projectFile ? { unrealFile: s.unreal.projectFile } : {}) })).filter((p) => p.kind === "unreal");
+  app.get("/api/unreal/projects", async () => {
+    const list = await unrealProjects();
+    return {
+      latest: BRIDGE_VERSION,
+      projects: await Promise.all(
+        list.map(async (p) => {
+          const raw = await readFileFs(join(p.path, "Plugins", "KesherAIBridge", "KesherAIBridge.uplugin"), "utf8").catch(() => "");
+          let plugin: string | null = null;
+          try {
+            plugin = raw ? String((JSON.parse(raw.replace(/^\uFEFF/, "")) as { VersionName?: string }).VersionName ?? "?") : null;
+          } catch {
+            plugin = "?";
+          }
+          return { ...p, plugin, open: !!s.unreal.projectFile && dirname(s.unreal.projectFile).toLowerCase() === p.path.toLowerCase() };
+        }),
+      ),
+    };
+  });
+
   app.post<{ Body: { project?: string } }>("/api/unreal/install", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Install the plugin on the computer that runs KesherAI." });
     if (!req.body?.project) return reply.code(400).send({ error: "Choose the project folder." });
+    // From the phone: only a project found on the computer (never any folder by path).
+    if (!isLocalRequest(req) && !(await unrealProjects()).some((p) => p.path === req.body!.project)) return reply.code(403).send({ error: "From the phone, choose one of the projects found on the computer." });
     try {
       await installer.install(req.body.project);
       return { job: installer.status() };
