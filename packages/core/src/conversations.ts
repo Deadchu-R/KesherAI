@@ -16,6 +16,7 @@ import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { findEngines, readProject } from "./unreal-install.js";
+import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
@@ -177,6 +178,13 @@ export class ConversationManager {
   /** Whether an Unreal Engine is installed here (checked in the background). */
   private unrealEngines = false;
   private unrealCheckedAt = 0;
+  /** Long builds that keep running across a KesherAI restart (~/.kesher/jobs). */
+  private jobsStore?: JobStore;
+  /** @returns The long-job store (made on first use). */
+  jobs(): JobStore {
+    this.jobsStore ??= new JobStore(join(this.deps.outputsDir, "..", "jobs"));
+    return this.jobsStore;
+  }
 
   /** Looks for installed Unreal engines at most every 5 minutes, without waiting. */
   private checkUnreal(): void {
@@ -712,7 +720,7 @@ export class ConversationManager {
     // Unreal: when an engine is installed here (checked in the background, at most every 5 minutes) or a project is in use.
     this.checkUnreal();
     if (this.unrealState.project || this.unrealEngines) {
-      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs")));
+      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs()));
       media.notes.push(UNREAL_NOTE);
     }
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];

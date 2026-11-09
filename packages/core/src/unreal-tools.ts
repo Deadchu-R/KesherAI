@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
 import { addEngineFolders, findEngines, readProject, enableUnrealMcp, type UnrealEngine } from "./unreal-install.js";
 import { projectPath } from "./unity-tools.js";
+import type { JobStore } from "./jobs.js";
 
 /**
  * Unreal in the chat, the way the Unity tools work: the model sees the
@@ -46,7 +47,7 @@ export const UNREAL_TOOL_NAMES = [
 ] as const;
 
 export const UNREAL_NOTE =
-  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
+  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). Builds keep running if KesherAI restarts: when the user says continue after a restart, call the same tool again and it joins the running build. Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
@@ -229,7 +230,29 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
  * @param state - Holds the chat's current Unreal project (shared with the page).
  * @param logsDir - Where the build and package logs go.
  */
-export function unrealTools(state: { project?: string }, logsDir: string): AgentTool[] {
+export function unrealTools(state: { project?: string }, logsDir: string, jobs?: JobStore): AgentTool[] {
+  /**
+   * A long build as a job that survives a KesherAI restart (update, closing the app): a job with the same key
+   * that is still running is joined instead of starting a second one, so "continue" after a restart picks up the
+   * build where it is. Stop in the chat stops the job; KesherAI quitting does not.
+   */
+  const longRun = async (key: string, file: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeoutMs: number; log: string; signal?: AbortSignal }): Promise<Run & { note: string }> => {
+    if (!jobs) return { ...(await runProgram(file, args, { env: opts.env, timeoutMs: opts.timeoutMs, log: opts.log })), note: "" };
+    const old = await jobs.find(key);
+    const rec = old?.state === "running" ? old : await jobs.start(key, file, args, { env: opts.env });
+    const note = old?.state === "running" ? `Joined the same build already running since ${new Date(old.startedAt).toLocaleTimeString()} (it kept going while KesherAI restarted). ` : "";
+    const onAbort = () => jobs.stop(rec);
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      const st = await jobs.wait(rec, { timeoutMs: opts.timeoutMs, signal: opts.signal });
+      await writeFile(opts.log, st.output).catch(() => undefined);
+      if (st.state === "running") return { code: -2, out: st.output, note: `${note}Still running after ${Math.round(opts.timeoutMs / 60000)} minutes; call this tool again to keep waiting for it. ` };
+      if (st.state === "stopped") return { code: -1, out: st.output, note: `${note}The build stopped before it finished (KesherAI or the computer was closed, or it was stopped). Call the tool again to run it again; Unreal continues from what was already built. ` };
+      return { code: st.code ?? -1, out: st.output, note };
+    } finally {
+      opts.signal?.removeEventListener("abort", onAbort);
+    }
+  };
   const need = async () => {
     if (!state.project) throw new Error("No Unreal project is chosen. Use unreal_create_project for a new one or unreal_use_project with the folder of an existing one.");
     return readProject(state.project);
@@ -348,20 +371,20 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
       risk: "exec",
       spec: { name: "unreal_compile", description: "Compile the project's C++ for the editor (Unreal's Build.bat, Win64 Development) and report the errors. Close the editor first, or it may refuse (Live Coding).", inputSchema: { type: "object", properties: {} } },
       preview: async () => `Build.bat <project>Editor Win64 Development (${state.project ?? "no project"})`,
-      run: async () => {
+      run: async (_input, ctx) => {
         const p = await need();
         const e = await engineOf(p.engine);
         const name = moduleName(p.file);
         await mkdir(logsDir, { recursive: true });
         const log = join(logsDir, "unreal-build.log");
         await writeFile(log, `> Build.bat ${name}Editor Win64 Development\n`);
-        const r = await runProgram(join(e.path, "Engine", "Build", "BatchFiles", "Build.bat"), [`${name}Editor`, "Win64", "Development", `-Project=${p.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000, log });
-        if (r.code === 0) return { output: `Compiled with no errors.\n${cut(r.out.split("\n").filter((l) => /warning/i.test(l)).join("\n"))}` };
+        const r = await longRun(`unreal-compile:${p.file}`, join(e.path, "Engine", "Build", "BatchFiles", "Build.bat"), [`${name}Editor`, "Win64", "Development", `-Project=${p.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000, log, signal: ctx?.signal });
+        if (r.code === 0) return { output: `${r.note}Compiled with no errors.\n${cut(r.out.split("\n").filter((l) => /warning/i.test(l)).join("\n"))}` };
         const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|fatal/i.test(l));
         const why = /SDK validation failed|Sdk: not found/i.test(r.out)
           ? "The Windows SDK is missing (not a problem in the code). STOP and ask the user to install it: Visual Studio Installer → Modify → 'Game development with C++' and a Windows 11 SDK. Do not install it yourself.\n"
           : /Live ?Coding/i.test(r.out) ? "The editor is open with Live Coding: close the editor (or compile there with Ctrl+Alt+F11), then compile again.\n" : !errors.some((l) => /\.(h|cpp)\(\d+/i.test(l)) && /(Visual Studio|MSVC|compiler|toolchain).{0,60}(not found|not installed|missing|could not be found)/i.test(r.out) ? "Visual Studio's C++ tools were not found. STOP and ask the user to install Visual Studio with 'Game development with C++'. Do not install it yourself.\n" : errors.length ? "These are errors in the code: fix the files.\n" : "";
-        return { output: `Compile FAILED (exit ${r.code}). ${why}Errors (fix them, write the files again, compile again):\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
+        return { output: `${r.note}Compile FAILED (exit ${r.code}). ${why}Errors (fix them, write the files again, compile again):\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
       },
     },
     {
@@ -404,7 +427,7 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
         inputSchema: { type: "object", properties: { target: { type: "string", enum: ["android", "windows"] } } },
       },
       preview: async (input) => `RunUAT BuildCookRun ${String(input.target ?? "windows")} (${state.project ?? "no project"})`,
-      run: async (input) => {
+      run: async (input, ctx) => {
         const p = await need();
         const e = await engineOf(p.engine);
         const android = input.target === "android";
@@ -419,7 +442,7 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
         }
         const args = ["BuildCookRun", `-project=${p.file}`, "-noP4", `-platform=${android ? "Android" : "Win64"}`, ...(android ? ["-cookflavor=ASTC"] : []), "-clientconfig=Development", "-build", "-cook", "-stage", "-pak", "-iostore", "-package", "-archive", `-archivedirectory=${out}`, "-unattended", "-utf8output"];
         await writeFile(log, `> RunUAT ${args.join(" ")}\n`);
-        const r = await runProgram(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat"), args, { env, timeoutMs: 3 * 3_600_000, log });
+        const r = await longRun(`unreal-package:${p.file}:${android ? "android" : "windows"}`, join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat"), args, { env, timeoutMs: 3 * 3_600_000, log, signal: ctx?.signal });
         const made: string[] = [];
         const walk = async (d: string, depth: number) => {
           for (const x of await readdir(d, { withFileTypes: true }).catch(() => [])) {
@@ -430,10 +453,10 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
         await walk(out, 0);
         if (r.code !== 0 || !made.length) {
           const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|failed|exception/i.test(l)).slice(-40);
-          return { output: `Packaging did NOT finish (exit ${r.code}). Full log: ${log}\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
+          return { output: `${r.note}Packaging did NOT finish (exit ${r.code}). Full log: ${log}\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
         }
         const sizes = await Promise.all(made.map(async (f) => `${f} (${Math.round((await stat(f)).size / 1048576)} MB)`));
-        return { output: `Packaged: ${sizes.join(", ")}.` };
+        return { output: `${r.note}Packaged: ${sizes.join(", ")}.` };
       },
     },
   ];

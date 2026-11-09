@@ -93,6 +93,11 @@ function Updates() {
       setAllBusy(false);
     }
   };
+  // Builds running now: they keep going through the update, and the chat joins them again afterwards.
+  const [jobs, setJobs] = useState<Array<{ id: string; key: string; startedAt: string }>>([]);
+  useEffect(() => {
+    void api<{ running: Array<{ id: string; key: string; startedAt: string }> }>("/api/jobs").then((r) => setJobs(r.running), () => undefined);
+  }, []);
   const apply = async () => {
     setError("");
     try {
@@ -112,6 +117,13 @@ function Updates() {
         <button type="button" onClick={() => void reconnect({ restart: true })}>{t("restartComputerApp")}</button>
       </p>
       <p className="mono">{version ? `KesherAI v${version.version}${version.commit ? ` (${version.commit})` : ""}` : "…"}</p>
+      {jobs.length > 0 && (
+        <p className="small" dir="auto">
+          🔨 {getLocale() === "he"
+            ? `${jobs.length === 1 ? "בנייה אחת רצה" : `${jobs.length} בניות רצות`} עכשיו (${jobs.map((j) => j.key.split(":")[0]).join(", ")}). הן ממשיכות לרוץ בזמן העדכון; אחריו כתוב "המשך" בצ'אט והוא יתחבר אליהן שוב.`
+            : `${jobs.length === 1 ? "A build is" : `${jobs.length} builds are`} running now (${jobs.map((j) => j.key.split(":")[0]).join(", ")}). They keep going during the update; afterwards say "continue" in the chat and it picks them up again.`}
+        </p>
+      )}
       <div className="row">
         <button type="button" onClick={() => void doCheck()} disabled={checking || !!progress?.running}>{checking ? "…" : t("checkUpdates")}</button>
         {check && check.newCommits.length > 0 && !progress?.running && (

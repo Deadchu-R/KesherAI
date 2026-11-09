@@ -469,6 +469,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
   app.get("/api/updates/progress", async () => s.updater.status());
+  /** Long builds running now (they keep going through an update; the chat joins them again after the restart). */
+  app.get("/api/jobs", async () => ({
+    running: (await s.conversations.jobs().running()).map((j) => ({ id: j.id, key: j.key, startedAt: j.startedAt })),
+  }));
   app.post("/api/updates/apply", async (_req, reply) => {
     try {
       return await s.updater.apply();
