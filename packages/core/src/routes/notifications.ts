@@ -28,8 +28,10 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     async (req, reply) => {
       const b = req.body ?? {};
       const n = s.config.notifications;
-      if (!isLocalRequest(req) && ((b.ntfy?.server !== undefined && b.ntfy.server.trim().replace(/\/$/, "") !== n.ntfy.server) || b.includeText === true))
-        return reply.code(403).send({ error: "Where notifications go (the ntfy server) and whether they carry the text are changed only on the computer itself." });
+      // From a device: not where notifications go or whether they carry text, and not turning phone alerts off
+      // (a stolen phone must not silence the "someone tried to get in" alerts).
+      if (!isLocalRequest(req) && ((b.ntfy?.server !== undefined && b.ntfy.server.trim().replace(/\/$/, "") !== n.ntfy.server) || b.includeText === true || (b.ntfy?.enabled === false && n.ntfy.enabled) || b.newTopic === true))
+        return reply.code(403).send({ error: "Where notifications go (the server, a new topic), whether they carry the text, and turning phone notifications off are changed only on the computer itself." });
       if (b.ntfy?.server !== undefined) {
         if (!/^https?:\/\/[^\s/]+/.test(b.ntfy.server)) return reply.code(400).send({ error: "The ntfy server is an address like https://ntfy.sh" });
         n.ntfy.server = b.ntfy.server.trim().replace(/\/$/, "");

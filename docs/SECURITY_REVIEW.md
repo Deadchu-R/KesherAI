@@ -101,6 +101,12 @@ This review went through the code part by part. Each finding is listed with what
 
 23. **Fixed addresses for access from anywhere (0.5.93):** the user's own Cloudflare tunnel (a subdomain of their domain) or Tailscale Funnel (their ts.net name). Choosing one and setting it up is computer-only. Funnel passes requests to 127.0.0.1, but they name another host and carry forwarding headers (and `Tailscale-Funnel-Request`, now in the list), so they are never "from this computer" and need a key; they count as coming through the internet link for "only paired devices" and the idle-key rule. The Cloudflare tunnel's key file stays in the user's ~/.cloudflared.
 
+24. **Scan after 0.5.95** (phone notifications, connector keys, fixed addresses, the Unreal checks, the editor socket).
+    - **Fixed:** from a paired device, phone notifications could be turned off or moved to a new topic: a stolen phone could silence the "someone tried to get in" alerts. Both are computer-only now.
+    - **Fixed:** pressing "Sign in to Cloudflare" again started another cloudflared each time; now the waiting sign-in's page is reused.
+    - **Checked:** a connector key cannot make more keys (its scope closes /api); the editor socket's bare-Origin exception is for `/api/unreal/ws` only and the socket stays computer-only; the Cloudflare address is checked before it reaches cloudflared, whose arguments are a list (no shell); `unreal_python` writes its script only inside the project's Saved folder.
+    - **Faster:** `unreal_compile` and `unreal_python` answers are much shorter (distinct errors only; no start-up noise), and the Unreal guide sent with each message is ~57% smaller.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA-mrhx-c7xc-m3w5 (high), memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. It is the one advisory the release's automatic audit is told to skip (`pnpm.auditConfig.ignoreGhsas` in package.json), until the move to zod 4. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.

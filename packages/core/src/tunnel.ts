@@ -122,6 +122,7 @@ export class Tunnel {
   /** Tailscale Funnel is passing the internet to KesherAI (mode "tailscale"). */
   private funnelOn = false;
   private loginUrl?: string;
+  private loginChild?: ChildProcess;
   /** Where `cloudflared tunnel login` keeps the account's certificate. */
   private get cert(): string {
     return join(homedir(), ".cloudflared", "cert.pem");
@@ -158,7 +159,10 @@ export class Tunnel {
   async cloudflareLogin(): Promise<{ loginUrl?: string; signedIn: boolean }> {
     await this.install();
     if (existsSync(this.cert)) return { signedIn: true };
+    // A sign-in already waiting: the same page (one cloudflared at a time).
+    if (this.loginChild && this.loginChild.exitCode === null && this.loginUrl) return { loginUrl: this.loginUrl, signedIn: false };
     const child = spawn(this.exe, ["tunnel", "login"], { windowsHide: true, detached: false });
+    this.loginChild = child;
     let out = "";
     const url = await new Promise<string | undefined>((res) => {
       const timer = setTimeout(() => res(undefined), 20_000);
