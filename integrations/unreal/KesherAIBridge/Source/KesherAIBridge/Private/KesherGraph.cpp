@@ -30,7 +30,7 @@
 
 namespace
 {
-	TSharedRef<FJsonObject> MakeError(const FString& Message)
+	TSharedRef<FJsonObject> BridgeError(const FString& Message)
 	{
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetStringField(TEXT("error"), Message);
@@ -60,7 +60,7 @@ namespace
 		return nullptr;
 	}
 
-	FString PinType(const UEdGraphPin* Pin)
+	FString PinTypeName(const UEdGraphPin* Pin)
 	{
 		FString Type = Pin->PinType.PinCategory.ToString();
 		if (UObject* Sub = Pin->PinType.PinSubCategoryObject.Get()) Type += TEXT(":") + Sub->GetName();
@@ -95,7 +95,7 @@ namespace
 			const FString Shown = Pin->GetDisplayName().ToString();
 			if (!Shown.IsEmpty() && Shown != Pin->PinName.ToString()) P->SetStringField(TEXT("label"), Shown);
 			P->SetStringField(TEXT("dir"), Pin->Direction == EGPD_Input ? TEXT("in") : TEXT("out"));
-			P->SetStringField(TEXT("type"), PinType(Pin));
+			P->SetStringField(TEXT("type"), PinTypeName(Pin));
 			FString Default = Pin->DefaultObject ? Pin->DefaultObject->GetPathName() : !Pin->DefaultTextValue.IsEmpty() ? Pin->DefaultTextValue.ToString() : Pin->DefaultValue;
 			if (!Default.IsEmpty() && Pin->LinkedTo.Num() == 0) P->SetStringField(TEXT("default"), Default);
 			TArray<TSharedPtr<FJsonValue>> Links;
@@ -159,14 +159,14 @@ namespace
 		return nullptr;
 	}
 
-	FString Str(const TSharedPtr<FJsonObject>& O, const TCHAR* Field)
+	FString JsonStr(const TSharedPtr<FJsonObject>& O, const TCHAR* Field)
 	{
 		FString V;
 		O->TryGetStringField(Field, V);
 		return V;
 	}
 
-	int32 Int(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, int32 Default)
+	int32 JsonInt(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, int32 Default)
 	{
 		double V = Default;
 		O->TryGetNumberField(Field, V);
@@ -201,7 +201,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Read(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetStringField(TEXT("path"), Path);
 		Out->SetStringField(TEXT("name"), BP->GetName());
@@ -242,9 +242,9 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Apply(const FString& Path, const FString& GraphName, const TArray<TSharedPtr<FJsonValue>>& Ops)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
 		UEdGraph* Graph = FindGraph(BP, GraphName);
-		if (!Graph) return MakeError(TEXT("No graph named ") + GraphName);
+		if (!Graph) return BridgeError(TEXT("No graph named ") + GraphName);
 		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
 
 		FScopedTransaction Transaction(LOCTEXT("Edit", "KesherAI edit"));
@@ -270,17 +270,17 @@ namespace KesherGraph
 		{
 			const TSharedPtr<FJsonObject> Op = V.IsValid() ? V->AsObject() : nullptr;
 			if (!Op.IsValid()) continue;
-			const FString Kind = Str(Op, TEXT("op"));
+			const FString Kind = JsonStr(Op, TEXT("op"));
 			FString Problem;
 			UEdGraphNode* Made = nullptr;
 
 			if (Kind == TEXT("add"))
 			{
-				const FString Type = Str(Op, TEXT("type"));
-				const int32 X = Int(Op, TEXT("x"), 0), Y = Int(Op, TEXT("y"), 0);
+				const FString Type = JsonStr(Op, TEXT("type"));
+				const int32 X = JsonInt(Op, TEXT("x"), 0), Y = JsonInt(Op, TEXT("y"), 0);
 				if (Type == TEXT("call"))
 				{
-					if (UFunction* F = FindFunctionFor(BP, Str(Op, TEXT("function"))))
+					if (UFunction* F = FindFunctionFor(BP, JsonStr(Op, TEXT("function"))))
 					{
 						FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
 						UK2Node_CallFunction* N = Creator.CreateNode();
@@ -290,11 +290,11 @@ namespace KesherGraph
 						Creator.Finalize();
 						Made = N;
 					}
-					else Problem = TEXT("No function ") + Str(Op, TEXT("function"));
+					else Problem = TEXT("No function ") + JsonStr(Op, TEXT("function"));
 				}
 				else if (Type == TEXT("event"))
 				{
-					const FName EventName(*Str(Op, TEXT("event")));
+					const FName EventName(*JsonStr(Op, TEXT("event")));
 					UFunction* F = BP->ParentClass ? BP->ParentClass->FindFunctionByName(EventName) : nullptr;
 					if (F)
 					{
@@ -318,7 +318,7 @@ namespace KesherGraph
 				{
 					FGraphNodeCreator<UK2Node_CustomEvent> Creator(*Graph);
 					UK2Node_CustomEvent* N = Creator.CreateNode();
-					N->CustomFunctionName = FName(*Str(Op, TEXT("name")));
+					N->CustomFunctionName = FName(*JsonStr(Op, TEXT("name")));
 					N->NodePosX = X;
 					N->NodePosY = Y;
 					Creator.Finalize();
@@ -344,7 +344,7 @@ namespace KesherGraph
 				}
 				else if (Type == TEXT("get") || Type == TEXT("set"))
 				{
-					const FName Var(*Str(Op, TEXT("variable")));
+					const FName Var(*JsonStr(Op, TEXT("variable")));
 					if (FBlueprintEditorUtils::FindNewVariableIndex(BP, Var) == INDEX_NONE && !(BP->SkeletonGeneratedClass && BP->SkeletonGeneratedClass->FindPropertyByName(Var)))
 					{
 						Problem = TEXT("No variable ") + Var.ToString();
@@ -374,7 +374,7 @@ namespace KesherGraph
 
 				if (Made)
 				{
-					const FString Ref = Str(Op, TEXT("ref"));
+					const FString Ref = JsonStr(Op, TEXT("ref"));
 					if (!Ref.IsEmpty()) Refs.Add(Ref, Made);
 				}
 			}
@@ -384,47 +384,47 @@ namespace KesherGraph
 				const TSharedPtr<FJsonObject>* To = nullptr;
 				if (Op->TryGetObjectField(TEXT("from"), From) && Op->TryGetObjectField(TEXT("to"), To))
 				{
-					UEdGraphNode* A = NodeOf(Str(*From, TEXT("node")));
-					UEdGraphNode* B = NodeOf(Str(*To, TEXT("node")));
-					UEdGraphPin* PA = A ? FindPin(A, Str(*From, TEXT("pin")), EGPD_Output) : nullptr;
-					UEdGraphPin* PB = B ? FindPin(B, Str(*To, TEXT("pin")), EGPD_Input) : nullptr;
-					if (!PA || !PB) Problem = TEXT("Pin not found: ") + Str(*From, TEXT("node")) + TEXT(".") + Str(*From, TEXT("pin")) + TEXT(" → ") + Str(*To, TEXT("node")) + TEXT(".") + Str(*To, TEXT("pin"));
+					UEdGraphNode* A = NodeOf(JsonStr(*From, TEXT("node")));
+					UEdGraphNode* B = NodeOf(JsonStr(*To, TEXT("node")));
+					UEdGraphPin* PA = A ? FindPin(A, JsonStr(*From, TEXT("pin")), EGPD_Output) : nullptr;
+					UEdGraphPin* PB = B ? FindPin(B, JsonStr(*To, TEXT("pin")), EGPD_Input) : nullptr;
+					if (!PA || !PB) Problem = TEXT("Pin not found: ") + JsonStr(*From, TEXT("node")) + TEXT(".") + JsonStr(*From, TEXT("pin")) + TEXT(" → ") + JsonStr(*To, TEXT("node")) + TEXT(".") + JsonStr(*To, TEXT("pin"));
 					else if (!Schema->TryCreateConnection(PA, PB)) Problem = TEXT("These pins cannot be connected: ") + PA->PinName.ToString() + TEXT(" → ") + PB->PinName.ToString();
 				}
 				else Problem = TEXT("connect needs from and to");
 			}
 			else if (Kind == TEXT("set"))
 			{
-				UEdGraphNode* N = NodeOf(Str(Op, TEXT("node")));
-				UEdGraphPin* Pin = N ? FindPin(N, Str(Op, TEXT("pin")), EGPD_Input) : nullptr;
-				if (!Pin) Problem = TEXT("Pin not found: ") + Str(Op, TEXT("pin"));
+				UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node")));
+				UEdGraphPin* Pin = N ? FindPin(N, JsonStr(Op, TEXT("pin")), EGPD_Input) : nullptr;
+				if (!Pin) Problem = TEXT("Pin not found: ") + JsonStr(Op, TEXT("pin"));
 				else
 				{
 					Pin->Modify();
-					Schema->TrySetDefaultValue(*Pin, Str(Op, TEXT("value")));
+					Schema->TrySetDefaultValue(*Pin, JsonStr(Op, TEXT("value")));
 				}
 			}
 			else if (Kind == TEXT("move"))
 			{
-				if (UEdGraphNode* N = NodeOf(Str(Op, TEXT("node"))))
+				if (UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node"))))
 				{
 					N->Modify();
-					N->NodePosX = Int(Op, TEXT("x"), N->NodePosX);
-					N->NodePosY = Int(Op, TEXT("y"), N->NodePosY);
+					N->NodePosX = JsonInt(Op, TEXT("x"), N->NodePosX);
+					N->NodePosY = JsonInt(Op, TEXT("y"), N->NodePosY);
 				}
 				else Problem = TEXT("Node not found");
 			}
 			else if (Kind == TEXT("delete"))
 			{
-				if (UEdGraphNode* N = NodeOf(Str(Op, TEXT("node")))) FBlueprintEditorUtils::RemoveNode(BP, N, true);
+				if (UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node")))) FBlueprintEditorUtils::RemoveNode(BP, N, true);
 				else Problem = TEXT("Node not found");
 			}
 			else if (Kind == TEXT("comment"))
 			{
-				if (UEdGraphNode* N = NodeOf(Str(Op, TEXT("node"))))
+				if (UEdGraphNode* N = NodeOf(JsonStr(Op, TEXT("node"))))
 				{
 					N->Modify();
-					N->NodeComment = Str(Op, TEXT("text"));
+					N->NodeComment = JsonStr(Op, TEXT("text"));
 					N->bCommentBubbleVisible = !N->NodeComment.IsEmpty();
 				}
 				else Problem = TEXT("Node not found");
@@ -453,7 +453,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Compile(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
 		FCompilerResultsLog Log;
 		FKismetEditorUtilities::CompileBlueprint(BP, EBlueprintCompileOptions::None, &Log);
 		TArray<TSharedPtr<FJsonValue>> Messages;
@@ -475,7 +475,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Save(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
 		TArray<UPackage*> Packages = { BP->GetPackage() };
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), UEditorLoadingAndSavingUtils::SavePackages(Packages, false));
@@ -485,7 +485,7 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Open(const FString& Path)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
-		if (!BP) return MakeError(TEXT("No Blueprint at ") + Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
 		if (GEditor) GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(BP);
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), true);
