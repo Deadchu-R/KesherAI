@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { open, stat } from "node:fs/promises";
+import { basename } from "node:path";
 
 /**
  * Google sign-in and Drive sync for projects and conversations.
@@ -246,6 +248,67 @@ export class GoogleDrive {
       throw new Error(`Google answered ${res.status}: ${text.slice(0, 200)}`);
     }
     return (res.status === 204 ? undefined : await res.json()) as T;
+  }
+
+  /**
+   * The id of a folder at the top of the user's Drive with this name, made if there is none. KesherAI's
+   * permission (drive.file) only lets it add files to folders it made itself, so a folder of that name the
+   * user made by hand is used only when it accepts the upload; otherwise KesherAI makes its own.
+   */
+  async ensureFolder(name: string, fresh = false): Promise<string> {
+    if (fresh) return (await this.call<{ id: string }>(`${this.endpoints.api}/files?fields=id`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, mimeType: FOLDER_MIME }) })).id;
+    const q = encodeURIComponent(`name='${name.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}' and mimeType='${FOLDER_MIME}' and 'root' in parents and trashed=false`);
+    const found = await this.call<{ files: Array<{ id: string; capabilities?: { canAddChildren?: boolean } }> }>(`${this.endpoints.api}/files?q=${q}&fields=files(id,capabilities(canAddChildren))&orderBy=createdTime`);
+    const usable = found.files.find((f) => f.capabilities?.canAddChildren !== false);
+    if (usable) return usable.id;
+    const made = await this.call<{ id: string }>(`${this.endpoints.api}/files?fields=id`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME }),
+    });
+    return made.id;
+  }
+
+  /**
+   * Uploads a file of any size from this computer into a Drive folder, in 8 MB pieces (Google's resumable
+   * upload), so a 200 MB game build never sits in memory whole.
+   *
+   * @returns The new file's id and link.
+   */
+  async uploadFile(path: string, folderId: string, onProgress?: (sent: number, total: number) => void): Promise<{ id: string; link: string; size: number }> {
+    const size = (await stat(path)).size;
+    const name = basename(path);
+    const init = await fetch(`${this.endpoints.upload}/files?uploadType=resumable&fields=id,webViewLink`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${await this.token()}`, "content-type": "application/json; charset=UTF-8", "x-upload-content-length": String(size) },
+      body: JSON.stringify({ name, parents: [folderId] }),
+    });
+    if (!init.ok) throw new Error(`Google answered ${init.status}: ${(await init.text().catch(() => "")).slice(0, 200)}`);
+    const session = init.headers.get("location");
+    if (!session) throw new Error("Google did not start the upload.");
+    const fh = await open(path, "r");
+    try {
+      const CHUNK = 8 * 1024 * 1024;
+      for (let at = 0; ; ) {
+        const len = Math.min(CHUNK, size - at);
+        const buf = Buffer.alloc(len);
+        await fh.read(buf, 0, len, at);
+        const res = await fetch(session, { method: "PUT", headers: { "content-range": size === 0 ? "bytes */0" : `bytes ${at}-${at + len - 1}/${size}` }, body: buf });
+        if (res.status === 308) {
+          // Google says how much it has; continue from there.
+          const range = res.headers.get("range");
+          at = range ? Number(/-(\d+)$/.exec(range)?.[1] ?? at - 1) + 1 : at + len;
+          onProgress?.(at, size);
+          continue;
+        }
+        if (!res.ok) throw new Error(`The upload stopped: Google answered ${res.status}.`);
+        const f = (await res.json()) as { id: string; webViewLink?: string };
+        onProgress?.(size, size);
+        return { id: f.id, link: f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`, size };
+      }
+    } finally {
+      await fh.close();
+    }
   }
 
   /** @returns Whether a service (Gmail, Calendar) is connected. */

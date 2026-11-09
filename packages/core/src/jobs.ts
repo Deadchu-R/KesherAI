@@ -82,11 +82,13 @@ export class JobStore {
     let child;
     try {
       if (process.platform === "win32") {
-        if ([file, ...args].some((a) => /["%^&|<>!\r\n]/.test(a))) throw new Error("A path or argument has a character Windows' command line cannot pass safely (\" % ^ & | < > !).");
+        if ([file, ...args, log].some((a) => /["%^&|<>!\r\n]/.test(a))) throw new Error("A path or argument has a character Windows' command line cannot pass safely (\" % ^ & | < > !).");
         // "call": without it, cmd never comes back from a .bat to write the exit marker.
         const line = `${/\.(bat|cmd)$/i.test(file) ? "call " : ""}${[file, ...args].map((a) => `"${a}"`).join(" ")}`;
-        // cmd runs the job, then writes the exit marker into the same log (/v:on: !ERRORLEVEL! is read after the job).
-        child = spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/v:on", "/s", "/c", `"${line} & echo __KESHER_EXIT__ !ERRORLEVEL!"`], { cwd: opts.cwd, env: opts.env ?? process.env, detached: true, windowsHide: true, windowsVerbatimArguments: true, stdio: ["ignore", out, out] });
+        // cmd runs the job with its output appended to the log by cmd itself, then writes the exit marker (/v:on:
+        // !ERRORLEVEL! is read after the job). A log handle passed from Node only got the batch file's own lines:
+        // the programs it started (Unreal's AutomationTool) wrote to the detached job's own hidden console instead.
+        child = spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/v:on", "/s", "/c", `"${line} >> "${log}" 2>&1 & echo __KESHER_EXIT__ !ERRORLEVEL! >> "${log}""`], { cwd: opts.cwd, env: opts.env ?? process.env, detached: true, windowsHide: true, windowsVerbatimArguments: true, stdio: "ignore" });
       } else {
         child = spawn("sh", ["-c", '"$0" "$@"; echo "__KESHER_EXIT__ $?"', file, ...args], { cwd: opts.cwd, env: opts.env ?? process.env, detached: true, stdio: ["ignore", out, out] });
       }

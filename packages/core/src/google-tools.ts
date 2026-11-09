@@ -232,5 +232,42 @@ export function googleTools(g: GoogleDrive): AgentTool[] {
       },
     );
   }
+  // Saving a file (a game build, a report) to the user's own Drive. Only with this computer's own Google sign-in,
+  // so only the person signed in here can use it; nothing about the account is in the code. drive.file is enough.
+  if (g.connected) {
+    tools.push({
+      risk: "exec",
+      spec: {
+        name: "drive_upload_file",
+        description: "Save a file from this computer (e.g. a built .apk or .exe) to the user's Google Drive, into a folder at the top of their Drive (default \"BuildTests\", made if missing). Any size. Returns the link, which opens on the phone.",
+        inputSchema: { type: "object", properties: { path: { type: "string", description: "The file's full path on this computer." }, folder: { type: "string", description: "Folder name in Drive (default BuildTests)." } }, required: ["path"] },
+      },
+      preview: async (input) => `Upload ${str(input.path)} to your Google Drive, folder "${str(input.folder) || "BuildTests"}"`,
+      run: async (input, ctx) => {
+        const path = str(input.path);
+        const folderName = (str(input.folder) || "BuildTests").slice(0, 100);
+        if (!path) throw new Error("Give the file's full path.");
+        let folderId = await g.ensureFolder(folderName);
+        let shown = 0;
+        const progress = (sent: number, total: number) => {
+          const pct = Math.floor((sent / total) * 100);
+          if (pct >= shown + 10) {
+            shown = pct;
+            ctx?.progress?.(`${pct}% (${Math.round(sent / 1048576)} of ${Math.round(total / 1048576)} MB)\n`);
+          }
+        };
+        try {
+          const f = await g.uploadFile(path, folderId, progress);
+          return { output: `Saved to Google Drive, folder "${folderName}" (${Math.round(f.size / 1048576)} MB): ${f.link}` };
+        } catch (err) {
+          // A folder the user made by hand may not take KesherAI's files (drive.file): make KesherAI's own of that name.
+          if (!/\b(403|404)\b/.test((err as Error).message)) throw err;
+          folderId = await g.ensureFolder(folderName, true);
+          const f = await g.uploadFile(path, folderId, progress);
+          return { output: `Saved to Google Drive, in a new folder "${folderName}" (KesherAI could not add files to the existing one) (${Math.round(f.size / 1048576)} MB): ${f.link}` };
+        }
+      },
+    });
+  }
   return tools;
 }

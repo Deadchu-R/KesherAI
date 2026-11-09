@@ -753,7 +753,9 @@ export function ConversationPage({ id }: { id: string }) {
                 <ActivityGroup
                   key={`g${b.key}`}
                   steps={b.steps}
-                  live={busy && bi === blocks.length - 1}
+                  // Live while the agent works and this group has a step still running (an approval card can come
+                  // after the group, so "the last block" missed a build that was running after its approval).
+                  live={busy && (bi === blocks.length - 1 || b.steps.some((st) => !st.result))}
                   convId={id}
                   renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} />}
                   liveOutput={liveOut}
