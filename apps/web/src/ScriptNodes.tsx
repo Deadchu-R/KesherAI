@@ -27,6 +27,14 @@ const KIND: Record<CsStmt["kind"], [string, string]> = {
  */
 export function ScriptNodes() {
   const [scripts, setScripts] = useState<string[] | null>(null);
+  const [searched, setSearched] = useState<{ folders: number; partial: boolean; error?: string }>({ folders: 0, partial: false });
+  const loadScripts = () => {
+    setScripts(null);
+    void api<{ scripts: string[]; folders: number; partial: boolean }>("/api/unity/scripts").then(
+      (r) => { setScripts(r.scripts); setSearched({ folders: r.folders ?? 0, partial: !!r.partial }); },
+      (e: Error) => { setScripts([]); setSearched({ folders: 0, partial: false, error: e.message }); },
+    );
+  };
   const [q, setQ] = useState("");
   const [path, setPath] = useState("");
   const [file, setFile] = useState<{ text: string; mtime: number } | null>(null);
@@ -38,7 +46,7 @@ export function ScriptNodes() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    void api<{ scripts: string[] }>("/api/unity/scripts").then((r) => setScripts(r.scripts), (e: Error) => { toast(e.message); setScripts([]); });
+    loadScripts();
   }, []);
 
   const open = (p: string) => {
@@ -121,7 +129,12 @@ export function ScriptNodes() {
           <option value="">{L("בחרו סקריפט…", "Choose a script…")}</option>
           {(scripts ?? []).map((s) => <option key={s} value={s}>{s.replace(/^Assets\//, "")}</option>)}
         </select>
-        {scripts === null ? <p className="muted small">…</p> : !scripts.length ? <p className="muted small">{L("אין סקריפטים ב-Assets.", "No scripts in Assets.")}</p> : (
+        {scripts === null ? <p className="muted small">…</p> : !scripts.length ? (
+          <div className="stack small">
+            <p className="muted">{searched.error ?? L(`לא נמצאו קבצי .cs בתיקיית Assets (נבדקו ${searched.folders} תיקיות).`, `No .cs files in Assets (${searched.folders} folders looked at).`)}</p>
+            <button type="button" onClick={loadScripts}>{L("חפש שוב", "Search again")}</button>
+          </div>
+        ) : (
           <ul>
             {list.map((s) => (
               <li key={s}><button type="button" className={s === path ? "on" : ""} onClick={() => open(s)} title={s} dir="ltr">{s.split("/").pop()}</button></li>

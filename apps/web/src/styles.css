@@ -1629,3 +1629,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .found-projects li { gap: 8px; align-items: center; }
 .found-projects .block { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .found-projects .grow { min-width: 0; }
+
+/* The persona menu (a floating list like the model menu). */
+.persona-pop .model-pop-list button { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; text-align: start; width: 100%; }
+.persona-pop .model-pop-list button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.persona-hint { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

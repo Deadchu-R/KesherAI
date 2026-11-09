@@ -154,3 +154,43 @@ export async function findScripts(roots: string[], query: string, max = 40): Pro
   } else hits.sort((a, b) => b.score - a.score || a.rel.length - b.rel.length);
   return hits.slice(0, max).map(({ path, rel, root }) => ({ path, rel, root }));
 }
+
+/** Folders under Assets that hold no scripts worth showing (generated or huge). */
+const NOT_SCRIPTS = /^(\..*|StreamingAssets|AddressableAssetsData|Gizmos)$/i;
+
+/**
+ * The C# scripts of a Unity project (under Assets/, Plugins included), up to
+ * 3,000, breadth first with the folders most likely to hold the user's own
+ * code (Scripts, Code, Source, _Project, Game…) looked at first, so big asset
+ * packs never use up the search before the user's scripts are reached.
+ *
+ * @param project - The Unity project folder.
+ * @returns The scripts' project paths, how many folders were looked at, and whether it stopped early.
+ */
+export async function listUnityScripts(project: string): Promise<{ scripts: string[]; folders: number; partial: boolean }> {
+  const root = join(project, "Assets");
+  const out: string[] = [];
+  const likely = (n: string) => /^(_?scripts?|code|source|src|_?project|game|gameplay|runtime|editor)$/i.test(n);
+  const queue: string[] = [root];
+  let folders = 0;
+  let entries = 0;
+  while (queue.length && out.length < 3000 && entries < 400_000) {
+    const dir = queue.shift()!;
+    folders++;
+    const list = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    const subs: string[] = [];
+    for (const e of list) {
+      entries++;
+      if (e.isDirectory()) {
+        if (!NOT_SCRIPTS.test(e.name)) subs.push(e.name);
+      } else if (e.name.endsWith(".cs")) out.push(relative(project, join(dir, e.name)).replace(/\\/g, "/"));
+    }
+    // Likely code folders go to the front of the queue.
+    subs.sort((a, b) => Number(likely(b)) - Number(likely(a)));
+    const front = subs.filter(likely).map((n) => join(dir, n));
+    const back = subs.filter((n) => !likely(n)).map((n) => join(dir, n));
+    queue.unshift(...front);
+    queue.push(...back);
+  }
+  return { scripts: out.sort(), folders, partial: queue.length > 0 };
+}

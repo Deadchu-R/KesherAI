@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
-import { dirname, join, relative } from "node:path";
+import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import type WebSocket from "ws";
@@ -15,11 +15,11 @@ import { projectPath } from "../unity-tools.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
-import { findGameProjects } from "../game-projects.js";
+import { findGameProjects, listUnityScripts } from "../game-projects.js";
 import { readFile as readFileFs } from "node:fs/promises";
 
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
@@ -397,19 +397,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     app.get(`${base}/scripts`, async (_req, reply) => {
       const project = unity.activeProject;
       if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
-      const out: string[] = [];
-      const stack = [join(project, "Assets")];
-      let seen = 0;
-      while (stack.length && out.length < 2000 && seen < 50_000) {
-        const dir = stack.pop()!;
-        for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-          seen++;
-          if (e.name.startsWith(".") || e.name === "Plugins" || e.name.startsWith("TextMesh Pro")) continue;
-          if (e.isDirectory()) stack.push(join(dir, e.name));
-          else if (e.name.endsWith(".cs")) out.push(relative(project, join(dir, e.name)).replace(/\\/g, "/"));
-        }
-      }
-      return { scripts: out.sort() };
+      return listUnityScripts(project);
     });
     app.get<{ Querystring: { path?: string } }>(`${base}/script`, async (req, reply) => {
       const project = unity.activeProject;

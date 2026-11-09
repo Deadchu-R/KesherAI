@@ -66,3 +66,24 @@ test("finds Unity projects Unity Hub does not list, two levels deep in the usual
   assert.deepEqual(found.map((p) => p.name).sort(), ["Racer", "Tetris"]);
   assert.equal(found.find((p) => p.name === "Racer")!.engine, "2022.3.40f1");
 });
+
+test("a project's scripts are found even behind a huge asset pack, Plugins included", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { listUnityScripts } = await import("./game-projects.js");
+  const p = await mkdtemp(join(tmpdir(), "uproj-"));
+  // A big pack first in the folder order, with many folders and files.
+  for (let i = 0; i < 40; i++) {
+    const d = join(p, "Assets", "ZZZ_HugePack", `Folder${i}`);
+    await mkdir(d, { recursive: true });
+    for (let j = 0; j < 30; j++) await writeFile(join(d, `tex${j}.png`), "x");
+  }
+  await mkdir(join(p, "Assets", "Scripts", "Player"), { recursive: true });
+  await writeFile(join(p, "Assets", "Scripts", "Player", "Move.cs"), "class Move {}");
+  await mkdir(join(p, "Assets", "Plugins", "MyLib"), { recursive: true });
+  await writeFile(join(p, "Assets", "Plugins", "MyLib", "Lib.cs"), "class Lib {}");
+  const r = await listUnityScripts(p);
+  assert.deepEqual(r.scripts, ["Assets/Plugins/MyLib/Lib.cs", "Assets/Scripts/Player/Move.cs"]);
+  assert.equal(r.partial, false);
+});
