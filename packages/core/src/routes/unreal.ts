@@ -6,6 +6,7 @@ import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
+import { editWidget } from "../widget-edit.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
 
@@ -123,6 +124,39 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(502).send({ error: (err as Error).message });
       }
     });
+    /** Widget Blueprints (UMG, plugin 0.1.5+): the widget tree for the Designer view. */
+    app.get<{ Querystring: { path?: string } }>(`${base}/widget`, async (req, reply) => {
+      if (!req.query.path) return reply.code(400).send({ error: "Which Widget Blueprint?" });
+      try {
+        return await unreal.request("widget", { path: req.query.path }, 30_000);
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+    /** The Designer's own changes (move, resize, text, colors): applied in the editor as one undo step. */
+    app.post<{ Body: { path?: string; ops?: unknown[] } }>(`${base}/widget/apply`, async (req, reply) => {
+      if (!req.body?.path || !Array.isArray(req.body.ops)) return reply.code(400).send({ error: "Send the Widget Blueprint and the operations." });
+      try {
+        return await unreal.request("widget_apply", { path: req.body.path, ops: req.body.ops.slice(0, 200) }, 30_000);
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+    /** A Widget Blueprint changed in words (the Designer's AI bubble). */
+    app.post<{ Body: { path?: string; request?: string; selected?: string; model?: string } }>(`${base}/widget/edit`, async (req, reply) => {
+      const path = String(req.body?.path ?? "");
+      const request = String(req.body?.request ?? "").trim().slice(0, 8000);
+      if (!path || !request) return reply.code(400).send({ error: "Choose a Widget Blueprint and say what to change." });
+      const picked = typeof req.body?.model === "string" ? req.body.model : "";
+      const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
+      if (!chat) return reply.code(400).send({ error: "Choose a chat model first; it makes the change." });
+      try {
+        return await editWidget(unreal, s.registry, chat, { path, request, ...(req.body?.selected ? { selected: String(req.body.selected).slice(0, 120) } : {}), signal: AbortSignal.timeout(300_000) });
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+
     /** Ctrl+Z / Ctrl+Y in the page: the editor's own undo and redo. */
     for (const cmd of ["undo", "redo"] as const) {
       app.post(`${base}/${cmd}`, async (_req, reply) => {

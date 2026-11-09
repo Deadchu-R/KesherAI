@@ -5,6 +5,7 @@
 #include "Editor.h"
 #include "IWebSocket.h"
 #include "KesherGraph.h"
+#include "KesherWidget.h"
 #include "Misc/App.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/Paths.h"
@@ -20,7 +21,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.4");
+static const TCHAR* BridgeVersion = TEXT("0.1.5");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -129,6 +130,12 @@ void FKesherAIBridgeModule::OnMessage(const FString& Text)
 		FString Query;
 		In->TryGetStringField(TEXT("query"), Query);
 		Result = KesherGraph::Actions(Path, Query);
+	}
+	else if (Cmd == TEXT("widget")) Result = KesherWidget::Read(Path);
+	else if (Cmd == TEXT("widget_apply"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Ops = nullptr;
+		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherWidget::Apply(Path, *Ops);
 	}
 	else if (Cmd == TEXT("undo") || Cmd == TEXT("redo")) Result = KesherGraph::Undo(Cmd == TEXT("redo"));
 	else if (Cmd == TEXT("quit_for_update"))

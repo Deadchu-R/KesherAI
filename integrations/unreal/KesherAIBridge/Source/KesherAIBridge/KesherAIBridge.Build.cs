@@ -23,6 +23,8 @@ public class KesherAIBridge : ModuleRules
 			"JsonUtilities",
 			"Slate",
 			"SlateCore",
+			"UMG",
+			"UMGEditor",
 		});
 	}
 }

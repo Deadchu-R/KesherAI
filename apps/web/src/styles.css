@@ -1131,10 +1131,44 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .bp-flash { animation: bp-flash 0.6s ease-in-out 4; pointer-events: none; }
 @keyframes bp-flash { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .bp-flash { animation: none; } }
-.ue-views { display: flex; gap: 4px; }
+.ue-views { display: flex; gap: 4px; flex-wrap: wrap; }
+.wd { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; align-items: start; }
+@media (max-width: 900px) { .wd { grid-template-columns: minmax(0, 1fr); } }
+.wd-stage { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: #0d0e10 repeating-conic-gradient(#15161a 0% 25%, #101114 0% 50%) 0 0 / 24px 24px; border: 1px solid var(--border); direction: ltr; }
+.wd-screen { position: absolute; inset-block-start: 0; left: 0; transform-origin: 0 0; outline: 2px dashed rgb(255 255 255 / 0.15); }
+.wd-screen > .wd-w { width: 100%; height: 100%; }
+.wd-w { box-sizing: border-box; position: relative; min-width: 8px; min-height: 8px; }
+.wd-w.sel { outline: 3px solid #f0a830; outline-offset: 1px; z-index: 50; }
+.wd-canvas { width: 100%; height: 100%; }
+.wd-hbox { display: flex; flex-direction: row; align-items: flex-start; }
+.wd-vbox { display: flex; flex-direction: column; align-items: stretch; }
+.wd-overlay { display: grid; }
+.wd-overlay > * { grid-area: 1 / 1; }
+.wd-text { white-space: pre-wrap; font-family: Roboto, system-ui, sans-serif; line-height: 1.2; }
+.wd-image { display: grid; place-items: center; }
+.wd-pic { font-size: 28px; opacity: 0.6; }
+.wd-progress { height: 24px; background: #2a2b30; }
+.wd-progress > span { display: block; height: 100%; }
+.wd-button { display: grid; place-items: center; background: #3b3d44; border-radius: 4px; padding: 6px 12px; }
+.wd-border { display: grid; }
+.wd-spacer { min-width: 16px; min-height: 16px; }
+.wd-other { outline: 1px dashed #666; display: grid; place-items: center; }
+.wd-tag { font: 14px system-ui; color: #aaa; }
+.wd-empty { position: absolute; inset: 40% 10% auto; font-size: 40px; text-align: center; }
+.wd-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wd-side h3 { margin: 0 0 4px; }
+.wd-tree, .wd-tree ul { list-style: none; margin: 0; padding: 0; }
+.wd-tree { max-height: 220px; overflow: auto; }
+.wd-tree button { display: flex; gap: 6px; align-items: baseline; width: 100%; text-align: start; background: none; border: 0; padding: 3px 8px; border-radius: 6px; }
+.wd-tree button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.wd-details { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; }
+.wd-field { display: flex; flex-direction: column; gap: 2px; }
+.wd-field input[type="color"] { width: 60px; height: 30px; padding: 0; }
+.wd-ask { gap: 6px; }
 .plugin-update { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; }
 .ue-views button { padding: 4px 10px; border-radius: 999px; }
 .ue-views button.on { background: var(--accent); color: var(--accent-ink, #000); }
+.ue-split[hidden] { display: none; }
 .ue-split { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
 .ue-split.both { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 /* Side by side: the Blueprint list becomes the drop-down, so the two views get the width. */

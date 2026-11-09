@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { UnityCliPanel } from "./UnityCliPanel";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
 import { BlueprintCode } from "../BlueprintCode";
+import { WidgetDesigner } from "../WidgetDesigner";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, desktop, toast, useLibrary } from "../library";
@@ -187,7 +188,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   // The AI bubble over the node view: a short chat about the Blueprint shown (follow-ups know what came before).
   const [bubble, setBubble] = useState(false);
   // Graph, code, or both side by side (remembered); a line clicked in the code flashes its node.
-  const [view, setView] = useState<"graph" | "code" | "both">(() => {
+  const [view, setView] = useState<"graph" | "code" | "both" | "design">(() => {
     try {
       const v = localStorage.getItem("kesher.bpView");
       return v === "code" || v === "both" ? v : "graph";
@@ -195,7 +196,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       return "graph";
     }
   });
-  const chooseView = (v: "graph" | "code" | "both") => {
+  const chooseView = (v: "graph" | "code" | "both" | "design") => {
     setView(v);
     try {
       localStorage.setItem("kesher.bpView", v);
@@ -216,7 +217,11 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const loadBp = (p: string) =>
     void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(p)}`).then(
       (r) => {
-        setBp(r);
+        // Opening another Blueprint: a Widget Blueprint starts in the Designer.
+        setBp((was) => {
+          if (was?.graph.path !== r.graph.path && /UserWidget|Widget$/.test(r.graph.parent ?? "")) setView("design");
+          return r;
+        });
         setGraphName((g) => (r.graph.graphs.some((x) => x.name === g) ? g : r.graph.graphs[0]?.name ?? ""));
       },
       (e: Error) => {
@@ -291,6 +296,9 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
 
   const outdated = st.editor && st.editor.bridge && st.editor.bridge !== st.latestBridge;
   const graph = bp?.graph.graphs.find((g) => g.name === graphName) ?? bp?.graph.graphs[0];
+  // A Widget Blueprint (UMG) opens in the Designer; "design" means graph for any other Blueprint.
+  const isWidget = /UserWidget|Widget$/.test(bp?.graph.parent ?? "");
+  const shownView = view === "design" && !(isWidget && !unity) ? "graph" : view;
   const shown = (list?.blueprints ?? []).filter((b) => !filter || b.name.toLowerCase().includes(filter.toLowerCase()));
   const neverConnected = !st.connected && !st.projects.length;
 
@@ -344,7 +352,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       )}
 
       {!neverConnected && (
-        <div className={`ue-body${view === "both" ? " wide" : ""}`}>
+        <div className={`ue-body${view === "both" || view === "design" ? " wide" : ""}`}>
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
             <select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label={unity ? "Script Graph" : "Blueprint"}>
@@ -384,27 +392,28 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                   ))}
                 </div>
                 <div className="ue-views" role="tablist" aria-label={L("תצוגה", "View")}>
-                  {(["graph", "code", "both"] as const).map((v) => (
-                    <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => chooseView(v)}>
-                      {v === "graph" ? L("גרף", "Graph") : v === "code" ? L("קוד", "Code") : L("זה לצד זה", "Side by side")}
+                  {(isWidget && !unity ? (["design", "graph", "code", "both"] as const) : (["graph", "code", "both"] as const)).map((v) => (
+                    <button key={v} type="button" role="tab" aria-selected={shownView === v} className={shownView === v ? "on" : ""} onClick={() => chooseView(v)}>
+                      {v === "design" ? L("עיצוב", "Designer") : v === "graph" ? L("גרף", "Graph") : v === "code" ? L("קוד", "Code") : L("זה לצד זה", "Side by side")}
                     </button>
                   ))}
                 </div>
-                <div className={`ue-split${view === "both" ? " both" : ""}`}>
-                {view !== "graph" && graph && (
+                {shownView === "design" && <WidgetDesigner path={path} editable={st.connected && !bp.offline} {...(model ? { model } : {})} />}
+                <div className={`ue-split${shownView === "both" ? " both" : ""}`} hidden={shownView === "design"}>
+                {shownView !== "graph" && shownView !== "design" && graph && (
                   <BlueprintCode
                     nodes={graph.nodes}
                     selected={picked}
                     editable={st.connected || unity}
                     busy={busy}
                     onPick={(id) => {
-                      if (view === "code") chooseView("both");
+                      if (shownView === "code") chooseView("both");
                       setFlash((f) => ({ id, n: (f?.n ?? 0) + 1 }));
                     }}
                     onApply={(code, before) => void edit(`Change this graph so it does exactly what this code says. The code is the graph written as text (one line per node, in the order the exec wires run; "x = Node(...)" names a node's outputs; indented blocks under "then:" / "else:" are those exec outputs). Make only the differences.\n\nBEFORE:\n${before.slice(0, 3000)}\n\nAFTER:\n${code.slice(0, 3000)}`, L("עדכון הגרף לפי הקוד", "Update the graph from the code"))}
                   />
                 )}
-                <div className="ue-stage" hidden={view === "code"}>
+                <div className="ue-stage" hidden={shownView === "code"}>
                   <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={!unity && st.connected && !bp.offline} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
                   {!bubble && (
                     <button type="button" className="ue-ai-fab primary" onClick={() => setBubble(true)} aria-label={L("עריכה עם AI", "Edit with AI")} title={L("עריכה עם AI", "Edit with AI")}>✨</button>
