@@ -39,13 +39,14 @@ export const UNITY_TOOL_NAMES = [
   "unity_command",
   "unity_script_eval",
   "unity_screenshot",
+  "unity_performance",
   "unity_build",
   "unity_install_platform",
 ] as const;
 
 /** The workflow, for the model (Unity's own guidance for agents, in short). */
 export const UNITY_NOTE =
-  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look. 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. At the end, list exactly what changed (files and scene objects).";
+  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look; unity_performance for FPS, draw calls and memory (in Play Mode, before and after an optimization). 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. At the end, list exactly what changed (files and scene objects).";
 
 const MAX_TEXT = 300_000;
 const CODE_EXT = /\.(cs|shader|hlsl|cginc|compute|uss|uxml|tss|asmdef|asmref)$/i;
@@ -514,6 +515,18 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
     {
       risk: "read",
       spec: {
+        name: "unity_performance",
+        description: "How heavy the game is right now in the open Unity Editor: frame time and FPS, batches, SetPass calls, triangles, vertices, memory (total, managed/GC, textures and meshes) and the busiest objects. Best in Play Mode (start it with unity_command 'editor.playmode start', after 'editor set_auto_tick'). Use it before and after an optimization to show the difference.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      run: async () => {
+        need();
+        return { output: cut(await evalCs(PERFORMANCE)) };
+      },
+    },
+    {
+      risk: "read",
+      spec: {
         name: "unity_screenshot",
         description: "A picture of the Unity Editor's Game view (or the Scene view) to check your work; you and the user see it.",
         inputSchema: { type: "object", properties: { view: { type: "string", enum: ["game", "scene"] } } },
@@ -573,6 +586,30 @@ const ADD_COMPONENTS = (names: string[]) =>
   else { var c = UnityEditor.Undo.AddComponent(go, t); report += c != null ? "; added ${n}" : "; Unity refused ${n}"; } }`,
     )
     .join("\n");
+
+/** Frame and memory stats from the Editor (UnityStats is the Game view's Stats panel). */
+const PERFORMANCE = `var sb = new System.Text.StringBuilder();
+var playing = UnityEditor.EditorApplication.isPlaying;
+sb.AppendLine(playing ? "Play Mode: on" : "Play Mode: off (numbers are for the Editor view; play for real ones)");
+var dt = UnityEngine.Time.unscaledDeltaTime;
+if (playing && dt > 0) sb.AppendLine("Frame: " + (dt * 1000f).ToString("0.0") + " ms (" + (1f / dt).ToString("0") + " FPS)");
+sb.AppendLine("Batches: " + UnityEditor.UnityStats.batches + ", SetPass calls: " + UnityEditor.UnityStats.setPassCalls + ", draw calls: " + UnityEditor.UnityStats.drawCalls);
+sb.AppendLine("Triangles: " + UnityEditor.UnityStats.triangles + ", vertices: " + UnityEditor.UnityStats.vertices);
+sb.AppendLine("Shadow casters: " + UnityEditor.UnityStats.shadowCasters + ", render textures: " + UnityEditor.UnityStats.renderTextureCount);
+long mb = 1024 * 1024;
+sb.AppendLine("Memory: allocated " + (UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / mb) + " MB, reserved " + (UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / mb) + " MB, managed (GC) " + (UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong() / mb) + " MB of " + (UnityEngine.Profiling.Profiler.GetMonoHeapSizeLong() / mb) + " MB, graphics driver " + (UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / mb) + " MB");
+long tex = 0; foreach (var t in UnityEngine.Resources.FindObjectsOfTypeAll<UnityEngine.Texture>()) tex += UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(t);
+long mesh = 0; foreach (var m in UnityEngine.Resources.FindObjectsOfTypeAll<UnityEngine.Mesh>()) mesh += UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(m);
+sb.AppendLine("Textures: " + (tex / mb) + " MB, meshes: " + (mesh / mb) + " MB");
+var all = UnityEngine.Object.FindObjectsByType<UnityEngine.GameObject>(UnityEngine.FindObjectsSortMode.None);
+var renderers = UnityEngine.Object.FindObjectsByType<UnityEngine.Renderer>(UnityEngine.FindObjectsSortMode.None);
+var behaviours = UnityEngine.Object.FindObjectsByType<UnityEngine.MonoBehaviour>(UnityEngine.FindObjectsSortMode.None);
+sb.AppendLine("Objects: " + all.Length + " GameObjects, " + renderers.Length + " renderers, " + behaviours.Length + " scripts, " + UnityEngine.Object.FindObjectsByType<UnityEngine.Light>(UnityEngine.FindObjectsSortMode.None).Length + " lights");
+var heavy = new System.Collections.Generic.List<System.Tuple<int, string>>();
+foreach (var r in renderers) { var f = r.GetComponent<UnityEngine.MeshFilter>(); if (f != null && f.sharedMesh != null && f.sharedMesh.isReadable) heavy.Add(System.Tuple.Create(f.sharedMesh.triangles.Length / 3, r.name)); }
+heavy.Sort((a, b) => b.Item1.CompareTo(a.Item1));
+if (heavy.Count > 0) { sb.Append("Most triangles:"); for (var i = 0; i < System.Math.Min(5, heavy.Count); i++) sb.Append(" " + heavy[i].Item2 + " (" + heavy[i].Item1 + ")"); sb.AppendLine(); }
+return sb.ToString();`;
 
 const HIERARCHY = `var sb = new System.Text.StringBuilder(); var count = 0;
 var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();

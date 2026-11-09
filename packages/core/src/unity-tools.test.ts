@@ -36,6 +36,12 @@ test("chat Unity tools: names checked, flags after the fence, screenshots shown"
   assert.equal(shot.images?.[0]?.mimeType, "image/png");
   assert.equal(tools.unity_script_eval!.risk, "exec");
   assert.equal(tools.unity_status!.risk, "read");
+
+  await tools.unity_performance!.run({}, ctx);
+  const perf = calls.at(-1)!;
+  assert.deepEqual(perf.slice(0, 3), ["command", "script", "eval"]);
+  assert.match(perf.at(-1)!, /UnityStats\.batches/);
+  assert.equal(tools.unity_performance!.risk, "read");
 });
 
 test("Unity code tools: paths stay in the project, scripts compile after writing, C# text is escaped", async () => {
