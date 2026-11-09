@@ -107,6 +107,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** a connector key cannot make more keys (its scope closes /api); the editor socket's bare-Origin exception is for `/api/unreal/ws` only and the socket stays computer-only; the Cloudflare address is checked before it reaches cloudflared, whose arguments are a list (no shell); `unreal_python` writes its script only inside the project's Saved folder.
     - **Faster:** `unreal_compile` and `unreal_python` answers are much shorter (distinct errors only; no start-up noise), and the Unreal guide sent with each message is ~57% smaller.
 
+25. **Scan after 0.5.99** (zod 4, the editor's project path, the Blueprint model choice and AI bubble, target phones).
+    - **Fixed:** a phone read over USB names itself (its model and GPU strings), and that text goes into the model's brief: it is now cut to plain characters and 60 letters, so a phone cannot carry instructions to the model.
+    - **Fixed:** reading the plugged-in phone runs one at a time (each read runs adb and dumpsys).
+    - **Checked:** the editor's `projectFile` is kept only when it is a real `.uproject` on this computer, and a chat takes it only when its name matches the project the page named; the editor socket stays computer-only. The Blueprint edit's `model` must be a chat model listed here. Target phone ids must be in the catalog or read over USB. The Unity frame-rate script is written only into the project, only for an Android build the user approved, and only with target phones chosen.
+    - **Dependencies:** zod 4 (0.5.96) removed the last audit exception; `pnpm audit --prod` is clean.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

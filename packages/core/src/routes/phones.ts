@@ -33,8 +33,12 @@ export async function phoneRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
 
   /** Reads the phone plugged in now and adds it (chosen) to the list. */
+  let reading = false;
   app.post("/api/phones/detect", async (_req, reply) => {
-    const r = await readPluggedPhone();
+    // One read at a time (each runs adb and dumpsys on the phone).
+    if (reading) return reply.code(429).send({ error: "Already reading the phone." });
+    reading = true;
+    const r = await readPluggedPhone().finally(() => (reading = false));
     if (!r.phone) return reply.code(409).send({ error: r.problem ?? "No phone." });
     const p = r.phone;
     s.config.phones.custom = [p, ...s.config.phones.custom.filter((c) => c.id !== p.id)].slice(0, 20);

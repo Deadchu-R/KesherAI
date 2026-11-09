@@ -155,12 +155,16 @@ public static class KesherTargetPhones
 `;
 }
 
+/** A phone's own text, as it goes into the model's brief: plain characters, short (a phone's name is not instructions). */
+const clean = (s: string | undefined, max = 60) => (s ?? "").replace(/[^\p{L}\p{N} .+()_/-]/gu, "").replace(/\s+/g, " ").trim().slice(0, max);
+
 /** Reads a plugged-in phone's real values from `adb shell` answers. */
-export function phoneFromProps(props: Record<string, string>, wmSize: string, gles: string, memKb?: number, fps?: number): Phone {
+export function phoneFromProps(raw: Record<string, string>, wmSize: string, gles: string, memKb?: number, fps?: number): Phone {
+  const props = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, clean(v)]));
   const make = props["ro.product.manufacturer"] || props["ro.product.brand"] || "Phone";
   const model = props["ro.product.marketname"] || props["ro.product.vendor.marketname"] || props["ro.product.model"] || "Android phone";
   const size = /(\d+)x(\d+)/.exec(wmSize);
-  const gpu = /GLES:\s*[^,]+,\s*([^,]+),/.exec(gles)?.[1]?.replace(/\(TM\)\s*/i, "").trim() || "unknown GPU";
+  const gpu = clean(/GLES:\s*[^,]+,\s*([^,]+),/.exec(gles)?.[1]?.replace(/\(TM\)\s*/i, "")) || "unknown GPU";
   const ramGb = memKb ? Math.round(memKb / 1024 / 1024) : undefined;
   const brand = make.charAt(0).toUpperCase() + make.slice(1);
   return {
