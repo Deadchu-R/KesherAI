@@ -1,3 +1,4 @@
+import { textToolCalls } from "./text-tool-calls.js";
 import { makeModelId, type AgentMessage, type ChatStreamEvent, type ModelInfo, type ModelLocation, type ToolCall } from "@kesher/shared";
 import type {
   Provider,
@@ -206,6 +207,11 @@ export class OpenAICompatibleProvider implements Provider {
       .sort(([a], [b]) => a - b)
       .filter(([, c]) => c.name)
       .map(([i, c]) => ({ id: c.id || `call_${i}`, name: c.name, arguments: parseToolArguments(c.args) }));
+    // A local model that wrote its call as text (Qwen3-Coder XML, Hermes JSON): run it rather than ending the turn.
+    if (!toolCalls.length && request.tools?.length) {
+      const found = textToolCalls(text);
+      if (found.calls.length) return { text: found.text, toolCalls: found.calls, ...(usage ? { usage } : {}) };
+    }
     return { text, toolCalls, ...(usage ? { usage } : {}) };
   }
 }
