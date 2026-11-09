@@ -109,7 +109,7 @@ This review went through the code part by part. Each finding is listed with what
 
 ## Known, not yet fixed
 
-- **zod 3:** GHSA-mrhx-c7xc-m3w5 (high), memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. It is the one advisory the release's automatic audit is told to skip (`pnpm.auditConfig.ignoreGhsas` in package.json), until the move to zod 4. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.
+- ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
 
 ## Still to review
 

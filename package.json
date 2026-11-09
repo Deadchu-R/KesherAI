@@ -1,7 +1,7 @@
 {
   "name": "kesher",
   "private": true,
-  "version": "0.5.95",
+  "version": "0.5.96",
   "description": "Local-first, open-source desktop app that runs every kind of AI model — chat, image, video, audio — in one place.",
   "license": "Apache-2.0",
   "type": "module",
@@ -37,9 +37,6 @@
     "overrides": {
       "content-disposition@3": "file:./vendor/content-disposition",
       "dompurify": "^3.4.17"
-    },
-    "auditConfig": {
-      "ignoreGhsas": ["GHSA-mrhx-c7xc-m3w5"]
     }
   }
 }

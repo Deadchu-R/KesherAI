@@ -286,8 +286,8 @@ importers:
         specifier: 8.22.2
         version: 8.22.2
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.6.6
+        version: 4.6.7
     devDependencies:
       '@types/ws':
         specifier: 8.18.1
@@ -308,8 +308,8 @@ importers:
         specifier: workspace:*
         version: link:../shared
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.6.6
+        version: 4.6.7
 
   packages/providers:
     dependencies:
@@ -320,8 +320,8 @@ importers:
   packages/shared:
     dependencies:
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.6.6
+        version: 4.6.7
 
   packages/skills: {}
 
@@ -3908,8 +3908,8 @@ packages:
   zlibjs@0.3.1:
     resolution: {integrity: sha512-+J9RrgTKOmlxFSDHo0pI1xM6BLVUv+o0ZT9ANtCxGkjIVCCUdx9alUF8Gm+dGLKbkkkidWIHFDZHDMpfITt4+w==}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -7773,4 +7773,4 @@ snapshots:
 
   zlibjs@0.3.1: {}
 
-  zod@3.25.76: {}
+  zod@4.6.7: {}

@@ -1,6 +1,6 @@
 {
   "name": "@kesher/core",
-  "version": "0.5.95",
+  "version": "0.5.96",
   "description": "The local KesherAI server: model registry, chat and image routes, downloads, plugins, skills, remote access and an OpenAI-compatible API.",
   "license": "Apache-2.0",
   "type": "module",
@@ -41,7 +41,7 @@
     "fflate": "^0.8.3",
     "tesseract.js": "^6.0.1",
     "ws": "8.22.2",
-    "zod": "^3.24.0"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/ws": "8.18.1"

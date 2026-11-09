@@ -37,7 +37,7 @@ export const KesherConfigSchema = z.object({
       /** Start ComfyUI when KesherAI starts. */
       autoStart: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   engines: z
     .object({
       /** Path of the `llama-server` binary from llama.cpp. */
@@ -63,9 +63,9 @@ export const KesherConfigSchema = z.object({
           split: z.array(z.number().positive()).optional(),
           main: z.number().int().min(0).optional(),
         })
-        .default({}),
+        .prefault({}),
     })
-    .default({}),
+    .prefault({}),
   /** Where KesherAI downloads models. Defaults to `models` in the data folder. */
   modelsDir: z.string().optional(),
   /** Other folders with models (from "Scan computer" or added by hand). KesherAI only reads them. */
@@ -86,7 +86,7 @@ export const KesherConfigSchema = z.object({
     )
     .default([]),
   /** Active model per category id, e.g. `{ "chat": "llamacpp/Qwen3-8B-Q4_K_M", "image": "comfyui/flux1-dev.safetensors" }`. */
-  activeModels: z.record(z.string(), z.string()).default({}),
+  activeModels: z.record(z.string(), z.string()).prefault({}),
   /** Google Drive sign-in. The client id defaults to the one in branding.config.ts. */
   google: z
     .object({
@@ -102,30 +102,30 @@ export const KesherConfigSchema = z.object({
       lastError: z.string().optional(),
       services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
     })
-    .default({}),
+    .prefault({}),
   /** Unity projects the user added (worked on through Unity's CLI). */
   unity: z
     .object({
       projects: z.array(z.string()).default([]),
       active: z.string().optional(),
     })
-    .default({}),
+    .prefault({}),
   /** Talking to KesherAI from Telegram through the user's own bot (telegram.ts). */
   telegram: z
     .object({
       enabled: z.boolean().default(false),
       token: z.string().optional(),
       chats: z.array(z.number()).default([]),
-      chatInfo: z.record(z.string(), z.object({ name: z.string(), pairedAt: z.string() })).default({}),
-      conversations: z.record(z.string(), z.string()).default({}),
+      chatInfo: z.record(z.string(), z.object({ name: z.string(), pairedAt: z.string() })).prefault({}),
+      conversations: z.record(z.string(), z.string()).prefault({}),
       approveCommands: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
-  appearance: z.record(z.string(), z.unknown()).default({}),
+  appearance: z.record(z.string(), z.unknown()).prefault({}),
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */
-  figma: z.object({ token: z.string().max(200).optional() }).default({}),
+  figma: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Tool search for local models (only everyday tools in full; the rest loaded on demand). On unless false. */
   toolSearch: z.boolean().optional(),
   /** Looks the user saved by name (Settings → Appearance → My looks). */
@@ -136,7 +136,7 @@ export const KesherConfigSchema = z.object({
       done: z.boolean().default(false),
       role: z.string().max(200).optional(),
     })
-    .default({}),
+    .prefault({}),
   /** Protecting the graphics card: temperature limit, unloading idle models, low priority (see gpu-guard.ts). */
   guard: z
     .object({
@@ -146,7 +146,7 @@ export const KesherConfigSchema = z.object({
       unloadAfterMinutes: z.number().int().min(0).max(1440).default(20),
       gentle: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   /** Microsoft 365 Copilot (work or school account with a Copilot licence). */
   copilot: z
     .object({
@@ -157,7 +157,7 @@ export const KesherConfigSchema = z.object({
       lastError: z.string().optional(),
       web: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
   /**
    * Business mode: only the listed connections may be used (e.g. only
    * Copilot); every other model, local or cloud, is turned off. A
@@ -169,7 +169,7 @@ export const KesherConfigSchema = z.object({
       enabled: z.boolean().default(false),
       allowed: z.array(z.string()).default(["copilot"]),
     })
-    .default({}),
+    .prefault({}),
   /** OneDrive sign-in (Microsoft account). The application id defaults to the one in branding.config.ts. */
   onedrive: z
     .object({
@@ -180,16 +180,16 @@ export const KesherConfigSchema = z.object({
       lastSync: z.string().optional(),
       lastError: z.string().optional(),
     })
-    .default({}),
+    .prefault({}),
   /** "My devices": the user's computers find each other through their Google account. */
   devices: z
     .object({
       id: z.string().optional(),
       share: z.boolean().default(false),
       syncSettings: z.boolean().default(true),
-      stamps: z.record(z.string(), z.object({ hash: z.string(), at: z.number() })).default({}),
+      stamps: z.record(z.string(), z.object({ hash: z.string(), at: z.number() })).prefault({}),
     })
-    .default({}),
+    .prefault({}),
   /** "Connect with GitHub" (device sign-in). */
   github: z
     .object({
@@ -198,7 +198,7 @@ export const KesherConfigSchema = z.object({
       scopes: z.string().optional(),
       clientId: z.string().optional(),
     })
-    .default({}),
+    .prefault({}),
   /** A cloud-synced folder (Google Drive for desktop, OneDrive, Dropbox) to mirror projects and conversations to. */
   syncFolder: z.string().optional(),
   remote: z
@@ -218,7 +218,7 @@ export const KesherConfigSchema = z.object({
        */
       anywhereMode: z.enum(["quick", "cloudflare", "tailscale"]).default("quick"),
       /** The user's own Cloudflare tunnel (mode "cloudflare"). */
-      cloudflare: z.object({ hostname: z.string().optional(), tunnelId: z.string().optional() }).default({}),
+      cloudflare: z.object({ hostname: z.string().optional(), tunnelId: z.string().optional() }).prefault({}),
       /** A key of its own for each paired device (only a hash is kept), so one can be removed without the others. */
       devices: z.array(z.object({ id: z.string(), name: z.string(), hash: z.string(), createdAt: z.string(), lastSeen: z.string().optional(), lastAddress: z.string().optional(), scope: z.literal("mcp").optional() })).default([]),
       /** Through the internet link, only devices with their own key (not the shared token, which the QR code and other computers use). */
@@ -226,7 +226,7 @@ export const KesherConfigSchema = z.object({
       /** Through the internet link, a device key not used for this many days stops working (0 = never). */
       anywhereIdleDays: z.number().int().min(0).max(365).default(30),
     })
-    .default({}),
+    .prefault({}),
   /** Speech: how the microphone button turns speech into text. */
   /** Meetings in My day. */
   meetings: z
@@ -236,7 +236,7 @@ export const KesherConfigSchema = z.object({
       /** Keep the meeting's recording, so its transcript follows playback (off: deleted after the write-up). */
       keepRecording: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   speech: z
     .object({
       /** `auto`: this computer when it can, else a connected cloud service; `local`; or `cloud:<connection id>` (Groq, OpenAI). */
@@ -244,9 +244,9 @@ export const KesherConfigSchema = z.object({
       /** Spoken language, or `auto`. */
       language: z.string().default("auto"),
     })
-    .default({}),
+    .prefault({}),
   /** Computer control: models with vision see the screen and click and type (off until the user turns it on). */
-  computer: z.object({ enabled: z.boolean().default(false) }).default({}),
+  computer: z.object({ enabled: z.boolean().default(false) }).prefault({}),
   /** The coach (prompt and usage advice). */
   coach: z
     .object({
@@ -255,11 +255,11 @@ export const KesherConfigSchema = z.object({
       /** Keep notes about how the user works and tell the models (local file `coach.json`). */
       learn: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
   /** Keys for apps that use the APIs (/v1 and /mcp), one per app; only hashes are kept. */
   apiKeys: z.array(z.object({ id: z.string(), name: z.string(), hash: z.string(), prefix: z.string(), createdAt: z.string(), lastUsedAt: z.string().optional(), uses: z.number().optional() })).default([]),
   /** Ask apps on this computer for a key too (by default only other devices need one). */
-  apiAuth: z.object({ requireKeyLocally: z.boolean().default(false) }).default({}),
+  apiAuth: z.object({ requireKeyLocally: z.boolean().default(false) }).prefault({}),
   /** Download speed limit in megabytes per second (0: none). */
   downloadLimitMBps: z.number().min(0).default(0),
   /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
@@ -271,12 +271,12 @@ export const KesherConfigSchema = z.object({
       /** Whether another app (Claude, through KesherAI's MCP server) may approve KesherAI's own approval cards. Off: only the user does. */
       allowApprovals: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   /** Notifications when long work ends or KesherAI waits for an answer. */
   notifications: z
     .object({
       /** On the phone through ntfy (https://ntfy.sh or a server of your own). */
-      ntfy: z.object({ enabled: z.boolean().default(false), server: z.string().default("https://ntfy.sh"), topic: z.string().optional() }).default({}),
+      ntfy: z.object({ enabled: z.boolean().default(false), server: z.string().default("https://ntfy.sh"), topic: z.string().optional() }).prefault({}),
       /** A notification on this computer when the window is not in front. */
       desktop: z.boolean().default(true),
       /** Only work that took at least this long. */
@@ -290,11 +290,11 @@ export const KesherConfigSchema = z.object({
       /** Seconds an agent waits for an approval before the phone is told. */
       waitingSeconds: z.number().int().min(0).max(3600).default(60),
     })
-    .default({}),
+    .prefault({}),
   /** Parts of KesherAI turned off (Settings → Parts); see PARTS in @kesher/shared. Missing = on. */
-  parts: z.record(z.string(), z.boolean()).default({}),
+  parts: z.record(z.string(), z.boolean()).prefault({}),
   /** Per-plugin settings, keyed by plugin id. */
-  plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).default({}) })).default({}),
+  plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).prefault({}) })).prefault({}),
 });
 
 /** Parsed config; see {@link KesherConfigSchema}. */
