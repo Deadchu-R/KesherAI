@@ -10,6 +10,7 @@ import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, toast, useLibrary } from "../library";
 import { AddUnityPackage } from "../engine/AddUnityPackage";
+import { BlueprintVariables, type BpVar } from "../engine/BlueprintVariables";
 import { ConnectSteps } from "../engine/ConnectSteps";
 import { ConnectUnityAssistant } from "../engine/ConnectUnityAssistant";
 import { NewBlueprint } from "../engine/NewBlueprint";
@@ -30,7 +31,7 @@ interface Status {
   download: string;
 }
 interface BpItem { path: string; name: string; parent?: string; saved?: boolean }
-interface Blueprint { path: string; name: string; parent?: string; variables: Array<{ name: string; type: string }>; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
+interface Blueprint { path: string; name: string; parent?: string; variables: BpVar[]; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
 interface Queued { id: string; path: string; graph: string; request?: string; at: string; ops: unknown[] }
 
 /**
@@ -364,6 +365,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                   />
                 )}
                 <Fullscreen hidden={shownView === "code"} label={L("הגרף במסך מלא", "The graph, full screen")}>
+                <div className="ue-graph-row">
                 <div className="ue-stage">
                   <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={!unity && st.connected && !bp.offline} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
                   {!bubble && (
@@ -418,6 +420,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                       </form>
                     </div>
                   )}
+                </div>
+                {(!unity || bp.graph.parent === "Script Graph" || bp.graph.parent === "State Graph") && (
+                  <aside className="ue-vars card">
+                    <BlueprintVariables unity={unity} base={base} path={path} vars={bp.graph.variables ?? []} blueprints={list?.blueprints ?? []} connected={st.connected && !bp.offline} onGraph={(g) => setBp((was) => (was ? { ...was, graph: g as Blueprint } : was))} />
+                  </aside>
+                )}
                 </div>
                 </Fullscreen>
                 </div>

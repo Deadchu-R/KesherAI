@@ -23,6 +23,17 @@ import { MCP_PRESETS } from "../mcp.js";
 import { findGameProjects, listUnityScripts } from "../game-projects.js";
 import { readFile as readFileFs } from "node:fs/promises";
 
+/** The plugin and package versions that edit variables. */
+const VARS_UNREAL = "0.1.9";
+const VARS_UNITY = "0.2.2";
+/** Whether version a is b or newer. */
+const atLeast = (a: string, b: string) => {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return true;
+};
+
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
 
@@ -193,6 +204,29 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       return await b.request("apply", { path, graph, ops: kind === "unity" ? JSON.stringify(ops) : ops });
     } catch (err) {
       return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * The Blueprint's (or Script Graph's) own variables, like My Blueprint → Variables: add, change
+   * (name, type, starting value, shown in the level / Inspector, tooltip, category), remove.
+   * Unreal plugin 0.1.9+, Unity package 0.2.2+. Answers with the results and the graph read again.
+   */
+  app.post<{ Body: { path?: string; ops?: unknown[] } }>(`${base}/vars`, async (req, reply) => {
+    const { path, ops } = req.body ?? {};
+    if (!path || !Array.isArray(ops) || !ops.length || ops.length > 50) return reply.code(400).send({ error: "Send the Blueprint and the variable changes." });
+    const st = await b.status();
+    const have = st.editor?.bridge ?? "";
+    const need = kind === "unity" ? VARS_UNITY : VARS_UNREAL;
+    if (st.connected && have && !atLeast(have, need)) return reply.code(409).send({ error: kind === "unity" ? `Variables need the KesherAI Unity package ${need} (installed ${have}). Update it from this page.` : `Variables need the KesherAI Bridge plugin ${need} (installed ${have}). Press "Update automatically" at the top of the Unreal page.` });
+    try {
+      const out = await b.request<{ results: unknown[]; failed: number }>("vars", { path, ops: kind === "unity" ? JSON.stringify(ops) : ops }, 120_000);
+      const graph = await b.graph(path).catch(() => undefined);
+      return { ...out, ...(graph ? { graph: graph.graph } : {}) };
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (kind === "unity" && /kesher_vars/.test(msg)) return reply.code(409).send({ error: `Variables need the KesherAI Unity package ${VARS_UNITY}. Update it from this page.` });
+      return reply.code(502).send({ error: msg });
     }
   });
 

@@ -24,20 +24,21 @@ const BP: BlueprintJson = {
 };
 
 /** A stand-in for the Unreal Editor with the plugin: answers commands like the plugin does. */
-async function fakeEditor(port: number, calls: string[], projectFile?: string) {
+async function fakeEditor(port: number, calls: string[], projectFile?: string, bridge = "0.1.0", sent?: unknown[]) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/api/unreal/ws`);
   await new Promise((r, j) => (ws.once("open", r), ws.once("error", j)));
   ws.on("message", (d) => {
     const m = JSON.parse(String(d)) as { id: string; cmd: string; ops?: unknown[] };
     calls.push(m.cmd);
+    sent?.push(m);
     const result =
       m.cmd === "list" ? { blueprints: [{ path: BP.path, name: BP.name, parent: "Actor" }] }
       : m.cmd === "graph" ? BP
-      : m.cmd === "apply" ? { results: (m.ops ?? []).map(() => ({ ok: true })), failed: 0 }
+      : m.cmd === "apply" || m.cmd === "vars" ? { results: (m.ops ?? []).map(() => ({ ok: true })), failed: 0 }
       : { ok: true, messages: [] };
     ws.send(JSON.stringify({ id: m.id, ok: true, result }));
   });
-  ws.send(JSON.stringify({ event: "hello", project: "DoorGame", engine: "5.5.4", bridge: "0.1.0", ...(projectFile ? { projectFile } : {}) }));
+  ws.send(JSON.stringify({ event: "hello", project: "DoorGame", engine: "5.5.4", bridge, ...(projectFile ? { projectFile } : {}) }));
   return ws;
 }
 
@@ -121,4 +122,36 @@ test("blueprintPrompt shows the graph compactly and parseOps reads the model's a
   const copied = parseOps('{"ops":[{"op":"connect","from":{"node":"AAA","pin":"out then (exec)"},"to":{"node":"$p","pin":"in execute (exec)"}},{"op":"set","node":"$p","pin":"in InString \\"In String\\" (string) = Hi"}]}');
   assert.deepEqual(copied.ops[0], { op: "connect", from: { node: "AAA", pin: "then" }, to: { node: "$p", pin: "execute" } });
   assert.equal(copied.ops[1]!.pin, "InString");
+});
+
+test("variables: sent to a plugin that has them, an older plugin is asked to update", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "kesher-ue-vars-"));
+  const server = await createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
+  await server.app.listen({ port: 0, host: "127.0.0.1" });
+  const port = (server.app.server.address() as { port: number }).port;
+  const get = async (url: string) => (await server.app.inject({ method: "GET", url })).json() as Record<string, unknown>;
+  const ops = [{ op: "add", name: "Health", type: "real", default: "100", editable: true, tooltip: "Starts full", category: "Stats" }];
+  try {
+    const old = await fakeEditor(port, []);
+    await until(async () => (await get("/api/unreal")).connected === true);
+    const refused = await server.app.inject({ method: "POST", url: "/api/unreal/vars", payload: { path: BP.path, ops } });
+    assert.equal(refused.statusCode, 409);
+    assert.match(refused.json().error, /0\.1\.9/);
+    old.close();
+    await until(async () => (await get("/api/unreal")).connected === false);
+
+    const sent: Array<{ cmd: string; ops?: unknown[] }> = [];
+    const ws = await fakeEditor(port, [], undefined, "0.1.9", sent);
+    await until(async () => (await get("/api/unreal")).connected === true);
+    const r = await server.app.inject({ method: "POST", url: "/api/unreal/vars", payload: { path: BP.path, ops } });
+    assert.equal(r.statusCode, 200);
+    const body = r.json() as { failed: number; graph: BlueprintJson };
+    assert.equal(body.failed, 0);
+    assert.equal(body.graph.name, "BP_Door");
+    assert.deepEqual(sent.find((m) => m.cmd === "vars")?.ops, ops);
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/unreal/vars", payload: { path: BP.path, ops: [] } })).statusCode, 400);
+    ws.close();
+  } finally {
+    await server.app.close();
+  }
 });

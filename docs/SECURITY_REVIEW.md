@@ -152,6 +152,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** self-work's git calls take arguments as a list; `fetch` only reads; the worktree is a new folder next to the project and a new branch; nothing is pushed or merged.
     - **Checked:** the C++/Verse/C# views send only the graph as code to the chosen local model and show the answer as text (never run or written anywhere).
 
+32. **Scan after 0.6.27** (Unity AI Assistant connection, the interface check, the styled-frame flow, variables panels for C# scripts, Blueprints and Script Graphs, full screen).
+    - **Checked:** variable changes go to the editor as data (Unreal: a JSON message on the plugin's local socket; Unity: one CLI argument, the CLI started with its arguments as a list, never a shell). At most 50 changes a call; names and types are checked again in the editor (a type must be a real class or struct). From the phone this is allowed, like the graph edits it already makes.
+    - **Checked:** C# variable edits are text changes made in the page and saved through the same `/api/unity/script` guard as before (Assets only, `.cs`, size cap, mtime check, a copy kept first). Renaming touches only the class's own code, never strings or comments.
+    - **Checked:** connecting Unity's AI Assistant is allowed only from this computer, writes one entry into the project's `UserSettings/mcp.json`, and gives it a key limited to the MCP tools (not the whole API).
+    - **Fixed:** on Windows, saving a library file failed when another program held it for a moment (antivirus, a reader): now it tries again a few times and removes its temp file when it gives up.
+    - **Checked:** the interface check (CI) starts the server on 127.0.0.1 with an empty data folder and no network discovery.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

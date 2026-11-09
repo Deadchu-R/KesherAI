@@ -70,6 +70,100 @@ namespace
 		return Type;
 	}
 
+	/**
+	 * A variable type as KesherAI names it: bool, int, int64, byte, real (float), string, name, text,
+	 * struct:Vector, object:Actor, object:/Game/Enemies/BP_Enemy (a Blueprint), class:Actor;
+	 * a list ends in "[]".
+	 */
+	FString VarTypeName(const FEdGraphPinType& T)
+	{
+		FString Out = T.PinCategory.ToString();
+		if (UObject* Sub = T.PinSubCategoryObject.Get())
+		{
+			const UClass* C = Cast<UClass>(Sub);
+			const UBlueprint* Owner = C ? Cast<UBlueprint>(C->ClassGeneratedBy) : nullptr;
+			Out += TEXT(":") + (Owner ? Owner->GetPathName() : Sub->GetName());
+		}
+		if (T.ContainerType == EPinContainerType::Array) Out += TEXT("[]");
+		return Out;
+	}
+
+	/** The class or struct a type names: a Blueprint's asset path, a script path, or a short name. */
+	UObject* FindTypeObject(const FString& Name, bool bStruct)
+	{
+		if (Name.StartsWith(TEXT("/")))
+		{
+			if (UBlueprint* B = LoadObject<UBlueprint>(nullptr, *Name)) return B->GeneratedClass;
+			return bStruct ? static_cast<UObject*>(LoadObject<UScriptStruct>(nullptr, *Name)) : static_cast<UObject*>(LoadObject<UClass>(nullptr, *Name));
+		}
+		if (bStruct)
+		{
+			if (Name == TEXT("Vector")) return TBaseStructure<FVector>::Get();
+			if (Name == TEXT("Vector2D")) return TBaseStructure<FVector2D>::Get();
+			if (Name == TEXT("Rotator")) return TBaseStructure<FRotator>::Get();
+			if (Name == TEXT("Transform")) return TBaseStructure<FTransform>::Get();
+			if (Name == TEXT("LinearColor")) return TBaseStructure<FLinearColor>::Get();
+			return FindFirstObject<UScriptStruct>(*Name, EFindFirstObjectOptions::NativeFirst);
+		}
+		return FindFirstObject<UClass>(*Name, EFindFirstObjectOptions::NativeFirst);
+	}
+
+	/** Reads a type name (VarTypeName's form) into a pin type; false with a reason when it is not known. */
+	bool ParseVarType(FString Name, FEdGraphPinType& Out, FString& Problem)
+	{
+		Out = FEdGraphPinType();
+		if (Name.EndsWith(TEXT("[]")))
+		{
+			Out.ContainerType = EPinContainerType::Array;
+			Name.LeftChopInline(2);
+		}
+		FString Cat = Name, Sub;
+		Name.Split(TEXT(":"), &Cat, &Sub);
+		if (Sub.IsEmpty()) Cat = Name;
+		Cat = Cat.ToLower();
+		if (Cat == TEXT("bool") || Cat == TEXT("boolean")) Out.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+		else if (Cat == TEXT("int")) Out.PinCategory = UEdGraphSchema_K2::PC_Int;
+		else if (Cat == TEXT("int64")) Out.PinCategory = UEdGraphSchema_K2::PC_Int64;
+		else if (Cat == TEXT("byte")) Out.PinCategory = UEdGraphSchema_K2::PC_Byte;
+		else if (Cat == TEXT("real") || Cat == TEXT("float") || Cat == TEXT("double"))
+		{
+			Out.PinCategory = UEdGraphSchema_K2::PC_Real;
+			Out.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+		}
+		else if (Cat == TEXT("string")) Out.PinCategory = UEdGraphSchema_K2::PC_String;
+		else if (Cat == TEXT("name")) Out.PinCategory = UEdGraphSchema_K2::PC_Name;
+		else if (Cat == TEXT("text")) Out.PinCategory = UEdGraphSchema_K2::PC_Text;
+		else if (Cat == TEXT("struct") || Cat == TEXT("object") || Cat == TEXT("class") || Cat == TEXT("softobject"))
+		{
+			UObject* Obj = FindTypeObject(Sub, Cat == TEXT("struct"));
+			if (!Obj)
+			{
+				Problem = TEXT("Unknown type ") + Sub;
+				return false;
+			}
+			Out.PinCategory = Cat == TEXT("struct") ? UEdGraphSchema_K2::PC_Struct : Cat == TEXT("class") ? UEdGraphSchema_K2::PC_Class : Cat == TEXT("softobject") ? UEdGraphSchema_K2::PC_SoftObject : UEdGraphSchema_K2::PC_Object;
+			Out.PinSubCategoryObject = Obj;
+		}
+		else
+		{
+			Problem = TEXT("Unknown type ") + Name;
+			return false;
+		}
+		return true;
+	}
+
+	/** A variable's starting value as text, read from the Blueprint's default object. */
+	FString VarDefault(UBlueprint* BP, const FBPVariableDescription& V)
+	{
+		UClass* C = BP->GeneratedClass;
+		UObject* CDO = C ? C->GetDefaultObject(false) : nullptr;
+		const FProperty* P = C ? C->FindPropertyByName(V.VarName) : nullptr;
+		if (!CDO || !P) return V.DefaultValue;
+		FString Out;
+		P->ExportText_InContainer(0, Out, CDO, CDO, CDO, PPF_None);
+		return Out;
+	}
+
 	TSharedRef<FJsonObject> NodeJson(UEdGraphNode* Node)
 	{
 		TSharedRef<FJsonObject> N = MakeShared<FJsonObject>();
@@ -217,6 +311,14 @@ namespace KesherGraph
 			FString Type = V.VarType.PinCategory.ToString();
 			if (UObject* Sub = V.VarType.PinSubCategoryObject.Get()) Type += TEXT(":") + Sub->GetName();
 			J->SetStringField(TEXT("type"), Type);
+			// What the variables panel shows and changes.
+			J->SetStringField(TEXT("ptype"), VarTypeName(V.VarType));
+			J->SetStringField(TEXT("default"), VarDefault(BP, V));
+			J->SetBoolField(TEXT("editable"), !(V.PropertyFlags & CPF_DisableEditOnInstance));
+			FString Tip;
+			FBlueprintEditorUtils::GetBlueprintVariableMetaData(BP, V.VarName, nullptr, FBlueprintMetadata::MD_Tooltip, Tip);
+			J->SetStringField(TEXT("tooltip"), Tip);
+			J->SetStringField(TEXT("category"), V.Category.ToString());
 			Vars.Add(MakeShared<FJsonValueObject>(J));
 		}
 		Out->SetArrayField(TEXT("variables"), Vars);
@@ -459,6 +561,120 @@ namespace KesherGraph
 		}
 
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetArrayField(TEXT("results"), Results);
+		Out->SetNumberField(TEXT("failed"), Failed);
+		return Out;
+	}
+
+	TSharedRef<FJsonObject> EditVariables(const FString& Path, const TArray<TSharedPtr<FJsonValue>>& Ops)
+	{
+		UBlueprint* BP = LoadBlueprint(Path);
+		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
+		FScopedTransaction Transaction(LOCTEXT("Vars", "KesherAI variables"));
+		BP->Modify();
+
+		auto Exists = [&](const FName& N) { return FBlueprintEditorUtils::FindNewVariableIndex(BP, N) != INDEX_NONE; };
+		// Starting values are set on the default object after the compile, when the property exists.
+		TMap<FName, FString> Defaults;
+		TArray<TSharedPtr<FJsonValue>> Results;
+		int32 Failed = 0;
+		for (const TSharedPtr<FJsonValue>& V : Ops)
+		{
+			const TSharedPtr<FJsonObject> Op = V.IsValid() ? V->AsObject() : nullptr;
+			if (!Op.IsValid()) continue;
+			const FString Kind = JsonStr(Op, TEXT("op"));
+			FName Name(*JsonStr(Op, TEXT("name")));
+			FString Problem;
+			if (Name.IsNone()) Problem = TEXT("A variable needs a name");
+			else if (Kind == TEXT("add"))
+			{
+				FEdGraphPinType Type;
+				if (Exists(Name)) Problem = TEXT("There is already a variable ") + Name.ToString();
+				else if (ParseVarType(JsonStr(Op, TEXT("type")), Type, Problem))
+				{
+					if (!FBlueprintEditorUtils::AddMemberVariable(BP, Name, Type, JsonStr(Op, TEXT("default")))) Problem = TEXT("Unreal did not add ") + Name.ToString() + TEXT(" (is the name allowed?)");
+				}
+			}
+			else if (!Exists(Name)) Problem = TEXT("No variable ") + Name.ToString();
+			else if (Kind == TEXT("remove")) FBlueprintEditorUtils::RemoveMemberVariable(BP, Name);
+			else if (Kind == TEXT("change"))
+			{
+				const FString NewName = JsonStr(Op, TEXT("newName"));
+				if (!NewName.IsEmpty() && FName(*NewName) != Name)
+				{
+					if (Exists(FName(*NewName))) Problem = TEXT("There is already a variable ") + NewName;
+					else
+					{
+						// Renames its Get/Set nodes too, like the editor.
+						FBlueprintEditorUtils::RenameMemberVariable(BP, Name, FName(*NewName));
+						Name = FName(*NewName);
+					}
+				}
+				FString TypeName;
+				if (Problem.IsEmpty() && Op->TryGetStringField(TEXT("type"), TypeName))
+				{
+					FEdGraphPinType Type;
+					const int32 I = FBlueprintEditorUtils::FindNewVariableIndex(BP, Name);
+					if (ParseVarType(TypeName, Type, Problem) && I != INDEX_NONE && !(BP->NewVariables[I].VarType == Type)) FBlueprintEditorUtils::ChangeMemberVariableType(BP, Name, Type);
+				}
+			}
+			else Problem = TEXT("Unknown operation ") + Kind;
+
+			// What add and change share: shown in the level (Instance Editable), tooltip, category, starting value.
+			if (Problem.IsEmpty() && (Kind == TEXT("add") || Kind == TEXT("change")))
+			{
+				bool bEditable = false;
+				if (Op->TryGetBoolField(TEXT("editable"), bEditable)) FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(BP, Name, !bEditable);
+				FString Text;
+				if (Op->TryGetStringField(TEXT("tooltip"), Text))
+				{
+					if (Text.IsEmpty()) FBlueprintEditorUtils::RemoveBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Tooltip);
+					else FBlueprintEditorUtils::SetBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Tooltip, Text);
+				}
+				if (Op->TryGetStringField(TEXT("category"), Text)) FBlueprintEditorUtils::SetBlueprintVariableCategory(BP, Name, nullptr, FText::FromString(Text.IsEmpty() ? TEXT("Default") : Text), true);
+				if (Op->TryGetStringField(TEXT("default"), Text) && Kind == TEXT("change")) Defaults.Add(Name, Text);
+			}
+
+			TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+			R->SetStringField(TEXT("op"), Kind);
+			R->SetStringField(TEXT("name"), Name.ToString());
+			R->SetBoolField(TEXT("ok"), Problem.IsEmpty());
+			if (!Problem.IsEmpty())
+			{
+				R->SetStringField(TEXT("error"), Problem);
+				Failed++;
+			}
+			Results.Add(MakeShared<FJsonValueObject>(R));
+		}
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+		if (Defaults.Num())
+		{
+			FKismetEditorUtilities::CompileBlueprint(BP);
+			UObject* CDO = BP->GeneratedClass ? BP->GeneratedClass->GetDefaultObject() : nullptr;
+			for (const TPair<FName, FString>& D : Defaults)
+			{
+				const int32 I = FBlueprintEditorUtils::FindNewVariableIndex(BP, D.Key);
+				if (I != INDEX_NONE) BP->NewVariables[I].DefaultValue = D.Value;
+				const FProperty* P = BP->GeneratedClass ? BP->GeneratedClass->FindPropertyByName(D.Key) : nullptr;
+				if (CDO && P)
+				{
+					CDO->Modify();
+					if (!P->ImportText_InContainer(*D.Value, CDO, CDO, PPF_None))
+					{
+						TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+						R->SetStringField(TEXT("op"), TEXT("default"));
+						R->SetStringField(TEXT("name"), D.Key.ToString());
+						R->SetBoolField(TEXT("ok"), false);
+						R->SetStringField(TEXT("error"), TEXT("Unreal could not read the starting value ") + D.Value);
+						Results.Add(MakeShared<FJsonValueObject>(R));
+						Failed++;
+					}
+				}
+			}
+			FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+		}
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetArrayField(TEXT("results"), Results);
 		Out->SetNumberField(TEXT("failed"), Failed);

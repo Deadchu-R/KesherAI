@@ -43,13 +43,20 @@ export interface PanelActions {
 
 const ARRAY = /\[\]$/;
 
+/** A type's short name for the list (Float, BP_Key, Vector3), not its code. */
+const typeLabel = (types: PanelType[], t: string) => {
+  const base = t.replace(ARRAY, "");
+  const known = types.find((x) => x.value === base)?.label.replace(/\s*\(.*\)$/, "") ?? base.replace(/^\w+:/, "").replace(/^.*[/.]/, "");
+  return ARRAY.test(t) ? `${known}[]` : known;
+};
+
 /**
  * The variables of a script or Blueprint, like the "My Blueprint" panel in
  * Unreal: a list with each variable's type color and an eye for whether the
  * designer sees it, a + to add one, and below it the chosen variable's
  * details (name, type, list or single, starting value, tooltip, shown).
  */
-export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; actions: PanelActions; shownLabel: string; categories?: boolean; busy?: boolean }) {
+export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean }) {
   const [sel, setSel] = useState("");
   const [adding, setAdding] = useState(false);
   const chosen = p.vars.find((v) => v.name === sel);
@@ -89,9 +96,9 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
               <button type="button" className="vars-row" onClick={() => setSel(v.name === sel ? "" : v.name)} aria-expanded={v.name === sel} dir="ltr">
                 <span className="vars-dot" style={{ background: pinColor(v.type.replace(ARRAY, "")) }} aria-hidden />
                 <span className="grow vars-name">{v.name}{ARRAY.test(v.type) ? " [ ]" : ""}</span>
-                <span className="muted vars-type">{v.type}</span>
+                <span className="muted vars-type" title={v.type}>{typeLabel(p.types, v.type)}</span>
               </button>
-              <button type="button" className="vars-eye" disabled={v.locked || p.busy} aria-pressed={v.shown} title={`${p.shownLabel}: ${v.shown ? L("כן", "yes") : L("לא", "no")}`} onClick={() => void run(() => p.actions.change(v.name, { ...v, shown: !v.shown }))}>{v.shown ? "👁" : "◌"}</button>
+              {p.shownLabel && <button type="button" className="vars-eye" disabled={v.locked || p.busy} aria-pressed={v.shown} title={`${p.shownLabel}: ${v.shown ? L("כן", "yes") : L("לא", "no")}`} onClick={() => void run(() => p.actions.change(v.name, { ...v, shown: !v.shown }))}>{v.shown ? "👁" : "◌"}</button>}
             </li>
           ))}
         </ul>
@@ -120,18 +127,20 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
 }
 
 /** The details of one variable (a new one or the chosen one). */
-function VarForm(p: { v: PanelVar; types: PanelType[]; shownLabel: string; categories?: boolean; submit: string; onSubmit: (v: PanelVar) => void; onCancel?: () => void; onRemove?: () => void; onSetInGraph?: () => void }) {
+function VarForm(p: { v: PanelVar; types: PanelType[]; shownLabel?: string; categories?: boolean; submit: string; onSubmit: (v: PanelVar) => void; onCancel?: () => void; onRemove?: () => void; onSetInGraph?: () => void }) {
   const [v, setV] = useState(p.v);
+  // Starts again only when the variable itself changed (a page that reloads often must not wipe what is typed).
+  const was = JSON.stringify(p.v);
   useEffect(() => {
-    setV(p.v);
-  }, [p.v]);
+    setV(JSON.parse(was) as PanelVar);
+  }, [was]);
   const list = ARRAY.test(v.type);
   const base = v.type.replace(ARRAY, "");
   const known = p.types.find((t) => t.value === base);
   const input = list ? "code" : known?.input ?? "code";
   const groups = [...new Set(p.types.map((t) => t.group))];
   const setType = (t: string, asList: boolean) => setV((x) => ({ ...x, type: asList ? `${t}[]` : t, value: "" }));
-  const dirty = JSON.stringify(v) !== JSON.stringify(p.v);
+  const dirty = JSON.stringify(v) !== was;
   return (
     <form className="vars-form stack small" onSubmit={(e) => { e.preventDefault(); p.onSubmit({ ...v, name: v.name.trim() }); }}>
       <label className="stack">
@@ -152,13 +161,13 @@ function VarForm(p: { v: PanelVar; types: PanelType[]; shownLabel: string; categ
         </label>
         <label className="row vars-check">
           <input type="checkbox" checked={list} onChange={(e) => setType(base, e.target.checked)} />
-          {L("רשימה", "List")}
+          <span>{L("רשימה", "List")}</span>
         </label>
       </div>
       {input === "bool" ? (
         <label className="row vars-check">
           <input type="checkbox" checked={v.value === "true"} onChange={(e) => setV({ ...v, value: e.target.checked ? "true" : "false" })} />
-          {L("ערך התחלתי: אמת", "Starts as true")}
+          <span>{L("ערך התחלתי: אמת", "Starts as true")}</span>
         </label>
       ) : input === "none" ? (
         <p className="muted">{L("את הערך בוחרים בעורך (גוררים אובייקט לשדה).", "The value is picked in the editor (drag an object onto it).")}</p>
@@ -174,14 +183,18 @@ function VarForm(p: { v: PanelVar; types: PanelType[]; shownLabel: string; categ
           <input value={v.category ?? ""} onChange={(e) => setV({ ...v, category: e.target.value })} />
         </label>
       )}
-      <label className="stack">
-        <span className="muted">{L("הסבר (Tooltip)", "Tooltip")}</span>
-        <input value={v.tooltip ?? ""} onChange={(e) => setV({ ...v, tooltip: e.target.value })} />
-      </label>
-      <label className="row vars-check">
-        <input type="checkbox" checked={v.shown} onChange={(e) => setV({ ...v, shown: e.target.checked })} />
-        {p.shownLabel}
-      </label>
+      {p.shownLabel && (
+        <label className="stack">
+          <span className="muted">{L("הסבר (Tooltip)", "Tooltip")}</span>
+          <input value={v.tooltip ?? ""} onChange={(e) => setV({ ...v, tooltip: e.target.value })} />
+        </label>
+      )}
+      {p.shownLabel && (
+        <label className="row vars-check">
+          <input type="checkbox" checked={v.shown} onChange={(e) => setV({ ...v, shown: e.target.checked })} />
+          <span>{p.shownLabel}</span>
+        </label>
+      )}
       <div className="row wrap">
         <button type="submit" className="primary" disabled={!dirty && !!p.onRemove}>{p.submit}</button>
         {p.onCancel && <button type="button" onClick={p.onCancel}>{L("ביטול", "Cancel")}</button>}

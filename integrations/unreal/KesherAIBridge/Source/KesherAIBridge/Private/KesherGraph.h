@@ -29,6 +29,13 @@ namespace KesherGraph
 	/** Applies operations to one graph of a Blueprint, as one undo step. */
 	TSharedRef<FJsonObject> Apply(const FString& Path, const FString& GraphName, const TArray<TSharedPtr<FJsonValue>>& Ops);
 
+	/**
+	 * The Blueprint's own variables (My Blueprint → Variables), as one undo step:
+	 * add (name, type, default, editable, tooltip, category), change (name and any
+	 * of newName, type, default, editable, tooltip, category), remove (name).
+	 */
+	TSharedRef<FJsonObject> EditVariables(const FString& Path, const TArray<TSharedPtr<FJsonValue>>& Ops);
+
 	/** Compiles a Blueprint and returns the compiler's messages. */
 	TSharedRef<FJsonObject> Compile(const FString& Path);
 

@@ -297,7 +297,11 @@ namespace KesherAI.Bridge
                 var withVars = target.Root as IGraphWithVariables;
                 if (withVars != null)
                 {
-                    foreach (var v in withVars.variables) vars.Add(new Dictionary<string, object> { ["name"] = v.name, ["type"] = v.value != null ? v.value.GetType().Name : "object" });
+                    foreach (var v in withVars.variables)
+                    {
+                        var t = DeclaredType(v);
+                        vars.Add(new Dictionary<string, object> { ["name"] = v.name, ["type"] = v.value != null ? v.value.GetType().Name : "object", ["ptype"] = TypeKey(t), ["default"] = ValueText(v.value) });
+                    }
                 }
                 return new Dictionary<string, object> { ["path"] = path, ["name"] = target.Name, ["parent"] = target.Root is StateGraph ? "State Graph" : "Script Graph", ["variables"] = vars, ["graphs"] = graphs };
             }
@@ -644,6 +648,202 @@ namespace KesherAI.Bridge
             finally
             {
                 target.Done();
+            }
+        }
+
+        // --- graph variables (Blackboard → Graph) ------------------------------------
+
+        /// <summary>The type a variable was declared with (its value may be empty).</summary>
+        static Type DeclaredType(VariableDeclaration v)
+        {
+            var handle = typeof(VariableDeclaration).GetProperty("typeHandle")?.GetValue(v);
+            var id = handle?.GetType().GetProperty("Identification")?.GetValue(handle) as string;
+            var t = string.IsNullOrEmpty(id) ? null : Type.GetType(id);
+            return t ?? v.value?.GetType();
+        }
+
+        /// <summary>How KesherAI names a type: int, float, bool, string, or the class name (Vector3, GameObject, Enemy).</summary>
+        static string TypeKey(Type t)
+        {
+            if (t == null) return "object";
+            if (t == typeof(int)) return "int";
+            if (t == typeof(float)) return "float";
+            if (t == typeof(bool)) return "bool";
+            if (t == typeof(string)) return "string";
+            return t.Name;
+        }
+
+        /// <summary>A type from KesherAI's name for it: the basic ones, Unity's, then any class in the project.</summary>
+        static Type FindType(string key)
+        {
+            switch ((key ?? "").ToLowerInvariant())
+            {
+                case "int": return typeof(int);
+                case "float": return typeof(float);
+                case "bool": return typeof(bool);
+                case "string": return typeof(string);
+            }
+            var u = typeof(GameObject).Assembly.GetType("UnityEngine." + key);
+            if (u != null) return u;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type[] types;
+                try { types = asm.GetTypes(); } catch (ReflectionTypeLoadException e) { types = e.Types.Where(x => x != null).ToArray(); }
+                var t = types.FirstOrDefault(x => x.Name == key && x.IsPublic && (typeof(UnityEngine.Object).IsAssignableFrom(x) || x.IsValueType));
+                if (t != null) return t;
+            }
+            return null;
+        }
+
+        static string ValueText(object v)
+        {
+            if (v == null) return "";
+            if (v is UnityEngine.Object o) return o ? o.name : "";
+            if (v is bool b) return b ? "true" : "false";
+            if (v is float f) return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (v is Vector3 v3) return v3.x.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", " + v3.y.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", " + v3.z.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (v is Vector2 v2) return v2.x.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", " + v2.y.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>A starting value of a type from text ("5", "true", "1, 2, 3"); null for an object (picked in the editor) or empty text.</summary>
+        static object ValueOf(Type t, string text)
+        {
+            text = (text ?? "").Trim();
+            if (t == typeof(string)) return text;
+            if (typeof(UnityEngine.Object).IsAssignableFrom(t)) return null;
+            if (text == "") return t.IsValueType ? Activator.CreateInstance(t) : null;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (t == typeof(int)) return int.Parse(text, inv);
+            if (t == typeof(float)) return float.Parse(text.TrimEnd('f', 'F'), inv);
+            if (t == typeof(bool)) return text.ToLowerInvariant() == "true";
+            var n = text.Trim('(', ')').Split(',').Select(x => float.Parse(x.Trim(), inv)).ToArray();
+            if (t == typeof(Vector2)) return new Vector2(n[0], n[1]);
+            if (t == typeof(Vector3)) return new Vector3(n[0], n[1], n[2]);
+            if (t == typeof(Color)) return new Color(n[0], n[1], n[2], n.Length > 3 ? n[3] : 1f);
+            return ConversionUtility.Convert(text, t);
+        }
+
+        /// <summary>Gives a declaration its type (so an empty object variable still knows it holds a GameObject).</summary>
+        static void SetDeclaredType(VariableDeclaration d, Type t)
+        {
+            var p = typeof(VariableDeclaration).GetProperty("typeHandle");
+            if (p == null || !p.CanWrite) return;
+            try { p.SetValue(d, Activator.CreateInstance(p.PropertyType, t.AssemblyQualifiedName)); } catch (Exception) { /* older Visual Scripting: the value's own type is used */ }
+        }
+
+        static bool RemoveDeclaration(VariableDeclarations decl, string name)
+        {
+            var coll = typeof(VariableDeclarations).GetField("collection", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(decl)
+                ?? typeof(VariableDeclarations).GetProperty("collection", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(decl);
+            var remove = coll?.GetType().GetMethod("Remove", new[] { typeof(string) });
+            return remove != null && (bool)remove.Invoke(coll, new object[] { name });
+        }
+
+        /// <summary>
+        /// The graph's own variables (Blackboard → Graph), as one undo step: add (name, type, default),
+        /// change (name and any of newName, type, default; a new name is given to its Get/Set nodes too),
+        /// remove (name).
+        /// </summary>
+        public static Dictionary<string, object> Vars(string path, List<object> ops)
+        {
+            var target = Load(path);
+            if (target == null) return Error("No graph at " + path);
+            try
+            {
+                var withVars = target.Root as IGraphWithVariables;
+                if (withVars == null) return Error("This graph has no variables of its own.");
+                Undo.RegisterCompleteObjectUndo(target.Owner, "KesherAI variables");
+                var decl = withVars.variables;
+                var results = new List<object>();
+                var failed = 0;
+                foreach (var o in ops)
+                {
+                    var op = o as Dictionary<string, object>;
+                    if (op == null) continue;
+                    var kind = Json.Str(op, "op");
+                    var name = Json.Str(op, "name");
+                    string problem = null;
+                    try
+                    {
+                        if (string.IsNullOrEmpty(name)) problem = "A variable needs a name";
+                        else if (kind == "add")
+                        {
+                            var t = FindType(Json.Str(op, "type"));
+                            if (decl.IsDefined(name)) problem = "There is already a variable " + name;
+                            else if (t == null) problem = "Unknown type " + Json.Str(op, "type");
+                            else
+                            {
+                                decl.Set(name, ValueOf(t, Json.Str(op, "default")));
+                                SetDeclaredType(decl.GetDeclaration(name), t);
+                            }
+                        }
+                        else if (!decl.IsDefined(name)) problem = "No variable " + name;
+                        else if (kind == "remove")
+                        {
+                            if (!RemoveDeclaration(decl, name)) problem = "Visual Scripting did not remove " + name;
+                        }
+                        else if (kind == "change")
+                        {
+                            var d = decl.GetDeclaration(name);
+                            var t = op.ContainsKey("type") ? FindType(Json.Str(op, "type")) : DeclaredType(d);
+                            if (t == null) problem = "Unknown type " + Json.Str(op, "type");
+                            else
+                            {
+                                var value = op.ContainsKey("default") ? ValueOf(t, Json.Str(op, "default")) : d.value;
+                                var newName = Json.Str(op, "newName");
+                                if (!string.IsNullOrEmpty(newName) && newName != name)
+                                {
+                                    if (decl.IsDefined(newName)) problem = "There is already a variable " + newName;
+                                    else
+                                    {
+                                        RemoveDeclaration(decl, name);
+                                        decl.Set(newName, value);
+                                        SetDeclaredType(decl.GetDeclaration(newName), t);
+                                        RenameUses(target.Root, name, newName);
+                                    }
+                                }
+                                else
+                                {
+                                    d.value = value;
+                                    SetDeclaredType(d, t);
+                                }
+                            }
+                        }
+                        else problem = "Unknown operation " + kind;
+                    }
+                    catch (Exception e)
+                    {
+                        problem = e.Message;
+                    }
+                    if (problem != null) failed++;
+                    var r = Res(kind, problem, null);
+                    r["name"] = name;
+                    results.Add(r);
+                }
+                EditorUtility.SetDirty(target.Owner);
+                if (path.Contains(".prefab#") || Application.isBatchMode) target.Save();
+                return Result(results, failed);
+            }
+            finally
+            {
+                target.Done();
+            }
+        }
+
+        /// <summary>Get/Set/Is Variable nodes of kind Graph that name the old variable now name the new one (in every tab).</summary>
+        static void RenameUses(IGraph root, string from, string to)
+        {
+            var tabs = new List<KeyValuePair<string, IGraph>>();
+            Tabs(root, "", tabs);
+            foreach (var tab in tabs)
+            {
+                var flow = tab.Value as FlowGraph;
+                if (flow == null) continue;
+                foreach (var u in flow.units.OfType<UnifiedVariableUnit>())
+                {
+                    if (u.kind == VariableKind.Graph && u.defaultValues.TryGetValue("name", out var n) && (n as string) == from) u.defaultValues["name"] = to;
+                }
             }
         }
 

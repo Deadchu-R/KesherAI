@@ -22,7 +22,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.8");
+static const TCHAR* BridgeVersion = TEXT("0.1.9");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -123,6 +123,11 @@ void FKesherAIBridgeModule::OnMessage(const FString& Text)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Ops = nullptr;
 		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherGraph::Apply(Path, Graph, *Ops);
+	}
+	else if (Cmd == TEXT("vars"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Ops = nullptr;
+		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherGraph::EditVariables(Path, *Ops);
 	}
 	else if (Cmd == TEXT("compile")) Result = KesherGraph::Compile(Path);
 	else if (Cmd == TEXT("save")) Result = KesherGraph::Save(Path);

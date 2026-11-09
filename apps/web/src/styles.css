@@ -1657,10 +1657,16 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .vars-eye { background: none; border: 0; padding: 4px 6px; min-width: 32px; }
 .vars-form { border-top: 1px solid var(--border, rgba(127,127,127,.25)); padding-top: 8px; }
 .vars-form input:not([type="checkbox"]), .vars-form select { width: 100%; }
-.vars-check { gap: 6px; align-items: center; }
+.vars-check { gap: 6px; align-items: center; flex-wrap: nowrap; }
+.vars-check > span { flex: 1; min-width: 0; }
 .script-graph { grid-template-columns: minmax(0, 1fr) 280px; }
 .script-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .script-code { width: 100%; min-height: 60dvh; font-family: var(--mono, monospace); font-size: 13px; line-height: 1.5; tab-size: 4; white-space: pre; overflow: auto; resize: vertical; }
 @media (max-width: 760px) {
   .script-graph { grid-template-columns: minmax(0, 1fr); }
 }
+/* A Blueprint's graph with its variables beside it (My Blueprint). */
+.ue-graph-row { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 10px; align-items: start; }
+.ue-split.both .ue-graph-row { grid-template-columns: minmax(0, 1fr); }
+.ue-vars { min-width: 0; }
+@media (max-width: 1100px) { .ue-graph-row { grid-template-columns: minmax(0, 1fr); } }

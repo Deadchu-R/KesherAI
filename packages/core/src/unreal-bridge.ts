@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.8";
+export const BRIDGE_VERSION = "0.1.9";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -387,7 +387,8 @@ export interface BlueprintJson {
   path: string;
   name: string;
   parent?: string;
-  variables: Array<{ name: string; type: string }>;
+  /** ptype…category: plugin 0.1.9+ / Unity package 0.2.2+ (the variables panel). */
+  variables: Array<{ name: string; type: string; ptype?: string; default?: string; editable?: boolean; tooltip?: string; category?: string }>;
   graphs: Array<{
     name: string;
     kind: "event" | "function" | "macro";

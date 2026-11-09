@@ -14,7 +14,7 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.1";
+        const string Version = "0.2.2";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 
@@ -32,6 +32,13 @@ namespace KesherAI.Bridge
         {
             var list = Json.Parse(ops) as List<object>;
             return list == null ? Out(new Dictionary<string, object> { ["error"] = "ops must be a JSON list" }) : Out(KesherGraph.Apply(path, graph, list));
+        }
+
+        [CliCommand("kesher_vars", "KesherAI Bridge: add, change or remove the graph's own variables (JSON list), as one undo step")]
+        static string Vars([CliArg("path", "Where the graph lives")] string path, [CliArg("ops", "The changes, a JSON list")] string ops)
+        {
+            var list = Json.Parse(ops) as List<object>;
+            return list == null ? Out(new Dictionary<string, object> { ["error"] = "ops must be a JSON list" }) : Out(KesherGraph.Vars(path, list));
         }
 
         [CliCommand("kesher_check", "KesherAI Bridge: check a graph (missing inputs, broken ports)")]
