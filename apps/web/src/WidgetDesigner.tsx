@@ -165,7 +165,13 @@ export function WidgetDesigner({ path, editable, model }: { path: string; editab
       if (pad) style.margin = pad;
       const h = align(s.HorizontalAlignment);
       const v = align(s.VerticalAlignment);
-      if (h || v) style.alignSelf = (parentClass === "HorizontalBox" ? v : h) ?? undefined;
+      if (/HorizontalBox/.test(parentClass)) style.alignSelf = v ?? undefined;
+      else if (/VerticalBox|ScrollBox/.test(parentClass)) style.alignSelf = h ?? undefined;
+      else {
+        // Border, Button, Overlay, Size Box (a grid here): each side on its own.
+        if (h) style.justifySelf = h === "flex-start" ? "start" : h === "flex-end" ? "end" : h;
+        if (v) style.alignSelf = v === "flex-start" ? "start" : v === "flex-end" ? "end" : v;
+      }
       if (/SizeRule=Fill/.test(String(s.Size ?? ""))) style.flex = `${Number(/Value=([\d.]+)/.exec(String(s.Size))?.[1] ?? 1)} 1 0`;
     }
     if (p.Visibility === "Collapsed") return null;

@@ -82,10 +82,17 @@ export function linearColor(v: unknown): string | undefined {
 const PLACES: Record<string, [number, number]> = { "top-left": [0, 0], top: [0.5, 0], "top-center": [0.5, 0], "top-right": [1, 0], left: [0, 0.5], "center-left": [0, 0.5], center: [0.5, 0.5], middle: [0.5, 0.5], right: [1, 0.5], "center-right": [1, 0.5], "bottom-left": [0, 1], bottom: [0.5, 1], "bottom-center": [0.5, 1], "bottom-right": [1, 1] };
 
 /** One "style" operation (plain words) → the exact set operations for that widget's class and slot. */
-export function expandStyle(op: Record<string, unknown>, cls: string, inCanvas: boolean): Array<Record<string, unknown>> {
+export function expandStyle(op: Record<string, unknown>, cls: string, inCanvas: boolean, parentCls = ""): Array<Record<string, unknown>> {
   const w = String(op.widget ?? "");
   const out: Array<Record<string, unknown>> = [];
   const set = (property: string, value: string) => out.push({ op: "set", widget: w, property, value });
+  // Inside a Border or a Button the content is centred, as people expect from a button (found on the real editor:
+  // START sat in the top-left corner of its blue box). "align" left/right moves it to that side.
+  if (/^(Border|Button)$/.test(parentCls)) {
+    const a = String(op.align ?? "center").toLowerCase();
+    set("slot.HorizontalAlignment", a === "left" ? "HAlign_Left" : a === "right" ? "HAlign_Right" : "HAlign_Center");
+    set("slot.VerticalAlignment", "VAlign_Center");
+  }
   if (op.text !== undefined && /Text/.test(cls)) set("Text", String(op.text));
   if (op.fontSize !== undefined && /Text/.test(cls)) set("fontSize", String(Math.round(Number(op.fontSize)) || 24));
   const color = linearColor(op.color);
@@ -143,7 +150,7 @@ export function cleanWidgetOps(ops: Array<Record<string, unknown>>, classOf: (na
       const cls = made.get(op.widget) ?? classOf(op.widget) ?? "";
       const parent = madeIn.get(op.widget);
       const parentCls = parent ? made.get(parent) ?? classOf(parent) : parentClassOf(op.widget);
-      out.push(...expandStyle(op, cls, /CanvasPanel/.test(parentCls ?? "")));
+      out.push(...expandStyle(op, cls, /CanvasPanel/.test(parentCls ?? ""), parentCls ?? ""));
       continue;
     }
     if (op.op !== "set" || typeof op.property !== "string") {

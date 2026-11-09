@@ -56,3 +56,11 @@ test("a style operation in plain words becomes the exact Unreal settings", () =>
   assert.match(String(v("Start", "BackgroundColor")), /^\(R=/);
   assert.equal(v("Start", "slot.position"), "-40,-40", "offsets go inward from the bottom-right");
 });
+
+test("text inside a Border or Button is centred unless asked otherwise", () => {
+  const ops = cleanWidgetOps([{ op: "style", widget: "Label", text: "START" }, { op: "style", widget: "Side", text: "X", align: "left" }], () => "TextBlock", () => "Border");
+  const v = (w: string, p: string) => ops.find((o) => o.widget === w && o.property === p)?.value;
+  assert.equal(v("Label", "slot.HorizontalAlignment"), "HAlign_Center");
+  assert.equal(v("Label", "slot.VerticalAlignment"), "VAlign_Center");
+  assert.equal(v("Side", "slot.HorizontalAlignment"), "HAlign_Left");
+});
