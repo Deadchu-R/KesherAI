@@ -40,7 +40,17 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
 /** Reads a library file, plain or gzip-compressed (recognised by its first two bytes). */
 async function readJson<T>(path: string): Promise<T | undefined> {
   try {
-    const buf = await readFile(path);
+    // Windows: a file just written can be held for a moment (antivirus); try again before calling it unreadable.
+    let buf: Buffer | undefined;
+    for (let i = 0; !buf; i++) {
+      try {
+        buf = await readFile(path);
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (i >= 8 || (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY")) throw e;
+        await new Promise((r) => setTimeout(r, 25 * (i + 1)));
+      }
+    }
     const text = buf[0] === 0x1f && buf[1] === 0x8b ? gunzipSync(buf).toString("utf8") : buf.toString("utf8");
     return JSON.parse(text) as T;
   } catch {
