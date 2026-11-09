@@ -14,6 +14,7 @@ import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { CoachPanel } from "../CoachPanel";
 import { WebToggle, useWebSearch } from "../WebToggle";
 import { UnityChip } from "../UnityChip";
+import { AddMenu } from "../AddMenu";
 import { Mic } from "../Mic";
 import { VoiceMode } from "../VoiceMode";
 import { useParts } from "../parts";
@@ -955,12 +956,16 @@ export function ConversationPage({ id }: { id: string }) {
               </div>
             )}
             <div className="box-bar">
-              {desktop()?.pickFiles ? (
-                <AddMenu onFiles={() => void desktop()!.pickFiles!().then((f) => attach(f))} onProject={() => void addProject()} />
-              ) : (
-                // In a browser, the phone, or another computer's window: files are sent to this chat's folder on the computer.
-                <AddMenu onFiles={() => uploadInput.current?.click()} />
-              )}
+              <AddMenu
+                onFiles={() => (desktop()?.pickFiles ? void desktop()!.pickFiles!().then((f) => attach(f)) : uploadInput.current?.click())}
+                onPhoto={() => photoInput.current?.click()}
+                {...(desktop()?.pickFiles ? { onProject: () => void addProject() } : {})}
+                onInsert={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
+                web={web}
+                onWeb={setWeb}
+                mode={info?.mode ?? conv.mode}
+                onMode={(m) => void patch({ mode: m })}
+              />
               <input ref={uploadInput} type="file" multiple hidden onChange={(e) => void uploadFiles(e.target.files).finally(() => { if (uploadInput.current) uploadInput.current.value = ""; })} />
               <WebToggle on={web} onChange={setWeb} />
               <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
@@ -1001,35 +1006,3 @@ export function ConversationPage({ id }: { id: string }) {
   );
 }
 
-/** The message box's +: files, or a project (Unity, Unreal or any folder) for the chat to work in. */
-function AddMenu({ onFiles, onProject }: { onFiles: () => void; onProject?: () => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    addEventListener("mousedown", close);
-    return () => removeEventListener("mousedown", close);
-  }, [open]);
-  const he = getLocale() === "he";
-  return (
-    <div className="model-menu add-menu" ref={ref}>
-      <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>+</button>
-      {open && (
-        <div className="model-pop" role="menu">
-          <button type="button" role="menuitem" onClick={() => { setOpen(false); onFiles(); }}>📎 {he ? "קבצים…" : "Files…"}</button>
-          {onProject ? (
-            <>
-              <button type="button" role="menuitem" onClick={() => { setOpen(false); onProject(); }}>🎮 {he ? "פרויקט: Unity, Unreal או תיקייה…" : "Project: Unity, Unreal or a folder…"}</button>
-              <p className="muted small" style={{ margin: "4px 8px" }}>{he ? "פרויקט Unity נהיה הפרויקט של הצ'אט (דרך ה-CLI). פרויקט Unreal נפתח לכלי הקבצים ול-Blueprints." : "A Unity project becomes the chat's project (through the CLI); an Unreal project opens to the file tools and Blueprints."}</p>
-            </>
-          ) : (
-            <p className="muted small" style={{ margin: "4px 8px" }}>{he ? "פרויקטים (Unity, Unreal) מוסיפים במחשב עצמו, או דרך 🕹 Unity." : "Projects (Unity, Unreal) are added on the computer itself, or through 🕹 Unity."}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
