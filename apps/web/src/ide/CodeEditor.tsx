@@ -4,6 +4,7 @@ import "./monaco-setup";
 import { liveMarkers, registerCSharpAssist, setProjectTypes } from "./csharp-assist";
 import { languageOf } from "./languages";
 import { fileUri, lspLink, registerLspProviders } from "./lsp-client";
+import { registerInlineSuggestions } from "./inline-suggest";
 
 /** A compiler problem to mark in the code (from Unity or Unreal). */
 export interface CodeProblem { line: number; column: number; code: string; message: string; severity: "error" | "warning" }
@@ -29,6 +30,7 @@ export default function CodeEditor(p: { path: string; value: string; onChange: (
   useEffect(() => {
     if (!box.current) return;
     if (language === "csharp") registerCSharpAssist();
+    if (!p.readOnly) registerInlineSuggestions();
     const light = document.documentElement.dataset.light === "1";
     const e = monaco.editor.create(box.current, {
       theme: light ? "vs" : "vs-dark",
@@ -44,6 +46,7 @@ export default function CodeEditor(p: { path: string; value: string; onChange: (
       suggestOnTriggerCharacters: true,
       wordBasedSuggestions: "currentDocument",
       fixedOverflowWidgets: true,
+      inlineSuggest: { enabled: true, mode: "subword" },
       readOnly: !!p.readOnly,
     });
     e.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => save.current?.());

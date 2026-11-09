@@ -72,6 +72,14 @@ function ActiveModels() {
             </label>
           );
         })}
+        <label title={getLocale() === "he" ? "בזמן כתיבת קוד, המודל מציע את ההמשך באפור; Tab מכניס. מודל קוד קטן ומהיר הכי טוב." : "While you write code, the model suggests what comes next in grey; Tab inserts it. A small fast coder model works best."}>
+          {getLocale() === "he" ? "הצעות קוד תוך כדי כתיבה (Inline)" : "Code suggestions while typing (inline)"}
+          <select value={settings.activeModels.codeInline ?? ""} onChange={(e) => void set("codeInline", e.target.value)}>
+            <option value="">{getLocale() === "he" ? "כבוי" : "Off"}</option>
+            {settings.activeModels.codeInline && !models.some((m) => m.id === settings.activeModels.codeInline) && <option value={settings.activeModels.codeInline}>{settings.activeModels.codeInline}</option>}
+            {models.filter((m) => m.category === "chat").sort((a, b) => Number(/coder|code/i.test(b.name)) - Number(/coder|code/i.test(a.name))).map((m) => <option key={m.id} value={m.id}>{m.name} · {m.providerId}</option>)}
+          </select>
+        </label>
       </div>
     </section>
   );

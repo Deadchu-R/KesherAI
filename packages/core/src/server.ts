@@ -64,6 +64,7 @@ import { copilotRoutes } from "./routes/copilot.js";
 import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { unrealSourceRoutes } from "./routes/unreal-source.js";
 import { lspRoutes } from "./routes/lsp.js";
+import { codeRoutes } from "./routes/code.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
 import { SelfWork } from "./self-work.js";
@@ -1029,6 +1030,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await unrealRoutes(app, services);
   unrealSourceRoutes(app, services);
   lspRoutes(app, services);
+  codeRoutes(app, services);
   await unityRoutes(app, services);
   await copilotRoutes(app, services);
   await browserRoutes(app, services);
