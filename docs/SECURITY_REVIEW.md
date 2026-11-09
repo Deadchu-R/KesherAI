@@ -138,6 +138,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** one-click plugin install from the phone takes only a project found on the computer; the plugin is written only into that project's `Plugins/KesherAIBridge`.
     - **Checked:** `view_image` reads only through the chat's own folders (the same resolver as the file tools), picture types only, at most 8 MB. The split asks another computer's `/api/guard` with that computer's own device key and uses only that computer's own models. The temperature read runs a fixed command (no input). Checkpoints of Unreal/Unity projects skip generated folders and files over 50 MB. The Verse translation takes only a model listed here and caps the code it sends.
 
+30. **Scan after 0.6.21** (tool calls written as text, the Unity test and performance tools, self-work, long-term approvals, the window's saved place).
+    - **Checked:** a tool call a local model writes as text (Qwen3-Coder XML, Hermes JSON) is read only from the model's own answer, only when the request offered tools and the answer had no real call; it then goes through the same approvals as any call (a quoted file cannot skip them).
+    - **Checked:** "Always allow" for a while ends at its time (rules that ended are dropped on the next save, and never match); a rule for one command matches only that command's words followed by plain arguments: anything chained after it (`;`, `&&`, `|`, `>`, backticks, `$( )`, a new line) needs approval again. Dangerous commands (push, recursive delete, installing programs, admin rights) still ask every time, whatever the rules say.
+    - **Checked:** self-work works only in a git project inside the home folder with no uncommitted changes, on a new `kesher-self/…` branch; git runs with its arguments as a list and never pushes, merges or switches back. The check command is a command line the user typed on the computer; from the phone a run can only start again with the same project and the same check. Stop rules: goal met, BLOCKED, 3 failures in a row, 45 minutes per item, 30 minutes waiting for an approval, the time limit and 80 turns.
+    - **Checked:** the Unity test always leaves Play Mode (also on an error) and reads back only its own picture in KesherAI's folder; `unity_performance` only reads.
+    - **Checked:** the window's saved place is used only when it is on a connected monitor.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
