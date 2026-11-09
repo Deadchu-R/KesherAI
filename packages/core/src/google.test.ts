@@ -97,8 +97,10 @@ test("connect, upload on save, and a second computer downloads it", async () => 
     assert.deepEqual([status.connected, status.email], [true, "roee@example.com"]);
 
     await a.app.inject({ method: "POST", url: "/api/projects", payload: { name: "Drive project" } });
+    const made = await a.app.inject({ method: "GET", url: "/api/projects" });
     const synced = (await a.app.inject({ method: "POST", url: "/api/google/sync" })).json() as { uploaded: number };
-    assert.equal(synced.uploaded, 1);
+    // Flaky only on Windows CI: say what was there when it fails.
+    assert.equal(synced.uploaded, 1, `sync answered ${JSON.stringify(synced)}; projects ${made.body.slice(0, 300)}; drive had ${g.files.size} files`);
     const uploaded = [...g.files.values()].filter((f) => f.appProperties?.kind === "projects");
     assert.equal(uploaded.length, 1);
     assert.match(uploaded[0]!.body ?? "", /Drive project/);
