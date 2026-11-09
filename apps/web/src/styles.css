@@ -1095,6 +1095,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 /* Unreal page */
 .ue-page { max-width: none; }
 .ue-head { gap: 10px; flex-wrap: wrap; }
+@media (max-width: 600px) { .ue-head h1 { flex-basis: 100%; } }
 .ue-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; }
 .ue-steps .button { display: inline-block; margin-inline-start: 6px; }
 .ue-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 12px; align-items: start; }
