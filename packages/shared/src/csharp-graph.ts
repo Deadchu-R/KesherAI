@@ -37,6 +37,7 @@ export interface CsMethod {
   body: CsStmt[];
 }
 
+/** A class (or struct) of the script: its name, base class, fields and methods. */
 export interface CsClass {
   name: string;
   base?: string;
