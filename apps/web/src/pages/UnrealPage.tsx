@@ -259,7 +259,14 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     }
   };
 
-  const outdated = st.editor && st.editor.bridge && st.editor.bridge !== st.latestBridge;
+  // Only an older plugin is offered the update (a newer one, from a newer KesherAI on another computer, is left alone).
+  const older = (a: string, b: string) => {
+    const x = a.split(".").map(Number);
+    const y = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+    return false;
+  };
+  const outdated = st.editor && st.editor.bridge && older(st.editor.bridge, st.latestBridge);
   const graph = bp?.graph.graphs.find((g) => g.name === graphName) ?? bp?.graph.graphs[0];
   // A Widget Blueprint (UMG) opens in the Designer; "design" means graph for any other Blueprint.
   const isWidget = /UserWidget|Widget$/.test(bp?.graph.parent ?? "");
