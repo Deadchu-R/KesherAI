@@ -92,3 +92,14 @@ test("a method as nodes: event, branch with True/False, loop body, wired in orde
   const local = nodes.find((n) => n.title === "float h")!;
   assert.deepEqual(nodes[0]!.pins[0]!.links, [`${local.id}:execute`]);
 });
+
+test("a new step and a removed step are written into the method", () => {
+  const classes = parseCSharp(SCRIPT);
+  const start = classes[0]!.methods[0]!;
+  start.body.splice(1, 1); // remove Debug.Log
+  start.body.push({ id: "n1", kind: "call", target: "Debug", name: "Log", args: ['"Ready"'], src: "", dirty: true });
+  const out = writeCSharp(SCRIPT, classes);
+  assert.ok(out.includes('rb = GetComponent<Rigidbody>();\n        Debug.Log("Ready");\n    }'), out.slice(out.indexOf("void Start"), out.indexOf("void Update")));
+  assert.ok(!out.includes("Hello { not a block }"));
+  assert.equal(parseCSharp(out)[0]!.methods[0]!.body.length, 2);
+});

@@ -82,6 +82,20 @@ export function ScriptNodes() {
     setSel("");
     setTick((t) => t + 1);
   };
+  /** Adds a new step after the chosen one (or at the end of the method). */
+  const add = (kind: "call" | "set" | "if" | "local") => {
+    if (!m) return;
+    const id = `n${Date.now()}`;
+    const stmt: CsStmt =
+      kind === "call" ? { id, kind, target: "Debug", name: "Log", args: ['"Hello"'], src: "", dirty: true }
+      : kind === "set" ? { id, kind, target: cls?.fields[0]?.name ?? "value", op: "=", value: "0", src: "", dirty: true }
+      : kind === "local" ? { id, kind, type: "var", name: "x", value: "0", src: "", dirty: true }
+      : { id, kind, cond: "true", then: [], src: "", dirty: true };
+    const list = found ? found.list : m.body;
+    list.splice(found ? found.index + 1 : list.length, 0, stmt);
+    setSel(id);
+    setTick((t) => t + 1);
+  };
   const save = async () => {
     if (!file) return;
     setSaving(true);
@@ -145,6 +159,13 @@ export function ScriptNodes() {
                   {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable={false} unity onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
                 <aside className="script-edit card">
+                  <div className="row wrap script-add" aria-label={L("הוספת צעד", "Add a step")}>
+                    <span className="muted small">{st ? L("הוסף אחרי:", "Add after:") : L("הוסף בסוף:", "Add at the end:")}</span>
+                    <button type="button" onClick={() => add("call")}>+ {L("פעולה", "Action")}</button>
+                    <button type="button" onClick={() => add("set")}>+ {L("שינוי ערך", "Change a value")}</button>
+                    <button type="button" onClick={() => add("if")}>+ {L("תנאי", "Condition")}</button>
+                    <button type="button" onClick={() => add("local")}>+ {L("משתנה", "Variable")}</button>
+                  </div>
                   {!st ? (
                     <p className="muted small">{L("בחרו נוד כדי לשנות אותו.", "Choose a node to change it.")}</p>
                   ) : (
@@ -154,12 +175,25 @@ export function ScriptNodes() {
                       {st.kind === "loop" && <Field label={L("חוזר על", "Repeats")} value={st.head} onChange={(v) => edit((s) => s.kind === "loop" && (s.head = v))} />}
                       {st.kind === "call" && (
                         <>
-                          <p className="small" dir="ltr">{st.target ? `${st.target}.` : ""}{st.name}( )</p>
+                          <Field label={L("על מה (אפשר להשאיר ריק)", "On what (can be empty)")} value={st.target} onChange={(v) => edit((s) => s.kind === "call" && (s.target = v))} />
+                          <Field label={L("הפעולה", "The action")} value={st.name} onChange={(v) => edit((s) => s.kind === "call" && (s.name = v.replace(/[^\w]/g, "")))} />
+                          <button type="button" className="small" onClick={() => edit((s) => s.kind === "call" && s.args.push("0"))}>+ {L("קלט", "Input")}</button>
                           {st.args.map((a, i) => <Field key={i} label={`${L("קלט", "Input")} ${i + 1}`} value={a} onChange={(v) => edit((s) => s.kind === "call" && (s.args[i] = v))} />)}
                         </>
                       )}
-                      {st.kind === "set" && <Field label={`${st.target} ${st.op}`} value={st.value} onChange={(v) => edit((s) => s.kind === "set" && (s.value = v))} />}
-                      {st.kind === "local" && <Field label={`${st.type} ${st.name} =`} value={st.value} onChange={(v) => edit((s) => s.kind === "local" && (s.value = v))} />}
+                      {st.kind === "set" && (
+                        <>
+                          <Field label={L("מה משתנה", "What changes")} value={st.target} onChange={(v) => edit((s) => s.kind === "set" && (s.target = v))} />
+                          <Field label={`${L("ערך חדש", "New value")} (${st.op})`} value={st.value} onChange={(v) => edit((s) => s.kind === "set" && (s.value = v))} />
+                        </>
+                      )}
+                      {st.kind === "local" && (
+                        <>
+                          <Field label={L("סוג", "Type")} value={st.type} onChange={(v) => edit((s) => s.kind === "local" && (s.type = v))} />
+                          <Field label={L("שם", "Name")} value={st.name} onChange={(v) => edit((s) => s.kind === "local" && (s.name = v.replace(/[^\w]/g, "")))} />
+                          <Field label={L("ערך", "Value")} value={st.value} onChange={(v) => edit((s) => s.kind === "local" && (s.value = v))} />
+                        </>
+                      )}
                       {st.kind === "return" && <Field label={L("מחזיר", "Returns")} value={st.value} onChange={(v) => edit((s) => s.kind === "return" && (s.value = v))} />}
                       {st.kind === "code" && <Field label={L("הקוד", "The code")} value={st.src} multiline onChange={(v) => edit((s) => s.kind === "code" && (s.src = v))} />}
                       <div className="row wrap">

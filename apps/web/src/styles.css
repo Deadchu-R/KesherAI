@@ -1604,3 +1604,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .script-graph { grid-template-columns: 1fr; }
   .script-canvas { min-height: 340px; }
 }
+.script-add { gap: 6px; align-items: center; }
+.script-add button { padding: 4px 8px; font-size: 13px; }
