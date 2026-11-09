@@ -58,7 +58,7 @@ const typeLabel = (types: PanelType[], t: string) => {
  * designer sees it, a + to add one, and below it the chosen variable's
  * details (name, type, list or single, starting value, tooltip, shown).
  */
-export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Public/private choices (the first is a new variable's). */ access?: Array<{ value: string; label: string }>; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean }) {
+export function VariablesPanel(p: { /** Lists get a starting value typed as code (C#); false: set in the editor (Unreal). */ listValues?: boolean; vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Public/private choices (the first is a new variable's). */ access?: Array<{ value: string; label: string }>; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean }) {
   const [sel, setSel] = useState("");
   const [adding, setAdding] = useState(false);
   const chosen = p.vars.find((v) => v.name === sel);
@@ -85,6 +85,7 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
           v={{ name: newName(), type: p.types[0]?.value ?? "bool", value: "", shown: true, ...(p.access?.[0] ? { access: p.access[0].value } : {}) }}
           types={p.types}
           access={p.access}
+          listValues={p.listValues}
           shownLabel={p.shownLabel}
           categories={p.categories}
           submit={L("הוסף", "Add")}
@@ -114,6 +115,7 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
             v={chosen}
             types={p.types}
             access={p.access}
+            listValues={p.listValues}
             shownLabel={p.shownLabel}
             categories={p.categories}
             submit={L("שמור משתנה", "Save variable")}
@@ -132,7 +134,7 @@ export function VariablesPanel(p: { vars: PanelVar[]; types: PanelType[]; action
 }
 
 /** The details of one variable (a new one or the chosen one). */
-function VarForm(p: { v: PanelVar; types: PanelType[]; access?: Array<{ value: string; label: string }> | undefined; shownLabel?: string; categories?: boolean; submit: string; onSubmit: (v: PanelVar) => void; onCancel?: () => void; onRemove?: () => void; onSetInGraph?: () => void }) {
+function VarForm(p: { listValues?: boolean | undefined; v: PanelVar; types: PanelType[]; access?: Array<{ value: string; label: string }> | undefined; shownLabel?: string; categories?: boolean; submit: string; onSubmit: (v: PanelVar) => void; onCancel?: () => void; onRemove?: () => void; onSetInGraph?: () => void }) {
   const [v, setV] = useState(p.v);
   // Starts again only when the variable itself changed (a page that reloads often must not wipe what is typed).
   const was = JSON.stringify(p.v);
@@ -142,7 +144,7 @@ function VarForm(p: { v: PanelVar; types: PanelType[]; access?: Array<{ value: s
   const list = ARRAY.test(v.type);
   const base = v.type.replace(ARRAY, "");
   const known = p.types.find((t) => t.value === base);
-  const input = list ? "code" : known?.input ?? "code";
+  const input = list ? (p.listValues === false ? "none" : "code") : known?.input ?? "code";
   const groups = [...new Set(p.types.map((t) => t.group))];
   const setType = (t: string, asList: boolean) => setV((x) => ({ ...x, type: asList ? `${t}[]` : t, value: "" }));
   const dirty = JSON.stringify(v) !== was;

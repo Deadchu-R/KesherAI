@@ -66,6 +66,7 @@ export function BlueprintVariables(p: { base: string; path: string; vars: BpVar[
         vars={vars}
         types={types}
         categories={!p.unity}
+        listValues={false}
         {...(p.unity ? {} : { access: [{ value: "public", label: L("Public: Blueprints אחרים יכולים לקרוא ולשנות", "Public: other Blueprints can read and change it") }, { value: "private", label: L("Private: רק ה-Blueprint הזה", "Private: this Blueprint only") }] })}
         {...(p.unity ? {} : { shownLabel: L("Instance Editable (משתנה בכל עותק בשלב)", "Instance Editable") })}
         actions={{

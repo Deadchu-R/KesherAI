@@ -1681,3 +1681,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .code-problems li.warning { color: var(--warn, #e6c35c); }
 .script-code-wrap > .ue-ai-fab, .script-code-wrap > .ue-bubble { inset-block-end: 56px; }
 .script-canvas > .ue-ai-fab, .script-canvas > .ue-bubble { z-index: 5; }
+/* A turned phone in full screen: the graph takes the height there is, its panels scroll beside or below it. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .fs-box.fs-on { padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); }
+  .fs-box.fs-on .script-graph { grid-template-columns: minmax(0, 1fr) 240px; }
+  .fs-box.fs-on .script-side { max-height: calc(100dvh - 50px); overflow: auto; }
+  .fs-box.fs-on .script-canvas { min-height: calc(100dvh - 50px); }
+  .fs-box.fs-on .ue-graph-row { grid-template-columns: minmax(0, 1fr) 230px; }
+  .fs-box.fs-on .ue-vars { max-height: calc(100dvh - 50px); overflow: auto; }
+  .fs-box.fs-on .ue-canvas { height: calc(100dvh - 50px); }
+  .fs-box.fs-on .code-editor { height: calc(100dvh - 90px); }
+}

@@ -11,6 +11,19 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
  */
 export function Fullscreen(p: { children: ReactNode; className?: string; label?: string; hidden?: boolean }) {
   const [big, setBig] = useState(false);
+  // On a phone or tablet the browser's own full screen is asked for too (no address bar), and the
+  // screen may be turned: the box follows the new size (the graph fits again on its own).
+  useEffect(() => {
+    if (!big || !matchMedia("(pointer: coarse)").matches) return;
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) void el.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+    const left = () => !document.fullscreenElement && setBig(false);
+    document.addEventListener("fullscreenchange", left);
+    return () => {
+      document.removeEventListener("fullscreenchange", left);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, [big]);
   useEffect(() => {
     if (!big) return;
     const key = (e: KeyboardEvent) => e.key === "Escape" && setBig(false);
