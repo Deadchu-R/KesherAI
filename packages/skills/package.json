@@ -1,6 +1,6 @@
 {
   "name": "@kesher/skills",
-  "version": "0.5.67",
+  "version": "0.5.68",
   "description": "Loads SKILL.md skills — the same open format Claude Code, Codex and LobeHub use.",
   "license": "Apache-2.0",
   "type": "module",

@@ -14,6 +14,8 @@ import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import { runSplit, type SplitWorker } from "./split-task.js";
 import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
+import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
+import { findEngines, readProject } from "./unreal-install.js";
 import { graphTools } from "./graph-edit.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
@@ -170,6 +172,18 @@ export class ConversationManager {
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
   private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
+  /** The Unreal project the chats work on (shared, like Unity's active project). */
+  private readonly unrealState: { project?: string } = {};
+  /** Whether an Unreal Engine is installed here (checked in the background). */
+  private unrealEngines = false;
+  private unrealCheckedAt = 0;
+
+  /** Looks for installed Unreal engines at most every 5 minutes, without waiting. */
+  private checkUnreal(): void {
+    if (process.platform !== "win32" || Date.now() - this.unrealCheckedAt < 300_000) return;
+    this.unrealCheckedAt = Date.now();
+    void findEngines().then((e) => (this.unrealEngines = e.length > 0), () => undefined);
+  }
 
   /** @param deps - Services the manager needs. */
   constructor(
@@ -692,12 +706,18 @@ export class ConversationManager {
       );
     }
     split.push(...unity);
+    // Unreal: when an engine is installed here (checked in the background, at most every 5 minutes) or a project is in use.
+    this.checkUnreal();
+    if (this.unrealState.project || this.unrealEngines) {
+      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs")));
+      media.notes.push(UNREAL_NOTE);
+    }
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
       return {
-        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$)/.test(t.spec.name)),
+        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor)$)/.test(t.spec.name)),
         notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
       };
     }
@@ -915,7 +935,7 @@ export class ConversationManager {
         }
         if (!(local && this.deps.config.toolSearch !== false)) return undefined;
         // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
-        return this.deps.unity?.activeProject ? [...CORE_TOOLS, ...UNITY_TOOL_NAMES] : CORE_TOOLS;
+        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : [])];
       },
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(
@@ -1105,6 +1125,9 @@ export class ConversationManager {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
+    // "[Unreal project: Name, UE 5.8 — C:\path; …]" (Unreal page → Open in chat): the Unreal tools work on that project.
+    const unrealHeader = /^\s*\[Unreal project: [^\]\n]*? — ([^;\]\n]+)[;\]]/.exec(text);
+    if (unrealHeader) await readProject(unrealHeader[1]!.trim()).then((p) => (this.unrealState.project = p.dir), () => undefined);
     // Rebuild tools and prompt so new active models and project changes apply.
     const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     session.setTools(tools);

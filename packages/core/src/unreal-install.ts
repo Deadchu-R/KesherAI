@@ -67,12 +67,53 @@ async function sourceEngines(): Promise<UnrealEngine[]> {
     .map((m) => ({ version: m[1]!, path: m[2]!.trim(), kind: "source" as const }));
 }
 
-/** @returns Every engine found on this computer. */
+/**
+ * Engines from the Epic Games Launcher's per-app manifests
+ * (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`). The
+ * launcher keeps these even when LauncherInstalled.dat is empty (seen on a
+ * PC where UE 5.6 was installed and the list file held no entries).
+ *
+ * @param texts - The .item files' text.
+ */
+export function manifestEngines(texts: string[]): UnrealEngine[] {
+  const out: UnrealEngine[] = [];
+  for (const text of texts) {
+    try {
+      const j = JSON.parse(text) as { AppName?: string; InstallLocation?: string };
+      const m = /^UE_(\d+\.\d+)$/.exec(j.AppName ?? "");
+      if (m && j.InstallLocation) out.push({ version: m[1]!, path: j.InstallLocation, kind: "launcher" });
+    } catch {
+      // not a manifest
+    }
+  }
+  return out;
+}
+
+/** @returns Every engine found on this computer (newest first, each folder once). */
 export async function findEngines(): Promise<UnrealEngine[]> {
   if (process.platform !== "win32") return [];
-  const list = join(process.env.ProgramData ?? "C:\\ProgramData", "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat");
+  const data = process.env.ProgramData ?? "C:\\ProgramData";
+  const list = join(data, "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat");
   const launcher = launcherEngines(await readFile(list, "utf8").catch(() => ""));
-  return [...launcher, ...(await sourceEngines().catch(() => []))].filter((e) => existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")));
+  const manDir = join(data, "Epic", "EpicGamesLauncher", "Data", "Manifests");
+  const items = (await readdir(manDir).catch(() => [] as string[])).filter((f) => f.endsWith(".item"));
+  const manifests = manifestEngines(await Promise.all(items.map((f) => readFile(join(manDir, f), "utf8").catch(() => ""))));
+  // The launcher's default folder, in case neither list has it.
+  const pf = join(process.env.ProgramFiles ?? "C:\\Program Files", "Epic Games");
+  const folders = (await readdir(pf).catch(() => [] as string[]))
+    .map((f) => ({ m: /^UE_(\d+\.\d+)$/.exec(f), path: join(pf, f) }))
+    .filter((e): e is { m: RegExpExecArray; path: string } => !!e.m)
+    .map((e) => ({ version: e.m[1]!, path: e.path, kind: "launcher" as const }));
+  const seen = new Set<string>();
+  return [...launcher, ...manifests, ...folders, ...(await sourceEngines().catch(() => []))]
+    .filter((e) => existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")))
+    .filter((e) => {
+      const k = resolve(e.path).toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
 }
 
 /**
