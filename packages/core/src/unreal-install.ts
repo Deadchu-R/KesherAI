@@ -47,12 +47,25 @@ export interface InstallJob {
  */
 export function launcherEngines(text: string): UnrealEngine[] {
   try {
-    const j = JSON.parse(text) as { InstallationList?: Array<{ InstallLocation?: string; AppName?: string }> };
+    const j = JSON.parse(text) as {
+      InstallationList?: Array<{ InstallLocation?: string; AppName?: string }>;
+    };
     return (j.InstallationList ?? [])
-      .map((e) => ({ m: /^UE_(\d+\.\d+)$/.exec(e.AppName ?? ""), path: e.InstallLocation ?? "" }))
-      .filter((e): e is { m: RegExpExecArray; path: string } => !!e.m && !!e.path)
-      .map((e) => ({ version: e.m[1]!, path: e.path, kind: "launcher" as const }))
-      .sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
+      .map((e) => ({
+        m: /^UE_(\d+\.\d+)$/.exec(e.AppName ?? ""),
+        path: e.InstallLocation ?? "",
+      }))
+      .filter(
+        (e): e is { m: RegExpExecArray; path: string } => !!e.m && !!e.path,
+      )
+      .map((e) => ({
+        version: e.m[1]!,
+        path: e.path,
+        kind: "launcher" as const,
+      }))
+      .sort((a, b) =>
+        b.version.localeCompare(a.version, undefined, { numeric: true }),
+      );
   } catch {
     return [];
   }
@@ -60,12 +73,23 @@ export function launcherEngines(text: string): UnrealEngine[] {
 
 /** Engines built from source, registered under HKCU\Software\Epic Games\Unreal Engine\Builds. */
 async function sourceEngines(): Promise<UnrealEngine[]> {
-  const out = await new Promise<string>((res) => execFile("reg", ["query", "HKCU\\Software\\Epic Games\\Unreal Engine\\Builds"], { windowsHide: true }, (_e, o) => res(o ?? "")));
+  const out = await new Promise<string>((res) =>
+    execFile(
+      "reg",
+      ["query", "HKCU\\Software\\Epic Games\\Unreal Engine\\Builds"],
+      { windowsHide: true },
+      (_e, o) => res(o ?? ""),
+    ),
+  );
   return out
     .split(/\r?\n/)
     .map((l) => /^\s+(\S+)\s+REG_SZ\s+(.+)$/.exec(l))
     .filter((m): m is RegExpExecArray => !!m)
-    .map((m) => ({ version: m[1]!, path: m[2]!.trim(), kind: "source" as const }));
+    .map((m) => ({
+      version: m[1]!,
+      path: m[2]!.trim(),
+      kind: "source" as const,
+    }));
 }
 
 /**
@@ -80,9 +104,13 @@ export function manifestEngines(texts: string[]): UnrealEngine[] {
   const out: UnrealEngine[] = [];
   for (const text of texts) {
     try {
-      const j = JSON.parse(text) as { AppName?: string; InstallLocation?: string };
+      const j = JSON.parse(text) as {
+        AppName?: string;
+        InstallLocation?: string;
+      };
       const m = /^UE_(\d+\.\d+)$/.exec(j.AppName ?? "");
-      if (m && j.InstallLocation) out.push({ version: m[1]!, path: j.InstallLocation, kind: "launcher" });
+      if (m && j.InstallLocation)
+        out.push({ version: m[1]!, path: j.InstallLocation, kind: "launcher" });
     } catch {
       // not a manifest
     }
@@ -92,14 +120,28 @@ export function manifestEngines(texts: string[]): UnrealEngine[] {
 
 /** Launcher engines registered under HKLM\SOFTWARE\EpicGames\Unreal Engine\<version> (InstalledDirectory). */
 async function registeredEngines(): Promise<UnrealEngine[]> {
-  const out = await new Promise<string>((res) => execFile("reg", ["query", "HKLM\\SOFTWARE\\EpicGames\\Unreal Engine", "/s", "/v", "InstalledDirectory"], { windowsHide: true }, (_e, o) => res(o ?? "")));
+  const out = await new Promise<string>((res) =>
+    execFile(
+      "reg",
+      [
+        "query",
+        "HKLM\\SOFTWARE\\EpicGames\\Unreal Engine",
+        "/s",
+        "/v",
+        "InstalledDirectory",
+      ],
+      { windowsHide: true },
+      (_e, o) => res(o ?? ""),
+    ),
+  );
   const found: UnrealEngine[] = [];
   let version = "";
   for (const line of out.split(/\r?\n/)) {
     const key = /\\Unreal Engine\\(\d+\.\d+)\s*$/i.exec(line);
     if (key) version = key[1]!;
     const dir = /^\s+InstalledDirectory\s+REG_SZ\s+(.+)$/.exec(line);
-    if (dir && version) found.push({ version, path: dir[1]!.trim(), kind: "launcher" });
+    if (dir && version)
+      found.push({ version, path: dir[1]!.trim(), kind: "launcher" });
   }
   return found;
 }
@@ -113,7 +155,9 @@ async function registeredEngines(): Promise<UnrealEngine[]> {
  */
 export function loggedEngines(text: string): UnrealEngine[] {
   const out = new Map<string, UnrealEngine>();
-  for (const m of text.matchAll(/DestinationPath[=:]\s*'?([A-Za-z]:\\[^'\r\n]*?UE_(\d+\.\d+)[^'\r\n]*?)'?\s*$/gm)) {
+  for (const m of text.matchAll(
+    /DestinationPath[=:]\s*'?([A-Za-z]:\\[^'\r\n]*?UE_(\d+\.\d+)[^'\r\n]*?)'?\s*$/gm,
+  )) {
     const path = m[1]!.trim();
     out.set(path.toLowerCase(), { version: m[2]!, path, kind: "launcher" });
   }
@@ -150,18 +194,62 @@ export function forgetEngines(): void {
 async function lookForEngines(): Promise<UnrealEngine[]> {
   if (process.platform !== "win32") return [];
   const data = process.env.ProgramData ?? "C:\\ProgramData";
-  const list = join(data, "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat");
-  const launcher = launcherEngines(await readFile(list, "utf8").catch(() => ""));
+  const list = join(
+    data,
+    "Epic",
+    "UnrealEngineLauncher",
+    "LauncherInstalled.dat",
+  );
+  const launcher = launcherEngines(
+    await readFile(list, "utf8").catch(() => ""),
+  );
   const manDir = join(data, "Epic", "EpicGamesLauncher", "Data", "Manifests");
-  const items = (await readdir(manDir).catch(() => [] as string[])).filter((f) => f.endsWith(".item"));
-  const manifests = manifestEngines(await Promise.all(items.map((f) => readFile(join(manDir, f), "utf8").catch(() => ""))));
-  const logDir = join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "EpicGamesLauncher", "Saved", "Logs");
-  const logs = (await readdir(logDir).catch(() => [] as string[])).filter((f) => /^EpicGamesLauncher.*\.log$/i.test(f));
-  const logged = loggedEngines((await Promise.all(logs.map((f) => readFile(join(logDir, f), "utf8").catch(() => "")))).join("\n"));
+  const items = (await readdir(manDir).catch(() => [] as string[])).filter(
+    (f) => f.endsWith(".item"),
+  );
+  const manifests = manifestEngines(
+    await Promise.all(
+      items.map((f) => readFile(join(manDir, f), "utf8").catch(() => "")),
+    ),
+  );
+  const logDir = join(
+    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+    "EpicGamesLauncher",
+    "Saved",
+    "Logs",
+  );
+  const logs = (await readdir(logDir).catch(() => [] as string[])).filter((f) =>
+    /^EpicGamesLauncher.*\.log$/i.test(f),
+  );
+  const logged = loggedEngines(
+    (
+      await Promise.all(
+        logs.map((f) => readFile(join(logDir, f), "utf8").catch(() => "")),
+      )
+    ).join("\n"),
+  );
   // Common folders on every drive (the new launcher keeps no list KesherAI can read), and the user's own folders.
-  const parents = new Set<string>([join(process.env.ProgramFiles ?? "C:\\Program Files", "Epic Games"), ...extraEngineFolders]);
-  for (const d of "CDEFGH") for (const sub of ["Epic Games", "EpicGames", "Program Files\\Epic Games", "UnrealEngine", "Unreal Engine", "Epic"]) parents.add(`${d}:\\${sub}`);
-  for (const sub of ["UnrealEngine", "Unreal Engine", "Epic Games", join("source", "repos")]) parents.add(join(homedir(), sub));
+  const parents = new Set<string>([
+    join(process.env.ProgramFiles ?? "C:\\Program Files", "Epic Games"),
+    ...extraEngineFolders,
+  ]);
+  for (const d of "CDEFGH")
+    for (const sub of [
+      "Epic Games",
+      "EpicGames",
+      "Program Files\\Epic Games",
+      "UnrealEngine",
+      "Unreal Engine",
+      "Epic",
+    ])
+      parents.add(`${d}:\\${sub}`);
+  for (const sub of [
+    "UnrealEngine",
+    "Unreal Engine",
+    "Epic Games",
+    join("source", "repos"),
+  ])
+    parents.add(join(homedir(), sub));
   const folders: UnrealEngine[] = [];
   for (const parent of parents) {
     // A folder that is itself an engine (e.g. D:\UE_5.8 given by the user).
@@ -172,19 +260,34 @@ async function lookForEngines(): Promise<UnrealEngine[]> {
       if (!m) continue;
       // The launcher sometimes nests it: E:\EpicGames\UE_5.6\UE_5.6.
       const nested = join(parent, f, f);
-      folders.push({ version: m[1]!, path: existsSync(join(nested, "Engine")) ? nested : join(parent, f), kind: "launcher" });
+      folders.push({
+        version: m[1]!,
+        path: existsSync(join(nested, "Engine")) ? nested : join(parent, f),
+        kind: "launcher",
+      });
     }
   }
   const seen = new Set<string>();
-  return [...launcher, ...manifests, ...logged, ...(await registeredEngines().catch(() => [])), ...folders, ...(await sourceEngines().catch(() => []))]
-    .filter((e) => existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")))
+  return [
+    ...launcher,
+    ...manifests,
+    ...logged,
+    ...(await registeredEngines().catch(() => [])),
+    ...folders,
+    ...(await sourceEngines().catch(() => [])),
+  ]
+    .filter((e) =>
+      existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")),
+    )
     .filter((e) => {
       const k = resolve(e.path).toLowerCase();
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
     })
-    .sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
+    .sort((a, b) =>
+      b.version.localeCompare(a.version, undefined, { numeric: true }),
+    );
 }
 
 /**
@@ -194,18 +297,34 @@ async function lookForEngines(): Promise<UnrealEngine[]> {
  * @returns Its .uproject path and `EngineAssociation` ("5.4", or a source build id).
  * @throws Error when the folder has no .uproject.
  */
-export async function readProject(folder: string): Promise<{ file: string; dir: string; engine: string }> {
-  const file = folder.toLowerCase().endsWith(".uproject") ? folder : (await readdir(folder).catch(() => [] as string[])).filter((f) => f.toLowerCase().endsWith(".uproject")).map((f) => join(folder, f))[0];
-  if (!file || !existsSync(file)) throw new Error("No Unreal project (.uproject) in that folder.");
-  const j = JSON.parse((await readFile(file, "utf8")).replace(/^\uFEFF/, "")) as { EngineAssociation?: string };
-  return { file, dir: dirname(file), engine: String(j.EngineAssociation ?? "") };
+export async function readProject(
+  folder: string,
+): Promise<{ file: string; dir: string; engine: string }> {
+  const file = folder.toLowerCase().endsWith(".uproject")
+    ? folder
+    : (await readdir(folder).catch(() => [] as string[]))
+        .filter((f) => f.toLowerCase().endsWith(".uproject"))
+        .map((f) => join(folder, f))[0];
+  if (!file || !existsSync(file))
+    throw new Error("No Unreal project (.uproject) in that folder.");
+  const j = JSON.parse(
+    (await readFile(file, "utf8")).replace(/^\uFEFF/, ""),
+  ) as { EngineAssociation?: string };
+  return {
+    file,
+    dir: dirname(file),
+    engine: String(j.EngineAssociation ?? ""),
+  };
 }
 
 /** @returns Where the plugin's source is: bundled with the app, or in the repository. */
 export function bridgeSource(): string | undefined {
   const resources = (process as { resourcesPath?: string }).resourcesPath;
   const here = dirname(fileURLToPath(import.meta.url));
-  return [resources && join(resources, "unreal-plugin", "KesherAIBridge"), resolve(here, "../../../integrations/unreal/KesherAIBridge")].find(
+  return [
+    resources && join(resources, "unreal-plugin", "KesherAIBridge"),
+    resolve(here, "../../../integrations/unreal/KesherAIBridge"),
+  ].find(
     (p): p is string => !!p && existsSync(join(p, "KesherAIBridge.uplugin")),
   );
 }
@@ -231,15 +350,35 @@ export class BridgeInstaller {
    * @throws Error when another install runs, the project or its engine is not found, or the plugin source is missing.
    */
   async install(folder: string): Promise<void> {
-    if (this.job && (this.job.state === "building" || this.job.state === "copying")) throw new Error("An install is already running.");
-    if (process.platform !== "win32") throw new Error("Installing from KesherAI works on Windows for now. On other systems, unzip the plugin into the project's Plugins folder (docs/UNREAL.md).");
+    if (
+      this.job &&
+      (this.job.state === "building" || this.job.state === "copying")
+    )
+      throw new Error("An install is already running.");
+    if (process.platform !== "win32")
+      throw new Error(
+        "Installing from KesherAI works on Windows for now. On other systems, unzip the plugin into the project's Plugins folder (docs/UNREAL.md).",
+      );
     const project = await readProject(folder);
     const engines = await findEngines();
-    const engine = engines.find((e) => e.version === project.engine) ?? (project.engine ? undefined : engines[0]);
-    if (!engine) throw new Error(`Unreal ${project.engine || "(any)"} was not found on this computer. Installed: ${engines.map((e) => e.version).join(", ") || "none"}.`);
+    const engine =
+      engines.find((e) => e.version === project.engine) ??
+      (project.engine ? undefined : engines[0]);
+    if (!engine)
+      throw new Error(
+        `Unreal ${project.engine || "(any)"} was not found on this computer. Installed: ${engines.map((e) => e.version).join(", ") || "none"}.`,
+      );
     const source = bridgeSource();
-    if (!source) throw new Error("The plugin's files are missing from this copy of KesherAI.");
-    const job: InstallJob = { state: "building", project: project.dir, engine: engine.version, log: [] };
+    if (!source)
+      throw new Error(
+        "The plugin's files are missing from this copy of KesherAI.",
+      );
+    const job: InstallJob = {
+      state: "building",
+      project: project.dir,
+      engine: engine.version,
+      log: [],
+    };
     this.job = job;
     void this.run(job, engine, source, project.dir).catch((err: Error) => {
       job.state = "failed";
@@ -247,17 +386,44 @@ export class BridgeInstaller {
     });
   }
 
-  private async run(job: InstallJob, engine: UnrealEngine, source: string, projectDir: string): Promise<void> {
-    const version = JSON.parse(await readFile(join(source, "KesherAIBridge.uplugin"), "utf8")) as { VersionName?: string };
-    const built = join(this.dir, `${engine.version.replace(/[^\w.-]/g, "_")}-${version.VersionName ?? "0"}`, "KesherAIBridge");
+  private async run(
+    job: InstallJob,
+    engine: UnrealEngine,
+    source: string,
+    projectDir: string,
+  ): Promise<void> {
+    const version = JSON.parse(
+      await readFile(join(source, "KesherAIBridge.uplugin"), "utf8"),
+    ) as { VersionName?: string };
+    const built = join(
+      this.dir,
+      `${engine.version.replace(/[^\w.-]/g, "_")}-${version.VersionName ?? "0"}`,
+      "KesherAIBridge",
+    );
     if (!existsSync(join(built, "Binaries"))) {
       await rm(built, { recursive: true, force: true });
       await mkdir(dirname(built), { recursive: true });
-      const uat = join(engine.path, "Engine", "Build", "BatchFiles", "RunUAT.bat");
+      const uat = join(
+        engine.path,
+        "Engine",
+        "Build",
+        "BatchFiles",
+        "RunUAT.bat",
+      );
       const code = await new Promise<number>((res) => {
-        const child = spawn("cmd.exe", ["/d", "/s", "/c", `"${uat}" BuildPlugin -Plugin="${join(source, "KesherAIBridge.uplugin")}" -Package="${built}" -TargetPlatforms=Win64`], { windowsHide: true, windowsVerbatimArguments: true });
+        const child = spawn(
+          "cmd.exe",
+          [
+            "/d",
+            "/s",
+            "/c",
+            `"${uat}" BuildPlugin -Plugin="${join(source, "KesherAIBridge.uplugin")}" -Package="${built}" -TargetPlatforms=Win64`,
+          ],
+          { windowsHide: true, windowsVerbatimArguments: true },
+        );
         const add = (d: Buffer) => {
-          for (const line of d.toString().split(/\r?\n/)) if (line.trim()) job.log.push(line.slice(0, 300));
+          for (const line of d.toString().split(/\r?\n/))
+            if (line.trim()) job.log.push(line.slice(0, 300));
           if (job.log.length > 400) job.log.splice(0, job.log.length - 400);
         };
         child.stdout.on("data", add);
@@ -279,8 +445,14 @@ export class BridgeInstaller {
     await rm(dest, { recursive: true, force: true });
     await mkdir(dest, { recursive: true });
     // Without Source/ and Intermediate/: Unreal loads the built files and never asks to compile.
-    for (const part of ["KesherAIBridge.uplugin", "Binaries", "Resources", "README.md"]) {
-      if (existsSync(join(built, part))) await cp(join(built, part), join(dest, part), { recursive: true });
+    for (const part of [
+      "KesherAIBridge.uplugin",
+      "Binaries",
+      "Resources",
+      "README.md",
+    ]) {
+      if (existsSync(join(built, part)))
+        await cp(join(built, part), join(dest, part), { recursive: true });
     }
     job.state = "done";
     job.message = `Installed in ${dest}. Open (or restart) the project in Unreal ${engine.version}.`;
@@ -291,9 +463,10 @@ export class BridgeInstaller {
 export function unityPackageSource(): string | undefined {
   const resources = (process as { resourcesPath?: string }).resourcesPath;
   const here = dirname(fileURLToPath(import.meta.url));
-  return [resources && join(resources, "unity-package", "com.kesherai.bridge"), resolve(here, "../../../integrations/unity/com.kesherai.bridge")].find(
-    (p): p is string => !!p && existsSync(join(p, "package.json")),
-  );
+  return [
+    resources && join(resources, "unity-package", "com.kesherai.bridge"),
+    resolve(here, "../../../integrations/unity/com.kesherai.bridge"),
+  ].find((p): p is string => !!p && existsSync(join(p, "package.json")));
 }
 
 /**
@@ -306,9 +479,18 @@ export function unityPackageSource(): string | undefined {
  * @throws Error when the folder is not a Unity project or the package files are missing.
  */
 export async function installUnityPackage(folder: string): Promise<string> {
-  if (!existsSync(join(folder, "Assets")) || !existsSync(join(folder, "Packages", "manifest.json"))) throw new Error("That is not a Unity project folder (it needs Assets/ and Packages/manifest.json).");
+  if (
+    !existsSync(join(folder, "Assets")) ||
+    !existsSync(join(folder, "Packages", "manifest.json"))
+  )
+    throw new Error(
+      "That is not a Unity project folder (it needs Assets/ and Packages/manifest.json).",
+    );
   const source = unityPackageSource();
-  if (!source) throw new Error("The package's files are missing from this copy of KesherAI.");
+  if (!source)
+    throw new Error(
+      "The package's files are missing from this copy of KesherAI.",
+    );
   const dest = join(folder, "Packages", "com.kesherai.bridge");
   await rm(dest, { recursive: true, force: true });
   await cp(source, dest, { recursive: true });
@@ -316,13 +498,33 @@ export async function installUnityPackage(folder: string): Promise<string> {
 }
 
 /** Plugins that are editor tools only: a game (a phone build above all) must not pack or start them. */
-export const EDITOR_ONLY_PLUGINS = ["ModelContextProtocol", "AllToolsets", "PythonScriptPlugin", "EditorScriptingUtilities"];
+export const EDITOR_ONLY_PLUGINS = [
+  "ModelContextProtocol",
+  "AllToolsets",
+  "PythonScriptPlugin",
+  "EditorScriptingUtilities",
+];
 
 /** Marks the editor-only plugins of a .uproject's list with TargetAllowList ["Editor"]; true when something changed. */
-export function markEditorOnly(plugins: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }>): boolean {
+export function markEditorOnly(
+  plugins: Array<{
+    Name?: string;
+    Enabled?: boolean;
+    TargetAllowList?: string[];
+  }>,
+): boolean {
   let changed = false;
   for (const p of plugins) {
-    if (p?.Name && EDITOR_ONLY_PLUGINS.includes(p.Name) && p.Enabled && !(Array.isArray(p.TargetAllowList) && p.TargetAllowList.length === 1 && p.TargetAllowList[0] === "Editor")) {
+    if (
+      p?.Name &&
+      EDITOR_ONLY_PLUGINS.includes(p.Name) &&
+      p.Enabled &&
+      !(
+        Array.isArray(p.TargetAllowList) &&
+        p.TargetAllowList.length === 1 &&
+        p.TargetAllowList[0] === "Editor"
+      )
+    ) {
       p.TargetAllowList = ["Editor"];
       changed = true;
     }
@@ -336,14 +538,104 @@ export function markEditorOnly(plugins: Array<{ Name?: string; Enabled?: boolean
  *
  * @returns What changed, or "" when nothing had to.
  */
-export async function keepEditorPluginsOutOfGame(folder: string): Promise<string> {
+export async function keepEditorPluginsOutOfGame(
+  folder: string,
+): Promise<string> {
   const { file } = await readProject(folder);
   const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
-  const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }> };
+  const j = JSON.parse(text) as {
+    Plugins?: Array<{
+      Name?: string;
+      Enabled?: boolean;
+      TargetAllowList?: string[];
+    }>;
+  };
   if (!Array.isArray(j.Plugins) || !markEditorOnly(j.Plugins)) return "";
-  if (!existsSync(`${file}.kesher-backup`)) await writeFile(`${file}.kesher-backup`, text); // the first original is kept
+  if (!existsSync(`${file}.kesher-backup`))
+    await writeFile(`${file}.kesher-backup`, text); // the first original is kept
   await writeFile(file, `${JSON.stringify(j, null, "\t")}\n`);
-  return `Editor-only plugins (${j.Plugins.filter((p) => p.TargetAllowList?.[0] === "Editor").map((p) => p.Name).join(", ")}) are now kept out of the game build (TargetAllowList Editor in ${file}; the old file is ${file}.kesher-backup).`;
+  return `Editor-only plugins (${j.Plugins.filter(
+    (p) => p.TargetAllowList?.[0] === "Editor",
+  )
+    .map((p) => p.Name)
+    .join(
+      ", ",
+    )}) are now kept out of the game build (TargetAllowList Editor in ${file}; the old file is ${file}.kesher-backup).`;
+}
+
+/** An engine's exact version from Engine/Build/Build.version, e.g. [5, 8, 2]. */
+export async function engineVersion(
+  enginePath: string,
+): Promise<[number, number, number] | undefined> {
+  try {
+    const j = JSON.parse(
+      await readFile(
+        join(enginePath, "Engine", "Build", "Build.version"),
+        "utf8",
+      ),
+    ) as {
+      MajorVersion?: number;
+      MinorVersion?: number;
+      PatchVersion?: number;
+    };
+    return [
+      Number(j.MajorVersion),
+      Number(j.MinorVersion),
+      Number(j.PatchVersion ?? 0),
+    ];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Sets a key in one section of an .ini text (adds the section or key when missing). */
+export function setIniKey(
+  text: string,
+  section: string,
+  key: string,
+  value: string,
+): string {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((l) => l.trim() === section);
+  if (start < 0)
+    return `${text.replace(/\s*$/, "")}\n\n${section}\n${key}=${value}\n`;
+  let end = lines.findIndex(
+    (l, i) => i > start && /^\[.*\]\s*$/.test(l.trim()),
+  );
+  if (end < 0) end = lines.length;
+  const at = lines.findIndex(
+    (l, i) => i > start && i < end && l.split("=")[0]?.trim() === key,
+  );
+  if (at >= 0) lines[at] = `${key}=${value}`;
+  else lines.splice(start + 1, 0, `${key}=${value}`);
+  return lines.join("\n");
+}
+
+/**
+ * Unreal 5.8.0–5.8.3 bug UE-396689 (fixed in 5.8.4): with a shared shader
+ * library the Android Vulkan game misses shaders and quits right after the
+ * logo ("Missing shader resource for hash … VULKAN_ES3_1_ANDROID"). Turns
+ * the shared library off in the project's DefaultGame.ini (the cooker reads
+ * it from there; the game gets a few % bigger).
+ *
+ * @returns What changed, or "" when nothing had to.
+ */
+export async function avoidShaderLibraryBug(
+  projectDir: string,
+  enginePath: string,
+): Promise<string> {
+  const v = await engineVersion(enginePath);
+  if (!v || v[0] !== 5 || v[1] !== 8 || v[2] >= 4) return "";
+  const ini = join(projectDir, "Config", "DefaultGame.ini");
+  const before = existsSync(ini) ? await readFile(ini, "utf8") : "";
+  const section = "[/Script/UnrealEd.ProjectPackagingSettings]";
+  let after = setIniKey(before, section, "bShareMaterialShaderCode", "False");
+  after = setIniKey(after, section, "bSharedMaterialNativeLibraries", "False");
+  if (after === before) return "";
+  if (before && !existsSync(`${ini}.kesher-backup`))
+    await writeFile(`${ini}.kesher-backup`, before);
+  await writeFile(ini, after);
+  return `Unreal ${v.join(".")} has a bug (UE-396689, fixed in 5.8.4) where a shared shader library makes the Android game quit right after the logo: the shared shader library is now off in ${ini}.`;
 }
 
 /**
@@ -359,7 +651,13 @@ export async function keepEditorPluginsOutOfGame(folder: string): Promise<string
 export async function enableUnrealMcp(folder: string): Promise<string> {
   const { file, dir, engine } = await readProject(folder);
   const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
-  const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }> };
+  const j = JSON.parse(text) as {
+    Plugins?: Array<{
+      Name?: string;
+      Enabled?: boolean;
+      TargetAllowList?: string[];
+    }>;
+  };
   const plugins = Array.isArray(j.Plugins) ? j.Plugins : [];
   let changed = false;
   for (const name of ["ModelContextProtocol", "AllToolsets"]) {
@@ -374,19 +672,30 @@ export async function enableUnrealMcp(folder: string): Promise<string> {
   }
   if (markEditorOnly(plugins)) changed = true;
   if (changed) {
-    if (!existsSync(`${file}.kesher-backup`)) await writeFile(`${file}.kesher-backup`, text); // the first original is kept
+    if (!existsSync(`${file}.kesher-backup`))
+      await writeFile(`${file}.kesher-backup`, text); // the first original is kept
     j.Plugins = plugins;
     await writeFile(file, `${JSON.stringify(j, null, "\t")}\n`);
   }
   // Per-user editor settings (not in source control): start the MCP server with the editor.
-  const platform = process.platform === "win32" ? "WindowsEditor" : process.platform === "darwin" ? "MacEditor" : "LinuxEditor";
+  const platform =
+    process.platform === "win32"
+      ? "WindowsEditor"
+      : process.platform === "darwin"
+        ? "MacEditor"
+        : "LinuxEditor";
   const iniDir = join(dir, "Saved", "Config", platform);
   const ini = join(iniDir, "EditorPerProjectUserSettings.ini");
-  const section = "[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]";
+  const section =
+    "[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]";
   let cur = existsSync(ini) ? await readFile(ini, "utf8") : "";
   if (!/bAutoStartServer\s*=\s*True/i.test(cur)) {
-    if (cur.includes(section)) cur = cur.replace(section, `${section}\nbAutoStartServer=True`).replace(/\nbAutoStartServer\s*=\s*False/gi, "");
-    else cur = `${cur.trimEnd()}${cur ? "\n\n" : ""}${section}\nbAutoStartServer=True\n`;
+    if (cur.includes(section))
+      cur = cur
+        .replace(section, `${section}\nbAutoStartServer=True`)
+        .replace(/\nbAutoStartServer\s*=\s*False/gi, "");
+    else
+      cur = `${cur.trimEnd()}${cur ? "\n\n" : ""}${section}\nbAutoStartServer=True\n`;
     await mkdir(iniDir, { recursive: true });
     await writeFile(ini, cur);
   }

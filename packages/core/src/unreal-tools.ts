@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/p
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
-import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, type UnrealEngine } from "./unreal-install.js";
+import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, avoidShaderLibraryBug, type UnrealEngine } from "./unreal-install.js";
 import { projectPath } from "./unity-tools.js";
 import type { JobStore } from "./jobs.js";
 
@@ -185,7 +185,7 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
     [`Source/${name}/${name}.cpp`]: `#include "Modules/ModuleManager.h"\n\nIMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, ${name}, "${name}");\n`,
     [`Source/${name}/${name}GameMode.h`]: `#pragma once\n\n#include "CoreMinimal.h"\n#include "GameFramework/GameModeBase.h"\n#include "${name}GameMode.generated.h"\n\n/** The game's rules. Spawns everything the game needs in BeginPlay. */\nUCLASS()\nclass ${api} A${name}GameMode : public AGameModeBase\n{\n\tGENERATED_BODY()\npublic:\n\tvirtual void BeginPlay() override;\n};\n`,
     [`Source/${name}/${name}GameMode.cpp`]: `#include "${name}GameMode.h"\n\nvoid A${name}GameMode::BeginPlay()\n{\n\tSuper::BeginPlay();\n}\n`,
-    "Config/DefaultGame.ini": `[/Script/EngineSettings.GeneralProjectSettings]\nProjectName=${name}\nProjectID=${[...Array(32)].map(() => "0123456789ABCDEF"[Math.floor(Math.random() * 16)]).join("")}\n\n[/Script/UnrealEd.ProjectPackagingSettings]\nBuildConfiguration=PPBC_Development\nbShareMaterialShaderCode=True\nbSharedMaterialNativeLibraries=True\nbUseIoStore=True\nbCompressed=True\nIncludePrerequisites=False\n\n[/Script/Engine.AssetManagerSettings]\n+PrimaryAssetTypesToScan=(PrimaryAssetType="GameFeatureData",AssetBaseClass=/Script/GameFeatures.GameFeatureData,bHasBlueprintClasses=False,bIsEditorOnly=False,Directories=((Path="/Game/Unused")),SpecificAssets=,Rules=(Priority=-1,ChunkId=-1,bApplyRecursively=True,CookRule=AlwaysCook))\n`,
+    "Config/DefaultGame.ini": `[/Script/EngineSettings.GeneralProjectSettings]\nProjectName=${name}\nProjectID=${[...Array(32)].map(() => "0123456789ABCDEF"[Math.floor(Math.random() * 16)]).join("")}\n\n[/Script/UnrealEd.ProjectPackagingSettings]\nBuildConfiguration=PPBC_Development\nbShareMaterialShaderCode=False\nbSharedMaterialNativeLibraries=False\nbUseIoStore=True\nbCompressed=True\nIncludePrerequisites=False\n\n[/Script/Engine.AssetManagerSettings]\n+PrimaryAssetTypesToScan=(PrimaryAssetType="GameFeatureData",AssetBaseClass=/Script/GameFeatures.GameFeatureData,bHasBlueprintClasses=False,bIsEditorOnly=False,Directories=((Path="/Game/Unused")),SpecificAssets=,Rules=(Priority=-1,ChunkId=-1,bApplyRecursively=True,CookRule=AlwaysCook))\n`,
     "Config/DefaultEngine.ini": [
       "[/Script/EngineSettings.GameMapsSettings]",
       "GameDefaultMap=/Engine/Maps/Entry.Entry",
@@ -442,6 +442,8 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         const env: NodeJS.ProcessEnv = { ...process.env };
         // Editor-only plugins (Python, the editor's MCP and its toolsets) are not packed into the game.
         const fixed = await keepEditorPluginsOutOfGame(p.dir).catch(() => "");
+        // Unreal 5.8.0–5.8.3 (UE-396689): a shared shader library misses shaders on Android Vulkan and the game quits at start.
+        const shaderFix = android ? await avoidShaderLibraryBug(p.dir, e.path).catch(() => "") : "";
         if (android) {
           const a = await androidTools();
           if (!a.sdk || !a.ndk || !a.jdk) return { output: `Android tools are missing: SDK ${a.sdk ?? "missing"}, NDK ${a.ndk ?? "missing"}, JDK ${a.jdk ?? "missing"}. Install Android Studio, or Unity's Android module, then try again.` };
@@ -466,7 +468,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
           return { output: `${r.note}Packaging did NOT finish (exit ${r.code}). Full log: ${log}\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
         }
         const sizes = await Promise.all(made.map(async (f) => `${f} (${Math.round((await stat(f)).size / 1048576)} MB)`));
-        return { output: `${fixed ? `${fixed}\n` : ""}${r.note}Packaged: ${sizes.join(", ")}.${android ? " To test it on the user's phone (USB debugging on), use android_run_on_phone with the .apk." : ""}` };
+        return { output: `${fixed ? `${fixed}\n` : ""}${shaderFix ? `${shaderFix}\n` : ""}${r.note}Packaged: ${sizes.join(", ")}.${android ? " To test it on the user's phone (USB debugging on), use android_run_on_phone with the .apk." : ""}` };
       },
     },
   ];
