@@ -104,6 +104,22 @@ async function registeredEngines(): Promise<UnrealEngine[]> {
   return found;
 }
 
+/**
+ * Install folders the Epic Games Launcher wrote in its own log
+ * (`DestinationPath='E:\\EpicGames\\UE_5.8'`). The 2026 launcher keeps no
+ * install list KesherAI can read, but logs every install and verify.
+ *
+ * @param text - The launcher logs' text.
+ */
+export function loggedEngines(text: string): UnrealEngine[] {
+  const out = new Map<string, UnrealEngine>();
+  for (const m of text.matchAll(/DestinationPath[=:]\s*'?([A-Za-z]:\\[^'\r\n]*?UE_(\d+\.\d+)[^'\r\n]*?)'?\s*$/gm)) {
+    const path = m[1]!.trim();
+    out.set(path.toLowerCase(), { version: m[2]!, path, kind: "launcher" });
+  }
+  return [...out.values()];
+}
+
 /** Folders the user pointed to (an engine folder like D:\\UE_5.8, or a folder that holds UE_x.y folders). */
 const extraEngineFolders = new Set<string>();
 /** Adds folders to look in for engines (Settings or unreal_status's engine_folder). */
@@ -120,9 +136,12 @@ export async function findEngines(): Promise<UnrealEngine[]> {
   const manDir = join(data, "Epic", "EpicGamesLauncher", "Data", "Manifests");
   const items = (await readdir(manDir).catch(() => [] as string[])).filter((f) => f.endsWith(".item"));
   const manifests = manifestEngines(await Promise.all(items.map((f) => readFile(join(manDir, f), "utf8").catch(() => ""))));
+  const logDir = join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "EpicGamesLauncher", "Saved", "Logs");
+  const logs = (await readdir(logDir).catch(() => [] as string[])).filter((f) => /^EpicGamesLauncher.*\.log$/i.test(f));
+  const logged = loggedEngines((await Promise.all(logs.map((f) => readFile(join(logDir, f), "utf8").catch(() => "")))).join("\n"));
   // Common folders on every drive (the new launcher keeps no list KesherAI can read), and the user's own folders.
   const parents = new Set<string>([join(process.env.ProgramFiles ?? "C:\\Program Files", "Epic Games"), ...extraEngineFolders]);
-  for (const d of "CDEFGH") for (const sub of ["Epic Games", "Program Files\\Epic Games", "UnrealEngine", "Unreal Engine", "Epic"]) parents.add(`${d}:\\${sub}`);
+  for (const d of "CDEFGH") for (const sub of ["Epic Games", "EpicGames", "Program Files\\Epic Games", "UnrealEngine", "Unreal Engine", "Epic"]) parents.add(`${d}:\\${sub}`);
   for (const sub of ["UnrealEngine", "Unreal Engine", "Epic Games", join("source", "repos")]) parents.add(join(homedir(), sub));
   const folders: UnrealEngine[] = [];
   for (const parent of parents) {
@@ -131,11 +150,14 @@ export async function findEngines(): Promise<UnrealEngine[]> {
     if (own) folders.push({ version: own[1]!, path: parent, kind: "launcher" });
     for (const f of await readdir(parent).catch(() => [] as string[])) {
       const m = /^UE_(\d+\.\d+)$/i.exec(f);
-      if (m) folders.push({ version: m[1]!, path: join(parent, f), kind: "launcher" });
+      if (!m) continue;
+      // The launcher sometimes nests it: E:\EpicGames\UE_5.6\UE_5.6.
+      const nested = join(parent, f, f);
+      folders.push({ version: m[1]!, path: existsSync(join(nested, "Engine")) ? nested : join(parent, f), kind: "launcher" });
     }
   }
   const seen = new Set<string>();
-  return [...launcher, ...manifests, ...(await registeredEngines().catch(() => [])), ...folders, ...(await sourceEngines().catch(() => []))]
+  return [...launcher, ...manifests, ...logged, ...(await registeredEngines().catch(() => [])), ...folders, ...(await sourceEngines().catch(() => []))]
     .filter((e) => existsSync(join(e.path, "Engine", "Build", "BatchFiles", "RunUAT.bat")))
     .filter((e) => {
       const k = resolve(e.path).toLowerCase();

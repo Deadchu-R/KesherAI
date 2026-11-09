@@ -37,3 +37,13 @@ test("source tools stay inside the project and its code folders", async () => {
   await assert.rejects(() => write.run({ path: "Content/Maps/x.umap", content: "x" }, {} as never));
   await assert.rejects(() => write.run({ path: "Source/run.bat", content: "x" }, {} as never));
 });
+
+test("loggedEngines reads install folders from the Epic launcher's log", async () => {
+  const { loggedEngines } = await import("./unreal-install.js");
+  const log = [
+    "[x]LogCommunityPortalAppManager: PopulateInstallConfigFromCurrent: FINAL DestinationPath='E:\\EpicGames\\UE_5.8'",
+    "[x]LogCommunityPortalAppManager: RequestAppInstall:     .DestinationPath: E:\\EpicGames\\UE_5.6\\UE_5.6",
+    "[x] DestinationPath='E:\\EpicGames\\Fortnite\\Fortnite'",
+  ].join("\n");
+  assert.deepEqual(loggedEngines(log).map((e) => [e.version, e.path]), [["5.8", "E:\\EpicGames\\UE_5.8"], ["5.6", "E:\\EpicGames\\UE_5.6\\UE_5.6"]]);
+});
