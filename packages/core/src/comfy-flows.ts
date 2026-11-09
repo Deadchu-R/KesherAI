@@ -125,6 +125,35 @@ export function readyFlows(): ReadyFlow[] {
         "10": { class_type: "SaveGLB", inputs: { mesh: ["9", 0], filename_prefix: "mesh/KesherAI" } },
       },
     },
+    {
+      id: "styled-frame",
+      icon: "🎞️",
+      title: { en: "A styled game frame (keeps the scene's shapes)", he: "פריים מעוצב מהמשחק (שומר על הצורות של הסצנה)" },
+      description: {
+        en: "Load a screenshot of your game (Unity's Game view or Unreal's viewport) and describe the look (\"watercolor, warm sunset\", \"anime cel shading\"). The edges of the scene guide a ControlNet, so the layout stays and only the style changes. Use it for concept art, key art or a look test before you build it in the engine.",
+        he: "טוענים צילום מסך מהמשחק (Game view ב-Unity או ה-viewport ב-Unreal) ומתארים את המראה (\"צבעי מים, שקיעה חמה\", \"אנימה cel shading\"). הקווים של הסצנה מנחים ControlNet, כך שהקומפוזיציה נשמרת ורק הסגנון משתנה. טוב לקונספט, לתמונת שער או לבדיקת מראה לפני שבונים אותו במנוע.",
+      },
+      license: { name: "CreativeML Open RAIL-M (Stable Diffusion 1.5); ControlNet 1.1: OpenRAIL", url: "https://huggingface.co/spaces/CompVis/stable-diffusion-license" },
+      files: [
+        { label: "Stable Diffusion 1.5 (fp16)", repo: "Comfy-Org/stable-diffusion-v1-5-archive", path: "v1-5-pruned-emaonly-fp16.safetensors", rel: "image/v1-5-pruned-emaonly-fp16.safetensors", gb: 2.1 },
+        { label: "ControlNet 1.1 canny (fp16)", repo: "comfyanonymous/ControlNet-v1-1_fp16_safetensors", path: "control_v11p_sd15_canny_fp16.safetensors", rel: "controlnet/control_v11p_sd15_canny_fp16.safetensors", gb: 0.7 },
+      ],
+      checkpoints: { "1": "v1-5-pruned-emaonly-fp16.safetensors" },
+      flow: {
+        "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "v1-5-pruned-emaonly-fp16.safetensors" }, _meta: { title: "Stable Diffusion 1.5" } },
+        "2": { class_type: "LoadImage", inputs: { image: "example.png" }, _meta: { title: "Screenshot of the game" } },
+        "3": { class_type: "ImageScale", inputs: { image: ["2", 0], upscale_method: "lanczos", width: 768, height: 432, crop: "center" }, _meta: { title: "Size (16:9)" } },
+        "4": { class_type: "Canny", inputs: { image: ["3", 0], low_threshold: 0.3, high_threshold: 0.6 }, _meta: { title: "The scene's edges" } },
+        "5": { class_type: "ControlNetLoader", inputs: { control_net_name: "control_v11p_sd15_canny_fp16.safetensors" } },
+        "6": { class_type: "CLIPTextEncode", inputs: { clip: ["1", 1], text: "watercolor painting of a game scene, soft warm sunset light, painterly, detailed" }, _meta: { title: "The look you want" } },
+        "7": { class_type: "CLIPTextEncode", inputs: { clip: ["1", 1], text: "blurry, low quality, text, watermark, distorted" }, _meta: { title: "What to avoid" } },
+        "8": { class_type: "ControlNetApplyAdvanced", inputs: { positive: ["6", 0], negative: ["7", 0], control_net: ["5", 0], image: ["4", 0], strength: 0.9, start_percent: 0, end_percent: 1, vae: ["1", 2] }, _meta: { title: "Keep the shapes (strength)" } },
+        "9": { class_type: "VAEEncode", inputs: { pixels: ["3", 0], vae: ["1", 2] } },
+        "10": { class_type: "KSampler", inputs: { model: ["1", 0], positive: ["8", 0], negative: ["8", 1], latent_image: ["9", 0], seed: seed(), steps: 25, cfg: 7, sampler_name: "dpmpp_2m", scheduler: "karras", denoise: 0.75 }, _meta: { title: "How much to change (denoise)" } },
+        "11": { class_type: "VAEDecode", inputs: { samples: ["10", 0], vae: ["1", 2] } },
+        "12": { class_type: "SaveImage", inputs: { images: ["11", 0], filename_prefix: "styled/KesherAI" } },
+      },
+    },
   ];
 }
 
