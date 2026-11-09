@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -14,7 +14,10 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
  */
 export async function resolveInWorkspace(root: string, path: string): Promise<string> {
   const realRoot = await realpath(root);
-  const target = resolve(realRoot, path || ".");
+  let target = resolve(realRoot, path || ".");
+  // An absolute path spelled another way than the folder's real path (a Windows short name like
+  // RUNNER~1, a junction, a link): compare by the real path of its deepest part that exists.
+  if (isAbsolute(path) && relative(realRoot, target).startsWith("..")) target = await realSpelling(target);
   assertInside(realRoot, target, path);
   // Follow symlinks of the deepest part that exists, then check again.
   let existing = target;
@@ -43,6 +46,22 @@ export async function resolveInWorkspace(root: string, path: string): Promise<st
   return target;
 }
 
+/** The path with its existing part replaced by that part's real path (the rest kept as given). */
+async function realSpelling(p: string): Promise<string> {
+  let existing = p;
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      return join(await realpath(existing), ...rest.reverse());
+    } catch {
+      const parent = dirname(existing);
+      if (parent === existing) return p;
+      rest.push(existing.slice(parent.length).replace(/^[\\/]+/, ""));
+      existing = parent;
+    }
+  }
+}
+
 function assertInside(root: string, target: string, original: string): void {
   const rel = relative(root, target);
   if (rel === "") return;
@@ -59,7 +78,16 @@ function assertInside(root: string, target: string, original: string): void {
  * @returns e.g. `src/app.ts`.
  */
 export function displayPath(root: string, absolute: string): string {
-  const rel = relative(root, absolute);
+  let rel = relative(root, absolute);
+  // Tool paths are resolved from the folder's real path; the root may be spelled another way
+  // (a Windows short name like RUNNER~1, a junction or a link): compare with its real path too.
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    try {
+      rel = relative(realpathSync.native(root), absolute);
+    } catch {
+      // the folder is gone: show the full path
+    }
+  }
   // Files in a granted folder outside the project are shown with their full path.
   if (rel.startsWith("..") || isAbsolute(rel)) return absolute;
   return rel.split(sep).join("/") || ".";

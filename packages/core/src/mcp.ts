@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, posix, win32 } from "node:path";
 import { homedir } from "node:os";
 import type { ToolSpec } from "@kesher/shared";
 
@@ -761,12 +761,14 @@ export class McpManager {
  * @returns The program's full path.
  */
 export function unityRelay(platform = process.platform, arch = process.arch, home = homedir()): string {
-  if (platform === "win32") return join(home, ".unity", "relay", "relay_win.exe");
+  // The path is for that system, whichever one this runs on (found by the Windows test run).
+  const j = platform === "win32" ? win32.join : posix.join;
+  if (platform === "win32") return j(home, ".unity", "relay", "relay_win.exe");
   if (platform === "darwin") {
     const a = arch === "arm64" ? "arm64" : "x64";
-    return join(home, ".unity", "relay", `relay_mac_${a}.app`, "Contents", "MacOS", `relay_mac_${a}`);
+    return j(home, ".unity", "relay", `relay_mac_${a}.app`, "Contents", "MacOS", `relay_mac_${a}`);
   }
-  return join(home, ".unity", "relay", "relay_linux");
+  return j(home, ".unity", "relay", "relay_linux");
 }
 
 /**

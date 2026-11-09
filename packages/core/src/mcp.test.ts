@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingMessage } from "node:http";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { sep } from "node:path";
 import { join } from "node:path";
 import { MCP_PRESETS, McpManager, mcpResultText, mcpToolName, migratePreset, missingTool, presetHelp, rpcFromSse, unityRelay } from "./mcp.js";
 
@@ -127,7 +126,7 @@ test("says what to install when a program is missing", () => {
 });
 
 test("Unity and Unreal use their official servers; old entries are updated", () => {
-  assert.equal(unityRelay("win32", "x64", "C:\\Users\\Roee Tal"), "C:\\Users\\Roee Tal/.unity/relay/relay_win.exe".replace(/\//g, sep));
+  assert.equal(unityRelay("win32", "x64", "C:\\Users\\Roee Tal"), "C:\\Users\\Roee Tal\\.unity\\relay\\relay_win.exe");
   assert.match(unityRelay("darwin", "arm64", "/Users/r"), /relay_mac_arm64\.app\/Contents\/MacOS\/relay_mac_arm64$/);
   const unreal = MCP_PRESETS.find((p) => p.id === "unreal")!;
   assert.equal(unreal.url, "http://127.0.0.1:8000/mcp");
