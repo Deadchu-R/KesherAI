@@ -100,7 +100,10 @@ export async function androidTools(): Promise<{ sdk?: string; ndk?: string; jdk?
   for (const v of (await readdir(hub).catch(() => [] as string[])).sort().reverse()) {
     const ap = join(hub, v, "Editor", "Data", "PlaybackEngines", "AndroidPlayer");
     if (!existsSync(ap)) continue;
-    if (!sdk && existsSync(join(ap, "SDK"))) ((sdk = join(ap, "SDK")), (from = `Unity ${v}'s Android module`));
+    if (!sdk && existsSync(join(ap, "SDK"))) {
+      sdk = join(ap, "SDK");
+      from = `Unity ${v}'s Android module`;
+    }
     if (!ndk && existsSync(join(ap, "NDK"))) ndk = join(ap, "NDK");
     if (!jdk && existsSync(join(ap, "OpenJDK"))) jdk = join(ap, "OpenJDK");
   }
