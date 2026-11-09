@@ -68,7 +68,7 @@ test("Gmail and Calendar tools: search, read, draft (never send), events", async
   const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
   const g = new GoogleDrive({ clientId: "c", refreshToken: "rt", services: ["gmail", "calendar"] }, async () => undefined, { auth: "", token: `${base}/token`, revoke: "", api: base, upload: base, gmail: `${base}/gmail`, calendar: `${base}/cal` });
   const tools = Object.fromEntries(googleTools(g).map((t) => [t.spec.name, t]));
-  assert.deepEqual(Object.keys(tools).sort(), ["calendar_add_event", "calendar_events", "gmail_draft", "gmail_read", "gmail_search"]);
+  assert.deepEqual(Object.keys(tools).sort(), ["calendar_add_event", "calendar_events", "drive_upload_file", "gmail_draft", "gmail_read", "gmail_search"]);
   assert.equal(tools.gmail_search!.risk, "read");
   assert.equal(tools.gmail_draft!.risk, "exec");
   const ctx = {} as never;
@@ -89,9 +89,11 @@ test("Gmail and Calendar tools: search, read, draft (never send), events", async
   srv.close();
 });
 
-test("no tools when the services are not connected", () => {
+test("with only the Google sign-in (no Gmail, Calendar or Drive reading), only saving a file to Drive", () => {
   const g = new GoogleDrive({ clientId: "c", refreshToken: "rt" }, async () => undefined);
-  assert.equal(googleTools(g).length, 0);
+  assert.deepEqual(googleTools(g).map((t) => t.spec.name), ["drive_upload_file"]);
+  // Not signed in at all: nothing.
+  assert.equal(googleTools(new GoogleDrive({ clientId: "c" }, async () => undefined)).length, 0);
 });
 
 test("email helpers", () => {
