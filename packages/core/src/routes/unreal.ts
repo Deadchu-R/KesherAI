@@ -133,33 +133,52 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   }
 
   // The Blueprint in Verse (Unreal 6 / UEFN), translated by the chosen model from the graph as code and the first draft.
+  // The graph in a real language, translated by the chosen model from the graph as code (and a first draft):
+  // Unreal → C++ or Verse (Unreal 6 / UEFN); Unity → C#. Read-only: for reading, porting and learning.
+  const translate = async (req: { body?: { path?: string; graph?: string; draft?: string; model?: string } }, lang: string) => {
+    const path = String(req.body?.path ?? "");
+    const picked = typeof req.body?.model === "string" ? req.body.model : "";
+    const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
+    if (!path || !chat) throw Object.assign(new Error("Choose a graph and a chat model."), { code: 400 });
+    const { graph } = await b.graph(path);
+    const g = graph.graphs.find((x) => x.name === req.body?.graph) ?? graph.graphs[0];
+    if (!g) throw Object.assign(new Error("The graph is empty."), { code: 400 });
+    const code = codeText(blueprintToCode(g.nodes as CodeNode[])).slice(0, 6000);
+    const draft = String(req.body?.draft ?? "").slice(0, 6000);
+    const rules: Record<string, string> = {
+      verse: "Translate this Unreal Blueprint into Verse, the gameplay language of Unreal 6 and UEFN. Rules: a class `name_device := class(creative_device):` with `using { /Fortnite.com/Devices }` and `using { /Verse.org/Simulation }`; BeginPlay → `OnBegin<override>()<suspends>:void=`; Print String → Print(\"...\"); Delay → Sleep(seconds) (only inside <suspends> functions); Branch → if (Condition?): / else:; variables → `var Name:type = value` fields and `set Name = value`; failure contexts use `?` and `[]`. Use only Verse APIs you are sure exist; where Blueprint has no Verse equivalent, keep a `# check:` comment that says what to do.",
+      cpp: `Translate this Unreal Blueprint into Unreal Engine 5 C++: the header (.h) then the source (.cpp), for a class A${graph.name.replace(/^BP_/, "")} : public ${graph.parent && /^[AU]/.test(graph.parent) ? graph.parent : `A${graph.parent ?? "Actor"}`} in a module named YOURGAME_API. Rules: #include "${graph.name.replace(/^BP_/, "")}.generated.h" last in the header; UCLASS(), GENERATED_BODY(); variables as UPROPERTY(EditAnywhere, BlueprintReadWrite); BeginPlay/Tick as virtual overrides calling Super::; Print String → GEngine->AddOnScreenDebugMessage and UE_LOG; Delay → GetWorldTimerManager().SetTimer with an FTimerHandle; Branch → if; casts → Cast<T>(); events bound to delegates with AddDynamic and a UFUNCTION handler. Keep the Blueprint's names. Mark anything you are not sure of with // check:.`,
+      csharp: "Translate this Unity Visual Scripting graph into a Unity C# MonoBehaviour. Rules: using UnityEngine; class name = the graph's name in PascalCase; On Start → void Start(), On Update → void Update(), On Trigger Enter → OnTriggerEnter(Collider other), On Collision Enter → OnCollisionEnter(Collision c); graph variables → [SerializeField] private fields; Debug Log → Debug.Log; Wait For Seconds → a coroutine (IEnumerator, yield return new WaitForSeconds, StartCoroutine); If → if; Get/Set Variable → the field. Keep the graph's names. Mark anything you are not sure of with // check:.",
+    };
+    const prompt = [
+      `${rules[lang]}`,
+      `The graph: ${graph.name}${graph.parent ? ` (parent ${graph.parent})` : ""}, as code (one line per node, in the order the flow wires run):`,
+      code,
+      ...(draft ? ["", "A mechanical first draft (may be wrong):", draft] : []),
+      "",
+      "Answer with the code only, in code blocks.",
+    ].join("\n");
+    const r = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: prompt }], tools: [] }, AbortSignal.timeout(240_000), () => undefined);
+    const blocks = [...r.text.matchAll(/```[\w+#-]*\s*\n([\s\S]*?)```/g)].map((m) => m[1]!.trim());
+    return blocks.length ? blocks.join("\n\n") : r.text.trim();
+  };
+  const LANGS = kind === "unreal" ? ["cpp", "verse"] : ["csharp"];
+  app.post<{ Body: { path?: string; graph?: string; draft?: string; model?: string; lang?: string } }>(`${base}/translate`, async (req, reply) => {
+    const lang = String(req.body?.lang ?? "");
+    if (!LANGS.includes(lang)) return reply.code(400).send({ error: `Languages here: ${LANGS.join(", ")}.` });
+    try {
+      return { code: await translate(req, lang) };
+    } catch (err) {
+      return reply.code((err as { code?: number }).code === 400 ? 400 : 502).send({ error: (err as Error).message });
+    }
+  });
   if (kind === "unreal") {
+    // The older name of the Verse translation.
     app.post<{ Body: { path?: string; graph?: string; draft?: string; model?: string } }>(`${base}/verse`, async (req, reply) => {
-      const path = String(req.body?.path ?? "");
-      const picked = typeof req.body?.model === "string" ? req.body.model : "";
-      const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
-      if (!path || !chat) return reply.code(400).send({ error: "Choose a Blueprint and a chat model." });
       try {
-        const { graph } = await b.graph(path);
-        const g = graph.graphs.find((x) => x.name === req.body?.graph) ?? graph.graphs[0];
-        if (!g) return reply.code(400).send({ error: "The Blueprint has no graph." });
-        const code = codeText(blueprintToCode(g.nodes as CodeNode[])).slice(0, 6000);
-        const prompt = [
-          `Translate this Unreal Blueprint (${graph.name}, parent ${graph.parent ?? "Actor"}) into Verse, the gameplay language of Unreal 6 and UEFN.`,
-          "The Blueprint as code (one line per node, in the order the exec wires run):",
-          code,
-          "",
-          "A mechanical first draft (may be wrong):",
-          String(req.body?.draft ?? "").slice(0, 6000),
-          "",
-          "Rules: a class `name_device := class(creative_device):` with `using { /Fortnite.com/Devices }` and `using { /Verse.org/Simulation }`; BeginPlay → `OnBegin<override>()<suspends>:void=`; Print String → Print(\"...\"); Delay → Sleep(seconds) (only inside <suspends> functions); Branch → if (Condition?): / else:; variables → `var Name:type = value` fields and `set Name = value`; failure contexts use `?` and `[]`. Use only Verse APIs you are sure exist; where Blueprint has no Verse equivalent, keep a `# check:` comment that says what to do.",
-          "Answer with the Verse code only, in one code block.",
-        ].join("\n");
-        const r = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: prompt }], tools: [] }, AbortSignal.timeout(180_000), () => undefined);
-        const verse = (/```(?:verse)?\s*\n([\s\S]*?)```/.exec(r.text)?.[1] ?? r.text).trim();
-        return { verse };
+        return { verse: await translate(req, "verse") };
       } catch (err) {
-        return reply.code(502).send({ error: (err as Error).message });
+        return reply.code((err as { code?: number }).code === 400 ? 400 : 502).send({ error: (err as Error).message });
       }
     });
   }

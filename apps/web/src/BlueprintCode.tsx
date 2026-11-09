@@ -4,6 +4,10 @@ import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
+/** The real languages a graph can be shown in. */
+export type Lang = "cpp" | "verse" | "csharp";
+const LANG_NAME: Record<Lang, string> = { cpp: "C++", verse: "Verse", csharp: "C#" };
+
 /**
  * The Blueprint as code: read it like a script (each event a block, lines in
  * the order the exec wires run them). Click a line: its node flashes in the
@@ -11,15 +15,17 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
  * into text you can change; "Apply" sends the new code to the model, which
  * changes the graph to match (as one undo step in the editor).
  */
-export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy, verse }: { nodes: CodeNode[]; selected: Set<string>; onPick: (node: string) => void; onApply: (code: string, before: string) => void; editable: boolean; busy: boolean; verse?: { name: string; translate: (draft: string) => Promise<string> } }) {
-  // Unreal: the same graph as a first Verse version (Unreal 6 / UEFN), read-only, with an optional full translation by the model.
-  const [lang, setLang] = useState<"code" | "verse">("code");
-  const [aiVerse, setAiVerse] = useState("");
+export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy, translate }: { nodes: CodeNode[]; selected: Set<string>; onPick: (node: string) => void; onApply: (code: string, before: string) => void; editable: boolean; busy: boolean; translate?: { name: string; unity: boolean; run: (lang: Lang, draft: string) => Promise<string> } }) {
+  // The same graph in a real language: Unreal → C++ and Verse (Unreal 6 / UEFN), Unity → C#. Verse has a mechanical
+  // first draft; every language has a full translation by the model (read-only).
+  const [lang, setLang] = useState<"code" | Lang>("code");
+  const [ai, setAi] = useState<Partial<Record<Lang, string>>>({});
   const [translating, setTranslating] = useState(false);
   useEffect(() => {
-    setAiVerse("");
+    setAi({});
   }, [nodes]);
-  const lines = useMemo(() => (lang === "verse" && verse ? blueprintToVerse(nodes, verse.name) : blueprintToCode(nodes)), [nodes, lang, verse?.name]);
+  const langs: Lang[] = translate ? (translate.unity ? ["csharp"] : ["cpp", "verse"]) : [];
+  const lines = useMemo(() => (lang === "verse" && translate ? blueprintToVerse(nodes, translate.name) : blueprintToCode(nodes)), [nodes, lang, translate?.name]);
   const text = useMemo(() => codeText(lines), [lines]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
@@ -34,15 +40,15 @@ export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy
   return (
     <div className="bp-code">
       <div className="row bp-code-bar">
-        <strong className="grow small">{L("ה-Blueprint כקוד", "The Blueprint as code")}</strong>
-        {verse && !editing && (
+        <strong className="grow small">{translate?.unity ? L("הגרף כקוד", "The graph as code") : L("ה-Blueprint כקוד", "The Blueprint as code")}</strong>
+        {langs.length > 0 && !editing && (
           <span className="row bp-code-lang" role="tablist" aria-label={L("שפה", "Language")}>
-            <button type="button" role="tab" aria-selected={lang === "code"} className={lang === "code" ? "on" : ""} onClick={() => setLang("code")}>{L("קוד", "Code")}</button>
-            <button type="button" role="tab" aria-selected={lang === "verse"} className={lang === "verse" ? "on" : ""} onClick={() => setLang("verse")} title={L("Verse: שפת ה-gameplay של Unreal 6 ו-UEFN", "Verse: the gameplay language of Unreal 6 and UEFN")}>Verse</button>
+            <button type="button" role="tab" aria-selected={lang === "code"} className={lang === "code" ? "on" : ""} onClick={() => setLang("code")} title={L("הגרף כקוד פשוט לקריאה", "The graph as simple code to read")}>{L("קריאה", "Read")}</button>
+            {langs.map((l) => <button key={l} type="button" role="tab" aria-selected={lang === l} className={lang === l ? "on" : ""} onClick={() => setLang(l)} title={l === "verse" ? L("Verse: שפת ה-gameplay של Unreal 6 ו-UEFN", "Verse: the gameplay language of Unreal 6 and UEFN") : undefined}>{LANG_NAME[l]}</button>)}
           </span>
         )}
-        {verse && lang === "verse" && (
-          <button type="button" disabled={translating} onClick={() => { setTranslating(true); void verse.translate(text).then(setAiVerse, () => undefined).finally(() => setTranslating(false)); }}>{translating ? L("מתרגם…", "Translating…") : `✨ ${L("תרגום מלא עם AI", "Full translation with AI")}`}</button>
+        {translate && lang !== "code" && (
+          <button type="button" disabled={translating} onClick={() => { const l = lang; setTranslating(true); void translate.run(l, l === "verse" ? text : "").then((c) => setAi((a) => ({ ...a, [l]: c })), () => undefined).finally(() => setTranslating(false)); }}>{translating ? L("מתרגם…", "Translating…") : `✨ ${ai[lang] ? L("תרגם שוב", "Translate again") : L(`תרגום ל-${LANG_NAME[lang]} עם AI`, `Translate to ${LANG_NAME[lang]} with AI`)}`}</button>
         )}
         {editable && !editing && lang === "code" && <button type="button" onClick={() => setEditing(true)}>{L("עריכה", "Edit")}</button>}
         {editing && (
@@ -52,8 +58,10 @@ export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy
           </>
         )}
       </div>
-      {lang === "verse" && aiVerse ? (
-        <pre className="bp-code-ai" dir="ltr">{aiVerse}</pre>
+      {lang !== "code" && ai[lang] ? (
+        <pre className="bp-code-ai" dir="ltr">{ai[lang]}</pre>
+      ) : lang === "cpp" || lang === "csharp" ? (
+        <p className="muted bp-code-empty">{translating ? L("המודל כותב את הקוד…", "The model is writing the code…") : L(`לחצו "תרגום ל-${LANG_NAME[lang]}" כדי לראות את הגרף כקוד ${LANG_NAME[lang]} אמיתי.`, `Press "Translate to ${LANG_NAME[lang]}" to see the graph as real ${LANG_NAME[lang]}.`)}</p>
       ) : editing ? (
         <textarea className="bp-code-edit" dir="ltr" spellCheck={false} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={L("קוד ה-Blueprint", "Blueprint code")} />
       ) : (
@@ -71,7 +79,7 @@ export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy
           })}
         </ol>
       )}
-      <p className="muted small">{lang === "verse" ? L("טיוטה ראשונה ב-Verse (Unreal 6 ו-UEFN): נקודת התחלה לקריאה ולהעברה, לא תרגום שנבדק. שורות עם # check צריכות בדיקה.", "A first Verse draft (Unreal 6 and UEFN): a starting point to read and port, not a checked translation. Lines with # check need a look.") : L("הקוד נכתב מהגרף (לא C++ אמיתי). לחיצה על שורה מהבהבת את הנוד שלה.", "Written from the graph (not real C++). Click a line to flash its node.")}</p>
+      <p className="muted small">{lang === "cpp" || lang === "csharp" ? L(`תרגום של המודל ל-${LANG_NAME[lang]}: לקריאה, ללמידה ולהעברה לקוד. שורות עם // check צריכות בדיקה.`, `The model's ${LANG_NAME[lang]} translation: to read, learn from and move into code. Lines with // check need a look.`) : lang === "verse" ? L("טיוטה ראשונה ב-Verse (Unreal 6 ו-UEFN): נקודת התחלה לקריאה ולהעברה, לא תרגום שנבדק. שורות עם # check צריכות בדיקה.", "A first Verse draft (Unreal 6 and UEFN): a starting point to read and port, not a checked translation. Lines with # check need a look.") : L("הקוד נכתב מהגרף (לא C++ אמיתי). לחיצה על שורה מהבהבת את הנוד שלה.", "Written from the graph (not real C++). Click a line to flash its node.")}</p>
     </div>
   );
 }

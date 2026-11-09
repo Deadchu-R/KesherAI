@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { UnityCliPanel } from "./UnityCliPanel";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
-import { BlueprintCode } from "../BlueprintCode";
+import { BlueprintCode, type Lang } from "../BlueprintCode";
 import { WidgetDesigner } from "../WidgetDesigner";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
@@ -556,7 +556,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                       if (shownView === "code") chooseView("both");
                       setFlash((f) => ({ id, n: (f?.n ?? 0) + 1 }));
                     }}
-                    {...(!unity && bp ? { verse: { name: bp.graph.name, translate: (draft: string) => api<{ verse: string }>(`${base}/verse`, { method: "POST", body: { path, graph: graph.name, draft, ...(model ? { model } : {}) } }).then((r) => r.verse, (e: Error) => { toast(e.message); throw e; }) } } : {})}
+                    {...(bp ? { translate: { name: bp.graph.name, unity, run: (lang: Lang, draft: string) => api<{ code: string }>(`${base}/translate`, { method: "POST", body: { path, graph: graph.name, lang, draft, ...(model ? { model } : {}) } }).then((r) => r.code, (e: Error) => { toast(e.message); throw e; }) } } : {})}
                     onApply={(code, before) => void edit(`Change this graph so it does exactly what this code says. The code is the graph written as text (one line per node, in the order the exec wires run; "x = Node(...)" names a node's outputs; indented blocks under "then:" / "else:" are those exec outputs). Make only the differences.\n\nBEFORE:\n${before.slice(0, 3000)}\n\nAFTER:\n${code.slice(0, 3000)}`, L("עדכון הגרף לפי הקוד", "Update the graph from the code"))}
                   />
                 )}

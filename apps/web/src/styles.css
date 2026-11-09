@@ -1588,3 +1588,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 /* "Always allow": how long, and only one command. */
 .scope-menu label.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .scope-menu .ap-only input[type="text"], .scope-menu .ap-only input:not([type]) { flex: 1 1 140px; min-width: 0; font-family: var(--mono, monospace); }
+
+.bp-code-empty { padding: 16px 12px; }
