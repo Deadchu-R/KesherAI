@@ -7,15 +7,13 @@ import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
-import { PersonaChip, usePersonas } from "../Personas";
+import { usePersonas } from "../Personas";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { CoachPanel } from "../CoachPanel";
-import { WebToggle, useWebSearch } from "../WebToggle";
+import { useWebSearch } from "../WebToggle";
 import { UnityChip } from "../UnityChip";
-import { AddMenu } from "../AddMenu";
-import { Mic } from "../Mic";
 import { VoiceMode } from "../VoiceMode";
 import { useParts } from "../parts";
 import { takeOpening } from "../phone";
@@ -28,6 +26,7 @@ import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { getLocale, t } from "../i18n";
 import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../BlueprintChatPanel";
 import { useChatAttach } from "../ChatAttach";
+import { ComposerBar } from "../ComposerBar";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -955,41 +954,35 @@ export function ConversationPage({ id }: { id: string }) {
                 <button type="button" aria-label={getLocale() === "he" ? "סגור" : "Close"} onClick={() => setUnrealSetup(null)}>✕</button>
               </div>
             )}
-            <div className="box-bar">
-              <AddMenu
-                {...attachments.menu}
-                onInsert={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
-                web={web}
-                onWeb={setWeb}
-                mode={info?.mode ?? conv.mode}
-                onMode={(m) => void patch({ mode: m })}
-              />
-              <WebToggle on={web} onChange={setWeb} />
-              <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
-              {voicePart && <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />}
-              {voicePart && (
-                <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
-                  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                </button>
-              )}
-              {conv.kind === "chat" && <PersonaChip value={conv.personaId} onChange={(p) => void patch({ personaId: p?.id ?? null })} />}
-              <ModelMenu models={modelOptions} value={conv.modelId} onChange={(id) => void patch({ modelId: id })} />
-              <select className="model-chip" value={info?.mode ?? conv.mode} onChange={(e) => void patch({ mode: e.target.value as PermissionMode })} aria-label={t("mode")}>
-                <option value="plan">{t("modePlan")}</option>
-                <option value="ask">{t("modeAsk")}</option>
-                <option value="auto-edit">{t("modeAutoEdit")}</option>
-                <option value="auto">{t("modeAuto")}</option>
-              </select>
-              <span className="grow" />
-              {busy ? (
+            <ComposerBar
+              attach={attachments.menu}
+              onInsert={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
+              web={web}
+              onWeb={setWeb}
+              {...(voicePart ? { onDictate: (txt: string) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt)) } : {})}
+              {...(conv.kind === "chat" ? { persona: { value: conv.personaId, onChange: (p: { id: string } | null) => void patch({ personaId: p?.id ?? null }) } } : {})}
+              model={{ models: modelOptions, value: conv.modelId, onChange: (mid) => void patch({ modelId: mid }) }}
+              mode={{ value: info?.mode ?? conv.mode, onChange: (m) => void patch({ mode: m }) }}
+              extra={
                 <>
-                  {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
-                  <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })} aria-label={t("stop")}>■</button>
+                  <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
+                  {voicePart && (
+                    <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
+                      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                    </button>
+                  )}
                 </>
-              ) : (
-                <button type="submit" className="primary send" disabled={!input.trim()} aria-label={t("send")}>↑</button>
-              )}
-            </div>
+              }
+              send={
+                busy ? (
+                  <>
+                    {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
+                    <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })} aria-label={t("stop")}>■</button>
+                  </>
+                ) : undefined
+              }
+              canSend={!!input.trim()}
+            />
           </div>
         </form>
       </div>

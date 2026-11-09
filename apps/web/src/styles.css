@@ -1560,3 +1560,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .ue-found { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ue-found li { gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; background: var(--panel-2, #26272c); }
 .ue-found li .grow { min-width: 0; overflow-wrap: anywhere; }
+/* Phone: the chat box's buttons wrap onto a second line instead of squeezing over each other. */
+@media (max-width: 600px) {
+  .box-bar { flex-wrap: wrap; row-gap: 6px; }
+  .box-bar > * { flex-shrink: 0; }
+  .box-bar .model-chip, .box-bar .model-menu > button { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .box-bar .web-chip > span { display: none; }
+  .box-bar .web-chip { width: 32px; padding: 0; justify-content: center; }
+}

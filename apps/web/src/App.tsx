@@ -1,14 +1,11 @@
 import { GuardBanner } from "./GuardSection";
-import { ModelMenu } from "./ModelMenu";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
 import { PhoneTabs } from "./PhoneTabs";
 import { AppBar } from "./AppBar";
-import { WebToggle, useWebSearch } from "./WebToggle";
-import { Mic } from "./Mic";
+import { useWebSearch } from "./WebToggle";
 import { ComputerBanner } from "./ComputerSection";
-import { PersonaChip } from "./Personas";
-import { AddMenu } from "./AddMenu";
+import { ComposerBar } from "./ComposerBar";
 import { useChatAttach } from "./ChatAttach";
 import { PromptTextarea, expandSlash } from "./SlashMenu";
 import { usePending } from "./pages/WatchPage";
@@ -147,17 +144,17 @@ function Home() {
               }
             }}
           />
-          <div className="box-bar">
-            <AddMenu {...attachments.menu} onInsert={(txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)} web={web} onWeb={setWeb} />
-            {attachments.elements}
-            <WebToggle on={web} onChange={setWeb} />
-            <Mic onText={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
-            <PersonaChip value={personaId} onChange={(p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); }} />
-            {/* The same menu as in a chat: grouped, searchable, and "where it runs" when you have other computers. */}
-            <ModelMenu models={models} value={modelId} onChange={setModelId} />
-            <span className="grow" />
-            <button type="submit" className="primary send" disabled={!text.trim() || busy} aria-label={t("send")}>↑</button>
-          </div>
+          {attachments.elements}
+          <ComposerBar
+            attach={attachments.menu}
+            onInsert={(txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
+            web={web}
+            onWeb={setWeb}
+            onDictate={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))}
+            persona={{ value: personaId, onChange: (p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); } }}
+            model={{ models, value: modelId, onChange: setModelId }}
+            canSend={!!text.trim() && !busy}
+          />
         </div>
       </form>
       {homeSections.map((sec) =>
