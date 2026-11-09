@@ -232,7 +232,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string; scope?: "conversation" | "model" | "everywhere" } }>(
+  app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string; scope?: "conversation" | "model" | "everywhere"; minutes?: number; command?: string } }>(
     "/api/conversations/:id/approvals/:requestId",
     async (req, reply) => {
       const opened = await s.conversations.open(req.params.id);
@@ -251,12 +251,15 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
             ...(scope === "conversation" ? { conversationId: req.params.id } : {}),
             ...(scope === "model" ? { modelId: opened.session.modelId } : {}),
             createdAt: new Date().toISOString(),
+            // For a while (1 hour, today, a week…) or for good.
+            ...(Number(req.body.minutes) > 0 ? { until: new Date(Date.now() + Math.min(Number(req.body.minutes), 366 * 24 * 60) * 60_000).toISOString() } : {}),
+            // Only this command (its start, e.g. "pnpm test"), not every command.
+            ...(typeof req.body.command === "string" && req.body.command.trim() ? { command: req.body.command.trim().slice(0, 200) } : {}),
           };
-          const same = (r: { tool: string; scope: string; conversationId?: string; modelId?: string }) => r.tool === rule.tool && r.scope === rule.scope && r.conversationId === rule.conversationId && r.modelId === rule.modelId;
-          if (!s.config.permissions.some(same)) {
-            s.config.permissions.push(rule);
-            await s.saveConfig();
-          }
+          const same = (r: { tool: string; scope: string; conversationId?: string; modelId?: string; command?: string }) => r.tool === rule.tool && r.scope === rule.scope && r.conversationId === rule.conversationId && r.modelId === rule.modelId && r.command === (rule as { command?: string }).command;
+          // A newer answer replaces the old rule (e.g. "for an hour" after "for good"); rules that ended are dropped.
+          s.config.permissions = [...s.config.permissions.filter((r) => !same(r) && !(r.until && Date.parse(r.until) <= Date.now())), rule];
+          await s.saveConfig();
         }
       }
       if (!opened.session.approve(req.params.requestId, d, req.body.feedback)) return reply.code(404).send({ error: "That request is no longer waiting" });

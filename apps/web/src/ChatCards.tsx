@@ -14,6 +14,8 @@ import { RichText } from "./RichText";
  * same way.
  */
 
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
 /** Colours a unified diff. */
@@ -81,9 +83,15 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
+  // "Always": for how long (0 = for good) and, for a command, only commands that start like this one.
+  const [minutes, setMinutes] = useState(0);
+  const firstCmd = ev.name === "run_command" && typeof ev.input.command === "string" ? ev.input.command.trim() : "";
+  const [onlyCmd, setOnlyCmd] = useState(!!firstCmd);
+  const [prefix, setPrefix] = useState(() => firstCmd.split(/\s+/).slice(0, firstCmd.split(/\s+/).length > 2 ? 2 : 3).join(" ").split(/[;&|]/)[0]!.trim());
   const decide = async (decision: "allow" | "always" | "deny", scope?: "conversation" | "model" | "everywhere") => {
     setBusy(true);
-    await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(scope ? { scope } : {}), ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
+    const always = decision === "always" ? { ...(minutes > 0 ? { minutes } : {}), ...(firstCmd && onlyCmd && prefix.trim() ? { command: prefix.trim() } : {}) } : {};
+    await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(scope ? { scope } : {}), ...always, ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
     setBusy(false);
   };
   if (!pending) {
@@ -144,6 +152,23 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
       </div>
       {scopeOpen && (
         <div className="scope-menu" role="menu">
+          <label className="small row">
+            {L("לכמה זמן", "For how long")}
+            <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+              <option value={0}>{L("לתמיד", "For good")}</option>
+              <option value={60}>{L("שעה", "1 hour")}</option>
+              <option value={240}>{L("4 שעות", "4 hours")}</option>
+              <option value={Math.max(1, Math.round((new Date().setHours(24, 0, 0, 0) - Date.now()) / 60_000))}>{L("עד סוף היום", "Until the end of today")}</option>
+              <option value={7 * 24 * 60}>{L("שבוע", "1 week")}</option>
+            </select>
+          </label>
+          {firstCmd && (
+            <label className="small row ap-only">
+              <input type="checkbox" checked={onlyCmd} onChange={(e) => setOnlyCmd(e.target.checked)} />
+              {L("רק פקודות שמתחילות ב:", "Only commands that start with:")}
+              <input dir="ltr" value={prefix} disabled={!onlyCmd} onChange={(e) => setPrefix(e.target.value)} aria-label={L("תחילת הפקודה", "The command's start")} />
+            </label>
+          )}
           <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "conversation")}>{t("alwaysChat", { tool: ev.name })}</button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "model")}>{t("alwaysModel", { tool: ev.name })}</button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "everywhere")}>{t("alwaysEverywhere", { tool: ev.name })}</button>

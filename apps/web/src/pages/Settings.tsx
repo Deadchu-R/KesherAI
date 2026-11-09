@@ -448,7 +448,7 @@ export function SettingsPage() {
   );
 }
 
-interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string }
+interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string; until?: string; command?: string }
 
 /** Approvals the user gave for good: what runs without asking, and where. */
 /** Desktop app: start with the computer, in the background (no window), so the phone and other computers can always reach it. */
@@ -520,9 +520,9 @@ export function PermissionsSection() {
       {rules.length === 0 && <p className="muted">{t("permissionsNone")}</p>}
       <div className="list">
         {rules.map((r, i) => (
-          <div key={`${r.tool}-${r.scope}-${r.conversationId ?? r.modelId ?? ""}`} className="row">
-            <span className="mono">{r.tool}</span>
-            <span className="grow muted" dir="auto">{where(r)}</span>
+          <div key={`${r.tool}-${r.scope}-${r.conversationId ?? r.modelId ?? ""}-${r.command ?? ""}`} className="row">
+            <span className="mono">{r.tool}{r.command ? <> · <code dir="ltr">{r.command}…</code></> : null}</span>
+            <span className="grow muted" dir="auto">{where(r)}{r.until ? ` · ${Date.parse(r.until) <= Date.now() ? (getLocale() === "he" ? "הסתיים" : "ended") : `${getLocale() === "he" ? "עד" : "until"} ${new Date(r.until).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}`}` : ""}</span>
             <button type="button" onClick={() => void api<Rule[]>(`/api/permissions/${i}`, { method: "DELETE" }).then(setRules)}>{t("remove")}</button>
           </div>
         ))}

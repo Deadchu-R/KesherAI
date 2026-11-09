@@ -66,7 +66,8 @@ export interface AgentSessionOptions {
    * everywhere). Called before asking; return true to run without asking.
    * Dangerous commands still always ask.
    */
-  isAlwaysAllowed?(tool: string, modelId: string): boolean;
+  /** Whether a saved rule allows this tool (for a command: its text, matched against command rules). */
+  isAlwaysAllowed?(tool: string, modelId: string, command?: string): boolean;
   /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
   contextTokens?: number;
   /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
@@ -132,7 +133,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
   private readonly questions = new Map<string, (text: string) => void>();
   private readonly alwaysAllowed = new Set<string>();
-  private readonly isAlwaysAllowed?: (tool: string, modelId: string) => boolean;
+  private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string) => boolean;
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
@@ -772,7 +773,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       recordChange: (path, before) => this.changes.push({ path, before }),
       progress: this.liveOutput(call.id),
     };
-    const always = this.alwaysAllowed.has(tool.spec.name) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId);
+    const always = this.alwaysAllowed.has(tool.spec.name) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments));
     const verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
     if (verdict.action === "deny") return fail(verdict.reason);
     if (verdict.action === "ask") {

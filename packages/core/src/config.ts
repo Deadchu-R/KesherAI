@@ -82,6 +82,10 @@ export const KesherConfigSchema = z.object({
         conversationId: z.string().optional(),
         modelId: z.string().optional(),
         createdAt: z.string().optional(),
+        /** Ends at this time (ISO); none = for good. */
+        until: z.string().optional(),
+        /** For a command tool: only commands that start with this (e.g. "pnpm test"); none = any command. */
+        command: z.string().optional(),
       }),
     )
     .default([]),

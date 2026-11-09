@@ -127,6 +127,25 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
  * others are listed by name and loaded with find_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
+/**
+ * Whether a saved "always allow" rule covers this call: the tool, the scope
+ * (this chat, this model, everywhere), not past its end time, and, for a rule
+ * kept for one command, a command that starts with it as a whole word and
+ * chains nothing else after it (no ;, &&, |, backticks or $( ) ).
+ */
+export function ruleAllows(r: { tool: string; scope: string; conversationId?: string; modelId?: string; until?: string; command?: string }, c: { tool: string; modelId: string; conversationId: string; command?: string }, now = Date.now()): boolean {
+  if (r.tool !== c.tool && r.tool !== "*") return false;
+  if (!(r.scope === "everywhere" || (r.scope === "model" && r.modelId === c.modelId) || (r.scope === "conversation" && r.conversationId === c.conversationId))) return false;
+  if (r.until && Date.parse(r.until) <= now) return false;
+  if (r.command) {
+    const cmd = (c.command ?? "").trim().replace(/\s+/g, " ");
+    const want = r.command.trim().replace(/\s+/g, " ");
+    if (!(cmd === want || cmd.startsWith(`${want} `))) return false;
+    if (/[;&|`\n]|\$\(|>\s*[^&\s]|<\(/.test(cmd.slice(want.length))) return false;
+  }
+  return true;
+}
+
 const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
 
 /** The Blueprint tools: always in full while the Unreal Editor is connected (so a model never misses the Test tool). */
@@ -1046,12 +1065,7 @@ export class ConversationManager {
         // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
         return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project || this.deps.unity?.activeProject ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.connected ? UNREAL_GRAPH_TOOLS : [])];
       },
-      isAlwaysAllowed: (tool, modelId) =>
-        this.deps.config.permissions.some(
-          (r) =>
-            (r.tool === tool || r.tool === "*") &&
-            (r.scope === "everywhere" || (r.scope === "model" && r.modelId === modelId) || (r.scope === "conversation" && r.conversationId === id)),
-        ),
+      isAlwaysAllowed: (tool, modelId, command) => this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
     });
     this.sessions.set(id, session);
     if (this.deps.onEvent) {
