@@ -453,6 +453,9 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         await walk(out, 0);
         if (r.code !== 0 || !made.length) {
           const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|failed|exception/i.test(l)).slice(-40);
+          // Seen on the test PC: Unity's Android SDK has no licenses folder, and Unreal refuses to package without it.
+          if (/SDK license file not found|agree to (the )?license/i.test(r.out))
+            return { output: `${r.note}Packaging stopped: the Android SDK license is not accepted (no licenses file in ${(await androidTools()).sdk ?? "the SDK"}). Accepting a license is the user's decision: STOP and tell the user to accept it, either with the SDK's cmdline-tools\\…\\bin\\sdkmanager.bat --licenses (as administrator when the SDK is under Program Files) or in Unreal: Project Settings → Platforms → Android → Accept SDK License. Then package again. Never accept it yourself.` };
           return { output: `${r.note}Packaging did NOT finish (exit ${r.code}). Full log: ${log}\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
         }
         const sizes = await Promise.all(made.map(async (f) => `${f} (${Math.round((await stat(f)).size / 1048576)} MB)`));
