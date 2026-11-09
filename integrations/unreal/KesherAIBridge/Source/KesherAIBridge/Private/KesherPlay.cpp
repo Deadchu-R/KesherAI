@@ -66,7 +66,7 @@ namespace
 		bool bDropped = false;
 	};
 
-	FTestLog* Log = nullptr;
+	FTestLog* TestLog = nullptr;
 	bool bRunning = false;
 	double StartedAt = 0;
 	FString TestPath;
@@ -77,7 +77,7 @@ namespace
 
 	void Unhook()
 	{
-		if (Log && GLog) GLog->RemoveOutputDevice(Log);
+		if (TestLog && GLog) GLog->RemoveOutputDevice(TestLog);
 		FEditorDelegates::PostPIEStarted.Remove(StartedHandle);
 		FEditorDelegates::EndPIE.Remove(EndedHandle);
 	}
@@ -119,11 +119,11 @@ namespace
 		if (Actor) Placed = Actor->GetName();
 	}
 
-	TArray<TSharedPtr<FJsonValue>> LogJson(bool& bDropped)
+	TArray<TSharedPtr<FJsonValue>> KesherLogLines(bool& bDropped)
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
-		if (!Log) return Out;
-		for (const FString& Line : Log->Take(bDropped))
+		if (!TestLog) return Out;
+		for (const FString& Line : TestLog->Take(bDropped))
 		{
 			FString Kind, Rest, Cat, Text;
 			Line.Split(TEXT("|"), &Kind, &Rest);
@@ -188,10 +188,10 @@ namespace KesherPlay
 			return Out;
 		}
 
-		if (!Log) Log = new FTestLog();
-		Log->Reset();
+		if (!TestLog) TestLog = new FTestLog();
+		TestLog->Reset();
 		Unhook();
-		GLog->AddOutputDevice(Log);
+		GLog->AddOutputDevice(TestLog);
 		TestPath = Path;
 		bPlaceActor = bPlace;
 		Placed.Reset();
@@ -215,7 +215,7 @@ namespace KesherPlay
 		Out->SetBoolField(TEXT("running"), bRunning);
 		Out->SetNumberField(TEXT("seconds"), bRunning ? FPlatformTime::Seconds() - StartedAt : 0);
 		Out->SetStringField(TEXT("placed"), Placed);
-		Out->SetArrayField(TEXT("log"), LogJson(bDropped));
+		Out->SetArrayField(TEXT("log"), KesherLogLines(bDropped));
 		return Out;
 	}
 
@@ -227,7 +227,7 @@ namespace KesherPlay
 		Out->SetStringField(TEXT("placed"), Placed);
 		Out->SetStringField(TEXT("picture"), bPlaying ? Picture() : FString());
 		bool bDropped = false;
-		Out->SetArrayField(TEXT("log"), LogJson(bDropped));
+		Out->SetArrayField(TEXT("log"), KesherLogLines(bDropped));
 		Out->SetBoolField(TEXT("logCut"), bDropped);
 		Out->SetNumberField(TEXT("seconds"), bRunning ? FPlatformTime::Seconds() - StartedAt : 0);
 		Unhook();
@@ -239,7 +239,7 @@ namespace KesherPlay
 	void Shutdown()
 	{
 		Unhook();
-		delete Log;
-		Log = nullptr;
+		delete TestLog;
+		TestLog = nullptr;
 	}
 }
