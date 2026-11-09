@@ -21,6 +21,9 @@ namespace KesherWidget
 	/** The widget tree of a Widget Blueprint; an "error" field when it is not one. */
 	TSharedRef<FJsonObject> Read(const FString& Path);
 
+	/** Imports a PNG on this computer as a texture under /Game (for pictures from Figma). */
+	TSharedRef<FJsonObject> ImportTexture(const FString& File, const FString& Folder, const FString& Name);
+
 	/** Applies operations to a Widget Blueprint's tree, as one undo step. */
 	TSharedRef<FJsonObject> Apply(const FString& Path, const TArray<TSharedPtr<FJsonValue>>& Ops);
 }

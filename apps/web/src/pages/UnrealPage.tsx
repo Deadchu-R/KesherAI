@@ -41,7 +41,7 @@ function PluginUpdate({ latest, now, download }: { latest: string; now: string; 
     return () => clearInterval(id);
   }, [running]);
   const start = () => void api<{ job: Job }>("/api/unreal/update-plugin", { method: "POST" }).then((r) => setJob(r.job), (e: Error) => toast(e.message));
-  const step = job ? { building: L("בונה את הגרסה החדשה (Unreal נשאר פתוח)…", "Building the new version (Unreal stays open)…"), waiting: L("Unreal נסגר — אם הוא שואל אם לשמור, ענה במחשב…", "Closing Unreal — if it asks to save, answer on the computer…"), copying: L("מחליף את הפלאגין…", "Replacing the plugin…"), done: job.message ?? L("עודכן.", "Updated."), failed: job.message ?? L("נכשל.", "Failed.") }[job.state] : "";
+  const step = job ? { building: L("בונה את הגרסה החדשה (Unreal נשאר פתוח)…", "Building the new version (Unreal stays open)…"), waiting: L("ממתין ש-Unreal ייסגר — אם הוא שואל אם לשמור, ענו במחשב. (פלאגין ישן לא יודע לסגור: סגרו את Unreal כשנוח, והעדכון יסתיים לבד ויפתח אותו מחדש.)", "Waiting for Unreal to close — if it asks to save, answer on the computer. (An older plugin cannot close it: close Unreal when convenient and the update finishes by itself and opens it again.)"), copying: L("מחליף את הפלאגין…", "Replacing the plugin…"), done: job.message ?? L("עודכן.", "Updated."), failed: job.message ?? L("נכשל.", "Failed.") }[job.state] : "";
   return (
     <div className="card row plugin-update">
       <span className="grow small">{L(`גרסה חדשה של הפלאגין: ${latest} (מותקנת ${now}).`, `A newer plugin: ${latest} (installed ${now}).`)} {step && <strong dir="auto">{step}</strong>}</span>

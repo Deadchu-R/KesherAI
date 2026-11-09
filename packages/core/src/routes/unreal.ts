@@ -1,13 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
 import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
-import { figmaNodeTree, parseFigmaLink } from "../figma.js";
+import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
+import { mkdir, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { MCP_PRESETS } from "../mcp.js";
@@ -168,9 +171,27 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         const parent = String(req.body?.parent ?? "") || (tree.root && /Panel|Box|Overlay/.test(tree.root.class) ? tree.root.name : "");
         if (tree.root && !parent) return reply.code(400).send({ error: "Choose the panel the design goes into (in the Hierarchy)." });
         const doc = (await figmaNodeTree(token, f.key, f.node)) as FigmaNode;
-        const { ops, notes } = figmaToWidgetOps(doc, parent, names, 300, /CanvasPanel/.test(findW(tree.root, parent)?.class ?? ""));
+        const { ops, notes, images } = figmaToWidgetOps(doc, parent, names, 300, /CanvasPanel/.test(findW(tree.root, parent)?.class ?? ""));
         const result = await unreal.request<{ results: Array<{ ok: boolean; error?: string }>; failed: number }>("widget_apply", { path, ops }, 60_000);
-        return { added: ops.filter((o) => o.op === "add").length, notes, result };
+        // Pictures: Figma renders each one, Unreal imports it as a texture (/Game/UI/Figma), and its Image shows it.
+        const dir = join(s.paths.root, "unreal", "figma");
+        await mkdir(dir, { recursive: true });
+        const brushes: Array<Record<string, string>> = [];
+        for (const img of images.slice(0, 20)) {
+          try {
+            const png = await figmaFrame(token, f.key, img.node);
+            const file = join(dir, `${img.widget}.png`);
+            await writeFile(file, png);
+            const r = await unreal.request<{ asset: string }>("import_texture", { file, folder: "/Game/UI/Figma", name: `T_${img.widget}` }, 120_000);
+            const asset = r.asset.includes(".") ? r.asset : `${r.asset}.${r.asset.split("/").pop()}`;
+            brushes.push({ op: "set", widget: img.widget, property: "Brush", value: `(ResourceObject=/Script/Engine.Texture2D'${asset}',ImageSize=(X=${img.w},Y=${img.h}))` }, { op: "set", widget: img.widget, property: "ColorAndOpacity", value: "(R=1,G=1,B=1,A=1)" });
+          } catch (err) {
+            notes.push(`${img.widget}: the picture did not come over (${(err as Error).message}).`);
+          }
+        }
+        if (images.length > 20) notes.push(`Only the first 20 pictures came over as textures.`);
+        if (brushes.length) await unreal.request("widget_apply", { path, ops: brushes }, 60_000).catch((err: Error) => notes.push(`Setting the pictures: ${err.message}`));
+        return { added: ops.filter((o) => o.op === "add").length, pictures: brushes.length / 2, notes, result };
       } catch (err) {
         return reply.code(502).send({ error: (err as Error).message });
       }
@@ -318,7 +339,17 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
    * too: the save question shows on the computer.
    */
   app.post("/api/unreal/update-plugin", async (_req, reply) => {
-    const file = unreal.projectFile;
+    // Plugins before 0.1.3 do not say where the project is: the project of that name in the usual folders.
+    let file = unreal.projectFile;
+    const name = await unreal.project();
+    if (!file && name && /^[\w-]+$/.test(name)) {
+      for (const dir of [join(homedir(), "Unreal Projects", name), join(homedir(), "Documents", "Unreal Projects", name)]) {
+        if (existsSync(join(dir, `${name}.uproject`))) {
+          file = join(dir, `${name}.uproject`);
+          break;
+        }
+      }
+    }
     if (!file) return reply.code(409).send({ error: "Open the project in Unreal first (with the plugin connected), or use Install into a project." });
     try {
       await installer.update(dirname(file), () => unreal.closeForUpdate(), file);

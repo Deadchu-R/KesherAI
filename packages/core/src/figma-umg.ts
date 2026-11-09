@@ -54,9 +54,11 @@ const SHAPE = /^(RECTANGLE|ELLIPSE|VECTOR|STAR|POLYGON|LINE|BOOLEAN_OPERATION)$/
  * @param parentIsCanvas - The panel it goes into is a Canvas Panel (the frame is then given its size there).
  * @returns The operations, and what could not come over as it is.
  */
-export function figmaToWidgetOps(frame: FigmaNode, parent: string, taken: Iterable<string> = [], max = 300, parentIsCanvas = false): { ops: Op[]; notes: string[] } {
+export function figmaToWidgetOps(frame: FigmaNode, parent: string, taken: Iterable<string> = [], max = 300, parentIsCanvas = false): { ops: Op[]; notes: string[]; images: Array<{ widget: string; node: string; w: number; h: number }> } {
   const ops: Op[] = [];
   const notes: string[] = [];
+  /** Pictures to bring in as textures afterwards (the widget, the Figma node, its size). */
+  const images: Array<{ widget: string; node: string; w: number; h: number }> = [];
   const used = new Set(taken);
   const nameFor = (n: FigmaNode, fallback: string) => {
     const base = (n.name.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || fallback).replace(/^(\d)/, "_$1").slice(0, 48);
@@ -105,7 +107,8 @@ export function figmaToWidgetOps(frame: FigmaNode, parent: string, taken: Iterab
       const c = solid(n);
       if (hasImage(n)) {
         set(w, "ColorAndOpacity", "(R=0.2,G=0.2,B=0.2,A=1)");
-        notes.push(`${w}: a picture in Figma — import it as a texture and set it on this Image.`);
+        const b = box(n);
+        images.push({ widget: w, node: n.id, w: Math.round(b.width), h: Math.round(b.height) });
       } else if (c?.color) set(w, "ColorAndOpacity", linear(c.color, c.opacity ?? 1));
       else if (n.type !== "RECTANGLE") notes.push(`${w}: a ${n.type.toLowerCase()} without a plain colour, shown as a white box.`);
       place(w, n, origin);
@@ -157,5 +160,5 @@ export function figmaToWidgetOps(frame: FigmaNode, parent: string, taken: Iterab
     ops.splice(ops.indexOf(first) + 1, 0, { op: "set", widget: String(first.name), property: "slot.size", value: `${Math.round(b.width)},${Math.round(b.height)}` });
   }
   if (ops.filter((o) => o.op === "add").length >= max) notes.push(`Only the first ${max} widgets came over; pick a smaller frame for the rest.`);
-  return { ops, notes };
+  return { ops, notes, images };
 }

@@ -17,7 +17,7 @@ test("a Figma frame becomes UMG widgets: canvas positions, auto layout as boxes,
       { id: "6", name: "hidden", type: "TEXT", visible: false, characters: "x" },
     ],
   };
-  const { ops, notes } = figmaToWidgetOps(frame, "", ["Title"]);
+  const { ops } = figmaToWidgetOps(frame, "", ["Title"]);
   const adds = ops.filter((o) => o.op === "add");
   assert.deepEqual(adds.map((o) => o.class), ["CanvasPanel", "Image", "TextBlock", "VerticalBox", "Image", "Image"]);
   assert.equal(adds[0]!.parent, undefined, "an empty Widget Blueprint: the frame is the root");
@@ -26,7 +26,7 @@ test("a Figma frame becomes UMG widgets: canvas positions, auto layout as boxes,
   assert.ok(ops.some((o) => o.widget === "Title_2" && o.property === "Text" && o.value === "AUTO SHOOTER"));
   assert.ok(ops.some((o) => o.widget === "Start" && o.property === "slot.Padding" && /Bottom=20/.test(String(o.value))), "auto-layout gap as padding");
   assert.ok(!ops.some((o) => o.widget === "Logo" && o.property === "slot.Padding"), "no gap after the last child");
-  assert.ok(notes.some((n) => /Logo: a picture/.test(n)));
+  assert.deepEqual(figmaToWidgetOps(frame, "", ["Title"]).images, [{ widget: "Logo", node: "5", w: 400, h: 80 }], "pictures come in as textures afterwards");
   assert.ok(!adds.some((o) => o.name === "hidden"));
   // Into an existing canvas: the frame keeps its size there.
   const into = figmaToWidgetOps({ ...frame, children: [] }, "Root", [], 300, true);

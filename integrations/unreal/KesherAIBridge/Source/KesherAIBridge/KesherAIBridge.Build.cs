@@ -25,6 +25,7 @@ public class KesherAIBridge : ModuleRules
 			"SlateCore",
 			"UMG",
 			"UMGEditor",
+			"AssetTools",
 		});
 	}
 }

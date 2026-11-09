@@ -2,7 +2,11 @@
 
 #include "KesherWidget.h"
 
+#include "AssetImportTask.h"
+#include "AssetToolsModule.h"
 #include "Blueprint/WidgetTree.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/PanelSlot.h"
 #include "Components/PanelWidget.h"
@@ -164,6 +168,25 @@ namespace KesherWidget
 		Out->SetStringField(TEXT("path"), Path);
 		Out->SetStringField(TEXT("name"), BP->GetName());
 		if (BP->WidgetTree && BP->WidgetTree->RootWidget) Out->SetObjectField(TEXT("root"), Describe(BP->WidgetTree->RootWidget));
+		return Out;
+	}
+
+	TSharedRef<FJsonObject> ImportTexture(const FString& File, const FString& Folder, const FString& Name)
+	{
+		if (!File.EndsWith(TEXT(".png"), ESearchCase::IgnoreCase) || !IFileManager::Get().FileExists(*File)) return WidgetError(TEXT("No PNG at ") + File);
+		if (!Folder.StartsWith(TEXT("/Game/")) || Folder.Contains(TEXT(".."))) return WidgetError(TEXT("Textures go under /Game/"));
+		UAssetImportTask* Task = NewObject<UAssetImportTask>();
+		Task->Filename = File;
+		Task->DestinationPath = Folder;
+		Task->DestinationName = Name;
+		Task->bAutomated = true;
+		Task->bReplaceExisting = true;
+		Task->bSave = true;
+		FAssetToolsModule& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+		Tools.Get().ImportAssetTasks({ Task });
+		if (Task->ImportedObjectPaths.Num() == 0) return WidgetError(TEXT("Unreal did not import ") + FPaths::GetCleanFilename(File));
+		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetStringField(TEXT("asset"), Task->ImportedObjectPaths[0]);
 		return Out;
 	}
 

@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.5";
+export const BRIDGE_VERSION = "0.1.6";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -88,8 +88,10 @@ export class UnrealBridge {
   async closeForUpdate(timeoutMs = 15 * 60_000): Promise<void> {
     const pid = this.info?.pid;
     if (this.connected) {
-      const r = await this.request<{ ok?: boolean }>("quit_for_update", {}, 10 * 60_000).catch((err: Error) => (/Unknown command/.test(err.message) ? { ok: true, manual: true } : Promise.reject(err)));
+      const r = await this.request<{ ok?: boolean; manual?: boolean }>("quit_for_update", {}, 10 * 60_000).catch((err: Error) => (/Unknown command/.test(err.message) ? { ok: true, manual: true } : Promise.reject(err)));
       if (r.ok === false) throw new Error("Unreal stayed open (saving was cancelled). Press Update again when ready.");
+      // An older plugin cannot close Unreal: wait (up to half a day) for the user to close it; the update then finishes by itself.
+      if (r.manual) timeoutMs = Math.max(timeoutMs, 12 * 3600_000);
     }
     const alive = () => {
       if (!pid) return this.connected;
