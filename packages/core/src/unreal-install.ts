@@ -315,6 +315,37 @@ export async function installUnityPackage(folder: string): Promise<string> {
   return `Added to ${dest}. Unity loads it the next time it gets focus (Visual Scripting is added too if the project lacks it).`;
 }
 
+/** Plugins that are editor tools only: a game (a phone build above all) must not pack or start them. */
+export const EDITOR_ONLY_PLUGINS = ["ModelContextProtocol", "AllToolsets", "PythonScriptPlugin", "EditorScriptingUtilities"];
+
+/** Marks the editor-only plugins of a .uproject's list with TargetAllowList ["Editor"]; true when something changed. */
+export function markEditorOnly(plugins: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }>): boolean {
+  let changed = false;
+  for (const p of plugins) {
+    if (p?.Name && EDITOR_ONLY_PLUGINS.includes(p.Name) && p.Enabled && !(Array.isArray(p.TargetAllowList) && p.TargetAllowList.length === 1 && p.TargetAllowList[0] === "Editor")) {
+      p.TargetAllowList = ["Editor"];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Keeps the editor-only plugins out of the game in a project's .uproject
+ * (a copy of the old file is kept next to it).
+ *
+ * @returns What changed, or "" when nothing had to.
+ */
+export async function keepEditorPluginsOutOfGame(folder: string): Promise<string> {
+  const { file } = await readProject(folder);
+  const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
+  const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }> };
+  if (!Array.isArray(j.Plugins) || !markEditorOnly(j.Plugins)) return "";
+  await writeFile(`${file}.kesher-backup`, text);
+  await writeFile(file, `${JSON.stringify(j, null, "\t")}\n`);
+  return `Editor-only plugins (${j.Plugins.filter((p) => p.TargetAllowList?.[0] === "Editor").map((p) => p.Name).join(", ")}) are now kept out of the game build (TargetAllowList Editor in ${file}; the old file is ${file}.kesher-backup).`;
+}
+
 /**
  * Turns on Unreal Engine's own MCP server in a project (Unreal 5.8 and
  * newer): the ModelContextProtocol and AllToolsets plugins in the
@@ -328,19 +359,20 @@ export async function installUnityPackage(folder: string): Promise<string> {
 export async function enableUnrealMcp(folder: string): Promise<string> {
   const { file, dir, engine } = await readProject(folder);
   const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
-  const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean }> };
+  const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }> };
   const plugins = Array.isArray(j.Plugins) ? j.Plugins : [];
   let changed = false;
   for (const name of ["ModelContextProtocol", "AllToolsets"]) {
     const p = plugins.find((x) => x?.Name === name);
     if (!p) {
-      plugins.push({ Name: name, Enabled: true });
+      plugins.push({ Name: name, Enabled: true, TargetAllowList: ["Editor"] });
       changed = true;
     } else if (p.Enabled !== true) {
       p.Enabled = true;
       changed = true;
     }
   }
+  if (markEditorOnly(plugins)) changed = true;
   if (changed) {
     await writeFile(`${file}.kesher-backup`, text);
     j.Plugins = plugins;

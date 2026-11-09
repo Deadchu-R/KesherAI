@@ -15,6 +15,7 @@ import { runSplit, type SplitWorker } from "./split-task.js";
 import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
+import { androidPhoneTools } from "./android-phone.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
@@ -731,12 +732,14 @@ export class ConversationManager {
       split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id)).filter((t) => /^unreal_(status|create_project|use_project)$/.test(t.spec.name)));
       media.notes.push("Unreal Engine is installed here: for Unreal work start with unreal_status, then unreal_create_project or unreal_use_project (the other Unreal tools and their guide come after that).");
     }
+    // A game project in use: running its Android build on the user's phone and reading why it closed.
+    if (this.unrealState.project || this.deps.unity?.activeProject) split.push(...androidPhoneTools());
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
       return {
-        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor)$)/.test(t.spec.name)),
+        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor)$|android_run_on_phone$)/.test(t.spec.name)),
         notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
       };
     }
@@ -954,7 +957,7 @@ export class ConversationManager {
         }
         if (!(local && this.deps.config.toolSearch !== false)) return undefined;
         // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
-        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : [])];
+        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project || this.deps.unity?.activeProject ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : [])];
       },
       isAlwaysAllowed: (tool, modelId) =>
         this.deps.config.permissions.some(

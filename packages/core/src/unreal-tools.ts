@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/p
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
-import { addEngineFolders, findEngines, readProject, enableUnrealMcp, type UnrealEngine } from "./unreal-install.js";
+import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, type UnrealEngine } from "./unreal-install.js";
 import { projectPath } from "./unity-tools.js";
 import type { JobStore } from "./jobs.js";
 
@@ -47,7 +47,7 @@ export const UNREAL_TOOL_NAMES = [
 ] as const;
 
 export const UNREAL_NOTE =
-  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). Builds keep running if KesherAI restarts: when the user says continue after a restart, call the same tool again and it joins the running build. If a knowledge base named Library: Unreal Engine C++ API exists (Library store), look up classes and functions there with search_knowledge before writing code that uses them, instead of guessing. Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
+  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). If the Android game closes or crashes on the phone, android_run_on_phone installs the .apk, starts it and returns the game's own log (look for Fatal error, Assertion failed, Failed to); fix the cause it shows, never guess. Builds keep running if KesherAI restarts: when the user says continue after a restart, call the same tool again and it joins the running build. If a knowledge base named Library: Unreal Engine C++ API exists (Library store), look up classes and functions there with search_knowledge before writing code that uses them, instead of guessing. Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
@@ -169,9 +169,10 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
         Modules: [{ Name: name, Type: "Runtime", LoadingPhase: "Default" }],
         Plugins: [
           { Name: "ModelingToolsEditorMode", Enabled: false },
-          { Name: "PythonScriptPlugin", Enabled: true },
-          { Name: "EditorScriptingUtilities", Enabled: true },
-          ...(/^5\.([89]|\d\d)/.test(engine) || /^[6-9]\./.test(engine) ? [{ Name: "ModelContextProtocol", Enabled: true }, { Name: "AllToolsets", Enabled: true }] : []),
+          // Editor tools only: kept out of the game itself (a phone build otherwise packs and starts editor-only, NoRedist plugins).
+          { Name: "PythonScriptPlugin", Enabled: true, TargetAllowList: ["Editor"] },
+          { Name: "EditorScriptingUtilities", Enabled: true, TargetAllowList: ["Editor"] },
+          ...(/^5\.([89]|\d\d)/.test(engine) || /^[6-9]\./.test(engine) ? [{ Name: "ModelContextProtocol", Enabled: true, TargetAllowList: ["Editor"] }, { Name: "AllToolsets", Enabled: true, TargetAllowList: ["Editor"] }] : []),
         ],
         TargetPlatforms: ["Android", "Windows"],
       },
@@ -439,6 +440,8 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         await mkdir(logsDir, { recursive: true });
         const log = join(logsDir, "unreal-package.log");
         const env: NodeJS.ProcessEnv = { ...process.env };
+        // Editor-only plugins (Python, the editor's MCP and its toolsets) are not packed into the game.
+        const fixed = await keepEditorPluginsOutOfGame(p.dir).catch(() => "");
         if (android) {
           const a = await androidTools();
           if (!a.sdk || !a.ndk || !a.jdk) return { output: `Android tools are missing: SDK ${a.sdk ?? "missing"}, NDK ${a.ndk ?? "missing"}, JDK ${a.jdk ?? "missing"}. Install Android Studio, or Unity's Android module, then try again.` };
@@ -463,7 +466,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
           return { output: `${r.note}Packaging did NOT finish (exit ${r.code}). Full log: ${log}\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
         }
         const sizes = await Promise.all(made.map(async (f) => `${f} (${Math.round((await stat(f)).size / 1048576)} MB)`));
-        return { output: `${r.note}Packaged: ${sizes.join(", ")}.` };
+        return { output: `${fixed ? `${fixed}\n` : ""}${r.note}Packaged: ${sizes.join(", ")}.${android ? " To test it on the user's phone (USB debugging on), use android_run_on_phone with the .apk." : ""}` };
       },
     },
   ];
