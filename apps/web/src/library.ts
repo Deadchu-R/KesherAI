@@ -78,7 +78,7 @@ export async function createConversation(body: {
   workspace?: string;
   modelId?: string;
   personaId?: string;
-}): Promise<string> {
+}, opts: { open?: boolean } = {}): Promise<string> {
   let c: { id: string };
   try {
     c = await api<{ id: string }>("/api/conversations", { method: "POST", body });
@@ -90,7 +90,8 @@ export async function createConversation(body: {
     c = await api<{ id: string }>("/api/conversations", { method: "POST", body: { ...body, modelId } });
   }
   await refreshLibrary();
-  location.hash = `#/c/${c.id}`;
+  // A chat made for an attachment on the start screen opens only when the message is sent.
+  if (opts.open !== false) location.hash = `#/c/${c.id}`;
   return c.id;
 }
 

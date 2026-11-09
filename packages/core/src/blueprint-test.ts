@@ -43,6 +43,8 @@ export function cleanLog(lines: TestLine[], max = 120): TestLine[] {
   let last = "";
   let repeat = 0;
   for (const l of lines) {
+    // Engine housekeeping (LogHAL, LogWindows…) says nothing about the Blueprint, even as errors.
+    if (/^(LogHAL|LogWindows|LogInit|LogPakFile|LogConfig|LogShaderLibrary|LogVirtualization)$/.test(l.category)) continue;
     if (l.kind !== "error" && noise.test(l.category)) continue;
     const key = `${l.kind}|${l.category}|${l.text}`;
     if (key === last) {
@@ -113,7 +115,7 @@ export function describeRun(run: TestRun, path: string): string {
  *
  * @param goal - What the user expects, if they said (else the model judges from the code).
  */
-export async function judgeRun(registry: ProviderRegistry, modelId: string, graph: { name: string; graphs: Array<{ name: string; nodes: unknown[] }> }, path: string, run: TestRun, goal: string, signal: AbortSignal): Promise<string> {
+export async function judgeRun(registry: ProviderRegistry, modelId: string, graph: { name: string; graphs: Array<{ name: string; nodes: unknown[] }> }, path: string, run: TestRun, goal: string, signal: AbortSignal, lang = "en"): Promise<string> {
   const code = graph.graphs.map((g) => `## ${g.name}\n${codeText(blueprintToCode(g.nodes as CodeNode[]))}`).join("\n").slice(0, 6000);
   const turn = modelTurnFor(registry, modelId);
   const prompt = [
@@ -124,7 +126,7 @@ export async function judgeRun(registry: ProviderRegistry, modelId: string, grap
     goal ? `\nWhat the user expects: ${goal}` : "",
     run.picture ? "\nThe picture is the game view at the end of the run." : "",
     "",
-    "Answer in the user's language (Hebrew if the request is Hebrew; otherwise English), short:",
+    `Answer in ${lang === "he" ? "Hebrew" : "English"}, short:`,
     "1. One line: works / does not work / cannot tell, and why.",
     "2. What happened, from the log (and picture).",
     "3. Problems found (Accessed None, errors, a Print that never came, an event that never ran) and the likely fix in the graph.",

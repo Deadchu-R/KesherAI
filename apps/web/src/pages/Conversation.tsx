@@ -18,7 +18,7 @@ import { AddMenu } from "../AddMenu";
 import { Mic } from "../Mic";
 import { VoiceMode } from "../VoiceMode";
 import { useParts } from "../parts";
-import { takeOpening, uploadToConversation } from "../phone";
+import { takeOpening } from "../phone";
 import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
@@ -27,7 +27,7 @@ const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: 
 import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { getLocale, t } from "../i18n";
 import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../BlueprintChatPanel";
-import { Annotator, type Annotated } from "../Annotator";
+import { useChatAttach } from "../ChatAttach";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -356,32 +356,6 @@ export function ConversationPage({ id }: { id: string }) {
   // Voice (Settings → Parts): the microphone, voice mode and reading aloud.
   const voicePart = useParts().on("voice");
   const [askPhoto, setAskPhoto] = useState(false);
-  const photoInput = useRef<HTMLInputElement>(null);
-  // Marking up a picture (the computer's screen, or one from this device) before it goes to the chat.
-  const annotInput = useRef<HTMLInputElement>(null);
-  const [annotSrc, setAnnotSrc] = useState("");
-  const startAnnotate = async (from: "screen" | "file") => {
-    if (from === "file") return annotInput.current?.click();
-    try {
-      const res = await fetch(withToken("/api/computer/screen?w=2400"));
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
-      setAnnotSrc(URL.createObjectURL(await res.blob()));
-    } catch (e) {
-      setError(getLocale() === "he" ? `אי אפשר לצלם את המסך: ${(e as Error).message} (צריך שליטה במחשב פעילה: הגדרות → שליטה במחשב)` : `Cannot capture the screen: ${(e as Error).message} (turn on computer control in Settings)`);
-    }
-  };
-  const finishAnnotate = async (r: Annotated | null) => {
-    URL.revokeObjectURL(annotSrc);
-    setAnnotSrc("");
-    if (!r) return;
-    try {
-      const path = await uploadToConversation(id, `marked-up-${Date.now()}.png`, r.png);
-      const notes = r.notes.length ? `${getLocale() === "he" ? "הסימונים בתמונה" : "The marks in the picture"}:\n${r.notes.join("\n")}\n` : "";
-      setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}[${t("attached")}: ${path}]\n${notes}`);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
   // Opened from the phone (shared from another app, or a widget button): a draft, voice mode, or the camera.
   useEffect(() => {
     const apply = () => {
@@ -395,17 +369,6 @@ export function ConversationPage({ id }: { id: string }) {
     addEventListener("kesher-opening", on);
     return () => removeEventListener("kesher-opening", on);
   }, [id]);
-  const addPhotos = async (files: FileList | null) => {
-    setAskPhoto(false);
-    for (const f of [...(files ?? [])]) {
-      try {
-        const path = await uploadToConversation(id, f.name || "photo.jpg", f);
-        setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}[${t("attached")}: ${path}]\n`);
-      } catch (e) {
-        setError((e as Error).message);
-      }
-    }
-  };
   const voiceOn = useRef(false);
   voiceOn.current = voice;
   const [openPanel, setOpenPanel] = useState("");
@@ -589,9 +552,17 @@ export function ConversationPage({ id }: { id: string }) {
   }, [lastLook?.seq]);
   const answers = useMemo(() => new Map(events.filter((e): e is Ev<"answer"> => e.type === "answer").map((e) => [e.questionId, e])), [events]);
 
-  const uploadInput = useRef<HTMLInputElement>(null);
   /** After adding an Unreal project that is not connected yet: offer the right way to connect it. */
   const [unrealSetup, setUnrealSetup] = useState<{ path: string; engine: string; msg?: string } | null>(null);
+  // The + menu's attachments: the same hook in every chat box (start screen, chat, code start).
+  const attachments = useChatAttach({
+    convId: id,
+    insert: (txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`),
+    onError: setError,
+    onProject: (r) => {
+      if (r.kind === "unreal" && !r.connected) setUnrealSetup({ path: r.path, engine: r.engine ?? "" });
+    },
+  });
   const resume = (dismiss: boolean) => {
     setConv((c) => (c ? { ...c, interruptedAt: undefined } : c));
     void api(`/api/conversations/${id}/resume`, { method: "POST", body: { dismiss } }).catch((e: Error) => setError(e.message));
@@ -623,44 +594,6 @@ export function ConversationPage({ id }: { id: string }) {
     } catch (e) {
       setError((e as Error).message);
       setInput(text);
-    }
-  };
-  /** Gives the agent access to files the user attached, and names them in the message. */
-  const attach = async (paths: string[]) => {
-    const added: string[] = [];
-    for (const p of paths) {
-      try {
-        const r = await api<{ path: string }>(`/api/conversations/${id}/access`, { method: "POST", body: { path: p } });
-        added.push(r.path);
-      } catch (e) {
-        setError((e as Error).message);
-      }
-    }
-    if (added.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${added.map((p) => `[${t("attached")}: ${p}]`).join("\n")}\n`);
-  };
-  /** + → Files without the desktop app: uploads them to this chat's folder on the computer. */
-  const uploadFiles = async (files: FileList | null) => {
-    const lines: string[] = [];
-    for (const f of Array.from(files ?? [])) {
-      try {
-        lines.push(`[${t("attached")}: ${await uploadToConversation(id, f.name, f)}]`);
-      } catch (e) {
-        setError(`${f.name}: ${(e as Error).message}`);
-      }
-    }
-    if (lines.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${lines.join("\n")}\n`);
-  };
-  /** + → Project: a Unity, Unreal or any project folder, for the chat to work in. */
-  const addProject = async (picked?: string) => {
-    const folder = picked ?? (await desktop()?.pickFolder());
-    if (!folder) return;
-    try {
-      const r = await api<{ kind: string; line: string; path: string; engine?: string; connected?: boolean }>(`/api/conversations/${id}/project`, { method: "POST", body: { path: folder } });
-      setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${r.line}\n`);
-      if (r.kind === "unity") dispatchEvent(new Event("kesher-unity-added"));
-      if (r.kind === "unreal" && !r.connected) setUnrealSetup({ path: r.path, engine: r.engine ?? "" });
-    } catch (e) {
-      setError((e as Error).message);
     }
   };
   const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null }>) => {
@@ -701,13 +634,11 @@ export function ConversationPage({ id }: { id: string }) {
       {askPhoto && (
         <div className="photo-ask card row">
           <span className="grow">{t("photoAsk")}</span>
-          <button type="button" className="primary" onClick={() => photoInput.current?.click()}>{t("photoTake")}</button>
+          <button type="button" className="primary" onClick={() => { setAskPhoto(false); attachments.takePhoto(); }}>{t("photoTake")}</button>
           <button type="button" className="as-link" onClick={() => setAskPhoto(false)}>✕</button>
         </div>
       )}
-      <input ref={annotInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) setAnnotSrc(URL.createObjectURL(f)); e.target.value = ""; }} />
-      {annotSrc && <Annotator src={annotSrc} onDone={(r) => void finishAnnotate(r)} />}
-      <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void addPhotos(e.target.files); e.target.value = ""; }} />
+      {attachments.elements}
       {voice && (
         <VoiceMode
           busy={busy}
@@ -971,7 +902,7 @@ export function ConversationPage({ id }: { id: string }) {
             e.preventDefault();
             setDragging(false);
             const paths = [...e.dataTransfer.files].map((f) => bridge.pathOf!(f)).filter(Boolean);
-            void attach(paths);
+            void attachments.attach(paths);
           }}
         >
           <div className="box">
@@ -1026,20 +957,13 @@ export function ConversationPage({ id }: { id: string }) {
             )}
             <div className="box-bar">
               <AddMenu
-                onFiles={() => (desktop()?.pickFiles ? void desktop()!.pickFiles!().then((f) => attach(f)) : uploadInput.current?.click())}
-                onPhoto={() => photoInput.current?.click()}
-                onAnnotate={(from) => void startAnnotate(from)}
-                {...(desktop()?.pickFiles ? { onProject: () => void addProject() } : {})}
-                onGameProject={(path) => void addProject(path)}
-                convId={id}
-                onScript={(path) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}[${t("attached")}: ${path}]\n`)}
+                {...attachments.menu}
                 onInsert={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
                 web={web}
                 onWeb={setWeb}
                 mode={info?.mode ?? conv.mode}
                 onMode={(m) => void patch({ mode: m })}
               />
-              <input ref={uploadInput} type="file" multiple hidden onChange={(e) => void uploadFiles(e.target.files).finally(() => { if (uploadInput.current) uploadInput.current.value = ""; })} />
               <WebToggle on={web} onChange={setWeb} />
               <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
               {voicePart && <Mic onText={(txt) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />}

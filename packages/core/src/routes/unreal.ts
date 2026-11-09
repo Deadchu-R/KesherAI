@@ -103,7 +103,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   // "Test": play the game in the editor for a few seconds, then a model says whether the Blueprint did what it should.
   if (kind === "unreal") {
     let testing = false;
-    app.post<{ Body: { path?: string; seconds?: number; goal?: string; model?: string; judge?: boolean } }>(`${base}/test`, async (req, reply) => {
+    app.post<{ Body: { path?: string; seconds?: number; goal?: string; model?: string; judge?: boolean; lang?: string } }>(`${base}/test`, async (req, reply) => {
       const path = String(req.body?.path ?? "");
       if (testing) return reply.code(409).send({ error: "A test is already running." });
       testing = true;
@@ -116,7 +116,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
           const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
           if (chat && path) {
             const { graph } = await b.graph(path);
-            verdict = await judgeRun(s.registry, chat, graph, path, run, String(req.body?.goal ?? "").slice(0, 1000), AbortSignal.timeout(180_000)).catch((e: Error) => `(The model could not check the run: ${e.message})`);
+            verdict = await judgeRun(s.registry, chat, graph, path, run, String(req.body?.goal ?? "").slice(0, 1000), AbortSignal.timeout(180_000), req.body?.lang === "he" ? "he" : "en").catch((e: Error) => `(The model could not check the run: ${e.message})`);
           }
         }
         const { picture: _p, ...rest } = run;

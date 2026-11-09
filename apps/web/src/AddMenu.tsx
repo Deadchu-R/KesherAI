@@ -25,8 +25,9 @@ export interface AddMenuProps {
   onInsert: (text: string) => void;
   web: boolean;
   onWeb: (on: boolean) => void;
-  mode: PermissionMode;
-  onMode: (mode: PermissionMode) => void;
+  /** The chat's approvals mode (a box with no chat yet has none). */
+  mode?: PermissionMode;
+  onMode?: (mode: PermissionMode) => void;
 }
 
 type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | "projects" | "scripts" | null;
@@ -156,8 +157,8 @@ export function AddMenu(p: AddMenuProps) {
           {sub === "knowledge" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => { p.onInsert(`${L("חפש בבסיס הידע", "Search the knowledge base")} "${x.name}": `); done(); }}>{x.name}</button>)}<a className="add-sub-link small" href="#/libraries" onClick={done}>📦 {L("חנות ספריות", "Library store")}</a></div>}
           <button type="button" role="menuitem" aria-expanded={sub === "skills"} onClick={() => openSub("skills")}>🧩 {L("סקילים", "Skills")} <span className="sub-arrow">›</span></button>
           {sub === "skills" && <div className="add-sub">{list((x) => <button key={x.id ?? x.name} type="button" role="menuitem" dir="auto" title={x.description} onClick={() => { p.onInsert(`${L("השתמש בסקיל", "Use the skill")} "${x.name}": `); done(); }}>{x.name}</button>)}</div>}
-          <button type="button" role="menuitem" aria-expanded={sub === "approvals"} onClick={() => openSub("approvals")}>✅ {L("אישורים", "Approvals")} <span className="sub-arrow">›</span></button>
-          {sub === "approvals" && <div className="add-sub">{modes.map(([m, label]) => <button key={m} type="button" role="menuitemradio" aria-checked={p.mode === m} onClick={() => { p.onMode(m); done(); }}>{p.mode === m ? "● " : "○ "}{label}</button>)}</div>}
+          {p.onMode && <button type="button" role="menuitem" aria-expanded={sub === "approvals"} onClick={() => openSub("approvals")}>✅ {L("אישורים", "Approvals")} <span className="sub-arrow">›</span></button>}
+          {p.onMode && sub === "approvals" && <div className="add-sub">{modes.map(([m, label]) => <button key={m} type="button" role="menuitemradio" aria-checked={p.mode === m} onClick={() => { p.onMode!(m); done(); }}>{p.mode === m ? "● " : "○ "}{label}</button>)}</div>}
           <hr />
           <a role="menuitem" href="#/connections" onClick={done}>🔌 {L("קונקטורים ומכשירים", "Connectors and devices")}</a>
           <a role="menuitem" href="#/memory" onClick={done}>🧠 {L("זיכרונות", "Memory")}</a>

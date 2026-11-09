@@ -8,6 +8,8 @@ import { WebToggle, useWebSearch } from "./WebToggle";
 import { Mic } from "./Mic";
 import { ComputerBanner } from "./ComputerSection";
 import { PersonaChip } from "./Personas";
+import { AddMenu } from "./AddMenu";
+import { useChatAttach } from "./ChatAttach";
 import { PromptTextarea, expandSlash } from "./SlashMenu";
 import { usePending } from "./pages/WatchPage";
 import { PluginStyles } from "./plugins";
@@ -84,13 +86,31 @@ function Home() {
   }, []);
   const hour = new Date().getHours();
   const greeting = t(hour < 5 ? "greetNight" : hour < 12 ? "greetMorning" : hour < 18 ? "greetDay" : "greetEvening");
+  // The chat is made on the first thing added with + (a file, a project…), or when the message is sent.
+  const [draftId, setDraftId] = useState<string>();
+  const ensure = async () => {
+    if (draftId) return draftId;
+    const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) }, { open: false });
+    if (id) setDraftId(id);
+    return id;
+  };
+  const attachments = useChatAttach({
+    ensure,
+    insert: (txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`),
+    onError: (m) => toast(m),
+  });
   const start = async () => {
     const value = expandSlash(text.trim());
     if (!value || busy) return;
     setBusy(true);
     try {
-      const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
+      const id = draftId ?? (await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) }));
       if (!id) return;
+      if (draftId) {
+        // Made by an attachment: the model or persona may have changed since, and now the chat opens.
+        await api(`/api/conversations/${id}`, { method: "PATCH", body: { ...(modelId ? { modelId } : {}), personaId: personaId ?? null } }).catch(() => undefined);
+        location.hash = `#/c/${id}`;
+      }
       await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: value, ...(web ? { web: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
@@ -128,6 +148,8 @@ function Home() {
             }}
           />
           <div className="box-bar">
+            <AddMenu {...attachments.menu} onInsert={(txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)} web={web} onWeb={setWeb} />
+            {attachments.elements}
             <WebToggle on={web} onChange={setWeb} />
             <Mic onText={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))} />
             <PersonaChip value={personaId} onChange={(p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); }} />

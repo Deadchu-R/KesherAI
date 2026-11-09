@@ -427,7 +427,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     setRequest("");
     setChat((c) => [...c, { who: "you", lines: [goal ? `🧪 ${L("בדיקה", "Test")}: ${goal}` : `🧪 ${L("בדיקה", "Test")}`] }]);
     try {
-      const r = await api<{ played: boolean; reason?: string; compile: string[]; log: Array<{ kind: string; category: string; text: string }>; pictureId?: string; placed?: string; seconds: number; verdict: string; summary: string }>(`${base}/test`, { method: "POST", body: { path, seconds: 6, goal, ...(model ? { model } : {}) } });
+      const r = await api<{ played: boolean; reason?: string; compile: string[]; log: Array<{ kind: string; category: string; text: string }>; pictureId?: string; placed?: string; seconds: number; verdict: string; summary: string }>(`${base}/test`, { method: "POST", body: { path, seconds: 6, goal, lang: getLocale(), ...(model ? { model } : {}) } });
       const lines = r.verdict ? r.verdict.split("\n").filter((l) => l.trim()) : [r.summary];
       if (!r.played && r.reason) lines.unshift(`⛔ ${r.reason}`);
       setChat((c) => [...c, { who: "ai", lines, ...(r.pictureId ? { picture: r.pictureId } : {}), log: [...r.compile.map((x) => `⚠ ${x}`), ...r.log.map((l) => `${l.kind === "error" ? "⛔ " : l.kind === "warning" ? "⚠ " : ""}${l.text}`)] }]);
