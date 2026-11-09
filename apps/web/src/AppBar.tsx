@@ -70,7 +70,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   }, [menu]);
 
   const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/connections" ? t("connections") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : hash === "#/plugins" ? t("pluginsNav") : hash === "#/community" ? t("communityNav") : "";
-  const inCode = hash.startsWith("#/c/") && document.querySelector("[data-conv-kind='code']") !== null;
+  const inCode = hash === "#/code" || (hash.startsWith("#/c/") && document.querySelector("[data-conv-kind='code']") !== null);
   const status = online === null ? t("barChecking") : online ? t("computerOn", { name: host || location.hostname }) : t("serverOffline");
 
   return (
@@ -109,7 +109,8 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         <button type="button" className="bar-btn hist" aria-label={t("forward")} title={t("forward")} onClick={() => history.forward()}>{Icon.forward}</button>
         <div className="bar-seg" role="group" aria-label={t("chatOrCode")}>
           <a href="#/" className={!inCode ? "on" : ""} aria-label={t("newChat")} title={t("newChat")}>{Icon.chat}</a>
-          <button type="button" className={inCode ? "on" : ""} aria-label={t("newCode")} title={t("newCode")} onClick={() => dispatchEvent(new Event(NEW_CODE_EVENT))}>{Icon.code}</button>
+          {/* Code, like the Claude app's Code side: its own start screen, the folder chosen in the message box (no dialog). */}
+          <a href="#/code" className={inCode ? "on" : ""} aria-label={t("newCode")} title={t("newCode")}>{Icon.code}</a>
         </div>
       </div>
       <div className="appbar-main">

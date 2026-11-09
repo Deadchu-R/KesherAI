@@ -319,6 +319,14 @@ button.on { border-color: var(--accent); }
 .greeting { font-size: 34px; font-weight: 500; letter-spacing: -0.02em; text-align: center; }
 .home-composer { position: static; width: min(720px, 100%); padding: 0; background: none; }
 .home-composer textarea { min-height: 72px; }
+.code-folder { max-width: 220px; }
+.code-folder-edit { gap: 6px; flex: 1 1 220px; min-width: 0; }
+.code-folder-edit input { flex: 1; min-width: 0; }
+.code-where { margin: -6px 0 0; max-width: min(720px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-recent { width: min(720px, 100%); }
+.code-recent ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.code-recent a { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
+.code-recent a:hover { background: var(--panel-2); }
 .ideas { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: min(720px, 100%); }
 .ideas button { height: 34px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 13px; color: var(--text-2); background: transparent; }
 .sidebar-actions { display: flex; flex-direction: column; gap: 2px; padding: 0 0 8px; }

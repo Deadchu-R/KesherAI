@@ -27,6 +27,7 @@ import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
+import { CodeHome } from "./pages/CodeHome";
 
 /* Pages load only when opened, so starting KesherAI (and a part that is off) costs nothing. */
 const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
@@ -209,6 +210,7 @@ export function App() {
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
+  else if (hash === "#/code") page = <CodeHome />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/training") page = <TrainingPage />;
   else if (hash === "#/parts") page = <PartsPage />;
