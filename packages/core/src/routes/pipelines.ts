@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, resolve, sep } from "node:path";
+import { homedir } from "node:os";
+import { isLocalRequest } from "../auth.js";
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { PIPELINE_TEMPLATES, type Pipeline } from "../pipelines.js";
@@ -38,6 +40,15 @@ export async function pipelineRoutes(app: FastifyInstance, s: KesherServices): P
   app.get("/api/routines", async () => s.routines.list());
   app.post<{ Body: Partial<Routine> }>("/api/routines", async (req, reply) => {
     const b = req.body ?? {};
+    // A folder the routine's chat may write to: only set on this computer, and only inside the user's home folder.
+    const folder = b.action?.type === "prompt" ? b.action.folder : undefined;
+    if (folder) {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Give a routine a folder on this computer." });
+      const home = resolve(homedir());
+      const abs = resolve(folder);
+      if (!isAbsolute(folder) || !(abs + sep).startsWith(home + sep) || abs === home) return reply.code(400).send({ error: "The folder must be inside your home folder (not the home folder itself)." });
+      b.action = { ...b.action, folder: abs } as typeof b.action;
+    }
     try {
       return await s.routines.save({ ...b, name: b.name ?? "", schedule: b.schedule ?? { kind: "daily", time: "08:00" }, action: b.action ?? { type: "prompt", prompt: "" } });
     } catch (e) {

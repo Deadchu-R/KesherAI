@@ -487,9 +487,14 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       const files = done?.files.length ? ` Files: ${done.files.join(", ")}.` : "";
       return { ok: done?.status === "done", message: done?.status === "done" ? `Finished.${files}` : done?.error ?? "Stopped.", link: "#/pipelines" };
     },
-    runPrompt: async (name, prompt, modelId, personaId) => {
+    runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
       const c = await services.conversations.create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString()}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
-      await services.conversations.send(c.id, prompt);
+      // A routine's folder (e.g. a list it keeps): created if missing, then opened to this chat's file tools.
+      if (opts.folder) {
+        await mkdir(opts.folder, { recursive: true });
+        await (await services.conversations.open(c.id))?.session.grant(opts.folder);
+      }
+      await services.conversations.send(c.id, opts.folder ? `${prompt}\n\n(Your folder for this: ${opts.folder})` : prompt, opts.web ? { web: true } : {});
       const end = Date.now() + 30 * 60_000;
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500));
@@ -508,6 +513,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       if (id) await services.conversations.delete(id);
     },
     telegram: async (text) => telegram.broadcast(text),
+    busy: () => Object.keys(services.conversations.activity()).length > 0,
   });
   void routines.start();
   // Unity's CLI: the Unity page and the chat's Unity tools share it.

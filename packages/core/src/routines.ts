@@ -11,7 +11,11 @@ import { dirname } from "node:path";
  */
 
 /** When a routine runs. */
-export type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number };
+export type Schedule =
+  | { kind: "daily"; time: string; days?: number[] }
+  | { kind: "every"; minutes: number }
+  /** Once each time KesherAI starts, a few minutes after (in the background). */
+  | { kind: "startup"; delayMinutes?: number };
 
 /** What it does. */
 export type RoutineAction =
@@ -23,6 +27,12 @@ export type RoutineAction =
       personaId?: string;
       /** A heartbeat (like OpenClaw's): look, and speak only when something needs the user; otherwise no chat and no notification. */
       quiet?: boolean;
+      /** The chat may search the web. */
+      web?: boolean;
+      /** A folder on this computer the chat may read and write (e.g. a list it keeps up to date). */
+      folder?: string;
+      /** In the background: starts only when no chat is working, so it never slows the user's own work. */
+      background?: boolean;
     };
 
 /** A saved routine. */
@@ -45,7 +55,9 @@ export interface Routine {
 /** What routines run on. */
 export interface RoutineDeps {
   runPipeline(id: string, inputs: Record<string, string>): Promise<{ ok: boolean; message: string; link: string }>;
-  runPrompt(name: string, prompt: string, modelId?: string, personaId?: string): Promise<{ ok: boolean; message: string; link: string }>;
+  runPrompt(name: string, prompt: string, modelId?: string, personaId?: string, opts?: { web?: boolean; folder?: string }): Promise<{ ok: boolean; message: string; link: string }>;
+  /** Whether any chat is working now (background routines wait until none is). */
+  busy?(): boolean;
   notify(title: string, body: string, path: string): Promise<void>;
   /** Removes the chat a quiet run made when it found nothing. */
   discard?(link: string): Promise<void>;
@@ -68,7 +80,12 @@ export const foundNothing = (message: string): boolean => /^\W*nothing\W*$/i.tes
  * @param last - The last run (ms), for "every N minutes".
  * @returns The time in ms.
  */
-export function nextRun(s: Schedule, after: number, last?: number): number {
+export function nextRun(s: Schedule, after: number, last?: number, startedAt?: number): number {
+  if (s.kind === "startup") {
+    // Once per start: a few minutes after KesherAI started, and not again until the next start.
+    const at = (startedAt ?? after) + Math.min(120, Math.max(0, s.delayMinutes ?? 3)) * 60_000;
+    return last && startedAt && last >= startedAt ? Infinity : Math.max(after, at);
+  }
   if (s.kind === "every") {
     const step = Math.max(5, s.minutes) * 60_000;
     return last ? Math.max(after, last + step) : after + step;
@@ -89,6 +106,7 @@ export class Routines {
   private timer?: NodeJS.Timeout;
   private running = new Set<string>();
   private due = new Map<string, number>();
+  private readonly startedAt: number;
 
   /**
    * @param file - routines.json.
@@ -99,7 +117,9 @@ export class Routines {
     private readonly file: string,
     private readonly deps: RoutineDeps,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    this.startedAt = now();
+  }
 
   /** Reads the routines and starts the clock (once). */
   start(): Promise<void> {
@@ -114,13 +134,16 @@ export class Routines {
   }
 
   private plan() {
-    for (const r of this.list_) this.due.set(r.id, nextRun(r.schedule, this.now(), r.lastRun ? Date.parse(r.lastRun) : undefined));
+    for (const r of this.list_) this.due.set(r.id, nextRun(r.schedule, this.now(), r.lastRun ? Date.parse(r.lastRun) : undefined, this.startedAt));
   }
 
   /** @returns The routines with when each runs next. */
   async list(): Promise<Array<Routine & { nextRun: string | null; running: boolean }>> {
     await this.start();
-    return this.list_.map((r) => ({ ...r, nextRun: r.enabled ? new Date(this.due.get(r.id) ?? nextRun(r.schedule, this.now())).toISOString() : null, running: this.running.has(r.id) }));
+    return this.list_.map((r) => {
+      const at = this.due.get(r.id) ?? nextRun(r.schedule, this.now(), undefined, this.startedAt);
+      return { ...r, nextRun: r.enabled && Number.isFinite(at) ? new Date(at).toISOString() : null, running: this.running.has(r.id) };
+    });
   }
 
   /**
@@ -136,10 +159,11 @@ export class Routines {
     if (r.schedule.kind === "every" && !(r.schedule.minutes >= 5)) throw new Error("Every 5 minutes at most often.");
     if (r.action.type === "prompt" && !r.action.prompt.trim()) throw new Error("Write what to ask.");
     if (r.action.type === "pipeline" && !r.action.pipelineId) throw new Error("Choose a pipeline.");
+    if (r.schedule.kind === "startup" && r.schedule.delayMinutes !== undefined && !(r.schedule.delayMinutes >= 0 && r.schedule.delayMinutes <= 120)) throw new Error("Start 0–120 minutes after KesherAI starts.");
     const old = r.id ? this.list_.find((x) => x.id === r.id) : undefined;
     const saved: Routine = { ...(old ?? {}), id: old?.id ?? randomUUID(), name: r.name.trim().slice(0, 80), enabled: r.enabled ?? true, schedule: r.schedule, action: r.action, notify: r.notify ?? true, telegram: r.telegram === true };
     this.list_ = old ? this.list_.map((x) => (x.id === saved.id ? saved : x)) : [...this.list_, saved];
-    this.due.set(saved.id, nextRun(saved.schedule, this.now(), saved.lastRun ? Date.parse(saved.lastRun) : undefined));
+    this.due.set(saved.id, nextRun(saved.schedule, this.now(), saved.lastRun ? Date.parse(saved.lastRun) : undefined, this.startedAt));
     await this.persist();
     return saved;
   }
@@ -155,7 +179,10 @@ export class Routines {
   /** Runs what is due. */
   async tick(): Promise<void> {
     const t = this.now();
-    await Promise.all(this.list_.filter((r) => r.enabled && (this.due.get(r.id) ?? Infinity) <= t).map((r) => this.runNow(r.id)));
+    // A background routine waits (checked every 30 s) while any chat is working, so it never slows the user's own work.
+    const busy = this.deps.busy?.() ?? false;
+    const due = this.list_.filter((r) => r.enabled && (this.due.get(r.id) ?? Infinity) <= t && !(busy && r.action.type === "prompt" && r.action.background));
+    await Promise.all(due.map((r) => this.runNow(r.id)));
   }
 
   /**
@@ -168,10 +195,10 @@ export class Routines {
     if (!r || this.running.has(id)) return;
     this.running.add(id);
     // The next time is planned from now, so a routine that runs long does not start twice.
-    this.due.set(id, nextRun(r.schedule, this.now() + 1000, this.now()));
+    this.due.set(id, nextRun(r.schedule, this.now() + 1000, this.now(), this.startedAt));
     try {
       const quiet = r.action.type === "prompt" && r.action.quiet === true;
-      const res = r.action.type === "pipeline" ? await this.deps.runPipeline(r.action.pipelineId, r.action.inputs ?? {}) : await this.deps.runPrompt(r.name, r.action.prompt + (quiet ? QUIET_NOTE : ""), r.action.modelId, r.action.personaId);
+      const res = r.action.type === "pipeline" ? await this.deps.runPipeline(r.action.pipelineId, r.action.inputs ?? {}) : await this.deps.runPrompt(r.name, r.action.prompt + (quiet ? QUIET_NOTE : ""), r.action.modelId, r.action.personaId, { ...(r.action.web ? { web: true } : {}), ...(r.action.folder ? { folder: r.action.folder } : {}) });
       if (quiet && res.ok && foundNothing(res.message)) {
         // Nothing needs the user: no chat left behind, no notification.
         await this.deps.discard?.(res.link).catch(() => undefined);

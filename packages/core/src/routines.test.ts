@@ -68,3 +68,30 @@ test("a heartbeat speaks only when something needs the user", async () => {
   assert.equal(sentToTelegram.length, 1);
   r.close();
 });
+
+test("a background routine runs once per start, after a delay, and waits while chats work", async () => {
+  let now = new Date(2026, 10, 9, 9, 0).getTime();
+  let busy = true;
+  const runs: Array<{ prompt: string; opts?: { web?: boolean; folder?: string } }> = [];
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-rt-")), "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async (_n, prompt, _m, _p, opts) => (runs.push({ prompt, ...(opts ? { opts } : {}) }), { ok: true, message: "Updated the list.", link: "#/c/x" }),
+    notify: async () => undefined,
+    busy: () => busy,
+  }, () => now);
+  await r.save({ name: "Research", schedule: { kind: "startup", delayMinutes: 3 }, action: { type: "prompt", prompt: "Update the list", web: true, folder: "/home/u/Research", background: true } });
+  await assert.rejects(r.save({ name: "Bad", schedule: { kind: "startup", delayMinutes: 500 }, action: { type: "prompt", prompt: "x" } }), /0–120/);
+  await r.tick();
+  assert.equal(runs.length, 0, "not before the delay");
+  now += 4 * 60_000;
+  await r.tick();
+  assert.equal(runs.length, 0, "waits while a chat works");
+  busy = false;
+  await r.tick();
+  assert.deepEqual(runs, [{ prompt: "Update the list", opts: { web: true, folder: "/home/u/Research" } }]);
+  now += 24 * 3600_000;
+  await r.tick();
+  assert.equal(runs.length, 1, "once per start");
+  const [l] = await r.list();
+  assert.equal(l!.nextRun, null, "next: the next start");
+});
