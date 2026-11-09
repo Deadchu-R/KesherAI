@@ -11,8 +11,14 @@ export interface AddMenuProps {
   onFiles: () => void;
   /** Take a photo (phone camera) or pick a picture. */
   onPhoto: () => void;
-  /** A Unity/Unreal project or folder (on the computer itself). */
+  /** A folder chosen in the computer's dialog (the desktop app only). */
   onProject?: () => void;
+  /** Adds one of the Unity/Unreal projects found on the computer (works from the phone too). */
+  onGameProject?: (path: string) => void;
+  /** The chat, for finding scripts in its folders. */
+  convId?: string;
+  /** Adds a script found in the chat's folders. */
+  onScript?: (path: string) => void;
   /** Adds text to the message box. */
   onInsert: (text: string) => void;
   web: boolean;
@@ -21,7 +27,7 @@ export interface AddMenuProps {
   onMode: (mode: PermissionMode) => void;
 }
 
-type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | null;
+type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | "projects" | "scripts" | null;
 interface Named { id: string; name?: string; title?: string; description?: string }
 
 /**
@@ -38,6 +44,15 @@ export function AddMenu(p: AddMenuProps) {
   const [open, setOpen] = useState(false);
   const [sub, setSub] = useState<Sub>(null);
   const [items, setItems] = useState<Named[] | null>(null);
+  const [games, setGames] = useState<Array<{ kind: string; name: string; path: string; engine?: string }> | null>(null);
+  const [scriptQ, setScriptQ] = useState("");
+  const [scripts, setScripts] = useState<{ roots: string[]; scripts: Array<{ path: string; rel: string }> } | null>(null);
+  // Scripts: searched as you type (a short pause first).
+  useEffect(() => {
+    if (sub !== "scripts" || !p.convId) return;
+    const t = setTimeout(() => void api<{ roots: string[]; scripts: Array<{ path: string; rel: string }> }>(`/api/conversations/${p.convId}/scripts?q=${encodeURIComponent(scriptQ)}`).then(setScripts, () => setScripts({ roots: [], scripts: [] })), 250);
+    return () => clearTimeout(t);
+  }, [sub, scriptQ, p.convId]);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -66,6 +81,14 @@ export function AddMenu(p: AddMenuProps) {
       skills: () => api<{ skills: Named[] } | Named[]>("/api/skills").then((r) => (Array.isArray(r) ? r : r.skills)),
     };
     if (s && load[s]) void load[s]().then((x) => setItems((x ?? []).slice(0, 30)), () => setItems([]));
+    if (s === "projects") {
+      setGames(null);
+      void api<{ projects: Array<{ kind: string; name: string; path: string; engine?: string }> }>("/api/game-projects").then((r) => setGames(r.projects), () => setGames([]));
+    }
+    if (s === "scripts") {
+      setScripts(null);
+      setScriptQ("");
+    }
   };
   const insertPage = async (id: string, title: string) => {
     const page = await api<{ title?: string; content?: string }>(`/api/pages/${encodeURIComponent(id)}`).catch(() => null);
@@ -98,7 +121,26 @@ export function AddMenu(p: AddMenuProps) {
           {sub === "pages" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => void insertPage(x.id, x.title ?? x.name ?? "")}>{x.title ?? x.name}</button>)}</div>}
           <button type="button" role="menuitem" aria-expanded={sub === "chats"} onClick={() => openSub("chats")}>💬 {L("משיחה אחרת", "From another chat")} <span className="sub-arrow">›</span></button>
           {sub === "chats" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => void insertChat(x.id, x.title ?? "")}>{x.title}</button>)}</div>}
-          {p.onProject && <button type="button" role="menuitem" onClick={() => { done(); p.onProject!(); }}>🎮 {L("פרויקט: Unity, Unreal או תיקייה…", "Project: Unity, Unreal or a folder…")}</button>}
+          {(p.onGameProject || p.onProject) && <button type="button" role="menuitem" aria-expanded={sub === "projects"} onClick={() => openSub("projects")}>🎮 {L("פרויקט Unity או Unreal", "A Unity or Unreal project")} <span className="sub-arrow">›</span></button>}
+          {sub === "projects" && (
+            <div className="add-sub">
+              {games === null ? <p className="muted small add-sub-note">…</p> : games.length === 0 ? <p className="muted small add-sub-note">{L("לא נמצאו פרויקטים במחשב.", "No projects found on the computer.")}</p> : games.map((g) => (
+                <button key={g.path} type="button" role="menuitem" dir="auto" title={g.path} onClick={() => { done(); p.onGameProject?.(g.path); }}>
+                  {g.kind === "unity" ? "◼ Unity" : "◆ Unreal"} · {g.name}{g.engine ? <span className="muted small"> {g.engine}</span> : null}
+                </button>
+              ))}
+              {p.onProject && <button type="button" role="menuitem" onClick={() => { done(); p.onProject!(); }}>📁 {L("תיקייה אחרת…", "Another folder…")}</button>}
+            </div>
+          )}
+          {p.onScript && p.convId && <button type="button" role="menuitem" aria-expanded={sub === "scripts"} onClick={() => openSub("scripts")}>📜 {L("סקריפט מהפרויקט", "A script from the project")} <span className="sub-arrow">›</span></button>}
+          {sub === "scripts" && (
+            <div className="add-sub">
+              <input className="add-sub-search" dir="auto" autoFocus value={scriptQ} onChange={(e) => setScriptQ(e.target.value)} placeholder={L("חיפוש: Player, Door.cpp…", "Find: Player, Door.cpp…")} aria-label={L("חיפוש סקריפט", "Find a script")} />
+              {scripts === null ? <p className="muted small add-sub-note">…</p> : !scripts.roots.length ? <p className="muted small add-sub-note">{L("קודם הוסיפו פרויקט לצ'אט (🎮 למעלה).", "Add a project to the chat first (🎮 above).")}</p> : scripts.scripts.length === 0 ? <p className="muted small add-sub-note">{L("לא נמצא.", "Nothing found.")}</p> : scripts.scripts.map((x) => (
+                <button key={x.path} type="button" role="menuitem" dir="ltr" title={x.path} onClick={() => { p.onScript!(x.path); done(); }}>{x.rel}</button>
+              ))}
+            </div>
+          )}
           <hr />
           <button type="button" role="menuitemcheckbox" aria-checked={p.web} onClick={() => p.onWeb(!p.web)}>🌐 {L("חיפוש באינטרנט", "Web search")} <span className="sub-arrow">{p.web ? "✓" : ""}</span></button>
           <button type="button" role="menuitem" onClick={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); done(); }}>🔬 {L("מחקר מעמיק", "Deep research")}</button>

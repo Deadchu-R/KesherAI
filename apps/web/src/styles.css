@@ -1542,3 +1542,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .bp-chat-head { gap: 8px; align-items: center; flex-wrap: wrap; }
 .bp-chat-head select { min-width: 0; flex: 1 1 140px; }
 .ue-canvas.bp-chat-canvas { height: min(42dvh, 380px); min-height: 220px; }
+.add-sub-search { margin: 4px 0; font-size: 13px; width: 100%; box-sizing: border-box; }
+.add-sub button[dir="ltr"] { text-align: left; overflow-wrap: anywhere; }

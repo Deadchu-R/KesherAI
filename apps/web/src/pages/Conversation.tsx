@@ -625,8 +625,8 @@ export function ConversationPage({ id }: { id: string }) {
     if (lines.length) setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${lines.join("\n")}\n`);
   };
   /** + → Project: a Unity, Unreal or any project folder, for the chat to work in. */
-  const addProject = async () => {
-    const folder = await desktop()?.pickFolder();
+  const addProject = async (picked?: string) => {
+    const folder = picked ?? (await desktop()?.pickFolder());
     if (!folder) return;
     try {
       const r = await api<{ kind: string; line: string; path: string; engine?: string; connected?: boolean }>(`/api/conversations/${id}/project`, { method: "POST", body: { path: folder } });
@@ -1001,6 +1001,9 @@ export function ConversationPage({ id }: { id: string }) {
                 onFiles={() => (desktop()?.pickFiles ? void desktop()!.pickFiles!().then((f) => attach(f)) : uploadInput.current?.click())}
                 onPhoto={() => photoInput.current?.click()}
                 {...(desktop()?.pickFiles ? { onProject: () => void addProject() } : {})}
+                onGameProject={(path) => void addProject(path)}
+                convId={id}
+                onScript={(path) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}[${t("attached")}: ${path}]\n`)}
                 onInsert={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
                 web={web}
                 onWeb={setWeb}

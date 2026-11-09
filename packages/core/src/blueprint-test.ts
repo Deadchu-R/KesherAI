@@ -82,7 +82,8 @@ export async function runBlueprintTest(b: UnrealBridge, path: string, opts: { se
   while (Date.now() < until && !opts.signal?.aborted) await new Promise((r) => setTimeout(r, 500));
   // Always stop playing: a picture of the game view, the log, then Play In Editor ends.
   const stop = await b.request<{ played: boolean; picture?: string; log: TestLine[]; placed?: string; seconds: number }>("play_stop", {}, 60_000);
-  const picture = stop.picture ? await readFile(stop.picture).catch(() => undefined) : undefined;
+  // Only the plugin's own picture file (Saved/KesherAI/test-run.png), never another path the socket names.
+  const picture = stop.picture && /[\\/]Saved[\\/]KesherAI[\\/]test-run\.png$/i.test(stop.picture) ? await readFile(stop.picture).catch(() => undefined) : undefined;
   return {
     played: stop.played,
     ...(stop.played ? {} : { reason: "The game did not start in the editor (is a dialog open in Unreal?)." }),

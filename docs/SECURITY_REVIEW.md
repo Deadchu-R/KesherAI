@@ -125,6 +125,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** widget changes are capped (200 operations a call); they change only the chosen Widget Blueprint's widgets, in one undo step. The model's operations are cleaned first (one property per change).
     - **Checked:** an update started from an old plugin waits for the user to close Unreal (never closes it itself); with plugin 0.1.6+ Unreal asks to save first and Cancel keeps it open.
 
+28. **Scan after 0.6.12** (the Test button, Blueprints connected to chats, projects and scripts from the phone, continuing after a restart).
+    - **Checked:** a test run plays only in the editor's play world (the Actor is placed there, the level is not changed) and always ends with `play_stop`; one test at a time. KesherAI reads back only the plugin's own picture (`Saved/KesherAI/test-run.png`), never another path the socket names; the editor socket stays computer-only.
+    - **Checked:** from the phone, + → Project adds only a Unity/Unreal project found on the computer (KesherAI's Unity projects, Unity Hub's list, the usual Unreal Projects folders, the connected editor); any other folder still needs the computer's own dialog. + → Script searches only the chat's own folders (its workspace and what was given to it), skips generated folders, does not follow symlinked folders and stops after 30,000 entries.
+    - **Checked:** "Continue where it stopped" sends a fixed message only for a chat KesherAI itself recorded as working when it closed; the list is kept in KesherAI's data folder and capped.
+    - **Fixed:** effects in the web app returned values by accident; newer Chrome returns a Promise from `scrollIntoView`, which React then called (the Blueprint page crashed). All effects now use block bodies, and a lint rule keeps it so.
+    - **Dependencies:** `pnpm audit --prod` checked again.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

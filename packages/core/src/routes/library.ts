@@ -14,6 +14,7 @@ import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
 import { readProject } from "../unreal-install.js";
+import { findGameProjects, findScripts } from "../game-projects.js";
 
 const MODES: PermissionMode[] = ["plan", "ask", "auto-edit", "auto"];
 
@@ -335,11 +336,16 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
    * project (its tools work on it through the CLI), an Unreal project is opened to the chat's file tools
    * and the Blueprint tools; any other folder is opened to the file tools. Only on this computer.
    */
+  const gameProjects = async () => findGameProjects({ unity: (await s.unity.status().catch(() => ({ projects: [] as string[] }))).projects, ...(s.unreal.projectFile ? { unrealFile: s.unreal.projectFile } : {}) });
+  /** The Unity and Unreal projects found on this computer, to add to a chat (also from the phone). */
+  app.get("/api/game-projects", async () => ({ projects: await gameProjects() }));
+
   app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/project", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Add a project on this computer." });
+    const folder = String(req.body?.path ?? "");
+    // From the phone (remote): only a project found on the computer (never any folder by path).
+    if (!isLocalRequest(req) && !(await gameProjects()).some((p) => p.path === folder)) return reply.code(403).send({ error: "From the phone, choose one of the projects found on the computer." });
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
-    const folder = String(req.body?.path ?? "");
     try {
       const path = await opened.session.grant(folder);
       const name = basename(path);
@@ -357,6 +363,15 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
+  });
+
+  /** Scripts in the chat's folders (its workspace and the projects/files given to it), by part of the name: + → Script. */
+  app.get<{ Params: { id: string }; Querystring: { q?: string } }>("/api/conversations/:id/scripts", async (req, reply) => {
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    const ws = opened.session.info().workspace;
+    const roots = [...opened.session.grants, ...(ws ? [ws] : [])];
+    return { roots, scripts: roots.length ? await findScripts(roots, String(req.query.q ?? "").slice(0, 100)) : [] };
   });
 
   /** "Another answer": the last answer is written again; the earlier one stays as a version. */

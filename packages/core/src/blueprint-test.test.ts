@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
@@ -27,7 +27,8 @@ test("Test plays the game in the editor, stops it, and returns the log and the p
   const server = await createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
   await server.app.listen({ port: 0, host: "127.0.0.1" });
   const port = (server.app.server.address() as { port: number }).port;
-  const png = join(dataDir, "shot.png");
+  await mkdir(join(dataDir, "Saved", "KesherAI"), { recursive: true });
+  const png = join(dataDir, "Saved", "KesherAI", "test-run.png");
   await writeFile(png, Buffer.from("89504e470d0a1a0a", "hex"));
   const calls: string[] = [];
   const ws = new WebSocket(`ws://127.0.0.1:${port}/api/unreal/ws`);
