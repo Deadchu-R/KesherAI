@@ -1,6 +1,6 @@
 {
   "name": "@kesher/agent",
-  "version": "0.5.93",
+  "version": "0.5.94",
   "description": "The KesherAI agent: a tool-calling loop with file and terminal tools, permission modes, approvals, questions and undo.",
   "license": "Apache-2.0",
   "type": "module",

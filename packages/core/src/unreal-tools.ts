@@ -7,6 +7,7 @@ import type { AgentTool } from "@kesher/agent";
 import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
 import { knownIssues, preflight } from "./known-issues.js";
 import { compileErrors, describePlugins, installBuiltPlugin, listPlugins, readPlugin } from "./unreal-plugins.js";
+import { lintUnrealSource, shortErrors } from "./unreal-lint.js";
 import { projectPath } from "./unity-tools.js";
 import type { JobStore } from "./jobs.js";
 
@@ -51,7 +52,8 @@ export const UNREAL_TOOL_NAMES = [
 ] as const;
 
 export const UNREAL_NOTE =
-  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). If the Android game closes or crashes on the phone, android_run_on_phone installs the .apk, starts it and returns the game's own log (look for Fatal error, Assertion failed, Failed to); fix the cause it shows, never guess. Builds keep running if KesherAI restarts: when the user says continue after a restart, call the same tool again and it joins the running build. 7) unreal_plugins lists the project's and engine's plugins (version, engine built for, source or not); unreal_port_plugin rebuilds one with source for another engine version and installs it. If a knowledge base named Library: Unreal Engine C++ API exists (Library store), look up classes and functions there with search_knowledge before writing code that uses them, instead of guessing. Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
+  // Kept short (it goes with every message while a project is open); each tool's own description carries its details.
+  "Unreal: work on the user's project with the unreal_ tools; never say something was made, compiled or packaged unless a tool result here shows it. Loop: unreal_status → (unreal_create_project | unreal_use_project) → unreal_list_source/unreal_read_source → unreal_write_source (fix what it flags at once) → unreal_compile until it compiles. Game logic in C++, spawning what it needs in code (engine shapes /Engine/BasicShapes/Cube.Cube with BasicShapeMaterial and a dynamic \"Color\"); text with AHUD::DrawText; touch through APlayerController. Light for phones: few objects, no dynamic shadows or post effects. If a knowledge base \"Library: Unreal Engine C++ API\" exists, look classes up with search_knowledge instead of guessing. unreal_python runs editor Python headless; unreal_open_editor shows it (5.8: its MCP tools appear). unreal_package builds for android/windows when asked (long; joins a running build after a restart; a game closing on the phone → android_run_on_phone). unreal_plugins / unreal_port_plugin for plugins. Never install system software; say what is missing and stop. End with exactly what changed.";
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
@@ -374,7 +376,14 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         if (content.length > 300_000) throw new Error("That file is too long.");
         await mkdir(dirname(abs), { recursive: true });
         await writeFile(abs, content);
-        return { output: `Wrote ${rel} (${content.length} characters). Compile with unreal_compile.` };
+        // The usual compile-breakers, said now instead of after a build (a minute, and a long log).
+        let buildCs: string | undefined;
+        if (/\.(h|hpp|cpp)$/i.test(abs)) {
+          const mod = rel.replace(/\\/g, "/").split("/")[1];
+          if (mod) buildCs = await readFile(join(p.dir, "Source", mod, `${mod}.Build.cs`), "utf8").catch(() => undefined);
+        }
+        const issues = /\.(h|hpp|cpp)$/i.test(abs) ? lintUnrealSource(rel, content, buildCs) : [];
+        return { output: `Wrote ${rel} (${content.length} characters).${issues.length ? `\nFix these before compiling (they would fail the build):\n- ${issues.join("\n- ")}` : " Compile with unreal_compile."}` };
       },
     },
     {
@@ -390,11 +399,13 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         await writeFile(log, `> Build.bat ${name}Editor Win64 Development\n`);
         const r = await longRun(`unreal-compile:${p.file}`, join(e.path, "Engine", "Build", "BatchFiles", "Build.bat"), [`${name}Editor`, "Win64", "Development", `-Project=${p.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000, log, signal: ctx?.signal, progress: ctx?.progress });
         if (r.code === 0) return { output: `${r.note}Compiled with no errors.\n${cut(r.out.split("\n").filter((l) => /warning/i.test(l)).join("\n"))}` };
-        const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|fatal/i.test(l));
+        // Each distinct error once, short paths: a broken header repeats the same error in every file including it.
+        const short = shortErrors(r.out);
+        const errors = short.lines;
         const why = /SDK validation failed|Sdk: not found/i.test(r.out)
           ? "The Windows SDK is missing (not a problem in the code). STOP and ask the user to install it: Visual Studio Installer → Modify → 'Game development with C++' and a Windows 11 SDK. Do not install it yourself.\n"
           : /Live ?Coding/i.test(r.out) ? "The editor is open with Live Coding: close the editor (or compile there with Ctrl+Alt+F11), then compile again.\n" : !errors.some((l) => /\.(h|cpp)\(\d+/i.test(l)) && /(Visual Studio|MSVC|compiler|toolchain).{0,60}(not found|not installed|missing|could not be found)/i.test(r.out) ? "Visual Studio's C++ tools were not found. STOP and ask the user to install Visual Studio with 'Game development with C++'. Do not install it yourself.\n" : errors.length ? "These are errors in the code: fix the files.\n" : "";
-        return { output: `${r.note}Compile FAILED (exit ${r.code}). ${why}Errors (fix them, write the files again, compile again):\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
+        return { output: `${r.note}Compile FAILED (exit ${r.code}). ${why}Errors${short.total > errors.length ? ` (the first ${errors.length} of ${short.total} different ones)` : ""} (fix them, write the files again, compile again; full log ${log}):\n${cut((errors.length ? errors : r.out.split("\n").slice(-40)).join("\n"))}` };
       },
     },
     {
