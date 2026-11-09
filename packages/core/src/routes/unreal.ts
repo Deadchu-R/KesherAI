@@ -7,6 +7,8 @@ import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
+import { modelTurnFor } from "../conversations.js";
+import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
@@ -125,6 +127,38 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(502).send({ error: (err as Error).message });
       } finally {
         testing = false;
+      }
+    });
+  }
+
+  // The Blueprint in Verse (Unreal 6 / UEFN), translated by the chosen model from the graph as code and the first draft.
+  if (kind === "unreal") {
+    app.post<{ Body: { path?: string; graph?: string; draft?: string; model?: string } }>(`${base}/verse`, async (req, reply) => {
+      const path = String(req.body?.path ?? "");
+      const picked = typeof req.body?.model === "string" ? req.body.model : "";
+      const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
+      if (!path || !chat) return reply.code(400).send({ error: "Choose a Blueprint and a chat model." });
+      try {
+        const { graph } = await b.graph(path);
+        const g = graph.graphs.find((x) => x.name === req.body?.graph) ?? graph.graphs[0];
+        if (!g) return reply.code(400).send({ error: "The Blueprint has no graph." });
+        const code = codeText(blueprintToCode(g.nodes as CodeNode[])).slice(0, 6000);
+        const prompt = [
+          `Translate this Unreal Blueprint (${graph.name}, parent ${graph.parent ?? "Actor"}) into Verse, the gameplay language of Unreal 6 and UEFN.`,
+          "The Blueprint as code (one line per node, in the order the exec wires run):",
+          code,
+          "",
+          "A mechanical first draft (may be wrong):",
+          String(req.body?.draft ?? "").slice(0, 6000),
+          "",
+          "Rules: a class `name_device := class(creative_device):` with `using { /Fortnite.com/Devices }` and `using { /Verse.org/Simulation }`; BeginPlay → `OnBegin<override>()<suspends>:void=`; Print String → Print(\"...\"); Delay → Sleep(seconds) (only inside <suspends> functions); Branch → if (Condition?): / else:; variables → `var Name:type = value` fields and `set Name = value`; failure contexts use `?` and `[]`. Use only Verse APIs you are sure exist; where Blueprint has no Verse equivalent, keep a `# check:` comment that says what to do.",
+          "Answer with the Verse code only, in one code block.",
+        ].join("\n");
+        const r = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: prompt }], tools: [] }, AbortSignal.timeout(180_000), () => undefined);
+        const verse = (/```(?:verse)?\s*\n([\s\S]*?)```/.exec(r.text)?.[1] ?? r.text).trim();
+        return { verse };
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
       }
     });
   }

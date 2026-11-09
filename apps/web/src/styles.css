@@ -1568,3 +1568,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .box-bar .web-chip > span { display: none; }
   .box-bar .web-chip { width: 32px; padding: 0; justify-content: center; }
 }
+.bp-code-lang { gap: 2px; }
+.bp-code-lang button { padding: 2px 10px; font-size: 12px; }
+.bp-code-lang button.on { background: var(--accent, #7c7cff); color: var(--accent-ink, #fff); }
+.bp-code-ai { white-space: pre-wrap; overflow: auto; max-height: 60vh; font-size: 12.5px; padding: 10px; background: var(--panel-2, #1b1c20); border-radius: 8px; }
