@@ -4,6 +4,7 @@ import { extname, join } from "node:path";
 import type { AgentTool, ToolContext } from "./tools.js";
 import { IGNORED_DIRS, displayPath } from "./workspace.js";
 import { runShell } from "./shell.js";
+import { checkUnrealFolder } from "./unreal-cpp-check.js";
 
 /**
  * Two tools that help agents work in real projects, especially with small
@@ -154,7 +155,7 @@ export const checkCodeTool: AgentTool = {
   risk: "exec",
   spec: {
     name: "check_code",
-    description: "Check the project for errors with its own compiler or checker (TypeScript, .NET/Unity C#, C/C++, Rust, Go, Python). Call it after you change code, and fix what it reports. Returns the errors with file and line.",
+    description: "Check the project for errors with its own compiler or checker (TypeScript, .NET/Unity C#, C/C++, Rust, Go, Python), and Unreal C++ against the engine's rules (generated.h names, includes, delegates, class prefixes; no engine build needed). Call it after you change code, and fix what it reports. Returns the errors with file and line.",
     inputSchema: { type: "object", properties: { purpose: { type: "string", description: "One short sentence for the user, in their language." } } },
   },
   commandOf() {
@@ -169,7 +170,11 @@ export const checkCodeTool: AgentTool = {
     const root = rootOf(ctx);
     const top = await readdir(root).catch(() => [] as string[]);
     const c = checkerFor(root, top);
-    if (!c) return { output: "No checker found for this project (no tsconfig.json, .sln/.csproj, compile_commands.json, Cargo.toml, go.mod or Python files)." };
+    // Unreal C++: the fast rules first (generated.h names, includes, delegates, A/U prefixes), with or without a compiler here.
+    const ue = await checkUnrealFolder(root).catch(() => undefined);
+    const ueText = ue ? (ue.length ? `Unreal C++ rules: ${ue.length} problem(s) — fix every error:\n${ue.slice(0, 60).join("\n")}` : "Unreal C++ rules: no problems found.") : "";
+    if (!c) return { output: ueText || "No checker found for this project (no tsconfig.json, .sln/.csproj, compile_commands.json, Cargo.toml, go.mod or Python files)." };
+    if (ue?.length) return { output: `${ueText}\n(Fix these first; then check_code runs the compiler too.)` };
     let command = c.command;
     if (command === "CLANGCHECK") {
       const changed = (ctx as ToolContext & { changedFiles?: string[] }).changedFiles?.filter((f) => /\.(c|cc|cpp)$/i.test(f)) ?? [];

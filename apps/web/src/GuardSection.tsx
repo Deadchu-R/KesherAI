@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 interface Reading { index: number; name: string; temp: number; util: number; memUsed: number; memTotal: number; power?: number; powerLimit?: number }
-interface GuardConfig { enabled: boolean; maxTemp: number; resumeTemp: number; unloadAfterMinutes: number; gentle: boolean }
+interface GuardConfig { enabled: boolean; maxTemp: number; resumeTemp: number; unloadAfterMinutes: number; gentle: boolean; maxRamPercent?: number; maxCpuPercent?: number; maxCpuTemp?: number }
 /** What `/api/guard` answers. */
 export interface GuardStatus {
   config: GuardConfig;
   cards: Reading[];
   paused: boolean;
   cooling: boolean;
+  system?: { ramUsed: number; ramTotal: number; cpu: number; cpuTemp?: number };
+  systemHold?: string;
   waiting: number;
   running: number;
   lastUnload?: { what: string; at: string };
@@ -91,6 +95,19 @@ export function GuardSection() {
         <p className="muted small">{t("guardNoCards")}</p>
       )}
 
+      {g.system && (
+        <ul className="guard-cards">
+          <li>
+            <strong>{L("המחשב", "This computer")}</strong>
+            <span className="row small">
+              <span>{L("זיכרון", "Memory")} <b>{gb(g.system.ramUsed)} / {gb(g.system.ramTotal)} GB</b> ({Math.round((g.system.ramUsed / Math.max(1, g.system.ramTotal)) * 100)}%)</span>
+              <span>{L("מעבד", "Processor")} <b>{g.system.cpu}%</b></span>
+              {g.system.cpuTemp !== undefined ? <span><TempBar temp={g.system.cpuTemp} max={c.maxCpuTemp || 95} /> <b>{g.system.cpuTemp}°C</b></span> : c.maxCpuTemp ? <span className="muted">{L("Windows לא מוסר את טמפרטורת המעבד במחשב הזה", "This computer does not report the processor's temperature")}</span> : null}
+            </span>
+          </li>
+        </ul>
+      )}
+
       <div className="row">
         {g.paused ? (
           <button type="button" className="primary" onClick={() => void run("/api/guard/pause", { on: false })}>▶ {t("guardResume")}</button>
@@ -99,7 +116,7 @@ export function GuardSection() {
         )}
         <button type="button" disabled={g.running > 0} onClick={() => void run("/api/guard/free")}>{t("guardFree")}</button>
         <span className="muted small">
-          {g.cooling ? `🌡 ${t("guardCooling", { temp: c.resumeTemp })}` : g.paused ? t("guardPausedNote") : g.running ? t("guardRunning", { n: g.running }) : ""}
+          {g.cooling ? `🌡 ${t("guardCooling", { temp: c.resumeTemp })}` : g.systemHold ? `⏳ ${L("עבודה חדשה ממתינה", "New work waits")}: ${g.systemHold}` : g.paused ? t("guardPausedNote") : g.running ? t("guardRunning", { n: g.running }) : ""}
           {g.waiting ? ` · ${t("guardWaiting", { n: g.waiting })}` : ""}
         </span>
       </div>
@@ -119,6 +136,25 @@ export function GuardSection() {
             {[0, 5, 10, 20, 30, 60, 120].map((m) => <option key={m} value={m}>{m ? t("guardMinutes", { n: m }) : t("guardNever")}</option>)}
           </select>
         </label>
+        <label className="field">
+          <span>{L("הגבלת זיכרון (RAM)", "Memory (RAM) limit")}</span>
+          <select value={c.maxRamPercent ?? 0} onChange={(e) => set({ maxRamPercent: Number(e.target.value) })}>
+            {[0, 70, 80, 85, 90, 95].map((n) => <option key={n} value={n}>{n ? L(`עד ${n}%`, `Up to ${n}%`) : L("בלי הגבלה", "No limit")}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>{L("הגבלת מעבד", "Processor limit")}</span>
+          <select value={c.maxCpuPercent ?? 0} onChange={(e) => set({ maxCpuPercent: Number(e.target.value) })}>
+            {[0, 50, 60, 70, 80, 90].map((n) => <option key={n} value={n}>{n ? L(`עד ${n}%`, `Up to ${n}%`) : L("בלי הגבלה", "No limit")}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>{L("טמפרטורת מעבד מקסימלית", "Highest processor temperature")}</span>
+          <select value={c.maxCpuTemp ?? 0} onChange={(e) => set({ maxCpuTemp: Number(e.target.value) })}>
+            {[0, 70, 75, 80, 85, 90, 95].map((n) => <option key={n} value={n}>{n ? `${n}°C` : L("בלי הגבלה", "No limit")}</option>)}
+          </select>
+        </label>
+        <p className="muted small">{L("כשעוברים גבול, עבודה מקומית חדשה ממתינה (מה שכבר רץ מסתיים), וכשהזיכרון מלא מודלים לא בשימוש נפרקים. חלוקת עבודה בין המחשבים מדלגת על מחשב חם או עמוס ובוחרת לכל מחשב מודל שמתאים לחומרה שלו.", "Past a limit, new local work waits (what runs finishes), and when memory is full idle models are unloaded. Splitting work across your computers skips a hot or busy one and gives each computer a model that fits its hardware.")}</p>
         <label className="row">
           <input type="checkbox" checked={c.gentle} onChange={(e) => set({ gentle: e.target.checked })} />
           <span>{t("guardGentle")}</span>
@@ -133,10 +169,10 @@ export function GuardSection() {
 /** A bar across the app while local work is held (paused, or a card is cooling), with Resume. */
 export function GuardBanner() {
   const [g, setG] = useGuard(8000);
-  if (!g || !g.config.enabled || (!g.paused && !g.cooling)) return null;
+  if (!g || !g.config.enabled || (!g.paused && !g.cooling && !g.systemHold)) return null;
   return (
     <p className="guard-banner row">
-      <span className="grow">{g.cooling ? `🌡 ${t("guardCooling", { temp: g.config.resumeTemp })}` : `⏸ ${t("guardPausedNote")}`}{g.waiting ? ` · ${t("guardWaiting", { n: g.waiting })}` : ""}</span>
+      <span className="grow">{g.cooling ? `🌡 ${t("guardCooling", { temp: g.config.resumeTemp })}` : g.systemHold ? `⏳ ${L("עבודה חדשה ממתינה", "New work waits")}: ${g.systemHold}` : `⏸ ${t("guardPausedNote")}`}{g.waiting ? ` · ${t("guardWaiting", { n: g.waiting })}` : ""}</span>
       {g.paused && <button type="button" className="primary" onClick={() => void api<GuardStatus>("/api/guard/pause", { method: "POST", body: { on: false } }).then(setG)}>▶ {t("guardResume")}</button>}
     </p>
   );

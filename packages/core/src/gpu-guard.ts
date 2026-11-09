@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { setPriority, constants } from "node:os";
+import { cpus, freemem, setPriority, constants, totalmem } from "node:os";
+import { readFile } from "node:fs/promises";
 
 /**
  * Keeps the graphics card safe and the computer pleasant to use while local
@@ -47,10 +48,78 @@ export interface GuardConfig {
   unloadAfterMinutes: number;
   /** Run the engines at low priority. */
   gentle: boolean;
+  /** New local work waits while the computer's memory (RAM) use is at or above this percent; 0 = no limit. Idle models are unloaded to free it. */
+  maxRamPercent: number;
+  /** New local work waits while the processor is this busy (percent, averaged over a few readings); 0 = no limit. */
+  maxCpuPercent: number;
+  /** New local work waits while the processor is this hot (°C); 0 = no limit. Goes on 7 °C lower. */
+  maxCpuTemp: number;
+}
+
+/** The computer's own readings (memory, processor, processor temperature). */
+export interface SystemReading {
+  ramUsed: number;
+  ramTotal: number;
+  /** Percent, averaged over the last readings. */
+  cpu: number;
+  /** °C, when the system tells it (Windows thermal zones, Linux /sys); undefined otherwise. */
+  cpuTemp?: number;
+}
+
+/** Reads the processor's temperature; replaceable in tests. */
+export type CpuTempReader = () => Promise<number | undefined>;
+
+/**
+ * The processor's temperature without administrator rights: Windows' thermal
+ * zone counters (tenths of Kelvin), Linux's /sys thermal zones. Many desktops
+ * do not report it; then it is undefined and the limit is not used.
+ */
+export const realCpuTemp: CpuTempReader = async () => {
+  if (process.platform === "win32") {
+    const out = await new Promise<string>((resolve) =>
+      execFile(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction SilentlyContinue | Measure-Object -Property HighPrecisionTemperature -Maximum).Maximum"],
+        { timeout: 8000, windowsHide: true },
+        (err, o) => resolve(err ? "" : o),
+      ),
+    );
+    const tenthsK = Number(out.trim());
+    if (!Number.isFinite(tenthsK) || tenthsK <= 0) return undefined;
+    const c = tenthsK / 10 - 273.15;
+    return c > 5 && c < 130 ? Math.round(c) : undefined;
+  }
+  if (process.platform === "linux") {
+    let best: number | undefined;
+    for (let i = 0; i < 12; i++) {
+      const v = Number((await readFile(`/sys/class/thermal/thermal_zone${i}/temp`, "utf8").catch(() => "")).trim());
+      if (Number.isFinite(v) && v > 0) best = Math.max(best ?? 0, Math.round(v / 1000));
+    }
+    return best;
+  }
+  return undefined;
+};
+
+/**
+ * Why new work should wait because of the computer itself (not the graphics card), or nothing.
+ * Hysteresis: once holding, memory goes on 5 points lower, the processor 15 points lower, its temperature 7 °C lower.
+ *
+ * @param r - The readings.
+ * @param cfg - The limits.
+ * @param was - The previous reason.
+ * @returns The reason in words, or undefined.
+ */
+export function systemHold(r: SystemReading, cfg: Pick<GuardConfig, "maxRamPercent" | "maxCpuPercent" | "maxCpuTemp">, was?: string): string | undefined {
+  const ram = r.ramTotal ? (r.ramUsed / r.ramTotal) * 100 : 0;
+  const slack = (n: number) => (was ? n : 0);
+  if (cfg.maxRamPercent > 0 && ram >= cfg.maxRamPercent - slack(5)) return `memory (RAM) is ${Math.round(ram)}% used (limit ${cfg.maxRamPercent}%)`;
+  if (cfg.maxCpuPercent > 0 && r.cpu >= cfg.maxCpuPercent - slack(15)) return `the processor is ${Math.round(r.cpu)}% busy (limit ${cfg.maxCpuPercent}%)`;
+  if (cfg.maxCpuTemp > 0 && r.cpuTemp !== undefined && r.cpuTemp >= cfg.maxCpuTemp - slack(7)) return `the processor is ${r.cpuTemp} °C (limit ${cfg.maxCpuTemp} °C)`;
+  return undefined;
 }
 
 /** The defaults: safe for every NVIDIA card (they slow themselves down near 90 °C). */
-export const GUARD_DEFAULTS: GuardConfig = { enabled: true, maxTemp: 83, resumeTemp: 75, unloadAfterMinutes: 20, gentle: false };
+export const GUARD_DEFAULTS: GuardConfig = { enabled: true, maxTemp: 83, resumeTemp: 75, unloadAfterMinutes: 20, gentle: false, maxRamPercent: 0, maxCpuPercent: 0, maxCpuTemp: 0 };
 
 /** What Settings and the status bar show. */
 export interface GuardStatus {
@@ -60,6 +129,10 @@ export interface GuardStatus {
   paused: boolean;
   /** A card is too hot; new work waits. */
   cooling: boolean;
+  /** The computer's memory, processor and processor temperature. */
+  system: SystemReading;
+  /** Why new work waits because of the computer itself (memory, processor), if it does. */
+  systemHold?: string;
   /** Requests waiting right now. */
   waiting: number;
   /** Requests running right now. */
@@ -154,6 +227,11 @@ export class GpuGuard {
   private cards: GpuReading[] = [];
   private paused = false;
   private cooling = false;
+  private sys: SystemReading = { ramUsed: 0, ramTotal: totalmem(), cpu: 0 };
+  private sysHold?: string;
+  private cpuSamples: number[] = [];
+  private lastCpu?: { idle: number; total: number };
+  private lastTempAt = 0;
   private waiting = 0;
   private running = 0;
   private lastActive = Date.now();
@@ -172,7 +250,33 @@ export class GpuGuard {
     private readonly config: () => GuardConfig,
     private readonly smi: SmiReader = realSmi,
     private readonly notify: (text: string) => void = () => undefined,
+    private readonly cpuTemp: CpuTempReader = realCpuTemp,
+    private readonly memory: () => { used: number; total: number } = () => ({ used: totalmem() - freemem(), total: totalmem() }),
   ) {}
+
+  /** Memory and processor now (the processor averaged over the last 4 readings). */
+  private async readSystem(cfg: GuardConfig): Promise<void> {
+    const mem = this.memory();
+    let idle = 0;
+    let total = 0;
+    for (const c of cpus()) {
+      idle += c.times.idle;
+      total += c.times.user + c.times.nice + c.times.sys + c.times.idle + c.times.irq;
+    }
+    if (this.lastCpu && total > this.lastCpu.total) {
+      const busy = 100 - ((idle - this.lastCpu.idle) / (total - this.lastCpu.total)) * 100;
+      this.cpuSamples = [...this.cpuSamples.slice(-3), Math.max(0, Math.min(100, busy))];
+    }
+    this.lastCpu = { idle, total };
+    const cpu = this.cpuSamples.length ? this.cpuSamples.reduce((a, b) => a + b, 0) / this.cpuSamples.length : 0;
+    // The temperature costs a process start on Windows: read it only when its limit is on, at most every 15 s.
+    let cpuTemp = this.sys.cpuTemp;
+    if (cfg.maxCpuTemp > 0 && Date.now() - this.lastTempAt > 15_000) {
+      this.lastTempAt = Date.now();
+      cpuTemp = await this.cpuTemp().catch(() => undefined);
+    }
+    this.sys = { ramUsed: mem.used, ramTotal: mem.total, cpu: Math.round(cpu), ...(cpuTemp !== undefined ? { cpuTemp } : {}) };
+  }
 
   /**
    * Adds an engine the guard may unload when idle.
@@ -187,7 +291,7 @@ export class GpuGuard {
   start(): void {
     const tick = async () => {
       await this.check().catch(() => undefined);
-      const busy = this.running > 0 || this.waiting > 0 || this.cooling;
+      const busy = this.running > 0 || this.waiting > 0 || this.cooling || !!this.sysHold;
       this.timer = setTimeout(() => void tick(), busy ? 3000 : 15_000);
       this.timer.unref?.();
     };
@@ -219,6 +323,17 @@ export class GpuGuard {
     }
     if (!this.cooling && was) this.release();
 
+    // The computer itself: memory, processor, processor temperature.
+    await this.readSystem(cfg).catch(() => undefined);
+    const hadSys = this.sysHold;
+    this.sysHold = cfg.enabled ? systemHold(this.sys, cfg, hadSys) : undefined;
+    if (this.sysHold && !hadSys) {
+      this.notify(`New local work waits: ${this.sysHold}.`);
+      // Short of memory: free what nobody is using.
+      if (/memory/.test(this.sysHold) && this.running === 0) await this.freeNow();
+    }
+    if (!this.sysHold && hadSys) this.release();
+
     if (cfg.enabled && cfg.unloadAfterMinutes > 0 && this.running === 0 && this.waiting === 0 && Date.now() - this.lastActive > cfg.unloadAfterMinutes * 60_000) {
       await this.freeNow();
     }
@@ -248,7 +363,7 @@ export class GpuGuard {
   }
 
   private get holding(): boolean {
-    return this.paused || this.cooling;
+    return this.paused || this.cooling || !!this.sysHold;
   }
 
   /**
@@ -327,6 +442,8 @@ export class GpuGuard {
       cards: this.cards,
       paused: this.paused,
       cooling: this.cooling,
+      system: this.sys,
+      ...(this.sysHold ? { systemHold: this.sysHold } : {}),
       waiting: this.waiting,
       running: this.running,
       lastActive: new Date(this.lastActive).toISOString(),

@@ -12,7 +12,7 @@ import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "./config.js";
 import type { AssetStore } from "./assets.js";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
-import { runSplit, type SplitWorker } from "./split-task.js";
+import { pickForHardware, runSplit, type RemoteLoad, type SplitWorker } from "./split-task.js";
 import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
@@ -449,8 +449,23 @@ export class ConversationManager {
         const away = registry.awayReason(provider.id);
         let failed = "";
         const models = away ? [] : await provider.listModels(AbortSignal.any([signal, AbortSignal.timeout(8000)])).catch((e: Error) => ((failed = e.message), []));
-        const pick = models.find((m) => m.id === current) ?? models.find(chatLike);
-        if (!pick) skipped.push(`${name}: ${away ? "asleep or turned off" : failed ? "not reachable (asleep, off, or KesherAI closed)" : "no chat model loaded"}`);
+        if (away || failed) {
+          skipped.push(`${name}: ${away ? "asleep or turned off" : "not reachable (asleep, off, or KesherAI closed)"}`);
+          continue;
+        }
+        // Its hardware and load now (its guard: temperatures, memory, how busy): a hot or busy computer is skipped,
+        // and the model is one that fits its free memory, so no computer is overloaded.
+        const cfg = devices.find((d) => d.provider.id === provider.id)?.config as { baseUrl?: string; apiKey?: string } | undefined;
+        const root = cfg?.baseUrl?.replace(/\/v1\/?$/, "");
+        const load = root
+          ? ((await fetch(`${root}/api/guard`, { headers: cfg?.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}, signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]) })
+              .then((r) => (r.ok ? r.json() : undefined))
+              .catch(() => undefined)) as RemoteLoad | undefined)
+          : undefined;
+        const chat = models.filter(chatLike);
+        const choice = pickForHardware(chat.map((m) => m.id), load, current);
+        const pick = choice.model ? chat.find((m) => m.id === choice.model) : undefined;
+        if (!pick) skipped.push(`${name}: ${choice.skip ?? "no chat model loaded"}`);
         if (pick) out.push({ name: provider.name.replace(/\s*\(your computer\)$/i, ""), modelId: pick.id, turn: modelTurnFor(registry, pick.id) });
       }
       return out;

@@ -145,6 +145,9 @@ export const KesherConfigSchema = z.object({
       resumeTemp: z.number().int().min(50).max(90).default(75),
       unloadAfterMinutes: z.number().int().min(0).max(1440).default(20),
       gentle: z.boolean().default(false),
+      maxRamPercent: z.number().int().min(0).max(98).default(0),
+      maxCpuPercent: z.number().int().min(0).max(100).default(0),
+      maxCpuTemp: z.number().int().min(0).max(105).default(0),
     })
     .prefault({}),
   /** Microsoft 365 Copilot (work or school account with a Copilot licence). */

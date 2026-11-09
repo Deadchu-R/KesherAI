@@ -109,3 +109,58 @@ export async function runSplit(
   );
   return results.map((r, i) => r ?? lastError.get(i) ?? { title: parts[i]!.title, computer: "", modelId: "", ok: false, text: "Stopped.", ms: 0 });
 }
+
+/** What another computer's guard says (its /api/guard), as much as choosing needs. */
+export interface RemoteLoad {
+  paused?: boolean;
+  cooling?: boolean;
+  systemHold?: string;
+  cards?: Array<{ temp: number; util: number; memUsed: number; memTotal: number }>;
+  system?: { ramUsed: number; ramTotal: number; cpu: number; cpuTemp?: number };
+}
+
+/** A model's size in billions of parameters, from its name ("Qwen3-4B-Q4_K_M" → 4, "30b" → 30). */
+export function paramsOf(id: string): number | undefined {
+  const m = /(?:^|[^a-z0-9.])(\d+(?:\.\d+)?)\s*b(?![a-z])/i.exec(id.replace(/[_/]/g, "-"));
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isFinite(n) && n > 0 && n < 2000 ? n : undefined;
+}
+
+/**
+ * Chooses which of a computer's models takes parts, by its hardware and how
+ * loaded it is now, so a weak or hot computer is never overloaded:
+ * it is skipped while it is paused, cooling, short of memory, too busy or its
+ * graphics card is over 85% busy; otherwise the biggest model that fits in its
+ * graphics memory (or, with no card, half its RAM), keeping a fifth free, at about 0.6 GB
+ * per billion parameters at the usual 4-bit size. The chat's own model wins
+ * when it fits.
+ *
+ * @param models - The computer's chat models (ids).
+ * @param load - Its guard's status (undefined: it did not say; then any model).
+ * @param preferred - The chat's model, used when it fits.
+ * @returns The model, or why the computer is skipped.
+ */
+export function pickForHardware(models: string[], load: RemoteLoad | undefined, preferred?: string): { model?: string; skip?: string } {
+  if (!models.length) return { skip: "no chat model loaded" };
+  if (load?.paused) return { skip: "its owner paused local work" };
+  if (load?.cooling) return { skip: "its graphics card is cooling down" };
+  if (load?.systemHold) return { skip: `busy: ${load.systemHold}` };
+  const cards = load?.cards ?? [];
+  if (cards.some((c) => c.util >= 85)) return { skip: "its graphics card is busy with other work" };
+  // What the computer can hold: its biggest card (or, with no card, half its RAM), keeping a fifth for context and the
+  // desktop. How busy it is right now is handled above (busy, hot, short of memory: skipped).
+  const vram = cards.length ? Math.max(...cards.map((c) => c.memTotal)) : 0;
+  const ram = load?.system?.ramTotal ?? 0;
+  const budget = ((cards.length ? vram : ram * 0.5) * 0.8) / 1024 ** 3;
+  if (!load || budget <= 0) return { model: preferred && models.includes(preferred) ? preferred : models[0]! };
+  const fits = (id: string) => {
+    const p = paramsOf(id);
+    return p === undefined || p * 0.6 <= budget;
+  };
+  if (preferred && models.includes(preferred) && fits(preferred)) return { model: preferred };
+  const sized = models.filter((m) => paramsOf(m) !== undefined && fits(m)).sort((a, b) => paramsOf(b)! - paramsOf(a)!);
+  if (sized.length) return { model: sized[0]! };
+  const unknown = models.find((m) => paramsOf(m) === undefined);
+  return unknown ? { model: unknown } : { skip: `its models are too big for its memory (${budget.toFixed(1)} GB usable)` };
+}
+

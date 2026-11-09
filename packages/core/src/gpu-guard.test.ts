@@ -107,3 +107,30 @@ test("the registry sends only local providers' work through the gate", async () 
   for await (const _ of registry.get("away")!.chat!({} as never)) void _;
   assert.deepEqual(calls, ["before here", "chat here", "after", "before here", "image here", "after", "chat away"]);
 });
+
+test("memory, processor and processor temperature limits hold new work, with room before going on", async () => {
+  const { systemHold } = await import("./gpu-guard.js");
+  const GB = 1024 ** 3;
+  const cfg = { maxRamPercent: 90, maxCpuPercent: 0, maxCpuTemp: 85 };
+  assert.equal(systemHold({ ramUsed: 8 * GB, ramTotal: 16 * GB, cpu: 99 }, cfg), undefined, "processor limit off");
+  assert.match(systemHold({ ramUsed: 15 * GB, ramTotal: 16 * GB, cpu: 10 }, cfg) ?? "", /memory \(RAM\) is 94%/);
+  assert.match(systemHold({ ramUsed: 14.1 * GB, ramTotal: 16 * GB, cpu: 10 }, cfg, "was") ?? "", /memory/, "goes on only 5 points lower");
+  assert.match(systemHold({ ramUsed: 4 * GB, ramTotal: 16 * GB, cpu: 10, cpuTemp: 88 }, cfg) ?? "", /88 °C/);
+  assert.equal(systemHold({ ramUsed: 4 * GB, ramTotal: 16 * GB, cpu: 10, cpuTemp: 77 }, cfg, "was"), undefined);
+  let mem = { used: 15.5 * GB, total: 16 * GB };
+  const notes: string[] = [];
+  const g = new GpuGuard(() => ({ ...GUARD_DEFAULTS, maxRamPercent: 90 }), async () => { throw new Error("no card"); }, (t) => notes.push(t), async () => undefined, () => mem);
+  await g.check();
+  assert.match(g.status().systemHold ?? "", /memory/);
+  const started = g.before("local");
+  let ran = false;
+  void started.then(() => (ran = true));
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(ran, false, "waits while memory is short");
+  mem = { used: 6 * GB, total: 16 * GB };
+  await g.check();
+  await started;
+  g.after();
+  assert.equal(ran, true);
+  assert.match(notes.join("\n"), /New local work waits: memory/);
+});

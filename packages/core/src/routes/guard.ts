@@ -27,6 +27,11 @@ export async function guardRoutes(app: FastifyInstance, s: KesherServices): Prom
     g.resumeTemp = int(b.resumeTemp, 50, 90) ?? g.resumeTemp;
     if (g.resumeTemp > g.maxTemp - 3) g.resumeTemp = g.maxTemp - 3;
     g.unloadAfterMinutes = int(b.unloadAfterMinutes, 0, 1440) ?? g.unloadAfterMinutes;
+    // 0 turns a limit off; otherwise a sensible range (a limit too low would hold everything).
+    const limit = (v: unknown, lo: number, hi: number, cur: number) => (v === 0 ? 0 : int(v, lo, hi) ?? cur);
+    g.maxRamPercent = limit(b.maxRamPercent, 50, 98, g.maxRamPercent);
+    g.maxCpuPercent = limit(b.maxCpuPercent, 40, 100, g.maxCpuPercent);
+    g.maxCpuTemp = limit(b.maxCpuTemp, 60, 105, g.maxCpuTemp);
     await s.saveConfig();
     await s.guard.check().catch(() => undefined);
     return s.guard.status();
