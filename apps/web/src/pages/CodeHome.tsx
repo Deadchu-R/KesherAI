@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ComposerBar } from "../ComposerBar";
+import { SelfWorkPanel } from "../SelfWorkPanel";
 import { useChatAttach } from "../ChatAttach";
 import { useWebSearch } from "../WebToggle";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
@@ -171,6 +172,7 @@ export function CodeHome() {
         </div>
       </form>
       {folder && !typing && <p className="muted small code-where" dir="ltr">{folder}</p>}
+      <SelfWorkPanel folder={folder} />
       {sessions.length > 0 && (
         <section className="code-recent">
           <h2 className="small muted">{L("סשנים אחרונים", "Recent sessions")}</h2>

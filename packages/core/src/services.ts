@@ -1,3 +1,4 @@
+import type { SelfWork } from "./self-work.js";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { DownloadManager } from "@kesher/downloads";
 import type { KesherConfig, DataPaths } from "./config.js";
@@ -125,6 +126,8 @@ export interface KesherServices {
   pipelines: Pipelines;
   /** Pipelines and prompts on a schedule. */
   routines: Routines;
+  /** KesherAI working on a git project by itself (set once the chats exist). */
+  selfWork?: SelfWork;
   /** KesherAI's managed ComfyUI. */
   comfy: ComfyManager;
   /** Paired devices' own keys (set once the server is built). */

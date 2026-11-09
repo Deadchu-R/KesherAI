@@ -1575,3 +1575,12 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .bp-code-lang button { padding: 2px 10px; font-size: 12px; }
 .bp-code-lang button.on { background: var(--accent, #7c7cff); color: var(--accent-ink, #fff); }
 .bp-code-ai { white-space: pre-wrap; overflow: auto; max-height: 60vh; font-size: 12.5px; padding: 10px; background: var(--panel-2, #1b1c20); border-radius: 8px; }
+
+/* Self-work on the code screen. */
+.self-work { margin: 16px auto 0; width: min(720px, 100%); border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel); }
+.self-work-head { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; background: transparent; border: 0; color: inherit; font: inherit; text-align: start; }
+.self-work-body { display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px; }
+.self-work-body textarea { width: 100%; resize: vertical; }
+.self-work-body .row.wrap { flex-wrap: wrap; gap: 8px; align-items: center; }
+.self-work-body input.grow { flex: 1 1 180px; min-width: 0; }
+.self-work-items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }

@@ -63,6 +63,9 @@ import { managedPolicy, policyCheck } from "./business.js";
 import { copilotRoutes } from "./routes/copilot.js";
 import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { guardRoutes } from "./routes/guard.js";
+import { selfWorkRoutes } from "./routes/self-work.js";
+import { SelfWork } from "./self-work.js";
+import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
@@ -688,6 +691,21 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
   };
   stopConversation = (id) => services.conversations.stop(id);
+  // Self-work: KesherAI works on a git project by itself, on its own branch, item by item.
+  const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
+    createChat: async (repo, title, modelId) => (await services.conversations.create({ kind: "code", workspace: repo, mode: "auto", title, ...(modelId ? { modelId } : {}) })).id,
+    send: async (id, text) => void (await services.conversations.send(id, text)),
+    state: async (id) => {
+      const opened = await services.conversations.open(id);
+      const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");
+      return { status: opened?.session.info().status ?? "error", last: last && last.type === "assistant" ? last.text : "" };
+    },
+    git: (repo, args) => runIn(repo, "git", args, false),
+    check: (repo, command) => runIn(repo, command, [], true),
+    notify: async (title, body, path) => void (await notifier.send({ title, body, path, tags: ["robot"] }).catch(() => undefined)),
+  });
+  services.selfWork = selfWork;
+  void selfWork.load().catch(() => undefined);
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
@@ -945,6 +963,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
+  await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);
   await unityRoutes(app, services);
   await copilotRoutes(app, services);
