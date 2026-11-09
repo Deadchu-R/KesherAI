@@ -49,6 +49,16 @@ function GraphView({ nodes, unity = false }: { nodes: GNode[]; unity?: boolean }
       const h = HEAD + Math.max(ins.length, outs.length, 1) * ROW + 8;
       return { n, x: n.x * SCALE - minX + 20, y: n.y * SCALE - minY + 20, h, ins, outs };
     });
+    // Nodes that sit on top of each other (a new node placed where another is) move right until they are clear,
+    // so every node and pin can be read (found on the phone: a new PrintString covered BeginPlay).
+    const hit = (a: (typeof boxes)[number], b: (typeof boxes)[number]) => a.x < b.x + W + 12 && b.x < a.x + W + 12 && a.y < b.y + b.h + 12 && b.y < a.y + a.h + 12;
+    for (let i = 1; i < boxes.length; i++) {
+      for (let guard = 0; guard < 50; guard++) {
+        const other = boxes.slice(0, i).find((b) => hit(b, boxes[i]!));
+        if (!other) break;
+        boxes[i]!.x = other.x + W + 40;
+      }
+    }
     const at = new Map<string, { x: number; y: number }>();
     for (const b of boxes) {
       b.ins.forEach((p, i) => at.set(`${b.n.id}:${p.name}`, { x: b.x, y: b.y + HEAD + i * ROW + ROW / 2 }));
@@ -70,6 +80,70 @@ function GraphView({ nodes, unity = false }: { nodes: GNode[]; unity?: boolean }
     const height = Math.max(...boxes.map((b) => b.y + b.h)) + 40;
     return { boxes, links, width, height };
   }, [nodes]);
+
+  // Zoom and pan, like Unreal's graph editor and React Flow: wheel or pinch to zoom, drag to move,
+  // buttons for + / − / fit. It opens fitted to the frame, so the whole graph shows on a phone too.
+  const frame = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; k: number } | null>(null);
+  const fit = () => {
+    const el = frame.current;
+    if (!el || !layout) return;
+    const r = el.getBoundingClientRect();
+    const k = Math.min(1.5, Math.max(0.15, Math.min(r.width / layout.width, r.height / layout.height)));
+    setView({ k, x: (r.width - layout.width * k) / 2, y: (r.height - layout.height * k) / 2 });
+  };
+  useEffect(fit, [layout]);
+  const zoomAt = (factor: number, cx?: number, cy?: number) =>
+    setView((v) => {
+      const r = frame.current?.getBoundingClientRect();
+      const px = cx ?? (r ? r.width / 2 : 0);
+      const py = cy ?? (r ? r.height / 2 : 0);
+      const k = Math.min(3, Math.max(0.1, v.k * factor));
+      return { k, x: px - ((px - v.x) * k) / v.k, y: py - ((py - v.y) * k) / v.k };
+    });
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    // Not passive, so the page does not scroll while the graph zooms.
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [layout]);
+  const local = (e: React.PointerEvent) => {
+    const r = frame.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const down = (e: React.PointerEvent) => {
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    pointers.current.set(e.pointerId, local(e));
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), k: view.k };
+    }
+  };
+  const move = (e: React.PointerEvent) => {
+    const prev = pointers.current.get(e.pointerId);
+    if (!prev) return;
+    const now = local(e);
+    pointers.current.set(e.pointerId, now);
+    if (pointers.current.size === 2 && pinch.current) {
+      const [a, b] = [...pointers.current.values()];
+      const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      const target = Math.min(3, Math.max(0.1, (pinch.current.k * d) / Math.max(1, pinch.current.d)));
+      zoomAt(target / view.k, (a!.x + b!.x) / 2, (a!.y + b!.y) / 2);
+    } else if (pointers.current.size === 1) setView((v) => ({ ...v, x: v.x + now.x - prev.x, y: v.y + now.y - prev.y }));
+  };
+  const up = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+  };
+
   if (!layout) return <p className="muted ue-empty">{L("הגרף ריק.", "This graph is empty.")}</p>;
   const pinRow = (p: Pin, i: number, x: number, y: number, side: "in" | "out") => (
     <g key={`${side}${i}`}>
@@ -81,22 +155,32 @@ function GraphView({ nodes, unity = false }: { nodes: GNode[]; unity?: boolean }
     </g>
   );
   return (
-    <svg className="ue-graph" width={layout.width} height={layout.height} role="img" aria-label={unity ? L("גרף Script Graph", "Script Graph") : L("גרף Blueprint", "Blueprint graph")}>
-      {layout.links.map((l, i) => <path key={i} d={l.d} stroke={l.color} strokeWidth={2} fill="none" opacity={0.85} />)}
-      {layout.boxes.map((b) => {
-        const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
-        return (
-          <g key={b.n.id}>
-            {b.n.comment && <text x={b.x} y={b.y - 6} className="ue-comment">💬 {b.n.comment}</text>}
-            <rect x={b.x} y={b.y} width={W} height={b.h} rx={7} fill="#1b1c20" stroke="#000" opacity={0.96} />
-            <path d={`M${b.x},${b.y + 7} a7,7 0 0 1 7,-7 h${W - 14} a7,7 0 0 1 7,7 v${HEAD - 7} h-${W} z`} fill={head} />
-            <text x={b.x + 9} y={b.y + 17} className="ue-title">{b.n.title.split("\n")[0]!.slice(0, 30)}</text>
-            {b.ins.map((p, i) => pinRow(p, i, b.x, b.y, "in"))}
-            {b.outs.map((p, i) => pinRow(p, i, b.x, b.y, "out"))}
-          </g>
-        );
-      })}
-    </svg>
+    <div className="ue-frame" ref={frame} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={fit}>
+      <svg className="ue-graph" width="100%" height="100%" role="img" aria-label={unity ? L("גרף Script Graph", "Script Graph") : L("גרף Blueprint", "Blueprint graph")}>
+        <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+          {layout.links.map((l, i) => <path key={i} d={l.d} stroke={l.color} strokeWidth={2} fill="none" opacity={0.85} />)}
+          {layout.boxes.map((b) => {
+            const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
+            return (
+              <g key={b.n.id}>
+                {b.n.comment && <text x={b.x} y={b.y - 6} className="ue-comment">💬 {b.n.comment.length > 40 ? `${b.n.comment.slice(0, 40)}…` : b.n.comment}</text>}
+                <rect x={b.x} y={b.y} width={W} height={b.h} rx={7} fill="#1b1c20" stroke="#000" opacity={0.96} />
+                <path d={`M${b.x},${b.y + 7} a7,7 0 0 1 7,-7 h${W - 14} a7,7 0 0 1 7,7 v${HEAD - 7} h-${W} z`} fill={head} />
+                <text x={b.x + 9} y={b.y + 17} className="ue-title">{b.n.title.split("\n")[0]!.slice(0, 30)}</text>
+                {b.ins.map((p, i) => pinRow(p, i, b.x, b.y, "in"))}
+                {b.outs.map((p, i) => pinRow(p, i, b.x, b.y, "out"))}
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+      <div className="ue-zoom" onPointerDown={(e) => e.stopPropagation()}>
+        <button type="button" onClick={() => zoomAt(1.25)} aria-label={L("הגדל", "Zoom in")} title={L("הגדל", "Zoom in")}>+</button>
+        <button type="button" onClick={() => zoomAt(0.8)} aria-label={L("הקטן", "Zoom out")} title={L("הקטן", "Zoom out")}>−</button>
+        <button type="button" onClick={fit} aria-label={L("הכל במסך", "Fit to screen")} title={L("הכל במסך", "Fit to screen")}>⤢</button>
+        <span className="muted small">{Math.round(view.k * 100)}%</span>
+      </div>
+    </div>
   );
 }
 

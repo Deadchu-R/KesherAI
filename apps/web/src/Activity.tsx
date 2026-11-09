@@ -12,10 +12,15 @@ export interface Step {
   result?: Ev<"tool_result">;
 }
 
-const WRITE = new Set(["write_file", "edit_file"]);
-const READ = new Set(["read_file", "list_files", "search"]);
-const RUN = new Set(["run_command", "build_executable", "install_tool", "check_tools"]);
-const WEB = new Set(["web_search", "web_fetch", "download_file"]);
+// What each tool does, for the folded line ("Wrote 2 files, ran 3 commands, used your computer 4×").
+// Game-engine tools count like the code tools they resemble (they were all "used a tool" before).
+const WRITE = /^(write_file|edit_file|unreal_write_source|unity_write_script|unity_create_gameobject|unity_add_component|(unreal|unity)_change_graph)$/;
+const READ = /^(read_file|list_files|search|unreal_(read_source|list_source|status|plugins|read_graph|list_graphs)|unity_(read_script|list_scripts|status|scene|console|find_commands|read_graph|list_graphs))$/;
+const RUN = /^(run_command|build_executable|install_tool|check_tools|unreal_(compile|python|package|open_editor|port_plugin|create_project)|unity_(build|command|script_eval|install_platform)|android_run_on_phone)$/;
+const WEB = /^(web_search|web_fetch|download_file)$/;
+const COMPUTER = /^(computer_|browser_)/;
+/** Pictures of the screen (shown small, like Claude's activity summary); other pictures stay big. */
+const SCREEN = /^(computer_|browser_)|screenshot/;
 
 function arg(step: Step, ...keys: string[]): string {
   for (const k of keys) {
@@ -45,25 +50,41 @@ export function stepLabel(step: Step): string {
     make_music: "stepMusic",
     make_3d: "stepModel3d",
     request_access: "stepAccess",
+    unreal_write_source: "stepWrite",
+    unity_write_script: "stepWrite",
+    unreal_read_source: "stepRead",
+    unity_read_script: "stepRead",
+    unreal_compile: "stepUeCompile",
+    unreal_python: "stepUePython",
+    unreal_package: "stepPackage",
+    unity_build: "stepPackage",
+    android_run_on_phone: "stepOnPhone",
+    unreal_change_graph: "stepGraph",
+    unity_change_graph: "stepGraph",
+    computer_screenshot: "stepScreenshot",
+    unity_screenshot: "stepScreenshot",
   };
-  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image") || (n === "list_files" ? t("theFolder") : "");
-  const key = keyFor[n];
+  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image", "target", "package") || (n === "list_files" ? t("theFolder") : "");
+  const key = keyFor[n] ?? (COMPUTER.test(n) ? "stepComputer" : undefined);
+  if (key === "stepComputer") return t(key, { what: n.replace(/^(computer|browser)_/, "").replace(/_/g, " ") });
   return key ? t(key, { what }) : `${n}${what ? `: ${what}` : ""}`;
 }
 
 /** "Edited 2 files, ran 3 commands" for a group of steps. */
 export function groupSummary(steps: Step[]): string {
-  const count = (set: Set<string>) => steps.filter((s) => set.has(s.call.name)).length;
+  const count = (re: RegExp) => steps.filter((s) => re.test(s.call.name)).length;
   const parts: string[] = [];
   const w = count(WRITE);
   const r = count(READ);
   const c = count(RUN);
   const web = count(WEB);
-  const other = steps.length - w - r - c - web;
+  const pc = count(COMPUTER);
+  const other = steps.length - w - r - c - web - pc;
   if (w) parts.push(t(w === 1 ? "sumWrite1" : "sumWrite", { n: w }));
   if (c) parts.push(t(c === 1 ? "sumRun1" : "sumRun", { n: c }));
   if (r) parts.push(t(r === 1 ? "sumRead1" : "sumRead", { n: r }));
   if (web) parts.push(t("sumWeb", { n: web }));
+  if (pc) parts.push(t("sumComputer", { n: pc }));
   if (other) parts.push(t(other === 1 ? "sumOther1" : "sumOther", { n: other }));
   return parts.join(", ");
 }
@@ -81,7 +102,9 @@ export function groupSummary(steps: Step[]): string {
 export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string; liveOutput?: Record<string, string> }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
-  const images = steps.flatMap((s) => s.result?.assetIds ?? []);
+  const images = steps.flatMap((s) => (SCREEN.test(s.call.name) ? [] : s.result?.assetIds ?? []));
+  // Screen pictures: small, in order, on the folded line (open one to see it full size).
+  const shots = steps.flatMap((s) => (SCREEN.test(s.call.name) ? s.result?.assetIds ?? [] : []));
   const videos = steps.flatMap((s) => s.result?.videoIds ?? []);
   const sounds = steps.flatMap((s) => s.result?.audioIds ?? []);
   // Older builds only said "Built dist/x.exe." in their output.
@@ -93,6 +116,12 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
           {live && <span className="spinner" aria-hidden />}
           <span className="activity-sum">{groupSummary(steps)}</span>
           {failed > 0 && <span className="pill bad">{t("stepsFailed", { n: failed })}</span>}
+          {shots.length > 0 && (
+            <span className="activity-thumbs" aria-label={t("sumShots", { n: shots.length })}>
+              {shots.slice(-4).map((id) => <img key={id} src={withToken(`/api/assets/${id}`)} alt="" />)}
+              {shots.length > 4 && <span className="muted small">+{shots.length - 4}</span>}
+            </span>
+          )}
           <span className="chev" aria-hidden />
         </summary>
         <ol className="steps">
@@ -102,6 +131,15 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
             </li>
           ))}
         </ol>
+        {shots.length > 0 && (
+          <div className="activity-shots">
+            {shots.map((id) => (
+              <a key={id} href={withToken(`/api/assets/${id}`)} target="_blank" rel="noreferrer">
+                <img src={withToken(`/api/assets/${id}`)} alt="" loading="lazy" />
+              </a>
+            ))}
+          </div>
+        )}
       </details>
       {/* What failed and why, without opening the group (only the first line of each error). */}
       {failed > 0 && (

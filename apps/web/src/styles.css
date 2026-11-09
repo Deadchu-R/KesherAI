@@ -286,6 +286,10 @@ button.on { border-color: var(--accent); }
 .live-output { margin: 4px 0 0; padding-inline-start: 24px; }
 .live-output pre { margin: 4px 0 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.12)); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 .activity-images { display: flex; flex-wrap: wrap; gap: 8px; }
+.activity-thumbs { display: inline-flex; align-items: center; gap: 4px; }
+.activity-thumbs img { width: 34px; height: 22px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+.activity-shots { display: flex; flex-wrap: wrap; gap: 8px; padding-inline-start: 24px; margin-top: 6px; }
+.activity-shots img { width: 180px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border); display: block; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -1105,10 +1109,16 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-list li button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .ue-select { display: none; }
 .ue-tools { gap: 6px; flex-wrap: wrap; }
+.ue-tools > strong { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .ue-tools > strong { flex-basis: 100%; } }
 .ue-tabs { display: flex; gap: 4px; overflow-x: auto; }
 .ue-tabs button { white-space: nowrap; padding: 4px 10px; border-radius: calc(999px * var(--r-scale, 1)); }
 .ue-tabs button.on { background: var(--accent); color: #000; }
-.ue-canvas { overflow: auto; max-height: 60dvh; background: #111214 radial-gradient(#26272b 1px, transparent 1px) 0 0 / 18px 18px; border-radius: calc(10px * var(--r-scale, 1)); direction: ltr; touch-action: pan-x pan-y; }
+.ue-canvas { overflow: hidden; height: min(62dvh, 640px); min-height: 320px; background: #111214 radial-gradient(#26272b 1px, transparent 1px) 0 0 / 18px 18px; border-radius: calc(10px * var(--r-scale, 1)); direction: ltr; }
+.ue-frame { position: relative; width: 100%; height: 100%; touch-action: none; cursor: grab; user-select: none; }
+.ue-frame:active { cursor: grabbing; }
+.ue-zoom { position: absolute; inset-block-start: 10px; inset-inline-end: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; background: rgb(27 28 32 / 0.9); border: 1px solid var(--border); border-radius: 10px; }
+.ue-zoom button { width: 36px; height: 36px; padding: 0; font-size: 18px; line-height: 1; }
 .ue-graph { display: block; }
 .ue-title { fill: #fff; font: 600 12px system-ui, sans-serif; }
 .ue-pin { fill: #d6d7db; font: 11px system-ui, sans-serif; }
@@ -1116,7 +1126,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-empty { padding: 30px; text-align: center; }
 .ue-ask { gap: 8px; }
 .ue-stage { position: relative; }
-.ue-stage .ue-canvas { min-height: 380px; }
 .ue-ai-fab { position: absolute; inset-block-end: 12px; inset-inline-start: 12px; width: 44px; height: 44px; border-radius: 50%; font-size: 1.2rem; padding: 0; box-shadow: 0 4px 14px rgb(0 0 0 / 0.45); }
 .ue-bubble { position: absolute; inset-block-end: 12px; inset-inline-start: 12px; width: min(360px, calc(100% - 24px)); max-height: calc(100% - 24px); display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--panel, #1b1c20); border: 1px solid var(--border, #2c2d33); border-radius: 16px; box-shadow: var(--shadow-2, 0 10px 30px rgb(0 0 0 / 0.5)); }
 .ue-bubble-head { gap: 6px; align-items: center; }
@@ -1129,7 +1138,8 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-report, .ue-queue { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
 .ue-queue { list-style: none; padding: 0; }
 @media (max-width: 760px) {
-  .ue-body { grid-template-columns: 1fr; }
+  .ue-body { grid-template-columns: minmax(0, 1fr); }
+  .ue-canvas { height: 58dvh; }
   .ue-list { max-height: none; }
   .ue-list ul, .ue-list > input { display: none; }
   .ue-select { display: block; width: 100%; }
