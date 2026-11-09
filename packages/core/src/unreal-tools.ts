@@ -46,7 +46,7 @@ export const UNREAL_TOOL_NAMES = [
 ] as const;
 
 export const UNREAL_NOTE =
-  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). At the end, list exactly what changed.";
+  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
@@ -91,6 +91,19 @@ async function visualStudio(): Promise<string | undefined> {
     execFile(vswhere, ["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "displayName"], { windowsHide: true, timeout: 10_000 }, (_e, o) => res(String(o ?? "").trim())),
   );
   return out || undefined;
+}
+
+/** The newest Windows 10/11 SDK Unreal can build with (Windows Kits\\10\\Include\\10.0.x), or undefined. */
+async function windowsSdk(): Promise<string | undefined> {
+  if (process.platform !== "win32") return undefined;
+  for (const pf of [process.env["ProgramFiles(x86)"], process.env.ProgramFiles]) {
+    if (!pf) continue;
+    const inc = join(pf, "Windows Kits", "10", "Include");
+    const versions = (await readdir(inc).catch(() => [] as string[])).filter((v) => /^10\.0\.\d+\.\d+$/.test(v) && existsSync(join(inc, v, "um", "windows.h")));
+    versions.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (versions.length) return versions.at(-1);
+  }
+  return undefined;
 }
 
 /** Android SDK, NDK and JDK: the user's own, else the ones Unity installed with its Android module. */
@@ -245,6 +258,7 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
           engines.length ? `Engines: ${engines.map((e) => `${e.version} (${e.path}${existsSync(join(e.path, "Engine", "Binaries", "Android")) || existsSync(join(e.path, "Engine", "Platforms", "Android")) ? ", Android ok" : ", NO Android support installed — Epic Launcher → engine ▾ → Options → Android"})`).join("; ")}` : "No Unreal Engine installed here.",
           `Project: ${state.project ?? "none chosen"}`,
           `C++ compiler: ${vs ?? "Visual Studio with 'Desktop development with C++' NOT found (needed to compile C++ projects)"}`,
+          `Windows SDK: ${(await windowsSdk()) ?? "NOT found — Unreal cannot build for Windows without it. The user installs it: Visual Studio Installer → Modify → 'Game development with C++' and a Windows 11 SDK. Do not install it yourself."}`,
           `Android: SDK ${a.sdk ?? "missing"}, NDK ${a.ndk ?? "missing"}, JDK ${a.jdk ?? "missing"} (from ${a.from})`,
           `Editor MCP server (Unreal 5.8): ${(await mcpUp()) ? "answers on 127.0.0.1:8000" : "not running (open the project in the editor)"}`,
         ];
@@ -344,7 +358,9 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
         const r = await runProgram(join(e.path, "Engine", "Build", "BatchFiles", "Build.bat"), [`${name}Editor`, "Win64", "Development", `-Project=${p.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000, log });
         if (r.code === 0) return { output: `Compiled with no errors.\n${cut(r.out.split("\n").filter((l) => /warning/i.test(l)).join("\n"))}` };
         const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|fatal/i.test(l));
-        const why = /Live ?Coding/i.test(r.out) ? "The editor is open with Live Coding: close the editor (or compile there with Ctrl+Alt+F11), then compile again.\n" : /Visual Studio|MSVC|compiler.*not found|toolchain/i.test(r.out) ? "Visual Studio's C++ tools were not found: install Visual Studio with 'Desktop development with C++' and 'Game development with C++'.\n" : "";
+        const why = /SDK validation failed|Sdk: not found/i.test(r.out)
+          ? "The Windows SDK is missing (not a problem in the code). STOP and ask the user to install it: Visual Studio Installer → Modify → 'Game development with C++' and a Windows 11 SDK. Do not install it yourself.\n"
+          : /Live ?Coding/i.test(r.out) ? "The editor is open with Live Coding: close the editor (or compile there with Ctrl+Alt+F11), then compile again.\n" : /Visual Studio|MSVC|compiler.*not found|toolchain/i.test(r.out) ? "Visual Studio's C++ tools were not found: install Visual Studio with 'Desktop development with C++' and 'Game development with C++'.\n" : "";
         return { output: `Compile FAILED (exit ${r.code}). ${why}Errors (fix them, write the files again, compile again):\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
       },
     },
