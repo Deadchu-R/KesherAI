@@ -462,10 +462,11 @@ export class ConversationManager {
               .then((r) => (r.ok ? r.json() : undefined))
               .catch(() => undefined)) as RemoteLoad | undefined)
           : undefined;
-        const chat = models.filter(chatLike);
-        const choice = pickForHardware(chat.map((m) => m.id), load, current);
-        const pick = choice.model ? chat.find((m) => m.id === choice.model) : undefined;
-        if (!pick) skipped.push(`${name}: ${choice.skip ?? "no chat model loaded"}`);
+        // Only that computer's own models: not the ones it reaches on other computers (a laptop also lists this PC's models).
+        const chat = models.filter((m) => chatLike(m) && !/^device-/.test(m.providerModelId));
+        const choice = pickForHardware(chat.map((m) => m.providerModelId), load, current);
+        const pick = choice.model ? chat.find((m) => m.providerModelId === choice.model) : undefined;
+        if (!pick) skipped.push(`${name}: ${choice.skip ?? "no chat model loaded"}${chat.length ? ` (its models: ${chat.slice(0, 4).map((m) => m.providerModelId).join(", ")})` : ""}`);
         if (pick) out.push({ name: provider.name.replace(/\s*\(your computer\)$/i, ""), modelId: pick.id, turn: modelTurnFor(registry, pick.id) });
       }
       return out;
@@ -507,7 +508,7 @@ export class ConversationManager {
           const used = [...new Set(results.filter((r) => r.ok).map((r) => r.computer))];
           return {
             output: [
-              `Ran ${parts.length} parts on ${used.length} computer(s): ${used.join(", ") || "none"}.${skipped.length ? ` Not used: ${skipped.join("; ")}.` : ""} Join them into one answer for the user (and say briefly which computers did the work, and which could not be used and why).`,
+              `Ran ${parts.length} parts on ${used.length} computer(s): ${used.join(", ") || "none"}.${skipped.length ? ` Not used: ${skipped.join("; ")}.` : ""} Join them into one answer for the user (and say briefly which computers did the work, and which could not be used and why). If the parts are code or files, first save each one with write_file (or the project's write tool), then run check_code and fix what it reports, before you answer.`,
               ...results.map((r, i) => `\n## Part ${i + 1}: ${r.title}${r.computer ? ` (on ${r.computer}, ${Math.round(r.ms / 1000)} s)` : ""}\n${r.ok ? r.text : `FAILED: ${r.text}`}`),
             ].join("\n"),
           };

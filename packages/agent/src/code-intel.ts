@@ -164,7 +164,7 @@ export const checkCodeTool: AgentTool = {
   async preview(_input, ctx) {
     const root = rootOf(ctx);
     const c = checkerFor(root, await readdir(root).catch(() => []));
-    return c ? `Check the project for errors (${c.name}): ${c.command === "CLANGCHECK" ? "clang -fsyntax-only on the changed files" : c.command}` : "No checker found for this project.";
+    return c ? `Check the project for errors (${c.name}): ${c.command === "CLANGCHECK" ? "clang -fsyntax-only on the changed files" : c.command}, and Unreal C++ rules if it has Unreal code` : "Check the code for errors (Unreal C++ rules for .h/.cpp files; nothing is built or run).";
   },
   async run(_input, ctx) {
     const root = rootOf(ctx);
@@ -173,7 +173,11 @@ export const checkCodeTool: AgentTool = {
     // Unreal C++: the fast rules first (generated.h names, includes, delegates, A/U prefixes), with or without a compiler here.
     const ue = await checkUnrealFolder(root).catch(() => undefined);
     const ueText = ue ? (ue.length ? `Unreal C++ rules: ${ue.length} problem(s) — fix every error:\n${ue.slice(0, 60).join("\n")}` : "Unreal C++ rules: no problems found.") : "";
-    if (!c) return { output: ueText || "No checker found for this project (no tsconfig.json, .sln/.csproj, compile_commands.json, Cargo.toml, go.mod or Python files)." };
+    if (!c) {
+      if (ueText) return { output: ueText };
+      const code = top.filter((f) => /\.(h|hpp|c|cc|cpp|cs|ts|tsx|js|py|rs|go)$/i.test(f));
+      return { output: code.length ? "No checker found for this project (no tsconfig.json, .sln/.csproj, compile_commands.json, Cargo.toml, go.mod or Python files)." : `Nothing to check: there are no code files in ${root} yet. Write the files first (write_file), then call check_code again.` };
+    }
     if (ue?.length) return { output: `${ueText}\n(Fix these first; then check_code runs the compiler too.)` };
     let command = c.command;
     if (command === "CLANGCHECK") {

@@ -301,7 +301,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
       risk: "write",
       spec: {
         name: "unreal_create_project",
-        description: "Make a new small C++ Unreal project set up for phones (mobile renderer, scalable, no starter content, Android settings, MCP on for 5.8+) with a game module and a GameMode. Then write the game in C++ and unreal_compile.",
+        description: "Make a NEW small C++ Unreal project set up for phones (mobile renderer, scalable, no starter content, Android settings, MCP on for 5.8+) with a game module and a GameMode. Only when the user asks for a new project: for a project that exists (named in the message, or open in the editor), use unreal_use_project, and for code that only needs writing (not building), just write the files.",
         inputSchema: { type: "object", properties: { name: { type: "string", description: "Letters and digits, e.g. AutoShooter." }, folder: { type: "string", description: "Parent folder (default: ~/Unreal Projects)." }, engine: { type: "string", description: "Engine version, e.g. 5.8 (default: the newest installed)." } }, required: ["name"] },
       },
       preview: async (input) => `New Unreal project ${String(input.name)} in ${String(input.folder ?? join(homedir(), "Unreal Projects"))}`,
