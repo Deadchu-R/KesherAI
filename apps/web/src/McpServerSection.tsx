@@ -4,7 +4,7 @@ import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Info { enabled: boolean; url: string; tools: string[]; snippets: { claudeCode: string; cursor: string; vscode: string; claudeDesktop?: string } }
+interface Info { enabled: boolean; allowApprovals?: boolean; url: string; tools: string[]; snippets: { claudeCode: string; cursor: string; vscode: string; claudeDesktop?: string } }
 
 const APPS: Array<{ key: keyof Info["snippets"]; name: string; where: [string, string] }> = [
   { key: "claudeCode", name: "Claude Code", where: ["הריצו בטרמינל:", "Run in a terminal:"] },
@@ -28,7 +28,7 @@ export function McpServerSection() {
   return (
     <section className="card stack">
       <h2>{L("שימוש ב-KesherAI מאפליקציות אחרות (MCP)", "Use KesherAI from other apps (MCP)")}</h2>
-      <p className="muted">{L("Claude Code, Claude Desktop, Cursor ו-VS Code יכולים להשתמש במודלים המקומיים שלכם, במאגרי הידע, ביצירת תמונות ובתמלול — דרך שרת ה-MCP של KesherAI. KesherAI צריך לרוץ.", "Claude Code, Claude Desktop, Cursor and VS Code can use your local models, knowledge bases, image generation and transcription through KesherAI's MCP server. KesherAI needs to be running.")}</p>
+      <p className="muted">{L("Claude Code, Claude Desktop, Cursor ו-VS Code יכולים לתת ל-KesherAI משימות בצ'אט (והוא עובד עם הכלים שלו במחשב), ולהשתמש במודלים המקומיים, במאגרי הידע, ביצירת תמונות ובתמלול — דרך שרת ה-MCP של KesherAI. KesherAI צריך לרוץ.", "Claude Code, Claude Desktop, Cursor and VS Code can give KesherAI tasks in a chat (it works with its own tools on this computer), and use your local models, knowledge bases, image generation and transcription through KesherAI's MCP server. KesherAI needs to be running.")}</p>
       <label className="check">
         <input type="checkbox" checked={info.enabled} onChange={(e) => void api<{ enabled: boolean }>("/api/mcp-server", { method: "PUT", body: { enabled: e.target.checked } }).then((r) => setInfo({ ...info, enabled: r.enabled }))} />
         {L("שרת MCP פעיל", "MCP server on")} <code dir="ltr">{info.url}</code>
@@ -45,6 +45,10 @@ export function McpServerSection() {
             <pre dir="ltr">{snippet}</pre>
             <button type="button" onClick={() => void navigator.clipboard?.writeText(snippet).then(() => setCopied(true))}>{copied ? L("הועתק", "Copied") : L("העתק", "Copy")}</button>
           </div>
+          <label className="check">
+            <input type="checkbox" checked={!!info.allowApprovals} onChange={(e) => void api<{ allowApprovals: boolean }>("/api/mcp-server", { method: "PUT", body: { allowApprovals: e.target.checked } }).then((r) => setInfo({ ...info, allowApprovals: r.allowApprovals }))} />
+            {L("לאפשר לאפליקציה המחוברת לאשר כרטיסי אישור של KesherAI (פקודות מסוכנות תמיד נשארות שלכם)", "Let the connected app answer KesherAI's approval cards (dangerous commands always stay yours)")}
+          </label>
           <p className="muted small">{L("כלים: ", "Tools: ")}<span dir="ltr">{info.tools.join(", ")}</span>. {L("ממכשירים אחרים צריך את טוקן הגישה מרחוק.", "From other devices it needs the remote access token.")}</p>
         </>
       )}

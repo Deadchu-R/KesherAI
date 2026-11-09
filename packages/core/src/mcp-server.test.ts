@@ -36,11 +36,24 @@ test("KesherAI as an MCP server: initialize, list tools, ask a local model, turn
     assert.ok(init.result.capabilities.tools);
     assert.equal((await rpc("notifications/initialized", {}, null)).statusCode, 202);
     const tools = ((await rpc("tools/list")).json() as { result: { tools: Array<{ name: string }> } }).result.tools.map((t) => t.name);
-    assert.deepEqual(tools, ["list_models", "ask_model", "search_knowledge", "generate_image", "transcribe_audio"]);
+    assert.deepEqual(tools, ["kesher_chat", "kesher_read", "kesher_list_chats", "kesher_approve", "list_models", "ask_model", "search_knowledge", "generate_image", "transcribe_audio"]);
     const ask = (await rpc("tools/call", { name: "ask_model", arguments: { prompt: "shalom" } })).json() as { result: { content: Array<{ text: string }>; isError: boolean } };
     assert.deepEqual(ask.result, { content: [{ type: "text", text: "SHALOM" }], isError: false });
     const models = (await rpc("tools/call", { name: "list_models", arguments: {} })).json() as { result: { content: Array<{ text: string }> } };
     assert.match(models.result.content[0]!.text, /u\/m — m \(chat, local\) \[active\]/);
+    // Giving KesherAI a task: a new chat, its answer and status come back.
+    const chat = (await rpc("tools/call", { name: "kesher_chat", arguments: { text: "build it", wait_seconds: 10 } })).json() as { result: { content: Array<{ text: string }>; isError: boolean } };
+    assert.equal(chat.result.isError, false);
+    assert.match(chat.result.content[0]!.text, /conversation_id: [\w-]+\nstatus: DONE\.[\s\S]*KesherAI: BUILD IT/);
+    const cid = /conversation_id: ([\w-]+)/.exec(chat.result.content[0]!.text)![1];
+    const read = (await rpc("tools/call", { name: "kesher_read", arguments: { conversation_id: cid } })).json() as { result: { content: Array<{ text: string }> } };
+    assert.match(read.result.content[0]!.text, /BUILD IT/);
+    const chats = (await rpc("tools/call", { name: "kesher_list_chats", arguments: {} })).json() as { result: { content: Array<{ text: string }> } };
+    assert.match(chats.result.content[0]!.text, /From Claude: build it/);
+    // Approving KesherAI's cards from outside is off until the user turns it on.
+    const appr = (await rpc("tools/call", { name: "kesher_approve", arguments: { conversation_id: cid, request_id: "x", decision: "allow" } })).json() as { result: { content: Array<{ text: string }>; isError: boolean } };
+    assert.equal(appr.result.isError, true);
+    assert.match(appr.result.content[0]!.text, /has not let other apps approve/);
     const img = (await rpc("tools/call", { name: "generate_image", arguments: { prompt: "x" } })).json() as { result: { isError: boolean } };
     assert.equal(img.result.isError, true);
     assert.equal(((await rpc("nope")).json() as { error: { code: number } }).error.code, -32601);

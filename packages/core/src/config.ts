@@ -257,7 +257,13 @@ export const KesherConfigSchema = z.object({
   /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
   browserKey: z.string().optional(),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
-  mcpServer: z.object({ enabled: z.boolean().default(true) }).default({}),
+  mcpServer: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Whether another app (Claude, through KesherAI's MCP server) may approve KesherAI's own approval cards. Off: only the user does. */
+      allowApprovals: z.boolean().default(false),
+    })
+    .default({}),
   /** Notifications when long work ends or KesherAI waits for an answer. */
   notifications: z
     .object({

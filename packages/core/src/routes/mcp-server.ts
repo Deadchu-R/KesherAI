@@ -30,10 +30,128 @@ interface Tool {
 
 const text = (t: string) => [{ type: "text" as const, text: t }];
 
+type Ev = { type: string; seq: number } & Record<string, unknown>;
+
+/**
+ * What happened in a conversation after one point, for another app: the
+ * answer, each step (tool, ok, a short output) and the cards waiting for the
+ * user. Long outputs are cut so a chat stays cheap to follow.
+ */
+export function summarizeEvents(events: Ev[], since: number, pending: Set<string>): string {
+  const lines: string[] = [];
+  const results = new Map<string, Ev>();
+  for (const e of events) if (e.seq > since && e.type === "tool_result") results.set(String(e.callId), e);
+  for (const e of events) {
+    if (e.seq <= since) continue;
+    if (e.type === "tool_call") {
+      const r = results.get(String(e.callId));
+      const out = r ? String(r.output ?? "").replace(/\s+/g, " ").slice(0, 300) : "(running or waiting)";
+      lines.push(`• ${String(e.name)} ${r ? (r.ok ? "✓" : "✗") : "…"} ${out}`);
+    } else if (e.type === "assistant") lines.push(`\nKesherAI: ${String(e.text).replace(/<think>[\s\S]*?<\/think>\s*/g, "")}`);
+    else if (e.type === "approval_request" && pending.has(String(e.requestId))) lines.push(`\n⏸ WAITING FOR APPROVAL (request_id ${String(e.requestId)}): ${String(e.name)} — ${String(e.reason)}\n${String(e.preview).slice(0, 1500)}`);
+    else if (e.type === "question" && !events.some((x) => x.type === "answer" && x.questionId === e.questionId)) lines.push(`\n❓ KesherAI asks the user: ${String(e.question)}`);
+    else if (e.type === "note") lines.push(`(${String(e.text)})`);
+    else if (e.type === "status" && e.status === "error") lines.push(`Error: ${String(e.message ?? "")}`);
+  }
+  return lines.join("\n").trim();
+}
+
 function toolsOf(s: KesherServices): Tool[] {
   const chatModel = (id?: unknown) => (typeof id === "string" && id.trim() ? id.trim() : s.config.activeModels.chat);
   const speech = speechTools({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }).find((t) => t.spec.name === "transcribe_audio")!;
+  /** Waits until the conversation stops running (idle, error, or waiting for the user), or time runs out. */
+  const settle = async (id: string, seconds: number, signal: AbortSignal) => {
+    const opened = await s.conversations.open(id);
+    if (!opened) throw new Error(`No KesherAI conversation ${id}.`);
+    const { session } = opened;
+    const until = Date.now() + Math.min(Math.max(seconds, 1), 600) * 1000;
+    while (Date.now() < until && !signal.aborted && (session.info().status === "running" || session.busy)) await new Promise((r) => setTimeout(r, 500));
+    return session;
+  };
+  const report = (id: string, session: Awaited<ReturnType<typeof settle>>, since: number) => {
+    const info = session.info();
+    const body = summarizeEvents(session.events as unknown as Ev[], since, new Set(info.pendingApprovals));
+    const state = info.status === "running" ? "STILL WORKING — call kesher_read again to follow it." : info.pendingApprovals.length ? `WAITING: ${info.pendingApprovals.length} approval card(s) in KesherAI.` : info.status === "waiting" ? "WAITING for an answer from the user." : info.status === "error" ? "STOPPED WITH AN ERROR." : "DONE.";
+    return text(`conversation_id: ${id}\nstatus: ${state}\n\n${body || "(nothing yet)"}`);
+  };
+  const lastUserSeq = (events: Ev[]) => [...events].reverse().find((e) => e.type === "user")?.seq ?? 0;
   return [
+    {
+      name: "kesher_chat",
+      description:
+        "Give KesherAI a task in words, as the user would in its chat: it works with its own tools on this computer (files, commands, Unity, Unreal, builds, Google Drive…) and its own models. Starts a new KesherAI chat, or continues one with conversation_id. Waits up to wait_seconds, then returns KesherAI's answer, each step it took, and any approval card waiting (changes and commands still ask the user in KesherAI unless they allowed it). For long work, call kesher_read later.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "The task or message, with everything KesherAI needs to know." },
+          conversation_id: { type: "string", description: "Continue this KesherAI chat (leave out for a new one)." },
+          model: { type: "string", description: "A model id from list_models for a new chat (default: KesherAI's active chat model)." },
+          wait_seconds: { type: "number", description: "How long to wait for the answer (default 120, at most 600)." },
+        },
+        required: ["text"],
+      },
+      async run(args, signal) {
+        const msg = String(args.text ?? "").trim();
+        if (!msg) throw new Error("Give the text.");
+        let id = typeof args.conversation_id === "string" && args.conversation_id.trim() ? args.conversation_id.trim() : "";
+        if (!id) {
+          const c = await s.conversations.create({ kind: "chat", ...(typeof args.model === "string" && args.model.trim() ? { modelId: args.model.trim() } : {}), title: `From Claude: ${msg.slice(0, 50)}` });
+          id = c.id;
+        }
+        const opened = await s.conversations.open(id);
+        if (!opened) throw new Error(`No KesherAI conversation ${id}.`);
+        const since = opened.session.events.at(-1)?.seq ?? 0;
+        await s.conversations.send(id, msg);
+        await new Promise((r) => setTimeout(r, 300));
+        const session = await settle(id, Number(args.wait_seconds) || 120, signal);
+        return report(id, session, since);
+      },
+    },
+    {
+      name: "kesher_read",
+      description: "Follow a KesherAI chat: what it did and said since the last message sent to it (or since a seq), its status, and approval cards waiting. Can wait a while for it to finish.",
+      inputSchema: { type: "object", properties: { conversation_id: { type: "string" }, wait_seconds: { type: "number", description: "Wait up to this long while it is still working (default 0)." } }, required: ["conversation_id"] },
+      annotations: { readOnlyHint: true },
+      async run(args, signal) {
+        const id = String(args.conversation_id ?? "");
+        const session = await settle(id, Number(args.wait_seconds) || 0, signal);
+        return report(id, session, lastUserSeq(session.events as unknown as Ev[]) - 1);
+      },
+    },
+    {
+      name: "kesher_list_chats",
+      description: "KesherAI's recent chats (id, title, when, and whether each is working or waiting for the user).",
+      inputSchema: { type: "object", properties: { limit: { type: "number" } } },
+      annotations: { readOnlyHint: true },
+      async run(args) {
+        const act = s.conversations.activity();
+        const list = s.library
+          .listConversations()
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .slice(0, Math.min(Math.max(Number(args.limit) || 15, 1), 50));
+        return text(list.map((c) => `${c.id} — ${c.title} (${c.updatedAt.slice(0, 16).replace("T", " ")}${act[c.id] ? `, ${act[c.id]}` : ""})`).join("\n") || "No chats yet.");
+      },
+    },
+    {
+      name: "kesher_approve",
+      description: "Answer an approval card in a KesherAI chat (allow or deny a change or command it asked to make). Works only when the user turned it on in KesherAI (Settings → Use KesherAI from other apps); dangerous commands always stay the user's to approve.",
+      inputSchema: { type: "object", properties: { conversation_id: { type: "string" }, request_id: { type: "string" }, decision: { type: "string", enum: ["allow", "deny"] }, feedback: { type: "string" } }, required: ["conversation_id", "request_id", "decision"] },
+      async run(args, signal) {
+        if (!s.config.mcpServer.allowApprovals) throw new Error("The user has not let other apps approve KesherAI's cards (KesherAI → Settings → Use KesherAI from other apps). Ask the user to approve it in KesherAI.");
+        const id = String(args.conversation_id ?? "");
+        const opened = await s.conversations.open(id);
+        if (!opened) throw new Error(`No KesherAI conversation ${id}.`);
+        const req = (opened.session.events as unknown as Ev[]).find((e) => e.type === "approval_request" && e.requestId === args.request_id);
+        if (!req) throw new Error("No such approval card.");
+        // A command KesherAI marks dangerous (deleting, installing programs…) "always needs your approval": the user's only.
+        if (args.decision === "allow" && /always needs your approval/i.test(String(req.reason))) throw new Error("This command always needs the user's own approval in KesherAI.");
+        const since = opened.session.events.at(-1)?.seq ?? 0;
+        if (!opened.session.approve(String(args.request_id), args.decision === "allow" ? "allow" : "deny", typeof args.feedback === "string" ? args.feedback : undefined)) throw new Error("That card is no longer waiting.");
+        await new Promise((r) => setTimeout(r, 300));
+        const session = await settle(id, 120, signal);
+        return report(id, session, since);
+      },
+    },
     {
       name: "list_models",
       description: "List the AI models KesherAI can use on this computer (local engines like llama.cpp, Ollama, LM Studio, and connected cloud services), with their ids.",
@@ -142,6 +260,7 @@ export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): 
     const stdio = bridge ? { command: electron ? process.execPath : "node", args: [bridge, url], ...(electron ? { env: { ELECTRON_RUN_AS_NODE: "1" } } : {}) } : undefined;
     return {
       enabled: s.config.mcpServer.enabled,
+      allowApprovals: s.config.mcpServer.allowApprovals,
       url,
       tools: toolsOf(s).map((t) => t.name),
       snippets: {
@@ -152,11 +271,12 @@ export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): 
       },
     };
   });
-  app.put<{ Body: { enabled?: boolean } }>("/api/mcp-server", async (req, reply) => {
+  app.put<{ Body: { enabled?: boolean; allowApprovals?: boolean } }>("/api/mcp-server", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on this computer." });
-    s.config.mcpServer.enabled = req.body?.enabled !== false;
+    if (typeof req.body?.enabled === "boolean") s.config.mcpServer.enabled = req.body.enabled;
+    if (typeof req.body?.allowApprovals === "boolean") s.config.mcpServer.allowApprovals = req.body.allowApprovals;
     await s.saveConfig();
-    return { enabled: s.config.mcpServer.enabled };
+    return { enabled: s.config.mcpServer.enabled, allowApprovals: s.config.mcpServer.allowApprovals };
   });
 
   app.get("/mcp", async (_req, reply) => reply.code(405).header("allow", "POST").send({ error: "KesherAI's MCP server answers POST requests (Streamable HTTP)." }));
@@ -176,7 +296,7 @@ export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): 
           protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: branding.productName, title: branding.productName, version: (await s.updater.version()).version },
-          instructions: `${branding.productName} runs AI models on the user's own computer. Use ask_model to hand work to a private local model, search_knowledge for the user's documents, generate_image and transcribe_audio for media.`,
+          instructions: `${branding.productName} runs AI models and an agent on the user's own computer. Use kesher_chat to give it a task as the user would (it uses its own tools: files, commands, Unity, Unreal, builds, Google Drive) and kesher_read to follow it; ask_model to hand a question to a private local model; search_knowledge for the user's documents; generate_image and transcribe_audio for media. Its approval cards stay the user's unless they let you answer them.`,
         });
       }
       case "ping":
