@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
@@ -145,11 +145,25 @@ export class JobStore {
     const until = Date.now() + opts.timeoutMs;
     let shown = 0;
     for (;;) {
-      const s = await this.state(rec);
-      if (opts.onOutput && s.output.length > shown) {
-        opts.onOutput(s.output.slice(shown));
-        shown = s.output.length;
+      // While it runs, only the new end of the log is read (a build's log grows to megabytes); the whole log once at the end.
+      if (alive(rec.pid)) {
+        const size = (await stat(rec.log).catch(() => ({ size: shown }))).size;
+        if (opts.onOutput && size > shown) {
+          const fh = await open(rec.log, "r").catch(() => undefined);
+          if (fh) {
+            const buf = Buffer.alloc(Math.min(size - shown, 256 * 1024));
+            await fh.read(buf, 0, buf.length, Math.max(shown, size - buf.length)).catch(() => undefined);
+            await fh.close();
+            opts.onOutput(buf.toString("utf8"));
+          }
+          shown = size;
+        }
+        if (Date.now() > until || opts.signal?.aborted) return this.state(rec);
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
       }
+      const s = await this.state(rec);
+      if (opts.onOutput && Buffer.byteLength(s.output) > shown) opts.onOutput(Buffer.from(s.output).subarray(shown).toString("utf8"));
       if (s.state !== "running" || Date.now() > until || opts.signal?.aborted) return s;
       await new Promise((r) => setTimeout(r, 2000));
     }

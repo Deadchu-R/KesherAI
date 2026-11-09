@@ -349,7 +349,9 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
       },
     },
     {
-      risk: "write",
+      // Code that runs: Build.cs runs when compiling and Content/Python/init_unreal.py when the editor opens,
+      // so writing it asks like a command (a prompt-injected page could otherwise slip code into a later build).
+      risk: "exec",
       spec: {
         name: "unreal_write_source",
         description: "Write a whole C++ (.h/.cpp), build (.cs), settings (.ini) or editor Python (.py) file into Source/, Config/ or Content/Python/. Folders are made. Then unreal_compile.",

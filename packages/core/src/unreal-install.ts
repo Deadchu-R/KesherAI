@@ -125,10 +125,29 @@ const extraEngineFolders = new Set<string>();
 /** Adds folders to look in for engines (Settings or unreal_status's engine_folder). */
 export function addEngineFolders(folders: Iterable<string>): void {
   for (const f of folders) if (f && f.trim()) extraEngineFolders.add(f.trim());
+  enginesCache = undefined;
 }
 
-/** @returns Every engine found on this computer (newest first, each folder once). */
-export async function findEngines(): Promise<UnrealEngine[]> {
+let enginesCache: { at: number; list: Promise<UnrealEngine[]> } | undefined;
+
+/**
+ * @returns Every engine found on this computer (newest first, each folder once). Looked up at most once a
+ *   minute: it reads the launcher's logs and lists several drives, and the Unreal tools ask on every call.
+ */
+export function findEngines(): Promise<UnrealEngine[]> {
+  if (!enginesCache || Date.now() - enginesCache.at > 60_000) {
+    enginesCache = { at: Date.now(), list: lookForEngines() };
+    enginesCache.list.catch(() => (enginesCache = undefined));
+  }
+  return enginesCache.list;
+}
+
+/** Forgets the engines found (after the user names a folder). */
+export function forgetEngines(): void {
+  enginesCache = undefined;
+}
+
+async function lookForEngines(): Promise<UnrealEngine[]> {
   if (process.platform !== "win32") return [];
   const data = process.env.ProgramData ?? "C:\\ProgramData";
   const list = join(data, "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat");
