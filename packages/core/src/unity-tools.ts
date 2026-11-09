@@ -366,8 +366,9 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
           await unity.cliRaw(["open", p, "--format", "json"], 120_000).catch(() => undefined);
           await unity.cliRaw(["status", ...at(), "--until-ready", "--timeout", "900", "--format", "json"], 920_000).catch(() => undefined);
         }
-        // No scene in Build Settings (a new project): the open scene is added, so the build has something to build.
-        await evalCs("var list = new System.Collections.Generic.List<UnityEditor.EditorBuildSettingsScene>(UnityEditor.EditorBuildSettings.scenes); bool any = false; foreach (var s in list) if (s.enabled) any = true; if (!any) { var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a != \"\") { list.Add(new UnityEditor.EditorBuildSettingsScene(a, true)); UnityEditor.EditorBuildSettings.scenes = list.ToArray(); return \"added \" + a; } } return \"ok\";").catch(() => "");
+        // The game starts in the scene the user works in: the open scene becomes the first one in Build Settings
+        // (a new project lists the template's SampleScene, so the build started there and showed none of the work).
+        await evalCs("var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a == \"\") return \"unsaved\"; var list = new System.Collections.Generic.List<UnityEditor.EditorBuildSettingsScene>(); list.Add(new UnityEditor.EditorBuildSettingsScene(a, true)); foreach (var s in UnityEditor.EditorBuildSettings.scenes) if (s.path != a) list.Add(s); UnityEditor.EditorBuildSettings.scenes = list.ToArray(); return \"first scene: \" + a;").catch(() => "");
         let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, "--confirm", "true"], 3_700_000);
         // The Editor queues the build and answers at once ("status: queued"): wait for it with `build status`.
         if (r.code === 0 && /queued|running|building|in.?progress/i.test(r.stdout)) {
