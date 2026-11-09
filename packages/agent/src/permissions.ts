@@ -22,6 +22,11 @@ const DANGEROUS: Array<[RegExp, string]> = [
   [/\b(reg\s+(add|delete)|Set-ItemProperty\s+.*HK(LM|CU))\b/i, "changes the Windows registry"],
   [/\bchmod\s+(-R\s+)?777\b/i, "opens file permissions to everyone"],
   [/>\s*\/dev\/sd[a-z]/i, "writes directly to a disk"],
+  // Installing system software: seen in a test, a model ran "winget install" for Visual Studio by itself.
+  [/\b(winget|choco|scoop)\s+(install|upgrade|uninstall|remove)\b/i, "installs or removes programs on the computer"],
+  [/\b(msiexec|vs_installer|vs_community|vs_buildtools|setup)(\.exe)?\s+.*(\/i\b|\/x\b|install|modify|--add|\/quiet|\/passive)/i, "installs or changes programs on the computer"],
+  [/\b(apt(-get)?|dnf|yum|pacman|brew)\s+(install|remove|upgrade)\b/i, "installs or removes programs on the computer"],
+  [/\bAdd-AppxPackage|Install-Package|Install-Module\b/i, "installs programs or modules on the computer"],
 ];
 
 /**
