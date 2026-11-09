@@ -3,6 +3,7 @@ import * as monaco from "monaco-editor";
 import "./monaco-setup";
 import { liveMarkers, registerCSharpAssist, setProjectTypes } from "./csharp-assist";
 import { languageOf } from "./languages";
+import { fileUri, lspLink, registerLspProviders } from "./lsp-client";
 
 /** A compiler problem to mark in the code (from Unity or Unreal). */
 export interface CodeProblem { line: number; column: number; code: string; message: string; severity: "error" | "warning" }
@@ -15,7 +16,7 @@ export interface CodeProblem { line: number; column: number; code: string; messa
  * `using` check, quick fixes (Ctrl+.), and the compiler's own errors marked on
  * their lines. Ctrl+S saves.
  */
-export default function CodeEditor(p: { path: string; value: string; onChange: (v: string) => void; /** Monaco's language; by default from the path. */ language?: string; problems?: CodeProblem[]; projectTypes?: string[]; onSave?: () => void; readOnly?: boolean; minimap?: boolean; className?: string }) {
+export default function CodeEditor(p: { path: string; value: string; onChange: (v: string) => void; /** Monaco's language; by default from the path. */ language?: string; problems?: CodeProblem[]; projectTypes?: string[]; onSave?: () => void; readOnly?: boolean; minimap?: boolean; className?: string; /** A language server for this file (Rider-like help): its WebSocket, the project folder and the file's full path. */ lsp?: { url: string; root: string; file: string; onStatus?: (s: string) => void } }) {
   const language = p.language ?? languageOf(p.path);
   const box = useRef<HTMLDivElement>(null);
   const ed = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -76,6 +77,27 @@ export default function CodeEditor(p: { path: string; value: string; onChange: (
     if (language === "csharp") monaco.editor.setModelMarkers(model, "live", liveMarkers(model));
     return () => sub.dispose();
   }, [p.path, p.value, language]);
+
+  // The language server gets this file (and every change) once it is ready.
+  useEffect(() => {
+    const model = ed.current?.getModel();
+    if (!p.lsp || !model) return;
+    registerLspProviders();
+    const status = p.lsp.onStatus ?? (() => undefined);
+    const link = lspLink(p.lsp.url, p.lsp.root, status);
+    const uri = fileUri(p.lsp.file);
+    let live = true;
+    void link.ready.then(() => {
+      if (live) {
+        link.open(model, uri);
+        status("ready");
+      }
+    }, (e: Error) => status(`error: ${e.message}`));
+    return () => {
+      live = false;
+      link.close(uri);
+    };
+  }, [p.lsp?.url, p.lsp?.root, p.lsp?.file]);
 
   useEffect(() => {
     if (p.projectTypes) setProjectTypes(p.projectTypes);

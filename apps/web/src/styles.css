@@ -1697,3 +1697,4 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .code-editor.bp-code-edit { height: min(50dvh, 480px); min-height: 220px; }
 /* Read-only code coloured by the editor (chat blocks, translations). */
 .code-view code span { white-space: pre; }
+.code-ai .ue-bubble-head select { max-width: 140px; }

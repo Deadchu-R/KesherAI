@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
 
@@ -10,11 +11,31 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
  * errors; the change can be undone in one click, and nothing is saved until
  * the user saves.
  */
-export function CodeAiBubble(p: { ask: (request: string, fix: boolean) => Promise<string>; errors: number; canUndo: boolean; onUndo: () => void; placeholder: string }) {
+export function CodeAiBubble(p: { ask: (request: string, fix: boolean, model: string) => Promise<string>; errors: number; canUndo: boolean; onUndo: () => void; placeholder: string }) {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState("");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<Array<{ who: "me" | "ai"; text: string }>>([]);
+  // Which model does the work (any chat model here: local, another computer's, or a cloud one); remembered.
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [model, setModel] = useState(() => {
+    try {
+      return localStorage.getItem("kesher.codeModel") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    if (open) void api<{ models: Array<{ id: string; name: string; category: string }> }>("/api/models").then((r) => setModels(r.models.filter((m) => m.category === "chat")), () => undefined);
+  }, [open]);
+  const choose = (id: string) => {
+    setModel(id);
+    try {
+      localStorage.setItem("kesher.codeModel", id);
+    } catch {
+      // private window: not remembered
+    }
+  };
   const run = async (fix: boolean) => {
     const text = fix ? L("תקן את שגיאות הקומפילציה", "Fix the compile errors") : request.trim();
     if (!text || busy) return;
@@ -22,7 +43,7 @@ export function CodeAiBubble(p: { ask: (request: string, fix: boolean) => Promis
     setLog((l) => [...l, { who: "me", text }]);
     setRequest("");
     try {
-      const note = await p.ask(fix ? "" : text, fix);
+      const note = await p.ask(fix ? "" : text, fix, model);
       setLog((l) => [...l, { who: "ai", text: note || L("הסקריפט עודכן. בדקו ושמרו.", "The script was changed. Check it, then save.") }]);
     } catch (e) {
       toast((e as Error).message);
@@ -36,6 +57,10 @@ export function CodeAiBubble(p: { ask: (request: string, fix: boolean) => Promis
     <div className="ue-bubble code-ai" role="dialog" aria-label={L("עריכה עם AI", "Edit with AI")}>
       <div className="row ue-bubble-head">
         <strong className="grow">✨ {L("עריכה עם AI", "Edit with AI")}</strong>
+        <select value={model} onChange={(e) => choose(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
+          <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
+          {models.map((m) => <option key={m.id} value={m.id}>{models.filter((x) => x.name === m.name).length > 1 ? `${m.name} · ${m.id.split("/")[0]}` : m.name}</option>)}
+        </select>
         {p.canUndo && <button type="button" className="small" onClick={p.onUndo} title={L("מחזיר את הסקריפט למה שהיה לפני השינוי האחרון של ה-AI", "Puts back the script as it was before the AI's last change")}>↶ {L("בטל שינוי", "Undo")}</button>}
         <button type="button" className="small" onClick={() => setOpen(false)} aria-label={L("סגור", "Close")}>✕</button>
       </div>

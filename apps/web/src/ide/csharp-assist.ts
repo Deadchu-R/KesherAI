@@ -1,4 +1,5 @@
 import * as monaco from "monaco-editor";
+import { lspServes } from "./lsp-client";
 import { NAMESPACE_OF, UNITY_API, UNITY_EVENTS_SNIPPETS, type ApiMember } from "./unity-api";
 
 /**
@@ -149,6 +150,7 @@ export function registerCSharpAssist(): void {
   monaco.languages.registerCompletionItemProvider("csharp", {
     triggerCharacters: ["."],
     provideCompletionItems(model, pos) {
+      if (lspServes(model)) return { suggestions: [] };
       const line = model.getLineContent(pos.lineNumber).slice(0, pos.column - 1);
       const word = model.getWordUntilPosition(pos);
       const range = new monaco.Range(pos.lineNumber, word.startColumn, pos.lineNumber, word.endColumn);
@@ -181,6 +183,7 @@ export function registerCSharpAssist(): void {
   });
   monaco.languages.registerHoverProvider("csharp", {
     provideHover(model, pos) {
+      if (lspServes(model)) return null;
       const w = model.getWordAtPosition(pos);
       if (!w) return null;
       const before = model.getLineContent(pos.lineNumber).slice(0, w.startColumn - 1);
@@ -194,6 +197,7 @@ export function registerCSharpAssist(): void {
   monaco.languages.registerSignatureHelpProvider("csharp", {
     signatureHelpTriggerCharacters: ["(", ","],
     provideSignatureHelp(model, pos) {
+      if (lspServes(model)) return null;
       const line = model.getLineContent(pos.lineNumber).slice(0, pos.column - 1);
       let depth = 0;
       let i = line.length - 1;
@@ -221,6 +225,7 @@ export function registerCSharpAssist(): void {
   monaco.languages.registerCodeActionProvider("csharp", {
     provideCodeActions(model, _range, context) {
       const actions: monaco.languages.CodeAction[] = [];
+      if (lspServes(model)) return { actions, dispose: () => undefined };
       const text = model.getValue();
       const usingAt = (() => {
         const lines = text.split("\n");
@@ -256,6 +261,7 @@ export function registerCSharpAssist(): void {
 
 /** The live check's markers for a C# file (brackets, missing `using`). */
 export function liveMarkers(model: monaco.editor.ITextModel): monaco.editor.IMarkerData[] {
+  if (lspServes(model)) return [];
   const text = model.getValue();
   const at = (i: number) => model.getPositionAt(i);
   return [

@@ -63,6 +63,7 @@ import { managedPolicy, policyCheck } from "./business.js";
 import { copilotRoutes } from "./routes/copilot.js";
 import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { unrealSourceRoutes } from "./routes/unreal-source.js";
+import { lspRoutes } from "./routes/lsp.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
 import { SelfWork } from "./self-work.js";
@@ -1027,6 +1028,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);
   unrealSourceRoutes(app, services);
+  lspRoutes(app, services);
   await unityRoutes(app, services);
   await copilotRoutes(app, services);
   await browserRoutes(app, services);

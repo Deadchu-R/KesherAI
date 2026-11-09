@@ -65,6 +65,24 @@ export function ScriptNodes() {
   const [checking, setChecking] = useState(false);
   /** The script before the AI's last change (one click puts it back). */
   const [beforeAi, setBeforeAi] = useState<string | null>(null);
+  /** Rider mode: the C# language server (csharp-ls) for the project, when installed. */
+  const [lsp, setLsp] = useState<{ installed: boolean; dotnet: boolean; solution: boolean; project: string | null } | null>(null);
+  const [lspStatus, setLspStatus] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const loadLsp = () => void api<NonNullable<typeof lsp>>("/api/lsp/csharp").then(setLsp, () => setLsp(null));
+  useEffect(loadLsp, []);
+  const installLsp = async () => {
+    setInstalling(true);
+    try {
+      const r = await api<{ ok: boolean; out: string }>("/api/lsp/csharp/install", { method: "POST" });
+      toast(r.ok ? L("מצב Rider מותקן.", "Rider mode is installed.") : r.out.slice(-300));
+      loadLsp();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   useEffect(() => {
     loadScripts();
@@ -162,8 +180,8 @@ export function ScriptNodes() {
     }
   };
   /** The AI changes the script as asked (or fixes the errors); it is not saved until the user saves. */
-  const askAi = async (request: string, fix: boolean) => {
-    const r = await api<{ code: string; note: string }>("/api/unity/script/ai", { method: "POST", body: { path, text: out, request, ...(fix || problems.length ? { errors: problems } : {}) } });
+  const askAi = async (request: string, fix: boolean, model: string) => {
+    const r = await api<{ code: string; note: string }>("/api/unity/script/ai", { method: "POST", body: { path, text: out, request, ...(model ? { model } : {}), ...(fix || problems.length ? { errors: problems } : {}) } });
     if (r.code.trim() === out.trim()) return L("ה-AI לא שינה כלום.", "The AI changed nothing.");
     setBeforeAi(out);
     setText(r.code);
@@ -274,10 +292,17 @@ export function ScriptNodes() {
               <div className="script-code-wrap">
                 <div className="row wrap script-code-bar">
                   <button type="button" disabled={checking} onClick={() => void check()} title={L("Unity מקמפל את כל הסקריפטים ומסמן את השגיאות בשורות", "Unity compiles every script and the errors are marked on their lines")}>{checking ? L("בודק…", "Checking…") : L("🔎 בדוק קומפילציה", "🔎 Check compile")}</button>
-                  <span className="muted small">{L("Ctrl+Space: השלמה · Ctrl+.: תיקון מהיר · Ctrl+S: שמירה", "Ctrl+Space: suggestions · Ctrl+.: quick fix · Ctrl+S: save")}</span>
+                  <span className="muted small">{L("Ctrl+Space: השלמה · Ctrl+.: תיקון מהיר · F12: הגדרה · F2: שינוי שם · Ctrl+S: שמירה", "Ctrl+Space: suggestions · Ctrl+.: quick fix · F12: definition · F2: rename · Ctrl+S: save")}</span>
+                  {lsp && (lsp.installed && lsp.solution ? (
+                    <span className={`pill ${lspStatus === "ready" ? "good" : ""}`} title={L("שרת שפה של C# (Roslyn) מכיר את כל הפרויקט והספריות", "A C# language server (Roslyn) that knows the whole project and its libraries")}>{lspStatus === "ready" ? L("🧠 מצב Rider", "🧠 Rider mode") : lspStatus.startsWith("error") ? L("מצב Rider: שגיאה", "Rider mode: error") : L("🧠 מצב Rider נטען…", "🧠 Rider mode loading…")}</span>
+                  ) : !lsp.installed ? (
+                    <button type="button" disabled={installing || !lsp.dotnet} onClick={() => void installLsp()} title={lsp.dotnet ? L("מתקין את csharp-ls (כלי של .NET למשתמש שלך) להשלמות ושגיאות של כל הפרויקט", "Installs csharp-ls (a .NET tool for your user) for suggestions and errors from the whole project") : L("צריך .NET SDK 8 ומעלה (dot.net)", "Needs the .NET SDK 8 or newer (dot.net)")}>{installing ? L("מתקין…", "Installing…") : L("🧠 התקן מצב Rider", "🧠 Install Rider mode")}</button>
+                  ) : (
+                    <span className="muted small">{L("למצב Rider: ב-Unity, Preferences → External Tools → Regenerate project files", "For Rider mode: in Unity, Preferences → External Tools → Regenerate project files")}</span>
+                  ))}
                 </div>
                 <Suspense fallback={<p className="muted">…</p>}>
-                  <CodeEditor path={path} value={out} onChange={setText} language="csharp" problems={problems} projectTypes={types.filter((t) => t.group !== "Unity" && t.input === "none").map((t) => t.value)} onSave={() => changed && void save()} />
+                  <CodeEditor path={path} value={out} onChange={setText} language="csharp" problems={problems} {...(lsp?.installed && lsp.solution && lsp.project ? { lsp: { url: "/api/unity/lsp", root: lsp.project, file: `${lsp.project}/${path}`, onStatus: setLspStatus } } : {})} projectTypes={types.filter((t) => t.group !== "Unity" && t.input === "none").map((t) => t.value)} onSave={() => changed && void save()} />
                 </Suspense>
                 {problems.length > 0 && (
                   <ul className="code-problems">
