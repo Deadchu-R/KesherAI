@@ -1,4 +1,5 @@
 import type React from "react";
+import { CodeView } from "./ide/CodeView";
 
 /** Inline Markdown: **bold**, *italic*, `code` and [links](https://…). */
 function inline(text: string, key: string): React.ReactNode[] {
@@ -57,7 +58,7 @@ export function RichText({ text }: { text: string }) {
       });
       flush(`l${i}-end`);
     }
-    if (parts[i + 2] !== undefined) out.push(<pre key={`c${i}`} className="code" dir="ltr"><code>{parts[i + 2]}</code></pre>);
+    if (parts[i + 2] !== undefined) out.push(<CodeView key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />);
   }
   return <div className="msg-text">{out}</div>;
 }

@@ -1692,3 +1692,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .fs-box.fs-on .ue-canvas { height: calc(100dvh - 50px); }
   .fs-box.fs-on .code-editor { height: calc(100dvh - 90px); }
 }
+/* The same code editor inside the IDE panel and the Blueprint code view. */
+.code-editor.editor-host { height: auto; flex: 1; min-height: 0; border: 0; border-radius: 0; }
+.code-editor.bp-code-edit { height: min(50dvh, 480px); min-height: 220px; }
+/* Read-only code coloured by the editor (chat blocks, translations). */
+.code-view code span { white-space: pre; }

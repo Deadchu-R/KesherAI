@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { CodeView } from "./ide/CodeView";
+// The code editor (VS Code's) loads when editing starts.
+const CodeEditor = lazy(() => import("./ide/CodeEditor"));
 import { blueprintToCode, blueprintToVerse, codeText, type CodeNode } from "@kesher/shared";
 import { getLocale } from "./i18n";
 
@@ -59,11 +62,13 @@ export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy
         )}
       </div>
       {lang !== "code" && ai[lang] ? (
-        <pre className="bp-code-ai" dir="ltr">{ai[lang]}</pre>
+        <CodeView className="bp-code-ai" code={ai[lang]!} language={lang === "cpp" ? "cpp" : lang === "csharp" ? "csharp" : "verse"} />
       ) : lang === "cpp" || lang === "csharp" ? (
         <p className="muted bp-code-empty">{translating ? L("המודל כותב את הקוד…", "The model is writing the code…") : L(`לחצו "תרגום ל-${LANG_NAME[lang]}" כדי לראות את הגרף כקוד ${LANG_NAME[lang]} אמיתי.`, `Press "Translate to ${LANG_NAME[lang]}" to see the graph as real ${LANG_NAME[lang]}.`)}</p>
       ) : editing ? (
-        <textarea className="bp-code-edit" dir="ltr" spellCheck={false} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={L("קוד ה-Blueprint", "Blueprint code")} />
+        <Suspense fallback={<textarea className="bp-code-edit" dir="ltr" spellCheck={false} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={L("קוד ה-Blueprint", "Blueprint code")} />}>
+          <CodeEditor className="bp-code-edit" path={`blueprint/${translate?.name ?? "graph"}.py`} language="python" value={draft} onChange={setDraft} />
+        </Suspense>
       ) : (
         <ol className="bp-code-lines" dir="ltr">
           {lines.map((l, i) => {

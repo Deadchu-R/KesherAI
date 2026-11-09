@@ -1,0 +1,6 @@
+/** Monaco's language for a file or a code block's tag (`ts`, `c#`, `py`…). */
+export function languageOf(pathOrTag: string): string {
+  const ext = (pathOrTag.includes(".") ? pathOrTag.split(".").pop() : pathOrTag)?.toLowerCase() ?? "";
+  const byExt: Record<string, string> = { js: "javascript", javascript: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript", ts: "typescript", typescript: "typescript", tsx: "typescript", mts: "typescript", py: "python", python: "python", md: "markdown", markdown: "markdown", json: "json", html: "html", htm: "html", xml: "xml", css: "css", scss: "scss", less: "less", c: "c", h: "cpp", cc: "cpp", cpp: "cpp", "c++": "cpp", hpp: "cpp", inl: "cpp", cs: "csharp", csharp: "csharp", "c#": "csharp", java: "java", go: "go", rs: "rust", rust: "rust", rb: "ruby", ruby: "ruby", php: "php", sh: "shell", bash: "shell", shell: "shell", zsh: "shell", ps1: "powershell", powershell: "powershell", bat: "bat", cmd: "bat", yml: "yaml", yaml: "yaml", sql: "sql", lua: "lua", luau: "lua", kt: "kotlin", kotlin: "kotlin", swift: "swift", gd: "python", shader: "hlsl", hlsl: "hlsl", glsl: "cpp", ini: "ini", toml: "ini", dockerfile: "dockerfile", verse: "python", diff: "plaintext", text: "plaintext", txt: "plaintext" };
+  return byExt[ext] ?? (pathOrTag.toLowerCase().endsWith("dockerfile") ? "dockerfile" : "plaintext");
+}
