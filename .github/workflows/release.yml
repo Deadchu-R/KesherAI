@@ -16,7 +16,13 @@ permissions:
   contents: write
 
 jobs:
+  # Lint, types, every test, the smoke test and the security checks (ci.yml): nothing is published if one fails.
+  check:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
   build:
+    needs: check
     strategy:
       # One system failing should not cancel the others' installers.
       fail-fast: false
