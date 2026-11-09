@@ -7,6 +7,7 @@
 #include "KesherGraph.h"
 #include "Misc/App.h"
 #include "Misc/EngineVersion.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
@@ -17,7 +18,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.2");
+static const TCHAR* BridgeVersion = TEXT("0.1.3");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -61,6 +62,8 @@ void FKesherAIBridgeModule::Connect()
 		Hello->SetStringField(TEXT("project"), FApp::GetProjectName());
 		Hello->SetStringField(TEXT("engine"), FEngineVersion::Current().ToString(EVersionComponent::Patch));
 		Hello->SetStringField(TEXT("bridge"), BridgeVersion);
+		// Where the project is, so KesherAI's chat works on the project open in this editor.
+		Hello->SetStringField(TEXT("projectFile"), FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()));
 		Send(Hello);
 	});
 	Socket->OnConnectionError().AddLambda([this](const FString&)

@@ -287,7 +287,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         const a = await androidTools();
         const lines = [
           engines.length ? `Engines: ${engines.map((e) => `${e.version} (${e.path}${existsSync(join(e.path, "Engine", "Binaries", "Android")) || existsSync(join(e.path, "Engine", "Platforms", "Android")) ? ", Android ok" : ", NO Android support installed — Epic Launcher → engine ▾ → Options → Android"})`).join("; ")}` : "No Unreal Engine installed here.",
-          `Project: ${state.project ?? "none chosen"}`,
+          `Project: ${state.project ?? "none chosen — call unreal_use_project with the project's folder (the other Unreal tools come after that)"}`,
           `C++ compiler: ${vs ?? "Visual Studio with 'Desktop development with C++' NOT found (needed to compile C++ projects)"}`,
           `Windows SDK: ${(await windowsSdk()) ?? "NOT found — Unreal cannot build for Windows without it. The user installs it: Visual Studio Installer → Modify → 'Game development with C++' and a Windows 11 SDK. Do not install it yourself."}`,
           `Android: SDK ${a.sdk ?? "missing"}, NDK ${a.ndk ?? "missing"}, JDK ${a.jdk ?? "missing"} (from ${a.from})`,

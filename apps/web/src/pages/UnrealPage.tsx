@@ -9,7 +9,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 interface Status {
   connected: boolean;
-  editor?: { project: string; engine: string; bridge: string };
+  editor?: { project: string; engine: string; bridge: string; projectFile?: string };
   projects: string[];
   queued: number;
   /** Unity: whether Unity's CLI is installed, and the project shown. */
@@ -297,7 +297,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     <div className="page ue-page">
       <div className="row ue-head">
         <h1 className="grow">{unity ? "Unity" : "Unreal Blueprints"}</h1>
-        <OpenInChat line={unity ? (st.active ? `[Unity project: ${st.active.split(/[\\/]/).pop()} — ${st.active}] ` : "") : list?.project ? `[Unreal project: ${list.project}${st.connected ? " — the editor is connected" : ""}] ` : ""} />
+        <OpenInChat line={unity ? (st.active ? `[Unity project: ${st.active.split(/[\\/]/).pop()} — ${st.active}] ` : "") : list?.project ? `[Unreal project: ${list.project}${st.editor?.projectFile ? ` — ${st.editor.projectFile}${st.connected ? "; the editor is connected" : ""}` : st.connected ? " — the editor is connected" : ""}] ` : ""} />
         <span className={`pill ${st.connected ? "good" : ""}`}>
           {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>

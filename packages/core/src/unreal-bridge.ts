@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -15,13 +16,15 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.2";
+export const BRIDGE_VERSION = "0.1.3";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
   project: string;
   engine: string;
   bridge: string;
+  /** The project's .uproject on this computer (plugin 0.1.3+). */
+  projectFile?: string;
   connectedAt: string;
 }
 
@@ -66,6 +69,11 @@ export class UnrealBridge {
     private readonly dir: string,
     private readonly editor = "Unreal Editor",
   ) {}
+
+  /** @returns The connected editor's project file, when the plugin said it. */
+  get projectFile(): string | undefined {
+    return this.connected ? this.info?.projectFile : undefined;
+  }
 
   /** @returns Whether an editor is connected now. */
   get connected(): boolean {
@@ -119,14 +127,16 @@ export class UnrealBridge {
   }
 
   private async onMessage(socket: WebSocket, text: string): Promise<void> {
-    let msg: { id?: string; ok?: boolean; result?: unknown; error?: string; event?: string; project?: string; engine?: string; bridge?: string };
+    let msg: { id?: string; ok?: boolean; result?: unknown; error?: string; event?: string; project?: string; engine?: string; bridge?: string; projectFile?: string };
     try {
       msg = JSON.parse(text) as typeof msg;
     } catch {
       return;
     }
     if (msg.event === "hello" && socket === this.socket) {
-      this.info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), connectedAt: new Date().toISOString() };
+      // Only a real .uproject on this computer is kept (the chat's Unreal tools then work on that project).
+      const pf = typeof msg.projectFile === "string" && /\.uproject$/i.test(msg.projectFile) && existsSync(msg.projectFile) ? msg.projectFile : undefined;
+      this.info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), connectedAt: new Date().toISOString() };
       this.lastProject = this.info.project;
       await mkdir(this.dir, { recursive: true });
       await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: this.info.project }));

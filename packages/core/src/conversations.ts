@@ -4,7 +4,8 @@ import type { SkillStore } from "./skill-store.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
 import { mkdir, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
+import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
 import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, branding, cleanAppearance, type Appearance, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
@@ -1195,7 +1196,22 @@ export class ConversationManager {
     const { session, conversation } = opened;
     // "[Unreal project: Name, UE 5.8 — C:\path; …]" (Unreal page → Open in chat): the Unreal tools work on that project.
     const unrealHeader = /^\s*\[Unreal project: [^\]\n]*? — ([^;\]\n]+)[;\]]/.exec(text);
-    if (unrealHeader) await readProject(unrealHeader[1]!.trim()).then((p) => (this.unrealState.project = p.dir), () => undefined);
+    let unrealDir = unrealHeader ? await readProject(unrealHeader[1]!.trim()).then((p) => p.dir, () => undefined) : undefined;
+    // "[Unreal project: Name — the editor is connected]": the project the connected editor has open, or one of that name
+    // in the usual folders (before 0.5.97 the header had no path, so the chat got no project and the small model stalled).
+    const unrealName = /^\s*\[Unreal project: ([\w-]+)/.exec(text)?.[1];
+    if (!unrealDir && unrealName) {
+      const home = homedir();
+      for (const c of [this.deps.unreal?.projectFile, join(home, "Documents", "Unreal Projects", unrealName), join(home, "Unreal Projects", unrealName)]) {
+        if (!c) continue;
+        const p = await readProject(c).catch(() => undefined);
+        if (p && basename(p.file).toLowerCase() === `${unrealName.toLowerCase()}.uproject`) {
+          unrealDir = p.dir;
+          break;
+        }
+      }
+    }
+    if (unrealDir) this.unrealState.project = unrealDir;
     // Rebuild tools and prompt so new active models and project changes apply.
     const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     session.setTools(tools);

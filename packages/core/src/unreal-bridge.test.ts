@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
@@ -24,7 +24,7 @@ const BP: BlueprintJson = {
 };
 
 /** A stand-in for the Unreal Editor with the plugin: answers commands like the plugin does. */
-async function fakeEditor(port: number, calls: string[]) {
+async function fakeEditor(port: number, calls: string[], projectFile?: string) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/api/unreal/ws`);
   await new Promise((r, j) => (ws.once("open", r), ws.once("error", j)));
   ws.on("message", (d) => {
@@ -37,7 +37,7 @@ async function fakeEditor(port: number, calls: string[]) {
       : { ok: true, messages: [] };
     ws.send(JSON.stringify({ id: m.id, ok: true, result }));
   });
-  ws.send(JSON.stringify({ event: "hello", project: "DoorGame", engine: "5.5.4", bridge: "0.1.0" }));
+  ws.send(JSON.stringify({ event: "hello", project: "DoorGame", engine: "5.5.4", bridge: "0.1.0", ...(projectFile ? { projectFile } : {}) }));
   return ws;
 }
 
@@ -46,17 +46,22 @@ const until = async (f: () => Promise<boolean>) => {
 };
 
 test("the editor connects, its Blueprints are kept, and work with Unreal closed waits in the queue", async () => {
-  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-ue-")), autodetect: false, pluginRoots: [] });
+  const dataDir = await mkdtemp(join(tmpdir(), "kesher-ue-"));
+  const server = await createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
+  // The plugin says where the project is (0.1.3+): kept only when it is a real .uproject here.
+  const uproject = join(dataDir, "DoorGame.uproject");
+  await writeFile(uproject, "{}");
   await server.app.listen({ port: 0, host: "127.0.0.1" });
   const port = (server.app.server.address() as { port: number }).port;
   const get = async (url: string) => (await server.app.inject({ method: "GET", url })).json() as Record<string, unknown>;
   try {
     assert.equal((await get("/api/unreal")).connected, false);
     const calls: string[] = [];
-    const ws = await fakeEditor(port, calls);
+    const ws = await fakeEditor(port, calls, uproject);
     await until(async () => (await get("/api/unreal")).connected === true);
     const st = await get("/api/unreal");
     assert.equal((st.editor as { project: string }).project, "DoorGame");
+    assert.equal((st.editor as { projectFile?: string }).projectFile, uproject);
     assert.match(String(st.download), /KesherAIBridge\.zip$/);
 
     const list = await get("/api/unreal/blueprints");
