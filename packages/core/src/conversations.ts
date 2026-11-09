@@ -25,6 +25,8 @@ import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
 import { analyzeChatTool } from "./chat-stats.js";
+import { taskBoardTool } from "./task-board-tool.js";
+import type { TaskBoard } from "./task-board.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
@@ -255,6 +257,8 @@ export class ConversationManager {
       };
       /** Unity's CLI: the chat's Unity tools (when the CLI is installed). */
       unity?: UnityCli;
+      /** The task board shared with Claude (self-work). */
+      board?: TaskBoard;
       /** The KesherAI Bridge plugin in Unreal: the chat's Blueprint tools (when the editor is connected). */
       unreal?: UnrealBridge;
       /** How the app looks: the change_look tool reads and changes it (Undo keeps the last looks). */
@@ -771,6 +775,8 @@ export class ConversationManager {
       );
     }
     split.push(...(this.deps.unity?.activeProject ? unity : unity.filter((t) => t.spec.name === "unity_status")));
+    // Code sessions (self-work among them) share a task board with Claude on this computer.
+    if (kind === "code" && this.deps.board) split.push(taskBoardTool(this.deps.board));
     // Unreal: when an engine is installed here (checked in the background, at most every 5 minutes) or a project is in use.
     this.checkUnreal();
     // Fewer tokens: with no Unreal project in use, only the three entry tools and one line go to the model

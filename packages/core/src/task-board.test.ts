@@ -1,0 +1,33 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { TaskBoard, boardText } from "./task-board.js";
+
+test("two agents share tasks: claim once, done with a result, notes, revisions", async () => {
+  const board = new TaskBoard(join(await mkdtemp(join(tmpdir(), "board-")), "self-work", "board.json"));
+  let b = await board.change("claude", [{ op: "add", title: "Refactor the composer", priority: 1 }, { op: "add", title: "Fix lint warnings" }]);
+  assert.equal(b.rev, 1);
+  assert.deepEqual(b.tasks.map((t) => t.id), ["t1", "t2"]);
+  b = await board.change("kesher", [{ op: "claim", id: "t2" }]);
+  await assert.rejects(board.change("claude", [{ op: "claim", id: "t2" }]), /already taken by kesher/);
+  await assert.rejects(board.change("claude", [{ op: "note", text: "hi" }], 1), /changed/, "a stale revision changes nothing");
+  b = await board.change("kesher", [{ op: "done", id: "t2", result: "commit abc123, pnpm test passed" }, { op: "note", text: "t2 done, taking nothing else", task: "t2" }], b.rev);
+  assert.equal(b.tasks[1]!.status, "done");
+  assert.equal(b.notes[0]!.from, "kesher");
+  await assert.rejects(board.change("claude", [{ op: "done", id: "t2", result: "x" }]), /belongs to kesher/);
+  const text = boardText(await board.read());
+  assert.match(text, /t1 \[open\] p1 Refactor the composer/);
+  assert.match(text, /Done: 1/);
+  assert.match(text, /kesher \(t2\): t2 done/);
+});
+
+test("writes in parallel never lose a change", async () => {
+  const board = new TaskBoard(join(await mkdtemp(join(tmpdir(), "board-")), "board.json"));
+  await Promise.all(Array.from({ length: 20 }, (_, i) => board.change(i % 2 ? "claude" : "kesher", [{ op: "add", title: `task ${i}` }])));
+  const b = await board.read();
+  assert.equal(b.tasks.length, 20);
+  assert.equal(b.rev, 20);
+  assert.equal(new Set(b.tasks.map((t) => t.id)).size, 20);
+});

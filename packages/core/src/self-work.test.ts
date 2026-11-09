@@ -30,7 +30,7 @@ async function setup(answers: string[], opts: { dirty?: boolean; checks?: number
     state: async () => ({ status: "idle", last: answers[Math.min(turn, answers.length - 1)] ?? "" }),
     git: async (_r, args) => {
       git.push(args);
-      if (args[0] === "status") return { code: 0, out: opts.dirty ? " M a.ts" : "" };
+      if (args[0] === "rev-parse" && args[1] === "--verify") return opts.dirty ? { code: 128, out: "fatal: no commits yet" } : { code: 0, out: "abc\n" };
       if (args[0] === "rev-parse") return { code: 0, out: `abc${git.length}\n` };
       return { code: 0, out: "" };
     },
@@ -46,7 +46,9 @@ test("works item by item on its own branch, checks, commits, and ends when done"
   const r = await sw.start({ repo, goal: "add a parser", check: "pnpm test", hours: 1 });
   assert.match(r.branch, /^kesher-self\/\d{12}$/);
   await sw.settled();
-  assert.deepEqual(git.find((a) => a[0] === "switch"), ["switch", "-c", r.branch]);
+  const wt = git.find((a) => a[0] === "worktree")!;
+  assert.deepEqual(wt.slice(0, 4), ["worktree", "add", "-b", r.branch]);
+  assert.match(r.worktree, /repo-self-work[\\/]\d{12}$/, "a separate folder next to the project");
   assert.equal(git.filter((a) => a[0] === "commit").length, 3);
   assert.ok(!git.some((a) => a[0] === "push" || a[0] === "merge"), "never pushes or merges");
   assert.equal(sw.current?.status, "done");
@@ -55,9 +57,9 @@ test("works item by item on its own branch, checks, commits, and ends when done"
   assert.ok(notes.includes("✅ Self-work finished"));
 });
 
-test("refuses uncommitted changes, and stops after 3 failed checks", async () => {
+test("refuses a project git cannot read, and stops after 3 failed checks", async () => {
   const dirty = await setup(["ITEM DONE: x"], { dirty: true });
-  await assert.rejects(dirty.sw.start({ repo: dirty.repo, goal: "x" }), /uncommitted/);
+  await assert.rejects(dirty.sw.start({ repo: dirty.repo, goal: "x" }), /git could not read/);
 
   const failing = await setup(["ITEM DONE: x"], { checks: [1, 1, 1] });
   await failing.sw.start({ repo: failing.repo, goal: "x", check: "pnpm test" });

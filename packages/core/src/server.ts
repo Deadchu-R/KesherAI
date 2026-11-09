@@ -65,6 +65,7 @@ import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
 import { SelfWork } from "./self-work.js";
+import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
@@ -525,6 +526,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Look for the CLI now, so the first chat already has the Unity tools.
   unityCli.cliKnown();
   const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));
+  // The task board self-work shares with Claude: a file on this computer only.
+  const taskBoard = new TaskBoard(join(paths.root, "self-work", "board.json"));
   const services: KesherServices = {
     browser,
     config,
@@ -536,6 +539,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     conversations: new ConversationManager({
+      board: taskBoard,
       registry,
       library,
       assets,
@@ -693,7 +697,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   stopConversation = (id) => services.conversations.stop(id);
   // Self-work: KesherAI works on a git project by itself, on its own branch, item by item.
   const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
-    createChat: async (repo, title, modelId) => (await services.conversations.create({ kind: "code", workspace: repo, mode: "auto", title, ...(modelId ? { modelId } : {}) })).id,
+    createChat: async (folder, title, modelId, extra = []) => {
+      const c = await services.conversations.create({ kind: "code", workspace: folder, mode: "auto", title, ...(modelId ? { modelId } : {}) });
+      // The shared board and handoff: readable by this chat's file tools.
+      for (const f of extra) {
+        await mkdir(f, { recursive: true }).catch(() => undefined);
+        await (await services.conversations.open(c.id))?.session.grant(f);
+      }
+      return c.id;
+    },
     send: async (id, text) => void (await services.conversations.send(id, text)),
     state: async (id) => {
       const opened = await services.conversations.open(id);
@@ -703,8 +715,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     git: (repo, args) => runIn(repo, "git", args, false),
     check: (repo, command) => runIn(repo, command, [], true),
     notify: async (title, body, path) => void (await notifier.send({ title, body, path, tags: ["robot"] }).catch(() => undefined)),
+    shared: join(paths.root, "self-work"),
   });
   services.selfWork = selfWork;
+  services.board = taskBoard;
   void selfWork.load().catch(() => undefined);
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.

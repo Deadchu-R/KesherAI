@@ -3,6 +3,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { isLocalRequest } from "../auth.js";
 import type { KesherServices } from "../services.js";
+import type { BoardChange } from "../task-board.js";
 
 /**
  * Self-work: start, follow and stop KesherAI working on a git project by itself.
@@ -41,5 +42,17 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
       s.conversations.stop(run.convId);
     }
     return { run: sw?.current ?? null };
+  });
+
+  // The shared task board: Roee sees it and can add, reopen or note from KesherAI (and the phone).
+  app.get("/api/self-work/board", async (_req, reply) => (s.board ? s.board.read() : reply.code(503).send({ error: "No board." })));
+  app.post<{ Body: { changes?: BoardChange[]; rev?: number } }>("/api/self-work/board", async (req, reply) => {
+    if (!s.board) return reply.code(503).send({ error: "No board." });
+    const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+    try {
+      return await s.board.change("roee", changes, typeof req.body?.rev === "number" ? req.body.rev : undefined);
+    } catch (e) {
+      return reply.code((e as { code?: number }).code === 409 ? 409 : 400).send({ error: (e as Error).message });
+    }
   });
 }

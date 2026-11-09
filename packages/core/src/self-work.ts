@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 /**
  * Self-work: KesherAI works on a git project by itself (its own code, on the
@@ -31,6 +31,8 @@ export interface SelfWorkState {
   repo: string;
   goal: string;
   branch: string;
+  /** The separate working folder (a git worktree) the run works in; the user's own checkout is not touched. */
+  worktree: string;
   check: string;
   modelId?: string;
   convId: string;
@@ -47,8 +49,8 @@ export interface SelfWorkState {
 
 /** What self-work needs from KesherAI (injected, so it can be tested). */
 export interface SelfWorkDeps {
-  /** Starts a code chat in the folder (auto-approve file edits and safe commands). */
-  createChat: (repo: string, title: string, modelId?: string) => Promise<string>;
+  /** Starts a code chat in the folder (auto-approve file edits and safe commands); `extra`: more folders it may read (the task board and handoff). */
+  createChat: (folder: string, title: string, modelId?: string, extra?: string[]) => Promise<string>;
   send: (convId: string, text: string) => Promise<void>;
   /** The chat's state and its last answer. */
   state: (convId: string) => Promise<{ status: string; last: string }>;
@@ -59,6 +61,8 @@ export interface SelfWorkDeps {
   notify: (title: string, body: string, link: string) => Promise<void>;
   /** Waits (tests replace it). */
   sleep?: (ms: number) => Promise<void>;
+  /** The folder with the shared task board and the handoff notes (board.json, handoff.md), if any. */
+  shared?: string;
 }
 
 const MAX_STEPS = 80;
@@ -68,10 +72,11 @@ const STEP_MS = 45 * 60_000;
 const WAIT_MS = 30 * 60_000;
 
 /** The rules the model gets with the goal. */
-export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check">, hours: number): string {
+export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check">, hours: number, shared?: string): string {
   return [
-    `Self-work mode: you work on this project by yourself for up to ${hours} hours, on the git branch ${s.branch} (already checked out; KesherAI commits for you).`,
+    `Self-work mode: you work on this project by yourself for up to ${hours} hours, in a separate copy of it (a git worktree) on the branch ${s.branch}; KesherAI commits for you. The user's own copy and the running app are not touched.`,
     `The goal: ${s.goal}`,
+    ...(shared ? ["", `First read ${shared}/handoff.md (the project's rules, the owner's preferences, the priority list) and the task_board (read). Work only on tasks you claimed on the board; Claude works on the same board, so never take a task Claude claimed, and mark yours done with the commit and how you tested it.`] : []),
     "",
     "How to work:",
     "1. First write .kesher-self/plan.md: a checklist (- [ ] item) of small, separate items that reach the goal, plus Decisions and Blockers sections. Keep it up to date: it is how the user follows you.",
@@ -135,29 +140,29 @@ export class SelfWork {
   }
 
   /**
-   * Starts a run: checks the folder is a git project with no uncommitted
-   * changes, makes the branch, opens the chat and sends the goal.
+   * Starts a run: checks the folder is a git project, makes its own working folder (a git worktree) on a new branch, opens the chat and sends the goal.
    */
   async start(o: SelfWorkStart): Promise<SelfWorkState> {
     if (this.run_ && (this.run_.status === "running" || this.run_.status === "waiting")) throw new Error("Self-work is already running. Stop it first.");
     const goal = o.goal.trim().slice(0, 4000);
     if (!goal) throw new Error("Say what to work on.");
     if (!existsSync(join(o.repo, ".git"))) throw new Error("That folder is not a git project (no .git folder).");
-    const dirty = await this.d.git(o.repo, ["status", "--porcelain"]);
-    if (dirty.code !== 0) throw new Error(`git could not read the project: ${dirty.out.slice(0, 300)}`);
-    if (dirty.out.trim()) throw new Error("The project has uncommitted changes. Commit or put them aside first, so self-work's commits hold only its own work.");
+    const head = await this.d.git(o.repo, ["rev-parse", "--verify", "HEAD"]);
+    if (head.code !== 0) throw new Error(`git could not read the project: ${head.out.slice(0, 300)}`);
     const hours = Math.min(12, Math.max(0.25, Number(o.hours ?? 2) || 2));
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
     const branch = `kesher-self/${stamp}`;
-    const made = await this.d.git(o.repo, ["switch", "-c", branch]);
-    if (made.code !== 0) throw new Error(`Could not make the branch ${branch}: ${made.out.slice(0, 300)}`);
+    // A separate working folder next to the project: the user's checkout (and the running app) stay as they are.
+    const worktree = join(dirname(o.repo), `${basename(o.repo)}-self-work`, stamp);
+    const made = await this.d.git(o.repo, ["worktree", "add", "-b", branch, worktree, "HEAD"]);
+    if (made.code !== 0) throw new Error(`Could not make the work folder for ${branch}: ${made.out.slice(0, 300)}`);
     const check = (o.check ?? "").trim().slice(0, 300);
-    const convId = await this.d.createChat(o.repo, `🤖 Self-work · ${goal.slice(0, 50)}`, o.modelId);
-    this.run_ = { id: stamp, repo: o.repo, goal, branch, check, ...(o.modelId ? { modelId: o.modelId } : {}), convId, status: "running", startedAt: Date.now(), until: Date.now() + hours * 3_600_000, steps: 0, items: [], failures: 0 };
+    const convId = await this.d.createChat(worktree, `🤖 Self-work · ${goal.slice(0, 50)}`, o.modelId, this.d.shared ? [this.d.shared] : []);
+    this.run_ = { id: stamp, repo: o.repo, goal, branch, worktree, check, ...(o.modelId ? { modelId: o.modelId } : {}), convId, status: "running", startedAt: Date.now(), until: Date.now() + hours * 3_600_000, steps: 0, items: [], failures: 0 };
     this.stopRequested = false;
     await this.save();
-    await this.d.send(convId, selfWorkBrief(this.run_, hours));
-    await this.d.notify("🤖 Self-work started", `${goal.slice(0, 120)} (branch ${branch}, up to ${hours} h)`, `#/c/${convId}`);
+    await this.d.send(convId, selfWorkBrief(this.run_, hours, this.d.shared));
+    await this.d.notify("🤖 Self-work started", `${goal.slice(0, 120)} (branch ${branch}, up to ${hours} h, in ${worktree})`, `#/c/${convId}`);
     this.loop = this.work(true);
     return this.run_;
   }
@@ -253,7 +258,7 @@ export class SelfWork {
           continue;
         }
         if (r.check) {
-          const c = await this.d.check(r.repo, r.check);
+          const c = await this.d.check(r.worktree ?? r.repo, r.check);
           if (c.code !== 0) {
             r.failures++;
             await this.save();
@@ -264,9 +269,9 @@ export class SelfWork {
         }
         r.failures = 0;
         const label = out.text || "Plan";
-        await this.d.git(r.repo, ["add", "-A"]);
-        const committed = await this.d.git(r.repo, ["commit", "-m", `self-work: ${label.slice(0, 150)}`, "-m", `Goal: ${r.goal.slice(0, 500)}`]);
-        const sha = committed.code === 0 ? (await this.d.git(r.repo, ["rev-parse", "--short", "HEAD"])).out.trim() : undefined;
+        await this.d.git(r.worktree ?? r.repo, ["add", "-A"]);
+        const committed = await this.d.git(r.worktree ?? r.repo, ["commit", "-m", `self-work: ${label.slice(0, 150)}`, "-m", `Goal: ${r.goal.slice(0, 500)}`]);
+        const sha = committed.code === 0 ? (await this.d.git(r.worktree ?? r.repo, ["rev-parse", "--short", "HEAD"])).out.trim() : undefined;
         if (out.kind === "item" || sha) {
           r.items.push({ at: Date.now(), text: label, ...(sha ? { commit: sha } : {}) });
           await this.save();
