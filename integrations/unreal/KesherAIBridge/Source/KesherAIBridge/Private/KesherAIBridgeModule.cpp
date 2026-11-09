@@ -18,11 +18,14 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "WebSocketsModule.h"
+#if WITH_LIVE_CODING
+#include "ILiveCodingModule.h"
+#endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.9");
+static const TCHAR* BridgeVersion = TEXT("0.1.10");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -130,6 +133,30 @@ void FKesherAIBridgeModule::OnMessage(const FString& Text)
 		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherGraph::EditVariables(Path, *Ops);
 	}
 	else if (Cmd == TEXT("compile")) Result = KesherGraph::Compile(Path);
+	else if (Cmd == TEXT("live_coding"))
+	{
+		// The editor's Live Coding (Ctrl+Alt+F11) for C++ changed in KesherAI's code editor; waits until it ends.
+		Result = MakeShared<FJsonObject>();
+#if WITH_LIVE_CODING
+		ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
+		if (!LiveCoding || !LiveCoding->IsEnabledForSession())
+		{
+			Result->SetBoolField(TEXT("ok"), false);
+			Result->SetStringField(TEXT("result"), TEXT("Live Coding is off in this editor (Editor Preferences → Live Coding), or a header changed: close the editor and compile."));
+		}
+		else
+		{
+			ELiveCodingCompileResult Outcome = ELiveCodingCompileResult::NotStarted;
+			LiveCoding->Compile(ELiveCodingCompileFlags::WaitForCompletion, &Outcome);
+			const bool bOk = Outcome == ELiveCodingCompileResult::Success || Outcome == ELiveCodingCompileResult::NoChanges;
+			Result->SetBoolField(TEXT("ok"), bOk);
+			Result->SetStringField(TEXT("result"), Outcome == ELiveCodingCompileResult::Success ? TEXT("Compiled and patched into the running editor.") : Outcome == ELiveCodingCompileResult::NoChanges ? TEXT("No changes to compile.") : Outcome == ELiveCodingCompileResult::CompileStillActive || Outcome == ELiveCodingCompileResult::InProgress ? TEXT("A compile is already running.") : TEXT("Live Coding failed: see the Live Coding window or the Output Log for the errors."));
+		}
+#else
+		Result->SetBoolField(TEXT("ok"), false);
+		Result->SetStringField(TEXT("result"), TEXT("Live Coding is not available here (Windows editor only)."));
+#endif
+	}
 	else if (Cmd == TEXT("save")) Result = KesherGraph::Save(Path);
 	else if (Cmd == TEXT("open")) Result = KesherGraph::Open(Path);
 	else if (Cmd == TEXT("actions"))

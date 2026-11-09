@@ -28,5 +28,11 @@ public class KesherAIBridge : ModuleRules
 			"AssetTools",
 			"ImageCore",
 		});
+
+		// Live Coding from KesherAI's C++ editor (Windows editor only).
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PrivateDependencyModuleNames.Add("LiveCoding");
+		}
 	}
 }

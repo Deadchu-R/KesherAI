@@ -22,7 +22,7 @@ interface Build { project: string; state: "running" | "ok" | "failed"; how: "liv
  * An Unreal project's C++ in the page: the files of Source/ and Config/, read
  * and write one (only there, only code and settings files, not when it changed
  * meanwhile; the old text is kept in KesherAI's folder first), and compile:
- * Live Coding in the open editor (plugin 0.1.9+), or Unreal's Build.bat when
+ * Live Coding in the open editor (plugin 0.1.10+), or Unreal's Build.bat when
  * the editor is closed. Only projects found on this computer (or the one open
  * in the editor) can be used, also from the phone.
  */
@@ -110,7 +110,7 @@ export function unrealSourceRoutes(app: FastifyInstance, s: KesherServices): voi
       if (p.open) {
         void unreal.request<{ ok: boolean; result?: string; log?: string }>("live_coding", {}, 600_000).then(
           (r) => Object.assign(b, { state: r.ok ? "ok" : "failed", tail: `${r.result ?? ""}\n${r.log ?? ""}`.trim(), errors: r.ok ? [] : shortErrors(r.log ?? r.result ?? "").lines, problems: parseCodeErrors(r.log ?? "", p.path) }),
-          (e: Error) => Object.assign(b, { state: "failed", errors: [/Unknown|live_coding/i.test(e.message) ? "Live Coding from KesherAI needs the plugin 0.1.9: update it from the Unreal page, or press Ctrl+Alt+F11 in the editor." : e.message] }),
+          (e: Error) => Object.assign(b, { state: "failed", errors: [/Unknown|live_coding/i.test(e.message) ? "Live Coding from KesherAI needs the plugin 0.1.10: update it from the Unreal page, or press Ctrl+Alt+F11 in the editor." : e.message] }),
         );
       } else {
         const proj = await readProject(p.path);
