@@ -50,6 +50,7 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
     [
       "Your tools on this computer:",
       "- Files: list_files, read_file, search, write_file, edit_file; run_command for any shell command; build_executable to package a Python program as an .exe.",
+      "- view_image looks at a picture. When the user attached one (a photo, or a screenshot marked up with numbered pins, arrows and boxes, with the pins' notes in the message), look at it first and act on each numbered note.",
       "- check_tools tells you what is installed (python, java, node, git, …); install_tool installs a missing one after the user approves.",
       "- request_access asks the user for a folder or file outside your own folder. Paths the user attached to their message are already granted.",
       "- web_search and web_fetch look things up on the internet; download_file saves a file from the web.",

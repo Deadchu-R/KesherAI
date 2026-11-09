@@ -387,4 +387,32 @@ export const requestAccessSpec: ToolSpec = {
 };
 
 /** The file and terminal tools of a code conversation. */
-export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, readFileTool, readDocumentTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];
+/** Pictures the model can look at (formats the vision APIs take). */
+const PICTURE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
+
+/**
+ * Looks at a picture: one the user attached (a photo, or a screenshot they
+ * marked up with arrows, circles and numbered notes) or one in the project.
+ * The model sees the picture itself (models without vision get only its size).
+ */
+export const viewImageTool: AgentTool = {
+  risk: "read",
+  spec: {
+    name: "view_image",
+    description: "Look at a picture file (PNG, JPG, WebP, GIF): one the user attached (\"[Attached: …]\", e.g. a screenshot they marked up with arrows, boxes and numbered notes) or one in the project. Use it whenever the user attached a picture.",
+    inputSchema: { type: "object", properties: { path: { type: "string", description: "The picture's path (as attached, or relative to the project)." } }, required: ["path"] },
+  },
+  async run(input, ctx) {
+    const given = str(input, "path").replace(/^\[?\s*(Attached|מצורף)\s*:\s*/i, "").replace(/\]\s*$/, "").trim();
+    const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], given);
+    const type = PICTURE_TYPES[path.split(".").pop()?.toLowerCase() ?? ""];
+    if (!type) throw new Error("Not a picture (PNG, JPG, WebP or GIF).");
+    const info = await stat(path).catch(() => undefined);
+    if (!info?.isFile()) throw new Error(`${given} does not exist.`);
+    if (info.size > 8 * 1024 * 1024) throw new Error("The picture is larger than 8 MB.");
+    const data = await readFile(path);
+    return { output: `Looking at ${ctx.workspace ? displayPath(ctx.workspace, path) : path} (${Math.round(info.size / 1024)} KB).`, images: [{ mimeType: type, data: data.toString("base64") }] };
+  },
+};
+
+export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, readFileTool, viewImageTool, readDocumentTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];

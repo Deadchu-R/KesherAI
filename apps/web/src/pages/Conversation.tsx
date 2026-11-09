@@ -27,6 +27,7 @@ const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: 
 import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { getLocale, t } from "../i18n";
 import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../BlueprintChatPanel";
+import { Annotator, type Annotated } from "../Annotator";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -356,6 +357,31 @@ export function ConversationPage({ id }: { id: string }) {
   const voicePart = useParts().on("voice");
   const [askPhoto, setAskPhoto] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
+  // Marking up a picture (the computer's screen, or one from this device) before it goes to the chat.
+  const annotInput = useRef<HTMLInputElement>(null);
+  const [annotSrc, setAnnotSrc] = useState("");
+  const startAnnotate = async (from: "screen" | "file") => {
+    if (from === "file") return annotInput.current?.click();
+    try {
+      const res = await fetch(withToken("/api/computer/screen?w=2400"));
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
+      setAnnotSrc(URL.createObjectURL(await res.blob()));
+    } catch (e) {
+      setError(getLocale() === "he" ? `אי אפשר לצלם את המסך: ${(e as Error).message} (צריך שליטה במחשב פעילה: הגדרות → שליטה במחשב)` : `Cannot capture the screen: ${(e as Error).message} (turn on computer control in Settings)`);
+    }
+  };
+  const finishAnnotate = async (r: Annotated | null) => {
+    URL.revokeObjectURL(annotSrc);
+    setAnnotSrc("");
+    if (!r) return;
+    try {
+      const path = await uploadToConversation(id, `marked-up-${Date.now()}.png`, r.png);
+      const notes = r.notes.length ? `${getLocale() === "he" ? "הסימונים בתמונה" : "The marks in the picture"}:\n${r.notes.join("\n")}\n` : "";
+      setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}[${t("attached")}: ${path}]\n${notes}`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   // Opened from the phone (shared from another app, or a widget button): a draft, voice mode, or the camera.
   useEffect(() => {
     const apply = () => {
@@ -679,6 +705,8 @@ export function ConversationPage({ id }: { id: string }) {
           <button type="button" className="as-link" onClick={() => setAskPhoto(false)}>✕</button>
         </div>
       )}
+      <input ref={annotInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) setAnnotSrc(URL.createObjectURL(f)); e.target.value = ""; }} />
+      {annotSrc && <Annotator src={annotSrc} onDone={(r) => void finishAnnotate(r)} />}
       <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void addPhotos(e.target.files); e.target.value = ""; }} />
       {voice && (
         <VoiceMode
@@ -1000,6 +1028,7 @@ export function ConversationPage({ id }: { id: string }) {
               <AddMenu
                 onFiles={() => (desktop()?.pickFiles ? void desktop()!.pickFiles!().then((f) => attach(f)) : uploadInput.current?.click())}
                 onPhoto={() => photoInput.current?.click()}
+                onAnnotate={(from) => void startAnnotate(from)}
                 {...(desktop()?.pickFiles ? { onProject: () => void addProject() } : {})}
                 onGameProject={(path) => void addProject(path)}
                 convId={id}

@@ -19,6 +19,8 @@ export interface AddMenuProps {
   convId?: string;
   /** Adds a script found in the chat's folders. */
   onScript?: (path: string) => void;
+  /** Mark up a picture (the computer's screen, or one from this device) before it goes to the chat. */
+  onAnnotate?: (from: "screen" | "file") => void;
   /** Adds text to the message box. */
   onInsert: (text: string) => void;
   web: boolean;
@@ -117,6 +119,12 @@ export function AddMenu(p: AddMenuProps) {
         <div className="model-pop add-pop" role="menu">
           <button type="button" role="menuitem" onClick={() => { done(); p.onFiles(); }}>📎 {L("קבצים…", "Files…")}</button>
           <button type="button" role="menuitem" onClick={() => { done(); p.onPhoto(); }}>📷 {L("מצלמה או תמונה", "Camera or photo")}</button>
+          {p.onAnnotate && (
+            <>
+              <button type="button" role="menuitem" onClick={() => { done(); p.onAnnotate!("screen"); }}>✏️ {L("צילום מסך של המחשב + סימון", "The computer's screen + mark it up")}</button>
+              <button type="button" role="menuitem" onClick={() => { done(); p.onAnnotate!("file"); }}>🖍 {L("סימון על תמונה", "Mark up a picture")}</button>
+            </>
+          )}
           <button type="button" role="menuitem" aria-expanded={sub === "pages"} onClick={() => openSub("pages")}>📄 {L("מסמך מהדפים", "A document from Pages")} <span className="sub-arrow">›</span></button>
           {sub === "pages" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => void insertPage(x.id, x.title ?? x.name ?? "")}>{x.title ?? x.name}</button>)}</div>}
           <button type="button" role="menuitem" aria-expanded={sub === "chats"} onClick={() => openSub("chats")}>💬 {L("משיחה אחרת", "From another chat")} <span className="sub-arrow">›</span></button>
