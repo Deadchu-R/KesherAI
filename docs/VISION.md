@@ -158,6 +158,7 @@ There are no dates: the pace depends on how many people join. Phases 3 and 4 can
 Not scheduled; kept here so they are not lost.
 
 - **Game builds from KesherAI, in the background:** build Unity and Unreal games (Windows, Android, and the other targets each engine has) from the page, while the user keeps working: a queue, progress and logs, the finished build in the library, and a phone notification when it is done.
+- **Copilot-style suggestions in the code editor:** while typing, a local model guesses the rest of the line or block and shows it greyed out; Tab inserts it (Monaco's inline completions, fed by a small fast coder model with the file and the cursor).
 - **Minecraft modding:** tools for Fabric/Forge/NeoForge mods (project setup, building, running a test client).
 - **Roblox:** Luau scripts and Roblox Studio (further out).
 - **Game modding in general:** tools for modding other games.

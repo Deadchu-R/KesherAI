@@ -16,6 +16,7 @@ import { ConnectUnityAssistant } from "../engine/ConnectUnityAssistant";
 import { NewBlueprint } from "../engine/NewBlueprint";
 import { OpenInChat } from "../engine/OpenInChat";
 import { PluginUpdate } from "../engine/PluginUpdate";
+import { UnrealSource } from "../engine/UnrealSource";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -76,7 +77,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const [bubble, setBubble] = useState(false);
   // Graph, code, or both side by side (remembered); a line clicked in the code flashes its node.
   // Unity: Visual Scripting graphs, or C# scripts shown as nodes.
-  const [source, setSource] = useState<"graphs" | "scripts">("graphs");
+  const [source, setSource] = useState<"graphs" | "scripts" | "cpp">("graphs");
   const [view, setView] = useState<"graph" | "code" | "both" | "design">(() => {
     try {
       const v = localStorage.getItem("kesher.bpView");
@@ -305,8 +306,17 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <ConnectSteps unity={unity} download={st.download} />
       )}
 
+      {!unity && (
+        <div className="row ue-projects">
+          <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
+            <button type="button" role="tab" aria-selected={source !== "cpp"} className={source !== "cpp" ? "on" : ""} onClick={() => setSource("graphs")}>Blueprints</button>
+            <button type="button" role="tab" aria-selected={source === "cpp"} className={source === "cpp" ? "on" : ""} onClick={() => setSource("cpp")} title={L("קוד ה-C++ של הפרויקט", "The project's C++ code")}>C++</button>
+          </span>
+        </div>
+      )}
+      {!unity && source === "cpp" && <UnrealSource />}
       {unity && source === "scripts" && st.active && <ScriptNodes key={st.active} />}
-      {!neverConnected && !(unity && source === "scripts") && (
+      {!neverConnected && !(unity && source === "scripts") && !(!unity && source === "cpp") && (
         <div className={`ue-body${view === "both" || view === "design" ? " wide" : ""}`}>
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
