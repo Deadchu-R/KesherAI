@@ -238,7 +238,7 @@ app.on("second-instance", () => showWindow());
 
 /** Where the window was last time (it opens there again, maximized if it was). */
 const windowFile = () => join(app.getPath("userData"), "window.json");
-interface WindowState { x?: number; y?: number; width: number; height: number; maximized?: boolean }
+interface WindowState { x?: number; y?: number; width: number; height: number; maximized?: boolean; /** The middle of the window as shown (a maximized window can sit on another monitor than its normal place). */ cx?: number; cy?: number }
 
 /**
  * The last window place, only when it is still on a connected monitor (a
@@ -248,6 +248,15 @@ function lastWindow(): WindowState | undefined {
   try {
     const w = JSON.parse(readFileSync(windowFile(), "utf8")) as WindowState;
     if (!(w.width >= 600 && w.height >= 400)) return undefined;
+    // Maximized: open on the monitor it was maximized on, whatever its normal place was.
+    if (w.maximized && w.cx !== undefined && w.cy !== undefined) {
+      const d = displays.getAllDisplays().find((x) => w.cx! >= x.bounds.x && w.cx! < x.bounds.x + x.bounds.width && w.cy! >= x.bounds.y && w.cy! < x.bounds.y + x.bounds.height);
+      if (d) {
+        const width = Math.min(w.width, d.workArea.width);
+        const height = Math.min(w.height, d.workArea.height);
+        return { width, height, maximized: true, x: d.workArea.x + Math.round((d.workArea.width - width) / 2), y: d.workArea.y + Math.round((d.workArea.height - height) / 2) };
+      }
+    }
     if (w.x === undefined || w.y === undefined) return { width: w.width, height: w.height, ...(w.maximized ? { maximized: true } : {}) };
     const on = displays.getAllDisplays().some((d) => {
       const a = d.workArea;
@@ -265,7 +274,8 @@ function rememberWindow(win: BrowserWindow): void {
   const save = () => {
     if (win.isDestroyed() || win.isMinimized()) return;
     const b = win.getNormalBounds();
-    void writeFile(windowFile(), JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height, maximized: win.isMaximized() })).catch(() => undefined);
+    const now = win.getBounds();
+    void writeFile(windowFile(), JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height, maximized: win.isMaximized(), cx: now.x + Math.round(now.width / 2), cy: now.y + Math.round(now.height / 2) })).catch(() => undefined);
   };
   const later = () => {
     clearTimeout(timer);

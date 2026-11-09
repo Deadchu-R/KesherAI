@@ -6,7 +6,7 @@ import { findGameProjects } from "../game-projects.js";
 import { projectPath } from "../unity-tools.js";
 import { findEngines, readProject } from "../unreal-install.js";
 import { lintUnrealSource, shortErrors } from "../unreal-lint.js";
-import { codeEditPrompt, codeFromAnswer, parseCodeErrors, type CodeError } from "../code-errors.js";
+import { applyCodeAnswer, codeEditPrompt, parseCodeErrors, type CodeError } from "../code-errors.js";
 import { modelTurnFor } from "../conversations.js";
 import { runProgram } from "../unreal-tools.js";
 
@@ -143,8 +143,9 @@ export function unrealSourceRoutes(app: FastifyInstance, s: KesherServices): voi
       const others = twin !== rel ? await readFile(join(p.path, twin), "utf8").then((t) => `// ${twin}\n${t}`, () => undefined) : undefined;
       const prompt = codeEditPrompt({ language: "cpp", engine: "unreal", path: rel, text, request: String(req.body?.request ?? "").slice(0, 4000), errors: Array.isArray(req.body?.errors) ? req.body.errors.slice(0, 30) : [], ...(others ? { others } : {}) });
       const r = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: prompt }], tools: [] }, AbortSignal.timeout(300_000), () => undefined);
-      const note = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```[\s\S]*?```/g, "").trim().split("\n").filter(Boolean).pop() ?? "";
-      return { code: codeFromAnswer(r.text), note: note.slice(0, 400), model: chat };
+      const put = applyCodeAnswer(text, r.text);
+      const note = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```[\s\S]*?```/g, "").replace(/<{5,}[\s\S]*?>{5,}\s*REPLACE/g, "").trim().split("\n").filter(Boolean).pop() ?? "";
+      return { code: put.code, note: `${note.slice(0, 400)}${put.missed ? ` (${put.missed} of ${put.blocks} changes did not match the file and were left out)` : ""}`, model: chat };
     } catch (err) {
       return reply.code((err as { code?: number }).code === 400 ? 400 : 502).send({ error: (err as Error).message });
     }

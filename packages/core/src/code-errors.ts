@@ -70,6 +70,65 @@ export function codeEditPrompt(o: { language: "csharp" | "cpp"; engine: "unity" 
     "",
     `The request: ${o.request || "Fix the errors."}`,
     "",
-    "Answer with the WHOLE new file in one code block, then one short line saying what changed.",
+    ...(o.text.length > WHOLE_FILE_UP_TO
+      ? [
+          "Answer ONLY with the changes, as blocks like this (one block per place; SEARCH copies the current lines exactly, a few lines are enough to be unique; an empty SEARCH adds at the end of the file):",
+          "<<<<<<< SEARCH",
+          "    int score;",
+          "=======",
+          "    int score;",
+          "    public int highScore;",
+          ">>>>>>> REPLACE",
+          "Then one short line saying what changed.",
+        ]
+      : ["Answer with the WHOLE new file in one code block, then one short line saying what changed."]),
   ].join("\n");
+}
+
+/** Files up to this size come back whole; bigger ones as change blocks (much faster for a local model). */
+export const WHOLE_FILE_UP_TO = 4000;
+
+/**
+ * Puts the model's answer into the file: SEARCH/REPLACE blocks (each found
+ * exactly, or line by line ignoring indentation), or a whole file in a code
+ * block.
+ *
+ * @returns The new text and the blocks that could not be placed.
+ */
+export function applyCodeAnswer(text: string, answer: string): { code: string; missed: number; blocks: number } {
+  const clean = answer.replace(/<think>[\s\S]*?<\/think>/g, "");
+  const blocks = [...clean.matchAll(/<{5,}\s*SEARCH[^\n]*\n([\s\S]*?)\n?={5,}[^\n]*\n([\s\S]*?)\n?>{5,}\s*REPLACE/g)];
+  if (!blocks.length) return { code: codeFromAnswer(clean), missed: 0, blocks: 0 };
+  let out = text;
+  let missed = 0;
+  for (const b of blocks) {
+    const search = b[1]!;
+    const replace = b[2]!;
+    if (!search.trim()) {
+      out = `${out.replace(/\s*$/, "")}\n${replace}\n`;
+      continue;
+    }
+    // Exact, starting at a line's start (a search without its indentation is placed by the line match below).
+    let at = out.indexOf(search);
+    while (at > 0 && out[at - 1] !== "\n") at = out.indexOf(search, at + 1);
+    if (at >= 0) {
+      out = out.slice(0, at) + replace + out.slice(at + search.length);
+      continue;
+    }
+    // The same lines with other indentation or line endings.
+    const lines = out.split("\n");
+    const want = search.split("\n").map((l) => l.trim());
+    let found = -1;
+    for (let i = 0; i + want.length <= lines.length && found < 0; i++) if (want.every((w, j) => lines[i + j]!.trim() === w)) found = i;
+    if (found < 0) {
+      missed++;
+      continue;
+    }
+    const indent = /^\s*/.exec(lines[found]!)![0];
+    const firstIndent = /^\s*/.exec(search.split("\n")[0]!)![0];
+    const moved = replace.split("\n").map((l) => (l.startsWith(firstIndent) ? indent + l.slice(firstIndent.length) : l));
+    lines.splice(found, want.length, ...moved);
+    out = lines.join("\n");
+  }
+  return { code: out, missed, blocks: blocks.length };
 }

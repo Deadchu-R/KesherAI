@@ -13,7 +13,7 @@ import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { runUnityTest } from "../unity-test.js";
 import { projectPath } from "../unity-tools.js";
 import { connectUnityAssistant } from "../unity-assistant.js";
-import { codeEditPrompt, codeFromAnswer, parseCodeErrors, type CodeError } from "../code-errors.js";
+import { applyCodeAnswer, codeEditPrompt, parseCodeErrors, type CodeError } from "../code-errors.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
@@ -498,9 +498,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         const chat = await chatModel(req.body?.model);
         const prompt = codeEditPrompt({ language: "csharp", engine: "unity", path: rel, text, request: String(req.body?.request ?? "").slice(0, 4000), errors: Array.isArray(req.body?.errors) ? req.body.errors.slice(0, 30) : [] });
         const r = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: prompt }], tools: [] }, AbortSignal.timeout(300_000), () => undefined);
-        const code = codeFromAnswer(r.text);
-        const note = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```[\s\S]*?```/g, "").trim().split("\n").filter(Boolean).pop() ?? "";
-        return { code, note: note.slice(0, 400), model: chat };
+        const put = applyCodeAnswer(text, r.text);
+        const note = r.text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```[\s\S]*?```/g, "").replace(/<{5,}[\s\S]*?>{5,}\s*REPLACE/g, "").trim().split("\n").filter(Boolean).pop() ?? "";
+        return { code: put.code, note: `${note.slice(0, 400)}${put.missed ? ` (${put.missed} of ${put.blocks} changes did not match the file and were left out)` : ""}`, model: chat };
       } catch (err) {
         return reply.code((err as { code?: number }).code === 400 ? 400 : 502).send({ error: (err as Error).message });
       }

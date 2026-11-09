@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { codeEditPrompt, codeFromAnswer, parseCodeErrors } from "./code-errors.js";
+import { applyCodeAnswer, codeEditPrompt, codeFromAnswer, parseCodeErrors } from "./code-errors.js";
 
 test("compiler errors from Unity (plain and inside JSON) and from MSVC, each once, relative paths", () => {
   const unity = 'Assets/Scripts/Player.cs(12,5): error CS1002: ; expected\nAssets/Scripts/Player.cs(12,5): error CS1002: ; expected\n{"messages":["Assets/Enemy.cs(3,10): warning CS0414: The field \'Enemy.x\' is assigned but its value is never used"]}';
@@ -21,4 +21,16 @@ test("the model's answer: the code block only; the prompt carries the file, the 
   assert.match(p, /Unity C# script/);
   assert.match(p, /CS1002/);
   assert.match(p, /The request: add jump/);
+});
+
+test("change blocks: exact, re-indented, added at the end, and a block that does not match", () => {
+  const file = "class A {\n    int score;\n    void Spawn() {\n        x = 1;\n    }\n}\n";
+  const answer = "<<<<<<< SEARCH\n    int score;\n=======\n    int score;\n    public int highScore;\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nx = 1;\n=======\nx = 1;\nif (score > highScore) highScore = score;\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nnot there\n=======\nzzz\n>>>>>>> REPLACE\nAdded highScore.";
+  const r = applyCodeAnswer(file, answer);
+  assert.equal(r.blocks, 3);
+  assert.equal(r.missed, 1);
+  assert.match(r.code, / {4}int score;\n {4}public int highScore;/);
+  assert.match(r.code, / {8}x = 1;\n {8}if \(score > highScore\) highScore = score;/);
+  assert.equal(applyCodeAnswer("a\n", "```\nb\n```").code, "b\n");
+  assert.match(codeEditPrompt({ language: "csharp", engine: "unity", path: "A.cs", text: "x".repeat(5000), request: "r" }), /SEARCH/);
 });
