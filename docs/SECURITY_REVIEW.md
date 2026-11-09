@@ -57,6 +57,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Device keys** are kept as hashes only and compared in constant time.
     - **The training uploads** are limited to PNG, JPEG and WebP, and the folder name is made safe.
     - **Faster:** the request log is now saved at most every 30 seconds instead of 5. The phone asks every few seconds.
+
+16. **Scan after 0.5.67** (the Unity and devices work, 0.5.49–0.5.67). No new security findings.
+    - **Unity windows:** the install, live and platform windows run fixed commands. The only inserted values are the Unity version, read from ProjectVersion.txt and limited to letters, digits and dots, and the module name, from a fixed list. The routes work only on this computer.
+    - **Opening a Unity project to a chat** happens only for a folder already on the Unity page's list (exact match), so a typed "[Unity project: …]" line cannot open another folder.
+    - **File tools in a project:** paths still go through the folder check, so `..` and links out of the project are refused.
+    - **Computers going to sleep:** the presence message needs the remote token and a known computer; the announce route is local only.
+    - **Faster:** the user PATH is read from the registry at most once a minute instead of every 10 seconds (it ran synchronously, blocking the server briefly while the Unity page polls).
     - **A crash on start found here:** `@fastify/static` 10 needed an ES-module-only dependency, which Electron's Node cannot load. 0.5.13 fixed it, and CI now loads the core with `require(esm)` switched off.
 
 ## Known, not yet fixed

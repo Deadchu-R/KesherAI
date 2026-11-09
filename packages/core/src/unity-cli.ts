@@ -45,7 +45,7 @@ let pathCache: { at: number; value: string } | undefined;
 export function freshPath(): string {
   const base = process.env.PATH ?? process.env.Path ?? "";
   if (process.platform !== "win32") return [join(homedir(), ".local", "bin"), join(homedir(), ".unity", "bin"), base].join(":");
-  if (pathCache && Date.now() - pathCache.at < 10_000) return pathCache.value;
+  if (pathCache && Date.now() - pathCache.at < 60_000) return pathCache.value;
   let user = "";
   try {
     const out = execFileSync("reg", ["query", "HKCU\\Environment", "/v", "Path"], { encoding: "utf8", windowsHide: true, timeout: 5000 });
