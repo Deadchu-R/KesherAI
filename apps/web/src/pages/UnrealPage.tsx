@@ -7,8 +7,12 @@ import { FoundUnityProjects } from "../FoundUnityProjects";
 import { WidgetDesigner } from "../WidgetDesigner";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
-import { createConversation, desktop, toast, useLibrary } from "../library";
-import { openWithDraft } from "../phone";
+import { createConversation, toast, useLibrary } from "../library";
+import { AddUnityPackage } from "../engine/AddUnityPackage";
+import { ConnectSteps } from "../engine/ConnectSteps";
+import { NewBlueprint } from "../engine/NewBlueprint";
+import { OpenInChat } from "../engine/OpenInChat";
+import { PluginUpdate } from "../engine/PluginUpdate";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -26,196 +30,6 @@ interface Status {
 interface BpItem { path: string; name: string; parent?: string; saved?: boolean }
 interface Blueprint { path: string; name: string; parent?: string; variables: Array<{ name: string; type: string }>; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
 interface Queued { id: string; path: string; graph: string; request?: string; at: string; ops: unknown[] }
-
-/**
- * A new Blueprint from KesherAI: made in Unreal at once, or — with Unreal
- * closed — kept with an empty graph you can already work on (in words, or
- * in the code view), and made when the project opens, before those changes.
- */
-function NewBlueprint({ connected, onMade }: { connected: boolean; onMade: (path: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("BP_New");
-  const [parent, setParent] = useState("Actor");
-  const [folder, setFolder] = useState("/Game/Blueprints");
-  const [busy, setBusy] = useState(false);
-  if (!open) return <button type="button" onClick={() => setOpen(true)}>{L("+ Blueprint חדש", "+ New Blueprint")}</button>;
-  const make = () => {
-    setBusy(true);
-    void api<{ path: string; queued: boolean }>("/api/unreal/create", { method: "POST", body: { name, parent, folder } })
-      .then(
-        (r) => {
-          toast(r.queued ? L(`${name} ממתין: ייווצר ב-Unreal כשהפרויקט ייפתח. אפשר כבר לעבוד עליו.`, `${name} is waiting: it is made in Unreal when the project opens. You can work on it already.`) : L(`${name} נוצר ב-Unreal.`, `${name} was made in Unreal.`));
-          setOpen(false);
-          onMade(r.path);
-        },
-        (e: Error) => toast(e.message),
-      )
-      .finally(() => setBusy(false));
-  };
-  return (
-    <form className="stack small ue-new" onSubmit={(e) => { e.preventDefault(); make(); }}>
-      <label>{L("שם", "Name")}<input dir="ltr" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
-      <label>
-        {L("סוג", "Type")}
-        <select value={parent} onChange={(e) => { setParent(e.target.value); if (e.target.value === "UserWidget" && /^BP_/.test(name)) setName(name.replace(/^BP_/, "WBP_")); }}>
-          {[["Actor", "Actor"], ["Pawn", "Pawn"], ["Character", "Character"], ["GameModeBase", "Game Mode"], ["PlayerController", "Player Controller"], ["ActorComponent", "Actor Component"], ["UserWidget", L("Widget (ממשק)", "Widget (UI)")]].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-        </select>
-      </label>
-      <label>{L("תיקייה", "Folder")}<input dir="ltr" value={folder} onChange={(e) => setFolder(e.target.value)} /></label>
-      {!connected && <p className="muted">{L("Unreal סגור: ה-Blueprint ייווצר כשהפרויקט ייפתח עם הפלאגין, ושינויים שתעשו בו עד אז יחולו אחריו.", "Unreal is closed: it is made when the project opens with the plugin, and changes you make to it meanwhile apply after it.")}</p>}
-      <div className="row">
-        <button type="button" onClick={() => setOpen(false)}>{L("ביטול", "Cancel")}</button>
-        <button type="submit" className="primary" disabled={busy}>{busy ? "…" : L("צור", "Create")}</button>
-      </div>
-    </form>
-  );
-}
-
-interface Job { state: "building" | "waiting" | "copying" | "done" | "failed"; project: string; engine: string; log: string[]; message?: string }
-
-/**
- * The plugin updates itself: one press builds the new version while Unreal
- * is open, Unreal asks to save and closes, the plugin is replaced, and the
- * project opens again (from the phone too; the save question shows on the computer).
- */
-function PluginUpdate({ latest, now, download }: { latest: string; now: string; download: string }) {
-  const [job, setJob] = useState<Job | null>(null);
-  const running = job?.state === "building" || job?.state === "waiting" || job?.state === "copying";
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => void api<{ job: Job | null }>("/api/unreal/engines").then((r) => setJob(r.job), () => undefined), 2000);
-    return () => clearInterval(id);
-  }, [running]);
-  const start = () => void api<{ job: Job }>("/api/unreal/update-plugin", { method: "POST" }).then((r) => setJob(r.job), (e: Error) => toast(e.message));
-  const step = job ? { building: L("בונה את הגרסה החדשה (Unreal נשאר פתוח)…", "Building the new version (Unreal stays open)…"), waiting: L("ממתין ש-Unreal ייסגר — אם הוא שואל אם לשמור, ענו במחשב. (פלאגין ישן לא יודע לסגור: סגרו את Unreal כשנוח, והעדכון יסתיים לבד ויפתח אותו מחדש.)", "Waiting for Unreal to close — if it asks to save, answer on the computer. (An older plugin cannot close it: close Unreal when convenient and the update finishes by itself and opens it again.)"), copying: L("מחליף את הפלאגין…", "Replacing the plugin…"), done: job.message ?? L("עודכן.", "Updated."), failed: job.message ?? L("נכשל.", "Failed.") }[job.state] : "";
-  return (
-    <div className="card row plugin-update">
-      <span className="grow small">{L(`גרסה חדשה של הפלאגין: ${latest} (מותקנת ${now}).`, `A newer plugin: ${latest} (installed ${now}).`)} {step && <strong dir="auto">{step}</strong>}</span>
-      {!running && job?.state !== "done" && <button type="button" className="primary" onClick={start}>{L("עדכן אוטומטית", "Update automatically")}</button>}
-      <a className="small" href={download}>{L("הורדה ידנית", "Download")}</a>
-    </div>
-  );
-}
-
-/**
- * Install into a project (this computer, Windows): KesherAI builds the
- * plugin for the project's engine once and copies it in, so it works in
- * Blueprint-only projects too.
- */
-function InstallIntoProject() {
-  const [mcpMsg, setMcpMsg] = useState("");
-  const [info, setInfo] = useState<{ engines: Array<{ version: string; path: string }>; job: Job | null; windows: boolean } | null>(null);
-  const [error, setError] = useState("");
-  const load = () => void api<NonNullable<typeof info>>("/api/unreal/engines").then(setInfo, () => setInfo(null));
-  useEffect(load, []);
-  const running = info?.job?.state === "building" || info?.job?.state === "copying";
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(load, 2000);
-    return () => clearInterval(id);
-  }, [running]);
-  // The Unreal projects found on this computer, with the plugin version in each: one click installs or updates it (from the phone too).
-  const [found, setFound] = useState<{ latest: string; projects: Array<{ name: string; path: string; engine?: string; plugin: string | null; open: boolean }> } | null>(null);
-  const loadFound = () => void api<NonNullable<typeof found>>("/api/unreal/projects").then(setFound, () => setFound(null));
-  useEffect(loadFound, []);
-  useEffect(() => {
-    if (info?.job?.state === "done") loadFound();
-  }, [info?.job?.state]);
-  const bridge = desktop();
-  if (!info?.windows) return null;
-  const installTo = async (folder: string) => {
-    setError("");
-    try {
-      await api("/api/unreal/install", { method: "POST", body: { project: folder } });
-      load();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  const pick = async () => {
-    const folder = await bridge?.pickFolder();
-    if (folder) await installTo(folder);
-  };
-  const job = info.job;
-  // Unreal 5.8+: the engine's own MCP server (hundreds of editor tools) for every chat.
-  const pickMcp = async () => {
-    setError("");
-    const folder = await bridge?.pickFolder();
-    if (!folder) return;
-    try {
-      setMcpMsg((await api<{ message: string }>("/api/unreal/mcp-setup", { method: "POST", body: { project: folder } })).message);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <div className="stack ue-install">
-      {found && found.projects.length > 0 && (
-        <ul className="ue-found">
-          {found.projects.map((p) => {
-            const current = p.plugin === found.latest;
-            return (
-              <li key={p.path} className="row">
-                <span className="grow" dir="auto" title={p.path}>◆ {p.name}{p.engine ? <span className="muted small"> UE {p.engine}</span> : null}</span>
-                <span className="muted small">{p.plugin ? (current ? `✅ ${L("מותקן", "Installed")} ${p.plugin}` : `${L("מותקן", "Installed")} ${p.plugin}`) : L("בלי הפלאגין", "No plugin")}</span>
-                {!current && !p.open && <button type="button" className="primary" disabled={running} onClick={() => void installTo(p.path)}>{p.plugin ? L("עדכן", "Update") : L("התקן בלחיצה", "Install")}</button>}
-                {!current && p.open && <span className="muted small">{p.plugin ? L("פתוח: \"עדכן אוטומטית\" למעלה", "Open: use \"Update automatically\" above") : L("סגרו את Unreal ואז התקינו", "Close Unreal, then install")}</span>}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <div className="row">
-        {bridge && <button type="button" onClick={() => void pickMcp()}>🤖 {L("חבר את הצ'אטים ל-Unreal 5.8+ (MCP)…", "Connect chats to Unreal 5.8+ (MCP)…")}</button>}
-        <span className="muted small">{L("מפעיל בפרויקט את שרת ה-MCP הרשמי של Unreal (כלים לשחקנים, Blueprints, חומרים, Niagara, Sequencer ועוד), כך שכל צ'אט יכול לעבוד בעורך הפתוח.", "Turns on Unreal's official MCP server in the project (tools for actors, Blueprints, materials, Niagara, Sequencer and more), so any chat can work in the open editor.")}</span>
-      </div>
-      {mcpMsg && <p className="pill">{mcpMsg}</p>}
-      <div className="row">
-        {bridge && <button type="button" disabled={running} onClick={() => void pick()}>📁 {L("התקן לתוך פרויקט אחר…", "Install into another project…")}</button>}
-        <span className="muted small">{L("עובד גם בפרויקט Blueprint בלבד, בלי C++. ", "Works in Blueprint-only projects too, no C++. ")}{info.engines.length ? `${L("נמצאו", "Found")}: UE ${info.engines.map((e) => e.version).join(", ")}` : L("לא נמצא Unreal במחשב.", "No Unreal found on this computer.")}</span>
-      </div>
-      {job && (
-        <div className="stack">
-          <p className={job.state === "failed" ? "error" : job.state === "done" ? "pill good" : "muted"}>
-            {job.state === "building" ? `⚙ ${L(`בונה את הפלאגין ל-Unreal ${job.engine} (פעם אחת לכל גרסה, כמה דקות)…`, `Building the plugin for Unreal ${job.engine} (once per version, a few minutes)…`)}` : job.state === "copying" ? L("מעתיק לפרויקט…", "Copying into the project…") : job.state === "done" ? `✅ ${job.message ?? ""}` : `⛔ ${job.message ?? ""}`}
-          </p>
-          {(running || job.state === "failed") && job.log.length > 0 && <pre className="ue-log" dir="ltr">{job.log.slice(-12).join("\n")}</pre>}
-        </div>
-      )}
-      {error && <p className="error">{error}</p>}
-    </div>
-  );
-}
-
-/** "Add to a project…" (this computer): copies the package into the project's Packages folder. */
-function AddUnityPackage({ compact = false }: { compact?: boolean }) {
-  const [msg, setMsg] = useState("");
-  const [error, setError] = useState("");
-  const bridge = desktop();
-  if (!bridge) return null;
-  const pick = async () => {
-    setError("");
-    setMsg("");
-    const folder = await bridge.pickFolder();
-    if (!folder) return;
-    try {
-      setMsg((await api<{ message: string }>("/api/unity/install", { method: "POST", body: { project: folder } })).message);
-      dispatchEvent(new Event("kesher-unity-added"));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <div className="stack ue-install">
-      <div className="row">
-        <button type="button" className={compact ? "" : "primary"} onClick={() => void pick()}>📁 {L("הוסף לפרויקט…", "Add to a project…")}</button>
-        {!compact && <span className="muted small">{L("בחר את תיקיית הפרויקט (זו שיש בה Assets ו-Packages).", "Pick the project folder (the one with Assets and Packages).")}</span>}
-      </div>
-      {msg && <p className="pill good">✅ {msg}</p>}
-      {error && <p className="error">{error}</p>}
-    </div>
-  );
-}
 
 /**
  * Unreal: your project's Blueprints, seen and changed in words, through the
@@ -477,31 +291,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       {outdated && !unity && <PluginUpdate latest={st.latestBridge} now={st.editor!.bridge} download={st.download} />}
 
       {(neverConnected || (!st.connected && !unity)) && (
-        <section className="card stack">
-          <h2>{L(`חיבור ${app}`, `Connect ${app}`)}</h2>
-          {unity ? (
-            <>
-              <AddUnityPackage />
-              <ol className="ue-steps">
-                <li>{L("Unity 6 ומעלה, עם Visual Scripting.", "Unity 6 or newer, with Visual Scripting.")}</li>
-                <li>{L("\"הוסף לפרויקט\" מעתיק את חבילת KesherAI Bridge לפרויקט ומוסיף את חבילת ה-Pipeline של Unity דרך ה-CLI. Unity מקמפל לבד — בלי Visual Studio.", "“Add to a project” copies the KesherAI Bridge package into the project and adds Unity's Pipeline package through the CLI. Unity compiles it by itself — no Visual Studio.")}</li>
-                <li>{L("כש-Unity פתוח, השינויים קורים בו מיד (Ctrl+Z מבטל). כשהוא סגור, KesherAI מריץ את Unity ברקע, משנה ושומר — לוקח קצת יותר זמן.", "With Unity open, changes happen in it at once (Ctrl+Z undoes them). With it closed, KesherAI runs Unity in the background, changes and saves — a little slower.")}</li>
-              </ol>
-            </>
-          ) : (
-            <>
-          <InstallIntoProject />
-          <p className="muted small">{L("או ידנית:", "Or by hand:")}</p>
-          <ol className="ue-steps">
-            <li>{L("הורד את הפלאגין:", "Download the plugin:")} <a className="button primary" href={st.download}>⬇ KesherAIBridge.zip</a></li>
-            <li>{L("חלץ אותו לתיקייה Plugins בתוך הפרויקט (YourProject/Plugins/KesherAIBridge).", "Unzip it into your project's Plugins folder (YourProject/Plugins/KesherAIBridge).")}</li>
-            <li>{L("פתח את הפרויקט. בפרויקט C++, Unreal יבנה את הפלאגין בפעם הראשונה (צריך Visual Studio). לפרויקט Blueprint בלבד — השתמש ב\"התקן לתוך פרויקט\" למעלה.", "Open the project. In a C++ project Unreal builds the plugin the first time (needs Visual Studio). For a Blueprint-only project, use “Install into a project” above.")}</li>
-            <li>{L("זהו: כש-KesherAI פתוח, Unreal מתחבר לבד ויופיע כאן 🟢.", "That's it: while KesherAI runs, Unreal connects by itself and shows 🟢 here.")}</li>
-          </ol>
-            </>
-          )}
-          <p className="muted small">{L(`החיבור הוא רק בתוך המחשב הזה. כל גרף שנפתח כאן נשמר כעותק, כדי שתוכל לראות אותו ולבקש שינויים גם כש-${app} סגור.`, `The connection stays on this computer. Every graph opened here is kept as a copy, so you can see it and ask for changes with ${app} closed too.`)} <a href={`https://github.com/Deadchu-R/KesherAI/blob/main/docs/${unity ? "UNITY" : "UNREAL"}.md`} target="_blank" rel="noreferrer">{`docs/${unity ? "UNITY" : "UNREAL"}.md`}</a></p>
-        </section>
+        <ConnectSteps unity={unity} download={st.download} />
       )}
 
       {unity && source === "scripts" && st.active && <ScriptNodes key={st.active} />}
@@ -647,46 +437,6 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
             ))}
           </ul>
         </section>
-      )}
-    </div>
-  );
-}
-
-/**
- * "Open in chat": the project goes into a chat, a new one or one you pick,
- * so you keep working on it in words (the chat's Unity or Unreal tools).
- *
- * @param props.line - What goes into the message box (empty: no project yet).
- */
-function OpenInChat({ line }: { line: string }) {
-  const { conversations } = useLibrary();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    addEventListener("mousedown", close);
-    return () => removeEventListener("mousedown", close);
-  }, [open]);
-  if (!line) return null;
-  const newChat = () =>
-    void createConversation({ kind: "chat" }).then((id) => id && openWithDraft(id, line), (e: Error) => toast(e.message));
-  return (
-    <div className="model-menu" ref={ref}>
-      <button type="button" className="primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>💬 {L("פתח בצ'אט", "Open in chat")}</button>
-      {open && (
-        <div className="model-pop" role="menu">
-          <button type="button" role="menuitem" onClick={() => { setOpen(false); newChat(); }}>＋ {L("צ'אט חדש", "New chat")}</button>
-          <div className="model-group-head"><span>{L("או לצ'אט קיים", "Or into a chat")}</span></div>
-          <div className="model-pop-list">
-            {conversations.slice(0, 12).map((c) => (
-              <button key={c.id} type="button" role="menuitem" onClick={() => { setOpen(false); openWithDraft(c.id, line); }}><span dir="auto">{c.title}</span></button>
-            ))}
-            {!conversations.length && <p className="muted small">{L("אין עדיין צ'אטים.", "No chats yet.")}</p>}
-          </div>
-        </div>
       )}
     </div>
   );
