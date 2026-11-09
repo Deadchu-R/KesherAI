@@ -375,12 +375,14 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
             await new Promise((res) => setTimeout(res, 5000));
             const st = await unity.cliRaw(["command", "build", "status", ...at(), "--result-only"], 30_000).catch(() => undefined);
             const text = st?.code === 0 ? st.stdout : "";
-            const busy = /queued|running|building|in.?progress/i.test(text);
-            if (text && !busy && /succeeded|success|completed|finished|done/i.test(text)) {
+            // Read the "status" field only: a finished build's report lists paths and steps that contain these words too.
+            const status = /"status"\s*:\s*"([^"]+)"/.exec(text)?.[1] ?? /^status:\s*(\S+)/m.exec(text)?.[1] ?? "";
+            const busy = /queued|running|building|in.?progress/i.test(status);
+            if (status && !busy && /succeeded|success|completed|finished|done/i.test(status)) {
               r = { code: 0, stdout: text, stderr: "" };
               break;
             }
-            if (text && !busy && /failed|cancel/i.test(text)) {
+            if (status && !busy && /failed|cancel|error/i.test(status)) {
               r = { code: 1, stdout: text, stderr: "" };
               break;
             }
