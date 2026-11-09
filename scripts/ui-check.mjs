@@ -1,3 +1,4 @@
+/* global window, document, localStorage, getComputedStyle -- the functions passed to page.evaluate run in the browser */
 // The interface check that runs on every version: the real server starts empty,
 // a browser opens every main screen at computer width (1280) and phone width
 // (390, as the remote app), and the check fails on a page error or a page wider
