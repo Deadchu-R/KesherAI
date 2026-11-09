@@ -730,10 +730,10 @@ export class ConversationManager {
     // (the full set and its long guide come once a project is created or opened); every message carried ~1,500
     // tokens of Unreal guidance before, also in chats that had nothing to do with Unreal.
     if (this.unrealState.project) {
-      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id)));
+      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id), () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[])));
       media.notes.push(UNREAL_NOTE);
     } else if (this.unrealEngines) {
-      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id)).filter((t) => /^unreal_(status|create_project|use_project)$/.test(t.spec.name)));
+      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id), () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[])).filter((t) => /^unreal_(status|create_project|use_project)$/.test(t.spec.name)));
       media.notes.push("Unreal Engine is installed here: for Unreal work start with unreal_status, then unreal_create_project or unreal_use_project (the other Unreal tools and their guide come after that).");
     }
     // A game project in use: running its Android build on the user's phone and reading why it closed.

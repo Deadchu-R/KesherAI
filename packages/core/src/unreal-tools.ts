@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
 import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
 import { knownIssues, preflight } from "./known-issues.js";
+import type { Phone } from "./phones.js";
 import { compileErrors, describePlugins, installBuiltPlugin, listPlugins, readPlugin } from "./unreal-plugins.js";
 import { lintUnrealSource, shortErrors } from "./unreal-lint.js";
 import { projectPath } from "./unity-tools.js";
@@ -238,7 +239,7 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
  * @param state - Holds the chat's current Unreal project (shared with the page).
  * @param logsDir - Where the build and package logs go.
  */
-export function unrealTools(state: { project?: string }, logsDir: string, jobs?: JobStore, onProject?: () => void): AgentTool[] {
+export function unrealTools(state: { project?: string }, logsDir: string, jobs?: JobStore, onProject?: () => void, targetPhones: () => Phone[] = () => []): AgentTool[] {
   /**
    * A long build as a job that survives a KesherAI restart (update, closing the app): a job with the same key
    * that is still running is joined instead of starting a second one, so "continue" after a restart picks up the
@@ -477,7 +478,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         const fixed = await keepEditorPluginsOutOfGame(p.dir).catch(() => "");
         // Known engine bugs for this version and platform (built-in list + the one on GitHub): fixed in the project before building.
         const v = await engineVersion(e.path);
-        const shaderFix = v ? (await preflight(p.dir, "unreal", v.join("."), android ? "android" : "windows", await knownIssues(join(logsDir, "known-issues.json"))).catch(() => [] as string[])).join("\n") : "";
+        const shaderFix = v ? (await preflight(p.dir, "unreal", v.join("."), android ? "android" : "windows", await knownIssues(join(logsDir, "known-issues.json")), android ? [...new Set(targetPhones().map((x) => x.gpuFamily))] : []).catch(() => [] as string[])).join("\n") : "";
         if (android) {
           const a = await androidTools();
           if (!a.sdk || !a.ndk || !a.jdk) return { output: `Android tools are missing: SDK ${a.sdk ?? "missing"}, NDK ${a.ndk ?? "missing"}, JDK ${a.jdk ?? "missing"}. Install Android Studio, or Unity's Android module, then try again.` };

@@ -28,6 +28,8 @@ export interface KnownIssue {
   until: string;
   /** Platforms it affects, e.g. ["android"]; empty = all. */
   platforms: string[];
+  /** GPU families it affects (adreno, mali, immortalis, xclipse, powervr); missing = all. With target phones chosen, it is checked only when one of them has such a GPU. */
+  gpus?: string[];
   title: string;
   /** Where it is documented. */
   source: string;
@@ -77,8 +79,9 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /** Whether an issue applies to this engine version and platform. */
-export function applies(issue: KnownIssue, engine: KnownIssue["engine"], version: string, platform: string): boolean {
+export function applies(issue: KnownIssue, engine: KnownIssue["engine"], version: string, platform: string, gpus: string[] = []): boolean {
   if (issue.engine !== engine) return false;
+  if (issue.gpus?.length && gpus.length && !issue.gpus.some((g) => gpus.includes(g))) return false;
   if (issue.platforms.length && !issue.platforms.includes(platform)) return false;
   if (issue.from && compareVersions(version, issue.from) < 0) return false;
   if (issue.until && compareVersions(version, issue.until) >= 0) return false;
@@ -98,7 +101,7 @@ export function iniValue(text: string, section: string, key: string): string | u
 
 function valid(x: unknown): x is KnownIssue {
   const i = x as KnownIssue;
-  return !!i && typeof i.id === "string" && (i.engine === "unreal" || i.engine === "unity") && typeof i.title === "string" && !!i.check && typeof i.check.file === "string" && !/(^|[\\/])\.\.([\\/]|$)/.test(i.check.file) && /^Config\//.test(i.check.file) && typeof i.check.key === "string" && Array.isArray(i.check.bad);
+  return !!i && typeof i.id === "string" && (i.engine === "unreal" || i.engine === "unity") && typeof i.title === "string" && !!i.check && typeof i.check.file === "string" && !/(^|[\\/])\.\.([\\/]|$)/.test(i.check.file) && /^Config\//.test(i.check.file) && typeof i.check.key === "string" && Array.isArray(i.check.bad) && (i.gpus === undefined || (Array.isArray(i.gpus) && i.gpus.every((g) => typeof g === "string")));
 }
 
 /**
@@ -135,9 +138,9 @@ export async function knownIssues(cacheFile?: string): Promise<KnownIssue[]> {
  *
  * @returns One line per issue found: fixed, or a warning.
  */
-export async function preflight(projectDir: string, engine: KnownIssue["engine"], version: string, platform: string, issues: KnownIssue[]): Promise<string[]> {
+export async function preflight(projectDir: string, engine: KnownIssue["engine"], version: string, platform: string, issues: KnownIssue[], gpus: string[] = []): Promise<string[]> {
   const out: string[] = [];
-  for (const issue of issues.filter((i) => applies(i, engine, version, platform))) {
+  for (const issue of issues.filter((i) => applies(i, engine, version, platform, gpus))) {
     const file = join(projectDir, issue.check.file);
     const text = existsSync(file) ? await readFile(file, "utf8") : "";
     const now = iniValue(text, issue.check.section, issue.check.key);

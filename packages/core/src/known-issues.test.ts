@@ -12,6 +12,11 @@ test("versions and which issues apply", () => {
   assert.equal(applies(shader, "unreal", "5.8.2", "android"), true);
   assert.equal(applies(shader, "unreal", "5.8.4", "android"), false, "fixed in 5.8.4");
   assert.equal(applies(shader, "unreal", "5.8.2", "windows"), false);
+  // A GPU-specific issue: checked only when a target phone has that GPU (no target phones: always checked).
+  const maliOnly = { ...shader, gpus: ["mali"] };
+  assert.equal(applies(maliOnly, "unreal", "5.8.2", "android", ["adreno"]), false);
+  assert.equal(applies(maliOnly, "unreal", "5.8.2", "android", ["adreno", "mali"]), true);
+  assert.equal(applies(maliOnly, "unreal", "5.8.2", "android"), true);
   assert.equal(applies(shader, "unity", "5.8.2", "android"), false);
 });
 
