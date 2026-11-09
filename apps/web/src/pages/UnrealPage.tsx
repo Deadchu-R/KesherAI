@@ -214,6 +214,26 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const [graphName, setGraphName] = useState("");
   const [filter, setFilter] = useState("");
   const [request, setRequest] = useState("");
+  // Which model makes the change (remembered here): a big model can be slow or stuck, a small one is often enough.
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [model, setModel] = useState(() => {
+    try {
+      return localStorage.getItem("kesher.graphModel") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    void api<{ models: Array<{ id: string; name: string; category: string }> }>("/api/models").then((r) => setModels(r.models.filter((m) => m.category === "chat")), () => undefined);
+  }, []);
+  const chooseModel = (id: string) => {
+    setModel(id);
+    try {
+      localStorage.setItem("kesher.graphModel", id);
+    } catch {
+      // private window: not remembered
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<string[]>([]);
   const [queue, setQueue] = useState<Queued[]>([]);
@@ -271,7 +291,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     setBusy(true);
     setReport([]);
     try {
-      const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request } });
+      const r = await api<{ note: string; applied: boolean; queued?: string; result?: { results: Array<{ ok: boolean; error?: string; op: string }>; failed: number }; compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> } }>(`${base}/edit`, { method: "POST", body: { path, graph: graphName, request, ...(model ? { model } : {}) } });
       const lines = [r.note || L("בוצע.", "Done.")];
       if (r.queued) lines.push(L(`⏳ ${app} סגור: השינוי ממתין ויוחל כשתפתח את הפרויקט.`, `⏳ ${app} is closed: the change waits and is applied when you open the project.`));
       r.result?.results.filter((x) => !x.ok).forEach((x) => lines.push(`⚠ ${x.error ?? x.op}`));
@@ -385,6 +405,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <div className="ue-canvas">{graph && <GraphView unity={unity} nodes={graph.nodes} />}</div>
                 <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
                   <input className="grow" dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("מה לשנות? למשל: ב-Start תדפיס Hello ללוג, ואם open אמת תזיז את הדלת", "What to change? e.g. on Start log Hello, and if open is true move the door") : L("מה לשנות? למשל: ב-BeginPlay תדפיס Hello, ואם Open אמת תפעיל את OpenDoor", "What to change? e.g. on BeginPlay print Hello, and if Open is true call OpenDoor")} />
+                  {models.length > 1 && (
+                    <select value={model} onChange={(e) => chooseModel(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
+                      <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
+                      {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  )}
                   <button type="submit" className="primary" disabled={busy || !request.trim()}>{busy ? L("המודל עובד…", "Working…") : `✨ ${st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}`}</button>
                 </form>
                 {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}

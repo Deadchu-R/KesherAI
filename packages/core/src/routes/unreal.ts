@@ -75,11 +75,13 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
    * editor connected the change is made at once (one undo step) and the
    * Blueprint compiled; with it closed, the change waits in the queue.
    */
-  app.post<{ Body: { path?: string; graph?: string; request?: string } }>(`${base}/edit`, async (req, reply) => {
+  app.post<{ Body: { path?: string; graph?: string; request?: string; model?: string } }>(`${base}/edit`, async (req, reply) => {
     const path = String(req.body?.path ?? "");
     const request = String(req.body?.request ?? "").trim().slice(0, 2000);
     if (!path || !request) return reply.code(400).send({ error: "Choose a Blueprint and say what to change." });
-    const chat = s.config.activeModels.chat;
+    // The model the page picked (a chat model that exists here), else the active chat model.
+    const picked = typeof req.body?.model === "string" ? req.body.model : "";
+    const chat = picked && (await s.registry.listAllModels().then((r) => r.models, () => [])).some((m) => m.id === picked && m.category === "chat") ? picked : s.config.activeModels.chat;
     if (!chat) return reply.code(400).send({ error: "Choose a chat model first; it makes the change." });
     try {
       return await editGraph(kind, b, s.registry, chat, { path, ...(req.body?.graph ? { graph: req.body.graph } : {}), request, signal: AbortSignal.timeout(300_000) });

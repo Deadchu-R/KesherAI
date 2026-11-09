@@ -422,7 +422,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
       risk: "exec",
       spec: {
         name: "unreal_python",
-        description: "Run Unreal editor Python headless on the project (UnrealEditor-Cmd -run=pythonscript; the editor must be closed and the C++ compiled). For levels and assets: e.g. unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).new_level('/Game/Maps/Main') then save_current_level(). print() output comes back.",
+        description: "Run Unreal editor Python headless on the project (UnrealEditor-Cmd -run=pythonscript; the editor must be closed and the C++ compiled). For assets and levels. A new Blueprint: f = unreal.BlueprintFactory(); f.set_editor_property('parent_class', unreal.Actor); bp = unreal.AssetToolsHelpers.get_asset_tools().create_asset('BP_Name', '/Game', unreal.Blueprint, f); unreal.EditorAssetLibrary.save_loaded_asset(bp). A level: unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).new_level('/Game/Maps/Main') then save_current_level(). Nodes inside a Blueprint are changed with unreal_change_graph (in words), not Python. print() output comes back.",
         inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] },
       },
       preview: async (input) => `Unreal Python:\n${String(input.code ?? "").slice(0, 2000)}`,
