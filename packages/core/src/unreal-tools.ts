@@ -360,7 +360,7 @@ export function unrealTools(state: { project?: string }, logsDir: string): Agent
         const errors = r.out.split(/\r?\n/).filter((l) => /\berror\b|fatal/i.test(l));
         const why = /SDK validation failed|Sdk: not found/i.test(r.out)
           ? "The Windows SDK is missing (not a problem in the code). STOP and ask the user to install it: Visual Studio Installer → Modify → 'Game development with C++' and a Windows 11 SDK. Do not install it yourself.\n"
-          : /Live ?Coding/i.test(r.out) ? "The editor is open with Live Coding: close the editor (or compile there with Ctrl+Alt+F11), then compile again.\n" : /Visual Studio|MSVC|compiler.*not found|toolchain/i.test(r.out) ? "Visual Studio's C++ tools were not found: install Visual Studio with 'Desktop development with C++' and 'Game development with C++'.\n" : "";
+          : /Live ?Coding/i.test(r.out) ? "The editor is open with Live Coding: close the editor (or compile there with Ctrl+Alt+F11), then compile again.\n" : !errors.some((l) => /\.(h|cpp)\(\d+/i.test(l)) && /(Visual Studio|MSVC|compiler|toolchain).{0,60}(not found|not installed|missing|could not be found)/i.test(r.out) ? "Visual Studio's C++ tools were not found. STOP and ask the user to install Visual Studio with 'Game development with C++'. Do not install it yourself.\n" : errors.length ? "These are errors in the code: fix the files.\n" : "";
         return { output: `Compile FAILED (exit ${r.code}). ${why}Errors (fix them, write the files again, compile again):\n${cut((errors.length ? errors : r.out.split("\n").slice(-60)).join("\n"))}` };
       },
     },
