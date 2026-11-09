@@ -14,6 +14,8 @@ export interface DeviceKey {
   createdAt: string;
   lastSeen?: string;
   lastAddress?: string;
+  /** "mcp": the key opens only /mcp (a connector for an AI app such as Claude), nothing else of KesherAI. */
+  scope?: "mcp";
 }
 
 const hashOf = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -35,9 +37,9 @@ export class DeviceKeys {
    * @param name - What the device called itself.
    * @returns The key (given to the device once; only its hash is kept).
    */
-  async issue(name: string): Promise<string> {
+  async issue(name: string, scope?: "mcp"): Promise<string> {
     const key = `kd_${randomBytes(32).toString("base64url")}`;
-    this.list().push({ id: randomUUID(), name: name.replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device", hash: hashOf(key), createdAt: new Date().toISOString() });
+    this.list().push({ id: randomUUID(), name: name.replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device", hash: hashOf(key), createdAt: new Date().toISOString(), ...(scope ? { scope } : {}) });
     await this.save();
     return key;
   }

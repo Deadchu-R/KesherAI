@@ -856,6 +856,24 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     void notifier.send({ title: "A new device key was made", body: `"${name}" can now connect to KesherAI through the internet link${isLocalRequest(req) ? "" : " (made from a connected device)"}. If it was not you, remove it in Settings → Phone.`, path: "#/settings/phone", tags: ["key"], priority: 4 }).catch(() => undefined);
     return { link: `${url.replace(/\/$/, "")}/?token=${encodeURIComponent(key)}`, name };
   });
+  /**
+   * A link for an AI app such as Claude (a custom connector, added from the phone or the web): KesherAI's MCP
+   * server through the internet link, with a key that opens only /mcp. Like device links, any signed-in device
+   * may ask (a few an hour), and each new key is announced and can be removed alone in Settings → Phone.
+   */
+  app.post<{ Body: { name?: string } }>("/api/remote/devices/connector", async (req, reply) => {
+    const hourAgo = Date.now() - 3_600_000;
+    while (invites.length && invites[0]! < hourAgo) invites.shift();
+    if (invites.length >= 5) return reply.code(429).send({ error: "Five links were made in the last hour. Try again later." });
+    if (!config.mcpServer.enabled) return reply.code(409).send({ error: "KesherAI's MCP server is off (Settings → For developers, on the computer)." });
+    const url = tunnel.status().url;
+    if (!url) return reply.code(409).send({ error: "Turn on access from anywhere first (Settings → Phone, on the computer)." });
+    const name = `${String(req.body?.name ?? "Claude").replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 30) || "Claude"} (connector)`;
+    invites.push(Date.now());
+    const key = await deviceKeys.issue(name, "mcp");
+    void notifier.send({ title: "A connector key was made", body: `"${name}" can now give KesherAI tasks through the internet link (its key opens only the MCP server)${isLocalRequest(req) ? "" : ", made from a connected device"}. If it was not you, remove it in Settings → Phone.`, path: "#/settings/phone", tags: ["key"], priority: 4 }).catch(() => undefined);
+    return { url: `${url.replace(/\/$/, "")}/mcp?token=${encodeURIComponent(key)}`, name };
+  });
   app.delete<{ Params: { id: string } }>("/api/remote/devices/:id", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Devices are removed on the computer that runs KesherAI." });
     return { ok: await deviceKeys.remove(req.params.id) };

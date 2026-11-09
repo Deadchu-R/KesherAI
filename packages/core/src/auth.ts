@@ -186,6 +186,11 @@ export function registerRemoteAuth(
     const device = devices?.find(given);
     const shared = !!token && !!given && safeEqual(given, token);
     if (device) {
+      // A connector key (for an AI app) opens KesherAI's MCP server and nothing else.
+      if ((device as { scope?: string }).scope === "mcp" && path !== "/mcp") {
+        await reply.code(403).send({ error: "This key is only for KesherAI's MCP server (/mcp)." });
+        return;
+      }
       const idle = devices!.idleDays();
       if (viaTunnel && idle > 0 && device.lastSeen && Date.now() - Date.parse(device.lastSeen) > idle * 86_400_000) {
         await reply.code(403).send({ error: `This device was not used for over ${idle} days, so it cannot come in through the internet link. Use it once on the home network, or pair it again.` });

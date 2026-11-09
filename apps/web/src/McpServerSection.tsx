@@ -13,6 +13,41 @@ const APPS: Array<{ key: keyof Info["snippets"]; name: string; where: [string, s
   { key: "vscode", name: "VS Code", where: ["הוסיפו ל-‎.vscode/mcp.json:", "Add to .vscode/mcp.json:"] },
 ];
 
+/**
+ * Claude from anywhere: a custom connector added in the Claude app (phone, web or desktop) with a link
+ * through KesherAI's internet link. Its key opens only the MCP server and can be removed alone.
+ */
+function ConnectorLink() {
+  const [link, setLink] = useState("");
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const make = () => {
+    setError("");
+    void api<{ url: string }>("/api/remote/devices/connector", { method: "POST", body: { name: "Claude" } }).then((r) => setLink(r.url), (e: Error) => setError(e.message));
+  };
+  return (
+    <div className="stack">
+      <h3>{L("חיבור Claude מכל מקום (גם מהטלפון)", "Connect Claude from anywhere (the phone too)")}</h3>
+      <p className="muted small">{L("קישור למחבר מותאם באפליקציית Claude, דרך קישור \"גישה מכל מקום\". המפתח שבקישור פותח רק את שרת ה-MCP (לא את שאר KesherAI), מופיע ב\"מכשירים מחוברים\" ואפשר להסיר אותו לבד. הקישור משתנה אם קישור הגישה מכל מקום מתחיל מחדש (למשל אחרי הפעלה מחדש של המחשב).", "A link for a custom connector in the Claude app, through the access-from-anywhere link. Its key opens only the MCP server (not the rest of KesherAI), shows under paired devices and can be removed alone. The link changes if the access-from-anywhere link starts again (after the computer restarts, say).")}</p>
+      {!link ? <button type="button" onClick={make}>{L("צור קישור ל-Claude", "Make a link for Claude")}</button> : (
+        <>
+          <div className="snippet">
+            <pre dir="ltr" style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{link}</pre>
+            <button type="button" onClick={() => void navigator.clipboard?.writeText(link).then(() => setCopied(true))}>{copied ? L("הועתק", "Copied") : L("העתק", "Copy")}</button>
+          </div>
+          <ol className="small">
+            <li>{L("באפליקציית Claude: הגדרות ← Connectors (מחברים) ← Add custom connector.", "In the Claude app: Settings → Connectors → Add custom connector.")}</li>
+            <li>{L("שם: KesherAI. כתובת: הקישור שהעתקת. אימות: No sign-in. הוסף.", "Name: KesherAI. URL: the link you copied. Authentication: No sign-in. Add.")}</li>
+            <li>{L("בצ'אט עם Claude: + ← Connectors ← הדלק את KesherAI.", "In a chat with Claude: + → Connectors → turn KesherAI on.")}</li>
+          </ol>
+          <p className="muted small">{L("שמור את הקישור בסוד: מי שמחזיק בו יכול לתת ל-KesherAI משימות (כרטיסי אישור עדיין מגיעים אליך).", "Keep the link secret: whoever has it can give KesherAI tasks (approval cards still come to you).")}</p>
+        </>
+      )}
+      {error && <p className="error small">{error}</p>}
+    </div>
+  );
+}
+
 /** KesherAI as an MCP server: how other AI apps on this computer use its models and knowledge. */
 export function McpServerSection() {
   const [info, setInfo] = useState<Info | null>(null);
@@ -33,6 +68,7 @@ export function McpServerSection() {
         <p>{info.enabled ? L("✅ פעיל במחשב.", "✅ On, on the computer.") : L("כבוי במחשב.", "Off, on the computer.")} {info.allowApprovals ? L("אפליקציה מחוברת יכולה לאשר כרטיסים (לא פקודות מסוכנות ולא שליטה במסך).", "A connected app may answer approval cards (never dangerous commands or screen control).") : L("כרטיסי אישור נשארים שלך בלבד.", "Approval cards stay yours only.")}</p>
         <p className="muted small">{L("החיבור של Claude Desktop, Claude Code, Cursor או VS Code והשינויים כאן נעשים במחשב עצמו (הגדרות ← למפתחים), כי ההגדרה נכתבת לאפליקציה שבמחשב. אפשר גם לבקש מ-Claude לעשות את זה במחשב בשבילך.", "Connecting Claude Desktop, Claude Code, Cursor or VS Code, and changing this, happen on the computer itself (Settings → For developers), since the setting goes into the app on the computer. You can also ask Claude to do it there for you.")}</p>
         <p className="muted small">{L("כלים: ", "Tools: ")}<span dir="ltr">{info.tools.join(", ")}</span></p>
+        {info.enabled && <ConnectorLink />}
       </section>
     );
   return (
@@ -60,6 +96,7 @@ export function McpServerSection() {
             {L("לאפשר לאפליקציה המחוברת לאשר כרטיסי אישור של KesherAI (פקודות מסוכנות תמיד נשארות שלכם)", "Let the connected app answer KesherAI's approval cards (dangerous commands always stay yours)")}
           </label>
           <p className="muted small">{L("כלים: ", "Tools: ")}<span dir="ltr">{info.tools.join(", ")}</span>. {L("ממכשירים אחרים צריך את טוקן הגישה מרחוק.", "From other devices it needs the remote access token.")}</p>
+          <ConnectorLink />
         </>
       )}
     </section>

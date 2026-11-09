@@ -97,6 +97,8 @@ This review went through the code part by part. Each finding is listed with what
     - Pairing, the internet link and the tokens stay computer-only; the phone app says so instead of asking and being refused.
     - A paired device's own 403s are shown as "your device: a computer-only setting" and no longer count toward the "someone tried to get in" alerts, so real alerts are not drowned out.
 
+22. **Connecting Claude from anywhere (0.5.92).** A custom connector in the Claude app reaches KesherAI's MCP server through the internet link. Its key is a device key with scope `mcp`: it opens `/mcp` and nothing else (tested: /api, /v1 and the device list answer 403 to it), shows under paired devices and is removed alone. It travels in the link (`?token=`), since connectors without sign-in send no headers; the request log never keeps query strings. Like device links, a few can be made an hour, each is announced on the computer and the phone, and approval cards stay the user's.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA-mrhx-c7xc-m3w5 (high), memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. It is the one advisory the release's automatic audit is told to skip (`pnpm.auditConfig.ignoreGhsas` in package.json), until the move to zod 4. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.
