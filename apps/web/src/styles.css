@@ -1522,11 +1522,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .answer-versions { display: inline-flex; align-items: center; gap: 2px; margin-inline-start: 4px; }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .lib-card { gap: 6px; }
-.add-pop { min-width: 260px; max-height: min(70vh, 560px); overflow: auto; }
+.add-pop { min-width: 260px; max-height: min(70vh, 560px); overflow: auto; gap: 1px; }
 .add-pop hr { border: 0; border-top: 1px solid var(--border, rgba(127,127,127,.25)); margin: 4px 6px; }
 .add-pop > a { display: block; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
 .add-pop > a:hover { background: var(--hover, rgba(127,127,127,.12)); }
 .add-pop .sub-arrow { float: inline-end; opacity: .6; }
+/* Menu rows look the same everywhere (the phone's button style must not frame or center them). */
+.add-pop button[role^="menuitem"] { display: block; width: 100%; text-align: start; border: 0; background: transparent; box-shadow: none; padding: 8px 10px; border-radius: 8px; color: inherit; font: inherit; min-height: 0; height: auto; line-height: 1.35; flex: none; }
+.add-pop button[role^="menuitem"]:hover, .add-pop button[role^="menuitem"][aria-expanded="true"] { background: var(--hover, rgba(127,127,127,.12)); }
 .add-sub { margin: 0 0 4px; padding-inline-start: 22px; display: flex; flex-direction: column; max-height: 220px; overflow: auto; }
 .add-sub button { font-size: 13px; text-align: start; }
 .add-sub-note { margin: 4px 8px; }

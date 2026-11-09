@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ModelMenu } from "../ModelMenu";
-import { AddMenu } from "../AddMenu";
+import { ComposerBar } from "../ComposerBar";
 import { useChatAttach } from "../ChatAttach";
-import { WebToggle, useWebSearch } from "../WebToggle";
+import { useWebSearch } from "../WebToggle";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { api } from "../api";
 import { getLocale } from "../i18n";
@@ -131,39 +130,44 @@ export function CodeHome() {
               }
             }}
           />
-          <div className="box-bar">
-            <AddMenu {...attachments.menu} onInsert={(txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)} web={web} onWeb={setWeb} />
-            {attachments.elements}
-            <WebToggle on={web} onChange={setWeb} />
-            {typing ? (
-              <span className="row code-folder-edit">
-                <input dir="ltr" autoFocus value={folder} placeholder={L("נתיב תיקייה במחשב", "A folder on the computer")} onChange={(e) => setFolder(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); choose(folder.trim()); } }} />
-                <button type="button" onClick={() => choose(folder.trim())}>{L("אישור", "OK")}</button>
-              </span>
-            ) : (
-              <select
-                className="model-chip code-folder"
-                value={folder}
-                title={folder}
-                aria-label={L("התיקייה לעבוד בה", "The folder to work in")}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === "\u0000pick") void desktop()!.pickFolder().then((f) => f && choose(f));
-                  else if (v === "\u0000type") setTyping(true);
-                  else choose(v);
-                }}
-              >
-                {!folder && <option value="">{L("📁 בחרו תיקייה", "📁 Choose a folder")}</option>}
-                {folder && !recent.includes(folder) && <option value={folder}>📁 {short(folder)}</option>}
-                {recent.map((f) => <option key={f} value={f}>📁 {short(f)}</option>)}
-                {desktop()?.pickFolder && <option value={"\u0000pick"}>{L("עיון…", "Browse…")}</option>}
-                <option value={"\u0000type"}>{L("הקלדת נתיב…", "Type a path…")}</option>
-              </select>
-            )}
-            <ModelMenu models={models} value={modelId} onChange={setModelId} />
-            <span className="grow" />
-            <button type="submit" className="primary send" disabled={!text.trim() || busy} aria-label={L("התחל", "Start")}>↑</button>
-          </div>
+          {attachments.elements}
+          <ComposerBar
+            attach={attachments.menu}
+            onInsert={(txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)}
+            web={web}
+            onWeb={setWeb}
+            model={{ models, value: modelId, onChange: setModelId }}
+            extra={
+              <>
+                {typing ? (
+                  <span className="row code-folder-edit">
+                    <input dir="ltr" autoFocus value={folder} placeholder={L("נתיב תיקייה במחשב", "A folder on the computer")} onChange={(e) => setFolder(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); choose(folder.trim()); } }} />
+                    <button type="button" onClick={() => choose(folder.trim())}>{L("אישור", "OK")}</button>
+                  </span>
+                ) : (
+                  <select
+                    className="model-chip code-folder"
+                    value={folder}
+                    title={folder}
+                    aria-label={L("התיקייה לעבוד בה", "The folder to work in")}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "\u0000pick") void desktop()!.pickFolder().then((f) => f && choose(f));
+                      else if (v === "\u0000type") setTyping(true);
+                      else choose(v);
+                    }}
+                  >
+                    {!folder && <option value="">{L("📁 בחרו תיקייה", "📁 Choose a folder")}</option>}
+                    {folder && !recent.includes(folder) && <option value={folder}>📁 {short(folder)}</option>}
+                    {recent.map((f) => <option key={f} value={f}>📁 {short(f)}</option>)}
+                    {desktop()?.pickFolder && <option value={"\u0000pick"}>{L("עיון…", "Browse…")}</option>}
+                    <option value={"\u0000type"}>{L("הקלדת נתיב…", "Type a path…")}</option>
+                  </select>
+                )}
+              </>
+            }
+            send={<button type="submit" className="primary send" disabled={!text.trim() || busy} aria-label={L("התחל", "Start")}>↑</button>}
+          />
         </div>
       </form>
       {folder && !typing && <p className="muted small code-where" dir="ltr">{folder}</p>}
