@@ -22,10 +22,19 @@ export function csharpLsPath(home = homedir()): string | undefined {
   return existsSync(exe) ? exe : undefined;
 }
 
-/** The solution of a Unity project (Unity writes `<Project>.sln` next to Assets/). */
+/**
+ * The solution of a Unity project: `<Project>.sln`, or `.slnx` (the newer
+ * format Unity 6.x writes), next to Assets/.
+ */
 export async function solutionOf(project: string): Promise<string | undefined> {
-  const sln = (await readdir(project).catch(() => [] as string[])).filter((f) => f.toLowerCase().endsWith(".sln"));
-  return sln.length ? join(project, sln[0]!) : undefined;
+  const files = await readdir(project).catch(() => [] as string[]);
+  const sln = files.find((f) => f.toLowerCase().endsWith(".sln")) ?? files.find((f) => f.toLowerCase().endsWith(".slnx"));
+  return sln ? join(project, sln) : undefined;
+}
+
+/** Whether the project has the C# project files a language server reads (.sln/.slnx or .csproj). */
+export async function hasProjectFiles(project: string): Promise<boolean> {
+  return (await readdir(project).catch(() => [] as string[])).some((f) => /\.(sln|slnx|csproj)$/i.test(f));
 }
 
 /** Splits LSP's framed stream (Content-Length headers) into JSON messages. */

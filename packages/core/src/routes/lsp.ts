@@ -3,7 +3,7 @@ import "@fastify/websocket";
 import { spawn } from "node:child_process";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
-import { LanguageServers, solutionOf } from "../lsp.js";
+import { LanguageServers, hasProjectFiles } from "../lsp.js";
 
 /** Runs dotnet with arguments (no shell) and returns its exit code and output. */
 function dotnet(args: string[], timeoutMs: number): Promise<{ code: number; out: string }> {
@@ -36,7 +36,7 @@ export function lspRoutes(app: FastifyInstance, s: KesherServices): LanguageServ
   app.get("/api/lsp/csharp", async () => {
     const project = s.unity.activeProject;
     const sdk = await dotnet(["--list-sdks"], 20_000);
-    return { installed: servers.installed, dotnet: sdk.code === 0 && /\d+\.\d+/.test(sdk.out), sdks: sdk.code === 0 ? sdk.out.trim().split(/\r?\n/).slice(0, 6) : [], solution: project ? !!(await solutionOf(project)) : false, project: project ?? null };
+    return { installed: servers.installed, dotnet: sdk.code === 0 && /\d+\.\d+/.test(sdk.out), sdks: sdk.code === 0 ? sdk.out.trim().split(/\r?\n/).slice(0, 6) : [], solution: project ? await hasProjectFiles(project) : false, project: project ?? null };
   });
 
   /** Installs csharp-ls for this user (`dotnet tool install --global csharp-ls`): no admin rights, only from this computer. */
