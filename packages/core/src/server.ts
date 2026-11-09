@@ -344,7 +344,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
-  const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads);
+  const tailscaleCli = new Tailscale();
+  const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads, {
+    mode: () => config.remote.anywhereMode,
+    named: () => config.remote.cloudflare,
+    saveNamed: async (n) => {
+      config.remote.cloudflare = n;
+      await persist();
+    },
+    tailscale: tailscaleCli,
+    // Funnel passes requests to 127.0.0.1; they still need a key: they name another host and carry forwarding headers.
+    tailscaleTarget: async () => ((await tailscaleCli.status(config.port).catch(() => undefined))?.running ? "127.0.0.1" : undefined),
+  });
   const whisper = new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
     const nv = await nvidiaGpus();
     return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };

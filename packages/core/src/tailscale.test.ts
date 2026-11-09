@@ -31,3 +31,31 @@ test("HTTPS through Tailscale: status, turn on, and the tailnet link when HTTPS 
   });
   assert.deepEqual(await none.status(7420), { installed: false, running: false, on: false });
 });
+
+test("Funnel: a fixed public address, or the link to allow it", async () => {
+
+  let allowed = false;
+  const calls: string[] = [];
+  const ts = new Tailscale(async (args) => {
+    calls.push(args.join(" "));
+    if (args[0] === "status") return JSON.stringify({ BackendState: "Running", Self: { DNSName: "pc.tail123.ts.net." } });
+    if (args[0] === "serve") return "{}";
+    if (args[0] === "funnel" && args[1] === "--bg") {
+      if (!allowed) throw new Error("Funnel not available; \"funnel\" node attribute not set. To enable, visit:\n\n https://login.tailscale.com/f/funnel?node=abc\n");
+      return "";
+    }
+    return "";
+  });
+  const first = await ts.funnel(7420, "127.0.0.1");
+  assert.match(first.hint!, /login\.tailscale\.com\/f\/funnel\?node=abc/);
+  allowed = true;
+  const second = await ts.funnel(7420, "127.0.0.1");
+  assert.equal(second.url, "https://pc.tail123.ts.net");
+  assert.ok(calls.includes("funnel --bg --https=443 http://127.0.0.1:7420"));
+});
+
+test("a request through Funnel needs a key: it names another host and is marked", async () => {
+  const { isLocalRequest } = await import("./auth.js");
+  assert.equal(isLocalRequest({ ip: "127.0.0.1", headers: { host: "pc.tail123.ts.net", "tailscale-funnel-request": "?1", "x-forwarded-for": "1.2.3.4" } }), false);
+  assert.equal(isLocalRequest({ ip: "127.0.0.1", headers: { host: "127.0.0.1:7420" } }), true);
+});

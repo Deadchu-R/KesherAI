@@ -135,6 +135,46 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
      * remembers the choice. Only from this computer. Body: `{ on: boolean }`.
      * Turning it on downloads cloudflared the first time (about 60 MB).
      */
+    /**
+     * Which internet link: quick (no account, a new address each start), the user's own Cloudflare (a fixed
+     * address in their domain) or Tailscale Funnel (a fixed ts.net address). Only from this computer.
+     */
+    app.put<{ Body: { mode?: string } }>("/api/remote/anywhere-mode", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      const mode = req.body?.mode;
+      if (mode !== "quick" && mode !== "cloudflare" && mode !== "tailscale") return reply.code(400).send({ error: "mode is quick, cloudflare or tailscale" });
+      const was = s.config.remote.anywhereMode;
+      s.config.remote.anywhereMode = mode;
+      await s.saveConfig();
+      if (s.config.remote.anywhere && was !== mode) {
+        s.tunnel.stop();
+        try {
+          await s.tunnel.start(s.config.port);
+        } catch (err) {
+          return reply.code(502).send({ ...s.tunnel.status(), error: (err as Error).message });
+        }
+      }
+      return s.tunnel.status();
+    });
+    /** Your own Cloudflare, step 1: Cloudflare's sign-in page (open it on any device; pick the domain there). */
+    app.post("/api/remote/cloudflare/login", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      try {
+        return await s.tunnel.cloudflareLogin();
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+    /** Your own Cloudflare, step 2: a tunnel for KesherAI and the address pointed at it. Body: `{ hostname }`. */
+    app.post<{ Body: { hostname?: string } }>("/api/remote/cloudflare/setup", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      try {
+        await s.tunnel.cloudflareSetup(String(req.body?.hostname ?? "").trim());
+        return s.tunnel.status();
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
     app.post<{ Body: { on?: boolean } }>("/api/remote/anywhere", async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
       const on = req.body?.on === true;

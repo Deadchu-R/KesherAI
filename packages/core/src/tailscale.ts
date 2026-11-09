@@ -71,6 +71,28 @@ export class Tailscale {
     return this.status(port);
   }
 
+  /**
+   * Tailscale Funnel: the same HTTPS address, open to the internet (for "access from anywhere" with a fixed
+   * address). Requests still need a device key or the token.
+   *
+   * @returns The state; `hint` says what to do when the tailnet does not allow Funnel yet (a link from Tailscale).
+   */
+  async funnel(port: number, target: string): Promise<TailscaleHttps> {
+    try {
+      await this.run(["funnel", "--bg", "--https=443", `http://${target}:${port}`]);
+    } catch (e) {
+      const msg = (e as Error).message;
+      const link = /https:\/\/login\.tailscale\.com\/\S+/.exec(msg)?.[0];
+      return { ...(await this.status(port)), hint: link ? `Allow Funnel for this computer in Tailscale first (open, approve, then try again): ${link}` : msg.slice(0, 400) };
+    }
+    return this.status(port);
+  }
+
+  /** Stops Funnel (the tailnet-only HTTPS, if on, is turned off too: they share port 443). */
+  async funnelOff(): Promise<void> {
+    await this.run(["funnel", "--https=443", "off"]).catch(() => undefined);
+  }
+
   /** Turns it off. */
   async disable(port: number): Promise<TailscaleHttps> {
     await this.run(["serve", "--https=443", "off"]).catch(() => undefined);

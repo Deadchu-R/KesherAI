@@ -13,7 +13,7 @@ export function isLoopback(ip: string): boolean {
 }
 
 /** Headers a tunnel or proxy adds. A request carrying one came from outside, even if it reached us over 127.0.0.1. */
-const FORWARDED = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-proto", "tailscale-user-login", "tailscale-headers-info"];
+const FORWARDED = ["cf-connecting-ip", "cf-ray", "x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-proto", "tailscale-user-login", "tailscale-headers-info", "tailscale-funnel-request"];
 
 /**
  * Whether a request really comes from this computer: from a loopback
@@ -182,7 +182,8 @@ export function registerRemoteAuth(
       return;
     }
     // Through the internet link (Cloudflare connects from this computer and says who is behind it).
-    const viaTunnel = isLoopback(request.ip) && request.headers["cf-connecting-ip"] !== undefined;
+    // Tailscale Funnel marks what it brings from the internet too (anyone may send that header, but it only makes the rules stricter).
+    const viaTunnel = (isLoopback(request.ip) && request.headers["cf-connecting-ip"] !== undefined) || request.headers["tailscale-funnel-request"] !== undefined;
     const device = devices?.find(given);
     const shared = !!token && !!given && safeEqual(given, token);
     if (device) {

@@ -13,6 +13,7 @@ import { BusinessSection, CopilotSection } from "../BusinessSection";
 import { openWelcome } from "../Welcome";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
+import { AnywhereMode, type TunnelInfo } from "../AnywhereMode";
 import { BrowserSection } from "../BrowserSection";
 import { ApiKeysSection } from "../ApiKeysSection";
 import { useEffect, useState } from "react";
@@ -25,7 +26,7 @@ import { getLocale, t } from "../i18n";
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 interface Remote {
   enabled: boolean; keepAwake: boolean; anywhere: boolean; token: string; port: number;
-  tunnel: { installed: boolean; running: boolean; url?: string; message?: string; error?: string };
+  tunnel: TunnelInfo & { message?: string };
   addresses: Array<{ address: string; tailscale: boolean; mac: string; broadcast: string }>;
 }
 
@@ -367,6 +368,7 @@ function Phone() {
           <strong>{t("anywhere")}</strong>
         </label>
         <p className="muted">{t("anywhereHint")}</p>
+        <AnywhereMode tunnel={remote.tunnel} onChange={(tunnel) => setRemote({ ...remote, tunnel })} />
         {anyBusy && <p className="muted">{remote.tunnel.installed ? t("anywhereConnecting") : t("anywhereDownloading")}</p>}
         {remote.anywhere && remote.tunnel.error && !anyBusy && <p className="error">{remote.tunnel.error}</p>}
         {anyQr && (
