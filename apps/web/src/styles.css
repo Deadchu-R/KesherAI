@@ -1634,3 +1634,33 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .persona-pop .model-pop-list button { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; text-align: start; width: 100%; }
 .persona-pop .model-pop-list button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .persona-hint { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Full screen for a graph: covers the window, a button returns it. */
+.fs-box[hidden] { display: none; }
+.fs-box { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fs-toggle { align-self: flex-end; padding: 4px 10px; font-size: 13px; }
+.fs-box.fs-on { position: fixed; inset: 0; z-index: 900; background: var(--bg, #111); padding: max(8px, env(safe-area-inset-top)) 10px 10px; overflow: auto; }
+.fs-box.fs-on > :not(.fs-toggle) { flex: 1; min-height: 0; }
+.fs-box.fs-on .script-canvas { min-height: calc(100dvh - 70px); }
+.fs-box.fs-on .ue-canvas { height: calc(100dvh - 60px); }
+
+/* Variables panel (like Unreal's My Blueprint). */
+.vars-panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.vars-head { align-items: center; gap: 8px; }
+.vars-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow: auto; }
+.vars-list li { display: flex; align-items: center; gap: 2px; border-radius: 6px; }
+.vars-list li.on { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.vars-row { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; background: none; border: 0; padding: 5px 6px; text-align: start; color: inherit; }
+.vars-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.vars-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 13px; }
+.vars-type { font-size: 12px; white-space: nowrap; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.vars-eye { background: none; border: 0; padding: 4px 6px; min-width: 32px; }
+.vars-form { border-top: 1px solid var(--border, rgba(127,127,127,.25)); padding-top: 8px; }
+.vars-form input:not([type="checkbox"]), .vars-form select { width: 100%; }
+.vars-check { gap: 6px; align-items: center; }
+.script-graph { grid-template-columns: minmax(0, 1fr) 280px; }
+.script-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.script-code { width: 100%; min-height: 60dvh; font-family: var(--mono, monospace); font-size: 13px; line-height: 1.5; tab-size: 4; white-space: pre; overflow: auto; resize: vertical; }
+@media (max-width: 760px) {
+  .script-graph { grid-template-columns: minmax(0, 1fr); }
+}

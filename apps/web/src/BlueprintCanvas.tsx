@@ -115,6 +115,24 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     fitted.current = `${path}|${graph}`;
     fit();
   }, [layout, path, graph]);
+  // Fit again when the frame becomes much bigger or smaller (full screen and back, a turned phone).
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+  useEffect(() => {
+    const el = frame.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let last = el.getBoundingClientRect();
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      const grew = Math.abs(r.width - last.width) / Math.max(1, last.width) + Math.abs(r.height - last.height) / Math.max(1, last.height);
+      if (grew > 0.25) {
+        last = r;
+        fitRef.current();
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const zoomAt = (factor: number, cx?: number, cy?: number) =>
     setView((v) => {
       const r = frame.current?.getBoundingClientRect();

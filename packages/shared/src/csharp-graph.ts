@@ -37,13 +37,36 @@ export interface CsMethod {
   body: CsStmt[];
 }
 
+/** A field of a class: one of the script's variables. */
+export interface CsField {
+  type: string;
+  name: string;
+  /** The starting value as C# (`5f`, `"Hi"`, `new Vector3(0, 1, 0)`), when it has one. */
+  value?: string;
+  /** Shown in Unity's Inspector: public (without [HideInInspector]) or [SerializeField]. */
+  shown: boolean;
+  /** The text of [Tooltip("…")], when it has one. */
+  tooltip?: string;
+  /** Written as `public`. */
+  isPublic?: boolean;
+  /** const / static / readonly / event, or several names in one line: shown, not edited here. */
+  locked?: boolean;
+  /** Where the declaration (its attributes … the `;`) is in the file. */
+  start: number;
+  end: number;
+}
+
 /** A class (or struct) of the script: its name, base class, fields and methods. */
 export interface CsClass {
   name: string;
   base?: string;
   /** Fields (the script's variables, shown in the Inspector when public or [SerializeField]). */
-  fields: Array<{ type: string; name: string; value?: string; shown: boolean }>;
+  fields: CsField[];
   methods: CsMethod[];
+  /** Where the class body is in the file (after `{`, at `}`), and the indentation of its members. */
+  open?: number;
+  close?: number;
+  indent?: string;
 }
 
 /** Unity's own events (called by the engine), shown as red event nodes. */
@@ -277,6 +300,35 @@ export function parseStatements(t: string): CsStmt[] {
   return out;
 }
 
+/** Where a member's declaration really starts: after blank space, comments and #directives. */
+function declStart(t: string, from: number, to: number): number {
+  let i = from;
+  while (i < to) {
+    if (/\s/.test(t[i]!)) i++;
+    else if (t.startsWith("//", i) || t.startsWith("/*", i)) i = skipLiteral(t, i);
+    else if (t[i] === "#") i = t.indexOf("\n", i) < 0 ? to : t.indexOf("\n", i);
+    else break;
+  }
+  return i;
+}
+
+/** The indentation of the line that has index i. */
+function lineIndent(t: string, i: number): string {
+  const ls = t.lastIndexOf("\n", i - 1) + 1;
+  return /^[ \t]*/.exec(t.slice(ls))![0];
+}
+
+/** Whether a type has a comma outside <…> (several names in one declaration: `int a, b`). */
+function topComma(type: string): boolean {
+  let d = 0;
+  for (const c of type) {
+    if (c === "<") d++;
+    else if (c === ">") d--;
+    else if (c === "," && d === 0) return true;
+  }
+  return false;
+}
+
 const CONTROL = /^(if|for|foreach|while|switch|catch|using|lock|return|new|else|get|set|add|remove|init)$/;
 
 /**
@@ -296,7 +348,7 @@ export function parseCSharp(text: string): CsClass[] {
     if (taken.some(([a, b]) => m!.index > a && m!.index < b)) continue;
     const open = m.index + m[0].length - 1;
     const close = matchBracket(text, open);
-    const cls: CsClass = { name: m[1]!, ...(m[2] ? { base: m[2].split(",")[0]!.trim() } : {}), fields: [], methods: [] };
+    const cls: CsClass = { name: m[1]!, ...(m[2] ? { base: m[2].split(",")[0]!.trim() } : {}), fields: [], methods: [], open: open + 1, close };
     let i = open + 1;
     let last = i;
     while (i < close) {
@@ -308,9 +360,23 @@ export function parseCSharp(text: string): CsClass[] {
       }
       const c = text[i];
       if (c === ";") {
-        const decl = text.slice(last, i).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "").trim();
-        const f = /^((?:\[[^\]]*\]\s*)*)((?:(?:public|private|protected|internal|static|readonly|const|new)\s+)*)([\w.<>,[\]?\s]+?)\s+([A-Za-z_]\w*)\s*(?:=\s*([\s\S]+))?$/.exec(decl);
-        if (f && !/\(/.test(f[3]!) && !/^(using|return)$/.test(f[3]!.trim())) cls.fields.push({ type: f[3]!.trim(), name: f[4]!, ...(f[5] ? { value: f[5].trim() } : {}), shown: /\bpublic\b/.test(f[2]!) || /SerializeField/.test(f[1]!) });
+        const start = declStart(text, last, i);
+        const decl = text.slice(start, i).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "").trim();
+        const f = /^((?:\[[^\]]*\]\s*)*)((?:(?:public|private|protected|internal|static|readonly|const|new|volatile)\s+)*)([\w.<>,[\]?\s]+?)\s+([A-Za-z_]\w*)\s*(?:=\s*([\s\S]+))?$/.exec(decl);
+        if (f && !/\(/.test(f[3]!) && !/^(using|return)$/.test(f[3]!.trim())) {
+          const type = f[3]!.trim();
+          const isPublic = /\bpublic\b/.test(f[2]!);
+          const tip = /\bTooltip\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)/.exec(f[1]!);
+          cls.fields.push({
+            type, name: f[4]!, ...(f[5] ? { value: f[5].trim() } : {}),
+            shown: (isPublic && !/HideInInspector/.test(f[1]!)) || /SerializeField/.test(f[1]!),
+            ...(tip ? { tooltip: tip[1]!.replace(/\\(.)/g, "$1") } : {}),
+            ...(isPublic ? { isPublic } : {}),
+            ...(/\b(const|static|readonly)\b/.test(f[2]!) || /\b(event|delegate)\b/.test(type) || topComma(type) ? { locked: true } : {}),
+            start, end: i + 1,
+          });
+          if (cls.indent === undefined) cls.indent = lineIndent(text, start);
+        }
         last = i + 1;
       } else if (c === "{") {
         const end = matchBracket(text, i);
@@ -333,6 +399,10 @@ export function parseCSharp(text: string): CsClass[] {
       i++;
     }
     taken.push([open, close]);
+    if (cls.indent === undefined) {
+      const first = /\n([ \t]*)\S/.exec(text.slice(open + 1, close));
+      cls.indent = first && first[1]!.length > lineIndent(text, m.index).length ? first[1]! : `${lineIndent(text, m.index)}    `;
+    }
     classes.push(cls);
   }
   return classes;
@@ -494,4 +564,170 @@ export function findStmt(list: CsStmt[], id: string): { list: CsStmt[]; index: n
     if (inner) return inner;
   }
   return undefined;
+}
+
+/** A field as the variables panel edits it. */
+export interface FieldSpec {
+  type: string;
+  name: string;
+  /** The starting value as C#; empty for none. */
+  value?: string;
+  shown: boolean;
+  tooltip?: string;
+}
+
+const IDENT = /^[A-Za-z_]\w*$/;
+const RESERVED = new Set("abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while".split(" "));
+
+/** Why a variable name cannot be used, or undefined when it can. */
+export function fieldNameProblem(cls: CsClass, name: string, except?: string): string | undefined {
+  if (!IDENT.test(name)) return "A name has letters, digits and _ only, and does not start with a digit.";
+  if (RESERVED.has(name)) return `"${name}" is a C# word.`;
+  if (name !== except && (cls.fields.some((f) => f.name === name) || cls.methods.some((m) => m.name === name))) return `"${name}" is already used in ${cls.name}.`;
+  if (name === cls.name) return "A variable cannot have the class's name.";
+  return undefined;
+}
+
+/** Writes a field's declaration (attributes, access, type, name, value). */
+function writeField(f: FieldSpec, wasPublic: boolean | undefined, keep: string, rename?: string): string {
+  const pub = wasPublic ?? f.shown;
+  const attrs: string[] = keep ? [keep] : [];
+  if (rename && f.shown) attrs.push(`[UnityEngine.Serialization.FormerlySerializedAs("${rename}")]`);
+  if (f.tooltip?.trim()) attrs.push(`[Tooltip("${f.tooltip.trim().replace(/["\\]/g, "\\$&")}")]`);
+  if (f.shown && !pub) attrs.push("[SerializeField]");
+  if (!f.shown && pub) attrs.push("[HideInInspector]");
+  return `${attrs.length ? `${attrs.join(" ")} ` : ""}${pub ? "public" : "private"} ${f.type.trim()} ${f.name}${f.value?.trim() ? ` = ${f.value.trim()}` : ""};`;
+}
+
+/** Attributes of a declaration that the panel does not manage (kept as they are). */
+function otherAttrs(decl: string): string {
+  const out: string[] = [];
+  const re = /\[([^\]]*)\]/g;
+  let m: RegExpExecArray | null;
+  const head = /^((?:\[[^\]]*\]\s*)*)/.exec(decl)![1]!;
+  while ((m = re.exec(head))) {
+    const parts = splitArgs(m[1]!).filter((a) => !/^\s*(SerializeField|HideInInspector|Tooltip\s*\(|(UnityEngine\.Serialization\.)?FormerlySerializedAs\s*\()/.test(a));
+    if (parts.length) out.push(`[${parts.map((p) => p.trim()).join(", ")}]`);
+  }
+  return out.join(" ");
+}
+
+/**
+ * Adds a variable to a class, after its last field (or at the top of the class).
+ *
+ * @returns The new text of the file.
+ */
+export function addField(text: string, cls: CsClass, f: FieldSpec): string {
+  const problem = fieldNameProblem(cls, f.name);
+  if (problem) throw new Error(problem);
+  if (!f.type.trim()) throw new Error("Choose a type.");
+  const indent = cls.indent ?? "    ";
+  const line = `${indent}${writeField(f, undefined, "")}`;
+  const lastField = cls.fields[cls.fields.length - 1];
+  if (lastField) {
+    const eol = text.indexOf("\n", lastField.end);
+    const at = eol < 0 ? text.length : eol;
+    return `${text.slice(0, at)}\n${line}${text.slice(at)}`;
+  }
+  const at = cls.open ?? 0;
+  const nl = text.indexOf("\n", at);
+  const after = nl >= 0 && !text.slice(at, nl).trim() ? nl : at;
+  return `${text.slice(0, after)}\n${line}\n${text.slice(after)}`;
+}
+
+/** Index ranges of strings and comments in a part of a file. */
+function literalRanges(t: string, from: number, to: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let i = from; i < to; ) {
+    const k = skipLiteral(t, i);
+    if (k !== i) {
+      out.push([i, k]);
+      i = k;
+    } else i++;
+  }
+  return out;
+}
+
+/** Where a name is used in a class (not in strings or comments, not as `other.name`). */
+export function fieldUses(text: string, cls: CsClass, name: string): number[] {
+  const from = cls.open ?? 0;
+  const to = cls.close ?? text.length;
+  const lit = literalRanges(text, from, to);
+  const re = new RegExp(`(?<![\\w.@])(this\\.)?\\b${name}\\b`, "g");
+  re.lastIndex = from;
+  const hits: number[] = [];
+  let m: RegExpExecArray | null;
+  const own = cls.fields.find((f) => f.name === name);
+  while ((m = re.exec(text)) && m.index < to) {
+    const at = m.index + (m[1]?.length ?? 0);
+    if (lit.some(([a, b]) => at >= a && at < b)) continue;
+    if (own && at >= own.start && at < own.end) continue;
+    hits.push(at);
+  }
+  return hits;
+}
+
+/**
+ * Changes a variable: its type, name, starting value, Inspector visibility and
+ * tooltip. A new name is changed everywhere in the class too, and a variable
+ * shown in the Inspector keeps the value set there ([FormerlySerializedAs]).
+ * Its other attributes (Header, Range…) stay.
+ *
+ * @returns The new text of the file.
+ */
+export function updateField(text: string, cls: CsClass, name: string, f: FieldSpec): string {
+  const old = cls.fields.find((x) => x.name === name);
+  if (!old) throw new Error(`No variable "${name}" in ${cls.name}.`);
+  if (old.locked) throw new Error(`"${name}" is const, static or shares its line; change it in the code.`);
+  const problem = fieldNameProblem(cls, f.name, name);
+  if (problem) throw new Error(problem);
+  const renamed = f.name !== name;
+  const uses = renamed ? fieldUses(text, cls, name) : [];
+  const decl = text.slice(old.start, old.end);
+  const keep = otherAttrs(decl);
+  // An earlier rename's attribute stays, so values from before it are kept too.
+  const prior = /FormerlySerializedAs\s*\(\s*"(\w+)"/.exec(decl)?.[1];
+  const next = writeField(f, old.isPublic ?? false, keep, renamed && old.shown ? name : prior);
+  // Rename uses from the end so earlier offsets stay right; the declaration is replaced in between.
+  let out = text;
+  const edits: Array<[number, number, string]> = [[old.start, old.end, next], ...uses.map((u): [number, number, string] => [u, u + name.length, f.name])];
+  edits.sort((a, b) => b[0] - a[0]);
+  for (const [a, b, s] of edits) out = `${out.slice(0, a)}${s}${out.slice(b)}`;
+  return out;
+}
+
+/**
+ * Removes a variable (its whole line when it is alone on it).
+ *
+ * @returns The new text of the file.
+ */
+export function removeField(text: string, cls: CsClass, name: string): string {
+  const old = cls.fields.find((x) => x.name === name);
+  if (!old) throw new Error(`No variable "${name}" in ${cls.name}.`);
+  if (old.locked) throw new Error(`"${name}" shares its line or is const/static; remove it in the code.`);
+  const ls = text.lastIndexOf("\n", old.start - 1);
+  const le = text.indexOf("\n", old.end);
+  const before = text.slice(ls + 1, old.start);
+  const after = text.slice(old.end, le < 0 ? text.length : le);
+  if (!before.trim() && !after.trim()) return `${text.slice(0, ls < 0 ? 0 : ls)}${text.slice(le < 0 ? text.length : le)}`;
+  return `${text.slice(0, old.start)}${text.slice(old.end).replace(/^[ \t]*/, "")}`;
+}
+
+/** C# for a starting value typed as plain text, by type (`5` → `5f` for a float, text → "text"). */
+export function csValue(type: string, raw: string): string {
+  const v = raw.trim();
+  if (!v) return "";
+  const t = type.trim();
+  if (t === "string") return /^".*"$/.test(v) ? v : `"${v.replace(/["\\]/g, "\\$&")}"`;
+  if (t === "float") return /^-?\d+(\.\d+)?$/.test(v) ? `${v}f` : v;
+  if (t === "bool") return /^(true|false)$/i.test(v) ? v.toLowerCase() : v;
+  return v;
+}
+
+/** Plain text for a starting value (the reverse of csValue), for the panel's inputs. */
+export function plainValue(type: string, value: string | undefined): string {
+  const v = (value ?? "").trim();
+  if (type === "string" && /^"(?:[^"\\]|\\.)*"$/.test(v)) return v.slice(1, -1).replace(/\\(.)/g, "$1");
+  if (type === "float" && /^-?\d+(\.\d+)?f$/i.test(v)) return v.slice(0, -1);
+  return v;
 }

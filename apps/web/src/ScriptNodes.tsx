@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { findStmt, methodToNodes, parseCSharp, writeCSharp, type CsClass, type CsStmt } from "@kesher/shared";
+import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsClass, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas } from "./BlueprintCanvas";
+import { Fullscreen } from "./Fullscreen";
+import { VariablesPanel, type PanelType, type PanelVar } from "./VariablesPanel";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
 
@@ -17,6 +19,13 @@ const KIND: Record<CsStmt["kind"], [string, string]> = {
   return: ["החזרת ערך", "Return a value"],
   code: ["קוד", "Code"],
 };
+
+/** Types a Unity variable can have; the project's own scripts are added to these. */
+const UNITY_TYPES: PanelType[] = [
+  ...(["bool", "int", "float", "string"] as const).map((t): PanelType => ({ value: t, label: t, input: t === "bool" ? "bool" : t === "string" ? "text" : "number", group: L("בסיסי", "Basic") })),
+  ...["Vector2", "Vector3", "Color"].map((t): PanelType => ({ value: t, label: t, input: "code", group: "Unity" })),
+  ...["GameObject", "Transform", "Rigidbody", "Rigidbody2D", "Collider", "Animator", "AudioSource", "AudioClip", "Sprite", "Material", "Camera", "ParticleSystem"].map((t): PanelType => ({ value: t, label: t, input: "none", group: "Unity" })),
+];
 
 /**
  * A Unity C# script as nodes, for people who do not write code: pick a
@@ -38,7 +47,10 @@ export function ScriptNodes() {
   const [q, setQ] = useState("");
   const [path, setPath] = useState("");
   const [file, setFile] = useState<{ text: string; mtime: number } | null>(null);
+  /** The script with every change so far (variables, typed code); node edits are on top of it. */
+  const [text, setTextState] = useState("");
   const [classes, setClasses] = useState<CsClass[]>([]);
+  const [ci, setCi] = useState(0);
   const [method, setMethod] = useState("");
   const [sel, setSel] = useState("");
   const [show, setShow] = useState<"nodes" | "code">("nodes");
@@ -54,15 +66,28 @@ export function ScriptNodes() {
     setSel("");
     void api<{ text: string; mtime: number }>(`/api/unity/script?path=${encodeURIComponent(p)}`).then((r) => {
       setFile(r);
+      setTextState(r.text);
       const parsed = parseCSharp(r.text);
       setClasses(parsed);
-      setMethod(parsed[0]?.methods[0]?.id ?? "");
+      // The class named like the file is the script's own (MonoBehaviour); others are helpers.
+      const own = Math.max(0, parsed.findIndex((c) => c.name === p.split("/").pop()!.replace(/\.cs$/, "")));
+      setCi(own);
+      setMethod(parsed[own]?.methods[0]?.id ?? "");
     }, (e: Error) => toast(e.message));
+  };
+  /** Takes new text for the script (typed code, a variable change) and reads it again, keeping the open method. */
+  const setText = (next: string) => {
+    const name = classes.flatMap((c) => c.methods).find((x) => x.id === method)?.name;
+    const parsed = parseCSharp(next);
+    setTextState(next);
+    setClasses(parsed);
+    setMethod(parsed[ci]?.methods.find((x) => x.name === name)?.id ?? parsed[ci]?.methods[0]?.id ?? "");
+    setSel("");
   };
 
   const m = classes.flatMap((c) => c.methods).find((x) => x.id === method);
   const nodes = useMemo(() => (m ? methodToNodes(m) : []), [m, tick]);
-  const out = useMemo(() => (file ? writeCSharp(file.text, classes) : ""), [file, classes, tick]);
+  const out = useMemo(() => (file ? writeCSharp(text, classes) : ""), [file, text, classes, tick]);
   const changed = !!file && out !== file.text;
   const found = m && sel ? findStmt(m.body, sel) : undefined;
   const st = found?.stmt;
@@ -91,12 +116,12 @@ export function ScriptNodes() {
     setTick((t) => t + 1);
   };
   /** Adds a new step after the chosen one (or at the end of the method). */
-  const add = (kind: "call" | "set" | "if" | "local") => {
+  const add = (kind: "call" | "set" | "if" | "local", target?: string) => {
     if (!m) return;
     const id = `n${Date.now()}`;
     const stmt: CsStmt =
       kind === "call" ? { id, kind, target: "Debug", name: "Log", args: ['"Hello"'], src: "", dirty: true }
-      : kind === "set" ? { id, kind, target: cls?.fields[0]?.name ?? "value", op: "=", value: "0", src: "", dirty: true }
+      : kind === "set" ? { id, kind, target: target ?? cls?.fields[0]?.name ?? "value", op: "=", value: target ? (cls?.fields.find((f) => f.name === target)?.value ?? "0") : "0", src: "", dirty: true }
       : kind === "local" ? { id, kind, type: "var", name: "x", value: "0", src: "", dirty: true }
       : { id, kind, cond: "true", then: [], src: "", dirty: true };
     const list = found ? found.list : m.body;
@@ -119,7 +144,34 @@ export function ScriptNodes() {
   };
 
   const list = (scripts ?? []).filter((s) => s.toLowerCase().includes(q.toLowerCase())).slice(0, 300);
-  const cls = classes[0];
+  const cls = classes[ci] ?? classes[0];
+  /** A variable change on the script as it is now (node edits included), then read again. */
+  const onVars = (f: (t: string, c: CsClass) => string) => {
+    const now = parseCSharp(out)[ci];
+    if (!now) throw new Error(L("לא נמצאה מחלקה בסקריפט.", "No class in this script."));
+    setText(f(out, now));
+  };
+  const vars: PanelVar[] = (cls?.fields ?? []).map((f) => ({ name: f.name, type: f.type, value: plainValue(f.type, f.value), shown: f.shown, ...(f.tooltip ? { tooltip: f.tooltip } : {}), ...(f.locked ? { locked: true } : {}) }));
+  const spec = (v: PanelVar) => ({ type: v.type, name: v.name, value: csValue(v.type, v.value), shown: v.shown, ...(v.tooltip ? { tooltip: v.tooltip } : {}) });
+  const types: PanelType[] = [
+    ...UNITY_TYPES,
+    ...[...new Set((scripts ?? []).map((s) => s.split("/").pop()!.replace(/\.cs$/, "")))].filter((n) => /^[A-Za-z_]\w*$/.test(n) && n !== cls?.name).sort().map((n): PanelType => ({ value: n, label: n, input: "none", group: L("הסקריפטים של הפרויקט", "This project's scripts") })),
+  ];
+  const variables = cls && (
+    <VariablesPanel
+      vars={vars}
+      types={types}
+      shownLabel={L("מוצג ב-Inspector", "Shown in the Inspector")}
+      busy={saving}
+      actions={{
+        add: (v) => onVars((t, c) => addField(t, c, spec(v))),
+        change: (name, v) => onVars((t, c) => updateField(t, c, name, spec(v))),
+        remove: (name) => onVars((t, c) => removeField(t, c, name)),
+        uses: (name) => (cls ? fieldUses(out, parseCSharp(out)[ci] ?? cls, name).length : 0),
+        setInGraph: m ? (name) => { setShow("nodes"); add("set", name); } : undefined,
+      }}
+    />
+  );
   return (
     <div className="ue-body script-nodes">
       <aside className="ue-list card">
@@ -156,21 +208,29 @@ export function ScriptNodes() {
               <button type="button" disabled={!changed || saving} onClick={() => open(path)}>{L("בטל שינויים", "Discard changes")}</button>
               <button type="button" className="primary" disabled={!changed || saving} onClick={() => void save()}>{saving ? "…" : L("💾 שמור ל-C#", "💾 Save as C#")}</button>
             </div>
-            {cls && cls.fields.length > 0 && (
-              <p className="small muted" dir="ltr">{L("משתנים:", "Variables:")} {cls.fields.map((f) => `${f.shown ? "◆" : "◇"} ${f.type} ${f.name}${f.value ? ` = ${f.value}` : ""}`).join(" · ")}</p>
+            {classes.length > 1 && (
+              <label className="row small">
+                <span className="muted">{L("מחלקה", "Class")}</span>
+                <select dir="ltr" value={ci} onChange={(e) => { const i = Number(e.target.value); setCi(i); setMethod(classes[i]?.methods[0]?.id ?? ""); setSel(""); }}>
+                  {classes.map((c, i) => <option key={i} value={i}>{c.name}</option>)}
+                </select>
+              </label>
             )}
             <div className="row wrap script-methods" role="tablist" aria-label={L("פונקציות", "Methods")}>
-              {classes.flatMap((c) => c.methods).map((x) => (
+              {(cls?.methods ?? []).map((x) => (
                 <button key={x.id} type="button" role="tab" aria-selected={x.id === method} className={x.id === method ? "on" : ""} onClick={() => { setMethod(x.id); setSel(""); }} dir="ltr">{x.name}</button>
               ))}
             </div>
             {show === "code" ? (
-              <pre className="bp-code-ai" dir="ltr">{out}</pre>
+              <textarea className="script-code" dir="ltr" spellCheck={false} value={out} onChange={(e) => setText(e.target.value)} aria-label={L("הקוד של הסקריפט", "The script's code")} />
             ) : (
+              <Fullscreen className="script-fs" label={L("הסקריפט במסך מלא", "The script, full screen")}>
               <div className="script-graph">
                 <div className="script-canvas">
                   {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable={false} unity onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
+                <div className="script-side">
+                <aside className="script-vars card">{variables}</aside>
                 <aside className="script-edit card">
                   <div className="row wrap script-add" aria-label={L("הוספת צעד", "Add a step")}>
                     <span className="muted small">{st ? L("הוסף אחרי:", "Add after:") : L("הוסף בסוף:", "Add at the end:")}</span>
@@ -217,7 +277,9 @@ export function ScriptNodes() {
                     </>
                   )}
                 </aside>
+                </div>
               </div>
+              </Fullscreen>
             )}
             <p className="muted small">{L("רק פונקציות ששיניתם נכתבות מחדש; כל השאר נשאר בדיוק כמו שהיה. לפני כל שמירה נשמר עותק של הקובץ הקודם בתיקייה של KesherAI.", "Only methods you changed are rewritten; everything else stays exactly as it was. A copy of the old file is kept in KesherAI's folder before each save.")}</p>
           </>

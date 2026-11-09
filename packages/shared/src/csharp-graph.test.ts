@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findStmt, methodToNodes, parseCSharp, writeCSharp } from "./csharp-graph.js";
+import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp } from "./csharp-graph.js";
 
 const SCRIPT = `using UnityEngine;
 using System.Collections;
@@ -102,4 +102,58 @@ test("a new step and a removed step are written into the method", () => {
   assert.ok(out.includes('rb = GetComponent<Rigidbody>();\n        Debug.Log("Ready");\n    }'), out.slice(out.indexOf("void Start"), out.indexOf("void Update")));
   assert.ok(!out.includes("Hello { not a block }"));
   assert.equal(parseCSharp(out)[0]!.methods[0]!.body.length, 2);
+});
+
+test("variables: add, change (type, value, Inspector, tooltip), rename everywhere, remove", () => {
+  let t = SCRIPT;
+  let c = parseCSharp(t)[0]!;
+  assert.equal(c.indent, "    ");
+  assert.deepEqual([c.fields[0]!.isPublic, c.fields[1]!.isPublic], [undefined, true]);
+  assert.match(t.slice(c.fields[0]!.start, c.fields[0]!.end), /^\[SerializeField\] private float speed = 5f;$/);
+
+  t = addField(t, c, { type: "bool", name: "canJump", value: "true", shown: true, tooltip: "Can the player jump" });
+  assert.match(t, /private Rigidbody rb; \/\/ set in Start\n    \[Tooltip\("Can the player jump"\)\] public bool canJump = true;\n/);
+  c = parseCSharp(t)[0]!;
+  assert.deepEqual(c.fields.at(-1), { ...c.fields.at(-1)!, name: "canJump", type: "bool", value: "true", shown: true, tooltip: "Can the player jump", isPublic: true });
+  assert.throws(() => addField(t, c, { type: "int", name: "health", shown: true }), /already used/);
+  assert.throws(() => addField(t, c, { type: "int", name: "class", shown: true }), /C# word/);
+  assert.throws(() => addField(t, c, { type: "int", name: "2x", shown: true }), /letters/);
+
+  // Rename speed → moveSpeed: every use in the class changes, strings and other objects' members do not.
+  const withString = t.replace('Debug.Log("Hello { not a block }");', 'Debug.Log("speed"); other.speed = speed;');
+  c = parseCSharp(withString)[0]!;
+  assert.equal(fieldUses(withString, c, "speed").length, 3);
+  const renamed = updateField(withString, c, "speed", { type: "float", name: "moveSpeed", value: "7f", shown: true });
+  assert.match(renamed, /\[UnityEngine\.Serialization\.FormerlySerializedAs\("speed"\)\] \[SerializeField\] private float moveSpeed = 7f;/);
+  assert.match(renamed, /Debug\.Log\("speed"\); other\.speed = moveSpeed;/);
+  assert.match(renamed, /Vector3\.right \* moveSpeed \* Time/);
+  assert.doesNotMatch(renamed.replace(/"speed"/g, "").replace(/other\.speed/, ""), /\bspeed\b/);
+
+  // Hide a public variable from the Inspector; show a private one.
+  c = parseCSharp(t)[0]!;
+  let u = updateField(t, c, "health", { type: "int", name: "health", value: "100", shown: false });
+  assert.match(u, /\[HideInInspector\] public int health = 100;/);
+  c = parseCSharp(u)[0]!;
+  assert.equal(c.fields.find((f) => f.name === "health")!.shown, false);
+  u = updateField(u, c, "rb", { type: "Rigidbody", name: "rb", shown: true });
+  assert.match(u, /\[SerializeField\] private Rigidbody rb; \/\/ set in Start/);
+
+  // Remove: the whole line goes; the rest of the file is untouched.
+  c = parseCSharp(t)[0]!;
+  const removed = removeField(t, c, "canJump");
+  assert.equal(removed, SCRIPT);
+  assert.equal(removeField(SCRIPT, parseCSharp(SCRIPT)[0]!, "health"), SCRIPT.replace("    public int health = 100;\n", ""));
+});
+
+test("variables: other attributes stay, locked declarations are not touched, a class with no fields", () => {
+  const src = `public class A : MonoBehaviour {\n    [Header("Move")] [Range(0, 10)] public float speed = 1f;\n    const int Max = 3;\n    int a, b;\n    void Start() { }\n}\n`;
+  const c = parseCSharp(src)[0]!;
+  assert.deepEqual(c.fields.map((f) => [f.name, !!f.locked]), [["speed", false], ["Max", true], ["b", true]]);
+  assert.match(updateField(src, c, "speed", { type: "float", name: "speed", value: "2f", shown: true, tooltip: 'Say "hi"' }), /\[Header\("Move"\)\] \[Range\(0, 10\)\] \[Tooltip\("Say \\"hi\\""\)\] public float speed = 2f;/);
+  assert.throws(() => updateField(src, c, "Max", { type: "int", name: "Max", shown: false }), /in the code/);
+  const empty = `public class B : MonoBehaviour\n{\n    void Start() { }\n}\n`;
+  const b = parseCSharp(empty)[0]!;
+  assert.equal(addField(empty, b, { type: "GameObject", name: "target", shown: true }), `public class B : MonoBehaviour\n{\n    public GameObject target;\n\n    void Start() { }\n}\n`);
+  assert.deepEqual([csValue("float", "2.5"), csValue("string", 'a"b'), csValue("bool", "TRUE"), csValue("int", "")], ["2.5f", '"a\\"b"', "true", ""]);
+  assert.deepEqual([plainValue("float", "2.5f"), plainValue("string", '"a\\"b"')], ["2.5", 'a"b']);
 });

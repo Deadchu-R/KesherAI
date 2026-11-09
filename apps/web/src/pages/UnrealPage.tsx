@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { UnityCliPanel } from "./UnityCliPanel";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
+import { Fullscreen } from "../Fullscreen";
 import { BlueprintCode, type Lang } from "../BlueprintCode";
 import { ScriptNodes } from "../ScriptNodes";
 import { FoundUnityProjects } from "../FoundUnityProjects";
@@ -362,7 +363,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     onApply={(code, before) => void edit(`Change this graph so it does exactly what this code says. The code is the graph written as text (one line per node, in the order the exec wires run; "x = Node(...)" names a node's outputs; indented blocks under "then:" / "else:" are those exec outputs). Make only the differences.\n\nBEFORE:\n${before.slice(0, 3000)}\n\nAFTER:\n${code.slice(0, 3000)}`, L("עדכון הגרף לפי הקוד", "Update the graph from the code"))}
                   />
                 )}
-                <div className="ue-stage" hidden={shownView === "code"}>
+                <Fullscreen hidden={shownView === "code"} label={L("הגרף במסך מלא", "The graph, full screen")}>
+                <div className="ue-stage">
                   <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={!unity && st.connected && !bp.offline} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
                   {!bubble && (
                     <button type="button" className="ue-ai-fab primary" onClick={() => setBubble(true)} aria-label={L("עריכה עם AI", "Edit with AI")} title={L("עריכה עם AI", "Edit with AI")}>✨</button>
@@ -417,6 +419,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     </div>
                   )}
                 </div>
+                </Fullscreen>
                 </div>
                 {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}
               </>
