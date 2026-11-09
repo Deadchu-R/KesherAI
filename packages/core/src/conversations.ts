@@ -16,6 +16,7 @@ import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
+import { delegateTool } from "./delegate.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
@@ -122,7 +123,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
  * others are listed by name and loaded with find_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
-const CORE_TOOLS = ["read_file", "write_file", "edit_file", "list_files", "search", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member"] as const;
+const CORE_TOOLS = ["read_file", "write_file", "edit_file", "list_files", "search", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate"] as const;
 
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
@@ -735,6 +736,8 @@ export class ConversationManager {
     // A game project in use: running its Android build on the user's phone and reading why it closed.
     if (this.unrealState.project || this.deps.unity?.activeProject) split.push(...androidPhoneTools());
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
+    // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
+    if (id) all.push(this.delegateFor(id, all));
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
@@ -744,6 +747,31 @@ export class ConversationManager {
       };
     }
     return { tools: all, notes: [...media.notes, ...group.notes] };
+  }
+
+  /** Chat models seen on the last listing, for the helpers' description (refreshed in the background). */
+  private chatModelIds: string[] = [];
+  private chatModelsAt = 0;
+
+  private delegateFor(id: string, tools: AgentTool[]): AgentTool {
+    if (Date.now() - this.chatModelsAt > 5 * 60_000) {
+      this.chatModelsAt = Date.now();
+      void this.deps.registry
+        .listAllModels()
+        .then((l) => (this.chatModelIds = l.models.filter((m) => (m.category === "chat" || m.category === "code") && !/embed|whisper|tts|rerank|phonon/i.test(m.providerModelId)).map((m) => m.id)))
+        .catch(() => undefined);
+    }
+    return delegateTool({
+      tools: () => tools,
+      currentModel: () => this.sessions.get(id)?.modelId ?? this.deps.config.activeModels.chat,
+      turnFor: (modelId) => {
+        this.deps.registry.resolve(modelId);
+        return modelTurnFor(this.deps.registry, modelId);
+      },
+      models: () => this.chatModelIds,
+      workspace: () => this.sessions.get(id)?.workspace,
+      contextTokens: (m) => this.contextFor(m),
+    });
   }
 
   private teamCache = new Map<string, Teammate[]>();
