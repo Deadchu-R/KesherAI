@@ -13,6 +13,7 @@
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, screen as displays } from "electron";
 import { join, resolve, sep } from "node:path";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import type { KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
@@ -225,10 +226,54 @@ const headless = process.argv.includes("--headless") || process.argv.includes("-
 
 app.on("second-instance", () => showWindow());
 
+/** Where the window was last time (it opens there again, maximized if it was). */
+const windowFile = () => join(app.getPath("userData"), "window.json");
+interface WindowState { x?: number; y?: number; width: number; height: number; maximized?: boolean }
+
+/**
+ * The last window place, only when it is still on a connected monitor (a
+ * monitor that was unplugged must not hide the window off-screen).
+ */
+function lastWindow(): WindowState | undefined {
+  try {
+    const w = JSON.parse(readFileSync(windowFile(), "utf8")) as WindowState;
+    if (!(w.width >= 600 && w.height >= 400)) return undefined;
+    if (w.x === undefined || w.y === undefined) return { width: w.width, height: w.height, ...(w.maximized ? { maximized: true } : {}) };
+    const on = displays.getAllDisplays().some((d) => {
+      const a = d.workArea;
+      return w.x! + 100 > a.x && w.x! + 100 < a.x + a.width && w.y! + 40 > a.y && w.y! + 40 < a.y + a.height;
+    });
+    return on ? w : { width: w.width, height: w.height };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keeps the window's place up to date (a moment after it moves or resizes). */
+function rememberWindow(win: BrowserWindow): void {
+  let timer: NodeJS.Timeout | undefined;
+  const save = () => {
+    if (win.isDestroyed() || win.isMinimized()) return;
+    const b = win.getNormalBounds();
+    void writeFile(windowFile(), JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height, maximized: win.isMaximized() })).catch(() => undefined);
+  };
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(save, 800);
+  };
+  win.on("move", later);
+  win.on("resize", later);
+  win.on("maximize", later);
+  win.on("unmaximize", later);
+  win.on("close", save);
+}
+
 async function createWindow(url: string): Promise<void> {
+  const last = lastWindow();
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: last?.width ?? 1440,
+    height: last?.height ?? 900,
+    ...(last?.x !== undefined && last.y !== undefined ? { x: last.x, y: last.y } : {}),
     minWidth: 900,
     minHeight: 600,
     title: branding.productName,
@@ -262,6 +307,9 @@ async function createWindow(url: string): Promise<void> {
       void shell.openExternal(target);
     }
   });
+
+  if (last?.maximized) win.maximize();
+  rememberWindow(win);
 
   // Closing the window keeps KesherAI working in the background (chats, downloads, tasks), in the tray.
   win.on("close", (event) => {
