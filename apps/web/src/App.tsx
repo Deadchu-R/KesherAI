@@ -32,6 +32,7 @@ import { useParts } from "./parts";
 const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
 const DayPage = lazy(() => import("./pages/Day").then((m) => ({ default: m.DayPage })));
 const KnowledgePage = lazy(() => import("./pages/Knowledge").then((m) => ({ default: m.KnowledgePage })));
+const LibrariesPage = lazy(() => import("./pages/Libraries").then((m) => ({ default: m.LibrariesPage })));
 const PersonasPage = lazy(() => import("./pages/PersonasPage").then((m) => ({ default: m.PersonasPage })));
 const PromptsPage = lazy(() => import("./pages/PromptsPage").then((m) => ({ default: m.PromptsPage })));
 const PipelinesPage = lazy(() => import("./pages/PipelinesPage").then((m) => ({ default: m.PipelinesPage })));
@@ -220,6 +221,7 @@ export function App() {
   else if (hash === "#/usage") page = <UsagePage />;
   else if (hash === "#/day") page = <DayPage />;
   else if (hash === "#/knowledge") page = <KnowledgePage />;
+  else if (hash === "#/libraries") page = <LibrariesPage />;
   else if (hash === "#/personas") page = <PersonasPage />;
   else if (hash === "#/prompts") page = <PromptsPage />;
   else if (hash === "#/watch") page = <WatchPage />;

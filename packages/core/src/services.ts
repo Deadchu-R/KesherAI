@@ -29,6 +29,7 @@ import type { Runtimes } from "./runtimes.js";
 import type { Devices } from "./devices.js";
 import type { Speeds } from "./speeds.js";
 import type { Journal } from "./journal.js";
+import type { Libraries } from "./libraries.js";
 import type { Knowledge } from "./knowledge.js";
 import type { Personas } from "./personas.js";
 import type { Prompts } from "./prompts.js";
@@ -110,6 +111,8 @@ export interface KesherServices {
   journal: Journal;
   /** Knowledge bases: folders and web pages the models search, with sources. */
   knowledge: Knowledge;
+  /** The library store: documentation downloaded once for offline work (each one a knowledge base). */
+  libraries: Libraries;
   /** Saved personas: instructions, model and knowledge base per assistant. */
   personas: Personas;
   /** The prompt library, run with `/command` in a message box. */

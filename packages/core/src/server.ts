@@ -48,6 +48,9 @@ import { notificationRoutes } from "./routes/notifications.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
+import { librariesRoutes } from "./routes/libraries.js";
+import { Libraries } from "./libraries.js";
+import { findEngines } from "./unreal-install.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
 import { ComfyUIProvider } from "@kesher/providers";
@@ -297,6 +300,14 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   let semantic: Semantic | undefined;
   const knowledge = new Knowledge(join(paths.root, "knowledge"), () => semantic?.embedder());
   void knowledge.load();
+  // The library store: documentation downloaded once, searched offline as knowledge bases. Unreal's API comes
+  // from the installed engine's own headers (the UObject classes and Core), with no download.
+  const libraries = new Libraries(join(paths.root, "libraries"), knowledge, async () => {
+    const e = (await findEngines())[0];
+    if (!e) return undefined;
+    const src = join(e.path, "Engine", "Source", "Runtime");
+    return [join(src, "Engine", "Classes"), join(src, "CoreUObject", "Public", "UObject"), join(src, "InputCore", "Classes"), join(src, "UMG", "Public")];
+  });
   const personas = new Personas(join(paths.root, "personas.json"));
   const skills = new SkillStore(paths.skills);
   void skills.list().catch(() => undefined);
@@ -619,6 +630,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     github,
     journal,
     knowledge,
+    libraries,
     personas,
     skills,
     pipelines,
@@ -880,6 +892,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await mcpRoutes(app, services);
   await journalRoutes(app, services);
   await knowledgeRoutes(app, services);
+  await librariesRoutes(app, services);
   await personaRoutes(app, services);
   await promptRoutes(app, services);
   await skillRoutes(app, services);

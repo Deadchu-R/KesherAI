@@ -58,7 +58,7 @@ export interface KnowledgeHit {
   score: number;
 }
 
-const DOC_EXT = new Set([".pdf", ".docx", ".md", ".markdown", ".txt", ".csv", ".html", ".htm", ".json", ".rtf", ".cs", ".ts", ".js", ".py", ".cpp", ".h", ".java", ".go", ".rs", ".yaml", ".yml", ".xml", ".ini", ".log"]);
+const DOC_EXT = new Set([".pdf", ".docx", ".md", ".markdown", ".txt", ".csv", ".html", ".htm", ".json", ".rtf", ".cs", ".ts", ".js", ".py", ".cpp", ".h", ".hpp", ".rst", ".mdx", ".gd", ".java", ".go", ".rs", ".yaml", ".yml", ".xml", ".ini", ".log"]);
 const SKIP_DIRS = new Set(["node_modules", ".git", "Library", "Temp", "obj", "bin", "Binaries", "Intermediate", "DerivedDataCache", "Saved", "dist", "build", ".venv", "venv", "__pycache__"]);
 const MAX_FILE = 60 * 1024 * 1024;
 const HEB_PREFIX = /^[והבלמשכ]/;
