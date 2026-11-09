@@ -3,6 +3,12 @@
 #include "KesherWidget.h"
 
 #include "AssetImportTask.h"
+#include "Blueprint/UserWidget.h"
+#include "Factories/BlueprintFactory.h"
+#include "FileHelpers.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/PackageName.h"
+#include "WidgetBlueprintFactory.h"
 #include "AssetToolsModule.h"
 #include "Blueprint/WidgetTree.h"
 #include "HAL/FileManager.h"
@@ -168,6 +174,48 @@ namespace KesherWidget
 		Out->SetStringField(TEXT("path"), Path);
 		Out->SetStringField(TEXT("name"), BP->GetName());
 		if (BP->WidgetTree && BP->WidgetTree->RootWidget) Out->SetObjectField(TEXT("root"), Describe(BP->WidgetTree->RootWidget));
+		return Out;
+	}
+
+	TSharedRef<FJsonObject> CreateBlueprint(const FString& Path, const FString& ParentName)
+	{
+		FString Package, Asset;
+		if (!Path.Split(TEXT("."), &Package, &Asset))
+		{
+			Package = Path;
+			Asset = FPackageName::GetLongPackageAssetName(Path);
+		}
+		if (!Package.StartsWith(TEXT("/Game/")) || Package.Contains(TEXT("..")) || Asset.IsEmpty()) return WidgetError(TEXT("New Blueprints go under /Game/"));
+		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+		if (LoadObject<UBlueprint>(nullptr, *(Package + TEXT(".") + Asset)))
+		{
+			Out->SetBoolField(TEXT("exists"), true);
+			return Out;
+		}
+		const FString Folder = FPackageName::GetLongPackagePath(Package);
+		IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		UObject* Made = nullptr;
+		if (ParentName == TEXT("UserWidget"))
+		{
+			UWidgetBlueprintFactory* F = NewObject<UWidgetBlueprintFactory>();
+			F->ParentClass = UUserWidget::StaticClass();
+			Made = Tools.CreateAsset(Asset, Folder, UWidgetBlueprint::StaticClass(), F);
+		}
+		else
+		{
+			const FString Name = ParentName.IsEmpty() ? TEXT("Actor") : ParentName;
+			UClass* Parent = FindFirstObject<UClass>(*Name, EFindFirstObjectOptions::None);
+			if (!Parent) Parent = FindFirstObject<UClass>(*(TEXT("A") + Name), EFindFirstObjectOptions::None);
+			if (!Parent) Parent = FindFirstObject<UClass>(*(TEXT("U") + Name), EFindFirstObjectOptions::None);
+			if (!Parent || !FKismetEditorUtilities::CanCreateBlueprintOfClass(Parent)) return WidgetError(TEXT("A Blueprint cannot be made from ") + Name);
+			UBlueprintFactory* F = NewObject<UBlueprintFactory>();
+			F->ParentClass = Parent;
+			Made = Tools.CreateAsset(Asset, Folder, UBlueprint::StaticClass(), F);
+		}
+		if (!Made) return WidgetError(TEXT("Unreal did not make ") + Asset);
+		TArray<UPackage*> Packages = { Made->GetPackage() };
+		UEditorLoadingAndSavingUtils::SavePackages(Packages, false);
+		Out->SetStringField(TEXT("path"), Made->GetPathName());
 		return Out;
 	}
 

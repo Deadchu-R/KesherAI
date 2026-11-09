@@ -21,7 +21,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.6");
+static const TCHAR* BridgeVersion = TEXT("0.1.7");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -132,6 +132,12 @@ void FKesherAIBridgeModule::OnMessage(const FString& Text)
 		Result = KesherGraph::Actions(Path, Query);
 	}
 	else if (Cmd == TEXT("widget")) Result = KesherWidget::Read(Path);
+	else if (Cmd == TEXT("create"))
+	{
+		FString Parent;
+		In->TryGetStringField(TEXT("parent"), Parent);
+		Result = KesherWidget::CreateBlueprint(Path, Parent);
+	}
 	else if (Cmd == TEXT("import_texture"))
 	{
 		FString File, Folder, Name;

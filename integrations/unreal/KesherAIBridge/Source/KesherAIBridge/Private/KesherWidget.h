@@ -21,6 +21,9 @@ namespace KesherWidget
 	/** The widget tree of a Widget Blueprint; an "error" field when it is not one. */
 	TSharedRef<FJsonObject> Read(const FString& Path);
 
+	/** Makes a new Blueprint (or a Widget Blueprint when the parent is UserWidget) and saves it; fine when it already exists. */
+	TSharedRef<FJsonObject> CreateBlueprint(const FString& Path, const FString& ParentName);
+
 	/** Imports a PNG on this computer as a texture under /Game (for pictures from Figma). */
 	TSharedRef<FJsonObject> ImportTexture(const FString& File, const FString& Folder, const FString& Name);
 

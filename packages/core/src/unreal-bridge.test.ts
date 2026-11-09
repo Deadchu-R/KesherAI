@@ -81,15 +81,22 @@ test("the editor connects, its Blueprints are kept, and work with Unreal closed 
     const off = await get(`/api/unreal/graph?path=${encodeURIComponent(BP.path)}`);
     assert.equal(off.offline, true);
     assert.equal((await get("/api/unreal/blueprints")).offline, true);
+    // A new Blueprint with Unreal closed: kept with an empty graph, listed, and made first when the editor connects.
+    const made = (await server.app.inject({ method: "POST", url: "/api/unreal/create", payload: { name: "BP_Gate", folder: "/Game/Blueprints", parent: "Actor" } })).json() as { path: string; queued: boolean };
+    assert.deepEqual(made, { path: "/Game/Blueprints/BP_Gate.BP_Gate", queued: true });
+    assert.ok(((await get("/api/unreal/blueprints")).blueprints as Array<{ path: string }>).some((b) => b.path === made.path));
+    assert.equal(((await get(`/api/unreal/graph?path=${encodeURIComponent(made.path)}`)).graph as BlueprintJson).name, "BP_Gate");
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/unreal/create", payload: { name: "../x", folder: "/Game" } })).statusCode, 400);
     assert.equal((await server.app.inject({ method: "GET", url: "/api/unreal/graph?path=/Game/Never.Never" })).statusCode, 404);
 
     // A change waits, and is applied when the editor connects again.
     await server.services.unreal.enqueue({ project: "DoorGame", path: BP.path, graph: "EventGraph", ops: [{ op: "add", type: "branch", ref: "$b" }] });
-    assert.equal(((await get("/api/unreal/queue")) as unknown as unknown[]).length, 1);
+    assert.equal(((await get("/api/unreal/queue")) as unknown as unknown[]).length, 2, "the new Blueprint, then the change");
     const calls2: string[] = [];
     const ws2 = await fakeEditor(port, calls2);
     await until(async () => calls2.includes("apply") && ((await get("/api/unreal/queue")) as unknown as unknown[]).length === 0);
     assert.ok(calls2.includes("apply") && calls2.includes("compile"));
+    assert.ok(calls2.indexOf("create") >= 0 && calls2.indexOf("create") < calls2.indexOf("apply"), "the waiting Blueprint is made first");
     ws2.close();
 
     // Only this computer may connect as the editor.

@@ -1165,6 +1165,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .wd-field { display: flex; flex-direction: column; gap: 2px; }
 .wd-field input[type="color"] { width: 60px; height: 30px; padding: 0; }
 .wd-ask { gap: 6px; }
+.ue-new label { display: flex; flex-direction: column; gap: 2px; }
 .plugin-update { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; }
 .ue-views button { padding: 4px 10px; border-radius: 999px; }
 .ue-views button.on { background: var(--accent); color: var(--accent-ink, #000); }

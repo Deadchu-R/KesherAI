@@ -120,6 +120,14 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   }
 
   if (kind === "unreal") {
+    /** A new Blueprint: made now, or (Unreal closed) when the project opens. */
+    app.post<{ Body: { name?: string; folder?: string; parent?: string } }>(`${base}/create`, async (req, reply) => {
+      try {
+        return await unreal.createBlueprint(String(req.body?.name ?? ""), String(req.body?.folder ?? "/Game/Blueprints"), String(req.body?.parent ?? "Actor"));
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
     /** Unreal's right-click menu: nodes that can be added, matching the words typed (plugin 0.1.4+). */
     app.get<{ Querystring: { path?: string; q?: string } }>(`${base}/actions`, async (req, reply) => {
       if (!req.query.path) return reply.code(400).send({ error: "Which Blueprint?" });

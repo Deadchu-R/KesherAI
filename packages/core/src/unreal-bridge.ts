@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.6";
+export const BRIDGE_VERSION = "0.1.7";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -39,6 +39,10 @@ export interface QueuedEdit {
   ops: unknown[];
   /** What the user asked for, in words. */
   request?: string;
+  /** "create": make this Blueprint first (it was made in KesherAI with Unreal closed). */
+  kind?: "create";
+  /** For "create": the parent class (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, UserWidget…). */
+  parent?: string;
   at: string;
 }
 
@@ -194,6 +198,13 @@ export class UnrealBridge {
     for (const q of await this.queue()) {
       if (q.project !== this.info?.project) continue;
       try {
+        // A Blueprint made in KesherAI while Unreal was closed: made now, before the changes that follow it in the queue.
+        if (q.kind === "create") {
+          await this.request("create", { path: q.path, parent: q.parent ?? "Actor" }, 60_000);
+          await this.unqueue(q.id);
+          await this.list().catch(() => undefined);
+          continue;
+        }
         await this.request("apply", { path: q.path, graph: q.graph, ops: q.ops });
         await this.request("compile", { path: q.path }).catch(() => undefined);
         await this.unqueue(q.id);
@@ -264,6 +275,10 @@ export class UnrealBridge {
       }
     }
     list ??= (await this.readJson<typeof list>(file)) ?? { blueprints: [] };
+    // Blueprints made in KesherAI that wait for Unreal: listed (and editable) already.
+    for (const q of await this.queue()) {
+      if (q.kind === "create" && q.project === project && !list!.blueprints.some((b) => b.path === q.path)) list!.blueprints.push({ path: q.path, name: q.path.split(".").pop() ?? q.path, parent: q.parent ?? "Actor", pending: true } as { path: string; name: string; parent?: string });
+    }
     const blueprints = await Promise.all(
       list!.blueprints.map(async (b) => ({ ...b, saved: !!(await this.readJson(join(this.projectDir(project), "graphs", fileFor(b.path)))) })),
     );
@@ -326,6 +341,37 @@ export class UnrealBridge {
     const left = q.filter((x) => x.id !== id);
     await this.writeJson(join(this.dir, "queue.json"), left);
     return left.length !== q.length;
+  }
+
+  /**
+   * A new Blueprint: made in the editor now when it is connected; otherwise
+   * kept (with an empty graph you can already change, in words or by hand)
+   * and made when the editor opens, before the changes made to it meanwhile.
+   *
+   * @param name - Its name, e.g. BP_Door.
+   * @param folder - Where under /Game, e.g. /Game/Blueprints.
+   * @param parent - The parent class (UserWidget makes a Widget Blueprint).
+   * @returns Its object path, and whether it waits for the editor.
+   */
+  async createBlueprint(name: string, folder: string, parent: string): Promise<{ path: string; queued: boolean }> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]{1,63}$/.test(name)) throw new Error("A name of letters, digits and _ (e.g. BP_Door).");
+    const dir = `/${folder.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")}`;
+    if (!/^\/Game(\/[A-Za-z0-9_]+)*$/.test(dir)) throw new Error("The folder must be under /Game (e.g. /Game/Blueprints).");
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(parent)) throw new Error("Choose a parent class.");
+    const path = `${dir}/${name}.${name}`;
+    if (this.connected) {
+      await this.request("create", { path, parent }, 60_000);
+      await this.list().catch(() => undefined);
+      return { path, queued: false };
+    }
+    const project = await this.project();
+    if (!project) throw new Error(`Connect the ${this.editor} once first, so KesherAI knows the project.`);
+    if ((await this.queue()).some((q) => q.kind === "create" && q.path === path)) throw new Error("That Blueprint is already waiting to be made.");
+    await this.enqueue({ project, path, graph: "EventGraph", ops: [], kind: "create", parent, request: `New ${parent === "UserWidget" ? "Widget Blueprint" : `Blueprint (${parent})`}` });
+    // An empty graph to work on until Unreal opens.
+    const graph: BlueprintJson = { path, name, parent, variables: [], graphs: [{ name: "EventGraph", kind: "event", nodes: [] }] };
+    await this.writeJson(join(this.projectDir(project), "graphs", fileFor(path)), { graph, savedAt: new Date().toISOString() });
+    return { path, queued: true };
   }
 
   /** @returns What the page shows. */
