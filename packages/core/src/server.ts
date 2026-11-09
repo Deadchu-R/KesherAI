@@ -65,6 +65,7 @@ import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
 import { SelfWork } from "./self-work.js";
+import { seedBuiltinSkills } from "./builtin-skills.js";
 import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
@@ -333,6 +334,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   const personas = new Personas(join(paths.root, "personas.json"));
   const skills = new SkillStore(paths.skills);
+  // The specialist skills KesherAI ships with (materials, VFX, level design); the user's own edits are kept.
+  void seedBuiltinSkills(paths.skills).then(() => skills.list()).catch(() => undefined);
   void skills.list().catch(() => undefined);
   void personas.load();
   const persist = () => saveConfig(paths, config);
