@@ -31,3 +31,27 @@ test("picks the right checker and keeps only real problems", () => {
   assert.equal(p.errors, 2);
   assert.equal(p.lines.length, 2);
 });
+
+test("code map ranks the files others use, finds symbols and game assets", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { findAssets, findSymbol } = await import("./code-intel.js");
+  const root = await mkdtemp(join(tmpdir(), "kesher-map-"));
+  await mkdir(join(root, "Source"), { recursive: true });
+  await mkdir(join(root, "Content", "UI"), { recursive: true });
+  await writeFile(join(root, "Source", "Alpha.h"), "class Alpha {};\n");
+  await writeFile(join(root, "Source", "HealthComponent.h"), "class UHealthComponent {\n};\n");
+  await writeFile(join(root, "Source", "Pickup.cpp"), "#include \"HealthComponent.h\"\nvoid APickup::Use() { UHealthComponent* H; }\n");
+  await writeFile(join(root, "Source", "Zone.cpp"), "void ADamageZone::Tick() { UHealthComponent* H; }\n");
+  await writeFile(join(root, "Content", "BP_Door.uasset"), "x");
+  await writeFile(join(root, "Content", "UI", "WBP_Hud.uasset"), "x");
+  const map = await codeMap(root);
+  assert.match(map.split("\n")[0]!, /HealthComponent\.h \[used by 2\]/, "the most used file first");
+  assert.match((await codeMap(root, ".", 8000, "zone")).split("\n")[0]!, /Zone\.cpp/, "the query first");
+  const where = await findSymbol(root, "UHealthComponent");
+  assert.match(where, /Source\/HealthComponent\.h:1/);
+  assert.match(where, /Used in 2 file/);
+  assert.match(await findAssets(root), /2 assets: .*Blueprint.*widget|2 assets: .*widget.*Blueprint/);
+  assert.match(await findAssets(root, "door"), /BP_Door\.uasset {2}\(Blueprint\)/);
+});

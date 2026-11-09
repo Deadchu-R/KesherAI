@@ -6,7 +6,7 @@ import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./works
 import { buildExecutableTool } from "./build.js";
 import { SYSTEM_TOOLS } from "./system-tools.js";
 import { MAX_OUTPUT, runShell } from "./shell.js";
-import { checkCodeTool, codeMapTool } from "./code-intel.js";
+import { checkCodeTool, codeMapTool, findAssetsTool, findSymbolTool } from "./code-intel.js";
 import { readDocumentTool } from "./documents.js";
 
 /** What a tool returns. */
@@ -415,4 +415,4 @@ export const viewImageTool: AgentTool = {
   },
 };
 
-export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, readFileTool, viewImageTool, readDocumentTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];
+export const CODE_TOOLS: readonly AgentTool[] = [listFiles, codeMapTool, findSymbolTool, findAssetsTool, readFileTool, viewImageTool, readDocumentTool, searchTool, writeFileTool, editFileTool, checkCodeTool, runCommandTool, buildExecutableTool, ...SYSTEM_TOOLS];

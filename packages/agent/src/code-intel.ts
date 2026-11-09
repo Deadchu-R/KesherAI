@@ -73,25 +73,117 @@ async function* sources(root: string, dir: string, depth = 0): AsyncGenerator<st
   }
 }
 
+/** One source file in the index. */
+interface Indexed {
+  path: string;
+  symbols: string[];
+  /** Line of each symbol's definition (same order as symbols). */
+  lines: number[];
+  /** Identifiers the file uses (for "who uses this"). */
+  words: Set<string>;
+}
+
+/** Files read before, by path: reused while their size and time are the same. */
+const cache = new Map<string, { size: number; mtime: number; item: Indexed }>();
+
+/** Symbol lines with their line numbers. */
+function symbolsWithLines(text: string, ext: string): { symbols: string[]; lines: number[] } {
+  const lang = LANG[ext.toLowerCase()];
+  const symbols: string[] = [];
+  const lines: number[] = [];
+  if (!lang) return { symbols, lines };
+  const all = text.split(/\r?\n/);
+  for (let i = 0; i < all.length && symbols.length < 40; i++) {
+    const line = all[i]!;
+    if (line.length > 300 || /^\s*(\/\/|#|\*|\/\*)/.test(line)) continue;
+    for (const re of PATTERNS[lang]!) {
+      const m = re.exec(line);
+      if (!m) continue;
+      const kind = m.length > 2 && m[2] ? m[1]! : "";
+      const name = (m.length > 2 && m[2] ? m[2] : m[1])!;
+      if (NOT_NAMES.has(name)) break;
+      const sym = kind && !/^(def|func|fn|function)$/.test(kind) ? `${kind} ${name}` : `${name}()`;
+      if (!symbols.includes(sym)) {
+        symbols.push(sym);
+        lines.push(i + 1);
+      }
+      break;
+    }
+  }
+  return { symbols, lines };
+}
+
+/** The bare name of a symbol line: `class Player` → Player, `Jump()` → Jump, `A::B()` → B. */
+const bare = (sym: string) => sym.replace(/\(\)$/, "").split(/\s+/).pop()!.split("::").pop()!;
+
 /**
- * Builds the map of a project.
+ * Reads the project's source files (up to 5,000), reusing files that did not change.
+ *
+ * @param root - The project folder.
+ * @param under - A subfolder (relative), or ".".
+ */
+export async function indexProject(root: string, under = "."): Promise<Indexed[]> {
+  const out: Indexed[] = [];
+  for await (const f of sources(root, join(root, under))) {
+    if (out.length >= 5000) break;
+    const st = await stat(f).catch(() => undefined);
+    if (!st || st.size > 400_000) continue;
+    const hit = cache.get(f);
+    if (hit && hit.size === st.size && hit.mtime === st.mtimeMs) {
+      out.push(hit.item);
+      continue;
+    }
+    const text = await readFile(f, "utf8").catch(() => "");
+    const { symbols, lines } = symbolsWithLines(text, extname(f));
+    const item: Indexed = { path: displayPath(root, f), symbols, lines, words: new Set(text.match(/[A-Za-z_]\w{3,}/g) ?? []) };
+    cache.set(f, { size: st.size, mtime: st.mtimeMs, item });
+    out.push(item);
+  }
+  if (cache.size > 20_000) cache.clear();
+  return out;
+}
+
+/**
+ * How many other files use each file's names (Aider's repo-map idea, without
+ * a parser): files the rest of the project leans on come first.
+ */
+function ranks(files: Indexed[]): Map<string, number> {
+  const owner = new Map<string, string>();
+  for (const f of files) for (const s of f.symbols) owner.set(bare(s), f.path);
+  const score = new Map<string, number>(files.map((f) => [f.path, 0]));
+  for (const f of files) {
+    for (const w of f.words) {
+      const o = owner.get(w);
+      if (o && o !== f.path) score.set(o, (score.get(o) ?? 0) + 1);
+    }
+  }
+  return score;
+}
+
+/**
+ * Builds the map of a project: each source file with what it defines, the
+ * most used files first (or the ones that match the query), within a budget,
+ * so a model finds the right file without reading the project.
  *
  * @param root - The project folder.
  * @param under - Only this subfolder (relative), if given.
- * @param budget - Characters at most.
+ * @param budget - Characters at most (about 4 per token).
+ * @param query - Words: files whose path or names match come first.
  * @returns The map.
  */
-export async function codeMap(root: string, under = ".", budget = 24_000): Promise<string> {
+export async function codeMap(root: string, under = ".", budget = 8_000, query = ""): Promise<string> {
+  const files = await indexProject(root, under);
+  if (!files.length) return "No source files found.";
+  const score = ranks(files);
+  const words = query.toLowerCase().split(/[^\w]+/).filter((w) => w.length > 1);
+  const match = (f: Indexed) => (words.length ? words.filter((w) => f.path.toLowerCase().includes(w) || f.symbols.some((s) => s.toLowerCase().includes(w))).length : 0);
+  const order = [...files].sort((a, b) => match(b) - match(a) || (score.get(b.path) ?? 0) - (score.get(a.path) ?? 0) || a.path.localeCompare(b.path));
   const lines: string[] = [];
   let size = 0;
-  let files = 0;
   let skipped = 0;
-  for await (const f of sources(root, join(root, under))) {
-    files++;
-    const st = await stat(f).catch(() => undefined);
-    if (!st || st.size > 400_000) continue;
-    const syms = symbolsOf(await readFile(f, "utf8").catch(() => ""), extname(f));
-    const line = `${displayPath(root, f)}${syms.length ? `: ${syms.join(", ")}` : ""}`;
+  for (const f of order) {
+    const used = score.get(f.path) ?? 0;
+    const line = `${f.path}${used ? ` [used by ${used}]` : ""}${f.symbols.length ? `: ${f.symbols.join(", ")}` : ""}`;
     if (size + line.length > budget) {
       skipped++;
       continue;
@@ -99,8 +191,71 @@ export async function codeMap(root: string, under = ".", budget = 24_000): Promi
     lines.push(line);
     size += line.length + 1;
   }
-  if (!files) return "No source files found.";
-  return lines.join("\n") + (skipped ? `\n… ${skipped} more files (pass a subfolder to see them)` : "");
+  return lines.join("\n") + (skipped ? `\n… ${skipped} more files (give a query or a subfolder to see them)` : "");
+}
+
+/**
+ * Where a name is defined (file:line) and which files use it.
+ *
+ * @param root - The project folder.
+ * @param name - A class, function or method name.
+ */
+export async function findSymbol(root: string, name: string): Promise<string> {
+  const files = await indexProject(root);
+  const want = name.replace(/\(\)$/, "").trim();
+  if (!want) return "Give a name.";
+  const defs: string[] = [];
+  for (const f of files) f.symbols.forEach((s, i) => bare(s) === want && defs.push(`${f.path}:${f.lines[i]}  ${s}`));
+  const users = files.filter((f) => f.words.has(want) && !defs.some((d) => d.startsWith(`${f.path}:`))).map((f) => f.path);
+  if (!defs.length && !users.length) return `No "${want}" in the project's source files.`;
+  return [defs.length ? `Defined in:\n${defs.join("\n")}` : `"${want}" is not defined in the project's sources (an engine or library name?).`, users.length ? `Used in ${users.length} file(s):\n${users.slice(0, 40).join("\n")}${users.length > 40 ? "\n…" : ""}` : "Not used in other files."].join("\n\n");
+}
+
+/** Game-engine assets worth knowing by name (Unity and Unreal). */
+const ASSET_KINDS: Record<string, string> = { ".prefab": "prefab", ".unity": "scene", ".asset": "asset", ".mat": "material", ".shadergraph": "shader graph", ".shader": "shader", ".anim": "animation", ".controller": "animator", ".uxml": "UI", ".uss": "UI style", ".inputactions": "input", ".uasset": "asset", ".umap": "level", ".tscn": "scene", ".tres": "resource" };
+/** Unreal asset name prefixes, to say what a .uasset is without opening it. */
+const UE_PREFIX: Array<[RegExp, string]> = [[/^BP_/, "Blueprint"], [/^WBP_|^W_/, "widget"], [/^ABP_/, "anim Blueprint"], [/^MI_/, "material instance"], [/^M_/, "material"], [/^T_/, "texture"], [/^SM_/, "static mesh"], [/^SK_/, "skeletal mesh"], [/^NS_|^FX_/, "Niagara"], [/^A_|^AM_/, "animation"], [/^S_|^SC_|^SW_/, "sound"], [/^DT_/, "data table"], [/^E_/, "enum"], [/^F_|^ST_/, "struct"], [/^IA_|^IMC_/, "input"], [/^L_|^LV_/, "level"]];
+
+/**
+ * The project's assets by name and kind (Unity Assets/, Unreal Content/,
+ * Godot), matching a query, so the model finds the right prefab, Blueprint or
+ * material without listing folders.
+ *
+ * @param root - The project folder.
+ * @param query - Words to match in the path (empty: a summary by kind).
+ */
+export async function findAssets(root: string, query = ""): Promise<string> {
+  const found: Array<{ path: string; kind: string }> = [];
+  const start = ["Assets", "Content"].map((d) => join(root, d)).filter((d) => existsSync(d));
+  const stack = start.length ? start : [root];
+  let seen = 0;
+  while (stack.length && seen < 60_000) {
+    const dir = stack.pop()!;
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      seen++;
+      if (e.name.startsWith(".")) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!IGNORED_DIRS.has(e.name) && !EXTRA_IGNORED.has(e.name) && e.name !== "__ExternalActors__" && e.name !== "__ExternalObjects__") stack.push(full);
+        continue;
+      }
+      const ext = extname(e.name).toLowerCase();
+      let kind = ASSET_KINDS[ext];
+      if (!kind) continue;
+      if (ext === ".uasset") kind = UE_PREFIX.find(([re]) => re.test(e.name))?.[1] ?? "asset";
+      found.push({ path: displayPath(root, full), kind });
+    }
+  }
+  if (!found.length) return "No Unity, Unreal or Godot assets found here.";
+  const words = query.toLowerCase().split(/[^\w]+/).filter((w) => w.length > 1);
+  if (!words.length) {
+    const by = new Map<string, number>();
+    for (const a of found) by.set(a.kind, (by.get(a.kind) ?? 0) + 1);
+    return `${found.length} assets: ${[...by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(", ")}. Give a query (a name or a kind, e.g. "player prefab", "BP_Door", "material") to list them.`;
+  }
+  const hits = found.filter((a) => words.every((w) => a.path.toLowerCase().includes(w) || a.kind.includes(w)));
+  if (!hits.length) return `No asset matches "${query}" (of ${found.length}).`;
+  return hits.slice(0, 80).map((a) => `${a.path}  (${a.kind})`).join("\n") + (hits.length > 80 ? `\n… ${hits.length - 80} more (narrow the query)` : "");
 }
 
 /** Which checker fits a project, and its command. */
@@ -137,16 +292,42 @@ const rootOf = (ctx: ToolContext) => {
   return ctx.workspace;
 };
 
-/** `code_map`: files and what they define. */
+/** `code_map`: files and what they define, the most used first. */
 export const codeMapTool: AgentTool = {
   risk: "read",
   spec: {
     name: "code_map",
-    description: "Map of the project: every source file with the classes, functions and methods it defines. Call it first in a project you do not know, then read only the files you need. Optional `path`: a subfolder.",
-    inputSchema: { type: "object", properties: { path: { type: "string" } } },
+    description: "Map of the project: source files with the classes, functions and methods they define, the files the rest of the project uses most first. Call it first in a project you do not know (with `query` for the task's words, e.g. 'health damage'), then read only the files you need. Much cheaper than list_files plus reading files. Optional `path`: a subfolder.",
+    inputSchema: { type: "object", properties: { query: { type: "string", description: "Words of the task: matching files come first." }, path: { type: "string" } } },
   },
   async run(input, ctx) {
-    return { output: await codeMap(rootOf(ctx), str(input, "path") || ".") };
+    return { output: await codeMap(rootOf(ctx), str(input, "path") || ".", 8_000, str(input, "query")) };
+  },
+};
+
+/** `find_symbol`: where a name is defined and who uses it. */
+export const findSymbolTool: AgentTool = {
+  risk: "read",
+  spec: {
+    name: "find_symbol",
+    description: "Where a class, function or method is defined (file:line) and which files use it, before changing it. Faster and cheaper than search.",
+    inputSchema: { type: "object", properties: { name: { type: "string", description: "e.g. UHealthComponent, ApplyDamage, PlayerController" } }, required: ["name"] },
+  },
+  async run(input, ctx) {
+    return { output: await findSymbol(rootOf(ctx), str(input, "name")) };
+  },
+};
+
+/** `find_assets`: Unity/Unreal/Godot assets by name and kind. */
+export const findAssetsTool: AgentTool = {
+  risk: "read",
+  spec: {
+    name: "find_assets",
+    description: "The game project's assets by name and kind (Unity prefabs, scenes, materials; Unreal Blueprints, materials, meshes, levels; Godot scenes). No query: a count by kind. With a query (e.g. 'player prefab', 'BP_Door', 'material'): the matching paths.",
+    inputSchema: { type: "object", properties: { query: { type: "string" } } },
+  },
+  async run(input, ctx) {
+    return { output: await findAssets(rootOf(ctx), str(input, "query")) };
   },
 };
 
