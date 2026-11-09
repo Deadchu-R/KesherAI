@@ -119,6 +119,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** the code view's "Apply" is a request to the model like the AI bubble (capped at 8,000 characters); the code start screen opens a code session only in a folder that exists (`assertFolder`), as the old dialog did.
     - **Faster:** `unreal_read_graph` / `unity_read_graph` now answer with the graph as code (much shorter than every node, pin and link).
 
+27. **Scan after 0.6.7** (Widget Designer, Figma → widgets, textures, new Blueprints, the plugin's self-update from an old plugin).
+    - **Checked:** a new Blueprint's name must be letters, digits and `_`, its folder must be under `/Game` (checked in KesherAI and again in the plugin); a waiting one is kept only in KesherAI's own data folder.
+    - **Checked:** Figma → widgets asks only api.figma.com with the token in a header; each picture comes only over HTTPS from Figma's image hosts (at most 12 MB, must be a PNG), is written to KesherAI's data folder under the widget's sanitized name, and is imported only under `/Game/UI/Figma`. The plugin imports only `.png` files that exist and only under `/Game`.
+    - **Checked:** widget changes are capped (200 operations a call); they change only the chosen Widget Blueprint's widgets, in one undo step. The model's operations are cleaned first (one property per change).
+    - **Checked:** an update started from an old plugin waits for the user to close Unreal (never closes it itself); with plugin 0.1.6+ Unreal asks to save first and Cancel keeps it open.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
