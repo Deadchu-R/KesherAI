@@ -1190,7 +1190,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-frame:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ue-frame.editable .bp-node { cursor: move; }
 .ue-frame .bp-pin { cursor: crosshair; }
-.bp-find { position: absolute; inset-block-start: 10px; inset-inline-start: 10px; gap: 6px; align-items: center; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-2); direction: rtl; }
+.bp-find { position: absolute; inset-block-end: 10px; inset-inline-start: 10px; gap: 6px; align-items: center; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-2); direction: rtl; }
 .bp-find input { width: min(220px, 50vw); }
 .bp-menu { position: absolute; width: min(300px, calc(100% - 16px)); display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-2); z-index: 5; direction: rtl; }
 .bp-menu ul { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 1px; }

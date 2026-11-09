@@ -104,7 +104,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     const k = Math.min(1.5, Math.max(0.15, Math.min(r.width / bounds.w, r.height / bounds.h)));
     setView({ k, x: (r.width - bounds.w * k) / 2 - bounds.x * k, y: (r.height - bounds.h * k) / 2 - bounds.y * k });
   };
-  useEffect(fit, [layout]);
+  // Fit when another Blueprint or graph opens, not after each change (found on the real editor: moving a node re-fitted the view).
+  const fitted = useRef("");
+  useEffect(() => {
+    if (!layout || fitted.current === `${path}|${graph}`) return;
+    fitted.current = `${path}|${graph}`;
+    fit();
+  }, [layout, path, graph]);
   const zoomAt = (factor: number, cx?: number, cy?: number) =>
     setView((v) => {
       const r = frame.current?.getBoundingClientRect();

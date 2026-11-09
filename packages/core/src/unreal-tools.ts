@@ -426,14 +426,16 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         description: "Run Unreal editor Python headless on the project (UnrealEditor-Cmd -run=pythonscript; the editor must be closed and the C++ compiled). For assets and levels. A new Blueprint: f = unreal.BlueprintFactory(); f.set_editor_property('parent_class', unreal.Actor); bp = unreal.AssetToolsHelpers.get_asset_tools().create_asset('BP_Name', '/Game', unreal.Blueprint, f); unreal.EditorAssetLibrary.save_loaded_asset(bp). A level: unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).new_level('/Game/Maps/Main') then save_current_level(). Nodes inside a Blueprint are changed with unreal_change_graph (in words), not Python. print() output comes back.",
         inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] },
       },
-      preview: async (input) => `Unreal Python:\n${String(input.code ?? "").slice(0, 2000)}`,
+      preview: async (input) => `Unreal Python:\n${/^\s*(import unreal\b|from unreal import)/m.test(String(input.code ?? "")) ? "" : "import unreal\n"}${String(input.code ?? "").slice(0, 2000)}`,
       run: async (input) => {
         const p = await need();
         const e = await engineOf(p.engine);
         const dir = join(p.dir, "Saved", "KesherAI");
         await mkdir(dir, { recursive: true });
         const script = join(dir, "run.py");
-        await writeFile(script, String(input.code ?? ""));
+        // Found on the real editor: a small model wrote a one-liner without "import unreal" and the script failed.
+        const code = String(input.code ?? "");
+        await writeFile(script, /^\s*(import unreal\b|from unreal import)/m.test(code) ? code : `import unreal\n${code}`);
         const cmd = join(e.path, "Engine", "Binaries", "Win64", "UnrealEditor-Cmd.exe");
         // Forward slashes: Unreal's command line reads "\r" in "C:\Users\user" as a line break (found on the user's PC:
         // "Could not load Python file 'C:/Usersoeet/…'").

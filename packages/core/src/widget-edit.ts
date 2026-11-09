@@ -49,17 +49,68 @@ export function widgetPrompt(root: WidgetNode | undefined, request: string, sele
         "You change an Unreal Engine Widget Blueprint (UMG). Answer with ONE JSON object and nothing else:",
         '{"ops":[...],"note":"one short sentence saying what changed"}',
         "Operations:",
-        '- {"op":"add","class":"TextBlock|Image|Button|Border|CanvasPanel|HorizontalBox|VerticalBox|Overlay|SizeBox|ScrollBox|ProgressBar|Spacer","parent":"<panel name>","name":"<new name>"}  (the first widget of an empty tree has no parent and becomes the root; a Button or Border takes ONE child)',
-        '- {"op":"set","widget":"<name>","property":"Text|fontSize|ColorAndOpacity|BrushColor|BackgroundColor|Padding|Visibility|Justification|Percent|WidthOverride|HeightOverride","value":"<value>"}',
-        '- {"op":"set","widget":"<name>","property":"slot.position|slot.size|slot.anchors|slot.alignment|slot.autoSize","value":"x,y | w,h | minX,minY,maxX,maxY | x,y | true"}  (in a Canvas Panel)',
-        '- {"op":"set","widget":"<name>","property":"slot.Padding|slot.HorizontalAlignment|slot.VerticalAlignment|slot.Size","value":"..."}  (in a box or overlay; e.g. Padding (Left=8,Top=8,Right=8,Bottom=8), HorizontalAlignment HAlign_Center, Size (SizeRule=Fill,Value=1.0))',
-        '- {"op":"remove","widget":"<name>"}   {"op":"move","widget":"<name>","parent":"<panel>","index":0}',
+        "Widget classes: TextBlock, Image, Button, Border, CanvasPanel, HorizontalBox, VerticalBox, Overlay, SizeBox, ScrollBox, ProgressBar, Spacer. The first widget of an empty tree has no parent and becomes the root; a Button or Border takes ONE child.",
+        "One property per set operation, exactly as in these examples:",
+        '{"op":"add","class":"CanvasPanel","name":"Root"}',
+        '{"op":"add","class":"TextBlock","parent":"Root","name":"TitleText"}',
+        '{"op":"set","widget":"TitleText","property":"Text","value":"MY GAME"}',
+        '{"op":"set","widget":"TitleText","property":"fontSize","value":"72"}',
+        '{"op":"set","widget":"TitleText","property":"ColorAndOpacity","value":"(SpecifiedColor=(R=1,G=0.4,B=0,A=1),ColorUseRule=UseColor_Specified)"}',
+        '{"op":"set","widget":"TitleText","property":"Justification","value":"Center"}',
+        '{"op":"set","widget":"TitleText","property":"slot.anchors","value":"0.5,0,0.5,0"}   (minX,minY,maxX,maxY; 0.5 = middle)',
+        '{"op":"set","widget":"TitleText","property":"slot.alignment","value":"0.5,0"}   (which point of the widget sits on the anchor)',
+        '{"op":"set","widget":"TitleText","property":"slot.position","value":"0,120"}   (pixels from the anchor)',
+        '{"op":"set","widget":"TitleText","property":"slot.size","value":"900,120"}',
+        '{"op":"add","class":"Button","parent":"Root","name":"StartButton"}   {"op":"set","widget":"StartButton","property":"BackgroundColor","value":"(R=0.1,G=0.3,B=1,A=1)"}',
+        '{"op":"add","class":"TextBlock","parent":"StartButton","name":"StartLabel"}',
+        '{"op":"set","widget":"SomeBorder","property":"BrushColor","value":"(R=0,G=0,B=0,A=0.6)"}   {"op":"set","widget":"SomeBorder","property":"Padding","value":"(Left=16,Top=8,Right=16,Bottom=8)"}',
+        'In a box or overlay: {"op":"set","widget":"X","property":"slot.Padding","value":"(Left=0,Top=0,Right=0,Bottom=12)"}  slot.HorizontalAlignment HAlign_Center  slot.Size (SizeRule=Fill,Value=1.0)',
+        '{"op":"remove","widget":"<name>"}   {"op":"move","widget":"<name>","parent":"<panel>","index":0}',
         "Values as Unreal writes them: colors (R=1,G=0.5,B=0,A=1) with 0–1 numbers; Visibility Visible|Collapsed|Hidden; Justification Left|Center|Right.",
         "Positions are pixels in a 1920×1080 design. Keep names unique and readable (TitleText, StartButton). Only change what was asked.",
       ].join("\n"),
     },
     { role: "user", content: `The widget tree now:\n${widgetOutline(root)}${selected ? `\n\nThe user has selected: ${selected}` : ""}\n\nChange: ${request}` },
   ];
+}
+
+/** Canvas slot fields a model may write without "slot.". */
+const SLOT_FIELDS: Record<string, string> = { position: "position", pos: "position", size: "size", anchors: "anchors", anchor: "anchors", alignment: "alignment", autosize: "autoSize", zorder: "z", z: "z" };
+
+/**
+ * What small models write wrongly, made right before it reaches the editor
+ * (found on the real editor: "position|slot.size|…" copied from the
+ * instructions, "position" without "slot.", a Border's "BackgroundColor"):
+ * one property per operation, slot fields under "slot.", the property each
+ * widget really has. Operations that cannot be made right are left out.
+ *
+ * @param ops - The model's operations.
+ * @param classOf - The class of a widget by its name (those made in the same answer included).
+ */
+export function cleanWidgetOps(ops: Array<Record<string, unknown>>, classOf: (name: string) => string | undefined): Array<Record<string, unknown>> {
+  const made = new Map<string, string>();
+  const out: Array<Record<string, unknown>> = [];
+  for (const op of ops) {
+    if (op.op === "add" && typeof op.name === "string" && typeof op.class === "string") made.set(op.name, op.class);
+    if (op.op !== "set" || typeof op.property !== "string") {
+      out.push(op);
+      continue;
+    }
+    // "a|b|c": the model copied a list of choices; nothing tells which it meant.
+    if (op.property.includes("|")) continue;
+    let prop = op.property.trim();
+    const bare = prop.replace(/^slot\./i, "");
+    const field = SLOT_FIELDS[bare.toLowerCase()];
+    if (field) prop = `slot.${field}`;
+    else if (/^fontsize$/i.test(prop)) prop = "fontSize";
+    const cls = made.get(String(op.widget)) ?? classOf(String(op.widget)) ?? "";
+    if (/Border/.test(cls) && /^(BackgroundColor|Color|ColorAndOpacity)$/.test(prop)) prop = "BrushColor";
+    if (/TextBlock/.test(cls) && /^(Color|TextColor)$/.test(prop)) prop = "ColorAndOpacity";
+    if (/TextBlock/.test(cls) && prop === "ColorAndOpacity" && /^\(R=/.test(String(op.value))) op.value = `(SpecifiedColor=${String(op.value)},ColorUseRule=UseColor_Specified)`;
+    if (/Image/.test(cls) && /^(Color|BrushColor)$/.test(prop)) prop = "ColorAndOpacity";
+    out.push({ ...op, property: prop });
+  }
+  return out;
 }
 
 /**
@@ -70,7 +121,16 @@ export async function editWidget(b: UnrealBridge, registry: ProviderRegistry, mo
   const tree = await b.request<{ root?: WidgetNode }>("widget", { path: opts.path }, 30_000);
   const turn = modelTurnFor(registry, modelId);
   const text = (await turn({ messages: widgetPrompt(tree.root, opts.request, opts.selected), tools: [] }, AbortSignal.any([opts.signal, AbortSignal.timeout(300_000)]), () => undefined)).text;
-  const { ops, note } = parseOps(text);
+  const parsed = parseOps(text);
+  const classes = new Map<string, string>();
+  const walk = (w?: WidgetNode) => {
+    if (!w) return;
+    classes.set(w.name, w.class);
+    (w.children ?? []).forEach(walk);
+  };
+  walk(tree.root);
+  const ops = cleanWidgetOps(parsed.ops, (n) => classes.get(n));
+  const note = parsed.note;
   if (!ops.length) return { ops, note: note || "Nothing to change.", applied: false };
   const result = await b.request<{ results: Array<{ ok: boolean; error?: string; widget?: string }>; failed: number }>("widget_apply", { path: opts.path, ops }, 30_000);
   const compile = await b.request<{ ok: boolean; messages: Array<{ severity: string; text: string }> }>("compile", { path: opts.path }).catch(() => undefined);
