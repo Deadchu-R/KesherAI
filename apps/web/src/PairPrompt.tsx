@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, isRemote } from "./api";
 import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -10,7 +10,8 @@ interface Request { id: string; code: string; device: string; from: string }
 export function PairPrompt() {
   const [reqs, setReqs] = useState<Request[]>([]);
   useEffect(() => {
-    let stop = false;
+    // Only the computer itself answers pairing requests (a phone's view never asks).
+    let stop = isRemote();
     const load = () =>
       api<Request[]>("/api/pair").then(
         (r) => !stop && setReqs(r),

@@ -92,6 +92,11 @@ This review went through the code part by part. Each finding is listed with what
     - A chat started by another app gets the same rules as one the user starts: changes outside its own folder and every command ask.
     - `unreal_port_plugin` asks first, runs the engine's own build tool with its arguments as a list, and never deletes the old plugin (it is renamed to a backup).
 
+21. **The access log reviewed with the user (November 9).** Every refused request came from the user's own phone (paired, with its own key) opening pages only the computer may use (/api/pair, /api/notifications, /api/remote); no wrong-token tries at all. Changes:
+    - Notifications can be set from a paired device (the phone app's Settings), except where they go (the ntfy server) and whether they carry the text: those stay computer-only.
+    - Pairing, the internet link and the tokens stay computer-only; the phone app says so instead of asking and being refused.
+    - A paired device's own 403s are shown as "your device: a computer-only setting" and no longer count toward the "someone tried to get in" alerts, so real alerts are not drowned out.
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA-mrhx-c7xc-m3w5 (high), memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. It is the one advisory the release's automatic audit is told to skip (`pnpm.auditConfig.ignoreGhsas` in package.json), until the move to zod 4. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.

@@ -12,7 +12,7 @@ interface Dev { id: string; name: string; createdAt: string; lastSeen?: string; 
 interface Log {
   requests?: Req[];
   visitors: Array<{ address: string; first: string; last: string; count: number; via: "tunnel" | "network"; agent?: string }>;
-  refused: Array<{ at: string; address: string; method: string; path: string; status: number; via: "tunnel" | "network" }>;
+  refused: Array<{ at: string; address: string; method: string; path: string; status: number; via: "tunnel" | "network"; device?: string }>;
 }
 
 /** Settings → Phone: who came in from outside, and who was refused. */
@@ -44,7 +44,7 @@ export function AccessLogSection() {
       {log.refused.length ? (
         <ul className="al-list bad-list">
           {log.refused.slice(0, 50).map((r, i) => (
-            <li key={r.at + i}><b dir="ltr">{r.address}</b> <span className="muted">· {when(r.at)} · {via(r.via)} · {why(r.status)} · <span dir="ltr">{r.method} {r.path}</span></span></li>
+            <li key={r.at + i}><b dir="ltr">{r.device ?? r.address}</b> <span className="muted">· {when(r.at)} · {via(r.via)} · {r.device && r.status === 403 ? L("המכשיר שלך: הגדרה שזמינה רק במחשב עצמו", "your device: a setting only the computer itself may change") : why(r.status)} · <span dir="ltr">{r.method} {r.path}</span></span></li>
           ))}
         </ul>
       ) : <p className="muted">{L("לא היו ניסיונות שנחסמו.", "No refused tries.")}</p>}

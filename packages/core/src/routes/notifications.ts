@@ -1,18 +1,20 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
-import { isLocalRequest } from "../auth.js";
+import { isLocalRequest, pairedDeviceOf } from "../auth.js";
 import { Notifier } from "../notify.js";
 
 /**
- * Notification settings and a test. Changing them is local-only, since the
- * topic is what lets a phone receive this computer's notifications.
+ * Notification settings and a test: on this computer, and from a paired
+ * device with its own key (the phone app's Settings). From a device, the
+ * ntfy server and "include the text" cannot be changed: they decide where
+ * the notifications' contents go.
  *
  * @param app - Fastify instance.
  * @param s - Services.
  */
 export async function notificationRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const local = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Notifications can be set up only on this computer." });
+    if (!isLocalRequest(req) && !pairedDeviceOf(req)) return reply.code(403).send({ error: "Notifications can be set up on this computer or from a paired device." });
   };
   const view = () => {
     const n = s.config.notifications;
@@ -26,6 +28,8 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     async (req, reply) => {
       const b = req.body ?? {};
       const n = s.config.notifications;
+      if (!isLocalRequest(req) && ((b.ntfy?.server !== undefined && b.ntfy.server.trim().replace(/\/$/, "") !== n.ntfy.server) || b.includeText === true))
+        return reply.code(403).send({ error: "Where notifications go (the ntfy server) and whether they carry the text are changed only on the computer itself." });
       if (b.ntfy?.server !== undefined) {
         if (!/^https?:\/\/[^\s/]+/.test(b.ntfy.server)) return reply.code(400).send({ error: "The ntfy server is an address like https://ntfy.sh" });
         n.ntfy.server = b.ntfy.server.trim().replace(/\/$/, "");

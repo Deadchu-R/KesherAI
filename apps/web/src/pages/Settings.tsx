@@ -18,7 +18,7 @@ import { ApiKeysSection } from "../ApiKeysSection";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
-import { api, type ModelListing } from "../api";
+import { api, isRemote, type ModelListing } from "../api";
 import { desktop, useLibrary } from "../library";
 import { getLocale, t } from "../i18n";
 
@@ -305,6 +305,8 @@ function Phone() {
     }
   };
   useEffect(() => {
+    // From the phone app: pairing, the internet link and the tokens are changed only on the computer (asking would only be refused).
+    if (isRemote()) return;
     void QRCode.toDataURL(APK_URL, { margin: 1, width: 140 }).then(setApkQr);
     api<Remote>("/api/remote")
       .then(async (r) => {
@@ -326,7 +328,13 @@ function Phone() {
       })
       .catch(() => setRemote(null)); // not available from a phone itself
   }, []);
-  if (!remote) return null;
+  if (!remote)
+    return isRemote() ? (
+      <section className="card stack">
+        <h2>{getLocale() === "he" ? "חיבור מכשירים וגישה מכל מקום" : "Pairing and access from anywhere"}</h2>
+        <p className="muted">{getLocale() === "he" ? "חיבור מכשיר חדש, קישור \"גישה מכל מקום\" והטוקנים משתנים רק במחשב עצמו, כדי שמי שמחזיק טלפון גנוב לא יוכל לפתוח את המחשב לאחרים. התראות ושאר ההגדרות עובדות גם מכאן." : "Pairing a new device, the access-from-anywhere link and the tokens are changed only on the computer itself, so a stolen phone cannot open the computer to others. Notifications and the other settings work from here too."}</p>
+      </section>
+    ) : null;
   const setRemote2 = async (patch: { enabled?: boolean; keepAwake?: boolean }) => {
     const res = await api<{ firewall?: string }>("/api/settings", { method: "PUT", body: { remote: patch } });
     setRemote({ ...remote, ...patch });

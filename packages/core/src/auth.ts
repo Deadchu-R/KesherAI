@@ -84,6 +84,14 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
+/** The paired device a request came in with (its own key), if any. */
+const pairedDevice = new WeakMap<object, string>();
+
+/** @returns The name of the paired device that sent this request (with its own key), or undefined. */
+export function pairedDeviceOf(request: Pick<FastifyRequest, "raw">): string | undefined {
+  return pairedDevice.get(request.raw);
+}
+
 /**
  * Requires the remote token from every request that does not come from this
  * computer. The token is accepted as `Authorization: Bearer <token>` or, for
@@ -185,6 +193,7 @@ export function registerRemoteAuth(
       }
       devices!.seen(device, who);
       deviceOf.set(request.raw, device.name);
+      pairedDevice.set(request.raw, device.name);
       return;
     }
     if (shared && viaTunnel && devices?.devicesOnly()) {

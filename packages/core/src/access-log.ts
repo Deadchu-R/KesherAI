@@ -22,6 +22,8 @@ export interface Refused {
   /** 401 wrong token, 403 other website, 429 too many tries. */
   status: number;
   via: "tunnel" | "network";
+  /** A paired device that came in with its own key and asked for a page only this computer may use (not an intrusion). */
+  device?: string;
 }
 
 /** One request from outside, for the full request log. */
@@ -101,8 +103,13 @@ export class AccessLog {
       else this.visitors.set(r.address, { address: r.address, first: at, last: at, count: 1, via: r.via, ...(agent ? { agent } : {}) });
       if (this.visitors.size > 100) this.visitors.delete([...this.visitors.values()].sort((a, b) => a.last.localeCompare(b.last))[0]!.address);
     } else {
-      this.refused.unshift({ at, address: r.address, method: r.method, path: PATH_KEEP.exec(r.path)?.[0] ?? r.path.slice(0, 1).replace(/[^/]/g, ""), status: r.status, via: r.via });
+      this.refused.unshift({ at, address: r.address, method: r.method, path: PATH_KEEP.exec(r.path)?.[0] ?? r.path.slice(0, 1).replace(/[^/]/g, ""), status: r.status, via: r.via, ...(r.device ? { device: r.device } : {}) });
       this.refused.length = Math.min(this.refused.length, 200);
+      // The user's own paired device opening a computer-only page is not someone trying to get in: no alert.
+      if (r.device && r.status === 403) {
+        this.save();
+        return;
+      }
       const now = Date.now();
       const times = (this.bursts.get(r.address) ?? []).filter((t) => now - t < 10 * 60_000);
       times.push(now);
