@@ -18,6 +18,8 @@ test("a new project is a C++ game for phones with MCP on 5.8", () => {
   assert.ok(up.Plugins.some((p) => p.Name === "ModelContextProtocol"));
   assert.match(f["Config/DefaultEngine.ini"]!, /GlobalDefaultGameMode=\/Script\/AutoShooter\.AutoShooterGameMode/);
   assert.match(f["Config/DefaultEngine.ini"]!, /TargetedHardwareClass=Mobile/);
+  // UE 5.8: a plugin pulls in GameFeatures, and the cook fails without this asset-manager rule (seen packaging AutoShooter).
+  assert.match(f["Config/DefaultGame.ini"]!, /PrimaryAssetType="GameFeatureData"/);
   assert.match(f["Source/AutoShooter/AutoShooterGameMode.h"]!, /class AUTOSHOOTER_API AAutoShooterGameMode/);
   const old = JSON.parse(newProjectFiles("Game", "5.6")["Game.uproject"]!) as { Plugins: Array<{ Name: string }> };
   assert.ok(!old.Plugins.some((p) => p.Name === "ModelContextProtocol"));
