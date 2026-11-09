@@ -746,7 +746,7 @@ export class ConversationManager {
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
       return {
-        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor)$|android_run_on_phone$)/.test(t.spec.name)),
+        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor|port_plugin)$|android_run_on_phone$)/.test(t.spec.name)),
         notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
       };
     }

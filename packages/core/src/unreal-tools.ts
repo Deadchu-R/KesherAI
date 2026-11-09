@@ -1,11 +1,12 @@
 import { spawn, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
 import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
 import { knownIssues, preflight } from "./known-issues.js";
+import { compileErrors, describePlugins, installBuiltPlugin, listPlugins, readPlugin } from "./unreal-plugins.js";
 import { projectPath } from "./unity-tools.js";
 import type { JobStore } from "./jobs.js";
 
@@ -45,10 +46,12 @@ export const UNREAL_TOOL_NAMES = [
   "unreal_python",
   "unreal_open_editor",
   "unreal_package",
+  "unreal_plugins",
+  "unreal_port_plugin",
 ] as const;
 
 export const UNREAL_NOTE =
-  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). If the Android game closes or crashes on the phone, android_run_on_phone installs the .apk, starts it and returns the game's own log (look for Fatal error, Assertion failed, Failed to); fix the cause it shows, never guess. Builds keep running if KesherAI restarts: when the user says continue after a restart, call the same tool again and it joins the running build. If a knowledge base named Library: Unreal Engine C++ API exists (Library store), look up classes and functions there with search_knowledge before writing code that uses them, instead of guessing. Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
+  "Unreal tools work on the user's Unreal project on this computer. NEVER say you made, compiled or packaged something unless a tool result in this chat shows it. The loop: 1) unreal_status (engines, project, compiler, Android tools, whether the editor's MCP server answers). 2) A new game: unreal_create_project makes a small C++ project set up for phones (mobile renderer, scalable, no starter content) with a game module, a GameMode and the editor's MCP turned on. 3) unreal_list_source / unreal_read_source, then unreal_write_source for .h/.cpp under Source/<Name>/ and unreal_compile; read the errors and fix until it compiles. Game logic in C++: spawn what the game needs in code (engine shapes /Engine/BasicShapes/Cube.Cube, material /Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial with a UMaterialInstanceDynamic and its \"Color\" parameter), so no assets must be made by hand; text with AHUD::DrawText; touch through APlayerController (bEnableClickEvents/bEnableTouchEvents, GetHitResultUnderFinger or DeprojectScreenPositionToWorld + LineTraceSingleByChannel). Keep everything light for phones: few objects, no dynamic shadows, no post effects. 4) unreal_python runs Unreal editor Python headless (editor closed) for assets and levels: unreal.EditorAssetLibrary, unreal.LevelEditorSubsystem, unreal.EditorLevelLibrary. 5) unreal_open_editor lets the user see it; with Unreal 5.8 its MCP tools then appear (list_toolsets → describe_toolset → call_tool, never guessed). 6) unreal_package builds the game (android or windows) when the user asks for a build; it takes long (the first Android build can take 30+ minutes). If the Android game closes or crashes on the phone, android_run_on_phone installs the .apk, starts it and returns the game's own log (look for Fatal error, Assertion failed, Failed to); fix the cause it shows, never guess. Builds keep running if KesherAI restarts: when the user says continue after a restart, call the same tool again and it joins the running build. 7) unreal_plugins lists the project's and engine's plugins (version, engine built for, source or not); unreal_port_plugin rebuilds one with source for another engine version and installs it. If a knowledge base named Library: Unreal Engine C++ API exists (Library store), look up classes and functions there with search_knowledge before writing code that uses them, instead of guessing. Never install system software yourself (winget, Visual Studio Installer, SDKs, drivers): when unreal_status or a compile says something is missing, tell the user exactly what to install and stop. At the end, list exactly what changed.";
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
@@ -472,6 +475,68 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         }
         const sizes = await Promise.all(made.map(async (f) => `${f} (${Math.round((await stat(f)).size / 1048576)} MB)`));
         return { output: `${fixed ? `${fixed}\n` : ""}${shaderFix ? `${shaderFix}\n` : ""}${r.note}Packaged: ${sizes.join(", ")}.${android ? " To test it on the user's phone (USB debugging on), use android_run_on_phone with the .apk." : ""}` };
+      },
+    },
+    {
+      risk: "read",
+      spec: {
+        name: "unreal_plugins",
+        description: "List the Unreal plugins: those in the project's Plugins folder, the engine's Fab/Marketplace plugins, and Epic's own the project turns on; with each one's version, the engine version it was built for, whether it is on, and whether it has source (then unreal_port_plugin can rebuild it for another engine version). Give the user the list.",
+        inputSchema: { type: "object", properties: { engine: { type: "string", description: "Which installed engine's Fab/Marketplace plugins to list (default: the project's)." } } },
+      },
+      run: async (input) => {
+        const p = state.project ? await readProject(state.project).catch(() => undefined) : undefined;
+        const e = await engineOf(String(input.engine ?? p?.engine ?? "")).catch(() => undefined);
+        const list = await listPlugins({ ...(p ? { projectDir: p.dir, uproject: p.file } : {}), ...(e ? { enginePath: e.path } : {}), includeEngine: !!p });
+        return { output: `${p ? `Project ${p.file} (Unreal ${p.engine})` : "No project chosen"}${e ? `; engine ${e.version} at ${e.path}` : ""}.\n\n${describePlugins(list, p?.engine ?? e?.version)}` };
+      },
+    },
+    {
+      risk: "exec",
+      spec: {
+        name: "unreal_port_plugin",
+        description: "Rebuild an Unreal plugin that has its C++ source for another installed engine version (RunUAT BuildPlugin), then install it: into the project's Plugins folder (default) or the target engine's Marketplace folder. The old plugin folder is kept as a backup. If it does not compile, the compiler's errors come back: fix the plugin's source (it is a copy under the build folder; tell the user) and run again. A plugin without source cannot be rebuilt: tell the user to get that engine version's build from Fab.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            plugin: { type: "string", description: "The plugin's name (from unreal_plugins) or the folder that holds its .uplugin." },
+            engine: { type: "string", description: "The target engine version, e.g. 5.8." },
+            install_to: { type: "string", enum: ["project", "engine"], description: "Where the rebuilt plugin goes (default project)." },
+          },
+          required: ["plugin", "engine"],
+        },
+      },
+      preview: async (input) => `Rebuild the Unreal plugin ${String(input.plugin)} for Unreal ${String(input.engine)} (RunUAT BuildPlugin) and install it into the ${input.install_to === "engine" ? "engine's Marketplace folder" : "project's Plugins folder"} (the old one kept as a backup)`,
+      run: async (input, ctx) => {
+        const target = await engineOf(String(input.engine ?? ""));
+        const p = state.project ? await readProject(state.project).catch(() => undefined) : undefined;
+        const name = String(input.plugin ?? "").trim();
+        let found = existsSync(join(name, `${basename(name)}.uplugin`)) ? await readPlugin(join(name, `${basename(name)}.uplugin`), "project") : undefined;
+        if (!found) {
+          const engines = await findEngines();
+          for (const e of engines) {
+            const list = await listPlugins({ ...(p ? { projectDir: p.dir } : {}), enginePath: e.path });
+            found = list.find((x) => x.name.toLowerCase() === name.toLowerCase() && x.hasSource) ?? found ?? list.find((x) => x.name.toLowerCase() === name.toLowerCase());
+            if (found?.hasSource) break;
+          }
+        }
+        if (!found) return { output: `No plugin named ${name} was found in the project or the engines' Fab/Marketplace folders. Call unreal_plugins to see the names.`, isError: true };
+        if (!found.hasSource) return { output: `${found.name} has no source (only built files), so it cannot be rebuilt for Unreal ${target.version}. Tell the user to install its Unreal ${target.version} build from Fab (Epic Games Launcher → Library → Fab Library → the plugin → Install to Engine ${target.version}).` };
+        if (input.install_to !== "engine" && !p) return { output: "No Unreal project is chosen: use unreal_use_project first, or install_to engine.", isError: true };
+        const out = join(homedir(), ".kesher", "unreal", "_ported", `${found.name}-${target.version}`);
+        await rm(out, { recursive: true, force: true });
+        await mkdir(dirname(out), { recursive: true });
+        await mkdir(logsDir, { recursive: true });
+        const log = join(logsDir, "unreal-port-plugin.log");
+        await writeFile(log, `> BuildPlugin ${found.path} for ${target.version}\n`);
+        const r = await longRun(`unreal-port:${found.path}:${target.version}`, join(target.path, "Engine", "Build", "BatchFiles", "RunUAT.bat"), ["BuildPlugin", `-Plugin=${join(found.path, `${found.name}.uplugin`)}`, `-Package=${out}`, "-TargetPlatforms=Win64", "-Rocket"], { timeoutMs: 3_600_000, log, signal: ctx?.signal, progress: ctx?.progress });
+        if (r.code !== 0 || !existsSync(join(out, "Binaries"))) {
+          const errors = compileErrors(r.out);
+          return { output: `${r.note}${found.name} did not build for Unreal ${target.version} (exit ${r.code}). Full log: ${log}\n${errors.length ? `Compiler errors:\n${errors.join("\n")}\nThe source is ${found.path}: fix it there (unreal_write_source works only inside the project, so for a plugin outside it tell the user what to change), then run again.` : cut(r.out.split("\n").slice(-40).join("\n"))}`, isError: true };
+        }
+        const dest = input.install_to === "engine" ? join(target.path, "Engine", "Plugins", "Marketplace", found.name) : join(p!.dir, "Plugins", found.name);
+        const backup = await installBuiltPlugin(out, dest, input.install_to !== "engine");
+        return { output: `${r.note}${found.name} was rebuilt for Unreal ${target.version} and installed in ${dest}.${backup ? ` The old one is kept in ${backup}.` : ""} Open the project with Unreal ${target.version} to use it.` };
       },
     },
   ];
