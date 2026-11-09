@@ -139,6 +139,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
   private readonly toolSearch?: () => readonly string[] | undefined;
+  /** How many times each changing action ran for the current message (the loop guard). */
+  private readonly repeats = new Map<string, number>();
   /** Tools the model loaded with find_tools in this conversation. */
   private readonly loadedTools = new Set<string>();
   /** Messages sent while the agent was busy, in order; the owner (the conversation manager) drains it. */
@@ -261,6 +263,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
     // `context` (e.g. web search results) goes to the model with the message, not into the user's bubble.
     this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text });
+    this.repeats.clear();
     this.push({ type: "user", text });
     if (note) this.push({ type: "note", text: note });
     void this.run();
@@ -735,6 +738,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
     const tool = this.tools.get(call.name);
     if (!tool) return fail(`There is no tool called "${call.name}".`);
+    // Loop guard: the same changing action with the same arguments a third time for one message is refused
+    // (seen live: a model started the same build and the same game again and again).
+    if (tool.risk === "exec" || tool.risk === "write") {
+      const key = `${call.name} ${JSON.stringify(call.arguments)}`;
+      const n = (this.repeats.get(key) ?? 0) + 1;
+      this.repeats.set(key, n);
+      if (n > 2) return fail(`You already ran ${call.name} with exactly these arguments twice for this message. Do not repeat it: tell the user what happened and what you need, or try something different.`);
+    }
 
     const ctx: ToolContext = {
       ...(this.workspace ? { workspace: this.workspace } : {}),

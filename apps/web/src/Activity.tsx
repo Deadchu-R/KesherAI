@@ -103,6 +103,20 @@ export function ActivityGroup({ steps, live, renderStep, convId }: { steps: Step
           ))}
         </ol>
       </details>
+      {/* What failed and why, without opening the group (only the first line of each error). */}
+      {failed > 0 && (
+        <ul className="activity-fails">
+          {steps
+            .filter((s) => s.result && !s.result.ok)
+            .slice(0, 4)
+            .map((s) => (
+              <li key={s.call.callId} dir="auto">
+                <span aria-hidden>✕ </span>
+                {stepLabel(s)}: <span className="muted">{(s.result?.output ?? "").replace(/^Error:\s*/, "").split("\n").find((l) => l.trim())?.slice(0, 160) ?? ""}</span>
+              </li>
+            ))}
+        </ul>
+      )}
       {current && (
         <p className="activity-now" dir="auto">
           {stepLabel(current)}
