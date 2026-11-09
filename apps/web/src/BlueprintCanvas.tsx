@@ -49,7 +49,9 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  */
 export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void }) {
   const [moved, setMoved] = useState<Record<string, { x: number; y: number }>>({});
-  useEffect(() => setMoved({}), [nodes]);
+  useEffect(() => {
+    setMoved({});
+  }, [nodes]);
   const layout = useMemo(() => {
     if (!nodes.length) return null;
     const boxes: Box[] = nodes.map((n) => {
@@ -92,7 +94,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [find, setFind] = useState<{ q: string; i: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [flashing, setFlashing] = useState<string | undefined>();
-  useEffect(() => onSelect?.(selected), [selected]);
+  useEffect(() => {
+    onSelect?.(selected);
+  }, [selected]);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; k: number } | null>(null);
   const press = useRef<number | undefined>(undefined);

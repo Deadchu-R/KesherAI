@@ -356,7 +356,9 @@ function Replay({ data, at }: { data: DayData; at: number | null }) {
   };
   const [i, setI] = useState(startIdx);
   const [playing, setPlaying] = useState(false);
-  useEffect(() => setI(startIdx()), [at, frames.length]);
+  useEffect(() => {
+    setI(startIdx());
+  }, [at, frames.length]);
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => setI((x) => (x + 1 < frames.length ? x + 1 : (setPlaying(false), x))), 400);

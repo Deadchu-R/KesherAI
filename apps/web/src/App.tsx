@@ -196,7 +196,9 @@ export function App() {
   const message = useToast();
 
   // On a phone the sidebar is a full-screen menu; close it when the user navigates.
-  useEffect(() => setMenuOpen(false), [hash]);
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [hash]);
 
   useEffect(() => {
     api("/api/health").then(() => setOnline(true), () => setOnline(false));

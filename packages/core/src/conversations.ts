@@ -3,7 +3,7 @@ import { personaPrompt, type Personas } from "./personas.js";
 import type { SkillStore } from "./skill-store.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
@@ -1499,8 +1499,50 @@ export class ConversationManager {
     return out;
   }
 
-  /** Saves every session and stops running ones; call on shutdown. */
+  /** Where the chats stopped by a restart are kept (so they can continue after it). */
+  private get interruptedFile(): string {
+    return join(this.deps.outputsDir, "..", "interrupted.json");
+  }
+
+  /**
+   * Chats that were working when KesherAI last closed (an update, a restart):
+   * they can continue from where they stopped.
+   *
+   * @returns Their ids and when they stopped.
+   */
+  async interrupted(): Promise<Array<{ id: string; at: string }>> {
+    try {
+      const list = JSON.parse(await readFile(this.interruptedFile, "utf8")) as unknown;
+      return Array.isArray(list) ? list.filter((x): x is { id: string; at: string } => !!x && typeof (x as { id?: unknown }).id === "string").slice(0, 50) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Continues a chat that a restart stopped: the agent is told what happened and
+   * to check what was already done before going on (like "resume" in coding agents).
+   * With `dismiss`, it is only taken off the list.
+   */
+  async resumeInterrupted(id: string, dismiss = false): Promise<boolean> {
+    const list = await this.interrupted();
+    if (!list.some((x) => x.id === id)) return false;
+    await writeFile(this.interruptedFile, JSON.stringify(list.filter((x) => x.id !== id)));
+    if (!dismiss)
+      await this.send(id, "KesherAI restarted (an update or a restart) while you were working on this. Continue the task from where you stopped. First look at the last tool results above to see what was already done, and do not repeat finished steps.");
+    return true;
+  }
+
+  /** Saves every session and stops running ones; call on shutdown. Chats that were working are remembered, so they can continue. */
   async closeAll(): Promise<void> {
+    const working = [...this.sessions].filter(([, s]) => {
+      const st = s.info().status;
+      return st === "running" || st === "waiting";
+    });
+    if (working.length) {
+      const before = (await this.interrupted()).filter((x) => !working.some(([id]) => id === x.id));
+      await writeFile(this.interruptedFile, JSON.stringify([...before, ...working.map(([id]) => ({ id, at: new Date().toISOString() }))])).catch(() => undefined);
+    }
     for (const [id, s] of this.sessions) {
       s.stop();
       await this.saveNow(id);

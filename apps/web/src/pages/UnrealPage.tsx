@@ -252,7 +252,9 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [chat, setChat] = useState<Array<{ who: "you" | "ai"; lines: string[] }>>([]);
   const chatEnd = useRef<HTMLDivElement>(null);
-  useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [chat, busy]);
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ block: "nearest" });
+  }, [chat, busy]);
   const [queue, setQueue] = useState<Queued[]>([]);
 
   const loadStatus = () => void api<Status>(base).then(setSt, () => undefined);

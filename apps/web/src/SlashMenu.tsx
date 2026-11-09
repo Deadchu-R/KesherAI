@@ -59,7 +59,9 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
   const typed = /^\/([^\s]*)$/.exec(value)?.[1]?.toLowerCase();
   const matches = typed === undefined || closed ? [] : prompts.filter((p) => p.command.startsWith(typed) || p.title.toLowerCase().includes(typed)).slice(0, 8);
   const open = typed !== undefined && !closed && (matches.length > 0 || prompts.length === 0);
-  useEffect(() => setActive(0), [typed]);
+  useEffect(() => {
+    setActive(0);
+  }, [typed]);
   useEffect(() => {
     if (typed === undefined) setClosed(false);
   }, [typed]);

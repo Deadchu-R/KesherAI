@@ -20,7 +20,9 @@ export function BlueprintCode({ nodes, selected, onPick, onApply, editable, busy
     if (!editing) setDraft(text);
   }, [text, editing]);
   const first = useRef<HTMLLIElement | null>(null);
-  useEffect(() => first.current?.scrollIntoView({ block: "nearest" }), [selected]);
+  useEffect(() => {
+    first.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
   let marked = false;
   return (
     <div className="bp-code">

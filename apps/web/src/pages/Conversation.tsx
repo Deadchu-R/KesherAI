@@ -333,7 +333,9 @@ export function ConversationPage({ id }: { id: string }) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   // A long chat opens with its latest part drawn; earlier parts on request (a long chat stays quick).
   const [shownBlocks, setShownBlocks] = useState(150);
-  useEffect(() => setShownBlocks(150), [id]);
+  useEffect(() => {
+    setShownBlocks(150);
+  }, [id]);
   const [info, setInfo] = useState<AgentSessionInfo | null>(null);
   const [streaming, setStreaming] = useState<Record<number, string>>({});
   /** Live output of running tools (builds, commands), by call id. */
@@ -380,7 +382,9 @@ export function ConversationPage({ id }: { id: string }) {
   const [openPanel, setOpenPanel] = useState("");
   const pluginUi = usePluginUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => setSlot(document.getElementById("appbar-title")), []);
+  useEffect(() => {
+    setSlot(document.getElementById("appbar-title"));
+  }, []);
   useEffect(() => {
     if (!titleMenu) return;
     const close = (e: Event) => {

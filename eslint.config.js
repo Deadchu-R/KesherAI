@@ -16,7 +16,12 @@ export default tseslint.config(
   { files: ["scripts/**", "apps/desktop/**"], languageOptions: { globals: globals.node } },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
   // Hooks in the same order on every render (a hook after an early return crashes the page: React error #310).
-  { files: ["apps/web/**/*.tsx", "apps/web/**/*.ts", "plugins/**/*.tsx"], plugins: { "react-hooks": reactHooks }, rules: { "react-hooks/rules-of-hooks": "error" } },
+  { files: ["apps/web/**/*.tsx", "apps/web/**/*.ts", "plugins/**/*.tsx"], plugins: { "react-hooks": reactHooks }, rules: {
+      "react-hooks/rules-of-hooks": "error",
+      // An effect must not return a value by accident: new Chrome versions return a Promise from
+      // scrollIntoView/scrollTo, and React then calls it as the cleanup ("M is not a function").
+      "no-restricted-syntax": ["error", { selector: "CallExpression[callee.name=/^use(Layout)?Effect$/] > ArrowFunctionExpression[expression=true]:first-child:not([body.type=/^(UnaryExpression|ArrowFunctionExpression)$/])", message: "Use a block body { ... } in effects, so nothing is returned as the cleanup." }],
+    } },
   { files: ["apps/browser-extension/**"], languageOptions: { globals: { ...globals.browser, ...globals.serviceworker, chrome: "readonly" } } },
   ...tseslint.configs.recommended,
   {

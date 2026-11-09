@@ -54,7 +54,9 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   useEffect(() => {
     api<{ name?: string }>("/api/remote/links").then((r) => setHost(r.name ?? ""), () => undefined);
   }, []);
-  useEffect(() => setMenu(false), [hash]);
+  useEffect(() => {
+    setMenu(false);
+  }, [hash]);
   useEffect(() => {
     if (!menu) return;
     const close = (e: MouseEvent) => {
