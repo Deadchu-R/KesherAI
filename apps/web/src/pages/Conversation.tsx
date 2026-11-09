@@ -27,7 +27,9 @@ const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: 
 import { ActivityGroup, stepLabel, type Step } from "../Activity";
 import { getLocale, t } from "../i18n";
 
-type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[] };
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+
+type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[]; interruptedAt?: string };
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
 /** Colours a unified diff. */
@@ -556,6 +558,10 @@ export function ConversationPage({ id }: { id: string }) {
   const uploadInput = useRef<HTMLInputElement>(null);
   /** After adding an Unreal project that is not connected yet: offer the right way to connect it. */
   const [unrealSetup, setUnrealSetup] = useState<{ path: string; engine: string; msg?: string } | null>(null);
+  const resume = (dismiss: boolean) => {
+    setConv((c) => (c ? { ...c, interruptedAt: undefined } : c));
+    void api(`/api/conversations/${id}/resume`, { method: "POST", body: { dismiss } }).catch((e: Error) => setError(e.message));
+  };
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;
 
   const busy = info?.status === "running" || info?.status === "waiting";
@@ -893,6 +899,13 @@ export function ConversationPage({ id }: { id: string }) {
           ))}
           {busy && (
             <p className="muted status-line">{info?.status === "waiting" ? t("waitingForYou") : t("working")}</p>
+          )}
+          {conv.interruptedAt && !busy && (
+            <div className="card row resume-card" role="status">
+              <span className="grow small">{L("KesherAI נסגר (עדכון או הפעלה מחדש) באמצע העבודה כאן. אפשר להמשיך מאיפה שעצר — הוא יבדוק מה כבר נעשה ולא יחזור על זה.", "KesherAI closed (an update or a restart) while working here. You can continue from where it stopped: it checks what was already done and does not repeat it.")}</span>
+              <button type="button" className="primary" onClick={() => resume(false)}>{L("המשך מאיפה שעצר", "Continue where it stopped")}</button>
+              <button type="button" onClick={() => resume(true)}>{L("לא צריך", "Dismiss")}</button>
+            </div>
           )}
           {error && <p className="error">{error}</p>}
           <div ref={bottom} style={{ scrollMarginBottom: "240px" }} />

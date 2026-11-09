@@ -319,3 +319,34 @@ test("conversation search finds words in messages and answers, Hebrew prefixes t
     await server.close();
   }
 });
+
+test("a chat working when KesherAI closes can continue after the restart", async () => {
+  const { server, dataDir } = await setup();
+  const folder = await mkdtemp(join(tmpdir(), "kesher-proj-"));
+  const project = (await server.app.inject({ method: "POST", url: "/api/projects", payload: { name: "G", workspace: folder } })).json() as { id: string };
+  const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", projectId: project.id, modelId: "fake/m" } })).json() as { id: string };
+  await server.app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "make a file" } });
+  await until(async () => {
+    const r = (await server.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { session: { pendingApprovals: string[] } };
+    return r.session.pendingApprovals[0];
+  });
+  await server.close();
+
+  const again = await createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
+  again.services.registry.registerFactory(scriptedFactory);
+  try {
+    const got = (await again.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { interruptedAt?: string };
+    assert.ok(got.interruptedAt, "marked as stopped by the restart");
+    const other = (await again.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "fake/m" } })).json() as { id: string };
+    assert.equal((await again.app.inject({ method: "POST", url: `/api/conversations/${other.id}/resume`, payload: {} })).statusCode, 404);
+    assert.equal((await again.app.inject({ method: "POST", url: `/api/conversations/${c.id}/resume`, payload: {} })).statusCode, 200);
+    const after = (await again.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { interruptedAt?: string };
+    assert.equal(after.interruptedAt, undefined);
+    await until(async () => {
+      const r = (await again.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { events: Array<{ type: string; text?: string }> };
+      return r.events.find((e) => e.type === "user" && /restarted/.test(e.text ?? "")) ? true : undefined;
+    });
+  } finally {
+    await again.close();
+  }
+});

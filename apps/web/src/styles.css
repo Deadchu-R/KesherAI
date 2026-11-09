@@ -1531,3 +1531,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .add-sub button { font-size: 13px; text-align: start; }
 .add-sub-note { margin: 4px 8px; }
 .add-sub-link { padding: 6px 8px; color: inherit; }
+.resume-card { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; border-color: var(--accent, #9aa4ff); margin: 8px 0; }
+.resume-card .grow { min-width: 0; flex-basis: 220px; }

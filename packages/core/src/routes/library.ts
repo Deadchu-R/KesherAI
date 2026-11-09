@@ -136,7 +136,19 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
     const { messages: _m, events: _e, ...summary } = opened.conversation;
-    return { ...summary, session: opened.session.info(), events: opened.session.events };
+    const interrupted = (await s.conversations.interrupted()).find((x) => x.id === req.params.id);
+    return { ...summary, session: opened.session.info(), events: opened.session.events, ...(interrupted ? { interruptedAt: interrupted.at } : {}) };
+  });
+
+  // A chat KesherAI stopped by closing (an update, a restart): continue it from where it stopped, or just dismiss.
+  app.post<{ Params: { id: string }; Body: { dismiss?: boolean } }>("/api/conversations/:id/resume", async (req, reply) => {
+    try {
+      const ok = await s.conversations.resumeInterrupted(req.params.id, req.body?.dismiss === true);
+      if (!ok) return reply.code(404).send({ error: "Nothing to continue in this chat." });
+      return { ok: true };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
   });
 
   app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null } }>(
