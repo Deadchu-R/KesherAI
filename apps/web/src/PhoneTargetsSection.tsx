@@ -49,7 +49,7 @@ export function PhoneTargetsSection() {
       <h2>{L("טלפוני יעד לבילדים", "Target phones for builds")}</h2>
       <p className="muted">{L("סמנו את הטלפונים שהמשחק או האתר מיועדים להם. צ'אטים של Unity ו-Unreal יבנו ויבדקו לפיהם (הטלפון החלש, מסכים, קצב רענון, סוגי GPU), ובילד Android של Unity יבקש את קצב הפריימים המתאים.", "Tick the phones a game or site is for. Unity and Unreal chats build and test for them (the weakest phone, screens, refresh rates, GPU types), and Unity Android builds ask for the right frame rate.")}</p>
       <div className="row">
-        <button type="button" onClick={detect} disabled={busy}>{busy ? L("קורא…", "Reading…") : L("📱 הוסף את הטלפון שמחובר ב-USB", "📱 Add the phone connected by USB")}</button>
+        <button type="button" onClick={detect} disabled={busy}>{busy ? L("קורא…", "Reading…") : L("📱 הוסף את הטלפון שמחובר למחשב ב-USB", "📱 Add the phone connected to the computer by USB")}</button>
         {msg && <span className="muted small" dir="auto">{msg}</span>}
       </div>
       {v.custom.length > 0 && <div className="stack">{v.custom.map(row)}</div>}
