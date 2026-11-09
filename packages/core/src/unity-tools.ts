@@ -360,6 +360,12 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         const out = target.ext === "/" ? folder : join(folder, `${name}${target.ext}`);
         // The open Editor's own build command first (Pipeline `build run`): `unity build` 1.0.0-beta through
         // Pipeline 0.10 sends an option the Editor rejects. With Unity closed, `unity build` runs a batch Editor.
+        // The Editor's own build needs the Editor open (and non-desktop targets have no batch build): open it and wait.
+        const ready = await unity.cliRaw(["status", ...at(), "--format", "json"], 20_000).catch(() => undefined);
+        if (!/"state":\s*"ready"/.test(ready?.stdout ?? "")) {
+          await unity.cliRaw(["open", p, "--format", "json"], 120_000).catch(() => undefined);
+          await unity.cliRaw(["status", ...at(), "--until-ready", "--timeout", "900", "--format", "json"], 920_000).catch(() => undefined);
+        }
         // No scene in Build Settings (a new project): the open scene is added, so the build has something to build.
         await evalCs("var list = new System.Collections.Generic.List<UnityEditor.EditorBuildSettingsScene>(UnityEditor.EditorBuildSettings.scenes); bool any = false; foreach (var s in list) if (s.enabled) any = true; if (!any) { var a = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (a != \"\") { list.Add(new UnityEditor.EditorBuildSettingsScene(a, true)); UnityEditor.EditorBuildSettings.scenes = list.ToArray(); return \"added \" + a; } } return \"ok\";").catch(() => "");
         let r = await unity.cliRaw(["command", "build", "run", ...at(), "--timeout", "3600", "--", "--target", target.id, "--output-path", out, "--confirm", "true"], 3_700_000);
