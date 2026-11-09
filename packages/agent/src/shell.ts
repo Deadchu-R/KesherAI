@@ -43,7 +43,10 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
     }, timeoutMs);
     const onAbort = () => kill();
     signal.addEventListener("abort", onAbort, { once: true });
+    let done = false;
     const finish = (code: number | null, error?: Error) => {
+      if (done) return;
+      done = true;
       clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
       const status = error
@@ -55,6 +58,17 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
     };
     child.on("error", (err) => finish(null, err));
     child.on("close", (code) => finish(code));
+    // A program started in the background (Windows "start", or "app &") keeps the output pipes open after the
+    // shell itself has exited, so "close" only comes when that program quits (a game started this way held the
+    // chat until it was closed). The shell's own exit is the end: wait a moment for the last output, then stop reading.
+    child.on("exit", (code) => {
+      setTimeout(() => {
+        if (done) return;
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish(code);
+      }, 1500);
+    });
   });
 }
 
