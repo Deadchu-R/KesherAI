@@ -159,6 +159,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Fixed:** on Windows, saving a library file failed when another program held it for a moment (antivirus, a reader): now it tries again a few times and removes its temp file when it gives up.
     - **Checked:** the interface check (CI) starts the server on 127.0.0.1 with an empty data folder and no network discovery.
 
+33. **Scan after 0.6.30** (the shared code editor, Rider mode's language server, Unreal C++ editing, inline suggestions, the AI bubble on code, plugin 0.1.10).
+    - **Checked:** Unreal C++ files are read and written only inside a project found on this computer (or the one open in the editor; a sender cannot name any other folder), only under `Source/` and `Config/`, only `.h/.hpp/.cpp/.inl/.cs/.ini`, through the same path guard as the Unity scripts (links followed, must stay inside), at most 400 KB, refused when the file changed since it was opened, the old file kept first. Compiling runs Unreal's own Build.bat with its arguments quoted and refused when they hold cmd's special characters (the same runner as the chat's tools), or asks the open editor for Live Coding.
+    - **Checked:** the language server is csharp-ls from the user's own `.dotnet/tools` folder, started with the project's own .sln and no shell; installing it (`dotnet tool install --global csharp-ls`, the user's own tools, no admin rights) is allowed only from this computer and was approved by Roee. Its WebSocket serves only the active Unity project; messages over 2 MB are dropped; the server is stopped 10 minutes after the last editor leaves.
+    - **Checked:** inline suggestions and the AI bubble send the code around the cursor (at most 6 KB before and 2 KB after) or the file to the model the user chose (or the active one); answers are only shown or put into the editor, never saved or run until the user saves. Off when no inline model is chosen.
+    - **Checked:** code coloured for reading (chat blocks, translations) is the editor's own escaped output; nothing from a model is put into the page as HTML.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
