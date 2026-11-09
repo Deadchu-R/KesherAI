@@ -418,7 +418,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     }
   };
 
-  /** "Test": plays the game in Unreal for a few seconds and a model says whether the Blueprint does what it should. */
+  /** "Test": plays the game in Unreal (or the scene in Unity's Play Mode) for a few seconds and a model says whether the Blueprint does what it should. */
   const test = async () => {
     if (!path || testing) return;
     const goal = request.trim();
@@ -528,7 +528,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                   <button type="button" disabled={!st.connected} onClick={() => void call("open")}>{L(`פתח ב-${app}`, `Open in ${app}`)}</button>
                   <button type="button" disabled={!st.connected} onClick={() => void call("compile")}>{unity ? L("בדוק", "Check") : L("קמפל", "Compile")}</button>
                   <button type="button" disabled={!st.connected} onClick={() => void call("save")}>{L("שמור", "Save")}</button>
-                  {!unity && <button type="button" className="primary" disabled={!st.connected || testing} onClick={() => void test()} title={L("מריץ את המשחק ב-Unreal כמה שניות, אוסף את הלוג ותמונה, והמודל בודק אם ה-Blueprint עובד", "Plays the game in Unreal for a few seconds, collects the log and a picture, and the model checks whether the Blueprint works")}>{testing ? L("בודק…", "Testing…") : `🧪 ${L("בדיקה", "Test")}`}</button>}
+                  <button type="button" className="primary" disabled={!st.connected || testing} onClick={() => void test()} title={unity ? L("מריץ את הסצנה ב-Play Mode כמה שניות, אוסף את ה-Console ותמונה, והמודל בודק אם הגרף עובד", "Plays the scene in Play Mode for a few seconds, collects the Console and a picture, and the model checks whether the graph works") : L("מריץ את המשחק ב-Unreal כמה שניות, אוסף את הלוג ותמונה, והמודל בודק אם ה-Blueprint עובד", "Plays the game in Unreal for a few seconds, collects the log and a picture, and the model checks whether the Blueprint works")}>{testing ? L("בודק…", "Testing…") : `🧪 ${L("בדיקה", "Test")}`}</button>
                 </div>
                 <div className="ue-tabs" role="tablist">
                   {bp.graph.graphs.map((g) => (
@@ -604,12 +604,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                           </div>
                         ))}
                         {busy && <div className="ue-msg ai muted">{linked && !unity ? L("הצ'אט עובד…", "The chat is working…") : L("המודל עובד…", "Working…")}</div>}
-                        {testing && <div className="ue-msg ai muted">{L("🧪 מריץ את המשחק ב-Unreal ובודק…", "🧪 Playing the game in Unreal and checking…")}</div>}
+                        {testing && <div className="ue-msg ai muted">{unity ? L("🧪 מריץ את הסצנה ב-Unity ובודק…", "🧪 Playing the scene in Unity and checking…") : L("🧪 מריץ את המשחק ב-Unreal ובודק…", "🧪 Playing the game in Unreal and checking…")}</div>}
                         <div ref={chatEnd} />
                       </div>
                       <form className="row ue-ask" onSubmit={(e) => { e.preventDefault(); void edit(); }}>
                         <input className="grow" dir="auto" autoFocus value={request} onChange={(e) => setRequest(e.target.value)} placeholder={unity ? L("למשל: ב-Start תדפיס Hello ללוג", "e.g. on Start log Hello") : L("למשל: ב-BeginPlay תדפיס Hello", "e.g. on BeginPlay print Hello")} />
-                        {!unity && <button type="button" disabled={!st.connected || testing || busy} onClick={() => void test()} aria-label={L("בדיקה: הטקסט (אם יש) הוא מה שאמור לקרות", "Test: the text (if any) is what should happen")} title={L("בדיקה: הטקסט (אם יש) הוא מה שאמור לקרות", "Test: the text (if any) is what should happen")}>🧪</button>}
+                        <button type="button" disabled={!st.connected || testing || busy} onClick={() => void test()} aria-label={L("בדיקה: הטקסט (אם יש) הוא מה שאמור לקרות", "Test: the text (if any) is what should happen")} title={L("בדיקה: הטקסט (אם יש) הוא מה שאמור לקרות", "Test: the text (if any) is what should happen")}>🧪</button>
                         <button type="submit" className="primary" disabled={busy || !request.trim()} aria-label={st.connected || unity ? L("שנה", "Change") : L("שנה כשיתחבר", "Change when it connects")}>{busy ? "…" : "↑"}</button>
                       </form>
                     </div>

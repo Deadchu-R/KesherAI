@@ -98,14 +98,14 @@ export async function runBlueprintTest(b: UnrealBridge, path: string, opts: { se
 }
 
 /** The run in words, for a model or a chat tool. */
-export function describeRun(run: TestRun, path: string): string {
-  const name = path.split(".").pop() || path || "the level";
+export function describeRun(run: TestRun, path: string, engine: "unreal" | "unity" = "unreal"): string {
+  const name = path.split(".").pop() || path || (engine === "unity" ? "the scene" : "the level");
   if (!run.played) return `${name} was not run: ${run.reason ?? ""}${run.compile.length ? `\nCompile messages:\n${run.compile.join("\n")}` : ""}`;
   const log = run.log.map((l) => `${l.kind === "log" ? "" : `[${l.kind}] `}${l.category ? `${l.category}: ` : ""}${l.text}`).join("\n");
   return [
-    `Played the game in the Unreal Editor for ${run.seconds} s${run.placed ? `, with ${name} placed in front of the player (${run.placed})` : ""}.`,
+    `Played the game in the ${engine === "unity" ? "Unity Editor (Play Mode)" : "Unreal Editor"} for ${run.seconds} s${run.placed ? `, with ${name} placed in front of the player (${run.placed})` : ""}.`,
     run.compile.length ? `Compile messages:\n${run.compile.join("\n")}` : "Compiled with no messages.",
-    log ? `What the game wrote (Print String, warnings, errors):\n${log}` : "The game wrote nothing (no Print String, no warnings or errors).",
+    log ? `What the game wrote (${engine === "unity" ? "Debug.Log" : "Print String"}, warnings, errors):\n${log}` : `The game wrote nothing (no ${engine === "unity" ? "Debug.Log" : "Print String"}, no warnings or errors).`,
   ].join("\n");
 }
 
@@ -115,22 +115,22 @@ export function describeRun(run: TestRun, path: string): string {
  *
  * @param goal - What the user expects, if they said (else the model judges from the code).
  */
-export async function judgeRun(registry: ProviderRegistry, modelId: string, graph: { name: string; graphs: Array<{ name: string; nodes: unknown[] }> }, path: string, run: TestRun, goal: string, signal: AbortSignal, lang = "en"): Promise<string> {
+export async function judgeRun(registry: ProviderRegistry, modelId: string, graph: { name: string; graphs: Array<{ name: string; nodes: unknown[] }> }, path: string, run: TestRun, goal: string, signal: AbortSignal, lang = "en", engine: "unreal" | "unity" = "unreal"): Promise<string> {
   const code = graph.graphs.map((g) => `## ${g.name}\n${codeText(blueprintToCode(g.nodes as CodeNode[]))}`).join("\n").slice(0, 6000);
   const turn = modelTurnFor(registry, modelId);
   const prompt = [
-    `You test Unreal Blueprints. The Blueprint ${graph.name} is below as code (one line per node, in the order the exec wires run).`,
+    engine === "unity" ? `You test Unity games. The Visual Scripting graph ${graph.name} is below as code (one line per node, in the order the flow wires run).` : `You test Unreal Blueprints. The Blueprint ${graph.name} is below as code (one line per node, in the order the exec wires run).`,
     code,
     "",
-    describeRun(run, path),
+    describeRun(run, path, engine),
     goal ? `\nWhat the user expects: ${goal}` : "",
     run.picture ? "\nThe picture is the game view at the end of the run." : "",
     "",
     `Answer in ${lang === "he" ? "Hebrew" : "English"}, short:`,
     "1. One line: works / does not work / cannot tell, and why.",
     "2. What happened, from the log (and picture).",
-    "3. Problems found (Accessed None, errors, a Print that never came, an event that never ran) and the likely fix in the graph.",
-    "Do not invent what is not in the log or the picture. BeginPlay runs at the start; Tick runs every frame; overlap and input events run only when something triggers them, so their silence is not a failure.",
+    "3. Problems found (Accessed None or NullReferenceException, errors, a Print that never came, an event that never ran) and the likely fix in the graph.",
+    "Do not invent what is not in the log or the picture. BeginPlay (Unity: Start/On Start) runs at the start; Tick (Unity: Update) runs every frame; overlap and input events run only when something triggers them, so their silence is not a failure.",
   ].join("\n");
   const r = await turn({ messages: [{ role: "user", content: prompt, ...(run.picture ? { images: [{ mimeType: "image/png", data: run.picture.toString("base64") }] } : {}) }], tools: [] }, AbortSignal.any([signal, AbortSignal.timeout(180_000)]), () => undefined);
   return r.text.trim();
