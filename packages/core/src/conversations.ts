@@ -17,6 +17,7 @@ import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
 import { delegateTool } from "./delegate.js";
+import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
@@ -734,7 +735,10 @@ export class ConversationManager {
       media.notes.push("Unreal Engine is installed here: for Unreal work start with unreal_status, then unreal_create_project or unreal_use_project (the other Unreal tools and their guide come after that).");
     }
     // A game project in use: running its Android build on the user's phone and reading why it closed.
-    if (this.unrealState.project || this.deps.unity?.activeProject) split.push(...androidPhoneTools());
+    if (this.unrealState.project || this.deps.unity?.activeProject) {
+      split.push(...androidPhoneTools());
+      media.notes.push(BUILD_RESEARCH_NOTE);
+    }
     const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
     if (id) all.push(this.delegateFor(id, all));

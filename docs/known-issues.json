@@ -1,0 +1,50 @@
+{
+  "about": "Known engine bugs KesherAI checks before every build (packages/core/src/known-issues.ts). Add one: engine, versions it affects (from inclusive, until = the fixed version), platforms, the .ini setting that triggers it, the value that avoids it, and where it is documented. KesherAI reads this file from GitHub once a day.",
+  "issues": [
+    {
+      "id": "UE-396689",
+      "engine": "unreal",
+      "from": "5.8.0",
+      "until": "5.8.4",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "title": "Shared shader library misses shaders on Android Vulkan (the game quits right after the logo) and breaks materials on Metal",
+      "source": "https://forums.unrealengine.com/t/5-8-2-bsharematerialshadercode-missing-shader-resource-for-hash-fatal-on-android-vulkan-global-shadermap-all-materials-break-on-ios-metal-worked-in-5-7-4/2763737",
+      "check": {
+        "file": "Config/DefaultGame.ini",
+        "section": "[/Script/UnrealEd.ProjectPackagingSettings]",
+        "key": "bShareMaterialShaderCode",
+        "bad": [
+          "True",
+          "true",
+          "1"
+        ]
+      },
+      "fix": "False"
+    },
+    {
+      "id": "kesher-mobile-ldr-vulkan",
+      "engine": "unreal",
+      "from": "5.8.0",
+      "until": "",
+      "platforms": [
+        "android"
+      ],
+      "title": "Mobile HDR off: Android Vulkan stops at start with 'Null Unordered Access View … FMobileBasePassUniformParameters' (found on a OnePlus 13, Android 16)",
+      "source": "https://github.com/Deadchu-R/KesherAI/blob/main/docs/known-issues.json",
+      "check": {
+        "file": "Config/DefaultEngine.ini",
+        "section": "[/Script/Engine.RendererSettings]",
+        "key": "r.MobileHDR",
+        "bad": [
+          "False",
+          "false",
+          "0"
+        ]
+      },
+      "fix": "True"
+    }
+  ]
+}

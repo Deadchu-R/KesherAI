@@ -4,7 +4,8 @@ import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/p
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
-import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, avoidShaderLibraryBug, type UnrealEngine } from "./unreal-install.js";
+import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
+import { knownIssues, preflight } from "./known-issues.js";
 import { projectPath } from "./unity-tools.js";
 import type { JobStore } from "./jobs.js";
 
@@ -443,8 +444,9 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         const env: NodeJS.ProcessEnv = { ...process.env };
         // Editor-only plugins (Python, the editor's MCP and its toolsets) are not packed into the game.
         const fixed = await keepEditorPluginsOutOfGame(p.dir).catch(() => "");
-        // Unreal 5.8.0–5.8.3 (UE-396689): a shared shader library misses shaders on Android Vulkan and the game quits at start.
-        const shaderFix = android ? await avoidShaderLibraryBug(p.dir, e.path).catch(() => "") : "";
+        // Known engine bugs for this version and platform (built-in list + the one on GitHub): fixed in the project before building.
+        const v = await engineVersion(e.path);
+        const shaderFix = v ? (await preflight(p.dir, "unreal", v.join("."), android ? "android" : "windows", await knownIssues(join(logsDir, "known-issues.json"))).catch(() => [] as string[])).join("\n") : "";
         if (android) {
           const a = await androidTools();
           if (!a.sdk || !a.ndk || !a.jdk) return { output: `Android tools are missing: SDK ${a.sdk ?? "missing"}, NDK ${a.ndk ?? "missing"}, JDK ${a.jdk ?? "missing"}. Install Android Studio, or Unity's Android module, then try again.` };
