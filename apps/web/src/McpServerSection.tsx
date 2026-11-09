@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, isRemote } from "./api";
 import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -25,6 +25,16 @@ export function McpServerSection() {
   const shown = APPS.filter((a) => info.snippets[a.key]);
   const current = shown.find((a) => a.key === app) ?? shown[0]!;
   const snippet = info.snippets[current.key] ?? "";
+  // From the phone app: what is on and what it offers; connecting apps and changing it happen on the computer.
+  if (isRemote())
+    return (
+      <section className="card stack">
+        <h2>{L("שימוש ב-KesherAI מאפליקציות אחרות (MCP)", "Use KesherAI from other apps (MCP)")}</h2>
+        <p>{info.enabled ? L("✅ פעיל במחשב.", "✅ On, on the computer.") : L("כבוי במחשב.", "Off, on the computer.")} {info.allowApprovals ? L("אפליקציה מחוברת יכולה לאשר כרטיסים (לא פקודות מסוכנות ולא שליטה במסך).", "A connected app may answer approval cards (never dangerous commands or screen control).") : L("כרטיסי אישור נשארים שלך בלבד.", "Approval cards stay yours only.")}</p>
+        <p className="muted small">{L("החיבור של Claude Desktop, Claude Code, Cursor או VS Code והשינויים כאן נעשים במחשב עצמו (הגדרות ← למפתחים), כי ההגדרה נכתבת לאפליקציה שבמחשב. אפשר גם לבקש מ-Claude לעשות את זה במחשב בשבילך.", "Connecting Claude Desktop, Claude Code, Cursor or VS Code, and changing this, happen on the computer itself (Settings → For developers), since the setting goes into the app on the computer. You can also ask Claude to do it there for you.")}</p>
+        <p className="muted small">{L("כלים: ", "Tools: ")}<span dir="ltr">{info.tools.join(", ")}</span></p>
+      </section>
+    );
   return (
     <section className="card stack">
       <h2>{L("שימוש ב-KesherAI מאפליקציות אחרות (MCP)", "Use KesherAI from other apps (MCP)")}</h2>

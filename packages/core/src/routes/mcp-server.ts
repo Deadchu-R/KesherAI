@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isLocalRequest } from "../auth.js";
+import { isLocalRequest, pairedDeviceOf } from "../auth.js";
 import type { FastifyInstance } from "fastify";
 import { branding } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
@@ -252,8 +252,9 @@ const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
  */
 export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   /** How to add KesherAI to other apps: the address and ready-made settings for each. */
+  // Seen from a paired device too (the phone app's Settings), to read only: it holds no secrets. Changes stay on this computer.
   app.get("/api/mcp-server", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on this computer." });
+    if (!isLocalRequest(req) && !pairedDeviceOf(req)) return reply.code(403).send({ error: "Only on this computer or a paired device." });
     const url = `http://127.0.0.1:${s.config.port}/mcp`;
     const resources = (process as { resourcesPath?: string }).resourcesPath;
     const here = dirname(fileURLToPath(import.meta.url));
