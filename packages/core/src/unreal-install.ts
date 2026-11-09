@@ -341,7 +341,7 @@ export async function keepEditorPluginsOutOfGame(folder: string): Promise<string
   const text = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
   const j = JSON.parse(text) as { Plugins?: Array<{ Name?: string; Enabled?: boolean; TargetAllowList?: string[] }> };
   if (!Array.isArray(j.Plugins) || !markEditorOnly(j.Plugins)) return "";
-  await writeFile(`${file}.kesher-backup`, text);
+  if (!existsSync(`${file}.kesher-backup`)) await writeFile(`${file}.kesher-backup`, text); // the first original is kept
   await writeFile(file, `${JSON.stringify(j, null, "\t")}\n`);
   return `Editor-only plugins (${j.Plugins.filter((p) => p.TargetAllowList?.[0] === "Editor").map((p) => p.Name).join(", ")}) are now kept out of the game build (TargetAllowList Editor in ${file}; the old file is ${file}.kesher-backup).`;
 }
@@ -374,7 +374,7 @@ export async function enableUnrealMcp(folder: string): Promise<string> {
   }
   if (markEditorOnly(plugins)) changed = true;
   if (changed) {
-    await writeFile(`${file}.kesher-backup`, text);
+    if (!existsSync(`${file}.kesher-backup`)) await writeFile(`${file}.kesher-backup`, text); // the first original is kept
     j.Plugins = plugins;
     await writeFile(file, `${JSON.stringify(j, null, "\t")}\n`);
   }
