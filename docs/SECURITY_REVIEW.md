@@ -86,6 +86,12 @@ This review went through the code part by part. Each finding is listed with what
     - Windows: the same tests and smoke test on a Windows machine, plus a .bat in a folder with spaces run directly and as a long job (not blocking until it has been green there);
     - CodeQL (security-extended) on every push to main and weekly, in the Security tab.
 
+20. **Scan of 0.5.87–0.5.88** (other AI apps give KesherAI tasks over MCP; Unreal plugins). Checked by requests against the real server:
+    - `/mcp` from this computer answers; a foreign Origin, `Origin: null`, `Sec-Fetch-Site: cross-site` and a form post are refused (403); a DNS-rebinding Host and another device without the token get 401. The smoke test now checks `/mcp` too, on every version.
+    - `kesher_approve` is off until the user turns it on (only on this computer: the setting cannot be changed from another device). Even then it never approves a command KesherAI marks dangerous (deleting, installing programs…) or screen control (`computer_use_app`).
+    - A chat started by another app gets the same rules as one the user starts: changes outside its own folder and every command ask.
+    - `unreal_port_plugin` asks first, runs the engine's own build tool with its arguments as a list, and never deletes the old plugin (it is renamed to a backup).
+
 ## Known, not yet fixed
 
 - **zod 3:** GHSA-mrhx-c7xc-m3w5 (high), memory use when validating oversized constrained collections; the fix is only in zod 4.6.6+. It is the one advisory the release's automatic audit is told to skip (`pnpm.auditConfig.ignoreGhsas` in package.json), until the move to zod 4. zod checks the local config file, request bodies and plugin manifests. The worst case is a slow or crashing server, not access. Moving to zod 4 changes how `.default({})` fills nested defaults, so it needs its own careful change.

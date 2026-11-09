@@ -145,6 +145,8 @@ function toolsOf(s: KesherServices): Tool[] {
         if (!req) throw new Error("No such approval card.");
         // A command KesherAI marks dangerous (deleting, installing programs…) "always needs your approval": the user's only.
         if (args.decision === "allow" && /always needs your approval/i.test(String(req.reason))) throw new Error("This command always needs the user's own approval in KesherAI.");
+        // Letting the model see and control the screen stays the user's own decision, whoever asks.
+        if (args.decision === "allow" && /^computer_use_app$/.test(String(req.name))) throw new Error("Screen control is approved only by the user, in KesherAI.");
         const since = opened.session.events.at(-1)?.seq ?? 0;
         if (!opened.session.approve(String(args.request_id), args.decision === "allow" ? "allow" : "deny", typeof args.feedback === "string" ? args.feedback : undefined)) throw new Error("That card is no longer waiting.");
         await new Promise((r) => setTimeout(r, 300));

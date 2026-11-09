@@ -55,6 +55,12 @@ try {
       req.end();
     });
     check(rebind === 401 || rebind === 403, `a request naming another host (DNS rebinding) needs the token (got ${rebind})`);
+    // The MCP server (other AI apps give KesherAI tasks through it): the same guards.
+    const rpc = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const mcpForeign = await fetch(`${base}/mcp`, { method: "POST", body: rpc, headers: { "content-type": "application/json", origin: "https://evil.example" } }).then((r) => r.status, () => 0);
+    check(mcpForeign === 403 || mcpForeign === 401, `/mcp refuses a foreign website (got ${mcpForeign})`);
+    const mcpOwn = await fetch(`${base}/mcp`, { method: "POST", body: rpc, headers: { "content-type": "application/json" } }).then((r) => r.json(), () => undefined);
+    check(Array.isArray(mcpOwn?.result?.tools) && mcpOwn.result.tools.some((t) => t.name === "kesher_chat"), "/mcp answers this computer with its tools");
     const own = await fetch(`${base}/api/conversations`).then((r) => r.status, () => 0);
     check(own === 200, `the computer itself gets its chats (got ${own})`);
   }
