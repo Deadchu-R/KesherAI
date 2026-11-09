@@ -8,7 +8,7 @@ interface Info { enabled: boolean; allowApprovals?: boolean; url: string; tools:
 
 const APPS: Array<{ key: keyof Info["snippets"]; name: string; where: [string, string] }> = [
   { key: "claudeCode", name: "Claude Code", where: ["הריצו בטרמינל:", "Run in a terminal:"] },
-  { key: "claudeDesktop", name: "Claude Desktop", where: ["Settings ← Developer ← Edit Config, והוסיפו ל-claude_desktop_config.json:", "Settings → Developer → Edit Config, and add to claude_desktop_config.json:"] },
+  { key: "claudeDesktop", name: "Claude Desktop", where: ["Settings ← Developer ← Edit Config, והוסיפו ל-claude_desktop_config.json (הכפתור פותח את הקובץ הנכון גם בגרסת ה-Microsoft Store, ששומרת אותו בתיקייה אחרת). אחר כך סגרו את Claude לגמרי (גם מאזור ההתראות) ופתחו מחדש:", "Settings → Developer → Edit Config, and add to claude_desktop_config.json (the button opens the right file in the Microsoft Store version too, which keeps it in another folder). Then quit Claude fully (from the tray too) and open it again:"] },
   { key: "cursor", name: "Cursor", where: ["הוסיפו ל-‎.cursor/mcp.json (או Settings ← MCP):", "Add to .cursor/mcp.json (or Settings → MCP):"] },
   { key: "vscode", name: "VS Code", where: ["הוסיפו ל-‎.vscode/mcp.json:", "Add to .vscode/mcp.json:"] },
 ];

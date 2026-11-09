@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import type { AgentTool } from "@kesher/agent";
+import { makeDiff, type AgentTool } from "@kesher/agent";
 import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
 import { knownIssues, preflight } from "./known-issues.js";
 import { compileErrors, describePlugins, installBuiltPlugin, listPlugins, readPlugin } from "./unreal-plugins.js";
@@ -367,7 +367,17 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         description: "Write a whole C++ (.h/.cpp), build (.cs), settings (.ini) or editor Python (.py) file into Source/, Config/ or Content/Python/. Folders are made. Then unreal_compile.",
         inputSchema: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] },
       },
-      preview: async (input) => `Write ${String(input.path)} (${String(input.content ?? "").length} characters)`,
+      // The real change (a diff against what is there now), so the approval shows what is approved.
+      preview: async (input) => {
+        const content = String(input.content ?? "");
+        try {
+          const p = await need();
+          const { abs, rel } = projectPath(p.dir, String(input.path ?? ""), ROOTS);
+          return makeDiff(rel, await readFile(abs, "utf8").catch(() => null), content);
+        } catch {
+          return `Write ${String(input.path)} (${content.length} characters)`;
+        }
+      },
       run: async (input) => {
         const p = await need();
         const { abs, rel } = projectPath(p.dir, String(input.path ?? ""), ROOTS);

@@ -70,6 +70,10 @@ test("Unity code tools: paths stay in the project, scripts compile after writing
   const ok = await tools.unity_write_script!.run({ path: "Assets/Scripts/Door.cs", content: "class Door {}" }, ctx);
   assert.match(ok.output, /Updated .*Compiled with no errors/s);
   assert.equal(changes[1]![1], "class Door {");
+  // The approval shows the real change against the file on disk.
+  const diff = await tools.unity_write_script!.preview!({ path: "Assets/Scripts/Door.cs", content: "class Door { int open; }" }, ctx);
+  assert.match(diff, /-class Door \{\}/);
+  assert.match(diff, /\+class Door \{ int open; \}/);
 
   const made = await tools.unity_create_gameobject!.run({ name: 'Door"); System.IO.File.Delete("x', components: ["Rigidbody"] }, ctx);
   assert.match(made.output, /Added Door/);

@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { AgentTool } from "@kesher/agent";
+import { makeDiff, type AgentTool } from "@kesher/agent";
 import { readResult, type UnityCli } from "./unity-cli.js";
 
 /**
@@ -203,7 +203,16 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
         } catch {
           // shown as given; run() refuses it
         }
-        const lines = String(input.content ?? "").split("\n");
+        const content = String(input.content ?? "");
+        if (p) {
+          try {
+            const { abs, rel } = projectPath(p, String(input.path ?? ""), ["Assets"]);
+            return makeDiff(rel, await readFile(abs, "utf8").catch(() => null), content);
+          } catch {
+            // refused by run()
+          }
+        }
+        const lines = content.split("\n");
         return `Write ${target} in ${p ?? "(no project)"} (${lines.length} lines):\n${lines.slice(0, 120).join("\n")}${lines.length > 120 ? "\n…" : ""}`;
       },
       run: async (input, ctx) => {
