@@ -131,6 +131,10 @@ export interface KesherServices {
   selfWork?: SelfWork;
   /** The task board self-work shares with Claude. */
   board?: TaskBoard;
+  /** Set in worker mode: its version, and "move to the newer version after the current item". */
+  worker?: { version: string; upgrade: () => void };
+  /** Set in the main desktop app: starts the worker and says where it is. */
+  workerHost?: { ensure: () => Promise<string>; url: () => string | undefined };
   /** KesherAI's managed ComfyUI. */
   comfy: ComfyManager;
   /** Paired devices' own keys (set once the server is built). */

@@ -153,6 +153,15 @@ export interface KesherServerOptions {
   restartApp?: () => void;
   /** The project's GitHub OAuth App client id, for "Connect with GitHub" (builds pass it from repository secrets). */
   githubClientId?: string;
+  /**
+   * Worker mode: this is a second, window-less KesherAI that runs self-work, so
+   * an update of the main app never stops the work. It uses the main app's
+   * models over its local API (waiting while the main app restarts), shares its
+   * task board, and sends notifications through it.
+   */
+  worker?: { mainUrl: string; mainRoot: string; version: string };
+  /** Main mode (desktop app): self-work runs in the worker; this starts it when needed and says where it is. */
+  workerHost?: { ensure: () => Promise<string>; url: () => string | undefined };
 }
 
 /** What {@link createKesherServer} returns. */
@@ -212,6 +221,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     await mkdir(paths.models, { recursive: true }).catch(() => undefined);
   }
   if (options.port !== undefined) config.port = options.port;
+  const worker = options.worker;
+  if (worker) {
+    // The worker only works for the main app on this computer: no remote access, no device sharing.
+    config.remote.enabled = false;
+    config.devices.share = false;
+    process.env.KESHER_NO_BEACON = "1";
+  }
 
   const registry = new ProviderRegistry();
   const downloads = new DownloadManager();
@@ -237,6 +253,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });
   registry.add({ id: "sdcpp", type: "sdcpp", name: "KesherAI image engine", location: "local" });
+  // The worker's models are the main app's (one copy on the graphics card), reached over its local API.
+  if (worker) registry.add({ id: "main", type: "openai-compatible", name: "KesherAI (main)", location: "local", baseUrl: `${worker.mainUrl.replace(/\/$/, "")}/v1`, options: { waitForServerMs: 10 * 60_000 } });
 
   const plugins = new PluginHost(registry, config, paths.root);
   if (features.plugins) await plugins.loadAll([paths.plugins, ...(options.pluginRoots ?? [])]);
@@ -527,7 +545,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   unityCli.cliKnown();
   const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));
   // The task board self-work shares with Claude: a file on this computer only.
-  const taskBoard = new TaskBoard(join(paths.root, "self-work", "board.json"));
+  const sharedDir = join(worker ? worker.mainRoot : paths.root, "self-work");
+  const taskBoard = new TaskBoard(join(sharedDir, "board.json"));
   const services: KesherServices = {
     browser,
     config,
@@ -696,6 +715,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   };
   stopConversation = (id) => services.conversations.stop(id);
   // Self-work: KesherAI works on a git project by itself, on its own branch, item by item.
+  let workerUpgrade = false;
   const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
     createChat: async (folder, title, modelId, extra = []) => {
       const c = await services.conversations.create({ kind: "code", workspace: folder, mode: "auto", title, ...(modelId ? { modelId } : {}) });
@@ -714,12 +734,35 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     git: (repo, args) => runIn(repo, "git", args, false),
     check: (repo, command) => runIn(repo, command, [], true),
-    notify: async (title, body, path) => void (await notifier.send({ title, body, path, tags: ["robot"] }).catch(() => undefined)),
-    shared: join(paths.root, "self-work"),
+    // The worker tells the main app, which has the phone notifications set up.
+    notify: async (title, body, path) =>
+      void (worker
+        ? await fetch(`${worker.mainUrl.replace(/\/$/, "")}/api/self-work/notify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, body, path }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined)
+        : await notifier.send({ title, body, path, tags: ["robot"] }).catch(() => undefined)),
+    shared: sharedDir,
+    // Between items: a worker asked to move to a newer version stops here (its run continues in the new one).
+    between: async () => {
+      if (workerUpgrade) process.exit(75);
+    },
   });
   services.selfWork = selfWork;
+  services.worker = worker ? { version: worker.version, upgrade: () => {
+    workerUpgrade = true;
+    const r = selfWork.current;
+    if (!r || (r.status !== "running" && r.status !== "waiting")) setTimeout(() => process.exit(75), 500);
+  } } : undefined;
+  services.workerHost = options.workerHost;
   services.board = taskBoard;
   void selfWork.load().catch(() => undefined);
+  if (worker) {
+    // A worker with nothing to do for 10 minutes ends (the main app starts it again for the next run).
+    let idleSince = Date.now();
+    setInterval(() => {
+      const r = selfWork.current;
+      if (r && (r.status === "running" || r.status === "waiting")) idleSince = Date.now();
+      else if (Date.now() - idleSince > 10 * 60_000) process.exit(0);
+    }, 30_000).unref();
+  }
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });

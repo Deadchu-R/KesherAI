@@ -63,6 +63,8 @@ export interface SelfWorkDeps {
   sleep?: (ms: number) => Promise<void>;
   /** The folder with the shared task board and the handoff notes (board.json, handoff.md), if any. */
   shared?: string;
+  /** Runs after each committed item (a worker may move to a newer version here; the run is saved first). */
+  between?: () => Promise<void>;
 }
 
 const MAX_STEPS = 80;
@@ -154,7 +156,11 @@ export class SelfWork {
     const branch = `kesher-self/${stamp}`;
     // A separate working folder next to the project: the user's checkout (and the running app) stay as they are.
     const worktree = join(dirname(o.repo), `${basename(o.repo)}-self-work`, stamp);
-    const made = await this.d.git(o.repo, ["worktree", "add", "-b", branch, worktree, "HEAD"]);
+    // Start from the newest code on GitHub when there is one (fetch only reads; nothing is pushed), else from this copy's HEAD.
+    await this.d.git(o.repo, ["fetch", "--quiet", "origin"]).catch(() => undefined);
+    const remote = await this.d.git(o.repo, ["rev-parse", "--verify", "--quiet", "origin/main"]);
+    const base = remote.code === 0 && remote.out.trim() ? "origin/main" : "HEAD";
+    const made = await this.d.git(o.repo, ["worktree", "add", "-b", branch, worktree, base]);
     if (made.code !== 0) throw new Error(`Could not make the work folder for ${branch}: ${made.out.slice(0, 300)}`);
     const check = (o.check ?? "").trim().slice(0, 300);
     const convId = await this.d.createChat(worktree, `🤖 Self-work · ${goal.slice(0, 50)}`, o.modelId, this.d.shared ? [this.d.shared] : []);
@@ -278,6 +284,8 @@ export class SelfWork {
           await this.d.notify(`🤖 ${label.slice(0, 80)}`, `Self-work: item ${r.items.length}${sha ? ` (${sha})` : ""}. ${r.goal.slice(0, 80)}`, `#/c/${r.convId}`);
         }
         if (out.kind === "all") return await this.end("done", out.text || "The goal is met.");
+        await this.save();
+        await this.d.between?.();
         await this.d.send(r.convId, "Next item from .kesher-self/plan.md (end with ITEM DONE / ALL DONE / BLOCKED).");
       }
     } catch (e) {

@@ -145,6 +145,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** the Unity test always leaves Play Mode (also on an error) and reads back only its own picture in KesherAI's folder; `unity_performance` only reads.
     - **Checked:** the window's saved place is used only when it is on a connected monitor.
 
+31. **Scan after 0.6.24** (code views, C# scripts as nodes, the task board, the self-work worker).
+    - **Checked:** C# scripts are read and written only inside the active Unity project's `Assets/`, only `.cs`, at most 400 KB, through the same path guard as the chat's Unity tools (links followed, must stay in the project); a write is refused when the file changed since it was opened, and the old text is kept in KesherAI's folder first. From the phone this is allowed (the paired owner), like the chat's `unity_write_script`.
+    - **Checked:** the self-work worker listens on 127.0.0.1 only, with remote access and device sharing off whatever its settings say; it runs from its own copy in KesherAI's data folder (never the install folder, so an update can neither break it nor be blocked by it). The main app talks to it only at that fixed local address; a sender can never choose where a request is passed. Worker-only routes (`upgrade`) and the worker's `notify` are refused unless they come from this computer; `notify` only takes a chat link of KesherAI's own form.
+    - **Checked:** the task board is one file in KesherAI's data folder, written atomically (temp file + rename) one writer at a time; requests from the interface always write as "roee"; at most 50 changes a call, titles and texts capped, notes kept to the last 500.
+    - **Checked:** self-work's git calls take arguments as a list; `fetch` only reads; the worktree is a new folder next to the project and a new branch; nothing is pushed or merged.
+    - **Checked:** the C++/Verse/C# views send only the graph as code to the chosen local model and show the answer as text (never run or written anywhere).
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

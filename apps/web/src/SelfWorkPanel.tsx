@@ -41,6 +41,8 @@ export function SelfWorkPanel(p: { folder: string }) {
   const [hours, setHours] = useState(2);
   const [check, setCheck] = useState("");
   const [busy, setBusy] = useState(false);
+  // What the run did lately, and what it waits for (it runs in the worker, whose chat has no window here).
+  const [log, setLog] = useState<{ lines: string[]; waiting: Array<{ requestId: string; name: string; preview: string; reason: string }> }>({ lines: [], waiting: [] });
 
   useEffect(() => {
     let alive = true;
@@ -48,6 +50,7 @@ export function SelfWorkPanel(p: { folder: string }) {
       if (!alive) return;
       setRun(r.run);
       if (r.run && !check) setCheck(r.run.check);
+      if (r.run && (r.run.status === "running" || r.run.status === "waiting")) void api<typeof log>("/api/self-work/log").then((l) => alive && setLog({ lines: l.lines ?? [], waiting: l.waiting ?? [] }), () => undefined);
     }, () => undefined);
     load();
     const t = window.setInterval(load, 5000);
@@ -86,11 +89,27 @@ export function SelfWorkPanel(p: { folder: string }) {
               <p dir="auto">{run.goal}</p>
               <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
               {run.note && <p className="small">{run.note}</p>}
+              {log.waiting.map((w) => (
+                <div key={w.requestId} className="card approval">
+                  <strong>✋ {L("מחכה לאישור שלך", "Waiting for your approval")}: <code>{w.name}</code></strong>
+                  <p className="muted small">{w.reason}</p>
+                  <pre className="code" dir="ltr">{w.preview}</pre>
+                  <div className="row">
+                    <button type="button" className="primary" onClick={() => void api("/api/self-work/approve", { method: "POST", body: { requestId: w.requestId, decision: "allow" } }).then(() => setLog((x) => ({ ...x, waiting: x.waiting.filter((y) => y.requestId !== w.requestId) })), (e: Error) => toast(e.message))}>{L("אשר", "Allow")}</button>
+                    <button type="button" onClick={() => void api("/api/self-work/approve", { method: "POST", body: { requestId: w.requestId, decision: "deny" } }).then(() => setLog((x) => ({ ...x, waiting: x.waiting.filter((y) => y.requestId !== w.requestId) })), (e: Error) => toast(e.message))}>{L("דחה", "Deny")}</button>
+                  </div>
+                </div>
+              ))}
               <ul className="self-work-items">
                 {run.items.map((i) => <li key={i.at}>✓ <span dir="auto">{i.text}</span>{i.commit && <code className="muted small"> {i.commit}</code>}</li>)}
               </ul>
+              {log.lines.length > 0 && (
+                <details className="self-work-log">
+                  <summary className="small">{L("מה הוא עושה עכשיו", "What it is doing now")}</summary>
+                  <ol className="small" dir="auto">{log.lines.slice(-25).map((l, i) => <li key={i}>{l}</li>)}</ol>
+                </details>
+              )}
               <div className="row">
-                <a className="button" href={`#/c/${run.convId}`}>{L("פתח את הצ'אט", "Open the chat")}</a>
                 <button type="button" onClick={stop}>{L("עצור", "Stop")}</button>
               </div>
             </>

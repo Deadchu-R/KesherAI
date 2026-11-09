@@ -34,6 +34,8 @@ export class OpenAICompatibleProvider implements Provider {
   readonly capabilities = { chat: true, tools: true };
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
+  /** How long to keep trying while the server cannot be reached (the main KesherAI restarting for an update). */
+  private readonly waitMs: number;
 
   /**
    * @param config - Needs `baseUrl` ending in `/v1` (or the API's equivalent).
@@ -45,6 +47,7 @@ export class OpenAICompatibleProvider implements Provider {
     this.name = config.name ?? config.id;
     this.location = config.location ?? "server";
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
+    this.waitMs = Number(config.options?.waitForServerMs ?? 0) || 0;
     this.headers = {
       "content-type": "application/json",
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
@@ -144,12 +147,30 @@ export class OpenAICompatibleProvider implements Provider {
     }
   }
 
+  /**
+   * Runs a request; while the server cannot be reached at all (connection
+   * refused: it is restarting), tries again every few seconds for up to
+   * `waitForServerMs`. Errors the server answered with are not retried.
+   */
+  private async reach<T>(go: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const until = Date.now() + this.waitMs;
+    for (;;) {
+      try {
+        return await go();
+      } catch (e) {
+        const down = e instanceof TypeError || /ECONNREFUSED|ECONNRESET|fetch failed|socket hang up/i.test(String((e as Error).message) + String((e as { cause?: unknown }).cause ?? ""));
+        if (!down || Date.now() > until || signal?.aborted) throw e;
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
+  }
+
   private async toolTurn(
     request: ProviderToolChatRequest,
     signal?: AbortSignal,
     onText?: (delta: string) => void,
   ): Promise<ProviderToolChatResult> {
-    const res = await fetchOk(`${this.baseUrl}/chat/completions`, {
+    const res = await this.reach(() => fetchOk(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: this.headers,
       signal,
@@ -169,7 +190,7 @@ export class OpenAICompatibleProvider implements Provider {
         stream: true,
         stream_options: { include_usage: true },
       }),
-    });
+    }), signal);
     if (!res.body) throw new Error("Empty response body");
 
     let text = "";

@@ -18,6 +18,7 @@ import { spawn } from "node:child_process";
 import type { KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
 import { connectComputer, forgetComputer, listComputers, openComputer } from "./computers.js";
+import { WORKER_PORT, workerHost } from "./worker.js";
 
 /**
  * The project's Google and GitHub sign-in clients. Release builds get it from the
@@ -61,6 +62,7 @@ async function startCore(): Promise<string> {
   const existing = await runningCore(branding.defaultPort);
   if (existing) return existing;
   const root = resourcesDir();
+  const host = app.isPackaged ? workerHost({ dataDir: process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`), version: app.getVersion(), exe: process.execPath, mainUrl: () => `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}` }) : undefined;
   // Loaded here, not at the top: if the core cannot load (a broken update), the rescue window still shows.
   const { createKesherServer } = await import("@kesher/core");
   const s = await createKesherServer({
@@ -94,6 +96,8 @@ async function startCore(): Promise<string> {
         return { png: img.toPNG(), jpeg: small.toJPEG(55), tiny: img.resize({ width: 32, height: 18 }).toBitmap() };
       },
     },
+    // Self-work runs in the worker (an installed copy only), so an update never stops it.
+    ...(host ? { workerHost: host } : {}),
     // An installed copy updates from the project's GitHub releases: download the installer, run it, quit.
     ...(app.isPackaged
       ? {
@@ -113,6 +117,8 @@ async function startCore(): Promise<string> {
     const url = await s.listen();
     server = s;
     autoUpdate();
+    // A self-work run that was working comes back (in a worker of this version), and an older worker moves on.
+    host?.watch();
     return url;
   } catch (err) {
     await s.close().catch(() => undefined);
@@ -218,6 +224,10 @@ function autoUpdate(): void {
   setTimeout(() => void run(), 60_000);
   setInterval(() => void run(), 4 * 60 * 60_000);
 }
+
+/** `--worker`: the window-less self-work KesherAI (see worker.ts); it has its own profile, so it is not "another window". */
+const workerMode = process.argv.includes("--worker");
+if (workerMode) app.setPath("userData", join(app.getPath("userData"), "worker"));
 
 // One window: opening KesherAI again focuses the existing window.
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -524,6 +534,20 @@ setInterval(() => {
 }, 5000);
 
 app.whenReady().then(async () => {
+  if (workerMode) {
+    // The worker: only the server, for self-work; its models are the main app's.
+    try {
+      const mainUrl = process.argv.find((a) => a.startsWith("--main-url="))?.slice(11) ?? `http://127.0.0.1:${branding.defaultPort}`;
+      if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(mainUrl)) throw new Error("The worker only works with the KesherAI on this computer.");
+      const { createKesherServer } = await import("@kesher/core");
+      const mainRoot = process.env.KESHER_MAIN_ROOT ?? join(app.getPath("home"), `.${branding.appId}`);
+      server = await createKesherServer({ port: WORKER_PORT, autodetect: false, worker: { mainUrl, mainRoot, version: app.getVersion() } });
+      await server.listen();
+    } catch {
+      app.exit(1);
+    }
+    return;
+  }
   try {
     const coreUrl = await startCore();
     if (!headless) await createWindow(process.env.KESHER_DEV_URL ?? coreUrl);

@@ -1606,3 +1606,4 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 }
 .script-add { gap: 6px; align-items: center; }
 .script-add button { padding: 4px 8px; font-size: 13px; }
+.self-work-log ol { margin: 6px 0 0; padding-inline-start: 18px; max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 3px; word-break: break-word; }
