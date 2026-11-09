@@ -10,6 +10,7 @@ import { getLocale } from "../i18n";
 import { createConversation, toast, useLibrary } from "../library";
 import { AddUnityPackage } from "../engine/AddUnityPackage";
 import { ConnectSteps } from "../engine/ConnectSteps";
+import { ConnectUnityAssistant } from "../engine/ConnectUnityAssistant";
 import { NewBlueprint } from "../engine/NewBlueprint";
 import { OpenInChat } from "../engine/OpenInChat";
 import { PluginUpdate } from "../engine/PluginUpdate";
@@ -281,6 +282,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
             {st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
           </select>
           <AddUnityPackage compact />
+          <ConnectUnityAssistant />
           <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
             <button type="button" role="tab" aria-selected={source === "graphs"} className={source === "graphs" ? "on" : ""} onClick={() => setSource("graphs")}>{L("גרפים", "Graphs")}</button>
             <button type="button" role="tab" aria-selected={source === "scripts"} className={source === "scripts" ? "on" : ""} onClick={() => setSource("scripts")} title={L("סקריפטי C# כנודים, לעבודה בלי קוד", "C# scripts as nodes, to work without code")}>{L("סקריפטים C#", "C# scripts")}</button>

@@ -12,6 +12,7 @@ import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { runUnityTest } from "../unity-test.js";
 import { projectPath } from "../unity-tools.js";
+import { connectUnityAssistant } from "../unity-assistant.js";
 import { BRIDGE_VERSION } from "../unreal-bridge.js";
 import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
@@ -437,6 +438,20 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     // Unity projects found on this computer (Unity Hub's list and the usual folders) that are not added yet.
     const foundUnity = async () => (await findGameProjects({ unity: s.config.unity.projects })).filter((p) => p.kind === "unity");
     app.get(`${base}/found`, async () => ({ projects: (await foundUnity()).filter((p) => !s.config.unity.projects.includes(p.path)) }));
+
+    // Unity AI Assistant gets KesherAI's tools (local models, images, knowledge) through its MCP settings. On this computer only.
+    app.post(`${base}/assistant-connect`, async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Connect Unity AI Assistant on the computer that runs KesherAI." });
+      const project = unity.activeProject;
+      if (!project || !s.deviceKeys) return reply.code(400).send({ error: "Choose a Unity project first." });
+      try {
+        const key = await s.deviceKeys.issue("Unity AI Assistant", "mcp");
+        const file = await connectUnityAssistant(project, `http://127.0.0.1:${s.config.port}/mcp`, key);
+        return { file, message: "KesherAI was added to Unity AI Assistant. In Unity: Edit → Project Settings → AI → Assistant MCP Extensions → Refresh File and Servers." };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
 
     app.put<{ Body: { project?: string } }>(`${base}/project`, async (req, reply) => {
       // From the phone: projects already added, or ones found on the computer; any other folder is chosen on the computer.
