@@ -1618,3 +1618,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .pill.claimed { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .pill.blocked { background: color-mix(in srgb, #e5484d 25%, transparent); }
 .task-notes ol { margin: 6px 0 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 3px; max-height: 200px; overflow: auto; }
+
+/* The computer popup: the user's other computers, each opens in its own window. */
+.hub-others { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; }
+.hub-others button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: start; background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; color: inherit; font: inherit; }
+.hub-others button:disabled { opacity: .5; }
