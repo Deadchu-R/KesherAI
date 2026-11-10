@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -132,27 +133,27 @@ export function GuardSection() {
         </label>
         <label className="field">
           <span>{t("guardUnload")}</span>
-          <select value={c.unloadAfterMinutes} onChange={(e) => set({ unloadAfterMinutes: Number(e.target.value) })}>
+          <Select value={c.unloadAfterMinutes} onChange={(e) => set({ unloadAfterMinutes: Number(e.target.value) })}>
             {[0, 5, 10, 20, 30, 60, 120].map((m) => <option key={m} value={m}>{m ? t("guardMinutes", { n: m }) : t("guardNever")}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span>{L("הגבלת זיכרון (RAM)", "Memory (RAM) limit")}</span>
-          <select value={c.maxRamPercent ?? 0} onChange={(e) => set({ maxRamPercent: Number(e.target.value) })}>
+          <Select value={c.maxRamPercent ?? 0} onChange={(e) => set({ maxRamPercent: Number(e.target.value) })}>
             {[0, 70, 80, 85, 90, 95].map((n) => <option key={n} value={n}>{n ? L(`עד ${n}%`, `Up to ${n}%`) : L("בלי הגבלה", "No limit")}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span>{L("הגבלת מעבד", "Processor limit")}</span>
-          <select value={c.maxCpuPercent ?? 0} onChange={(e) => set({ maxCpuPercent: Number(e.target.value) })}>
+          <Select value={c.maxCpuPercent ?? 0} onChange={(e) => set({ maxCpuPercent: Number(e.target.value) })}>
             {[0, 50, 60, 70, 80, 90].map((n) => <option key={n} value={n}>{n ? L(`עד ${n}%`, `Up to ${n}%`) : L("בלי הגבלה", "No limit")}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span>{L("טמפרטורת מעבד מקסימלית", "Highest processor temperature")}</span>
-          <select value={c.maxCpuTemp ?? 0} onChange={(e) => set({ maxCpuTemp: Number(e.target.value) })}>
+          <Select value={c.maxCpuTemp ?? 0} onChange={(e) => set({ maxCpuTemp: Number(e.target.value) })}>
             {[0, 70, 75, 80, 85, 90, 95].map((n) => <option key={n} value={n}>{n ? `${n}°C` : L("בלי הגבלה", "No limit")}</option>)}
-          </select>
+          </Select>
         </label>
         <p className="muted small">{L("כשעוברים גבול, עבודה מקומית חדשה ממתינה (מה שכבר רץ מסתיים), וכשהזיכרון מלא מודלים לא בשימוש נפרקים. חלוקת עבודה בין המחשבים מדלגת על מחשב חם או עמוס ובוחרת לכל מחשב מודל שמתאים לחומרה שלו.", "Past a limit, new local work waits (what runs finishes), and when memory is full idle models are unloaded. Splitting work across your computers skips a hot or busy one and gives each computer a model that fits its hardware.")}</p>
         <label className="row">

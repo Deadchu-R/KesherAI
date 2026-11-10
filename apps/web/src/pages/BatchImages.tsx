@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { zipSync } from "fflate";
 import { api, withToken } from "../api";
 import { t } from "../i18n";
+import { Select } from "../ui/Select";
 
 /** How many images one batch takes. */
 const MAX = 50;
@@ -147,11 +148,11 @@ export function BatchImagesPage() {
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <button type="button" onClick={() => fileInput.current?.click()} disabled={running || items.length >= MAX}>{t("batchAdd")}</button>
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
-          <select value={action} onChange={(e) => setAction(e.target.value as Action)} disabled={running} aria-label={t("batchAction")}>
+          <Select value={action} onChange={(e) => setAction(e.target.value as Action)} disabled={running} aria-label={t("batchAction")}>
             <option value="remove-bg">{t("batchRemoveBg")}</option>
             <option value="upscale">{t("batchUpscale")}</option>
             <option value="both">{t("batchBoth")}</option>
-          </select>
+          </Select>
           <span className="grow muted small">{items.length}/{MAX}</span>
           {running ? (
             <button type="button" onClick={() => (stop.current = true)}>{t("batchStop")}</button>

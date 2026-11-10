@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -57,10 +58,10 @@ export function CodeAiBubble(p: { ask: (request: string, fix: boolean, model: st
     <div className="ue-bubble code-ai" role="dialog" aria-label={L("עריכה עם AI", "Edit with AI")}>
       <div className="row ue-bubble-head">
         <strong className="grow">✨ {L("עריכה עם AI", "Edit with AI")}</strong>
-        <select value={model} onChange={(e) => choose(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
+        <Select value={model} onChange={(e) => choose(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
           <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
           {models.map((m) => <option key={m.id} value={m.id}>{models.filter((x) => x.name === m.name).length > 1 ? `${m.name} · ${m.id.split("/")[0]}` : m.name}</option>)}
-        </select>
+        </Select>
         {p.canUndo && <button type="button" className="small" onClick={p.onUndo} title={L("מחזיר את הסקריפט למה שהיה לפני השינוי האחרון של ה-AI", "Puts back the script as it was before the AI's last change")}>↶ {L("בטל שינוי", "Undo")}</button>}
         <button type="button" className="small" onClick={() => setOpen(false)} aria-label={L("סגור", "Close")}>✕</button>
       </div>

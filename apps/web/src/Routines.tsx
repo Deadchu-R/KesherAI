@@ -3,6 +3,7 @@ import { api } from "./api";
 import { getLocale } from "./i18n";
 import { desktop, toast } from "./library";
 import { usePersonas } from "./Personas";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -56,11 +57,11 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
         <form className="stack pl-inputs" onSubmit={(e) => { e.preventDefault(); void save(draft); }}>
           <label className="pl-field">{L("שם", "Name")}<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={L("למשל: סיכום בוקר", "e.g. Morning summary")} autoFocus /></label>
           <div className="row">
-            <select value={draft.schedule.kind} onChange={(e) => setDraft({ ...draft, schedule: e.target.value === "every" ? { kind: "every", minutes: 60 } : e.target.value === "startup" ? { kind: "startup", delayMinutes: 3 } : { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] } })}>
+            <Select value={draft.schedule.kind} onChange={(e) => setDraft({ ...draft, schedule: e.target.value === "every" ? { kind: "every", minutes: 60 } : e.target.value === "startup" ? { kind: "startup", delayMinutes: 3 } : { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] } })}>
               <option value="daily">{L("בשעה קבועה", "At a time")}</option>
               <option value="every">{L("כל כמה דקות", "Every few minutes")}</option>
               <option value="startup">{L("בכל הפעלה של KesherAI", "Each time KesherAI starts")}</option>
-            </select>
+            </Select>
             {draft.schedule.kind === "startup" ? (
               <label className="row">{L("אחרי", "After")}<input type="number" min={0} max={120} value={draft.schedule.delayMinutes ?? 3} onChange={(e) => setDraft({ ...draft, schedule: { kind: "startup", delayMinutes: Number(e.target.value) } })} style={{ width: 80 }} />{L("דקות", "minutes")}</label>
             ) : draft.schedule.kind === "daily" ? (
@@ -85,27 +86,27 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
             )}
           </div>
           <div className="row">
-            <select value={draft.action.type} onChange={(e) => setDraft({ ...draft, action: e.target.value === "pipeline" ? { type: "pipeline", pipelineId: pipelines[0]?.id ?? "" } : { type: "prompt", prompt: "" } })}>
+            <Select value={draft.action.type} onChange={(e) => setDraft({ ...draft, action: e.target.value === "pipeline" ? { type: "pipeline", pipelineId: pipelines[0]?.id ?? "" } : { type: "prompt", prompt: "" } })}>
               <option value="prompt">{L("שאלה למודל (שיחה חדשה כל פעם)", "Ask a model (a new chat each time)")}</option>
               <option value="pipeline" disabled={!pipelines.length}>{L("הרצת צינור", "Run a pipeline")}</option>
               {draft.action.type === "self-work" && <option value="self-work">{L("עבודה עצמית (נקבעה בדף הקוד)", "Self-work (set on the code page)")}</option>}
-            </select>
+            </Select>
             {draft.action.type === "prompt" && personas.length > 0 && (
-              <select value={draft.action.personaId ?? ""} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), ...(e.target.value ? { personaId: e.target.value } : { personaId: undefined }) } })}>
+              <Select value={draft.action.personaId ?? ""} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), ...(e.target.value ? { personaId: e.target.value } : { personaId: undefined }) } })}>
                 <option value="">{L("ללא פרסונה", "No persona")}</option>
                 {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </Select>
             )}
             {draft.action.type === "prompt" && models.length > 0 && (
-              <select value={draft.action.modelId ?? ""} onChange={(e) => setPrompt({ modelId: e.target.value || undefined })} aria-label={L("מודל", "Model")} title={L("למשימה פשוטה מספיק מודל קטן ומהיר", "A small, fast model is enough for simple work")}>
+              <Select value={draft.action.modelId ?? ""} onChange={(e) => setPrompt({ modelId: e.target.value || undefined })} aria-label={L("מודל", "Model")} title={L("למשימה פשוטה מספיק מודל קטן ומהיר", "A small, fast model is enough for simple work")}>
                 <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
                 {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+              </Select>
             )}
             {draft.action.type === "pipeline" && (
-              <select value={draft.action.pipelineId} onChange={(e) => setDraft({ ...draft, action: { type: "pipeline", pipelineId: e.target.value } })}>
+              <Select value={draft.action.pipelineId} onChange={(e) => setDraft({ ...draft, action: { type: "pipeline", pipelineId: e.target.value } })}>
                 {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </Select>
             )}
           </div>
           {draft.action.type === "prompt" && <textarea rows={3} dir="auto" value={draft.action.prompt} placeholder={L("למשל: סכם את המיילים שלא נקראו ואת הפגישות של היום", "e.g. Summarize my unread mail and today's meetings")} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), prompt: e.target.value } })} />}

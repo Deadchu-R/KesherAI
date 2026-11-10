@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -330,10 +331,10 @@ function Details({ w, parentClass, editable, onApply }: { w: WNode; parentClass?
       {editable && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           {/Panel|Box|Overlay|Border|Button|SizeBox/.test(w.class) && (
-            <select defaultValue="" onChange={(e) => { if (e.target.value) onApply([{ op: "add", class: e.target.value, parent: w.name }]); e.target.value = ""; }} aria-label={L("הוספת ווידג'ט בתוכו", "Add a widget inside")}>
+            <Select defaultValue="" onChange={(e) => { if (e.target.value) onApply([{ op: "add", class: e.target.value, parent: w.name }]); e.target.value = ""; }} aria-label={L("הוספת ווידג'ט בתוכו", "Add a widget inside")}>
               <option value="">{L("+ הוסף בתוכו…", "+ Add inside…")}</option>
               {["TextBlock", "Image", "Button", "Border", "CanvasPanel", "HorizontalBox", "VerticalBox", "Overlay", "SizeBox", "ProgressBar", "Spacer"].map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </Select>
           )}
           {parentClass && <button type="button" onClick={() => onApply([{ op: "remove", widget: w.name }])}>{L("מחק", "Delete")}</button>}
         </div>

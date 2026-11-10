@@ -6,6 +6,7 @@ import { stepLabel } from "./Activity";
 import { getLocale, t } from "./i18n";
 import { desktop } from "./library";
 import { RichText } from "./RichText";
+import { Select } from "./ui/Select";
 
 /*
  * The cards a chat shows between messages: a tool the model ran (with its
@@ -154,13 +155,13 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
         <div className="scope-menu" role="menu">
           <label className="small row">
             {L("לכמה זמן", "For how long")}
-            <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+            <Select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
               <option value={0}>{L("לתמיד", "For good")}</option>
               <option value={60}>{L("שעה", "1 hour")}</option>
               <option value={240}>{L("4 שעות", "4 hours")}</option>
               <option value={Math.max(1, Math.round((new Date().setHours(24, 0, 0, 0) - Date.now()) / 60_000))}>{L("עד סוף היום", "Until the end of today")}</option>
               <option value={7 * 24 * 60}>{L("שבוע", "1 week")}</option>
-            </select>
+            </Select>
           </label>
           {firstCmd && (
             <label className="small row ap-only">

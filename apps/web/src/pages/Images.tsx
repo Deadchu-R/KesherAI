@@ -5,6 +5,7 @@ import { pickModel } from "../ModelPicker";
 import { api, withToken, type Asset } from "../api";
 import { useModels } from "../useModels";
 import { t } from "../i18n";
+import { Select } from "../ui/Select";
 
 /** Text-to-image with any image provider (ComfyUI today; cloud APIs through plugins). */
 export function ImagesPage() {
@@ -66,9 +67,9 @@ export function ImagesPage() {
       >
         <label style={{ gridColumn: "1 / -1" }}>
           {t("pickModel")}
-          <select value={selected} onChange={(e) => setModelId(e.target.value)}>
+          <Select value={selected} onChange={(e) => setModelId(e.target.value)}>
             {models.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.providerId}</option>)}
-          </select>
+          </Select>
         </label>
         <label style={{ gridColumn: "1 / -1" }}>
           {t("prompt")}

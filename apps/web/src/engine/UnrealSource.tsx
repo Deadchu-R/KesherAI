@@ -5,6 +5,7 @@ import { Fullscreen } from "../Fullscreen";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import type { CodeProblem } from "../ide/CodeEditor";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 // KesherAI's code editor (VS Code's), loaded when this view opens.
@@ -101,14 +102,14 @@ export function UnrealSource() {
   return (
     <div className="ue-body script-nodes unreal-source">
       <aside className="ue-list card">
-        <select value={project} onChange={(e) => setProject(e.target.value)} aria-label={L("פרויקט", "Project")}>
+        <Select value={project} onChange={(e) => setProject(e.target.value)} aria-label={L("פרויקט", "Project")}>
           {(projects ?? []).map((p) => <option key={p.path} value={p.path}>{p.name}{p.open ? ` · ${L("פתוח ב-Unreal", "open in Unreal")}` : ""}</option>)}
-        </select>
+        </Select>
         <input value={q} placeholder={L("חיפוש קובץ…", "Find a file…")} onChange={(e) => setQ(e.target.value)} aria-label={L("חיפוש קובץ", "Find a file")} />
-        <select className="ue-select" value={path} onChange={(e) => e.target.value && open(e.target.value)} aria-label={L("קובץ", "File")}>
+        <Select className="ue-select" value={path} onChange={(e) => e.target.value && open(e.target.value)} aria-label={L("קובץ", "File")}>
           <option value="">{L("בחרו קובץ…", "Choose a file…")}</option>
           {files.map((f) => <option key={f.path} value={f.path}>{f.path}</option>)}
-        </select>
+        </Select>
         <ul>
           {shown.map((f) => (
             <li key={f.path}><button type="button" className={f.path === path ? "on" : ""} onClick={() => open(f.path)} title={f.path} dir="ltr">{f.path.replace(/^Source\//, "")}</button></li>

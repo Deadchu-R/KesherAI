@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const when = (iso: string) => new Date(iso).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { dateStyle: "short", timeStyle: "short" });
@@ -98,9 +99,9 @@ export function DeviceKeysSection() {
       ) : <p className="muted small">{L("עוד אין מכשירים עם מפתח משלהם. מכשיר שמתחבר מעכשיו (חיבור ברשת הביתית) יקבל אחד.", "No devices with their own key yet; a device that pairs from now on (on the home network) gets one.")}</p>}
       <label className="row small"><input type="checkbox" checked={d.devicesOnly} onChange={(e) => put({ devicesOnly: e.target.checked })} /> {L("דרך האינטרנט: רק מכשירים מחוברים עם מפתח משלהם (מומלץ). הטוקן המשותף והקוד QR יעבדו רק ברשת הביתית.", "Through the internet: only paired devices with their own key (recommended). The shared token and the QR code then work only on the home network.")}</label>
       <label className="row small">{L("מכשיר שלא היה בשימוש", "A device not used for")}
-        <select value={d.idleDays} onChange={(e) => put({ idleDays: Number(e.target.value) })}>
+        <Select value={d.idleDays} onChange={(e) => put({ idleDays: Number(e.target.value) })}>
           {[0, 7, 14, 30, 60, 90].map((n) => <option key={n} value={n}>{n === 0 ? L("אף פעם", "never") : L(`${n} ימים`, `${n} days`)}</option>)}
-        </select>
+        </Select>
         {L("לא ייכנס דרך האינטרנט עד שישתמשו בו ברשת הביתית.", "cannot come in through the internet until it is used on the home network.")}
       </label>
     </section>

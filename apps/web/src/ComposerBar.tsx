@@ -6,6 +6,7 @@ import { Mic } from "./Mic";
 import { ModelMenu } from "./ModelMenu";
 import { PersonaChip, type Persona } from "./Personas";
 import { WebToggle } from "./WebToggle";
+import { Select } from "./ui/Select";
 
 /**
  * The row under every chat box (start screen, chat, code start), one
@@ -40,12 +41,12 @@ export function ComposerBar(p: {
       {p.persona && <PersonaChip value={p.persona.value} onChange={p.persona.onChange} />}
       {p.model && <ModelMenu models={p.model.models} value={p.model.value} onChange={p.model.onChange} />}
       {p.mode && (
-        <select className="model-chip" value={p.mode.value} onChange={(e) => p.mode!.onChange(e.target.value as PermissionMode)} aria-label={t("mode")}>
+        <Select className="model-chip" value={p.mode.value} onChange={(e) => p.mode!.onChange(e.target.value as PermissionMode)} aria-label={t("mode")}>
           <option value="plan">{t("modePlan")}</option>
           <option value="ask">{t("modeAsk")}</option>
           <option value="auto-edit">{t("modeAutoEdit")}</option>
           <option value="auto">{t("modeAuto")}</option>
-        </select>
+        </Select>
       )}
       <span className="grow" />
       {p.send ?? <button type="submit" className="primary send" disabled={!p.canSend} aria-label={t("send")}>↑</button>}

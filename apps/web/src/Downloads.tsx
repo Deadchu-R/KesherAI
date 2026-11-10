@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, withToken } from "./api";
 import { getLocale, t, type StringKey } from "./i18n";
+import { Select } from "./ui/Select";
 
 /** One download, as the server reports it. */
 export interface Job { id: string; label: string; url?: string; status: string; received: number; total?: number; speed: number; error?: string }
@@ -129,11 +130,11 @@ export function DownloadsButton() {
           </div>
           <label className="row muted">
             <span className="grow">{t("dlLimit")}</span>
-            <select value={limit} onChange={(e) => changeLimit(Number(e.target.value))}>
+            <Select value={limit} onChange={(e) => changeLimit(Number(e.target.value))}>
               {[...new Set([0, 1, 2, 5, 10, 20, 50, limit])].sort((a, b) => a - b).map((v) => (
                 <option key={v} value={v}>{v === 0 ? t("dlNoLimit") : `${v} MB/s`}</option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       )}

@@ -1743,3 +1743,31 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .ws-terminal { display: flex; flex-direction: column; }
 .ws-terminal[hidden] { display: none; }
 .ws-terminal .terminal-pane { flex: 1; min-height: 0; height: auto; }
+
+/* ---------- Select: the one drop-down (Apple pop-up button + press-and-drag menu) ---------- */
+.ksel { display: inline-flex; align-items: center; gap: 8px; width: auto; max-width: 100%; min-width: 0; height: 40px; padding: 0 10px 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; font-size: 14px; text-align: start; cursor: default; touch-action: none; user-select: none; -webkit-user-select: none; transition: border-color .12s, box-shadow .12s, background .12s; }
+.ksel:hover:not(:disabled) { background: var(--panel); }
+.ksel:focus-visible, .ksel.open { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.ksel-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ksel-chev { flex: none; opacity: .65; }
+.ksel-menu { position: fixed; z-index: 1000; overflow-y: auto; overscroll-behavior: contain; padding: 5px; border-radius: calc(12px * var(--r-scale, 1)); background: color-mix(in srgb, var(--panel-2) 88%, transparent); backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2, 0 12px 40px rgb(0 0 0 / .45)); transform-origin: top center; animation: ksel-in .14s cubic-bezier(.2, .9, .3, 1.15); user-select: none; -webkit-user-select: none; touch-action: none; }
+.ksel-menu.up { transform-origin: bottom center; }
+@keyframes ksel-in { from { opacity: 0; transform: scale(.95); } }
+.ksel-group { padding: 8px 10px 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.ksel-opt { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 10px 4px 6px; border-radius: calc(7px * var(--r-scale, 1)); font-size: 14px; color: var(--text); cursor: default; }
+.ksel-opt.active { background: var(--accent); color: var(--accent-ink, #fff); }
+.ksel-opt.off { opacity: .45; }
+.ksel-check { width: 16px; flex: none; text-align: center; font-size: 12.5px; font-weight: 700; }
+.ksel-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) { .ksel-opt { min-height: 44px; font-size: 15.5px; padding-inline: 8px 12px; } .ksel { height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .ksel-menu { animation: none; } }
+/* Places that sized the old <select> */
+.topbar .ksel { flex: 1 1 140px; min-width: 0; width: auto; }
+.ent-list .ksel, .notify-min .ksel, .pl-add .ksel { width: auto; }
+.ent-list .ksel { height: auto; padding: 3px 6px; }
+.ue-bubble-head .ksel { max-width: 150px; width: auto; }
+.code-ai .ue-bubble-head .ksel { max-width: 140px; }
+.ue-bubble-link .ksel { flex: 1; min-width: 0; font-size: 0.85em; width: auto; }
+.bp-chat-head .ksel { min-width: 0; flex: 1 1 140px; width: auto; }
+.vars-form .ksel { width: 100%; }
+:root[data-preset="fulldark"] .ksel { border-color: var(--border-strong); }

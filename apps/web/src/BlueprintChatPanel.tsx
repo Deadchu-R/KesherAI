@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { BlueprintCanvas, type GNode } from "./BlueprintCanvas";
 import { getLocale } from "./i18n";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -79,10 +80,10 @@ export function BlueprintChatPanel({ convId, refresh, onSend, onChange, busy }: 
     <div className="bp-chat-panel card">
       <div className="row bp-chat-head">
         <strong>🔷 Blueprint</strong>
-        <select className="grow" value={path} onChange={(e) => choose(e.target.value)} aria-label={L("ה-Blueprint המחובר לצ'אט", "The Blueprint connected to this chat")}>
+        <Select className="grow" value={path} onChange={(e) => choose(e.target.value)} aria-label={L("ה-Blueprint המחובר לצ'אט", "The Blueprint connected to this chat")}>
           <option value="">{L("לא מחובר", "Not connected")}</option>
           {list.map((b) => <option key={b.path} value={b.path} disabled={!connected && !b.saved}>{b.name}{b.parent ? ` · ${b.parent}` : ""}</option>)}
-        </select>
+        </Select>
         {path && <button type="button" className="primary" disabled={!connected || busy} onClick={test} title={L("הסוכן מריץ את המשחק ב-Unreal, בודק ומחזיר תשובה בצ'אט", "The agent plays the game in Unreal, checks and answers in the chat")}>🧪 {L("בדיקה", "Test")}</button>}
         <a className="small" href="#/unreal">{L("לעורך המלא", "Full editor")}</a>
       </div>

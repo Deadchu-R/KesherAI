@@ -10,6 +10,7 @@ const CodeEditor = lazy(() => import("./ide/CodeEditor"));
 import { VariablesPanel, type PanelType, type PanelVar } from "./VariablesPanel";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -243,10 +244,10 @@ export function ScriptNodes() {
       <aside className="ue-list card">
         <input value={q} placeholder={L("חיפוש סקריפט…", "Find a script…")} onChange={(e) => setQ(e.target.value)} aria-label={L("חיפוש סקריפט", "Find a script")} />
         {/* On a phone the list folds into one menu. */}
-        <select className="ue-select" value={path} onChange={(e) => e.target.value && open(e.target.value)} aria-label={L("סקריפט", "Script")}>
+        <Select className="ue-select" value={path} onChange={(e) => e.target.value && open(e.target.value)} aria-label={L("סקריפט", "Script")}>
           <option value="">{L("בחרו סקריפט…", "Choose a script…")}</option>
           {(scripts ?? []).map((s) => <option key={s} value={s}>{s.replace(/^Assets\//, "")}</option>)}
-        </select>
+        </Select>
         {scripts === null ? <p className="muted small">…</p> : !scripts.length ? (
           <div className="stack small">
             <p className="muted">{searched.error ?? L(`לא נמצאו קבצי .cs בתיקיית Assets (נבדקו ${searched.folders} תיקיות).`, `No .cs files in Assets (${searched.folders} folders looked at).`)}</p>
@@ -277,9 +278,9 @@ export function ScriptNodes() {
             {classes.length > 1 && (
               <label className="row small">
                 <span className="muted">{L("מחלקה", "Class")}</span>
-                <select dir="ltr" value={ci} onChange={(e) => { const i = Number(e.target.value); setCi(i); setMethod(classes[i]?.methods[0]?.id ?? ""); setSel(""); }}>
+                <Select dir="ltr" value={ci} onChange={(e) => { const i = Number(e.target.value); setCi(i); setMethod(classes[i]?.methods[0]?.id ?? ""); setSel(""); }}>
                   {classes.map((c, i) => <option key={i} value={i}>{c.name}</option>)}
-                </select>
+                </Select>
               </label>
             )}
             <div className="row wrap script-methods" role="tablist" aria-label={L("פונקציות", "Methods")}>

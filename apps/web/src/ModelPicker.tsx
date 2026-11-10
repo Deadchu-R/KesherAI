@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES, type ModelInfo } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
+import { Select } from "./ui/Select";
 
 /**
  * "Choose a model" popup. Any screen that needs a model of some category
@@ -79,13 +80,13 @@ export function ModelPickerHost() {
           <>
             <label className="stack">
               {t("model")}
-              <select autoFocus value={choice} onChange={(e) => setChoice(e.target.value)} dir="ltr">
+              <Select autoFocus value={choice} onChange={(e) => setChoice(e.target.value)} dir="ltr">
                 {[...new Set(list.map((m) => m.providerId))].map((p) => (
                   <optgroup key={p} label={p}>
                     {list.filter((m) => m.providerId === p).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </optgroup>
                 ))}
-              </select>
+              </Select>
             </label>
             <p className="muted">{t("pickModelHint")}</p>
           </>

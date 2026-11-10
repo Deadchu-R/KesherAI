@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast, useLibrary } from "../library";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -124,9 +125,9 @@ export function TrainingPage() {
             <label>{L("שם", "Name")}<input value={name} onChange={(e) => setName(e.target.value)} placeholder={L("למשל: החתול שלי", "e.g. my-cat")} /></label>
             <label>{L("מילת הפעלה", "Trigger word")}<input dir="ltr" value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="mycat" /></label>
             <label>{L("מודל בסיס", "Base model")}
-              <select value={base} onChange={(e) => setBase(e.target.value)}>
+              <Select value={base} onChange={(e) => setBase(e.target.value)}>
                 {pic.bases?.map((b) => <option key={b.name} value={b.name}>{b.name}{b.family === "sdxl" ? " (SDXL)" : b.family === "sd15" ? " (SD 1.5)" : ""}</option>)}
-              </select>
+              </Select>
             </label>
             <label>{L("צעדים", "Steps")} <small className="muted">{steps}</small><input type="range" min={200} max={2000} step={100} value={steps} onChange={(e) => setSteps(Number(e.target.value))} /></label>
           </div>
@@ -167,8 +168,8 @@ export function TrainingPage() {
             <div><button type="button" className="primary" disabled={chat.phase === "installing"} onClick={() => confirm(L("להוריד ולהתקין את סביבת האימון (בערך 4GB)?", "Download and set up the trainer (about 4 GB)?")) && void api("/api/training/chat/install", { method: "POST" }).then(loadChat)}>{chat.phase === "installing" ? L("מתקין…", "Setting up…") : L("הכן את סביבת האימון", "Set up the trainer")}</button></div>
           ) : (
             <div className="look-grid">
-              <label>{L("מאגר", "Dataset")}<select value={chatDs} onChange={(e) => setChatDs(e.target.value)}><option value="">{L("בחר…", "Choose…")}</option>{datasets.map((d) => <option key={d.name} value={d.name}>{d.name} ({d.examples})</option>)}</select></label>
-              <label>{L("מודל בסיס", "Base model")}<select value={chatBase} onChange={(e) => setChatBase(e.target.value)}>{chat.bases.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}</select></label>
+              <label>{L("מאגר", "Dataset")}<Select value={chatDs} onChange={(e) => setChatDs(e.target.value)}><option value="">{L("בחר…", "Choose…")}</option>{datasets.map((d) => <option key={d.name} value={d.name}>{d.name} ({d.examples})</option>)}</Select></label>
+              <label>{L("מודל בסיס", "Base model")}<Select value={chatBase} onChange={(e) => setChatBase(e.target.value)}>{chat.bases.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}</Select></label>
               <label>{L("צעדים", "Steps")} <small className="muted">{chatSteps}</small><input type="range" min={50} max={1500} step={50} value={chatSteps} onChange={(e) => setChatSteps(Number(e.target.value))} /></label>
               <div className="look-field"><span>&nbsp;</span><button type="button" className="primary" disabled={!chatDs || chat.phase === "training"} onClick={() => void api("/api/training/chat", { method: "POST", body: { name: chatDs, dataset: chatDs, base: chatBase, steps: chatSteps } }).then(loadChat, (e: Error) => toast(e.message))}>{chat.phase === "training" ? L("מתאמן…", "Training…") : L("התחל אימון", "Start training")}</button></div>
             </div>

@@ -10,6 +10,7 @@ import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
 import { desktop, toast } from "../library";
 import { HubBrowser } from "../HubBrowser";
 import { DownloadBar, useDownloads } from "../Downloads";
+import { Select } from "../ui/Select";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -93,12 +94,12 @@ function StartHere({ onChange }: { onChange: () => void }) {
         {engine?.installed && (
           <label className="row parallel-pick" title={t("parallelHint")}>
             <span className="muted small">{t("parallelLabel")}</span>
-            <select
+            <Select
               value={engine.parallel ?? 2}
               onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { parallel: Number(e.target.value) } }).then(setEngine, (err: Error) => setError(err.message))}
             >
               {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            </Select>
           </label>
         )}
       </div>

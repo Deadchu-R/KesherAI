@@ -9,6 +9,7 @@ import { api } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, desktop, refreshLibrary, toast, useLibrary } from "../library";
 import { useModels } from "../useModels";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -147,7 +148,7 @@ export function CodeHome() {
                     <button type="button" onClick={() => choose(folder.trim())}>{L("אישור", "OK")}</button>
                   </span>
                 ) : (
-                  <select
+                  <Select
                     className="model-chip code-folder"
                     value={folder}
                     title={folder}
@@ -164,7 +165,7 @@ export function CodeHome() {
                     {recent.map((f) => <option key={f} value={f}>📁 {short(f)}</option>)}
                     {desktop()?.pickFolder && <option value={"\u0000pick"}>{L("עיון…", "Browse…")}</option>}
                     <option value={"\u0000type"}>{L("הקלדת נתיב…", "Type a path…")}</option>
-                  </select>
+                  </Select>
                 )}
               </>
             }

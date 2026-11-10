@@ -3,6 +3,7 @@ import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
 import { TaskBoardView } from "./TaskBoardView";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -142,7 +143,7 @@ export function SelfWorkPanel(p: { folder: string }) {
               )}
               <textarea dir="auto" rows={3} value={goal} placeholder={L("על מה לעבוד? למשל: לתקן את כל אזהרות ה-lint בתיקיית apps/web", "What to work on? e.g. fix every lint warning in apps/web")} onChange={(e) => setGoal(e.target.value)} />
               <div className="row wrap">
-                <label className="small">{L("שעות", "Hours")} <select value={hours} onChange={(e) => setHours(Number(e.target.value))}>{[0.5, 1, 2, 4, 8].map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
+                <label className="small">{L("שעות", "Hours")} <Select value={hours} onChange={(e) => setHours(Number(e.target.value))}>{[0.5, 1, 2, 4, 8].map((h) => <option key={h} value={h}>{h}</option>)}</Select></label>
                 <input dir="ltr" className="grow" value={check} placeholder={L("בדיקה אחרי כל פריט, למשל pnpm test", "Check after each item, e.g. pnpm test")} onChange={(e) => setCheck(e.target.value)} />
                 <button type="button" className="primary" disabled={busy || !goal.trim() || !p.folder} onClick={() => void start()} title={p.folder ? p.folder : L("בחרו תיקייה למעלה", "Choose a folder above")}>{L("התחל", "Start")}</button>
               </div>

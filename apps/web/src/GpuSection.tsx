@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { t } from "./i18n";
+import { Select } from "./ui/Select";
 
 interface GpuInfo {
   index: number;
@@ -90,11 +91,11 @@ export function GpuSection() {
         <>
           <label className="stack">
             <span>{t("gpuMode")}</span>
-            <select value={r.prefs.mode} onChange={(e) => void set({ mode: e.target.value })}>
+            <Select value={r.prefs.mode} onChange={(e) => void set({ mode: e.target.value })}>
               <option value="auto">{t("gpuModeAuto")}</option>
               <option value="all">{t("gpuModeAll")}</option>
               <option value="fastest">{t("gpuModeFastest")}</option>
-            </select>
+            </Select>
           </label>
           {r.prefs.mode !== "fastest" && (
             <div className="stack">

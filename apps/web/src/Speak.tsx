@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { withToken } from "./api";
 import { getLocale, t } from "./i18n";
+import { Select } from "./ui/Select";
 
 const VOICE_KEY = "kesher-tts-voice"; // "system:<voiceURI>" | "cloud:openai:<voice>" | ""
 // A new key (0.5.47): reading aloud by itself starts off for everyone; turn it on in Settings → Accessibility.
@@ -232,12 +233,12 @@ export function VoicePicker({ clouds }: { clouds: string[] }) {
     <>
       <label className="stack">
         <span>{t("ttsVoice")}</span>
-        <select value={voice} onChange={(e) => { setVoice(e.target.value); write(VOICE_KEY, e.target.value); }}>
+        <Select value={voice} onChange={(e) => { setVoice(e.target.value); write(VOICE_KEY, e.target.value); }}>
           <option value="">{t("ttsVoiceAuto")}</option>
           {local?.ready && local.voices.map((v) => <option key={v.id} value={`local:${v.id}`}>{t("ttsLocal")} · {v.name}</option>)}
           {clouds.includes("openai") && ["alloy", "nova", "shimmer", "echo", "onyx", "sage"].map((v) => <option key={v} value={`cloud:openai:${v}`}>OpenAI · {v}</option>)}
           {sorted.map((v) => <option key={v.voiceURI} value={`system:${v.voiceURI}`}>{v.name} ({v.lang})</option>)}
-        </select>
+        </Select>
       </label>
       {voices.length > 0 && !voices.some((v) => /^he|^iw/i.test(v.lang)) && <p className="muted small">{t("ttsNoHebrew")}</p>}
       {local && !local.ready && (

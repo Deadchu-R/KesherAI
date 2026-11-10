@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, isRemote } from "../api";
 import { getLocale } from "../i18n";
 import { desktop, toast } from "../library";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -94,7 +95,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
               <button type="button" disabled={!local} onClick={() => void api<{ message: string }>("/api/unity/cli/update", { method: "POST" }).then((r) => { toast(r.message); load(); }, (e: Error) => toast(e.message))}>{L("עדכן את Unity CLI", "Update Unity CLI")}</button>
             )}
             {hasProject && (
-              <select disabled={!local} value="" aria-label={L("הוסף פלטפורמת בילד", "Add a build platform")} onChange={(e) => {
+              <Select disabled={!local} value="" aria-label={L("הוסף פלטפורמת בילד", "Add a build platform")} onChange={(e) => {
                 const platform = e.target.value;
                 if (!platform || !confirm(L(`להוריד ולהוסיף את ${platform} ל-Unity? (כמה GB; Windows יבקש אישור)`, `Download and add ${platform} to Unity? (a few GB; Windows asks for permission)`))) return;
                 void api<{ message: string }>("/api/unity/cli/platform", { method: "POST", body: { platform } }).then((r) => toast(r.message), (er: Error) => toast(er.message));
@@ -105,7 +106,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
                 <option value="webgl">WebGL</option>
                 <option value="linux">Linux</option>
                 <option value="mac">macOS</option>
-              </select>
+              </Select>
             )}
             {hasProject && <button type="button" disabled={!local} onClick={() => void api("/api/unity/open-editor", { method: "POST" }).then(() => toast(L("Unity נפתח…", "Opening Unity…")), (e: Error) => toast(e.message))}>{L("פתח ב-Unity", "Open in Unity")}</button>}
             {!local && <span className="muted small">{L("יצירה ופתיחה של פרויקט: רק במחשב עצמו.", "Making and opening projects: on the computer itself.")}</span>}
@@ -126,16 +127,16 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
               </label>
               <div className="row">
                 <label className="grow">{L("גרסת עורך", "Editor version")}
-                  <select value={editor} onChange={(e) => setEditor(e.target.value)}>
+                  <Select value={editor} onChange={(e) => setEditor(e.target.value)}>
                     <option value="">{L("ברירת המחדל של Unity", "Unity's default")}</option>
                     {info.editors.map((v) => <option key={v} value={v}>{v}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <label className="grow">{L("סוג", "Template")}
-                  <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+                  <Select value={template} onChange={(e) => setTemplate(e.target.value)}>
                     <option value="3d">3D (URP)</option>
                     <option value="2d">2D (URP)</option>
-                  </select>
+                  </Select>
                 </label>
               </div>
               <label className="row small"><input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} /> {L("פתח ב-Unity כשמוכן", "Open in Unity when ready")}</label>

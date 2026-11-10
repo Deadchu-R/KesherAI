@@ -23,6 +23,7 @@ import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
 import { api, isRemote, type ModelListing } from "../api";
 import { desktop, useLibrary } from "../library";
 import { getLocale, t } from "../i18n";
+import { Select } from "../ui/Select";
 
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 interface Remote {
@@ -64,21 +65,21 @@ function ActiveModels() {
           return (
             <label key={c.id}>
               {c.label[getLocale()] ?? c.label.en}
-              <select value={current} onChange={(e) => void set(c.id, e.target.value)}>
+              <Select value={current} onChange={(e) => void set(c.id, e.target.value)}>
                 <option value="">{t("none")}</option>
                 {current && !options.some((m) => m.id === current) && <option value={current}>{current.split(/[\\/]/).pop()}</option>}
                 {options.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.providerId}</option>)}
-              </select>
+              </Select>
             </label>
           );
         })}
         <label title={getLocale() === "he" ? "בזמן כתיבת קוד, המודל מציע את ההמשך באפור; Tab מכניס. מודל קוד קטן ומהיר הכי טוב." : "While you write code, the model suggests what comes next in grey; Tab inserts it. A small fast coder model works best."}>
           {getLocale() === "he" ? "הצעות קוד תוך כדי כתיבה (Inline)" : "Code suggestions while typing (inline)"}
-          <select value={settings.activeModels.codeInline ?? ""} onChange={(e) => void set("codeInline", e.target.value)}>
+          <Select value={settings.activeModels.codeInline ?? ""} onChange={(e) => void set("codeInline", e.target.value)}>
             <option value="">{getLocale() === "he" ? "כבוי" : "Off"}</option>
             {settings.activeModels.codeInline && !models.some((m) => m.id === settings.activeModels.codeInline) && <option value={settings.activeModels.codeInline}>{settings.activeModels.codeInline}</option>}
             {models.filter((m) => m.category === "chat").sort((a, b) => Number(/coder|code/i.test(b.name)) - Number(/coder|code/i.test(a.name))).map((m) => <option key={m.id} value={m.id}>{m.name} · {m.providerId}</option>)}
-          </select>
+          </Select>
         </label>
       </div>
     </section>

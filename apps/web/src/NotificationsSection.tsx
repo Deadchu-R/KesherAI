@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { api } from "./api";
 import { getLocale } from "./i18n";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -77,9 +78,9 @@ export function NotificationsSection() {
         <>
           <label className="row small" style={{ gap: 8, paddingInlineStart: 26 }}>
             {L("אחרי", "After")}
-            <select value={s.waitingSeconds ?? 60} onChange={(e) => void put({ waitingSeconds: Number(e.target.value) })}>
+            <Select value={s.waitingSeconds ?? 60} onChange={(e) => void put({ waitingSeconds: Number(e.target.value) })}>
               {[0, 30, 60, 120, 300].map((n) => <option key={n} value={n}>{n === 0 ? L("מיד", "right away") : n < 60 ? L(`${n} שניות`, `${n} seconds`) : L(`${n / 60} דקות`, `${n / 60} min`)}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="check" style={{ paddingInlineStart: 26 }}><input type="checkbox" checked={s.approveButtons ?? true} onChange={(e) => void put({ approveButtons: e.target.checked })} /> {L("כפתורי אשר / דחה בהתראה, גם בשעון חכם (צריך גישה \"מכל מקום\")", "Approve / Deny buttons on the notification, on a smartwatch too (needs \"Access from anywhere\")")}</label>
         </>
@@ -87,9 +88,9 @@ export function NotificationsSection() {
       <label className="check"><input type="checkbox" checked={s.includeText} onChange={(e) => void put({ includeText: e.target.checked })} /> {L("לכלול את תחילת התשובה בהתראה (עוברת דרך שרת ntfy)", "Include the start of the answer (it passes through the ntfy server)")}</label>
       <label className="row notify-min">
         {L("רק לעבודה שלקחה לפחות", "Only for work that took at least")}
-        <select value={s.minSeconds} onChange={(e) => void put({ minSeconds: Number(e.target.value) })}>
+        <Select value={s.minSeconds} onChange={(e) => void put({ minSeconds: Number(e.target.value) })}>
           {[0, 30, 60, 120, 300, 600].map((n) => <option key={n} value={n}>{n === 0 ? L("תמיד", "always") : n < 60 ? `${n} ${L("שניות", "s")}` : `${n / 60} ${L("דק׳", "min")}`}</option>)}
-        </select>
+        </Select>
       </label>
       <details>
         <summary className="muted small">{L("מתקדם", "Advanced")}</summary>

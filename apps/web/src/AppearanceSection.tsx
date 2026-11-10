@@ -7,6 +7,7 @@ import { NAV_GROUPS, NAV_ICONS } from "./Sidebar";
 import { toast } from "./library";
 import { exportTheme, importTheme, lookFromPicture, lookFromTokens } from "./themeFiles";
 import { ToolIcon } from "./ToolIcon";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -221,9 +222,9 @@ export function AppearanceSection() {
       <div className="look-grid">
         <label>
           {L("גופן", "Font")}
-          <select value={look.font ?? "rubik"} onChange={(e) => patch({ font: e.target.value }, true)}>
+          <Select value={look.font ?? "rubik"} onChange={(e) => patch({ font: e.target.value }, true)}>
             {APPEARANCE_FONTS.map((f) => <option key={f.id} value={f.id}>{f.title}{f.hebrew ? "" : L(" (בלי אותיות עבריות)", "")}</option>)}
-          </select>
+          </Select>
         </label>
         <label>
           {L("גודל טקסט", "Text size")} <small className="muted">{`⁦${look.fontSize ?? 15}px⁩`}</small>

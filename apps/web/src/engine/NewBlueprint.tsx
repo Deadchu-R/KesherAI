@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -35,9 +36,9 @@ export function NewBlueprint({ connected, onMade }: { connected: boolean; onMade
       <label>{L("שם", "Name")}<input dir="ltr" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
       <label>
         {L("סוג", "Type")}
-        <select value={parent} onChange={(e) => { setParent(e.target.value); if (e.target.value === "UserWidget" && /^BP_/.test(name)) setName(name.replace(/^BP_/, "WBP_")); }}>
+        <Select value={parent} onChange={(e) => { setParent(e.target.value); if (e.target.value === "UserWidget" && /^BP_/.test(name)) setName(name.replace(/^BP_/, "WBP_")); }}>
           {[["Actor", "Actor"], ["Pawn", "Pawn"], ["Character", "Character"], ["GameModeBase", "Game Mode"], ["PlayerController", "Player Controller"], ["ActorComponent", "Actor Component"], ["UserWidget", L("Widget (ממשק)", "Widget (UI)")]].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-        </select>
+        </Select>
       </label>
       <label>{L("תיקייה", "Folder")}<input dir="ltr" value={folder} onChange={(e) => setFolder(e.target.value)} /></label>
       {!connected && <p className="muted">{L("Unreal סגור: ה-Blueprint ייווצר כשהפרויקט ייפתח עם הפלאגין, ושינויים שתעשו בו עד אז יחולו אחריו.", "Unreal is closed: it is made when the project opens with the plugin, and changes you make to it meanwhile apply after it.")}</p>}

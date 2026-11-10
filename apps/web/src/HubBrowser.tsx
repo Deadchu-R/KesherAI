@@ -4,6 +4,7 @@ import { api } from "./api";
 import { getLocale, t, type StringKey } from "./i18n";
 import { RatingBadge, type Estimate } from "./Estimate";
 import { DownloadBar } from "./Downloads";
+import { Select } from "./ui/Select";
 
 interface HubModel {
   repo: string;
@@ -118,16 +119,16 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
       <p className="muted small">{t("hubHint")}</p>
       <form className="hub-filters" onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <input className="grow" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchHub")} aria-label={t("searchHub")} />
-        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
+        <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
           <option value="">{t("anyCategory")}</option>
           {BUILT_IN_CATEGORIES.filter((c) => c.huggingFacePipelineTags?.length).map((c) => <option key={c.id} value={c.id}>{label(c.id)}</option>)}
-        </select>
-        <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label={t("format")}>
+        </Select>
+        <Select value={format} onChange={(e) => setFormat(e.target.value)} aria-label={t("format")}>
           {FORMATS.map((f) => <option key={f} value={f}>{f ? f.toUpperCase() : t("anyFormat")}</option>)}
-        </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t("sortBy")}>
+        </Select>
+        <Select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t("sortBy")}>
           {SORTS.map((s) => <option key={s} value={s}>{t(`sort-${s}`)}</option>)}
-        </select>
+        </Select>
         <button type="submit" className="primary">{t("search")}</button>
       </form>
       <div className="row hub-fit-filter" role="group" aria-label={L("לפי החומרה שלך", "By your hardware")}>

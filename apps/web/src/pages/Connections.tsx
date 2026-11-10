@@ -3,6 +3,7 @@ import { api } from "../api";
 import { t } from "../i18n";
 import { McpSection } from "../McpSection";
 import { DevicesSection } from "../DevicesSection";
+import { Select } from "../ui/Select";
 
 interface ProviderRow {
   id: string; type: string; name?: string; baseUrl?: string; location?: string;
@@ -90,9 +91,9 @@ export function ConnectionsPage() {
           <label>{t("id")}<input required value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} /></label>
           <label>
             {t("type")}
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
               {types.map((ty) => <option key={ty.type} value={ty.type}>{ty.displayName}</option>)}
-            </select>
+            </Select>
           </label>
           <label>{t("name")}<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>{t("baseUrl")}<input dir="ltr" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} /></label>

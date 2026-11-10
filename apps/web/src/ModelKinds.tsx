@@ -4,6 +4,7 @@ import { api, withToken } from "./api";
 import { getLocale } from "./i18n";
 import { DownloadsMatching, useDownloads } from "./Downloads";
 import { toast } from "./library";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -145,10 +146,10 @@ function VideoChoice({ k, onChange, setup }: { k: Kind; onChange: () => void; se
       {comfyModels.length > 0 && (
         <label className="row" style={{ gap: 8 }}>
           {L("מי מייצר את הסרטונים:", "Who makes the videos:")}
-          <select value={viaComfy ? k.active! : ""} onChange={(e) => void use(e.target.value)}>
+          <Select value={viaComfy ? k.active! : ""} onChange={(e) => void use(e.target.value)}>
             <option value="">{L("המנוע המובנה (stable-diffusion.cpp)", "The built-in engine (stable-diffusion.cpp)")}</option>
             {comfyModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          </Select>
         </label>
       )}
     </div>

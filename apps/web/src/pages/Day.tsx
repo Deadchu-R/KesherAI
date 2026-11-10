@@ -3,6 +3,7 @@ import { api, withToken } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, toast } from "../library";
 import { MeetingRecorder } from "../MeetingRecorder";
+import { Select } from "../ui/Select";
 
 /** Hebrew or English, for this page's own words. */
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -166,7 +167,7 @@ function JournalSettingsCard({ info, save }: { info: Info; save: (p: Partial<Set
     <section className="card stack day-settings">
       <label className="row"><input type="checkbox" checked={s.enabled} onChange={(e) => void save({ enabled: e.target.checked })} />{L("לתעד את היום", "Record my day")}</label>
       <label className="stack"><span>{L("כל כמה שניות", "Every how many seconds")}</span>
-        <select value={s.intervalSec} onChange={(e) => void save({ intervalSec: Number(e.target.value) })}>{[15, 30, 60, 120].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+        <Select value={s.intervalSec} onChange={(e) => void save({ intervalSec: Number(e.target.value) })}>{[15, 30, 60, 120].map((n) => <option key={n} value={n}>{n}</option>)}</Select>
       </label>
       <label className="stack"><span>{L("אפליקציות שלא לצלם (שמות תהליכים, מופרדים בפסיק)", "Apps never to capture (process names, comma-separated)")}</span>
         <input dir="ltr" value={exclude} placeholder="WhatsApp, Signal" onChange={(e) => setExclude(e.target.value)} onBlur={() => void save({ excludeApps: exclude.split(",").map((x) => x.trim()).filter(Boolean) })} />
@@ -176,10 +177,10 @@ function JournalSettingsCard({ info, save }: { info: Info; save: (p: Partial<Set
         <label className="stack"><span>{L("לשמור טקסט (ימים)", "Keep text (days)")}</span><input type="number" min={1} max={3650} value={s.keepTextDays} onChange={(e) => void save({ keepTextDays: Number(e.target.value) })} /></label>
       </div>
       <label className="stack"><span>{L("המודל שכותב את הסיכום", "Model that writes the summary")}</span>
-        <select value={s.modelId ?? ""} onChange={(e) => void save({ modelId: e.target.value })}>
+        <Select value={s.modelId ?? ""} onChange={(e) => void save({ modelId: e.target.value })}>
           <option value="">{L("מודל הצ'אט הפעיל", "The active chat model")}</option>
           {models.map((m) => <option key={m.id} value={m.id}>{m.name ?? m.id}{m.location === "cloud" ? " ☁" : ""}</option>)}
-        </select>
+        </Select>
       </label>
       <label className="row"><input type="checkbox" checked={s.allowCloud} onChange={(e) => void save({ allowCloud: e.target.checked })} />{L("לאפשר למודל בענן לקרוא את הטקסט שעל המסך", "Let a cloud model read the text on screen")}</label>
       {info.status.last && <p className="muted small">{L("צילום אחרון: ", "Last capture: ")}{info.status.lastCapture ? hhmm(info.status.lastCapture) : ""} · {info.status.last.idle ? L("לא היית ליד המחשב", "you were away") : info.status.last.skipped ? L("דולג (חלון פרטי)", "skipped (private window)") : info.status.last.app}</p>}
@@ -492,11 +493,11 @@ function Entities() {
                   {e.summary && <p className="small">{e.summary}</p>}
                   {e.aliases.length > 0 && <p className="muted small">{L("גם: ", "Also: ")}{e.aliases.join(", ")}</p>}
                   <div className="row small">
-                    <select value={e.kind} onChange={(ev) => edit(e.id, { kind: ev.target.value })} aria-label={L("סוג", "Kind")}>{kinds.map(([kk, l]) => <option key={kk} value={kk}>{l}</option>)}</select>
-                    <select value={e.parent ?? ""} onChange={(ev) => edit(e.id, { parent: ev.target.value || null })} aria-label={L("שייך ל", "Belongs to")}>
+                    <Select value={e.kind} onChange={(ev) => edit(e.id, { kind: ev.target.value })} aria-label={L("סוג", "Kind")}>{kinds.map(([kk, l]) => <option key={kk} value={kk}>{l}</option>)}</Select>
+                    <Select value={e.parent ?? ""} onChange={(ev) => edit(e.id, { parent: ev.target.value || null })} aria-label={L("שייך ל", "Belongs to")}>
                       <option value="">{L("לא שייך ל…", "Belongs to…")}</option>
                       {list.filter((x) => x.id !== e.id && x.kind !== "person").map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                    </select>
+                    </Select>
                     <button type="button" className="link-btn" onClick={() => edit(e.id, { hidden: !e.hidden })}>{e.hidden ? L("הצג", "Show") : L("הסתר", "Hide")}</button>
                   </div>
                 </li>

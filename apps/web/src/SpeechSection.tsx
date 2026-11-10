@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { t } from "./i18n";
 import { VoicePicker } from "./Speak";
+import { Select } from "./ui/Select";
 
 interface Info {
   choice: string;
@@ -32,21 +33,21 @@ export function SpeechSection() {
       <p className="muted small">{t("spIntro")}</p>
       <label className="stack">
         <span>{t("spEngine")}</span>
-        <select value={info.choice} onChange={(e) => void set({ stt: e.target.value })}>
+        <Select value={info.choice} onChange={(e) => void set({ stt: e.target.value })}>
           <option value="auto">{t("spAuto")}</option>
           {info.local.localPossible && <option value="local">{t("spLocal", { model: info.local.recommended.label })}</option>}
           {info.clouds.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-        </select>
+        </Select>
       </label>
       <label className="stack">
         <span>{t("spLanguage")}</span>
-        <select value={info.language} onChange={(e) => void set({ language: e.target.value })}>
+        <Select value={info.language} onChange={(e) => void set({ language: e.target.value })}>
           <option value="auto">{t("spLangAuto")}</option>
           <option value="he">עברית</option>
           <option value="en">English</option>
           <option value="ar">العربية</option>
           <option value="ru">Русский</option>
-        </select>
+        </Select>
       </label>
       {info.local.localPossible && (
         <p className="small">

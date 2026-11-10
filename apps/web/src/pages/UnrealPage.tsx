@@ -17,6 +17,7 @@ import { NewBlueprint } from "../engine/NewBlueprint";
 import { OpenInChat } from "../engine/OpenInChat";
 import { PluginUpdate } from "../engine/PluginUpdate";
 import { UnrealSource } from "../engine/UnrealSource";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -288,9 +289,9 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       {unity && <FoundUnityProjects onAdded={() => { loadStatus(); loadList(); }} />}
       {unity && st.projects.length > 0 && (
         <div className="row ue-projects">
-          <select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>
+          <Select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>
             {st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
-          </select>
+          </Select>
           <AddUnityPackage compact {...(st.active ? { project: st.active } : {})} />
           <ConnectUnityAssistant />
           <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
@@ -320,10 +321,10 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <div className={`ue-body${view === "both" || view === "design" ? " wide" : ""}`}>
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
-            <select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label={unity ? "Script Graph" : "Blueprint"}>
+            <Select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label={unity ? "Script Graph" : "Blueprint"}>
               <option value="">{unity ? L("בחר Script Graph או State Graph", "Choose a Script Graph or State Graph") : L("בחר Blueprint", "Choose a Blueprint")}</option>
               {shown.map((b) => <option key={b.path} value={b.path} disabled={!st.connected && !b.saved}>{b.name}</option>)}
-            </select>
+            </Select>
             <ul>
               {shown.map((b) => (
                 <li key={b.path}>
@@ -393,21 +394,21 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                       <div className="row ue-bubble-head">
                         <strong className="grow" dir="auto">✨ {bp?.graph.name ?? ""}{graph ? ` · ${graph.name}` : ""}</strong>
                         {models.length > 1 && (
-                          <select value={model} onChange={(e) => chooseModel(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
+                          <Select value={model} onChange={(e) => chooseModel(e.target.value)} aria-label={L("המודל שעושה את השינוי", "The model that makes the change")} title={L("המודל שעושה את השינוי", "The model that makes the change")}>
                             <option value="">{L("מודל הצ'אט הפעיל", "Active chat model")}</option>
                             {models.map((m) => <option key={m.id} value={m.id}>{models.filter((x) => x.name === m.name).length > 1 ? `${m.name} · ${m.id.split("/")[0]}` : m.name}</option>)}
-                          </select>
+                          </Select>
                         )}
                         <button type="button" className="icon-btn" onClick={() => setBubble(false)} aria-label={L("סגור", "Close")}>✕</button>
                       </div>
                       {!unity && (
                         <div className="row ue-bubble-link">
-                          <select value={linked} onChange={(e) => (e.target.value === "+" ? void createConversation({ kind: "chat" }).then((id) => id && link(id), (er: Error) => toast(er.message)) : link(e.target.value))} aria-label={L("לאן הבקשות הולכות", "Where requests go")} title={L("חיבור לצ'אט רגיל: הבקשות הולכות לצ'אט (עם כל הכלים שלו) ונשמרות ברשימת הצ'אטים", "Connect to a regular chat: requests go to that chat (with all its tools) and are kept in the chat list")}>
+                          <Select value={linked} onChange={(e) => (e.target.value === "+" ? void createConversation({ kind: "chat" }).then((id) => id && link(id), (er: Error) => toast(er.message)) : link(e.target.value))} aria-label={L("לאן הבקשות הולכות", "Where requests go")} title={L("חיבור לצ'אט רגיל: הבקשות הולכות לצ'אט (עם כל הכלים שלו) ונשמרות ברשימת הצ'אטים", "Connect to a regular chat: requests go to that chat (with all its tools) and are kept in the chat list")}>
                             <option value="">{L("✨ עריכה מהירה (בלי צ'אט)", "✨ Quick edit (no chat)")}</option>
                             {linked && !linkedTitle && <option value={linked}>{L("💬 הצ'אט המחובר", "💬 The connected chat")}</option>}
                             {conversations.slice(0, 15).map((c) => <option key={c.id} value={c.id}>💬 {c.title}</option>)}
                             <option value="+">＋ {L("צ'אט חדש מחובר", "New connected chat")}</option>
-                          </select>
+                          </Select>
                           {linked && <a className="small" href={`#/c/${linked}`}>{L("פתח", "Open")}</a>}
                         </div>
                       )}

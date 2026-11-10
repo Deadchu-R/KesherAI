@@ -4,6 +4,7 @@ import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { usePersonas } from "../Personas";
 import { RoutinesSection } from "../Routines";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -56,7 +57,7 @@ function TestEditor({ t, onChange }: { t: Test; onChange: (t: Test) => void }) {
   return (
     <div className="row pl-test">
       <input value={t.text} onChange={(e) => onChange({ ...t, text: e.target.value })} placeholder="{{answer}}" dir="auto" />
-      <select value={`${t.not ? "!" : ""}${t.kind}`} onChange={(e) => onChange({ ...t, not: e.target.value.startsWith("!"), kind: e.target.value.replace("!", "") as Test["kind"] })}>
+      <Select value={`${t.not ? "!" : ""}${t.kind}`} onChange={(e) => onChange({ ...t, not: e.target.value.startsWith("!"), kind: e.target.value.replace("!", "") as Test["kind"] })}>
         <option value="contains">{L("מכיל", "contains")}</option>
         <option value="!contains">{L("לא מכיל", "does not contain")}</option>
         <option value="equals">{L("שווה ל", "equals")}</option>
@@ -65,7 +66,7 @@ function TestEditor({ t, onChange }: { t: Test; onChange: (t: Test) => void }) {
         <option value="!empty">{L("לא ריק", "is not empty")}</option>
         <option value="ask">{L("לפי המודל: כן", "model says yes to")}</option>
         <option value="!ask">{L("לפי המודל: לא", "model says no to")}</option>
-      </select>
+      </Select>
       {t.kind !== "empty" && <input className="grow" value={t.value ?? ""} onChange={(e) => onChange({ ...t, value: e.target.value })} placeholder={t.kind === "ask" ? L("השאלה, למשל: האם זה מאושר?", "The question, e.g. Is it approved?") : L("מה לחפש", "What to look for")} dir="auto" />}
     </div>
   );
@@ -108,10 +109,10 @@ function Steps({ steps, onChange, depth, inLoop }: { steps: Step[]; onChange: (s
                 {out(s, i)}
                 {personas.length > 0 && (
                   <label className="pl-field">{L("פרסונה", "Persona")}
-                    <select value={String(s.persona ?? "")} onChange={(e) => set(i, { ...s, persona: e.target.value || undefined })}>
+                    <Select value={String(s.persona ?? "")} onChange={(e) => set(i, { ...s, persona: e.target.value || undefined })}>
                       <option value="">{L("ללא", "None")}</option>
                       {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
+                    </Select>
                   </label>
                 )}
                 {field(s, i, "model", L("מודל (ריק = הפעיל)", "Model (empty = active)"), false, true)}
@@ -136,11 +137,11 @@ function Steps({ steps, onChange, depth, inLoop }: { steps: Step[]; onChange: (s
             <>
               <div className="row">
                 <label className="pl-field">{L("סוג", "Kind")}
-                  <select value={String(s.mode)} onChange={(e) => set(i, { ...s, mode: e.target.value, ...(e.target.value === "until" && !s.until ? { until: { kind: "contains", text: "{{answer}}", value: "" } } : {}) })}>
+                  <Select value={String(s.mode)} onChange={(e) => set(i, { ...s, mode: e.target.value, ...(e.target.value === "until" && !s.until ? { until: { kind: "contains", text: "{{answer}}", value: "" } } : {}) })}>
                     <option value="lines">{L("לכל שורה ב…", "For each line of…")}</option>
                     <option value="times">{L("מספר פעמים", "A number of times")}</option>
                     <option value="until">{L("עד ש…", "Until…")}</option>
-                  </select>
+                  </Select>
                 </label>
                 {s.mode === "lines" && field(s, i, "over", L("הטקסט ({{item}} = השורה)", "The text ({{item}} = the line)"))}
                 {s.mode === "times" && <label className="pl-field">{L("כמה פעמים", "How many")}<input type="number" min={1} max={500} value={Number(s.count ?? 3)} onChange={(e) => set(i, { ...s, count: Number(e.target.value) })} /></label>}
@@ -153,10 +154,10 @@ function Steps({ steps, onChange, depth, inLoop }: { steps: Step[]; onChange: (s
         </li>
       ))}
       <li className="pl-add">
-        <select value="" onChange={(e) => e.target.value && onChange([...steps, newStep(e.target.value)])} aria-label={L("הוספת צעד", "Add a step")}>
+        <Select value="" onChange={(e) => e.target.value && onChange([...steps, newStep(e.target.value)])} aria-label={L("הוספת צעד", "Add a step")}>
           <option value="">{L("+ הוספת צעד…", "+ Add a step…")}</option>
           {TYPES.filter(([t]) => t !== "break" || inLoop).map(([t]) => <option key={t} value={t}>{typeName(t)}</option>)}
-        </select>
+        </Select>
       </li>
     </ol>
   );

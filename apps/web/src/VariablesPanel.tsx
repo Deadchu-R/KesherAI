@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { pinColor } from "./BlueprintCanvas";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -157,14 +158,14 @@ function VarForm(p: { listValues?: boolean | undefined; v: PanelVar; types: Pane
       <div className="row wrap">
         <label className="stack grow">
           <span className="muted">{L("סוג", "Type")}</span>
-          <select dir="ltr" value={base} onChange={(e) => setType(e.target.value, list)}>
+          <Select dir="ltr" value={base} onChange={(e) => setType(e.target.value, list)}>
             {!known && <option value={base}>{base}</option>}
             {groups.map((g) => (
               <optgroup key={g} label={g}>
                 {p.types.filter((t) => t.group === g).map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </optgroup>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="row vars-check">
           <input type="checkbox" checked={list} onChange={(e) => setType(base, e.target.checked)} />
@@ -174,9 +175,9 @@ function VarForm(p: { listValues?: boolean | undefined; v: PanelVar; types: Pane
       {p.access && (
         <label className="stack">
           <span className="muted">{L("גישה", "Access")}</span>
-          <select value={v.access ?? p.access[0]!.value} onChange={(e) => setV({ ...v, access: e.target.value })}>
+          <Select value={v.access ?? p.access[0]!.value} onChange={(e) => setV({ ...v, access: e.target.value })}>
             {p.access.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-          </select>
+          </Select>
         </label>
       )}
       {input === "bool" ? (

@@ -336,7 +336,8 @@ export class SelfWork {
     r.skipped.push({ at: Date.now(), why: why.slice(0, 300) });
     r.failures = 0;
     await this.d.git(r.worktree, ["reset", "--hard", "HEAD"]);
-    await this.d.git(r.worktree, ["clean", "-fd"]);
+    // Keep the run's own notes (.kesher-self/plan.md): found on the PC, the plan was gone after a skip.
+    await this.d.git(r.worktree, ["clean", "-fd", "-e", ".kesher-self"]);
     await this.save();
     await this.d.notify(`🤖 ${L_SKIP}`, `Self-work: ${why.slice(0, 120)}`, `#/c/${r.convId}`);
     await this.d.send(

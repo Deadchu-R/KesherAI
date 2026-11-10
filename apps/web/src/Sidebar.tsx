@@ -10,6 +10,7 @@ import { pageHidden } from "@kesher/shared";
 import { useParts } from "./parts";
 import { QuickMenu } from "./QuickMenu";
 import { AccountButton } from "./AccountButton";
+import { Select } from "./ui/Select";
 
 /** A dialog for a new code session or a new project. */
 function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () => void }) {
@@ -63,14 +64,14 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
         {kind === "code" && projects.length > 0 && (
           <label>
             {t("project")}
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
               <option value="">{t("noProject")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {!(kind === "code" && project?.workspace) && (

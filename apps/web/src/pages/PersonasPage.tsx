@@ -5,6 +5,7 @@ import { createConversation, refreshLibrary, toast } from "../library";
 import { ModelMenu } from "../ModelMenu";
 import { refreshPersonas, usePersonas, type Persona } from "../Personas";
 import { useModels } from "../useModels";
+import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 type Draft = Omit<Persona, "id"> & { id?: string };
@@ -77,10 +78,10 @@ export function PersonasPage() {
           {!!bases.length && (
             <label>
               {L("מאגר ידע לחפש בו קודם", "Knowledge base to search first")}
-              <select value={draft.knowledge ?? ""} onChange={(e) => setDraft({ ...draft, knowledge: e.target.value })}>
+              <Select value={draft.knowledge ?? ""} onChange={(e) => setDraft({ ...draft, knowledge: e.target.value })}>
                 <option value="">{L("ללא", "None")}</option>
                 {bases.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
+              </Select>
             </label>
           )}
           <details className="persona-more">
