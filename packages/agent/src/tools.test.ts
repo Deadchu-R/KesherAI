@@ -77,5 +77,8 @@ describe("list_files in a granted folder", () => {
     assert.doesNotMatch(md1.output, /a\.md/, "the glob is relative to the granted folder");
     const own1 = await tool.run({}, ctx);
     assert.ok(own1.output.includes(granted), "an empty own folder points at the granted one");
+    const search = CODE_TOOLS.find((x) => x.spec.name === "search")!;
+    const hit = await search.run({ pattern: "hi", path: granted, glob: "*.md" }, { ...ctx, signal: new AbortController().signal } as typeof ctx);
+    assert.match(hit.output, /README\.md:1: # hi/);
   });
 });

@@ -5,7 +5,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate } from "@kesher/shared";
 import { api, withToken } from "../api";
-import { desktop, refreshLibrary, useLibrary } from "../library";
+import { desktop, refreshLibrary, useActivity, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
@@ -99,11 +99,22 @@ export function ConversationPage({ id }: { id: string }) {
   const branches = conversations.filter((c) => c.branchOf?.id === id);
   const bottom = useRef<HTMLDivElement>(null);
 
+  // A live stream that went quiet (a phone's network, the tunnel) is opened again with the chat as it is now:
+  // found on the phone, the page kept "Working…" and the stop button after the run had stopped.
+  const [resync, setResync] = useState(0);
+  const shownId = useRef("");
   useEffect(() => {
     let es: EventSource | undefined;
     let cancelled = false;
-    setConv(null);
-    setEvents([]);
+    let heard = Date.now();
+    const watchdog = setInterval(() => {
+      if (!cancelled && !document.hidden && Date.now() - heard > 25_000) setResync((n) => n + 1);
+    }, 5000);
+    if (shownId.current !== id) {
+      shownId.current = id;
+      setConv(null);
+      setEvents([]);
+    }
     setStreaming({});
     setLiveOut({});
     setError("");
@@ -116,6 +127,7 @@ export function ConversationPage({ id }: { id: string }) {
         const last = c.events.at(-1)?.seq ?? 0;
         es = new EventSource(withToken(`/api/conversations/${id}/events?after=${last}`));
         es.onmessage = (m) => {
+          heard = Date.now();
           const e = JSON.parse(m.data as string) as AgentEvent | ({ type: "info" } & AgentSessionInfo) | { type: "ping" };
           if (e.type === "ping") return;
           if (e.type === "info") {
@@ -143,9 +155,19 @@ export function ConversationPage({ id }: { id: string }) {
       .catch((e: Error) => setError(e.message));
     return () => {
       cancelled = true;
+      clearInterval(watchdog);
       es?.close();
     };
-  }, [id]);
+  }, [id, resync]);
+  // The activity list (polled every few seconds) says the run ended but this page still shows it working: catch up.
+  const activity = useActivity();
+  const shownBusy = info?.status === "running" || info?.status === "waiting";
+  const serverBusy = !!activity[id];
+  useEffect(() => {
+    if (!shownBusy || serverBusy) return;
+    const tm = setTimeout(() => setResync((n) => n + 1), 4000);
+    return () => clearTimeout(tm);
+  }, [shownBusy, serverBusy]);
 
   // Follow new messages and steps while the user is at the bottom (reading further up stays put). The composer is
   // sticky over the end of the list, so the marker keeps a margin of its height (else it counts as already visible).
@@ -684,7 +706,7 @@ export function ConversationPage({ id }: { id: string }) {
                 busy ? (
                   <>
                     {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
-                    <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" })} aria-label={t("stop")}>■</button>
+                    <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500))} aria-label={t("stop")}>■</button>
                   </>
                 ) : undefined
               }

@@ -252,7 +252,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       if (e.type !== "assistant_delta") sse.send({ type: "info", ...session.info() });
     };
     session.on("event", onEvent);
-    const ping = setInterval(() => sse.send({ type: "ping" }), 25_000);
+    // Every 10 s: the page reopens a stream that stayed quiet for 25 s (a phone network or the tunnel can stall it silently).
+    const ping = setInterval(() => sse.send({ type: "ping" }), 10_000);
     sse.closed.addEventListener("abort", () => {
       clearInterval(ping);
       session.off("event", onEvent);

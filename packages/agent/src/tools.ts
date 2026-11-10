@@ -209,6 +209,7 @@ const searchTool: AgentTool = {
       properties: {
         pattern: { type: "string", description: "JavaScript regular expression, case-insensitive." },
         glob: { type: "string", description: "Only search files matching this glob, e.g. \"**/*.cs\"." },
+        path: { type: "string", description: "Folder to search (a granted folder in full). Default: the project root." },
       },
       required: ["pattern"],
     },
@@ -222,11 +223,18 @@ const searchTool: AgentTool = {
       throw new Error(`Invalid regular expression: ${(err as Error).message}`);
     }
     const globRe = str(input, "glob", false) ? globToRegExp(str(input, "glob")) : undefined;
+    // Like list_files: a granted folder is searched by its own paths (a plain chat with the board's project).
+    const dir = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path", false) || ".");
+    const real = (f: string) => { try { return realpathSync.native(f); } catch { return f; } };
+    const rd = relative(real(root), real(dir));
+    const inside = !rd.startsWith("..") && !isAbsolute(rd);
+    const grants = (ctx.extraRoots ?? []).filter((g) => g !== dir);
     const hits: string[] = [];
-    for await (const f of walk(root, root)) {
+    for await (const f of walk(root, dir)) {
       ctx.signal.throwIfAborted();
-      const rel = displayPath(root, f);
-      if (globRe && !globRe.test(rel)) continue;
+      const own = inside ? displayPath(root, f) : relative(dir, f).split(sep).join("/");
+      const rel = inside ? own : f;
+      if (globRe && !globRe.test(own)) continue;
       const info = await stat(f).catch(() => undefined);
       if (!info || info.size > 1024 * 1024) continue;
       const text = await readFile(f, "utf8").catch(() => "");
@@ -236,6 +244,7 @@ const searchTool: AgentTool = {
       });
       if (hits.length >= 300) break;
     }
+    if (!hits.length && inside && grants.length) return { output: `No matches in your own folder. You can also search: ${grants.join(", ")} (pass it as path).` };
     return { output: hits.length ? hits.join("\n") : "No matches." };
   },
 };
