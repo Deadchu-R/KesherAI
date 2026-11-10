@@ -228,6 +228,23 @@ const searchTool: AgentTool = {
   },
 };
 
+/**
+ * Stops write_file from replacing a big existing file with much less (seen on the PC: a local model that could not
+ * read a 2,000-line file whole "rewrote" it from the parts it had read).
+ *
+ * @param path - As the model gave it.
+ * @param before - The file now (null when new).
+ * @param content - What the model wants to write.
+ */
+export function guardRewrite(path: string, before: string | null, content: string): void {
+  if (before === null) return;
+  const was = before.split("\n").length;
+  const now = content.split("\n").length;
+  if (was > 300 && now < was * 0.8) {
+    throw new Error(`write_file would replace ${path} (${was} lines) with ${now} lines, removing ${was - now}. Change the part you need with edit_file instead (read that part with read_file offset/limit first). If removing them is really intended, delete them with edit_file.`);
+  }
+}
+
 const writeFileTool: AgentTool = {
   risk: "write",
   spec: {
@@ -245,13 +262,16 @@ const writeFileTool: AgentTool = {
   async preview(input, ctx) {
     const root = workspaceOf(ctx);
     const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
-    return makeDiff(displayPath(root, path), await readText(path), str(input, "content"));
+    const before = await readText(path);
+    guardRewrite(str(input, "path"), before, str(input, "content"));
+    return makeDiff(displayPath(root, path), before, str(input, "content"));
   },
   async run(input, ctx) {
     const root = workspaceOf(ctx);
     const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
     const before = await readText(path);
     const content = str(input, "content");
+    guardRewrite(str(input, "path"), before, content);
     await mkdir(dirname(path), { recursive: true });
     ctx.recordChange(path, before);
     await writeFile(path, content, "utf8");
@@ -259,6 +279,44 @@ const writeFileTool: AgentTool = {
     return { output: `${before === null ? "Created" : "Wrote"} ${rel} (${content.split("\n").length} lines).`, diff: makeDiff(rel, before, content) };
   },
 };
+
+/** read_file's line prefix (`  123  `). */
+const LINE_NO = /^\s*\d+ {2}/;
+
+/**
+ * Finds `oldText` in `before` line by line, ignoring each line's leading and trailing spaces (and read_file's line
+ * numbers when every line has one), and replaces it with `newText` moved to the file's indentation.
+ *
+ * @param before - The file.
+ * @param oldText - What the model asked to replace.
+ * @param newText - Its replacement.
+ * @param eol - The file's line ending.
+ * @returns The new file, or undefined when there is no single match.
+ */
+export function looseEdit(before: string, oldText: string, newText: string, eol: string): string | undefined {
+  let olds = oldText.split(/\r?\n/);
+  let news = newText.split(/\r?\n/);
+  const numbered = (ls: string[]) => ls.filter((l) => l.trim()).length > 0 && ls.filter((l) => l.trim()).every((l) => LINE_NO.test(l));
+  if (numbered(olds)) {
+    olds = olds.map((l) => l.replace(LINE_NO, ""));
+    if (numbered(news)) news = news.map((l) => l.replace(LINE_NO, ""));
+  }
+  while (olds.length && !olds[0]!.trim()) olds.shift();
+  while (olds.length && !olds[olds.length - 1]!.trim()) olds.pop();
+  if (!olds.length) return undefined;
+  const lines = before.split(/\r?\n/);
+  const hits: number[] = [];
+  for (let i = 0; i + olds.length <= lines.length && hits.length < 2; i++) {
+    if (olds.every((o, j) => o.trim() === lines[i + j]!.trim())) hits.push(i);
+  }
+  if (hits.length !== 1) return undefined;
+  const at = hits[0]!;
+  const indent = (s: string) => s.match(/^\s*/)![0];
+  const fileIndent = indent(lines[at]!);
+  const modelIndent = indent(olds[0]!);
+  const moved = news.map((l) => (!l.trim() ? l : l.startsWith(modelIndent) ? fileIndent + l.slice(modelIndent.length) : fileIndent + l.trimStart()));
+  return [...lines.slice(0, at), ...moved, ...lines.slice(at + olds.length)].join(eol);
+}
 
 async function applyEdit(ctx: ToolContext, input: Record<string, unknown>) {
   const root = workspaceOf(ctx);
@@ -273,7 +331,14 @@ async function applyEdit(ctx: ToolContext, input: Record<string, unknown>) {
   const needle = before.includes(oldText) ? oldText : oldText.replace(/\r?\n/g, eol);
   const replacement = needle === oldText ? newText : newText.replace(/\r?\n/g, eol);
   const count = before.split(needle).length - 1;
-  if (count === 0) throw new Error("old_text was not found in the file. Read the file again and copy the exact text, including spaces.");
+  if (count === 0) {
+    // Local models often get the indentation or trailing spaces wrong, or copy read_file's line numbers (seen on the
+    // PC: three failed tries, then the model rewrote a whole 2,000-line file). Like Aider, match line by line ignoring
+    // that, when the match is unique, and keep the file's own indentation.
+    const loose = looseEdit(before, oldText, newText, eol);
+    if (loose) return { path, before, after: loose, rel: displayPath(root, path) };
+    throw new Error("old_text was not found in the file. Read the file again and copy the exact text, including spaces.");
+  }
   if (count > 1 && input.replace_all !== true) {
     throw new Error(`old_text appears ${count} times. Add more surrounding lines so it is unique, or set replace_all.`);
   }

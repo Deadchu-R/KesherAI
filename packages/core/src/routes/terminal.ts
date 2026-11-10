@@ -139,23 +139,4 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
       return reply.code(400).send({ error: (err as Error).message });
     }
   });
-
-  /** `git status` and `git diff` of the folder, for the Changes tab. */
-  app.get<{ Params: { id: string } }>("/api/conversations/:id/git", async (req, reply) => {
-    const root = await folderOf(req.params.id);
-    if (!root) return reply.code(404).send({ error: "Conversation not found" });
-    const git = (args: string[]) =>
-      new Promise<{ code: number; out: string }>((resolve) => {
-        const p = spawn("git", args, { cwd: root, windowsHide: true });
-        let out = "";
-        p.stdout.on("data", (b: Buffer) => (out += b.toString()));
-        p.stderr.on("data", (b: Buffer) => (out += b.toString()));
-        p.on("error", () => resolve({ code: -1, out: "" }));
-        p.on("close", (code) => resolve({ code: code ?? -1, out }));
-      });
-    const status = await git(["status", "--porcelain=v1", "-b"]);
-    if (status.code !== 0) return { repo: false };
-    const diff = await git(["diff", "--no-color", "HEAD"]);
-    return { repo: true, status: status.out, diff: diff.out.slice(0, 400_000) };
-  });
 }

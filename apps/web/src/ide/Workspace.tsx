@@ -4,6 +4,7 @@ import { api, withToken } from "../api";
 import { t } from "../i18n";
 import { EditorPane } from "./Editor";
 import { TerminalPane } from "./Terminal";
+import { GitPanel } from "./GitPanel";
 
 interface FileItem { path: string; size: number }
 interface Node { name: string; path: string; children?: Map<string, Node> }
@@ -51,13 +52,13 @@ function Tree({ node, depth, open, toggle, onOpen, current }: { node: Node; dept
  * @param props.convId - Conversation id.
  * @param props.events - The conversation's events, for the Changes tab.
  * @param props.refresh - Changes whenever a tool finished.
+ * @param props.onFixInChat - Puts text into the chat's message box (a failed git step).
  */
-export function Workspace({ convId, events, refresh }: { convId: string; events: AgentEvent[]; refresh: number }) {
+export function Workspace({ convId, events, refresh, onFixInChat }: { convId: string; events: AgentEvent[]; refresh: number; onFixInChat?: (text: string) => void }) {
   const [tab, setTab] = useState<"files" | "changes" | "terminal">("files");
   const [files, setFiles] = useState<FileItem[]>([]);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [current, setCurrent] = useState("");
-  const [git, setGit] = useState<{ repo: boolean; status?: string; diff?: string } | null>(null);
   // Keep the terminal alive while other tabs are shown.
   const [terminalStarted, setTerminalStarted] = useState(false);
 
@@ -65,9 +66,8 @@ export function Workspace({ convId, events, refresh }: { convId: string; events:
     void api<{ files: FileItem[] }>(`/api/conversations/${convId}/files`).then((d) => setFiles(d.files)).catch(() => undefined);
   }, [convId, refresh]);
   useEffect(() => {
-    if (tab === "changes") void api<typeof git>(`/api/conversations/${convId}/git`).then(setGit).catch(() => setGit(null));
     if (tab === "terminal") setTerminalStarted(true);
-  }, [tab, refresh]);
+  }, [tab]);
 
   const tree = useMemo(() => buildTree(files), [files]);
   const changes = events.filter((e): e is Extract<AgentEvent, { type: "tool_result" }> => e.type === "tool_result" && !!e.diff);
@@ -109,7 +109,8 @@ export function Workspace({ convId, events, refresh }: { convId: string; events:
 
       {tab === "changes" && (
         <div className="ws-changes">
-          {changes.length === 0 && !git?.diff && <p className="muted">{t("noChanges")}</p>}
+          <GitPanel convId={convId} refresh={refresh} {...(onFixInChat ? { onFixInChat } : {})} />
+          {changes.length > 0 && <strong className="small muted">{t("ws-agentEdits")}</strong>}
           {changes.map((c) => (
             <details key={c.seq} open={changes.length < 4}>
               <summary className="mono" dir="ltr">{c.diff!.split("\n")[0]?.replace(/^---\s+(a\/)?/, "")}</summary>
@@ -123,13 +124,6 @@ export function Workspace({ convId, events, refresh }: { convId: string; events:
               </pre>
             </details>
           ))}
-          {git?.repo && (
-            <details>
-              <summary>{t("gitStatus")}</summary>
-              <pre className="code" dir="ltr">{git.status}</pre>
-              {git.diff && <pre className="code diff" dir="ltr">{git.diff}</pre>}
-            </details>
-          )}
         </div>
       )}
 

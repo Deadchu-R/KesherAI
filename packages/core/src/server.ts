@@ -65,6 +65,7 @@ import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
 import { ProjectFacts } from "./project-facts.js";
 import { unrealSourceRoutes } from "./routes/unreal-source.js";
 import { projectFactsRoutes } from "./routes/project-facts.js";
+import { gitRoutes } from "./routes/git.js";
 import { lspRoutes } from "./routes/lsp.js";
 import { codeRoutes } from "./routes/code.js";
 import { guardRoutes } from "./routes/guard.js";
@@ -1036,6 +1037,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await unrealRoutes(app, services);
   unrealSourceRoutes(app, services);
   await projectFactsRoutes(app, services);
+  await gitRoutes(app, services);
   lspRoutes(app, services);
   codeRoutes(app, services);
   await unityRoutes(app, services);

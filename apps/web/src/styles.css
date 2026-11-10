@@ -1724,3 +1724,18 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .mcp-found-cmd { overflow-wrap: anywhere; opacity: .85; }
 .found-persona { align-items: flex-start; gap: 10px; }
 .found-persona .grow { display: grid; gap: 2px; min-width: 0; }
+
+/* Git panel (code page → Changes) */
+.git-panel { gap: 8px; }
+.git-head { gap: 8px; align-items: center; }
+.git-add { color: var(--good); }
+.git-del { color: var(--bad); }
+.git-file { display: flex; gap: 8px; align-items: center; width: 100%; text-align: start; background: none; border: 1px solid transparent; padding: 5px 6px; border-radius: 6px; }
+.git-file:hover, .git-file.on { border-color: var(--border-strong); }
+.git-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.git-state { font: 600 11px/1 var(--mono, monospace); width: 18px; text-align: center; flex: none; }
+.git-state.s-M { color: var(--live); } .git-state.s-A, .git-state.s-n { color: var(--good); } .git-state.s-D { color: var(--bad); } .git-state.s-R { color: #93c5fd; }
+.git-fail pre, .git-panel .diff { max-height: 40vh; overflow: auto; }
+.git-branches .list { max-height: 30vh; overflow: auto; }
+.git-panel textarea { width: 100%; font: inherit; }
+@media (max-width: 760px) { .git-head > .grow { display: none; } .git-head .primary { margin-inline-start: auto; } }

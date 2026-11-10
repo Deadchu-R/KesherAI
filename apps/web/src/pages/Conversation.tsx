@@ -701,7 +701,7 @@ export function ConversationPage({ id }: { id: string }) {
       </div>
       {showIde && (
         <Suspense fallback={<aside className="workspace"><p className="muted ws-empty">{t("loading")}</p></aside>}>
-          <Workspace convId={id} events={events} refresh={toolResults} />
+          <Workspace convId={id} events={events} refresh={toolResults} onFixInChat={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)} />
         </Suspense>
       )}
       </div>
