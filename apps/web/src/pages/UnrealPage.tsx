@@ -291,7 +291,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           <select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>
             {st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
           </select>
-          <AddUnityPackage compact />
+          <AddUnityPackage compact {...(st.active ? { project: st.active } : {})} />
           <ConnectUnityAssistant />
           <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
             <button type="button" role="tab" aria-selected={source === "graphs"} className={source === "graphs" ? "on" : ""} onClick={() => setSource("graphs")}>{L("גרפים", "Graphs")}</button>
