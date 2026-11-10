@@ -80,6 +80,12 @@ export function mapUpdate(u: SessionUpdate): AcpUpdate | undefined {
   }
 }
 
+/** Agents' processes, ended when KesherAI quits. */
+const running = new Set<ChildProcess>();
+process.once("exit", () => {
+  for (const c of running) c.kill();
+});
+
 /** A connection to one ACP agent, with one session at a time. */
 export class AcpAgent {
   private sessionId?: string;
@@ -141,6 +147,9 @@ export class AcpAgent {
    */
   static async spawn(command: string, args: string[], cwd: string, h: AcpHandlers, env: NodeJS.ProcessEnv = process.env): Promise<AcpAgent> {
     const child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    running.add(child);
+    child.once("exit", () => running.delete(child));
+    child.stderr?.resume();
     await new Promise<void>((resolve, reject) => {
       child.once("spawn", () => resolve());
       child.once("error", reject);

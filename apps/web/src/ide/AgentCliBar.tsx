@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
+import { createConversation, toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -13,8 +14,9 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
  * sign-in. And Claude Code running on KesherAI's own model when it is installed.
  *
  * @param props.onRun - Opens a fresh terminal that starts the named command.
+ * @param props.convId - The code chat (its folder is where a new Antigravity chat works).
  */
-export function AgentCliBar({ onRun }: { onRun: (run: string) => void }) {
+export function AgentCliBar({ onRun, convId }: { onRun: (run: string) => void; convId?: string }) {
   const [st, setSt] = useState<{ agy: { installed: boolean; canInstall: boolean }; claude?: { installed: boolean } } | null>(null);
   const load = () => void api<NonNullable<typeof st>>("/api/agent-clis").then(setSt, () => setSt(null));
   useEffect(load, []);
@@ -26,6 +28,11 @@ export function AgentCliBar({ onRun }: { onRun: (run: string) => void }) {
           <button type="button" className="primary" onClick={() => onRun("agy")} title={L("פותח טרמינל חדש בתיקיית הפרויקט ומפעיל בו את Antigravity CLI של Google. בפעם הראשונה הוא יבקש להתחבר עם חשבון Google (מנוי Pro עובד).", "Opens a new terminal in the project folder and starts Google's Antigravity CLI. The first time, it asks you to sign in with Google (a Pro plan works).")}>
             ✦ Antigravity CLI
           </button>
+          {convId && (
+            <button type="button" onClick={() => void api<{ workspace?: string }>(`/api/conversations/${convId}`).then((c) => (c.workspace ? createConversation({ kind: "code", workspace: c.workspace, modelId: "agent/antigravity" }) : Promise.reject(new Error(L("לשיחה הזו אין תיקיית פרויקט.", "This chat has no project folder.")))), (e: Error) => toast(e.message)).catch((e: Error) => toast(e.message))} title={L("שיחת קוד חדשה באותה תיקייה, ש־Antigravity עונה בה (עם הכלים שלו). השינויים שלו מופיעים בצ'אט, ובקשות האישור שלו מגיעות גם ל־🔔 ולטלפון. צריך להתחבר אליו פעם אחת קודם, בכפתור משמאל.", "A new code chat in the same folder, answered by Antigravity (with its own tools). Its changes show in the chat, and its approval requests also reach 🔔 and the phone. Sign in to it once first, with the button next to this.")}>
+              💬 {L("שיחה עם Antigravity", "Chat with Antigravity")}
+            </button>
+          )}
           <button type="button" onClick={() => onRun("agy-update")}>{L("עדכון", "Update")}</button>
         </>
       ) : st.agy.canInstall ? (

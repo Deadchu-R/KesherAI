@@ -1,4 +1,5 @@
 import type { PersonaParams } from "./personas.js";
+import { outsideAgent } from "./acp-chat.js";
 import type { Checkpoints } from "./checkpoints.js";
 import { personaPrompt, type Personas } from "./personas.js";
 import type { ProjectFacts } from "./project-facts.js";
@@ -203,6 +204,8 @@ function steerImagesToEngine(tool: AgentTool): AgentTool {
  * tools) and saves them as they change.
  */
 export class ConversationManager {
+  /** Outside agents (their CLI processes) of open conversations. */
+  private readonly outside = new Map<string, { close: () => void }>();
   private readonly sessions = new Map<string, AgentSession>();
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
   private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
@@ -1058,9 +1061,13 @@ export class ConversationManager {
     const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     const workspace = this.workspaceOf(conversation);
     if (workspace && conversation.kind !== "code") await mkdir(workspace, { recursive: true });
+    // A code chat on an outside agent (Antigravity CLI): it answers with its own tools, in the folder.
+    const outside = conversation.kind === "code" ? outsideAgent(conversation.modelId, workspace) : undefined;
+    if (outside) this.outside.set(id, outside);
     const session = new AgentSession({
       id,
       modelId: conversation.modelId,
+      ...(outside ? { external: outside } : {}),
       model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params),
       mode: conversation.mode,
       ...(workspace ? { workspace } : {}),
@@ -1540,6 +1547,8 @@ export class ConversationManager {
   async delete(id: string): Promise<void> {
     this.sessions.get(id)?.stop();
     this.sessions.delete(id);
+    this.outside.get(id)?.close();
+    this.outside.delete(id);
     clearTimeout(this.saveTimers.get(id));
     await this.deps.library.deleteConversation(id);
   }

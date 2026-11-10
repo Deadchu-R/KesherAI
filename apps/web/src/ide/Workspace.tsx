@@ -132,7 +132,7 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
 
       {terminalStarted && (
         <div className="ws-terminal" hidden={tab !== "terminal"}>
-          <AgentCliBar onRun={(r) => setTermRun({ run: r, n: termRun.n + 1 })} />
+          <AgentCliBar convId={convId} onRun={(r) => setTermRun({ run: r, n: termRun.n + 1 })} />
           <TerminalPane key={termRun.n} convId={convId} {...(termRun.run ? { run: termRun.run } : {})} />
         </div>
       )}

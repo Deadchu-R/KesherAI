@@ -432,3 +432,66 @@ test("when the model counts more tokens than the estimate, KesherAI learns its r
   assert.ok(session.events.some((e) => e.type === "assistant" && e.text === "fits now"));
   assert.ok(!session.events.some((e) => e.type === "status" && e.status === "error"));
 });
+
+test("an outside agent's turn shows its text, steps and diff, and its approval question is a normal approval card", async () => {
+  const s = new AgentSession({
+    id: "x",
+    modelId: "acp/agy",
+    model: async () => {
+      throw new Error("not used");
+    },
+    mode: "ask",
+    tools: [],
+    systemPrompt: "",
+    external: {
+      turn: async (text, io) => {
+        io.text(`On it: ${text}. `);
+        io.tool({ id: "t1", name: "Edit a.ts" });
+        const d = await io.approve({ callId: "t1", name: "Edit a.ts", preview: "a → b", reason: "Antigravity asks first." });
+        io.tool({ id: "t1", name: "Edit a.ts", ok: d !== "deny", output: d, diff: "-a\n+b" });
+        io.text("Done.");
+      },
+    },
+  });
+  const asked = waitFor(s, (e) => e.type === "approval_request");
+  s.send("change a");
+  const req = (await asked) as Extract<AgentEvent, { type: "approval_request" }>;
+  assert.equal(s.info().status, "waiting");
+  assert.deepEqual(s.info().pendingApprovals, [req.requestId]);
+  assert.equal(s.approve(req.requestId, "allow"), true);
+  await waitFor(s, (e) => e.type === "status" && e.status === "idle");
+  const kinds = s.events.map((e) => e.type).filter((t) => t !== "status");
+  assert.deepEqual(kinds, ["user", "tool_call", "approval_request", "approval_result", "tool_result", "assistant"]);
+  const result = s.events.find((e) => e.type === "tool_result") as Extract<AgentEvent, { type: "tool_result" }>;
+  assert.equal(result.ok, true);
+  assert.equal(result.diff, "-a\n+b");
+  assert.equal((s.events.at(-2) as { text?: string }).text ?? (s.events.find((e) => e.type === "assistant") as { text: string }).text, "On it: change a. Done.");
+});
+
+test("Stop during an outside agent's question denies it and ends the turn", async () => {
+  let gotSignal: AbortSignal | undefined;
+  const s = new AgentSession({
+    id: "y",
+    modelId: "acp/agy",
+    model: async () => {
+      throw new Error("not used");
+    },
+    mode: "ask",
+    tools: [],
+    systemPrompt: "",
+    external: {
+      turn: async (_t, io, signal) => {
+        gotSignal = signal;
+        const d = await io.approve({ callId: "t1", name: "Run tests", preview: "pnpm test", reason: "asks" });
+        assert.equal(d, "deny");
+      },
+    },
+  });
+  const asked = waitFor(s, (e) => e.type === "approval_request");
+  s.send("go");
+  await asked;
+  s.stop();
+  await waitFor(s, (e) => e.type === "status" && e.status === "idle");
+  assert.equal(gotSignal?.aborted, true);
+  assert.ok(s.events.some((e) => e.type === "note" && /Stopped/.test(e.text)));
+});

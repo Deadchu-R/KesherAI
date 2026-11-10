@@ -43,10 +43,34 @@ const REVIEWER_PROMPT =
   "You are the reviewer in a team of AI models. Another model (the worker) did the user's request; you see the request, what it did and its answer. Check that the answer is correct, complete, and actually does what was asked (files really made, programs really built, no instructions left for the user to do by hand). If it is good, reply with the single word APPROVED on the first line, optionally followed by one sentence. Otherwise reply with a short list of concrete problems and how to fix them. Reply in the user's language.";
 
 /** Everything needed to start (or resume) a session. */
+/**
+ * What an outside coding agent (one that runs its own tools, e.g. Antigravity CLI over ACP) gets to show its
+ * turn in the conversation: streamed text, its tool steps, its plan, and approval questions that become
+ * KesherAI's own approval cards (so the notifications page and the phone can answer them too).
+ */
+export interface ExternalIO {
+  /** More of the answer. */
+  text: (delta: string) => void;
+  /** A tool step started or changed. A finished step (`ok` set) shows its output and diff. */
+  tool: (step: { id: string; name: string; input?: Record<string, unknown>; ok?: boolean; output?: string; diff?: string }) => void;
+  /** The agent's plan (shown like a note). */
+  plan: (text: string) => void;
+  /** Asks the user; resolves with their answer. */
+  approve: (req: { callId: string; name: string; preview: string; reason: string }) => Promise<"allow" | "always" | "deny">;
+}
+
+/** An outside agent that answers a message by itself (see {@link ExternalIO}). */
+export interface ExternalAgent {
+  turn: (text: string, io: ExternalIO, signal: AbortSignal) => Promise<void>;
+}
+
+/** How a session is set up. */
 export interface AgentSessionOptions {
   id: string;
   modelId: string;
   model: ModelTurn;
+  /** Set for a conversation run by an outside agent: `model` and the tools are then not used. */
+  external?: ExternalAgent;
   mode: PermissionMode;
   /** Absolute folder for file and terminal tools. */
   workspace?: string;
@@ -124,6 +148,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   readonly events: AgentEvent[];
   readonly messages: AgentMessage[];
   private model: ModelTurn;
+  private readonly external?: ExternalAgent;
   private tools: Map<string, AgentTool>;
   private readonly maxSteps: number;
   private readonly onChange?: (s: AgentSession) => void;
@@ -164,6 +189,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.id = opts.id;
     this.modelId = opts.modelId;
     this.model = opts.model;
+    if (opts.external) this.external = opts.external;
     this.mode = opts.mode;
     if (opts.workspace) this.workspace = opts.workspace;
     this.systemPrompt = opts.systemPrompt;
@@ -638,7 +664,63 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     return [...base, ...full, find];
   }
 
+  /** One turn of an outside agent: its text, steps and approval questions, shown like KesherAI's own. */
+  private async runExternal(ext: ExternalAgent): Promise<void> {
+    const abort = new AbortController();
+    this.abort = abort;
+    this.setStatus("running");
+    const turn = ++this.turn;
+    let text = "";
+    const seen = new Set<string>();
+    const request = [...this.messages].reverse().find((m) => m.role === "user")?.content;
+    const io: ExternalIO = {
+      text: (d) => {
+        if (!d) return;
+        text += d;
+        this.push({ type: "assistant_delta", turn, text: d }, false);
+      },
+      tool: (st) => {
+        if (!seen.has(st.id)) {
+          seen.add(st.id);
+          this.push({ type: "tool_call", callId: st.id, name: st.name, input: st.input ?? {} });
+        }
+        if (st.ok !== undefined) this.push({ type: "tool_result", callId: st.id, name: st.name, ok: st.ok, output: truncate(st.output ?? ""), ...(st.diff ? { diff: st.diff } : {}) });
+      },
+      plan: (t) => this.push({ type: "note", text: t }),
+      approve: async (req) => {
+        const requestId = randomUUID();
+        const { decision, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
+          this.approvals.set(requestId, resolve);
+          this.push({ type: "approval_request", requestId, callId: req.callId, name: req.name, input: {}, preview: req.preview, reason: req.reason, ...(this.lastSaid ? { purpose: this.lastSaid.slice(0, 400) } : {}), ...(this.workspace ? { folder: this.workspace } : {}) });
+          this.setStatus("waiting");
+        });
+        this.push({ type: "approval_result", requestId, decision, ...(feedback ? { feedback } : {}) });
+        if (!abort.signal.aborted) this.setStatus("running");
+        return decision === "allow" || decision === "always" ? decision : "deny";
+      },
+    };
+    try {
+      await ext.turn(typeof request === "string" ? request : "", io, abort.signal);
+      if (text) {
+        this.push({ type: "assistant", turn, text });
+        this.messages.push({ role: "assistant", content: text });
+        this.lastSaid = text;
+      }
+      if (abort.signal.aborted) this.push({ type: "note", text: "Stopped." });
+      this.setStatus("idle");
+    } catch (err) {
+      if (abort.signal.aborted) {
+        this.push({ type: "note", text: "Stopped." });
+        this.setStatus("idle");
+      } else this.setStatus("error", err instanceof Error ? err.message : String(err));
+    } finally {
+      if (this.abort === abort) this.abort = undefined;
+      this.onChange?.(this);
+    }
+  }
+
   private async run(): Promise<void> {
+    if (this.external) return this.runExternal(this.external);
     const abort = new AbortController();
     this.abort = abort;
     this.setStatus("running");
