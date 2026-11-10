@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { isAbsolute, resolve, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { isLocalRequest } from "../auth.js";
+import { pickCodeModel } from "../code-model.js";
 import type { KesherServices } from "../services.js";
 import type { SelfWorkState } from "../self-work.js";
 import type { BoardChange } from "../task-board.js";
@@ -43,14 +44,18 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     if (b.modelId !== undefined && typeof b.modelId !== "string") return reply.code(400).send({ error: "modelId is text." });
     const start = { repo, goal: String(b.goal ?? ""), ...(b.hours !== undefined ? { hours: Number(b.hours) } : {}), check };
     try {
+      // No model chosen: the best one for long coding runs on this computer (see code-model.ts), else the active chat model.
+      const auto = b.modelId ? undefined : pickCodeModel(await s.registry.listAllModels().then((r) => r.models.filter((m) => !m.id.startsWith("main/")), () => []));
       if (host) {
-        // The worker uses this app's models: the chosen one, or the active chat model.
-        const model = b.modelId || s.config.activeModels.chat;
-        return await toWorker("/api/self-work/start", "POST", { ...start, ...(model ? { modelId: `main/${model}` } : {}) }, true);
+        // The worker uses this app's models.
+        const model = b.modelId || auto?.id || s.config.activeModels.chat;
+        const r = await toWorker<{ run: SelfWorkState }>("/api/self-work/start", "POST", { ...start, ...(model ? { modelId: `main/${model}` } : {}) }, true);
+        return { ...r, ...(auto && !b.modelId ? { picked: auto } : {}) };
       }
       const sw = s.selfWork;
       if (!sw) return reply.code(503).send({ error: "Self-work is not ready yet." });
-      return { run: await sw.start({ ...start, ...(b.modelId ? { modelId: b.modelId } : {}) }) };
+      const model = b.modelId || auto?.id;
+      return { run: await sw.start({ ...start, ...(model ? { modelId: model } : {}) }), ...(auto && !b.modelId ? { picked: auto } : {}) };
     } catch (e) {
       return reply.code((e as { code?: number }).code === 409 ? 409 : 400).send({ error: (e as Error).message });
     }

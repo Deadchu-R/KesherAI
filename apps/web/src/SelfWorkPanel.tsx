@@ -7,6 +7,7 @@ import { TaskBoardView } from "./TaskBoardView";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 interface Run {
+  modelId?: string;
   repo: string;
   goal: string;
   branch: string;
@@ -65,10 +66,10 @@ export function SelfWorkPanel(p: { folder: string }) {
   const start = async () => {
     setBusy(true);
     try {
-      const r = await api<{ run: Run }>("/api/self-work/start", { method: "POST", body: { repo: p.folder, goal, hours, check } });
+      const r = await api<{ run: Run; picked?: { id: string; why: string } }>("/api/self-work/start", { method: "POST", body: { repo: p.folder, goal, hours, check } });
       setRun(r.run);
       setGoal("");
-      toast(L(`התחיל לעבוד על הענף ${r.run.branch}`, `Started on the branch ${r.run.branch}`));
+      toast(L(`התחיל לעבוד על הענף ${r.run.branch}${r.picked ? ` עם ${r.picked.id.split("/").pop()} (${r.picked.why})` : ""}`, `Started on the branch ${r.run.branch}${r.picked ? ` with ${r.picked.id.split("/").pop()} (${r.picked.why})` : ""}`));
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -88,7 +89,7 @@ export function SelfWorkPanel(p: { folder: string }) {
           {active && run ? (
             <>
               <p dir="auto">{run.goal}</p>
-              <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+              <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{run.modelId ? ` · ${run.modelId.replace(/^main\//, "").split("/").pop()}` : ""}</p>
               {run.note && <p className="small">{run.note}</p>}
               {log.waiting.map((w) => (
                 <div key={w.requestId} className="card approval">

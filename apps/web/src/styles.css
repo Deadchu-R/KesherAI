@@ -1698,3 +1698,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 /* Read-only code coloured by the editor (chat blocks, translations). */
 .code-view code span { white-space: pre; }
 .code-ai .ue-bubble-head select { max-width: 140px; }
+/* The code editor's toolbar (also on phones) and its touch engine. */
+.code-editor-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 0; }
+.editor-pane > .code-editor-wrap { flex: 1; }
+.code-toolbar { gap: 4px; flex-wrap: wrap; align-items: center; }
+.code-toolbar button { padding: 4px 10px; font-size: 13px; min-height: 34px; }
+.touch-editor .cm-editor { height: 100%; font-size: 14px; }
+.touch-editor .cm-scroller { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.kesher-monaco-overflow { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 1000; }

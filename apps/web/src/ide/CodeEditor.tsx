@@ -1,120 +1,59 @@
-import { useEffect, useRef } from "react";
-import * as monaco from "monaco-editor";
-import "./monaco-setup";
-import { liveMarkers, registerCSharpAssist, setProjectTypes } from "./csharp-assist";
-import { languageOf } from "./languages";
-import { fileUri, lspLink, registerLspProviders } from "./lsp-client";
-import { registerInlineSuggestions } from "./inline-suggest";
+import { Suspense, lazy, useRef, useState } from "react";
+import { api } from "../api";
+import { getLocale } from "../i18n";
+import { toast } from "../library";
+import type { EditorHandle, EditorProps } from "./editor-types";
 
-/** A compiler problem to mark in the code (from Unity or Unreal). */
-export interface CodeProblem { line: number; column: number; code: string; message: string; severity: "error" | "warning" }
+export type { CodeProblem } from "./editor-types";
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+// The engines: VS Code's (Monaco) with a mouse and keyboard, CodeMirror on touch screens (Monaco does not work with on-screen keyboards).
+const MonacoEditor = lazy(() => import("./MonacoEditor"));
+const TouchEditor = lazy(() => import("./TouchEditor"));
+const touch = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches;
 
 /**
  * THE code editor of KesherAI: every place that edits code uses it (the IDE
- * panel, Unity scripts, Unreal C++, settings that are code), so an
- * improvement here reaches all of them. VS Code's editor for one file, with Unity-aware help for C#: suggestions
- * (Ctrl+Space, and after a dot), signatures, hovers, a live bracket and
- * `using` check, quick fixes (Ctrl+.), and the compiler's own errors marked on
- * their lines. Ctrl+S saves.
+ * panel, Unity scripts, Unreal C++, Blueprint code), so an improvement here
+ * reaches all of them. A toolbar that always shows (also on a phone):
+ * suggestions, ✨ complete the line with the model chosen for code
+ * suggestions, Tab, undo and redo.
  */
-export default function CodeEditor(p: { path: string; value: string; onChange: (v: string) => void; /** Monaco's language; by default from the path. */ language?: string; problems?: CodeProblem[]; projectTypes?: string[]; onSave?: () => void; readOnly?: boolean; minimap?: boolean; className?: string; /** A language server for this file (Rider-like help): its WebSocket, the project folder and the file's full path. */ lsp?: { url: string; root: string; file: string; onStatus?: (s: string) => void } }) {
-  const language = p.language ?? languageOf(p.path);
-  const box = useRef<HTMLDivElement>(null);
-  const ed = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const change = useRef(p.onChange);
-  change.current = p.onChange;
-  const save = useRef(p.onSave);
-  save.current = p.onSave;
-  const own = useRef(false);
-
-  useEffect(() => {
-    if (!box.current) return;
-    if (language === "csharp") registerCSharpAssist();
-    if (!p.readOnly) registerInlineSuggestions();
-    const light = document.documentElement.dataset.light === "1";
-    const e = monaco.editor.create(box.current, {
-      theme: light ? "vs" : "vs-dark",
-      automaticLayout: true,
-      fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-      fontSize: 13,
-      minimap: { enabled: !!p.minimap },
-      scrollBeyondLastLine: false,
-      tabSize: 4,
-      bracketPairColorization: { enabled: true },
-      stickyScroll: { enabled: true },
-      quickSuggestions: { other: true, comments: false, strings: false },
-      suggestOnTriggerCharacters: true,
-      wordBasedSuggestions: "currentDocument",
-      fixedOverflowWidgets: true,
-      inlineSuggest: { enabled: true, mode: "subword" },
-      readOnly: !!p.readOnly,
-    });
-    e.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => save.current?.());
-    ed.current = e;
-    return () => {
-      e.getModel()?.dispose();
-      e.dispose();
-      ed.current = null;
-    };
-  }, []);
-
-  // One model per file; the page's text wins unless it is what the editor just sent.
-  useEffect(() => {
-    const e = ed.current;
-    if (!e) return;
-    const uri = monaco.Uri.parse(`kesher:///${p.path.replace(/\\/g, "/")}`);
-    let model = monaco.editor.getModel(uri);
-    if (!model) model = monaco.editor.createModel(p.value, language, uri);
-    if (e.getModel() !== model) {
-      const old = e.getModel();
-      e.setModel(model);
-      if (old && old !== model) old.dispose();
+export default function CodeEditor(p: EditorProps) {
+  const ref = useRef<EditorHandle>(null);
+  const [onTouch] = useState(touch);
+  const [completing, setCompleting] = useState(false);
+  const Engine = onTouch ? TouchEditor : MonacoEditor;
+  const complete = async () => {
+    const h = ref.current;
+    if (!h || completing) return;
+    setCompleting(true);
+    try {
+      const { prefix, suffix } = h.around();
+      const r = await api<{ text: string; off?: boolean }>("/api/code/complete", { method: "POST", body: { prefix, suffix, language: p.language ?? "", path: p.path } });
+      if (r.off) toast(L("בחרו מודל להצעות קוד בהגדרות ← מודלים פעילים ← \"הצעות קוד תוך כדי כתיבה\".", "Choose a model for code suggestions in Settings → Active models → \"Code suggestions while typing\"."));
+      else if (r.text) h.insert(r.text);
+      else toast(L("למודל אין המשך להציע כאן.", "The model has nothing to add here."));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setCompleting(false);
     }
-    if (model.getValue() !== p.value && !own.current) model.pushEditOperations([], [{ range: model.getFullModelRange(), text: p.value }], () => null);
-    own.current = false;
-    const sub = model.onDidChangeContent(() => {
-      own.current = true;
-      change.current(model!.getValue());
-      if (language === "csharp") monaco.editor.setModelMarkers(model!, "live", liveMarkers(model!));
-    });
-    if (language === "csharp") monaco.editor.setModelMarkers(model, "live", liveMarkers(model));
-    return () => sub.dispose();
-  }, [p.path, p.value, language]);
-
-  // The language server gets this file (and every change) once it is ready.
-  useEffect(() => {
-    const model = ed.current?.getModel();
-    if (!p.lsp || !model) return;
-    registerLspProviders();
-    const status = p.lsp.onStatus ?? (() => undefined);
-    const link = lspLink(p.lsp.url, p.lsp.root, status);
-    const uri = fileUri(p.lsp.file);
-    let live = true;
-    void link.ready.then(() => {
-      if (live) {
-        link.open(model, uri);
-        status("ready");
-      }
-    }, (e: Error) => status(`error: ${e.message}`));
-    return () => {
-      live = false;
-      link.close(uri);
-    };
-  }, [p.lsp?.url, p.lsp?.root, p.lsp?.file]);
-
-  useEffect(() => {
-    if (p.projectTypes) setProjectTypes(p.projectTypes);
-  }, [p.projectTypes]);
-
-  useEffect(() => {
-    const model = ed.current?.getModel();
-    if (!model) return;
-    monaco.editor.setModelMarkers(model, "compiler", (p.problems ?? []).map((x) => ({ severity: x.severity === "error" ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning, message: `${x.code}: ${x.message}`, code: x.code, source: "compiler", startLineNumber: x.line, startColumn: x.column, endLineNumber: x.line, endColumn: model.getLineMaxColumn(Math.min(Math.max(1, x.line), model.getLineCount())) })));
-  }, [p.problems, p.path]);
-
-  useEffect(() => {
-    ed.current?.updateOptions({ readOnly: !!p.readOnly });
-  }, [p.readOnly]);
-
-  return <div className={`code-editor ${p.className ?? ""}`} ref={box} dir="ltr" />;
+  };
+  return (
+    <div className="code-editor-wrap">
+      {!p.readOnly && (
+        <div className="row code-toolbar" dir="ltr" role="toolbar" aria-label={L("כלי עריכה", "Editing tools")}>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.suggest()} title={L("השלמה (Ctrl+Space)", "Suggestions (Ctrl+Space)")}>💡 {L("השלמה", "Suggest")}</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} disabled={completing} onClick={() => void complete()} title={L("המודל ממשיך את הקוד מהסמן", "The model continues the code at the cursor")}>{completing ? "…" : `✨ ${L("השלם", "Complete")}`}</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.insert("    ")} title="Tab">⇥</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.undo()} title={L("בטל (Ctrl+Z)", "Undo (Ctrl+Z)")} aria-label={L("בטל", "Undo")}>↶</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.redo()} title={L("חזור (Ctrl+Y)", "Redo (Ctrl+Y)")} aria-label={L("חזור", "Redo")}>↷</button>
+        </div>
+      )}
+      <Suspense fallback={<div className={`code-editor ${p.className ?? ""}`} />}>
+        <Engine ref={ref} {...p} />
+      </Suspense>
+    </div>
+  );
 }
