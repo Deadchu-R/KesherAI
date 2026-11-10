@@ -51,6 +51,12 @@ test("server args always enable tool calling and a sane context", () => {
   assert.deepEqual(LlamaEngine.serverArgs(["-ngl", "99"], true, 2), ["-ngl", "99", "--jinja", "-np", "2", "-c", "49152", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]);
   assert.deepEqual(LlamaEngine.serverArgs(["-np", "4"], false, 2), ["-np", "4", "-c", "32768", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]);
   assert.deepEqual(LlamaEngine.serverArgs(["-ctk", "f16"], false), ["-ctk", "f16", "-c", "32768"]);
+  // Builds that fit: the context comes from the model and fit shrinks it to the free memory, at least 32K per chat.
+  assert.deepEqual(LlamaEngine.serverArgs([], true, 2, true), ["--jinja", "-np", "2", "--fit-ctx", "32768", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]);
+  assert.deepEqual(LlamaEngine.samplingArgs("C:/m/Qwen3.6-27B-UD-Q4_K_XL.gguf"), ["--temp", "0.6", "--top-p", "0.95", "--top-k", "20", "--min-p", "0"]);
+  assert.deepEqual(LlamaEngine.samplingArgs("/m/Qwen3.6-27B.gguf", ["--temp", "1"]), ["--top-p", "0.95", "--top-k", "20", "--min-p", "0"]);
+  assert.deepEqual(LlamaEngine.samplingArgs("/m/gemma-4.gguf"), []);
+  assert.deepEqual(LlamaEngine.serverArgs(["-c", "65536"], true, 1, true), ["-c", "65536", "--jinja", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]);
 });
 
 test("big models get longer to load than small ones", () => {

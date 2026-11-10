@@ -356,12 +356,41 @@ export class LlamaEngine {
    * @returns The arguments to use.
    */
   static gpuArgs(args: readonly string[], version?: string): string[] {
-    const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
-    const fits = build >= 7400;
+    const fits = LlamaEngine.fits(version);
     const oldDefault = args.length === 2 && args[0] === "-ngl" && args[1] === "99";
     if (fits && oldDefault) return [];
     if (!fits && !args.some((a) => a === "-ngl" || a === "--n-gpu-layers" || a === "--gpu-layers")) return [...args, "-ngl", "99"];
     return [...args];
+  }
+
+  /**
+   * The sampling settings a model's makers recommend, as server defaults (a chat or persona that sets its own still
+   * wins). llama-server's own defaults (temperature 0.8, top-k 40, min-p 0.05) are tuned for chat, not for code.
+   *
+   * @param modelPath - The model file.
+   * @param args - Arguments from the config (a setting given there is kept).
+   * @returns Arguments to add.
+   */
+  static samplingArgs(modelPath: string, args: readonly string[] = []): string[] {
+    const name = basename(modelPath).toLowerCase();
+    // Qwen3.5/3.6 model cards: thinking mode for precise coding. Qwen3 Coder's card: temperature 0.7, top-p 0.8.
+    const rec = /qwen3\.[5-9]/.test(name)
+      ? { "--temp": "0.6", "--top-p": "0.95", "--top-k": "20", "--min-p": "0" }
+      : /qwen3-coder/.test(name)
+        ? { "--temp": "0.7", "--top-p": "0.8", "--top-k": "20", "--min-p": "0", "--repeat-penalty": "1.05" }
+        : undefined;
+    if (!rec) return [];
+    const aliases: Record<string, string[]> = { "--temp": ["--temp", "--temperature"], "--top-p": ["--top-p"], "--top-k": ["--top-k"], "--min-p": ["--min-p"], "--repeat-penalty": ["--repeat-penalty"] };
+    return Object.entries(rec).flatMap(([k, v]) => (aliases[k]!.some((a) => args.includes(a)) ? [] : [k, v]));
+  }
+
+  /**
+   * Whether a build fits the model to the free memory by itself (`--fit`, on by default since b7400).
+   *
+   * @param version - The build tag, e.g. `b12110`.
+   */
+  static fits(version?: string): boolean {
+    return Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0) >= 7400;
   }
 
   /**
@@ -384,15 +413,23 @@ export class LlamaEngine {
    * @param extra - Arguments from the config.
    * @param withJinja - Whether to add `--jinja`.
    * @param parallel - Chats answered at once.
+   * @param fits - Whether the build fits the model to memory by itself (see gpuArgs).
    * @returns The full argument list besides model, host and port.
    */
-  static serverArgs(extra: string[], withJinja = true, parallel = 1): string[] {
+  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false): string[] {
     const args = [...extra];
     if (withJinja && !args.includes("--jinja")) args.push("--jinja");
     const own = args.some((a) => a === "-np" || a === "--parallel");
     if (parallel > 1 && !own) args.push("-np", String(parallel));
-    // Room for coding agents (their instructions and tools alone are thousands of tokens): 32K, 16K more per extra chat.
-    if (!args.some((a) => a === "-c" || a === "--ctx-size")) args.push("-c", String(32768 + 16384 * (own ? 0 : parallel - 1)));
+    if (!args.some((a) => a === "-c" || a === "--ctx-size")) {
+      // Builds that fit: no -c, so llama.cpp starts from the model's own context and shrinks it only as far as the
+      // free memory needs, before it moves any layer off the GPU (common/fit.cpp: step 2, then step 3). Models whose
+      // context costs little memory (Qwen3.6: attention in only 16 of 64 layers) then get 100K+ per chat on one card
+      // instead of a fixed 24K. Each chat keeps at least 32K (--fit-ctx is per chat).
+      if (fits) args.push("--fit-ctx", "32768");
+      // Older builds: room for coding agents (their instructions and tools alone are thousands of tokens): 32K, 16K more per extra chat.
+      else args.push("-c", String(32768 + 16384 * (own ? 0 : parallel - 1)));
+    }
     // The context's memory at 8 bits (half of the default 16), so the bigger context fits next to the model.
     if (!args.some((a) => a.startsWith("--cache-type") || a === "-ctk" || a === "-ctv")) args.push("--cache-type-k", "q8_0", "--cache-type-v", "q8_0");
     return args;
@@ -418,7 +455,7 @@ export class LlamaEngine {
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p), ...gpuArgs], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args)], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {
@@ -426,7 +463,7 @@ export class LlamaEngine {
           // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
           if (!/jinja/i.test(this.log.join("\n"))) continue;
           try {
-            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, p), ...gpuArgs], timeoutMs, plan?.env);
+            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args)], timeoutMs, plan?.env);
             this.runningParallel = p;
             return;
           } catch (err2) {
