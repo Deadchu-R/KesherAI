@@ -317,3 +317,9 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Qwen3.8-27B is hybrid: only 16 of its 64 layers have a KV cache (3 DeltaNet layers to every attention layer), so its KV is small (~16 KB per token at f16, ~8 KB at q8_0; wal.sh). Going from q8_0 to q4_0 would save only about 1 GB at 100K tokens. The rest of the memory goes to weights, the recurrent state per slot, the MTP head and compute buffers.
 - **Decision:** keep q8_0. The context is better won back with parallel 1 or fewer MTP guesses, as measured above. TurboQuant (3-bit KV, matched fp16 in one test) can be re-checked when it is in mainline llama.cpp.
 - **Where this stopped:** KV cache research done; nothing to build.
+
+## 2026-11-10 (cont.) — Antigravity CLI on the PC: works end to end
+- With Roee's approval, Antigravity CLI was installed through KesherAI's terminal button (Google's installer) at `%LOCALAPPDATA%\agy\bin\agy.exe`, the path KesherAI already looks in. The Antigravity desktop app (`Programs\antigravity`) does not include the CLI.
+- **The CLI used the existing Google sign-in with no new login**, apparently the one Roee already had in the desktop app; no `agy` login step was needed.
+- **The test chat, in the KesherAI repo:** a one-line answer came back correct. Then `git status --short` produced an approval card in 🔔, was approved from the notifications page, ran, and was answered correctly ("one untracked file, electron.exe"). Both test chats were deleted.
+- **Fixed:** the approval card's "why" showed the previous turn's answer; it now shows what the agent said in this turn.

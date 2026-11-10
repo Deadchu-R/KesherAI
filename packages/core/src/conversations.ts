@@ -1470,13 +1470,15 @@ export class ConversationManager {
    * @param projectId - A project to put them in, or none.
    * @returns How many were added and how many were there already.
    */
-  async importChats(chats: ImportedChat[], projectId: string | null = null): Promise<{ added: number; skipped: number }> {
+  async importChats(chats: ImportedChat[], projectId: string | null = null): Promise<{ added: number; skipped: number; ids: string[] }> {
     const modelId = this.defaultChatModel() ?? "";
     let added = 0;
     let skipped = 0;
+    const ids: string[] = [];
     for (const chat of chats) {
       const h = createHash("sha256").update(`${chat.source}:${chat.originalId}`).digest("hex");
       const id = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+      ids.push(id);
       if (await this.deps.library.getConversation(id)) {
         skipped++;
         continue;
@@ -1493,13 +1495,16 @@ export class ConversationManager {
         else messages.push({ role: m.role, content: m.text } as AgentMessage);
       }
       const updatedAt = chat.messages.at(-1)?.at ?? chat.createdAt;
+      // A coding session (Claude Code) continues as a code chat in its folder, asking before changes.
+      const folder = chat.workspace && (await stat(chat.workspace).catch(() => undefined))?.isDirectory() ? chat.workspace : undefined;
       await this.deps.library.saveConversation({
         id,
         projectId,
         title: chat.title.slice(0, 120),
-        kind: "chat",
+        kind: folder ? "code" : "chat",
+        ...(folder ? { workspace: folder } : {}),
         modelId,
-        mode: "auto-edit",
+        mode: folder ? "ask" : "auto-edit",
         importedFrom: chat.source,
         messages,
         events,
@@ -1508,7 +1513,7 @@ export class ConversationManager {
       });
       added++;
     }
-    return { added, skipped };
+    return { added, skipped, ids };
   }
 
   /**

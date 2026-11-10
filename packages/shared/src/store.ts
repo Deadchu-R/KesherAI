@@ -41,7 +41,7 @@ export interface Conversation {
   /** Where the chat is written from: `telegram` chats ask before every change and get no computer or browser control. */
   source?: "telegram";
   /** For a chat imported from another assistant: which one. */
-  importedFrom?: "chatgpt" | "claude" | "gemini" | "openwebui" | "jan";
+  importedFrom?: "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code";
   /** What the model sees. */
   messages: AgentMessage[];
   /** What the user sees. */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { unzip } from "fflate";
-import { api } from "./api";
+import { api, isRemote } from "./api";
 import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -20,6 +20,51 @@ function chatsFileFromZip(file: File): Promise<string> {
           resolve(new TextDecoder().decode(files[first]));
         });
       }),
+  );
+}
+
+interface ClaudeSession { file: string; sessionId: string; title: string; cwd?: string; updatedAt: string; size: number }
+
+/**
+ * Claude Code's sessions on this computer: one click continues one in a code chat on the local model, in the
+ * same folder (for when Claude's usage is used up). Only on the computer itself: session files can hold
+ * secrets from commands.
+ */
+function ClaudeCodeSessions() {
+  const [list, setList] = useState<ClaudeSession[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (isRemote()) return;
+    void api<{ sessions: ClaudeSession[] }>("/api/import/claude-code").then((r) => setList(r.sessions), () => setList([]));
+  }, []);
+  if (!list?.length) return null;
+  const go = async (x: ClaudeSession) => {
+    setBusy(x.file);
+    setErr("");
+    try {
+      const r = await api<{ id?: string }>("/api/import/claude-code", { method: "POST", body: { file: x.file } });
+      if (r.id) location.hash = `#/c/${r.id}`;
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="stack cc-sessions">
+      <h3>{L("להמשיך סשן של Claude Code", "Continue a Claude Code session")}</h3>
+      <p className="muted small">{L("כשה־usage של Claude נגמר: הסשן נפתח כשיחת קוד באותה תיקייה, על המודל המקומי. המילים נשמרות, וכל צעד של כלי הופך לשורה קצרה. פלט הפקודות לא מועתק.", "When Claude's usage runs out: the session opens as a code chat in the same folder, on the local model. The words are kept and each tool step becomes a short line; command output is not copied.")}</p>
+      <ul className="cc-list">
+        {list.slice(0, 8).map((x) => (
+          <li key={x.file} className="row wrap">
+            <span className="grow" dir="auto"><strong>{x.title}</strong><br /><span className="muted small" dir="ltr">{x.cwd ?? ""}</span> <span className="muted small">· {new Date(x.updatedAt).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span></span>
+            <button type="button" disabled={!!busy} onClick={() => void go(x)}>{busy === x.file ? "…" : L("המשך בקשר", "Continue here")}</button>
+          </li>
+        ))}
+      </ul>
+      {err && <p className="error small">{err}</p>}
+    </div>
   );
 }
 
@@ -91,6 +136,7 @@ export function ImportChats() {
         <input ref={input} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
       </div>
       {result && <p className={result.ok ? "pill good" : "error"} role="status">{result.text}</p>}
+      <ClaudeCodeSessions />
     </section>
   );
 }

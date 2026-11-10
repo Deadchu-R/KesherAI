@@ -13,7 +13,7 @@
  */
 
 /** Where an imported chat came from. */
-export type ImportSource = "chatgpt" | "claude" | "gemini" | "openwebui" | "jan";
+export type ImportSource = "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code";
 
 /** One message of an imported chat. */
 export interface ImportedMessage {
@@ -31,6 +31,8 @@ export interface ImportedChat {
   title: string;
   createdAt: string;
   messages: ImportedMessage[];
+  /** A coding session's folder: it becomes a code chat there. */
+  workspace?: string;
 }
 
 type Json = Record<string, unknown>;

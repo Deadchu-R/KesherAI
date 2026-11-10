@@ -1814,3 +1814,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .kmenu-note { margin: 4px 10px; }
 @media (pointer: coarse) { .kmenu .kmenu-item, .kmenu a.kmenu-item, .kmenu button.kmenu-item { min-height: 44px; font-size: 15.5px; } .kmenu .kmenu-sub button.kmenu-item { min-height: 40px; } }
 @media (prefers-reduced-motion: reduce) { .kmenu { animation: none; } }
+.cc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cc-list li { padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); align-items: center; gap: 8px; }
+.cc-list li .muted { overflow-wrap: anywhere; }

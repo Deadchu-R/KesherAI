@@ -9,6 +9,7 @@ import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
 import { readExport, readJanThreads } from "../chat-import.js";
+import { findClaudeSessions, readClaudeSession } from "../claude-code-import.js";
 import { homedir } from "node:os";
 import { join as joinPath } from "node:path";
 import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-export.js";
@@ -115,6 +116,24 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const projectId = req.body?.projectId ?? null;
     if (projectId && !s.library.getProject(projectId)) return reply.code(400).send({ error: "That project does not exist." });
     return { source: "jan", found: chats.length, ...(await s.conversations.importChats(chats, projectId)) };
+  });
+
+  // Claude Code's sessions on this computer: continue one in a code chat on the local model (the CoolDown handoff).
+  // Session files can hold secrets from commands, so they are read only here, never from another device.
+  app.get("/api/import/claude-code", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    return { sessions: await findClaudeSessions() };
+  });
+  app.post<{ Body: { file?: string } }>("/api/import/claude-code", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    try {
+      const chat = await readClaudeSession(String(req.body?.file ?? ""));
+      if (!chat) return reply.code(400).send({ error: "That session has no messages." });
+      const r = await s.conversations.importChats([chat]);
+      return { ...r, id: r.ids[0] };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
   });
 
   app.get<{ Querystring: { q?: string } }>("/api/search", async (req) => {

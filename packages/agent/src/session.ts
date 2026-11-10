@@ -689,9 +689,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       plan: (t) => this.push({ type: "note", text: t }),
       approve: async (req) => {
         const requestId = randomUUID();
+        // The card's "why" is what the agent said in this turn so far (not an older answer).
         const { decision, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
           this.approvals.set(requestId, resolve);
-          this.push({ type: "approval_request", requestId, callId: req.callId, name: req.name, input: {}, preview: req.preview, reason: req.reason, ...(this.lastSaid ? { purpose: this.lastSaid.slice(0, 400) } : {}), ...(this.workspace ? { folder: this.workspace } : {}) });
+          this.push({ type: "approval_request", requestId, callId: req.callId, name: req.name, input: {}, preview: req.preview, reason: req.reason, ...(text.trim() ? { purpose: text.trim().slice(-400) } : {}), ...(this.workspace ? { folder: this.workspace } : {}) });
           this.setStatus("waiting");
         });
         this.push({ type: "approval_result", requestId, decision, ...(feedback ? { feedback } : {}) });
