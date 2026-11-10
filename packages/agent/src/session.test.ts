@@ -395,3 +395,20 @@ test("a request too long for the model's context is shortened and sent again, no
   assert.ok(!session.events.some((e) => e.type === "status" && e.status === "error"));
   assert.ok(session.contextTokens < 24_576, `window is now ${session.contextTokens}`);
 });
+
+test("one huge tool output inside a long run is cut down so the request fits a small context", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-big-"));
+  await writeFile(join(workspace, "big.ts"), "x".repeat(200_000));
+  const sizes: number[] = [];
+  let n = 0;
+  const model: ModelTurn = async (req) => {
+    sizes.push(JSON.stringify(req.messages).length);
+    n++;
+    return n === 1 ? { text: "", toolCalls: [{ id: "1", name: "read_file", arguments: { path: "big.ts" } }] } : { text: "done", toolCalls: [] };
+  };
+  const session = new AgentSession({ id: "b", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", contextTokens: 12_000 });
+  session.send("read big.ts");
+  await waitFor(session, (e) => e.type === "status" && e.status !== "running");
+  assert.ok(sizes.length >= 2);
+  assert.ok(sizes.at(-1)! < 12_000 * 4, `second request was ${sizes.at(-1)} characters`);
+});

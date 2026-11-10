@@ -569,10 +569,20 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private async fitContextRaw(signal: AbortSignal): Promise<AgentMessage[]> {
     const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
     const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
-    const msgs = shortenOldToolOutputs(this.messages);
+    // One tool output may not take more than a quarter of the window (found on the PC: a whole ScriptNodes.tsx read
+    // kept a 24K local model over its limit even after the older steps were summarised).
+    const cap = Math.max(4000, Math.floor(budget * 0.25));
+    const msgs = shortenOldToolOutputs(this.messages).map((m) =>
+      m.role === "tool" && m.content.length > cap
+        ? { ...m, content: `${m.content.slice(0, Math.floor(cap * 0.65))}\n… [${m.content.length - Math.floor(cap * 0.95)} characters left out: too long for this model's context. Read the part you need (read_file with offset and limit, or search for it).] …\n${m.content.slice(-Math.floor(cap * 0.3))}` }
+        : m,
+    );
     if (sizeOf(msgs) <= budget) return [system, ...msgs];
+    // A long run inside one message (self-work, a big task) cannot be cut at a user message: shorten all but the last
+    // tool output instead.
+    const tight = shortenOldToolOutputs(msgs, 1);
     const cut = cutPoint(msgs, Math.floor(budget * 0.6));
-    if (cut <= 0) return [system, ...msgs];
+    if (cut <= 0) return [system, ...(sizeOf(msgs) > budget ? tight : msgs)];
     const last = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "compacted" }> => e.type === "compacted");
     let summary = last && last.upTo === cut ? last.summary : undefined;
     if (!summary) {
@@ -592,7 +602,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       if (!summary) return [system, ...msgs.slice(cut)];
       this.push({ type: "compacted", upTo: cut, summary });
     }
-    return [{ role: "system", content: `${this.systemPrompt}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...msgs.slice(cut)];
+    const recent = msgs.slice(cut);
+    return [{ role: "system", content: `${this.systemPrompt}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...(sizeOf(recent) > budget * 0.8 ? shortenOldToolOutputs(recent, 1) : recent)];
   }
 
   private specs(): ToolSpec[] {
