@@ -921,10 +921,10 @@ export class ConversationManager {
       // KesherAI's own engine runs with 32K (see LlamaEngine.serverArgs); other local servers may load models smaller.
       // Its real share: with 2 chats at once each gets half of the context (found on the PC: 24,576, and self-work failed
       // three times sending 26K). A little room is kept for the answer.
-      const slot = provider.id === "llamacpp" ? this.deps.engineSlotTokens?.() : undefined;
-      if (slot) return Math.floor(slot * 0.9);
       // Self-work's worker reaches the main app's engine as `main/llamacpp/…`: the same engine, the same share.
       const viaMain = provider.id === "main" && modelId.startsWith("main/llamacpp/");
+      const slot = provider.id === "llamacpp" || viaMain ? this.deps.engineSlotTokens?.() : undefined;
+      if (slot) return Math.floor(slot * 0.9);
       return provider.location === "cloud" ? 100_000 : provider.id === "llamacpp" || viaMain ? 22_000 : 12_000;
     } catch {
       return 12_000;

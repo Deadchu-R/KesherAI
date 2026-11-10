@@ -193,6 +193,8 @@ export interface EngineStatus {
   runningParallel?: number;
   /** How fast the model last read a prompt, in tokens a second (slow means the graphics card is too full). */
   promptTps?: number;
+  /** The context each chat gets (llama-server's n_ctx_slot). */
+  slotTokens?: number;
 }
 
 /**
@@ -233,6 +235,7 @@ export class LlamaEngine {
       parallel: this.opts.parallel ?? 1,
       ...(this.runningParallel ? { runningParallel: this.runningParallel } : {}),
       ...(this.promptTps !== undefined && this.proc ? { promptTps: this.promptTps } : {}),
+      ...(this.slotContext() ? { slotTokens: this.slotContext() } : {}),
     };
   }
 

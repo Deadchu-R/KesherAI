@@ -261,6 +261,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });
   registry.add({ id: "sdcpp", type: "sdcpp", name: "KesherAI image engine", location: "local" });
   // The worker's models are the main app's (one copy on the graphics card), reached over its local API.
+  let mainSlot: number | undefined;
+  if (worker) {
+    const readSlot = () =>
+      void fetch(`${worker.mainUrl.replace(/\/$/, "")}/api/engines/llamacpp`, { signal: AbortSignal.timeout(5000) })
+        .then((r) => r.json() as Promise<{ slotTokens?: number }>)
+        .then((st) => (mainSlot = st.slotTokens), () => undefined);
+    readSlot();
+    setInterval(readSlot, 30_000).unref();
+  }
   if (worker) registry.add({ id: "main", type: "openai-compatible", name: "KesherAI (main)", location: "local", baseUrl: `${worker.mainUrl.replace(/\/$/, "")}/v1`, options: { waitForServerMs: 10 * 60_000 } });
 
   const plugins = new PluginHost(registry, config, paths.root);
@@ -580,7 +589,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       personas,
       skills,
       projectFacts,
-      engineSlotTokens: () => engine.slotContext(),
+      // A self-work worker uses the main app's engine (main/llamacpp/…): its share comes from there.
+      engineSlotTokens: () => (worker ? mainSlot : engine.slotContext()),
       onEvent: (convId, e, title, lastAnswer) => {
         notifier.onConversationEvent(convId, title, e, lastAnswer);
         telegram.onConversationEvent(convId, e);
