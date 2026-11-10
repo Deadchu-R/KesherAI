@@ -26,8 +26,23 @@ jobs:
       pages: write
       id-token: write
 
-  build:
+  # One draft release before the builds: the three systems used to create it at the same moment, which made two
+  # releases with the same tag (0.6.48: Linux in one, Windows/Mac in the other) and the notes step failed. The builds
+  # upload into this draft, and the notes job publishes it when all are in (installed copies never see half a release).
+  prepare:
     needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          gh release view "v$VERSION" > /dev/null 2>&1 || gh release create "v$VERSION" --draft --title "KesherAI $VERSION" --notes "" --target "$GITHUB_SHA"
+
+  build:
+    needs: [check, prepare]
     strategy:
       # One system failing should not cancel the others' installers.
       fail-fast: false
@@ -188,5 +203,6 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           node scripts/release-notes.mjs "$VERSION" > notes.md
           cat notes.md
-          ID=$(gh api "repos/${{ github.repository }}/releases/tags/v$VERSION" --jq .id)
-          gh api -X PATCH "repos/${{ github.repository }}/releases/$ID" -F body=@notes.md -f name="KesherAI $VERSION" > /dev/null
+          # gh finds a draft by its tag too (the REST tag lookup does not); publishing it is the last step.
+          ID=$(gh release view "v$VERSION" --json databaseId --jq .databaseId)
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$ID" -F body=@notes.md -f name="KesherAI $VERSION" -F draft=false > /dev/null

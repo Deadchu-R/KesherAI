@@ -99,7 +99,7 @@
         "provider": "github",
         "owner": "Deadchu-R",
         "repo": "KesherAI",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   },
