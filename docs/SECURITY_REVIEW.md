@@ -199,6 +199,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** looseEdit changes the file only when the loose match is unique, and the change still goes through the same approval and diff as edit_file.
     - **Performance:** the context is no longer fixed. llama.cpp's fit shrinks it before moving layers to system memory, so a model that fits the card keeps its full speed.
 
+39. **Scan after the 0.6.55 changes** (Gemini CLI and Claude Code in the terminal, self-work routines, Resume and the stuck-turn watch, the commit-in-turn check, the engine's context, checkpoint and margin settings, the phone's downloads button).
+    - **Fixed:** a self-work routine runs its check command on this computer, and a routine starts self-work through the route as a local request. A paired phone could therefore have saved a routine with any check command. Now a self-work routine is saved from the phone only with the same project and check as the last run (the panel's Start rule); on the computer, as before.
+    - **Checked:** the terminal starts only commands it knows by name (`gemini`, its install and update, `claude`). The request never gives a command. Claude Code's environment points it at KesherAI on 127.0.0.1 and clears ANTHROPIC_API_KEY, so the user's own key is not used. Gemini CLI gets no extra environment and keeps its own sign-in.
+    - **Checked:** `/api/agent-clis` only runs `where`/`which` with fixed names.
+    - **Checked:** the commit-in-turn check and Resume read git in the run's own worktree only. Resume refuses a finished run and a run whose folder is gone.
+    - **Performance:** shortening older tool outputs no longer moves every turn (the engine's prompt cache survives). Hybrid models get context checkpoints every 1,024 tokens. Fitting leaves 2 GB free on the card. A commit check runs every 30 s during a turn, which is one `git rev-parse`.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

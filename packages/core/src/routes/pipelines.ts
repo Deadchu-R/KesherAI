@@ -49,6 +49,14 @@ export async function pipelineRoutes(app: FastifyInstance, s: KesherServices): P
       if (!isAbsolute(folder) || !(abs + sep).startsWith(home + sep) || abs === home) return reply.code(400).send({ error: "The folder must be inside your home folder (not the home folder itself)." });
       b.action = { ...b.action, folder: abs } as typeof b.action;
     }
+    // A self-work routine runs its check command on this computer (scan 39): set on this computer, or from the phone
+    // only with the same project and check as the last run (the rule of the panel's Start).
+    if (b.action?.type === "self-work" && !isLocalRequest(req)) {
+      const last = (await app.inject({ method: "GET", url: "/api/self-work", remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } }).then((r) => r.json() as { run?: { repo?: string; check?: string } | null }, () => ({ run: null }))).run;
+      if (!last || resolve(String(b.action.repo)) !== last.repo || b.action.check !== last.check) {
+        return reply.code(403).send({ error: "Choose the project and its check on the computer first; from the phone you can save a routine with the same ones." });
+      }
+    }
     try {
       return await s.routines.save({ ...b, name: b.name ?? "", schedule: b.schedule ?? { kind: "daily", time: "08:00" }, action: b.action ?? { type: "prompt", prompt: "" } });
     } catch (e) {
