@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { PERSONA_TEMPLATES, type Persona } from "../personas.js";
 import { modelTurnFor } from "../conversations.js";
+import { findPersonas } from "../persona-import.js";
+import { isLocalRequest } from "../auth.js";
 
 /**
  * Personas: list (with ready-made templates), save and delete.
@@ -11,6 +13,31 @@ import { modelTurnFor } from "../conversations.js";
  */
 export async function personaRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   app.get("/api/personas", async () => ({ personas: await s.personas.list(), templates: PERSONA_TEMPLATES }));
+
+  // Personas other apps on this computer have (LM Studio presets, Ollama Modelfiles): listed, then added in one click.
+  // Their files are only read, and only on this computer; adding reads them again (the page only names them).
+  app.get("/api/personas/found", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    const mine = new Set((await s.personas.list()).map((p) => p.instructions.trim()));
+    return { found: (await findPersonas()).map((f) => ({ ...f, have: mine.has(f.instructions.trim()) })) };
+  });
+  app.post<{ Body: { items?: Array<{ app?: string; name?: string }> } }>("/api/personas/found/import", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    const want = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
+    const found = await findPersonas();
+    const names = new Set((await s.personas.list()).map((p) => p.name.toLowerCase()));
+    const added: string[] = [];
+    for (const w of want) {
+      const f = found.find((x) => x.app === w.app && x.name === w.name);
+      if (!f) continue;
+      // A persona of the same name stays; this one gets the app in its name.
+      const name = names.has(f.name.toLowerCase()) ? `${f.name} (${f.app})`.slice(0, 60) : f.name;
+      names.add(name.toLowerCase());
+      await s.personas.save({ name, instructions: f.instructions, ...(f.params ? { params: f.params } : {}), ...(f.starters ? { starters: f.starters } : {}) });
+      added.push(name);
+    }
+    return { added };
+  });
   app.post<{ Body: Partial<Persona> }>("/api/personas", async (req, reply) => {
     const b = req.body ?? {};
     if (!b.name?.trim() || !b.instructions?.trim()) return reply.code(400).send({ error: "A persona needs a name and instructions." });

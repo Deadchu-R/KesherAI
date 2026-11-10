@@ -128,6 +128,7 @@ export function PersonasPage() {
           <p className="muted small persona-text" dir="auto">{p.instructions.length > 220 ? `${p.instructions.slice(0, 220)}…` : p.instructions}</p>
         </section>
       ))}
+      {!draft && <FoundPersonas />}
       {!draft && (
         <section className="card">
           <h3>{L("להתחיל מתבנית", "Start from a template")}</h3>
@@ -141,5 +142,58 @@ export function PersonasPage() {
         </section>
       )}
     </div>
+  );
+}
+
+interface FoundPersona { app: string; name: string; instructions: string; params?: { temperature?: number }; starters?: string[]; have: boolean }
+
+/**
+ * Personas other apps on this computer have: LM Studio presets and Ollama
+ * models made with a Modelfile, added in one click (with their settings and
+ * example openings). Computer only; hidden when there are none.
+ */
+function FoundPersonas() {
+  const [found, setFound] = useState<FoundPersona[]>([]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api<{ found: FoundPersona[] }>("/api/personas/found").then((r) => setFound(r.found.filter((f) => !f.have)), () => setFound([]));
+  }, []);
+  if (!found.length) return null;
+  const key = (f: FoundPersona) => `${f.app}\u0000${f.name}`;
+  const add = async () => {
+    setBusy(true);
+    try {
+      const items = found.filter((f) => picked.has(key(f))).map((f) => ({ app: f.app, name: f.name }));
+      const r = await api<{ added: string[] }>("/api/personas/found/import", { method: "POST", body: { items } });
+      toast(L(`נוספו ${r.added.length} פרסונות.`, `Added ${r.added.length} personas.`));
+      setFound((fs) => fs.filter((f) => !picked.has(key(f))));
+      setPicked(new Set());
+      await refreshPersonas();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card stack">
+      <h3>{L("נמצאו באפליקציות אחרות במחשב", "Found in other apps on this computer")}</h3>
+      <p className="muted small">{L("presets של LM Studio ומודלים של Ollama שנבנו עם Modelfile. ההוראות, ההגדרות והדוגמאות שלהם עוברים, והקבצים המקוריים רק נקראים.", "LM Studio presets and Ollama models built with a Modelfile. Their instructions, settings and examples come along; the original files are only read.")}</p>
+      <ul className="list">
+        {found.map((f) => (
+          <li key={key(f)}>
+            <label className="row found-persona">
+              <input type="checkbox" checked={picked.has(key(f))} onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(key(f)); else n.delete(key(f)); return n; })} />
+              <span className="grow">
+                <strong>{f.name}</strong> <span className="pill">{f.app}</span>
+                <span className="muted small persona-text" dir="auto">{f.instructions.length > 160 ? `${f.instructions.slice(0, 160)}…` : f.instructions}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="row"><button type="button" className="primary" disabled={!picked.size || busy} onClick={() => void add()}>{L(`הוסף ${picked.size || ""}`, `Add ${picked.size || ""}`)}</button></div>
+    </section>
   );
 }
