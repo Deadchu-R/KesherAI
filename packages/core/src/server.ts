@@ -1145,6 +1145,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (config.engines.autoLoadLast && !afterTerminate && last && existsSync(last) && engine.status().installed) {
     void loadModel(services, last).catch((err) => engine.fail(err));
   }
+  // After Terminate nothing is loaded, but the engine stays chosen: the first message loads the last model
+  // (through the guard, like after an idle unload) instead of failing with "No provider llamacpp" (found on the phone).
+  else if (afterTerminate && last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
 
   return {
     app,
