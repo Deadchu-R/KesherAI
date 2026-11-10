@@ -188,8 +188,9 @@ jobs:
 
   # The "what's new" list the app shows before updating: from the commits since the last release.
   notes:
-    needs: build
-    if: always()
+    needs: [prepare, build]
+    # Published even if one system's build failed (the others' installers are good), but never without the draft.
+    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

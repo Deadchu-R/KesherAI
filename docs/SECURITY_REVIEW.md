@@ -185,6 +185,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** a request too long for the model is retried once per step, with a smaller window (never below 2,000 tokens).
     - **Performance:** reading Ollama's manifests read the params layer twice per model; it is now read once, together with the examples.
 
+37. **Scan after 0.6.50** (personas from LobeHub/Open WebUI files, more MCP config paths, AnythingLLM's models, the context fixes, the release workflow).
+    - **Checked:** a persona file can be uploaded from the phone too (it only adds personas). It is limited to 20 MB and 100 personas, each with the usual persona limits; an icon is at most 2 characters.
+    - **Checked:** the Microsoft Store path for Claude Desktop is found by listing only `Packages\Claude_*`. The config file there is read with the same rules as the others (listed without key values, added turned off).
+    - **Checked:** the learned characters-per-token ratio is held between 1.5 and 6, and a refused request is retried at most twice per step.
+    - **Fixed (release):** the three builds used to create two releases with one tag. Now one draft is made first, the builds upload into it, and it is published with its notes at the end, only if the draft step succeeded (verified with 0.6.49: one release, 11 files, notes).
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
