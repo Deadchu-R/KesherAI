@@ -13,7 +13,7 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 - Small steps: one item, then check, then the next.
 - Big files: search first, then read_file with offset/limit. Change them with edit_file; never rewrite a whole existing file.
 - Tests are `node:test` + `node:assert/strict` in `*.test.ts` next to the code (not vitest).
-- Check after each item: `pnpm -s typecheck && pnpm -s test`.
+- Check after each item: `pnpm -s typecheck && pnpm -s test`. Before a release also `pnpm -s lint` (CI fails on lint).
 - The interface works on the computer and on the phone (390 px wide). Hebrew and English: short components use `L(he, en)` with `getLocale()`; shared words go in `apps/web/src/i18n.ts`.
 - Every public function gets a TSDoc comment (what it does, its parameters).
 - Do not run prettier. Do not add dependencies without asking.
