@@ -66,9 +66,10 @@ export function SelfWorkPanel(p: { folder: string }) {
   const start = async () => {
     setBusy(true);
     try {
-      const r = await api<{ run: Run; picked?: { id: string; why: string } }>("/api/self-work/start", { method: "POST", body: { repo: p.folder, goal, hours, check } });
+      const r = await api<{ run: Run; picked?: { id: string; why: string }; contextNote?: string }>("/api/self-work/start", { method: "POST", body: { repo: p.folder, goal, hours, check } });
       setRun(r.run);
       setGoal("");
+      if (r.contextNote) toast(r.contextNote);
       toast(L(`התחיל לעבוד על הענף ${r.run.branch}${r.picked ? ` עם ${r.picked.id.split("/").pop()} (${r.picked.why})` : ""}`, `Started on the branch ${r.run.branch}${r.picked ? ` with ${r.picked.id.split("/").pop()} (${r.picked.why})` : ""}`));
     } catch (e) {
       toast((e as Error).message);

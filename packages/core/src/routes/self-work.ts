@@ -3,6 +3,8 @@ import { isAbsolute, resolve, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { isLocalRequest } from "../auth.js";
 import { pickCodeModel } from "../code-model.js";
+import { ensureLmStudioContext } from "../lmstudio-context.js";
+import { detectHardwareCached } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import type { SelfWorkState } from "../self-work.js";
 import type { BoardChange } from "../task-board.js";
@@ -46,16 +48,32 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     try {
       // No model chosen: the best one for long coding runs on this computer (see code-model.ts), else the active chat model.
       const auto = b.modelId ? undefined : pickCodeModel(await s.registry.listAllModels().then((r) => r.models.filter((m) => !m.id.startsWith("main/")), () => []));
+      // A local LM Studio model must be loaded with room for hours of tool calls (it often loads with 4096 tokens).
+      const chosen = b.modelId || auto?.id || s.config.activeModels.chat;
+      let contextNote = "";
+      if (chosen) {
+        const [providerId, ...rest] = chosen.split("/");
+        const prov = s.config.providers.find((p) => p.id === providerId) as { baseUrl?: string; apiKey?: string } | undefined;
+        if (prov?.baseUrl) {
+          const hw = await detectHardwareCached().catch(() => undefined);
+          const vramGb = hw ? Math.max(0, ...hw.gpus.map((g) => g.vramTotal)) / 1024 ** 3 : 0;
+          const r = await ensureLmStudioContext(prov.baseUrl, rest.join("/"), vramGb >= 20 ? 65_536 : 32_768, prov.apiKey).catch((e: Error) => {
+            contextNote = e.message;
+            return undefined;
+          });
+          if (r?.reloaded) contextNote = `${rest.join("/")} was loaded again with ${r.after} tokens of context (it had ${r.before ?? "none"}).`;
+        }
+      }
       if (host) {
         // The worker uses this app's models.
-        const model = b.modelId || auto?.id || s.config.activeModels.chat;
+        const model = chosen;
         const r = await toWorker<{ run: SelfWorkState }>("/api/self-work/start", "POST", { ...start, ...(model ? { modelId: `main/${model}` } : {}) }, true);
-        return { ...r, ...(auto && !b.modelId ? { picked: auto } : {}) };
+        return { ...r, ...(auto && !b.modelId ? { picked: auto } : {}), ...(contextNote ? { contextNote } : {}) };
       }
       const sw = s.selfWork;
       if (!sw) return reply.code(503).send({ error: "Self-work is not ready yet." });
       const model = b.modelId || auto?.id;
-      return { run: await sw.start({ ...start, ...(model ? { modelId: model } : {}) }), ...(auto && !b.modelId ? { picked: auto } : {}) };
+      return { run: await sw.start({ ...start, ...(model ? { modelId: model } : {}) }), ...(auto && !b.modelId ? { picked: auto } : {}), ...(contextNote ? { contextNote } : {}) };
     } catch (e) {
       return reply.code((e as { code?: number }).code === 409 ? 409 : 400).send({ error: (e as Error).message });
     }
