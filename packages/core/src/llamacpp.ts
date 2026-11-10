@@ -377,7 +377,10 @@ export class LlamaEngine {
   static samplingArgs(modelPath: string, args: readonly string[] = []): string[] {
     const name = basename(modelPath).toLowerCase();
     // Qwen3.5/3.6 model cards: thinking mode for precise coding. Qwen3 Coder's card: temperature 0.7, top-p 0.8.
-    const rec = /qwen3\.[5-9]/.test(name)
+    // Qwen3.8's card: thinking mode at temperature 1.0 (top-p 0.95, top-k 20, min-p 0).
+    const rec = /qwen3\.[89]/.test(name)
+      ? { "--temp": "1.0", "--top-p": "0.95", "--top-k": "20", "--min-p": "0" }
+      : /qwen3\.[5-7]/.test(name)
       ? { "--temp": "0.6", "--top-p": "0.95", "--top-k": "20", "--min-p": "0" }
       : /qwen3-coder/.test(name)
         ? { "--temp": "0.7", "--top-p": "0.8", "--top-k": "20", "--min-p": "0", "--repeat-penalty": "1.05" }

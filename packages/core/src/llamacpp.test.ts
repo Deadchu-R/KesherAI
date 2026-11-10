@@ -56,6 +56,7 @@ test("server args always enable tool calling and a sane context", () => {
   assert.deepEqual(LlamaEngine.samplingArgs("C:/m/Qwen3.6-27B-UD-Q4_K_XL.gguf"), ["--temp", "0.6", "--top-p", "0.95", "--top-k", "20", "--min-p", "0"]);
   assert.deepEqual(LlamaEngine.samplingArgs("/m/Qwen3.6-27B.gguf", ["--temp", "1"]), ["--top-p", "0.95", "--top-k", "20", "--min-p", "0"]);
   assert.deepEqual(LlamaEngine.samplingArgs("/m/gemma-4.gguf"), []);
+  assert.deepEqual(LlamaEngine.samplingArgs("/m/Qwen3.8-27B-UD-Q4_K_XL.gguf").slice(0, 2), ["--temp", "1.0"]);
   assert.deepEqual(LlamaEngine.serverArgs(["-c", "65536"], true, 1, true), ["-c", "65536", "--jinja", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]);
 });
 
