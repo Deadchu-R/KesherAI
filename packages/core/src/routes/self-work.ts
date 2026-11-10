@@ -79,6 +79,17 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     }
   });
 
+  // Resume the last run where it ended (also from the phone: same project, branch and check).
+  app.post<{ Body: { hours?: number } }>("/api/self-work/resume", async (req, reply) => {
+    if (host) return toWorker("/api/self-work/resume", "POST", { hours: req.body?.hours }, true).catch((e: Error & { code?: number }) => reply.code(e.code ?? 502).send({ error: e.message }));
+    if (!s.selfWork) return reply.code(503).send({ error: "Self-work is not available." });
+    try {
+      return { run: await s.selfWork.resume(Number(req.body?.hours) || 2) };
+    } catch (e) {
+      return reply.code((e as { code?: number }).code ?? 400).send({ error: (e as Error).message });
+    }
+  });
+
   app.post("/api/self-work/stop", async (_req, reply) => {
     if (host) return toWorker("/api/self-work/stop", "POST", {}).catch((e: Error) => reply.code(502).send({ error: e.message }));
     const sw = s.selfWork;

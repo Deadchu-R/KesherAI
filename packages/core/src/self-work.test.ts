@@ -90,3 +90,48 @@ test("a turn that changed files but forgot the closing line is checked and commi
   assert.equal(sw.current?.items[0]?.text, "Changes (the model did not name the item)");
   assert.ok(git.some((a) => a[0] === "commit"));
 });
+
+test("a stuck turn (nothing new for 12 minutes) is stopped and the item resumed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "selfwork-"));
+  const repo = join(root, "repo");
+  await mkdir(join(repo, ".git"), { recursive: true });
+  let clock = 0;
+  let turn = -1;
+  const stopped: string[] = [];
+  const sent: string[] = [];
+  const sw = new SelfWork(join(root, "selfwork.json"), {
+    createChat: async () => "c1",
+    send: async (_id, text) => {
+      sent.push(text);
+      turn++;
+    },
+    // The first turn never moves (same event count) and never ends; the next one finishes.
+    state: async () => (turn === 0 ? { status: "running", last: "", events: 5 } : { status: "idle", last: "ALL DONE", events: 9 }),
+    stopTurn: (id) => void stopped.push(id),
+    git: async (_r, args) => ({ code: 0, out: args[0] === "rev-parse" ? "abc\n" : "" }),
+    check: async () => ({ code: 0, out: "" }),
+    notify: async () => undefined,
+    sleep: async () => void (clock += 60_000),
+    now: () => clock,
+  });
+  await sw.start({ repo, goal: "x", hours: 2 });
+  await sw.settled();
+  assert.deepEqual(stopped, ["c1"]);
+  assert.ok(sent.some((m) => /ended with an error. Continue/.test(m)), "the item is resumed");
+  assert.equal(sw.current?.status, "done");
+});
+
+test("a run that ended can be resumed where it stopped", async () => {
+  const { sw, repo, sent } = await setup(["BLOCKED: which database?", "BLOCKED: which database?", "BLOCKED: which database?", "BLOCKED: which database?", "ALL DONE"]);
+  const r = await sw.start({ repo, goal: "x" });
+  await mkdir(r.worktree!, { recursive: true });
+  await sw.settled();
+  assert.equal(sw.current?.status, "blocked");
+  await assert.rejects(new SelfWork(join(repo, "none.json"), {} as SelfWorkDeps).resume(), /no run/);
+  const again = await sw.resume(1);
+  assert.equal(again.status, "running");
+  await sw.settled();
+  assert.equal(sw.current?.status, "done");
+  assert.ok(sent.some((m) => /^Resumed by you\./.test(m)));
+  await assert.rejects(sw.resume(), /finished its goal/);
+});

@@ -54,8 +54,10 @@ export interface SelfWorkDeps {
   /** Starts a code chat in the folder (auto-approve file edits and safe commands); `extra`: more folders it may read (the task board and handoff). */
   createChat: (folder: string, title: string, modelId?: string, extra?: string[]) => Promise<string>;
   send: (convId: string, text: string) => Promise<void>;
-  /** The chat's state and its last answer. */
-  state: (convId: string) => Promise<{ status: string; last: string }>;
+  /** The chat's state, its last answer, and how many events it has (progress: it grows while the model works). */
+  state: (convId: string) => Promise<{ status: string; last: string; events?: number }>;
+  /** Stops the chat's current turn (a stuck one). */
+  stopTurn?: (convId: string) => void;
   /** Runs git (arguments as a list, no shell). */
   git: (repo: string, args: string[]) => Promise<{ code: number; out: string }>;
   /** Runs the check command in the folder. */
@@ -63,6 +65,8 @@ export interface SelfWorkDeps {
   notify: (title: string, body: string, link: string) => Promise<void>;
   /** Waits (tests replace it). */
   sleep?: (ms: number) => Promise<void>;
+  /** The time (tests replace it). */
+  now?: () => number;
   /** The folder with the shared task board and the handoff notes (board.json, handoff.md), if any. */
   shared?: string;
   /** Runs after each committed item (a worker may move to a newer version here; the run is saved first). */
@@ -77,6 +81,8 @@ const L_SKIP = "Skipped an item";
 /** How long one item may run, and how long an approval may wait. */
 const STEP_MS = 45 * 60_000;
 const WAIT_MS = 30 * 60_000;
+/** A turn with no new step (no tool call, no answer) for this long is stuck: it is stopped and the item resumed. */
+const STALL_MS = 12 * 60_000;
 
 /** The rules the model gets with the goal. */
 export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check">, hours: number, shared?: string): string {
@@ -188,6 +194,33 @@ export class SelfWork {
     if (this.run_ && (this.run_.status === "running" || this.run_.status === "waiting")) await this.end("stopped", "Stopped by you.");
   }
 
+  /**
+   * Resumes the last run where it ended (stopped, blocked, failed, or cut short by a crash): same branch, worktree
+   * and chat, with a new time limit. Its finished items stay; the model is told to read the plan and go on.
+   *
+   * @param hours - How long it may go on (1/4 to 12).
+   * @returns The run.
+   * @throws When there is no run to resume, or one is still working.
+   */
+  async resume(hours = 2): Promise<SelfWorkState> {
+    const r = this.run_;
+    if (!r) throw Object.assign(new Error("There is no run to resume."), { code: 404 });
+    if (r.status === "running" || r.status === "waiting") throw Object.assign(new Error("The run is still working."), { code: 409 });
+    if (r.status === "done") throw Object.assign(new Error("That run finished its goal: start a new one."), { code: 409 });
+    if (r.worktree && !existsSync(r.worktree)) throw Object.assign(new Error("Its folder is gone: start a new run."), { code: 409 });
+    await this.loop?.catch(() => undefined);
+    const h = Math.min(12, Math.max(0.25, Number(hours) || 2));
+    r.status = "running";
+    r.failures = 0;
+    r.until = Date.now() + h * 3_600_000;
+    r.steps = Math.min(r.steps, MAX_STEPS - 20);
+    delete r.note;
+    this.stopRequested = false;
+    await this.save();
+    this.loop = this.work(false, "Resumed by you");
+    return r;
+  }
+
   /** For tests: waits until the loop ends. */
   async settled(): Promise<void> {
     await this.loop;
@@ -195,6 +228,10 @@ export class SelfWork {
 
   private async save(): Promise<void> {
     if (this.run_) await writeFile(this.file, JSON.stringify(this.run_, null, 2)).catch(() => undefined);
+  }
+
+  private now(): number {
+    return this.d.now ? this.d.now() : Date.now();
   }
 
   private sleep(ms: number): Promise<void> {
@@ -214,20 +251,26 @@ export class SelfWork {
   /** Waits for the chat to finish its turn. */
   private async turn(): Promise<{ status: string; last: string } | undefined> {
     const r = this.run_!;
-    const end = Date.now() + STEP_MS;
+    const end = this.now() + STEP_MS;
     let waitingSince = 0;
+    let seen = -1;
+    let movedAt = this.now();
     for (;;) {
       await this.sleep(2000);
       if (this.stopRequested) return undefined;
       const st = await this.d.state(r.convId);
+      if (st.events !== undefined && st.events !== seen) {
+        seen = st.events;
+        movedAt = this.now();
+      }
       if (st.status === "waiting") {
         if (!waitingSince) {
-          waitingSince = Date.now();
+          waitingSince = this.now();
           r.status = "waiting";
           r.note = "Waiting for your approval in the chat.";
           await this.save();
           await this.d.notify("✋ Self-work waits for your approval", r.goal.slice(0, 120), `#/c/${r.convId}`);
-        } else if (Date.now() - waitingSince > WAIT_MS) {
+        } else if (this.now() - waitingSince > WAIT_MS) {
           await this.end("blocked", "An approval waited more than 30 minutes.");
           return undefined;
         }
@@ -240,7 +283,19 @@ export class SelfWork {
         await this.save();
       }
       if (st.status !== "running") return st;
-      if (Date.now() > end) {
+      // Stuck (the engine hung, a command never returned): stop the turn and count it as an error, so the item is
+      // resumed, and given up on after 3 (found on the PC: a run that waited with nothing happening).
+      if (this.d.stopTurn && this.now() - movedAt > STALL_MS) {
+        this.d.stopTurn(r.convId);
+        return { status: "error", last: "" };
+      }
+      if (this.now() > end) {
+        if (this.d.stopTurn) {
+          // 45 minutes on one item: give up on it now (the error below makes it the third failure) and go on.
+          this.d.stopTurn(r.convId);
+          r.failures = MAX_FAILURES - 1;
+          return { status: "error", last: "" };
+        }
         await this.end("blocked", "One item ran for 45 minutes without finishing.");
         return undefined;
       }
@@ -273,9 +328,9 @@ export class SelfWork {
   }
 
   /** The loop: a turn, its outcome, the check, a commit, the next turn. */
-  private async work(fresh: boolean): Promise<void> {
+  private async work(fresh: boolean, why = "KesherAI restarted"): Promise<void> {
     const r = this.run_!;
-    if (!fresh) await this.d.send(r.convId, "KesherAI restarted. Read .kesher-self/plan.md and continue with the next item (end with ITEM DONE / ALL DONE / BLOCKED).").catch(() => undefined);
+    if (!fresh) await this.d.send(r.convId, `${why}. Read .kesher-self/plan.md and continue with the next item (end with ITEM DONE / ALL DONE / BLOCKED).`).catch(() => undefined);
     try {
       while (!this.stopRequested) {
         if (Date.now() > r.until) return await this.end("stopped", "The time limit was reached.");

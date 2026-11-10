@@ -79,6 +79,7 @@ export function SelfWorkPanel(p: { folder: string }) {
     }
   };
   const stop = () => void api<{ run: Run | null }>("/api/self-work/stop", { method: "POST" }).then((r) => setRun(r.run), (e: Error) => toast(e.message));
+  const resume = () => void api<{ run: Run | null }>("/api/self-work/resume", { method: "POST", body: { hours } }).then((r) => setRun(r.run), (e: Error) => toast(e.message));
 
   return (
     <section className="self-work">
@@ -122,6 +123,11 @@ export function SelfWorkPanel(p: { folder: string }) {
             <>
               <p className="muted small">{L("KesherAI עובד לבד על הפרויקט שבחרתם: ענף חדש, פריט אחד בכל פעם, בדיקה וקומיט אחרי כל פריט, והתראה לטלפון. הוא אף פעם לא דוחף ולא ממזג.", "KesherAI works on the chosen project by itself: a new branch, one item at a time, a check and a commit after each item, and a phone notification. It never pushes or merges.")}</p>
               {run && <p className="small">{L("הריצה הקודמת", "Last run")}: {L(...STATUS[run.status])}{run.note ? ` · ${run.note}` : ""} · {run.items.length} {L("פריטים", "items")} · <span dir="ltr">{run.branch}</span></p>}
+              {run && run.status !== "done" && (
+                <div className="row wrap">
+                  <button type="button" onClick={resume} title={L("ממשיך את אותה ריצה מאיפה שעצרה: אותו ענף, אותו צ'אט, הפריטים שכבר נעשו נשארים", "Goes on with the same run where it ended: same branch and chat; finished items stay")}>{L("↻ המשך מאיפה שעצר", "↻ Resume where it stopped")}</button>
+                </div>
+              )}
               <textarea dir="auto" rows={3} value={goal} placeholder={L("על מה לעבוד? למשל: לתקן את כל אזהרות ה-lint בתיקיית apps/web", "What to work on? e.g. fix every lint warning in apps/web")} onChange={(e) => setGoal(e.target.value)} />
               <div className="row wrap">
                 <label className="small">{L("שעות", "Hours")} <select value={hours} onChange={(e) => setHours(Number(e.target.value))}>{[0.5, 1, 2, 4, 8].map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
