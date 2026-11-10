@@ -78,6 +78,13 @@ export function SelfWorkPanel(p: { folder: string }) {
       setBusy(false);
     }
   };
+  const [nightly, setNightly] = useState("01:00");
+  // The same run, every night (a routine; it shows in Pipelines → Routines too, where it can be changed or removed).
+  const saveNightly = () =>
+    void api("/api/routines", {
+      method: "POST",
+      body: { name: L(`עבודה עצמית כל לילה: ${goal.slice(0, 40)}`, `Self-work every night: ${goal.slice(0, 40)}`), enabled: true, notify: true, schedule: { kind: "daily", time: nightly }, action: { type: "self-work", repo: p.folder, goal, hours, check } },
+    }).then(() => toast(L(`נשמר: כל לילה ב־${nightly}`, `Saved: every night at ${nightly}`)), (e: Error) => toast(e.message));
   const stop = () => void api<{ run: Run | null }>("/api/self-work/stop", { method: "POST" }).then((r) => setRun(r.run), (e: Error) => toast(e.message));
   const resume = () => void api<{ run: Run | null }>("/api/self-work/resume", { method: "POST", body: { hours } }).then((r) => setRun(r.run), (e: Error) => toast(e.message));
 
@@ -133,6 +140,10 @@ export function SelfWorkPanel(p: { folder: string }) {
                 <label className="small">{L("שעות", "Hours")} <select value={hours} onChange={(e) => setHours(Number(e.target.value))}>{[0.5, 1, 2, 4, 8].map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
                 <input dir="ltr" className="grow" value={check} placeholder={L("בדיקה אחרי כל פריט, למשל pnpm test", "Check after each item, e.g. pnpm test")} onChange={(e) => setCheck(e.target.value)} />
                 <button type="button" className="primary" disabled={busy || !goal.trim() || !p.folder} onClick={() => void start()} title={p.folder ? p.folder : L("בחרו תיקייה למעלה", "Choose a folder above")}>{L("התחל", "Start")}</button>
+              </div>
+              <div className="row wrap">
+                <label className="small">{L("או כל לילה בשעה", "Or every night at")} <input type="time" value={nightly} onChange={(e) => setNightly(e.target.value)} /></label>
+                <button type="button" disabled={!goal.trim() || !p.folder} onClick={saveNightly} title={L("שומר את זה כשגרה: מתחיל לבד כל לילה (אם קשר פועל), עם התראה", "Saves it as a routine: starts by itself every night (while KesherAI runs), with a notification")}>{L("שמירה כשגרה", "Save as a routine")}</button>
               </div>
             </>
           )}

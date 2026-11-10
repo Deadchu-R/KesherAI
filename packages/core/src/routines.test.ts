@@ -95,3 +95,22 @@ test("a background routine runs once per start, after a delay, and waits while c
   const [l] = await r.list();
   assert.equal(l!.nextRun, null, "next: the next start");
 });
+
+test("a self-work routine starts a run with its project, goal and check", async () => {
+  const started: unknown[] = [];
+  const dir = await (await import("node:fs/promises")).mkdtemp(join((await import("node:os")).tmpdir(), "routines-sw-"));
+  const rs = new Routines(join(dir, "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async () => ({ ok: true, message: "", link: "" }),
+    startSelfWork: async (o) => {
+      started.push(o);
+      return { ok: true, message: "Self-work started on kesher-self/x.", link: "#/code" };
+    },
+    notify: async () => undefined,
+  });
+  const r = await rs.save({ name: "Nightly", schedule: { kind: "daily", time: "01:00" }, action: { type: "self-work", repo: "C:/p", goal: "do the [CoolDown] tasks", hours: 8, check: "pnpm test" } });
+  await assert.rejects(rs.save({ name: "x", schedule: { kind: "daily", time: "01:00" }, action: { type: "self-work", repo: "", goal: "", hours: 1, check: "" } }), /project/);
+  await rs.runNow(r.id);
+  assert.deepEqual(started, [{ repo: "C:/p", goal: "do the [CoolDown] tasks", hours: 8, check: "pnpm test" }]);
+  assert.equal((await rs.list()).find((x) => x.id === r.id)?.lastStatus, "done");
+});

@@ -229,6 +229,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   }
   if (options.port !== undefined) config.port = options.port;
   const worker = options.worker;
+  /** The server itself, once made: routines start self-work through its route. */
+  let injectApp: { inject: (o: { method: "POST"; url: string; payload: unknown; remoteAddress: string; headers: Record<string, string> }) => Promise<{ statusCode: number; json: () => unknown }> } | undefined;
   if (worker) {
     // The worker only works for the main app on this computer: no remote access, no device sharing.
     config.remote.enabled = false;
@@ -527,6 +529,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       const files = done?.files.length ? ` Files: ${done.files.join(", ")}.` : "";
       return { ok: done?.status === "done", message: done?.status === "done" ? `Finished.${files}` : done?.error ?? "Stopped.", link: "#/pipelines" };
     },
+    // The same checks as the panel's Start (through the route, so a worker is used when there is one).
+    startSelfWork: async (o) => {
+      if (!injectApp) return { ok: false, message: "KesherAI is still starting.", link: "#/code" };
+      const r = await injectApp.inject({ method: "POST", url: "/api/self-work/start", payload: o, remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } });
+      const body = r.json() as { run?: { branch?: string; convId?: string }; error?: string };
+      return r.statusCode === 200 && body.run ? { ok: true, message: `Self-work started on ${body.run.branch ?? "a new branch"}.`, link: "#/code" } : { ok: false, message: body.error ?? `It did not start (${r.statusCode}).`, link: "#/code" };
+    },
     runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
       const c = await services.conversations.create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString()}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
       // A routine's folder (e.g. a list it keeps): created if missing, then opened to this chat's file tools.
@@ -790,6 +799,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
+  injectApp = app;
   // Cross-origin access: the model API (/v1) for web apps of any origin (they need an access key);
   // KesherAI's own API only for its own pages, the Android app and, for /api/browser, the extension.
   // Smaller answers over Wi-Fi and the tunnel (a long chat's JSON shrinks about tenfold). Only text:

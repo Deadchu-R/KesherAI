@@ -7,7 +7,7 @@ import { usePersonas } from "./Personas";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number } | { kind: "startup"; delayMinutes?: number };
-type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean; web?: boolean; folder?: string; background?: boolean };
+type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean; web?: boolean; folder?: string; background?: boolean } | { type: "self-work"; repo: string; goal: string; hours: number; check: string; modelId?: string };
 interface Routine { id?: string; name: string; enabled: boolean; schedule: Schedule; action: Action; notify: boolean; telegram?: boolean; lastRun?: string; lastStatus?: string; lastMessage?: string; lastLink?: string; nextRun?: string | null; running?: boolean }
 
 const DAYS: Array<[string, string]> = [["א׳", "Su"], ["ב׳", "Mo"], ["ג׳", "Tu"], ["ד׳", "We"], ["ה׳", "Th"], ["ו׳", "Fr"], ["ש׳", "Sa"]];
@@ -88,6 +88,7 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
             <select value={draft.action.type} onChange={(e) => setDraft({ ...draft, action: e.target.value === "pipeline" ? { type: "pipeline", pipelineId: pipelines[0]?.id ?? "" } : { type: "prompt", prompt: "" } })}>
               <option value="prompt">{L("שאלה למודל (שיחה חדשה כל פעם)", "Ask a model (a new chat each time)")}</option>
               <option value="pipeline" disabled={!pipelines.length}>{L("הרצת צינור", "Run a pipeline")}</option>
+              {draft.action.type === "self-work" && <option value="self-work">{L("עבודה עצמית (נקבעה בדף הקוד)", "Self-work (set on the code page)")}</option>}
             </select>
             {draft.action.type === "prompt" && personas.length > 0 && (
               <select value={draft.action.personaId ?? ""} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), ...(e.target.value ? { personaId: e.target.value } : { personaId: undefined }) } })}>
