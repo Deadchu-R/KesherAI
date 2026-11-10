@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, rmdir, stat, unlink } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
@@ -107,6 +107,29 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
       return { path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw), ...(measured ? { measured } : {}) };
     }));
     return [...own, ...others];
+  });
+
+  /**
+   * Deletes a model KesherAI downloaded (like LM Studio's My Models trash button), after the user confirmed it.
+   * Only files inside KesherAI's own models folder: other apps' models (LM Studio, Ollama…) are only read, never
+   * deleted. Never the model the engine has loaded. Empty folders left behind go too.
+   */
+  app.post<{ Body: { path?: string } }>("/api/models/delete", async (req, reply) => {
+    const path = resolve(String(req.body?.path ?? ""));
+    const root = resolve(s.paths.models);
+    if (!path.startsWith(root + sep)) return reply.code(400).send({ error: "Only models KesherAI downloaded can be deleted here (other apps' models stay as they are)." });
+    if (resolve(s.engine.status().modelPath ?? "") === path) return reply.code(409).send({ error: "This model is loaded. Load another one (or stop the engine) first." });
+    const st = await stat(path).catch(() => undefined);
+    if (!st?.isFile()) return reply.code(404).send({ error: "No such model file." });
+    try {
+      await unlink(path);
+    } catch (e) {
+      return reply.code(409).send({ error: `It could not be deleted (another app may have it open): ${(e as Error).message}` });
+    }
+    // Remove the folders it leaves empty, up to the models folder.
+    for (let d = dirname(path); d.startsWith(root + sep); d = dirname(d)) if (!(await rmdir(d).then(() => true, () => false))) break;
+    forgetFoundModels();
+    return { ok: true, freed: st.size };
   });
 
   /** The download folder and the extra folders KesherAI reads models from. */

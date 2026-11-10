@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, t } from "../i18n";
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
 import { desktop, toast } from "../library";
 import { HubBrowser } from "../HubBrowser";
@@ -268,6 +270,19 @@ export function ModelsPage() {
   const [error, setError] = useState("");
 
   const refreshLocal = () => void api<LocalFile[]>("/api/models/local").then(setLocal).catch(() => undefined);
+  const [disk, setDisk] = useState<{ freeGb?: number; totalGb?: number } | null>(null);
+  const refreshDisk = () => void api<{ freeGb?: number; totalGb?: number }>("/api/disk").then(setDisk, () => setDisk(null));
+  const removeModel = async (f: LocalFile) => {
+    if (!confirm(L(`למחוק את ${f.name} (${gb(f.size)})? הקובץ יימחק מהדיסק לצמיתות.`, `Delete ${f.name} (${gb(f.size)})? The file is removed from the disk for good.`))) return;
+    try {
+      await api("/api/models/delete", { method: "POST", body: { path: f.path } });
+      toast(L(`נמחק. התפנו ${gb(f.size)}.`, `Deleted. ${gb(f.size)} freed.`));
+      refreshLocal();
+      refreshDisk();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
 
   useEffect(() => {
     refreshLocal();
@@ -311,10 +326,7 @@ export function ModelsPage() {
       // remembered tab is only a convenience
     }
   };
-  const [disk, setDisk] = useState<{ freeGb?: number } | null>(null);
-  useEffect(() => {
-    void api<{ freeGb?: number }>("/api/disk").then(setDisk).catch(() => undefined);
-  }, [doneCount]);
+  useEffect(refreshDisk, [doneCount]);
   const tabs: Array<{ id: string; label: string; engine?: string }> = [
     { id: "chat", label: categoryLabel("chat") },
     { id: "image", label: categoryLabel("image") },
@@ -392,6 +404,7 @@ export function ModelsPage() {
       {tab === "storage" && (
         <section className="card stack">
           <h2>{t("localFiles")}</h2>
+          {disk?.freeGb !== undefined && <p className={`small ${disk.freeGb < 10 ? "error" : "muted"}`}>{L(`פנוי בכונן של המודלים: ${disk.freeGb.toFixed(0)} GB מתוך ${disk.totalGb?.toFixed(0) ?? "?"} GB`, `Free on the models drive: ${disk.freeGb.toFixed(0)} GB of ${disk.totalGb?.toFixed(0) ?? "?"} GB`)}</p>}
           <ModelFolders onChange={refreshLocal} />
           <div className="list">
             {local.map((f) => (
@@ -401,6 +414,9 @@ export function ModelsPage() {
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                 {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                 {f.gguf && loadButton(f)}
+                {(!f.source || f.source === "KesherAI") && (
+                  <button type="button" className="icon-btn" title={L("מחיקת הקובץ מהדיסק", "Delete the file from the disk")} aria-label={L(`מחיקת ${f.name}`, `Delete ${f.name}`)} onClick={() => void removeModel(f)}>🗑</button>
+                )}
               </div>
             ))}
             {!local.length && <p className="muted">{t("noLocalModels")}</p>}
