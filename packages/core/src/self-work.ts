@@ -79,7 +79,9 @@ const MAX_FAILURES = 3;
 const MAX_SKIPS = 3;
 const L_SKIP = "Skipped an item";
 /** How long one item may run, and how long an approval may wait. */
-const STEP_MS = 45 * 60_000;
+/** A turn that still moves (new steps keep coming) may run this long; a stuck one is caught sooner by STALL_MS. A slow
+ * local model can need most of an hour for one item (found on the PC: Qwen3.6 at 18 tokens/s), so this is only a cap. */
+const STEP_MS = 120 * 60_000;
 const WAIT_MS = 30 * 60_000;
 /** A turn with no new step (no tool call, no answer) for this long is stuck: it is stopped and the item resumed. */
 const STALL_MS = 12 * 60_000;
@@ -291,12 +293,12 @@ export class SelfWork {
       }
       if (this.now() > end) {
         if (this.d.stopTurn) {
-          // 45 minutes on one item: give up on it now (the error below makes it the third failure) and go on.
+          // Two hours on one item: give up on it now (the error below makes it the third failure) and go on.
           this.d.stopTurn(r.convId);
           r.failures = MAX_FAILURES - 1;
           return { status: "error", last: "" };
         }
-        await this.end("blocked", "One item ran for 45 minutes without finishing.");
+        await this.end("blocked", "One item ran for two hours without finishing.");
         return undefined;
       }
     }
