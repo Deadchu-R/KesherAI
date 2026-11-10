@@ -344,8 +344,12 @@ export const checkCodeTool: AgentTool = {
   },
   async preview(_input, ctx) {
     const root = rootOf(ctx);
-    const c = checkerFor(root, await readdir(root).catch(() => []));
-    return c ? `Check the project for errors (${c.name}): ${c.command === "CLANGCHECK" ? "clang -fsyntax-only on the changed files" : c.command}, and Unreal C++ rules if it has Unreal code` : "Check the code for errors (Unreal C++ rules for .h/.cpp files; nothing is built or run).";
+    const top = await readdir(root).catch(() => [] as string[]);
+    const c = checkerFor(root, top);
+    // Only a folder with C++ files (or Unreal's Source) gets the Unreal wording; a C# file alone is not Unreal code.
+    return c ? `Check the project for errors (${c.name}): ${c.command === "CLANGCHECK" ? "clang -fsyntax-only on the changed files" : c.command}, and Unreal C++ rules if it has Unreal code` : top.some((f) => /\.(h|hpp|cpp)$/i.test(f)) || top.includes("Source")
+      ? "Check the code for errors (Unreal C++ rules for .h/.cpp files; nothing is built or run)."
+      : "Look for a way to check the code for errors (nothing is built or run).";
   },
   async run(_input, ctx) {
     const root = rootOf(ctx);
