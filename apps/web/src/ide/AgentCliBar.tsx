@@ -5,15 +5,16 @@ import { getLocale } from "../i18n";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 /**
- * Buttons above the code page's terminal for Gemini CLI, Google's own coding
- * agent: start it in this project, or install it (with npm) when it is
- * missing. It signs in with the user's Google account inside the terminal, so
- * a Google AI Pro subscription works and KesherAI never holds that sign-in.
+ * Buttons above the code page's terminal for other coding agents' own CLIs:
+ * Gemini CLI (start it in this project, or install it with npm; it signs in
+ * with the user's Google account itself, so a Google AI Pro subscription works
+ * and KesherAI never holds that sign-in), and Claude Code running on
+ * KesherAI's own model when it is installed.
  *
  * @param props.onRun - Opens a fresh terminal that starts the named command.
  */
 export function AgentCliBar({ onRun }: { onRun: (run: string) => void }) {
-  const [st, setSt] = useState<{ gemini: { installed: boolean }; npm: boolean } | null>(null);
+  const [st, setSt] = useState<{ gemini: { installed: boolean }; claude?: { installed: boolean }; npm: boolean } | null>(null);
   const load = () => void api<NonNullable<typeof st>>("/api/agent-clis").then(setSt, () => setSt(null));
   useEffect(load, []);
   if (!st) return null;
@@ -32,6 +33,11 @@ export function AgentCliBar({ onRun }: { onRun: (run: string) => void }) {
         </button>
       ) : (
         <span className="muted small">{L("כדי להתקין את Gemini CLI צריך Node.js (מ־nodejs.org).", "Gemini CLI needs Node.js (from nodejs.org).")}</span>
+      )}
+      {st.claude?.installed && (
+        <button type="button" onClick={() => onRun("claude-local")} title={L("מפעיל את Claude Code על המודל של קשר (למשל Qwen במחשב): בלי חשבון Anthropic ובלי תשלום. כמו ollama launch claude.", "Starts Claude Code on KesherAI's model (e.g. Qwen on this computer): no Anthropic account, nothing to pay. Like ollama launch claude.")}>
+          {L("Claude Code על המודל המקומי", "Claude Code on the local model")}
+        </button>
       )}
       <span className="muted small grow">{L("ההתחברות שלו נשארת אצלו, לא בקשר.", "Its sign-in stays with it, not in KesherAI.")}</span>
       {st.gemini.installed || <button type="button" onClick={load}>{L("בדיקה שוב", "Check again")}</button>}

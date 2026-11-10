@@ -49,7 +49,28 @@ export const AGENT_CLIS: Record<string, string> = {
   gemini: "gemini",
   "gemini-install": "npm install -g @google/gemini-cli",
   "gemini-update": "npm install -g @google/gemini-cli@latest",
+  // Claude Code (Anthropic's CLI agent) on KesherAI's own model, like `ollama launch claude`: its requests go to
+  // KesherAI's Anthropic-compatible /v1/messages (any model name it sends goes to the active chat model), so no
+  // Anthropic account or key is used. The environment comes from LOCAL_ENV.
+  "claude-local": "claude",
 };
+
+/**
+ * Environment for the commands that run on KesherAI's own model.
+ *
+ * @param run - The command's name.
+ * @param port - KesherAI's port on this computer.
+ */
+export function agentEnv(run: string, port: number): Record<string, string> {
+  if (run !== "claude-local") return {};
+  return {
+    ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`,
+    // Local requests need no key; Claude Code only wants one set (and must not fall back to the user's own key).
+    ANTHROPIC_AUTH_TOKEN: "kesher-local",
+    ANTHROPIC_API_KEY: "",
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+  };
+}
 
 /** The user's shell. */
 function shell(): { file: string; args: string[] } {
@@ -93,8 +114,8 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
         p.on("error", () => resolve(undefined));
         p.on("close", (code) => resolve(code === 0 ? out.split(/\r?\n/)[0]?.trim() || undefined : undefined));
       });
-    const [gemini, npm] = await Promise.all([find("gemini"), find("npm")]);
-    return { gemini: { installed: !!gemini }, npm: !!npm };
+    const [gemini, npm, claude] = await Promise.all([find("gemini"), find("npm"), find("claude")]);
+    return { gemini: { installed: !!gemini }, claude: { installed: !!claude }, npm: !!npm };
   });
 
   /**
@@ -112,8 +133,10 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
     }
     const mod = loadPty();
     const sh = shell();
+    const port = Number(/:(\d+)$/.exec(String(req.headers.host ?? ""))?.[1] ?? 7420);
+    const extra = run && req.query.run ? agentEnv(req.query.run, port) : {};
     const term: Pty = mod
-      ? mod.spawn(sh.file, sh.args, { name: "xterm-256color", cols: 100, rows: 30, cwd, env: { ...process.env, TERM: "xterm-256color" } })
+      ? mod.spawn(sh.file, sh.args, { name: "xterm-256color", cols: 100, rows: 30, cwd, env: { ...process.env, TERM: "xterm-256color", ...extra } })
       : pipeShell(cwd);
     if (!mod) socket.send("(Simple terminal: interactive programs may not work.)\r\n");
     // A coding agent's own CLI (Gemini CLI): typed into the shell as if the user did, so it signs in and runs as itself.
