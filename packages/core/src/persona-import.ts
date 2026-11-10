@@ -116,3 +116,54 @@ export async function findPersonas(home = homedir(), env: NodeJS.ProcessEnv = pr
   await walk(join(models, "manifests"), []);
   return out;
 }
+
+/** A persona file from LobeHub (an agent) or Open WebUI (exported workspace models). */
+export type PersonaFileSource = "LobeHub" | "Open WebUI";
+
+/**
+ * Reads personas from an exported file: a LobeHub agent (`{ meta, config:
+ * { systemRole, params } }`, one or a list) or Open WebUI's exported models
+ * (a list of `{ name, params: { system, temperature, top_p, stop },
+ * meta: { suggestion_prompts } }`). The format is read from the content.
+ *
+ * @param json - The file's JSON.
+ * @returns What it holds, and where it is from.
+ */
+export function personasFromFile(json: unknown): { source: PersonaFileSource; personas: Array<Omit<FoundPersona, "app"> & { icon?: string }> } | undefined {
+  const list = Array.isArray(json) ? json : [json];
+  const objs = list.filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x));
+  if (!objs.length) return undefined;
+  const isLobe = objs.some((o) => o.config && typeof o.config === "object" && typeof (o.config as Record<string, unknown>).systemRole === "string");
+  const isOwui = objs.some((o) => o.params && typeof o.params === "object" && typeof (o.params as Record<string, unknown>).system === "string");
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  if (isLobe) {
+    const personas = objs.flatMap((o) => {
+      const config = (o.config ?? {}) as Record<string, unknown>;
+      const meta = (o.meta ?? {}) as Record<string, unknown>;
+      const instructions = text(config.systemRole);
+      if (!instructions) return [];
+      const p = (config.params ?? {}) as Record<string, unknown>;
+      const params = cleanParams({ temperature: p.temperature, topP: p.top_p });
+      const name = text(meta.title) || text(o.identifier) || "LobeHub agent";
+      const icon = text(meta.avatar);
+      return [{ name: name.slice(0, 60), instructions, ...(params ? { params } : {}), ...(icon && [...icon].length <= 2 ? { icon } : {}) }];
+    });
+    return personas.length ? { source: "LobeHub", personas } : undefined;
+  }
+  if (isOwui) {
+    const personas = objs.flatMap((o) => {
+      const p = (o.params ?? {}) as Record<string, unknown>;
+      const instructions = text(p.system);
+      if (!instructions) return [];
+      const meta = (o.meta ?? {}) as Record<string, unknown>;
+      const params = cleanParams({ temperature: p.temperature, topP: p.top_p, stop: p.stop });
+      const starters = (Array.isArray(meta.suggestion_prompts) ? meta.suggestion_prompts : [])
+        .map((s) => (s && typeof s === "object" ? text((s as Record<string, unknown>).content) : text(s)))
+        .filter(Boolean)
+        .slice(0, 6);
+      return [{ name: (text(o.name) || text(o.id) || "Open WebUI model").slice(0, 60), instructions, ...(params ? { params } : {}), ...(starters.length ? { starters } : {}) }];
+    });
+    return personas.length ? { source: "Open WebUI", personas } : undefined;
+  }
+  return undefined;
+}

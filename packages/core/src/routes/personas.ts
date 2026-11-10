@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { PERSONA_TEMPLATES, type Persona } from "../personas.js";
 import { modelTurnFor } from "../conversations.js";
-import { findPersonas } from "../persona-import.js";
+import { findPersonas, personasFromFile } from "../persona-import.js";
 import { isLocalRequest } from "../auth.js";
 
 /**
@@ -21,6 +21,21 @@ export async function personaRoutes(app: FastifyInstance, s: KesherServices): Pr
     const mine = new Set((await s.personas.list()).map((p) => p.instructions.trim()));
     return { found: (await findPersonas()).map((f) => ({ ...f, have: mine.has(f.instructions.trim()) })) };
   });
+  // An exported file (a LobeHub agent, Open WebUI's exported models), uploaded from the page (the phone too): adds them all.
+  app.post<{ Body: { data?: unknown } }>("/api/personas/import-file", { bodyLimit: 20 * 1024 * 1024 }, async (req, reply) => {
+    const r = personasFromFile(req.body?.data);
+    if (!r) return reply.code(400).send({ error: "This is not a persona file KesherAI knows: a LobeHub agent (.json) or Open WebUI's exported models (.json)." });
+    const names = new Set((await s.personas.list()).map((p) => p.name.toLowerCase()));
+    const added: string[] = [];
+    for (const f of r.personas.slice(0, 100)) {
+      const name = names.has(f.name.toLowerCase()) ? `${f.name} (${r.source})`.slice(0, 60) : f.name;
+      names.add(name.toLowerCase());
+      await s.personas.save({ name, instructions: f.instructions, ...(f.icon ? { icon: f.icon } : {}), ...(f.params ? { params: f.params } : {}), ...(f.starters ? { starters: f.starters } : {}) });
+      added.push(name);
+    }
+    return { source: r.source, added };
+  });
+
   app.post<{ Body: { items?: Array<{ app?: string; name?: string }> } }>("/api/personas/found/import", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
     const want = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];

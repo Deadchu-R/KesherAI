@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, refreshLibrary, toast } from "../library";
@@ -129,6 +129,7 @@ export function PersonasPage() {
         </section>
       ))}
       {!draft && <FoundPersonas />}
+      {!draft && <PersonaFile />}
       {!draft && (
         <section className="card">
           <h3>{L("להתחיל מתבנית", "Start from a template")}</h3>
@@ -194,6 +195,41 @@ function FoundPersonas() {
         ))}
       </ul>
       <div className="row"><button type="button" className="primary" disabled={!picked.size || busy} onClick={() => void add()}>{L(`הוסף ${picked.size || ""}`, `Add ${picked.size || ""}`)}</button></div>
+    </section>
+  );
+}
+
+/**
+ * Personas from an exported file: a LobeHub agent or Open WebUI's exported
+ * models (.json). Works from the phone too (the file is uploaded).
+ */
+function PersonaFile() {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (file: File) => {
+    setBusy(true);
+    try {
+      let data: unknown;
+      try {
+        data = JSON.parse(await file.text());
+      } catch {
+        throw new Error(L("הקובץ אינו JSON.", "The file is not JSON."));
+      }
+      const r = await api<{ source: string; added: string[] }>("/api/personas/import-file", { method: "POST", body: { data } });
+      toast(L(`נוספו ${r.added.length} פרסונות מ-${r.source}.`, `Added ${r.added.length} personas from ${r.source}.`));
+      await refreshPersonas();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+  return (
+    <section className="card row">
+      <span className="grow muted small">{L("יש לכם סוכן מ-LobeHub או מודלים שייצאתם מ-Open WebUI? ייבאו אותם כפרסונות, עם ההוראות, ההגדרות וההצעות שלהם.", "Have an agent from LobeHub, or models exported from Open WebUI? Import them as personas, with their instructions, settings and suggestions.")}</span>
+      <button type="button" disabled={busy} onClick={() => input.current?.click()}>{busy ? L("מייבא…", "Importing…") : L("ייבוא מקובץ", "Import a file")}</button>
+      <input ref={input} type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
     </section>
   );
 }

@@ -41,3 +41,13 @@ test("both are found on the computer from their own folders", async () => {
   const found = await findPersonas(home, {});
   assert.deepEqual(found.map((f) => `${f.app}:${f.name}`).sort(), ["LM Studio:short no reason", "Ollama:coder:latest"]);
 });
+
+test("a LobeHub agent and Open WebUI's exported models become personas; other JSON is refused", async () => {
+  const { personasFromFile } = await import("./persona-import.js");
+  const lobe = personasFromFile({ identifier: "unity-guru", meta: { title: "Unity Guru", avatar: "🎮", tags: ["unity"] }, config: { systemRole: "You are a Unity expert.", params: { temperature: 0.4, top_p: 1 } } });
+  assert.deepEqual(lobe, { source: "LobeHub", personas: [{ name: "Unity Guru", instructions: "You are a Unity expert.", params: { temperature: 0.4, topP: 1 }, icon: "🎮" }] });
+  const owui = personasFromFile([{ id: "reviewer", name: "Reviewer", base_model_id: "qwen3", params: { system: "Review code.", temperature: 0.1, stop: ["###"] }, meta: { suggestion_prompts: [{ content: "Review this PR" }] } }]);
+  assert.deepEqual(owui, { source: "Open WebUI", personas: [{ name: "Reviewer", instructions: "Review code.", params: { temperature: 0.1, stop: ["###"] }, starters: ["Review this PR"] }] });
+  assert.equal(personasFromFile({ mapping: {} }), undefined);
+  assert.equal(personasFromFile("text"), undefined);
+});
