@@ -164,6 +164,12 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
 
   // The shared task board: Roee sees it and can add, reopen or note from KesherAI (and the phone).
   app.get("/api/self-work/board", async (_req, reply) => (s.board ? s.board.read() : reply.code(503).send({ error: "No board." })));
+  // Where the board file is on this computer (the + menu's "the board file itself"), for this computer only.
+  app.get("/api/self-work/board/file", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    if (!s.board) return reply.code(503).send({ error: "No board." });
+    return { file: s.board.file };
+  });
   app.post<{ Body: { changes?: BoardChange[]; rev?: number } }>("/api/self-work/board", async (req, reply) => {
     if (!s.board) return reply.code(503).send({ error: "No board." });
     const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];

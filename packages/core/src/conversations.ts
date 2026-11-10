@@ -8,7 +8,7 @@ import type { SkillStore } from "./skill-store.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
+import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
@@ -1073,7 +1073,7 @@ export class ConversationManager {
               this.agentSessions.set(id, sid);
               this.scheduleSave(id);
             },
-          })
+          }, this.deps.board ? [dirname(this.deps.board.file)] : [])
         : undefined;
     if (outside) this.outside.set(id, outside);
     const session = new AgentSession({

@@ -43,6 +43,16 @@ const boardCat = (t: BoardTask): BoardCat => t.category ?? (/^\s*\[cool\s*down\]
  * to do with them. Plain text, so it works for any model: the local one or Antigravity (Gemini, Claude).
  */
 async function boardMessage(cat: BoardCat | "all"): Promise<string> {
+  // On the computer itself: the file, so the agent always reads the board as it is now (a local model with its
+  // task_board tool, Antigravity with the board's folder added). Elsewhere (the phone): the tasks pasted in.
+  const file = await api<{ file: string }>("/api/self-work/board/file").then((r) => r.file, () => undefined);
+  if (file) {
+    const which = cat === "all" ? L("כל המשימות הפתוחות", "all open tasks") : L(`המשימות הפתוחות בקטגוריה "${cat}"`, `the open tasks with category "${cat}"`);
+    return `${L("לוח המשימות שלנו", "Our task board")}: ${file}\n${L(
+      `קרא אותו (או השתמש בכלי task_board אם יש לך), וקח את ${which}, לפי priority (מספר נמוך קודם), אחת אחרי השנייה. סמן כל משימה כ־claimed לפני שאתה מתחיל ו־done עם ה־commit בסוף, אם אתה יכול. לכל משימה: בצע אותה, הרץ את הבדיקות (pnpm -s typecheck && pnpm -s test), ועשה commit נפרד עם הסבר. בלי push. אם משימה נכשלת פעמיים, דלג עליה וכתוב למה. בסוף תן סיכום: מה נעשה ומה לא.`,
+      `Read it (or use the task_board tool if you have it), and take ${which}, by priority (lowest number first), one after another. Mark each one claimed before you start and done with the commit at the end, if you can. For each: do it, run the checks (pnpm -s typecheck && pnpm -s test), and make its own commit with an explanation. No push. If a task fails twice, skip it and say why. At the end, sum up what was done and what was not.`,
+    )}\n`;
+  }
   const b = await api<{ tasks: BoardTask[] }>("/api/self-work/board");
   const open = b.tasks.filter((t) => t.status === "open" && (cat === "all" || boardCat(t) === cat)).sort((x, y) => x.priority - y.priority);
   if (!open.length) return L("(אין משימות פתוחות ברשימה הזו בלוח.)\n", "(No open tasks in that list on the board.)\n");

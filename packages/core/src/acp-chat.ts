@@ -51,9 +51,10 @@ export type OutsideAgent = ExternalAgent & {
  * @param start - Starts the connection (tests pass an in-process agent).
  * @param modeOf - The chat's approvals mode, matched to the agent's own modes before each turn.
  * @param saved - Where the chat keeps the agent's session id, so a restart resumes it instead of starting over.
+ * @param extraDirs - More folders it may read (the shared task board), each as its own `--add-dir`.
  * @returns The agent, or undefined when the id is not an outside agent.
  */
-export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string, saved?: { get: () => string | undefined; set: (id: string) => void }): OutsideAgent | undefined {
+export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string, saved?: { get: () => string | undefined; set: (id: string) => void }, extraDirs: string[] = []): OutsideAgent | undefined {
   const def = OUTSIDE_AGENTS[modelId];
   if (!def) return undefined;
   let conn: Promise<AcpAgent> | undefined;
@@ -88,7 +89,7 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
     const local = def.command === "agy" ? agyPath() : undefined;
     const command = local && (await stat(local).catch(() => undefined)) ? local : def.command;
     try {
-      return await AcpAgent.spawn(command, [...def.args, "--add-dir", workspace], workspace, handlers);
+      return await AcpAgent.spawn(command, [...def.args, "--add-dir", workspace, ...extraDirs.flatMap((d) => ["--add-dir", d])], workspace, handlers);
     } catch (e) {
       const msg = (e as NodeJS.ErrnoException).code === "ENOENT" ? `${def.name} is not installed. On the code page, press "Install Antigravity CLI", then "Antigravity CLI" once to sign in with Google.` : (e as Error).message;
       throw new Error(msg);
