@@ -101,7 +101,11 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Importer: LM Studio presets still unread; then write the importer's design.
 - UX pages still to look at, at 390 px: Unity (Rider mode pill), Settings → Active models (long select names).
 
+### LM Studio presets
+- [Presets](https://lmstudio.ai/docs/app/presets.md): one JSON file per preset in `%USERPROFILE%\.lmstudio\config-presets` (Windows) or `~/.lmstudio/config-presets`. A preset holds a system prompt plus any inference setting from the sidebar; load settings (GPU layers, context) are not in the new format. The docs don't list the exact keys, so they should be read from a real file on the PC (Roee has `.lmstudio`) before the importer is written. Legacy 0.2.x presets still load. Import from a file or URL exists since 0.3.15.
+- Mapping: system prompt → persona instructions; sampling settings → the persona's model settings.
+
 ### Where it stopped
-- TokenEconomizer: done, internals included (above). Next for it: the design for KesherAI's project facts (form repair + env value first, templated, per workspace, shown in the project page).
-- Importer research is complete enough to design it (LM Studio presets still unread). Next: the design for KesherAI's project facts; then LM Studio presets.
-- Next UX pages to look at, at 390 px: Unreal (C++ tab), Unity (Rider mode pill), Settings → Active models.
+- Project facts: **built** (0.6.43). Next for it: once real chats on the PC have run, look at what it learned and tune the error classes (Unity/Unreal build errors are next to add).
+- Importer: all formats are read except the exact LM Studio preset keys (read one real file from `.lmstudio/config-presets` on the PC). Next: write the importer design (one screen: pick an app, preview, choose, import).
+- UX pages still to look at, at 390 px: Unity (Rider mode pill), Settings → Active models (long select names).
