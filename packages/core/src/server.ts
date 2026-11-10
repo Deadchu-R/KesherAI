@@ -7,7 +7,7 @@ import { timingSafeEqual } from "node:crypto";
 import cors from "@fastify/cors";
 import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
 import { branding, cleanAppearance, features } from "@kesher/shared";
@@ -116,7 +116,7 @@ import { pluginRoutes } from "./routes/plugins.js";
 import { detectHardwareCached, freeSpace } from "@kesher/downloads";
 import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
-import { systemRoutes } from "./routes/system.js";
+import { systemRoutes, TERMINATED_FILE } from "./routes/system.js";
 import { modelRoutes } from "./routes/models.js";
 import { generateRoutes } from "./routes/generate.js";
 import { downloadRoutes } from "./routes/downloads.js";
@@ -520,7 +520,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       if (!registry.get("comfyui")) registry.add({ id: "comfyui", type: "comfyui", name: "ComfyUI (KesherAI)", location: "local", baseUrl: url });
     },
   });
-  if (config.comfyui.autoStart && config.parts.nodes !== false) void comfy.start().catch(() => undefined);
+  // After Terminate (see routes/system.ts) this start stays light: no ComfyUI, no model, until asked.
+  const terminatedFile = join(paths.root, TERMINATED_FILE);
+  const afterTerminate = existsSync(terminatedFile) && Date.now() - statSync(terminatedFile).mtimeMs < 10 * 60_000;
+  if (existsSync(terminatedFile)) rmSync(terminatedFile, { force: true });
+  if (config.comfyui.autoStart && config.parts.nodes !== false && !afterTerminate) void comfy.start().catch(() => undefined);
   semantic = new Semantic({
     config,
     registry,
@@ -1138,7 +1142,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // Bring back the model that was loaded last time, without delaying start-up.
   const last = config.engines.lastModel;
-  if (config.engines.autoLoadLast && last && existsSync(last) && engine.status().installed) {
+  if (config.engines.autoLoadLast && !afterTerminate && last && existsSync(last) && engine.status().installed) {
     void loadModel(services, last).catch((err) => engine.fail(err));
   }
 

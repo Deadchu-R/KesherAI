@@ -69,7 +69,7 @@ function Pct({ label, pct, extra }: { label: string; pct: number; extra?: string
   );
 }
 
-const hot = (c?: number) => (c === undefined ? "" : `${c}°C`);
+const hot = (c?: number) => (c === undefined ? "" : `${Math.round(c)}°C`);
 
 /**
  * The computer's load, live while the panel is open (from the phone too): processor and memory, each graphics
@@ -81,7 +81,8 @@ function PcLoad() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let alive = true;
-    const tick = () => void api<PcStatus>("/api/pc-status").then((r) => alive && setSt(r), () => undefined);
+    // A hidden tab (phone in a pocket) does not keep the computer measuring.
+    const tick = () => { if (!document.hidden) void api<PcStatus>("/api/pc-status").then((r) => alive && setSt(r), () => undefined); };
     tick();
     const id = setInterval(tick, 2500);
     return () => {

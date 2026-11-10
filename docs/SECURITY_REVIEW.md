@@ -241,3 +241,11 @@ This review went through the code part by part. Each finding is listed with what
 - **`/api/conversations/:id/agent-options`:** only for code chats on an outside agent. `configId` and `value` are strings of at most 200 characters, and the value must be one of the agent's own choices (tested). Opening the menu starts the agent's CLI, which the chat's first message would do anyway.
 - **MTP default 2:** an engine flag only.
 - **Nothing to fix.**
+
+## Scan 43 (2026-11-10): board categories and shortcut, board file path, load view, Terminate
+
+- **Board categories:** one of `normal | cooldown | fable`. Anything else is an error on edit and becomes `normal` on add. Self-work is told to take only `{cooldown}` tasks, and it still refuses outside agents (`agent/*`), so Antigravity never runs unattended.
+- **`/api/self-work/board/file`:** this computer only (403 from devices). On the phone, + pastes the task list instead of a path, so the PC's folder names never reach a device. The username was removed from the code and from git history (filter-repo; checked on a fresh mirror).
+- **`/api/pc-status`:** read only, with the same access as the rest of the API (local, or a paired device's key). It shows the card's name, load and memory, never files or processes. The guard's measurement is throttled to once every 2.5 s whoever polls. The page skips the poll while its tab is hidden (fixed now).
+- **`/api/system/terminate`:** needs `{confirm:"terminate"}`, and the page asks first. It needs a JSON body, so a cross-site form cannot send it. It stops self-work (and its worker, only at the address KesherAI started), ComfyUI and the engine, then restarts. It leaves a `terminated` mark in the data folder, so the next start, within 10 minutes and once only, loads no model and starts no ComfyUI. Found on the PC: without it, both came back by themselves. Tested.
+- **Fixed:** the hidden-tab poll, and the start after Terminate.

@@ -1,11 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
-import { basename, resolve, sep } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 import { Tailscale } from "../tailscale.js";
 import { isLocalRequest } from "../auth.js";
+
+/** Left by Terminate in the data folder: the next start loads no model and starts no ComfyUI (once). */
+export const TERMINATED_FILE = "terminated";
 
 /** Version of the core server API. */
 export const CORE_VERSION = "0.4.0";
@@ -78,16 +82,18 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
     await s.selfWork?.stop().catch(() => undefined);
     const worker = s.workerHost?.url();
     if (worker) await fetch(`${worker}/api/self-work/stop`, { method: "POST", signal: AbortSignal.timeout(5000) }).catch(() => undefined);
+    // The next start skips loading the last model and starting ComfyUI, so the computer stays free.
+    await writeFile(join(s.paths.root, TERMINATED_FILE), new Date().toISOString()).catch(() => undefined);
+    await s.comfy.stop().catch(() => undefined);
+    await s.engine.stop().catch(() => undefined);
     if (s.restartApp) {
-      // The restart closes everything (chats, engines, ComfyUI, Antigravity) and exits within 10 s.
+      // The restart closes the rest (chats, Antigravity) and exits within 10 s.
       s.restarting = true;
       setTimeout(() => s.restartApp?.(), 300);
       return { ok: true, restarting: true };
     }
     // Run from the command line: free what can be freed; the user restarts it there.
     await s.conversations.closeAll().catch(() => undefined);
-    await s.engine.stop().catch(() => undefined);
-    await s.comfy.stop().catch(() => undefined);
     return { ok: true, restarting: false };
   });
 
