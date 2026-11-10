@@ -4,6 +4,7 @@ import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
 import { reconnect } from "./Reconnect";
+import { InboxBell } from "./pages/InboxPage";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -121,6 +122,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {/* Pages render their own title here with a portal; React leaves this element's children to them. */}
           <div id="appbar-title" className="appbar-slot" />
         </div>
+        <InboxBell />
         <ComputerHub online={online} status={status} icon={Icon.computer} />
       </div>
     </header>

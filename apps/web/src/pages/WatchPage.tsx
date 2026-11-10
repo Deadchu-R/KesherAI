@@ -6,7 +6,7 @@ import { toast } from "../library";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 /** Something an agent waits for the user to approve. */
-export interface Pending { conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }
+export interface Pending { kind?: "chat" | "self-work"; conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }
 interface Status { enabled: boolean; active: boolean; app: string; log: Array<{ at: string; action: string; app: string; ok: boolean; note?: string }> }
 
 /** @returns What waits for approval now (polled). */
@@ -50,7 +50,7 @@ export function WatchPage() {
   const answer = async (p: Pending, decision: "allow" | "deny") => {
     setBusy(p.requestId);
     try {
-      await api(`/api/conversations/${p.conversationId}/approvals/${p.requestId}`, { method: "POST", body: { decision } });
+      await api("/api/inbox/answer", { method: "POST", body: { kind: p.kind ?? "chat", conversationId: p.conversationId, requestId: p.requestId, decision } });
     } catch (e) {
       toast((e as Error).message);
     } finally {

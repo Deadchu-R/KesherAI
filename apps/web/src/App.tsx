@@ -9,6 +9,7 @@ import { ComposerBar } from "./ComposerBar";
 import { useChatAttach } from "./ChatAttach";
 import { PromptTextarea, expandSlash } from "./SlashMenu";
 import { usePending } from "./pages/WatchPage";
+import { InboxPage } from "./pages/InboxPage";
 import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
@@ -180,11 +181,11 @@ function Home() {
   );
 }
 
-/** A pill when agents wait for approval somewhere, linking to "Watch and approve". */
+/** A pill when agents wait for approval somewhere, linking to the notifications page. */
 function ApprovalsPill({ hidden }: { hidden: boolean }) {
   const pending = usePending();
   if (hidden || !pending.length) return null;
-  return <a className="approvals-pill" href="#/watch" data-guard="">✋ {t("approvalsWaiting", { n: pending.length })}</a>;
+  return <a className="approvals-pill" href="#/inbox" data-guard="">✋ {t("approvalsWaiting", { n: pending.length })}</a>;
 }
 
 /** Routes by URL hash: `#/c/<id>`, `#/images`, `#/models`, `#/connections`, `#/settings`. */
@@ -248,6 +249,7 @@ export function App() {
   else if (hash === "#/personas") page = <PersonasPage />;
   else if (hash === "#/prompts") page = <PromptsPage />;
   else if (hash === "#/watch") page = <WatchPage />;
+  else if (hash === "#/inbox") page = <InboxPage />;
   else if (hash === "#/pipelines") page = <PipelinesPage />;
   else if (hash === "#/compare") page = <ComparePage />;
   else if (hash === "#/plugins") page = <PluginsPage />;
@@ -286,7 +288,7 @@ export function App() {
       </main>
       {message && <div className="toast" role="status">{message}</div>}
       <ComputerBanner />
-      <ApprovalsPill hidden={hash === "#/watch" || hash.startsWith("#/c/")} />
+      <ApprovalsPill hidden={hash === "#/watch" || hash === "#/inbox" || hash.startsWith("#/c/")} />
       <ModelPickerHost />
       <PluginStyles />
       <DownloadsButton />

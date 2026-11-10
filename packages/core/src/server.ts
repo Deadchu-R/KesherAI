@@ -46,6 +46,7 @@ import { comfyRoutes } from "./routes/comfy.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
 import { transcribeWith } from "./speech-tools.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { inboxRoutes } from "./routes/inbox.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
@@ -1055,6 +1056,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await pipelineRoutes(app, services);
   await comfyRoutes(app, services);
   await notificationRoutes(app, services);
+  await inboxRoutes(app, services);
   await mcpServerRoutes(app, services);
   await phoneRoutes(app, services);
   await githubRoutes(app, services);

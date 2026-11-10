@@ -23,9 +23,6 @@ export async function computerRoutes(app: FastifyInstance, s: KesherServices): P
     }
   });
 
-  /** Everything waiting for the user's approval, in every conversation. */
-  app.get("/api/approvals", async () => s.conversations.pendingApprovals());
-
   /** Stops every conversation that is controlling the computer. */
   app.post("/api/computer/stop", async () => {
     s.computer.stop();

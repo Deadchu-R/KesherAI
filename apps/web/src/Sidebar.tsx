@@ -124,7 +124,7 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
 /** The menu's pages in groups (the sidebar, and the top bar's menu on a phone). Plugin pages join "create". */
 export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typeof t>[0]; items: Array<[string, Parameters<typeof t>[0]]> }> = [
   { id: "create", icon: "🎨", label: "navCreate", items: [["#/images", "images"], ["#/batch", "batchNav"], ["#/nodes", "nodesNav"], ["#/unreal", "unrealNav"], ["#/unity", "unityNav"], ["#/training", "trainingNav"]] },
-  { id: "work", icon: "🧠", label: "navWork", items: [["#/pages", "pagesNav"], ["#/knowledge", "knowledgeNav"], ["#/libraries", "librariesNav"], ["#/day", "dayNav"], ["#/compare", "compareNav"], ["#/pipelines", "pipelinesNav"], ["#/watch", "watchNav"]] },
+  { id: "work", icon: "🧠", label: "navWork", items: [["#/pages", "pagesNav"], ["#/knowledge", "knowledgeNav"], ["#/libraries", "librariesNav"], ["#/day", "dayNav"], ["#/compare", "compareNav"], ["#/pipelines", "pipelinesNav"], ["#/inbox", "inboxNav"], ["#/watch", "watchNav"]] },
   { id: "assistant", icon: "🤖", label: "navAssistant", items: [["#/personas", "personasNav"], ["#/memory", "memoryNav"], ["#/prompts", "promptsNav"], ["#/community", "communityNav"], ["#/usage", "usageNav"]] },
   { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "connections"], ["#/plugins", "pluginsNav"], ["#/parts", "partsNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
@@ -132,7 +132,7 @@ export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typ
 /** An icon for each menu page (the sidebar's pins, the Tools page, the phone's bar). */
 export const NAV_ICONS: Record<string, string> = {
   "#/images": "🖼", "#/batch": "🗂", "#/nodes": "🧩", "#/unreal": "🎮", "#/unity": "🕹", "#/training": "🏋",
-  "#/pages": "📝", "#/knowledge": "📚", "#/libraries": "📦", "#/day": "📅", "#/compare": "⚖", "#/pipelines": "⛓", "#/watch": "🖥",
+  "#/pages": "📝", "#/knowledge": "📚", "#/libraries": "📦", "#/day": "📅", "#/compare": "⚖", "#/pipelines": "⛓", "#/watch": "🖥", "#/inbox": "🔔",
   "#/personas": "🎭", "#/memory": "🧠", "#/prompts": "💬", "#/community": "👥", "#/usage": "📊",
   "#/models": "📦", "#/connections": "🔌", "#/plugins": "🧷", "#/parts": "🎛", "#/updates": "⬆", "#/settings": "⚙",
 };

@@ -1771,3 +1771,17 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .bp-chat-head .ksel { min-width: 0; flex: 1 1 140px; width: auto; }
 .vars-form .ksel { width: 100%; }
 :root[data-preset="fulldark"] .ksel { border-color: var(--border-strong); }
+
+/* Notifications: the top bar's bell and its page. */
+.inbox-bell { position: relative; text-decoration: none; }
+.inbox-bell.urgent { color: var(--accent); }
+.inbox-count { position: absolute; inset-block-start: 1px; inset-inline-end: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.inbox .stack { margin-block-end: 24px; }
+.inbox-approval { display: grid; gap: 8px; }
+.inbox-approval pre { max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.inbox-actions button { min-width: 88px; }
+.inbox-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.inbox-notes li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; border-radius: calc(10px * var(--r-scale, 1)); }
+.inbox-notes li.new { background: var(--panel-2); }
+.inbox-notes li p { grid-column: 1 / -1; margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+@media (pointer: coarse) { .inbox-actions button { min-height: 44px; flex: 1; } }

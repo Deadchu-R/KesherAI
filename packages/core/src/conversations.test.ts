@@ -273,6 +273,29 @@ test("context explorer: shows the system prompt, tools and messages with sizes",
   }
 });
 
+test("the notifications page lists what waits for approval and answers it; bad answers are refused", async () => {
+  const { server } = await setup();
+  const app = server.app;
+  try {
+    await app.inject({ method: "PUT", url: "/api/settings", payload: { activeModels: { chat: "fake/m" } } });
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", mode: "ask" } })).json() as { id: string };
+    await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "make a file" } });
+    const inbox = await until(async () => {
+      const v = (await app.inject({ method: "GET", url: "/api/inbox" })).json() as { approvals: Array<{ kind: string; conversationId: string; requestId: string }>; notes: unknown[] };
+      return v.approvals.length ? v : undefined;
+    });
+    const p = inbox.approvals[0]!;
+    assert.equal(p.kind, "chat");
+    assert.ok(Array.isArray(inbox.notes));
+    assert.equal((await app.inject({ method: "POST", url: "/api/inbox/answer", payload: { kind: "chat", conversationId: c.id, requestId: "../../x" } })).statusCode, 400);
+    assert.equal((await app.inject({ method: "POST", url: "/api/inbox/answer", payload: { kind: "chat", conversationId: "nope", requestId: p.requestId, decision: "allow" } })).statusCode, 404);
+    assert.equal((await app.inject({ method: "POST", url: "/api/inbox/answer", payload: { kind: "chat", conversationId: c.id, requestId: p.requestId, decision: "deny" } })).statusCode, 200);
+    await until(async () => (((await app.inject({ method: "GET", url: "/api/inbox" })).json() as { approvals: unknown[] }).approvals.length === 0 ? true : undefined));
+  } finally {
+    await server.close();
+  }
+});
+
 test("approvals waiting in any conversation are listed and can be answered (watch and approve)", async () => {
   const { server } = await setup();
   const app = server.app;
