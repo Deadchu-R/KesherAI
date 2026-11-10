@@ -112,7 +112,7 @@ import { McpManager, mcpResultText } from "./mcp.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
-import { detectHardwareCached } from "@kesher/downloads";
+import { detectHardwareCached, freeSpace } from "@kesher/downloads";
 import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes } from "./routes/system.js";
@@ -415,6 +415,16 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     decide: async (convId, requestId, decision) => !!(await services.conversations.open(convId))?.session.approve(requestId, decision),
   });
   downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => notifier.onDownload(job));
+  // A nearly full drive (found on the PC: 27 MB left) breaks downloads, self-work and Windows itself: say so, once a day.
+  let diskWarned = 0;
+  const checkDisk = async () => {
+    const free = await freeSpace(paths.models).catch(() => undefined);
+    if (free === undefined || free >= 5 * 1024 ** 3 || Date.now() - diskWarned < 24 * 3_600_000) return;
+    diskWarned = Date.now();
+    await notifier.send({ title: "The drive is almost full", body: `Only ${(free / 1024 ** 3).toFixed(1)} GB is free where KesherAI keeps its models. Downloads and self-work will fail; Windows may slow down. Remove models you do not use (Models page) or other large files.`, path: "#/models", tags: ["warning"] }).catch(() => undefined);
+  };
+  setTimeout(() => void checkDisk(), 60_000).unref();
+  setInterval(() => void checkDisk(), 30 * 60_000).unref();
   // Telegram: the user's own bot; each paired chat has its own conversation (telegram.ts).
   const telegram = new TelegramBridge(config.telegram, persist, {
     newConversation: async (title) => (await services.conversations.create({ kind: "chat", title, source: "telegram" })).id,

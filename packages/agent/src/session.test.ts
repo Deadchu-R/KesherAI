@@ -137,7 +137,12 @@ test("paths outside the project are refused", async () => {
   assert.equal(await resolveInWorkspace(workspace, "sub/../sub/x"), join(await import("node:fs/promises").then((f) => f.realpath(workspace)), "sub", "x"));
   // Links that point out, also ones whose target does not exist yet, are refused.
   const { symlink } = await import("node:fs/promises");
-  await symlink("/tmp", join(workspace, "out"));
+  // Windows makes links only with Developer Mode or as administrator (found on Roee's PC: EPERM); skip that part there.
+  const linked = await symlink(tmpdir(), join(workspace, "out"), "junction").then(
+    () => true,
+    (e: NodeJS.ErrnoException) => (e.code === "EPERM" || e.code === "EACCES" ? false : Promise.reject(e)),
+  );
+  if (!linked) return;
   await symlink(join(tmpdir(), `kesher-nowhere-${Date.now()}`), join(workspace, "dangling"));
   await assert.rejects(resolveInWorkspace(workspace, "out/x.txt"), /outside/);
   await assert.rejects(resolveInWorkspace(workspace, "dangling"), /outside/);

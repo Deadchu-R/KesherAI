@@ -221,7 +221,9 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       const need = (job.total ?? 0) - start;
       if (need > 0) {
         const free = await freeSpace(dirname(req.dest));
-        if (free !== undefined && free < need + 256 * 1024 ** 2) {
+        // A margin of up to 256 MB (as much as the file itself for small ones: the tests' tiny downloads failed on a
+        // full disk because of the fixed margin).
+        if (free !== undefined && free < need + Math.min(256 * 1024 ** 2, need)) {
           diskFull = true;
           ctrl.abort();
           throw new Error(`Not enough disk space: this needs ${gb(need)}, and only ${gb(free)} is free on that drive. Free up space or choose another models folder, then press Retry.`);

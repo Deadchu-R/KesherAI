@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { isLocalRequest } from "../auth.js";
 import { pickCodeModel } from "../code-model.js";
 import { ensureLmStudioContext } from "../lmstudio-context.js";
-import { detectHardwareCached } from "@kesher/downloads";
+import { detectHardwareCached, freeSpace } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import type { SelfWorkState } from "../self-work.js";
 import type { BoardChange } from "../task-board.js";
@@ -43,6 +43,10 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     }
     const home = resolve(homedir());
     if (!b.repo || !isAbsolute(String(b.repo)) || !(repo + sep).startsWith(home + sep)) return reply.code(400).send({ error: "The project must be a folder inside your home folder." });
+    // A run makes a copy of the project and installs its packages: on a full disk every check fails (found on the PC
+    // with 0.2 GB left: the tests themselves failed) and Windows itself gets unstable.
+    const free = await freeSpace(repo).catch(() => undefined);
+    if (free !== undefined && free < 5 * 1024 ** 3) return reply.code(507).send({ error: `The drive has only ${(free / 1024 ** 3).toFixed(1)} GB free. Self-work needs at least 5 GB (a copy of the project and its packages). Free some space first.` });
     if (b.modelId !== undefined && typeof b.modelId !== "string") return reply.code(400).send({ error: "modelId is text." });
     const start = { repo, goal: String(b.goal ?? ""), ...(b.hours !== undefined ? { hours: Number(b.hours) } : {}), check };
     try {
