@@ -108,7 +108,8 @@ export async function findPersonas(home = homedir(), env: NodeJS.ProcessEnv = pr
       const model = ns === "library" ? rest.join("/") : [ns, ...rest].join("/");
       const system = await blob("system");
       if (!system) continue;
-      const p = fromOllamaLayers(`${model}:${e.name}`, { system, ...((await blob("params")) ? { params: (await blob("params"))! } : {}), ...((await blob("messages")) ? { messages: (await blob("messages"))! } : {}) });
+      const [params, messages] = await Promise.all([blob("params"), blob("messages")]);
+      const p = fromOllamaLayers(`${model}:${e.name}`, { system, ...(params ? { params } : {}), ...(messages ? { messages } : {}) });
       if (p) out.push(p);
     }
   };

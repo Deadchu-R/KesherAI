@@ -178,6 +178,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** the window place file holds only positions and sizes. A hidden window's place is no longer written.
     - **Performance:** the computer is looked over once per setup, and the models page keeps the result for five minutes. LM Studio's bundled-models folder is small.
 
+36. **Scan after 0.6.45** (project facts, the engine's context share, persona settings, importing MCP servers and personas from other apps).
+    - **Checked:** project facts are fixed sentences filled only with a command's program part (one word, or `python -m module`), whitespace and backticks removed, at most 80 characters, 4 facts and 600 characters per chat. Command output never reaches the prompt as text. They are stored in KesherAI's folder, and the user sees and removes them.
+    - **Checked:** MCP servers found in other apps' configs are listed with their command and only the names of their keys. They are added turned off, only from this computer. The server reads the config again when adding (the page only names the server); only http(s) addresses are accepted; key values are copied only when ticked.
+    - **Checked:** personas from LM Studio presets and Ollama Modelfiles are added only when ticked, only on this computer, with the same limits as any persona (20,000-character instructions, 6 starters of 300 characters). Settings are range-checked (temperature 0–2, top_p 0–1, up to 4 stop texts of 40 characters).
+    - **Checked:** a request too long for the model is retried once per step, with a smaller window (never below 2,000 tokens).
+    - **Performance:** reading Ollama's manifests read the params layer twice per model; it is now read once, together with the examples.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
