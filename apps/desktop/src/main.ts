@@ -653,6 +653,8 @@ app.on("before-quit", (event) => {
     .finally(() => s.close())
     .finally(() => {
       clearTimeout(force);
-      app.quit();
+      // exit, not quit: seen on the PC, the window stayed open with its server already closed ("The core server is
+      // not answering") and the relaunched copy gave way to it. A relaunch asked for earlier still happens.
+      app.exit(0);
     });
 });
