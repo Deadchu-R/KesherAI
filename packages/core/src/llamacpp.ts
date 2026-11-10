@@ -391,6 +391,23 @@ export class LlamaEngine {
   }
 
   /**
+   * Arguments for hybrid models (Qwen3.5–3.8, Qwen3-Next: recurrent Gated DeltaNet layers). Their state cannot be
+   * rolled back, so after a change in the middle of a conversation llama-server resumes from the nearest saved
+   * checkpoint, by default at least 8,192 tokens apart. Closer checkpoints (1,024) mean far less to read again on
+   * each agent step, for some system memory (see docs/RESEARCH_LOG.md: 53 s per step was found on the PC).
+   *
+   * @param modelPath - The model file.
+   * @param args - Arguments from the config (a setting given there is kept).
+   * @param version - The build tag (the flag is in b12110; older builds get nothing).
+   * @returns Arguments to add.
+   */
+  static hybridArgs(modelPath: string, args: readonly string[] = [], version?: string): string[] {
+    const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
+    if (build < 12000 || !/qwen3\.[5-9]|qwen3-?next/i.test(basename(modelPath))) return [];
+    return args.some((a) => a === "-cms" || a === "--checkpoint-min-step") ? [] : ["--checkpoint-min-step", "1024"];
+  }
+
+  /**
    * Whether a build fits the model to the free memory by itself (`--fit`, on by default since b7400).
    *
    * @param version - The build tag, e.g. `b12110`.
@@ -461,7 +478,7 @@ export class LlamaEngine {
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args)], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {
@@ -469,7 +486,7 @@ export class LlamaEngine {
           // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
           if (!/jinja/i.test(this.log.join("\n"))) continue;
           try {
-            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args)], timeoutMs, plan?.env);
+            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)], timeoutMs, plan?.env);
             this.runningParallel = p;
             return;
           } catch (err2) {
