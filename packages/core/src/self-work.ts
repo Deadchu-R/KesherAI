@@ -259,8 +259,14 @@ export class SelfWork {
           await this.d.send(r.convId, "The last turn ended with an error. Continue with the current item.");
           continue;
         }
-        const out = readOutcome(st.last);
+        let out = readOutcome(st.last);
         if (out.kind === "blocked") return await this.end("blocked", out.text);
+        // Local models often finish the work and forget the closing line (found on the PC with Qwen3 Coder): when the
+        // worktree changed, the check decides, not the wording.
+        if (out.kind === "none") {
+          const changed = (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim();
+          if (changed) out = { kind: "item", text: "Changes (the model did not name the item)" };
+        }
         if (out.kind === "none") {
           r.failures++;
           if (r.failures >= MAX_FAILURES) return await this.end("blocked", "The model did not say what it finished 3 times in a row.");

@@ -12,7 +12,7 @@ test("reads the model's outcome line", () => {
   assert.equal(readOutcome("just talking").kind, "none");
 });
 
-async function setup(answers: string[], opts: { dirty?: boolean; checks?: number[] } = {}) {
+async function setup(answers: string[], opts: { dirty?: boolean; checks?: number[]; changed?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "selfwork-"));
   const repo = join(root, "repo");
   await mkdir(join(repo, ".git"), { recursive: true });
@@ -32,6 +32,7 @@ async function setup(answers: string[], opts: { dirty?: boolean; checks?: number
       git.push(args);
       if (args[0] === "rev-parse" && args[1] === "--verify") return opts.dirty ? { code: 128, out: "fatal: no commits yet" } : { code: 0, out: "abc\n" };
       if (args[0] === "rev-parse") return { code: 0, out: `abc${git.length}\n` };
+      if (args[0] === "status") return { code: 0, out: opts.changed ? " M src/a.ts\n" : "" };
       return { code: 0, out: "" };
     },
     check: async () => ({ code: checks.shift() ?? 0, out: "1 test failed" }),
@@ -76,4 +77,13 @@ test("a BLOCKED answer ends the run and tells the user", async () => {
   assert.equal(sw.current?.status, "blocked");
   assert.equal(sw.current?.note, "which database?");
   assert.ok(notes.includes("✋ Self-work needs you"));
+});
+
+test("a turn that changed files but forgot the closing line is checked and committed, not counted as a failure", async () => {
+  const { sw, repo, git } = await setup(["I have successfully completed the refactoring.", "ALL DONE"], { changed: true });
+  await sw.start({ repo, goal: "refactor", check: "pnpm test", hours: 1 });
+  await sw.settled();
+  assert.equal(sw.current?.status, "done");
+  assert.equal(sw.current?.items[0]?.text, "Changes (the model did not name the item)");
+  assert.ok(git.some((a) => a[0] === "commit"));
 });
