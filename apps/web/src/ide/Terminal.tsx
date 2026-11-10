@@ -9,7 +9,7 @@ import { withToken } from "../api";
  * login shell elsewhere), running on the computer that runs KesherAI.
  *
  * @param props.convId - Conversation id.
- * @param props.run - A command the server knows by name to start in it (e.g. "gemini" for Gemini CLI).
+ * @param props.run - A command the server knows by name to start in it (e.g. "agy" for Antigravity CLI).
  */
 export function TerminalPane({ convId, run }: { convId: string; run?: string }) {
   const box = useRef<HTMLDivElement>(null);

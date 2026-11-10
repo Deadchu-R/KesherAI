@@ -3,7 +3,7 @@ import "@fastify/websocket";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { stat, writeFile, mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { resolveInWorkspace } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 
@@ -39,16 +39,24 @@ function loadPty(): PtyModule | null {
   return ptyModule;
 }
 
+/** Where Antigravity CLI's Windows installer puts `agy` (KesherAI's own PATH is older than the install). */
+export function agyPath(): string | undefined {
+  return process.platform === "win32" && process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "agy", "bin", "agy.exe") : undefined;
+}
+
 /**
- * Commands the code page can start in its terminal by name (never a command from the request). Gemini CLI is
- * Google's own agent: it signs in with the user's Google account (a Google AI Pro subscription works there) and
- * KesherAI only shows its terminal, so the sign-in never passes through KesherAI (Google forbids third-party apps
- * from using the subscription's sign-in themselves; see docs/RESEARCH_LOG.md).
+ * Commands the code page can start in its terminal by name (never a command from the request).
+ *
+ * Antigravity CLI (`agy`) is Google's own coding agent. Since June 18, 2026 it is the one a Google AI Pro or
+ * Ultra subscription signs in to (Gemini CLI kept only paid API keys and business accounts). It signs in with
+ * the user's Google account itself and KesherAI only shows its terminal, so the sign-in never passes through
+ * KesherAI (Google forbids third-party apps from using the subscription's sign-in themselves; see
+ * docs/RESEARCH_LOG.md). Its installer is Google's PowerShell script (Windows only here).
  */
 export const AGENT_CLIS: Record<string, string> = {
-  gemini: "gemini",
-  "gemini-install": "npm install -g @google/gemini-cli",
-  "gemini-update": "npm install -g @google/gemini-cli@latest",
+  agy: "agy",
+  "agy-install": "irm https://antigravity.google/cli/install.ps1 | iex",
+  "agy-update": "agy update",
   // Claude Code (Anthropic's CLI agent) on KesherAI's own model, like `ollama launch claude`: its requests go to
   // KesherAI's Anthropic-compatible /v1/messages (any model name it sends goes to the active chat model), so no
   // Anthropic account or key is used. The environment comes from LOCAL_ENV.
@@ -61,7 +69,14 @@ export const AGENT_CLIS: Record<string, string> = {
  * @param run - The command's name.
  * @param port - KesherAI's port on this computer.
  */
-export function agentEnv(run: string, port: number): Record<string, string> {
+export function agentEnv(run: string, port: number, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  if (run.startsWith("agy")) {
+    // A fresh install is not on KesherAI's PATH yet: put the installer's folder first (Windows names it "Path").
+    const exe = agyPath();
+    if (!exe) return {};
+    const key = Object.keys(env).find((k) => k.toLowerCase() === "path") ?? "PATH";
+    return { [key]: `${dirname(exe)};${env[key] ?? ""}` };
+  }
   if (run !== "claude-local") return {};
   return {
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`,
@@ -104,7 +119,7 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
     return c ? s.conversations.workspaceOf(c) : undefined;
   };
 
-  /** Whether Gemini CLI (and npm, to install it) is on this computer, for the terminal's buttons. */
+  /** Whether Antigravity CLI and Claude Code are on this computer, for the terminal's buttons. */
   app.get("/api/agent-clis", async () => {
     const find = (cmd: string) =>
       new Promise<string | undefined>((resolve) => {
@@ -114,8 +129,9 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
         p.on("error", () => resolve(undefined));
         p.on("close", (code) => resolve(code === 0 ? out.split(/\r?\n/)[0]?.trim() || undefined : undefined));
       });
-    const [gemini, npm, claude] = await Promise.all([find("gemini"), find("npm"), find("claude")]);
-    return { gemini: { installed: !!gemini }, claude: { installed: !!claude }, npm: !!npm };
+    const local = agyPath();
+    const [agy, claude, agyLocal] = await Promise.all([find("agy"), find("claude"), local ? stat(local).then(() => true, () => false) : false]);
+    return { agy: { installed: !!agy || agyLocal, canInstall: process.platform === "win32" }, claude: { installed: !!claude } };
   });
 
   /**
@@ -139,7 +155,7 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
       ? mod.spawn(sh.file, sh.args, { name: "xterm-256color", cols: 100, rows: 30, cwd, env: { ...process.env, TERM: "xterm-256color", ...extra } })
       : pipeShell(cwd);
     if (!mod) socket.send("(Simple terminal: interactive programs may not work.)\r\n");
-    // A coding agent's own CLI (Gemini CLI): typed into the shell as if the user did, so it signs in and runs as itself.
+    // A coding agent's own CLI (Antigravity CLI): typed into the shell as if the user did, so it signs in and runs as itself.
     if (run) setTimeout(() => term.write(`${run}\r`), 400);
     term.onData((d) => {
       if (socket.readyState === 1) socket.send(d);

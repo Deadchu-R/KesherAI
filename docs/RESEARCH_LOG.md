@@ -257,3 +257,19 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Project facts: **built** (0.6.43). Unity/Unreal error classes: Unity's build docs give no exact environment-error texts, and KesherAI's own Unreal build logs on the PC have no failures yet, so there is nothing real to learn from. Next: after a few weeks of chats on the PC, read `project-facts.json` and the failed commands, and add the classes that actually show up (no guessing).
 - Importer: all formats are read except the exact LM Studio preset keys (read one real file from `.lmstudio/config-presets` on the PC). Importer: design written and every format read (LM Studio presets from a real file). Next: build in the order listed (Persona params + starters first).
 - UX at 390 px (checked on the PC 2026-11-10): Settings → Active models showed a model that is not in the list as its whole path, cut from the start; it now shows the file name. On the Unity page, the downloads button covered the Add button of the first project found; on the phone it now shows only while something downloads or failed.
+
+## 2026-11-10 — Gemini CLI → Antigravity CLI; MTP speed on the PC
+
+**Finding that changes a plan:** since June 18, 2026 Google AI Pro and Ultra subscriptions no longer sign in to Gemini CLI (it kept paid API keys and business accounts; The Register, geminicli.com/docs/cli/acp-mode). Their CLI is now **Antigravity CLI (`agy`)**, a closed-source Go binary.
+- Windows install: `irm https://antigravity.google/cli/install.ps1 | iex` → `%LOCALAPPDATA%\agy\bin\agy.exe`; update with `agy update` (how2shout, inventivehq).
+- Official install page: personal Google sign-in works on Free, Pro and Ultra; also `GEMINI_API_KEY`, ADC, Enterprise.
+- **`agy acp`** (v1.5.0, Nov 4) is an official ACP v1 stdio server: "Any ACP client can launch Antigravity CLI". It has flags `--add-dir`, `--agent`, `--sandbox`, `--process-per-session` and `--login` (paste code). Sessions can be loaded, resumed and listed; it shows a model picker per account and thinking levels Low to Max. v1.5.1 made all account models available to ACP clients; v1.5.4 (Nov 10) added Auto mode.
+- Config lives in `~/.gemini/antigravity-cli/` (settings.json, mcp_config.json; remote servers use `serverUrl`). It reads AGENTS.md and GEMINI.md.
+- **Done:** the terminal buttons are now Antigravity CLI (start, update, install on Windows; PATH gets its folder for a fresh install). The MCP import reads its mcp_config.json.
+- **Next:** the ACP client in KesherAI should target `agy acp` (the official SDK is already approved), not `gemini --acp`. This is sanctioned, because Google documents third-party ACP clients and the sign-in stays inside agy.
+
+**MTP on the PC** (Qwen3.8-27B UD-Q4_K_XL, b12110, `--spec-type draft-mtp` at llama.cpp's default draft length):
+- 700-token CSV parser: 13.5s and 10.4s, about 52–67 tok/s, against 38.8 tok/s without MTP (≈1.5–1.7×).
+- Cost: the slot fell from 68.6K to 45.5K tokens.
+- Others' results: a 3090 at Q4_K_XL found `--spec-draft-n-max 2` best (+60% overall, +92% on code; hackmd thc1006). A 24 GB Blackwell run found n=8 best with NVFP4 (dev.to/pich). Each extra draft slot costs about 150 MiB.
+- **Decision:** keep MTP on. Next, try `--spec-draft-n-max 2` to win back VRAM and context.

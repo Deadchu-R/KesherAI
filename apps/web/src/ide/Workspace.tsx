@@ -62,7 +62,7 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
   const [current, setCurrent] = useState("");
   // Keep the terminal alive while other tabs are shown.
   const [terminalStarted, setTerminalStarted] = useState(false);
-  // A fresh terminal (n) that may start a known command (Gemini CLI, or its install).
+  // A fresh terminal (n) that may start a known command (Antigravity CLI, or its install).
   const [termRun, setTermRun] = useState<{ run?: string; n: number }>({ n: 0 });
 
   useEffect(() => {
