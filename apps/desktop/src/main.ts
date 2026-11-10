@@ -271,11 +271,14 @@ function lastWindow(): WindowState | undefined {
 /** Keeps the window's place up to date (a moment after it moves or resizes). */
 function rememberWindow(win: BrowserWindow): void {
   let timer: NodeJS.Timeout | undefined;
+  // Kept from the events: a hidden window (in the tray, or closing for an update) says it is not maximized on Windows,
+  // which made KesherAI reopen small on another monitor after an update.
+  let maximized = win.isMaximized();
   const save = () => {
-    if (win.isDestroyed() || win.isMinimized()) return;
+    if (win.isDestroyed() || win.isMinimized() || !win.isVisible()) return;
     const b = win.getNormalBounds();
     const now = win.getBounds();
-    void writeFile(windowFile(), JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height, maximized: win.isMaximized(), cx: now.x + Math.round(now.width / 2), cy: now.y + Math.round(now.height / 2) })).catch(() => undefined);
+    void writeFile(windowFile(), JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height, maximized, cx: now.x + Math.round(now.width / 2), cy: now.y + Math.round(now.height / 2) })).catch(() => undefined);
   };
   const later = () => {
     clearTimeout(timer);
@@ -283,8 +286,8 @@ function rememberWindow(win: BrowserWindow): void {
   };
   win.on("move", later);
   win.on("resize", later);
-  win.on("maximize", later);
-  win.on("unmaximize", later);
+  win.on("maximize", () => ((maximized = true), later()));
+  win.on("unmaximize", () => ((maximized = false), later()));
   win.on("close", save);
 }
 
