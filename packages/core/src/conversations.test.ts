@@ -296,6 +296,20 @@ test("the notifications page lists what waits for approval and answers it; bad a
   }
 });
 
+test("GET /api/inbox lists the notes newest first", async () => {
+  const { server } = await setup();
+  try {
+    await server.services.notifier.send({ title: "First note", body: "the older one" });
+    await new Promise((r) => setTimeout(r, 20));
+    await server.services.notifier.send({ title: "Second note", body: "the newer one" });
+    const v = (await server.app.inject({ method: "GET", url: "/api/inbox" })).json() as { notes: Array<{ title: string; at: number }> };
+    assert.deepEqual(v.notes.map((n) => n.title).slice(0, 2), ["Second note", "First note"]);
+    assert.ok(v.notes[0]!.at >= v.notes[1]!.at);
+  } finally {
+    await server.close();
+  }
+});
+
 test("approvals waiting in any conversation are listed and can be answered (watch and approve)", async () => {
   const { server } = await setup();
   const app = server.app;

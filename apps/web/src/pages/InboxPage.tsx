@@ -77,19 +77,29 @@ const time = (at: number | string) => {
 export function InboxPage() {
   const [box, refresh] = useInbox(3000);
   const [busy, setBusy] = useState("");
-  const [seen] = useState(seenAt);
+  const [seen, setSeen] = useState(seenAt);
+  const newestNote = box.notes[0]?.at ?? 0;
   // Opening the page reads everything that is there.
   useEffect(() => {
-    const newest = box.notes[0]?.at ?? 0;
-    if (newest > seenAt()) {
+    if (newestNote > seenAt()) {
       try {
-        localStorage.setItem(SEEN_KEY, String(newest));
+        localStorage.setItem(SEEN_KEY, String(newestNote));
       } catch {
         /* private window: the bell keeps counting */
       }
       dispatchEvent(new Event(SEEN_EVENT));
     }
-  }, [box.notes]);
+  }, [newestNote]);
+  // "Mark all read": the notes highlighted as new on this page stop being highlighted (board task t15).
+  const markAllRead = () => {
+    try {
+      localStorage.setItem(SEEN_KEY, String(newestNote));
+    } catch {
+      /* private window: the bell keeps counting */
+    }
+    setSeen(newestNote);
+    dispatchEvent(new Event(SEEN_EVENT));
+  };
   const answer = async (p: InboxApproval, decision: "allow" | "deny") => {
     setBusy(p.requestId);
     try {
@@ -132,7 +142,15 @@ export function InboxPage() {
         ))}
       </section>
       <section className="stack">
-        <h2>{L("התראות אחרונות", "Latest notifications")}</h2>
+        <div className="row">
+          <h2>{L("התראות אחרונות", "Latest notifications")}</h2>
+          <span className="grow" />
+          {newestNote > seen && (
+            <button type="button" className="link-btn" onClick={markAllRead}>
+              {L("סמן הכל כנקרא", "Mark all read")}
+            </button>
+          )}
+        </div>
         {box.notes.length === 0 && <p className="muted">{L("עוד לא נשלחו התראות. הן מגיעות כשעבודה ארוכה נגמרת, כשהורדה מסתיימת או כשסוכן מחכה לך.", "No notifications yet. They come when long work ends, a download finishes, or an agent waits for you.")}</p>}
         <ul className="inbox-notes">
           {box.notes.map((n) => (
