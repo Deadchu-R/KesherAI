@@ -94,7 +94,7 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
     try {
       return await AcpAgent.spawn(command, [...def.args, "--add-dir", workspace, ...extraDirs.flatMap((d) => ["--add-dir", d])], workspace, handlers);
     } catch (e) {
-      const msg = (e as NodeJS.ErrnoException).code === "ENOENT" ? `${def.name} is not installed. On the code page, press "Install Antigravity CLI", then "Antigravity CLI" once to sign in with Google.` : (e as Error).message;
+      const msg = (e as NodeJS.ErrnoException).code === "ENOENT" ? `${def.name} is not installed. On the code page, press "Install Antigravity CLI", then "Antigravity CLI" once to sign in with Google. (בעברית: Antigravity CLI לא מותקן. בעמוד הקוד לחצו על "התקנת Antigravity CLI", ואז על "Antigravity CLI" פעם אחת כדי להתחבר עם Google.)` : (e as Error).message;
       throw new Error(msg);
     }
   };
@@ -141,7 +141,7 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
       } catch (e) {
         const m = (e as Error).message;
         // Not signed in yet: say how, in its own terminal (KesherAI never handles the sign-in).
-        if (/auth|sign.?in|login|credential/i.test(m)) throw new Error(`${def.name} is not signed in. On the code page, press "Antigravity CLI" once and sign in with Google, then send again. (${m})`);
+        if (/auth|sign.?in|login|credential/i.test(m)) throw new Error(`${def.name} is not signed in. On the code page, press "Antigravity CLI" once and sign in with Google, then send again. (בעברית: לא מחוברים ל-Antigravity CLI. בעמוד הקוד לחצו על "Antigravity CLI" פעם אחת, התחברו עם Google, ושלחו שוב.) (${m})`);
         // The connection broke (the CLI quit): start it again next time.
         agent.close();
         conn = undefined;
