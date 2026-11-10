@@ -162,6 +162,10 @@ export class SelfWork {
     const base = remote.code === 0 && remote.out.trim() ? "origin/main" : "HEAD";
     const made = await this.d.git(o.repo, ["worktree", "add", "-b", branch, worktree, base]);
     if (made.code !== 0) throw new Error(`Could not make the work folder for ${branch}: ${made.out.slice(0, 300)}`);
+    // A new worktree has the code but not its packages: install them the project's own way (from the package
+    // manager's store, the lockfile as it is), so the check can build. Fixed commands only; a failure is left to the check to show.
+    const install = existsSync(join(worktree, "pnpm-lock.yaml")) ? "pnpm install --frozen-lockfile --prefer-offline" : existsSync(join(worktree, "package-lock.json")) ? "npm ci --prefer-offline --no-audit --no-fund" : existsSync(join(worktree, "yarn.lock")) ? "yarn install --frozen-lockfile" : "";
+    if (install) await this.d.check(worktree, install).catch(() => undefined);
     const check = (o.check ?? "").trim().slice(0, 300);
     const convId = await this.d.createChat(worktree, `🤖 Self-work · ${goal.slice(0, 50)}`, o.modelId, this.d.shared ? [this.d.shared] : []);
     this.run_ = { id: stamp, repo: o.repo, goal, branch, worktree, check, ...(o.modelId ? { modelId: o.modelId } : {}), convId, status: "running", startedAt: Date.now(), until: Date.now() + hours * 3_600_000, steps: 0, items: [], failures: 0 };
