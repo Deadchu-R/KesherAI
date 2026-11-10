@@ -437,7 +437,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         const code = String(input.code ?? "");
         await writeFile(script, /^\s*(import unreal\b|from unreal import)/m.test(code) ? code : `import unreal\n${code}`);
         const cmd = join(e.path, "Engine", "Binaries", "Win64", "UnrealEditor-Cmd.exe");
-        // Forward slashes: Unreal's command line reads "\r" in "C:\Users\user" as a line break (found on the user's PC:
+        // Forward slashes: Unreal's command line reads "\r" in "C:\Users\<name>" as a line break (found on the user's PC:
         // "Could not load Python file 'C:/Usersoeet/…'").
         const r = await runProgram(cmd, [p.file, "-run=pythonscript", `-script=${script.replace(/\\/g, "/")}`, "-unattended", "-nop4", "-nosplash", "-stdout", "-FullStdOutLogOutput"], { timeoutMs: 900_000 });
         // Only what the script said: Unreal's own start-up lines (hundreds of "registering …") are left out.

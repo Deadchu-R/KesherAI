@@ -1509,7 +1509,7 @@ export class ConversationManager {
       }
       const updatedAt = chat.messages.at(-1)?.at ?? chat.createdAt;
       // A coding session (Claude Code) continues as a code chat in its folder, asking before changes.
-      // Not the whole home folder or a drive (found on the PC: a session that ran in C:\Users\user): then a plain chat.
+      // Not the whole home folder or a drive (found on the PC: a session that ran in the user's own home folder): then a plain chat.
       const broad = (p: string) => { const r = resolvePath(p); return r === resolvePath(homedir()) || r === parsePath(r).root; };
       const folder = chat.workspace && !broad(chat.workspace) && (await stat(chat.workspace).catch(() => undefined))?.isDirectory() ? chat.workspace : undefined;
       await this.deps.library.saveConversation({

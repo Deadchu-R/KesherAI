@@ -43,7 +43,7 @@ test("a failing form followed by a working one becomes a form-repair fact; a too
 
 test("a fact is told only after 3 chats confirm it, is retired when contradicted, and stays gone when removed", async () => {
   const facts = new ProjectFacts(join(await mkdtemp(join(tmpdir(), "kesher-facts-")), "project-facts.json"));
-  const ws = "C:\\Users\\user\\source\\repos\\Tetris";
+  const ws = "C:\\Users\\me\\source\\repos\\Tetris";
   const failing = chat([["python make.py", NOT_RECOGNIZED], ["py -3 make.py", "built\n\nExit code 0."]]);
   await facts.learn(ws, "chat1", failing);
   await facts.learn(ws, "chat1", failing); // the same chat again counts once
