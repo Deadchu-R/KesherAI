@@ -29,6 +29,7 @@ export interface AcpPermission {
   options: Array<{ optionId: string; name: string; kind: PermissionOption["kind"] }>;
 }
 
+/** What KesherAI does with an agent's updates and permission questions. */
 export interface AcpHandlers {
   update: (u: AcpUpdate) => void;
   /** @returns The option the user chose, or undefined to cancel. */
