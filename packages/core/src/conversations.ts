@@ -1618,6 +1618,7 @@ export class ConversationManager {
       mode: session.mode,
       messages: session.messages,
       events: session.events,
+      ...(this.agentSessions.has(id) ? { agentSession: this.agentSessions.get(id)! } : {}),
     });
   }
 

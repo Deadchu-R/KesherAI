@@ -432,3 +432,18 @@ test("an imported coding session becomes a code chat in its folder, but never on
     await server.close();
   }
 });
+
+test("an outside agent's session id is saved with its chat (so a restart resumes it)", async () => {
+  const { server } = await setup();
+  try {
+    const m = server.services.conversations as unknown as { agentSessions: Map<string, string>; saveNow: (id: string) => Promise<void>; open: (id: string) => Promise<unknown> };
+    await server.app.inject({ method: "PUT", url: "/api/settings", payload: { activeModels: { chat: "fake/m" } } });
+    const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat" } })).json() as { id: string };
+    await m.open(c.id);
+    m.agentSessions.set(c.id, "agy-session-1");
+    await m.saveNow(c.id);
+    assert.equal((await server.services.library.getConversation(c.id))?.agentSession, "agy-session-1");
+  } finally {
+    await server.close();
+  }
+});
