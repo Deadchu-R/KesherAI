@@ -42,6 +42,8 @@ export interface Conversation {
   source?: "telegram";
   /** For a chat imported from another assistant: which one. */
   importedFrom?: "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code";
+  /** A code chat on an outside agent (Antigravity): its own session id, resumed after a restart. */
+  agentSession?: string;
   /** What the model sees. */
   messages: AgentMessage[];
   /** What the user sees. */

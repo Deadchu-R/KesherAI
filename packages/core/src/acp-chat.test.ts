@@ -63,3 +63,22 @@ test("Antigravity's own choices (model) are listed and can be picked; unknown va
     ext.close();
   }
 });
+
+test("after a restart the chat resumes the agent's own session; a gone one starts a new session", async () => {
+  const seen: { resumed?: string } = {};
+  let stored: string | undefined;
+  const store = { get: () => stored, set: (id: string) => void (stored = id) };
+  const a = outsideAgent("agent/antigravity", "/p", (h) => AcpAgent.connect(fakeAgent(seen), h), undefined, store)!;
+  await a.options();
+  assert.equal(stored, "s1", "the new session's id is kept");
+  a.close();
+  const b = outsideAgent("agent/antigravity", "/p", (h) => AcpAgent.connect(fakeAgent(seen), h), undefined, store)!;
+  await b.options();
+  assert.equal(seen.resumed, "s1");
+  b.close();
+  stored = "gone";
+  const c = outsideAgent("agent/antigravity", "/p", (h) => AcpAgent.connect(fakeAgent({}), h), undefined, store)!;
+  await c.options();
+  assert.equal(stored, "s1", "a new session replaced the gone one");
+  c.close();
+});

@@ -1,7 +1,7 @@
 import { agent } from "@agentclientprotocol/sdk";
 
 /** A fake agent: one sign-in method; a prompt streams a thought, asks to edit a file, and answers. */
-export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unknown; mode?: string; option?: string }) {
+export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unknown; mode?: string; option?: string; resumed?: string }) {
   return agent()
     .onRequest("initialize", ({ params }) => {
       seen.caps = params.clientCapabilities;
@@ -9,6 +9,11 @@ export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unk
     })
     .onRequest("authenticate", ({ params }) => {
       seen.auth = params.methodId;
+      return {};
+    })
+    .onRequest("session/resume", ({ params }) => {
+      if (params.sessionId !== "s1") throw new Error("Resource not found");
+      seen.resumed = params.sessionId;
       return {};
     })
     .onRequest("session/set_config_option", ({ params }) => {

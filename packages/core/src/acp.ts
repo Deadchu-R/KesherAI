@@ -208,6 +208,20 @@ export class AcpAgent {
     return r.sessionId;
   }
 
+  /**
+   * Opens an earlier session again without replaying it (`session/resume`), e.g. after KesherAI restarted.
+   *
+   * @param sessionId - From {@link newSession}.
+   * @param cwd - The project.
+   */
+  async resumeSession(sessionId: string, cwd: string): Promise<void> {
+    const r = await this.ctx.request("session/resume", { sessionId, cwd, mcpServers: [] });
+    this.sessionId = sessionId;
+    this.modes = (r.modes?.availableModes ?? []).map((m) => m.id);
+    this.mode = r.modes?.currentModeId;
+    this.options = flattenOptions(r.configOptions);
+  }
+
   /** The session's choices (model, thinking level…), as the agent last sent them. */
   options: AcpOption[] = [];
 

@@ -207,6 +207,8 @@ function steerImagesToEngine(tool: AgentTool): AgentTool {
 export class ConversationManager {
   /** Outside agents (their CLI processes) of open conversations. */
   private readonly outside = new Map<string, OutsideAgent>();
+  /** Outside agents' session ids, saved with the chat. */
+  private readonly agentSessions = new Map<string, string>();
   private readonly sessions = new Map<string, AgentSession>();
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
   private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
@@ -1063,7 +1065,16 @@ export class ConversationManager {
     const workspace = this.workspaceOf(conversation);
     if (workspace && conversation.kind !== "code") await mkdir(workspace, { recursive: true });
     // A code chat on an outside agent (Antigravity CLI): it answers with its own tools, in the folder.
-    const outside = conversation.kind === "code" ? outsideAgent(conversation.modelId, workspace, undefined, () => this.sessions.get(id)?.mode ?? conversation.mode) : undefined;
+    const outside =
+      conversation.kind === "code"
+        ? outsideAgent(conversation.modelId, workspace, undefined, () => this.sessions.get(id)?.mode ?? conversation.mode, {
+            get: () => this.agentSessions.get(id) ?? conversation.agentSession,
+            set: (sid) => {
+              this.agentSessions.set(id, sid);
+              this.scheduleSave(id);
+            },
+          })
+        : undefined;
     if (outside) this.outside.set(id, outside);
     const session = new AgentSession({
       id,
@@ -1400,6 +1411,7 @@ export class ConversationManager {
       mode: session.mode,
       messages: session.messages,
       events: session.events,
+      ...(this.agentSessions.has(id) ? { agentSession: this.agentSessions.get(id)! } : {}),
     });
   }
 

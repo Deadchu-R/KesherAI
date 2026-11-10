@@ -50,9 +50,10 @@ export type OutsideAgent = ExternalAgent & {
  * @param workspace - The conversation's folder.
  * @param start - Starts the connection (tests pass an in-process agent).
  * @param modeOf - The chat's approvals mode, matched to the agent's own modes before each turn.
+ * @param saved - Where the chat keeps the agent's session id, so a restart resumes it instead of starting over.
  * @returns The agent, or undefined when the id is not an outside agent.
  */
-export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string): OutsideAgent | undefined {
+export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string, saved?: { get: () => string | undefined; set: (id: string) => void }): OutsideAgent | undefined {
   const def = OUTSIDE_AGENTS[modelId];
   if (!def) return undefined;
   let conn: Promise<AcpAgent> | undefined;
@@ -95,7 +96,20 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
   };
   const ready = async (): Promise<AcpAgent> => {
     conn ??= connect().then(async (a) => {
-      await a.newSession(workspace ?? process.cwd());
+      const cwd = workspace ?? process.cwd();
+      const before = saved?.get();
+      // After a restart: the same session again (the agent remembers it); if that fails, a new one.
+      if (before) {
+        try {
+          await a.resumeSession(before, cwd);
+          return a;
+        } catch {
+          /* gone or not supported: start over */
+        }
+      }
+      // (Not `saved?.set(await …)`: optional chaining would skip starting the session when nothing is saved.)
+      const sid = await a.newSession(cwd);
+      saved?.set(sid);
       return a;
     });
     try {
