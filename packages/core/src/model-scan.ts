@@ -218,3 +218,19 @@ export function matchRecommended(found: readonly FoundModel[], repo: string, fil
     .filter((m) => m.format === "gguf" && pattern.test(basename(m.path)) && basename(m.path).toLowerCase().includes(stem))
     .sort((a, b) => b.size - a.size)[0];
 }
+
+/** Names of embedding models (they turn text into vectors for search by meaning, and do not chat). */
+const EMBEDDING_NAMES = /qwen3-embedding|nomic-embed|bge-|multilingual-e5|\be5-|gte-|mxbai-embed|snowflake-arctic-embed|embeddinggemma|jina-embeddings/i;
+
+/**
+ * An embedding model already on this computer, so search by meaning needs no
+ * download: Qwen3 Embedding first (KesherAI's own choice, Hebrew included),
+ * then the other known embedding models, the smallest GGUF of each.
+ *
+ * @param found - Models found on this computer.
+ * @returns The file to use, or undefined.
+ */
+export function pickEmbedding(found: readonly FoundModel[]): FoundModel | undefined {
+  const embeds = found.filter((m) => m.format === "gguf" && EMBEDDING_NAMES.test(m.path)).sort((a, b) => a.size - b.size);
+  return embeds.find((m) => /qwen3-embedding/i.test(m.path)) ?? embeds[0];
+}

@@ -4,6 +4,7 @@ import { listHubFiles } from "@kesher/downloads";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { DownloadManager } from "@kesher/downloads";
 import { LlamaEngine, waitForDownload } from "./llamacpp.js";
+import { pickEmbedding, scanComputer, scanFolder } from "./model-scan.js";
 import type { Embedder } from "./knowledge.js";
 import type { KesherConfig } from "./config.js";
 
@@ -101,6 +102,18 @@ export class Semantic {
     this.phase = "downloading";
     this.message = `Finding ${EMBEDDING_MODEL.name}…`;
     try {
+      // Already on this computer (LM Studio, Ollama, Hugging Face…): use it where it is, no download.
+      const own = await scanFolder({ folder: join(this.d.modelsDir(), "embedding"), source: "KesherAI" }, 6).catch(() => []);
+      const onComputer = pickEmbedding([...own, ...(await scanComputer(this.d.config.modelFolders).catch(() => [])).flatMap((f) => f.models)]);
+      if (onComputer) {
+        this.phase = "loading";
+        this.message = `Starting ${basename(onComputer.path)} (already on this computer, from ${onComputer.source})…`;
+        await this.load(onComputer.path);
+        this.phase = undefined;
+        this.message = "Search by meaning is on. The knowledge bases are being indexed again.";
+        this.d.changed();
+        return;
+      }
       const files = await listHubFiles(EMBEDDING_MODEL.repo, { ...(this.d.config.huggingFaceToken ? { token: this.d.config.huggingFaceToken } : {}) });
       const file = files.find((f) => EMBEDDING_MODEL.pattern.test(f.path)) ?? files.find((f) => EMBEDDING_MODEL.fallback.test(f.path));
       if (!file) throw new Error(`No model file in ${EMBEDDING_MODEL.repo}.`);

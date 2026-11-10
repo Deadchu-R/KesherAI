@@ -66,3 +66,11 @@ test("a recommended model already in another app's folder is found by its repo n
   assert.equal(matchRecommended(found, "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF", "Q4_K_M\\.gguf$")?.size, 17);
   assert.equal(matchRecommended(found, "unsloth/Qwen3-14B-GGUF", "Q4_K_M\\.gguf$"), undefined);
 });
+
+test("an embedding model on the computer is picked for search by meaning, Qwen3 Embedding first; chat models are not", async () => {
+  const { pickEmbedding } = await import("./model-scan.js");
+  const m = (path: string, size = 100): FoundModel => ({ path, name: path, size, source: "LM Studio", folder: "/x", format: "gguf" });
+  assert.equal(pickEmbedding([m("/x/Qwen3-8B-Q4_K_M.gguf")]), undefined);
+  assert.match(pickEmbedding([m("/x/nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q4_K_M.gguf")])!.path, /nomic/);
+  assert.match(pickEmbedding([m("/x/nomic-embed-text.gguf"), m("/x/Qwen3-Embedding-0.6B-Q8_0.gguf", 600)])!.path, /Qwen3-Embedding/);
+});
