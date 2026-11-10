@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { relative } from "node:path";
 import { makeDiff, type ExternalAgent, type ExternalIO } from "@kesher/agent";
-import { AcpAgent, type AcpHandlers, type AcpPermission, type AcpUpdate } from "./acp.js";
+import { AcpAgent, type AcpHandlers, type AcpOption, type AcpPermission, type AcpUpdate } from "./acp.js";
 import { agyPath } from "./routes/terminal.js";
 
 /**
@@ -35,6 +35,14 @@ function previewOf(p: AcpPermission, step?: { diffs?: string; text?: string }): 
   return [p.title, step?.diffs, step?.text].filter(Boolean).join("\n\n").slice(0, 8000) || p.toolKind || "(the agent did not say)";
 }
 
+/** An outside agent in a code chat. */
+export type OutsideAgent = ExternalAgent & {
+  close: () => void;
+  /** The session's choices (model, thinking level…); starts the agent if needed. */
+  options: () => Promise<AcpOption[]>;
+  setOption: (configId: string, value: string) => Promise<AcpOption[]>;
+};
+
 /**
  * Builds the outside agent for a conversation.
  *
@@ -44,7 +52,7 @@ function previewOf(p: AcpPermission, step?: { diffs?: string; text?: string }): 
  * @param modeOf - The chat's approvals mode, matched to the agent's own modes before each turn.
  * @returns The agent, or undefined when the id is not an outside agent.
  */
-export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string): (ExternalAgent & { close: () => void }) | undefined {
+export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string): OutsideAgent | undefined {
   const def = OUTSIDE_AGENTS[modelId];
   if (!def) return undefined;
   let conn: Promise<AcpAgent> | undefined;
@@ -85,21 +93,25 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
       throw new Error(msg);
     }
   };
+  const ready = async (): Promise<AcpAgent> => {
+    conn ??= connect().then(async (a) => {
+      await a.newSession(workspace ?? process.cwd());
+      return a;
+    });
+    try {
+      return await conn;
+    } catch (e) {
+      conn = undefined;
+      throw e;
+    }
+  };
   return {
+    options: async () => (await ready()).options,
+    setOption: async (configId, value) => (await ready()).setOption(configId, value),
     turn: async (text, turnIo, signal) => {
       io = turnIo;
       steps.clear();
-      conn ??= connect().then(async (a) => {
-        await a.newSession(workspace ?? process.cwd());
-        return a;
-      });
-      let agent: AcpAgent;
-      try {
-        agent = await conn;
-      } catch (e) {
-        conn = undefined;
-        throw e;
-      }
+      const agent = await ready();
       // KesherAI's mode → the agent's (ask before changes, accept edits, plan only); no match keeps its own.
       const want = { ask: "default", "auto-edit": "accept-edits", plan: "plan" }[modeOf?.() ?? ""];
       if (want) await agent.setMode(want).catch(() => false);

@@ -1,7 +1,7 @@
 import { agent } from "@agentclientprotocol/sdk";
 
 /** A fake agent: one sign-in method; a prompt streams a thought, asks to edit a file, and answers. */
-export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unknown; mode?: string }) {
+export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unknown; mode?: string; option?: string }) {
   return agent()
     .onRequest("initialize", ({ params }) => {
       seen.caps = params.clientCapabilities;
@@ -11,7 +11,11 @@ export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unk
       seen.auth = params.methodId;
       return {};
     })
-    .onRequest("session/new", () => ({ sessionId: "s1", modes: { currentModeId: "accept-edits", availableModes: [{ id: "default", name: "Default" }, { id: "accept-edits", name: "Accept edits" }, { id: "plan", name: "Plan" }] } }))
+    .onRequest("session/set_config_option", ({ params }) => {
+      seen.option = `${params.configId}=${String(params.value)}`;
+      return { configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: String(params.value), options: [{ value: "gemini-4-pro", name: "Gemini 4 Pro" }, { value: "gemini-4-flash", name: "Gemini 4 Flash" }] }] };
+    })
+    .onRequest("session/new", () => ({ sessionId: "s1", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "gemini-4-pro", options: [{ group: "g", name: "Google", options: [{ value: "gemini-4-pro", name: "Gemini 4 Pro" }, { value: "gemini-4-flash", name: "Gemini 4 Flash" }] }] }, { id: "fast", name: "Fast", type: "boolean", currentValue: false }], modes: { currentModeId: "accept-edits", availableModes: [{ id: "default", name: "Default" }, { id: "accept-edits", name: "Accept edits" }, { id: "plan", name: "Plan" }] } }))
     .onRequest("session/set_mode", ({ params }) => {
       seen.mode = params.modeId;
       return {};

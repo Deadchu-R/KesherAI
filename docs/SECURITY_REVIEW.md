@@ -234,3 +234,10 @@ This review went through the code part by part. Each finding is listed with what
 - **`/api/engines/llamacpp/settings` `mtpDraft`:** an integer from 0 to 16, or null; anything else is a 400. It has the same access as the existing `parallel` setting.
 - **Performance:** one agent process per open Antigravity chat, started on its first message. Saving notifications is debounced to once a second.
 - **Nothing to fix.**
+
+## Scan 42 (2026-11-10): Claude Code import, home-folder guard, Antigravity choices, MTP default
+
+- **Claude Code import:** this computer only (403 from devices). Only `.jsonl` files under `~/.claude/projects` are read (a relative path that would leave it is refused; tested), at most 60 MB. Thinking, tool output and Claude Code's wrappers are never copied, so secrets in command output stay out. A session from the home folder or a drive root becomes a plain chat, not a code chat over everything (found on the PC; tested).
+- **`/api/conversations/:id/agent-options`:** only for code chats on an outside agent. `configId` and `value` are strings of at most 200 characters, and the value must be one of the agent's own choices (tested). Opening the menu starts the agent's CLI, which the chat's first message would do anyway.
+- **MTP default 2:** an engine flag only.
+- **Nothing to fix.**

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { AgentApp, client, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { ClientContext, ContentBlock, PermissionOption, SessionUpdate, Stream, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ClientContext, ContentBlock, PermissionOption, SessionConfigOption, SessionUpdate, Stream, ToolCallContent } from "@agentclientprotocol/sdk";
 
 /**
  * A client for coding agents that speak the Agent Client Protocol (ACP, https://agentclientprotocol.com) over
@@ -19,7 +19,8 @@ export type AcpUpdate =
   | { kind: "thought"; text: string }
   | { kind: "tool"; id: string; title?: string; toolKind?: string; status?: string; diffs?: Array<{ path: string; oldText?: string; newText: string }>; text?: string }
   | { kind: "plan"; entries: Array<{ content: string; status: string }> }
-  | { kind: "mode"; mode: string };
+  | { kind: "mode"; mode: string }
+  | { kind: "options"; options: AcpOption[] };
 
 /** A permission question the agent asks before a tool runs. */
 export interface AcpPermission {
@@ -27,6 +28,24 @@ export interface AcpPermission {
   title: string;
   toolKind?: string;
   options: Array<{ optionId: string; name: string; kind: PermissionOption["kind"] }>;
+}
+
+/** A choice the agent offers for its session (model, thinking level…), flattened. */
+export interface AcpOption {
+  id: string;
+  name: string;
+  category?: string;
+  current: string;
+  choices: Array<{ value: string; name: string; description?: string }>;
+}
+
+/** Select options only (booleans are not shown), groups flattened. */
+export function flattenOptions(list: SessionConfigOption[] | null | undefined): AcpOption[] {
+  return (list ?? []).flatMap((o) => {
+    if (o.type !== "select") return [];
+    const choices = o.options.flatMap((x) => ("group" in x ? x.options : [x])).map((c) => ({ value: c.value, name: c.name, ...(c.description ? { description: c.description } : {}) }));
+    return [{ id: o.id, name: o.name, ...(o.category ? { category: o.category } : {}), current: o.currentValue, choices }];
+  });
 }
 
 /** What KesherAI does with an agent's updates and permission questions. */
@@ -75,6 +94,8 @@ export function mapUpdate(u: SessionUpdate): AcpUpdate | undefined {
       return { kind: "plan", entries: u.entries.map((e) => ({ content: e.content, status: e.status })) };
     case "current_mode_update":
       return { kind: "mode", mode: u.currentModeId };
+    case "config_option_update":
+      return { kind: "options", options: flattenOptions(u.configOptions) };
     default:
       return undefined;
   }
@@ -106,9 +127,12 @@ export class AcpAgent {
    * @param child - The agent's process, killed on close.
    */
   static async connect(target: Stream | AgentApp, h: AcpHandlers, child?: ChildProcess): Promise<AcpAgent> {
+    // Set below; updates that come later (new options) are written to it.
+    const ref: { agent?: AcpAgent } = {};
     const app = client()
       .onNotification("session/update", ({ params }) => {
         const u = mapUpdate(params.update);
+        if (u?.kind === "options" && ref.agent) ref.agent.options = u.options;
         if (u) h.update(u);
       })
       .onRequest("session/request_permission", async ({ params }) => {
@@ -122,6 +146,7 @@ export class AcpAgent {
       });
     const conn = target instanceof AgentApp ? app.connect(target) : app.connect(target);
     const agent = new AcpAgent(conn.agent, () => conn.close(), child);
+    ref.agent = agent;
     const init = await conn.agent.request("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
@@ -178,8 +203,26 @@ export class AcpAgent {
     const r = await this.ctx.request("session/new", { cwd, mcpServers: [] });
     this.sessionId = r.sessionId;
     this.modes = (r.modes?.availableModes ?? []).map((m) => m.id);
+    this.options = flattenOptions(r.configOptions);
     this.mode = r.modes?.currentModeId;
     return r.sessionId;
+  }
+
+  /** The session's choices (model, thinking level…), as the agent last sent them. */
+  options: AcpOption[] = [];
+
+  /**
+   * Picks a value for one of the session's choices.
+   *
+   * @returns The choices after it.
+   */
+  async setOption(configId: string, value: string): Promise<AcpOption[]> {
+    if (!this.sessionId) throw new Error("No session yet.");
+    const o = this.options.find((x) => x.id === configId);
+    if (!o || !o.choices.some((c) => c.value === value)) throw new Error("The agent does not offer that.");
+    const r = await this.ctx.request("session/set_config_option", { sessionId: this.sessionId, configId, value });
+    this.options = r.configOptions ? flattenOptions(r.configOptions) : this.options.map((x) => (x.id === configId ? { ...x, current: value } : x));
+    return this.options;
   }
 
   /** The session's modes (Antigravity: default, accept-edits, plan) and the current one. */

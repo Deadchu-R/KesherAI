@@ -1,5 +1,6 @@
 import type { PersonaParams } from "./personas.js";
-import { outsideAgent } from "./acp-chat.js";
+import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
+import type { AcpOption } from "./acp.js";
 import type { Checkpoints } from "./checkpoints.js";
 import { personaPrompt, type Personas } from "./personas.js";
 import type { ProjectFacts } from "./project-facts.js";
@@ -205,7 +206,7 @@ function steerImagesToEngine(tool: AgentTool): AgentTool {
  */
 export class ConversationManager {
   /** Outside agents (their CLI processes) of open conversations. */
-  private readonly outside = new Map<string, { close: () => void }>();
+  private readonly outside = new Map<string, OutsideAgent>();
   private readonly sessions = new Map<string, AgentSession>();
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
   private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
@@ -1548,6 +1549,26 @@ export class ConversationManager {
       s.queueChanged();
     }
     s.stop();
+  }
+
+  /**
+   * An outside agent's choices for its session (Antigravity: model, thinking level). Starts the agent.
+   *
+   * @param id - A code chat on an outside agent.
+   */
+  async agentOptions(id: string): Promise<AcpOption[]> {
+    if (!(await this.open(id))) throw new Error("Conversation not found");
+    const a = this.outside.get(id);
+    if (!a) throw new Error("This chat is not on an outside agent.");
+    return a.options();
+  }
+
+  /** Picks one of an outside agent's choices (see {@link agentOptions}). */
+  async setAgentOption(id: string, configId: string, value: string): Promise<AcpOption[]> {
+    if (!(await this.open(id))) throw new Error("Conversation not found");
+    const a = this.outside.get(id);
+    if (!a) throw new Error("This chat is not on an outside agent.");
+    return a.setOption(configId, value);
   }
 
   /** @param id - Conversation to delete; its session is stopped first. */

@@ -136,6 +136,24 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
+  // An outside agent's own choices (Antigravity: model, thinking level), for the chip in its code chat.
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/agent-options", async (req, reply) => {
+    try {
+      return { options: await s.conversations.agentOptions(req.params.id) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+  app.put<{ Params: { id: string }; Body: { configId?: string; value?: string } }>("/api/conversations/:id/agent-options", async (req, reply) => {
+    const { configId, value } = req.body ?? {};
+    if (typeof configId !== "string" || typeof value !== "string" || configId.length > 200 || value.length > 200) return reply.code(400).send({ error: "Which choice, and which value?" });
+    try {
+      return { options: await s.conversations.setAgentOption(req.params.id, configId, value) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   app.get<{ Querystring: { q?: string } }>("/api/search", async (req) => {
     const q = String(req.query.q ?? "").trim();
     if (!q) return { chats: [], knowledge: [], day: [] };

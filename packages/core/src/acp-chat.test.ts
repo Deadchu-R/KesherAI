@@ -48,3 +48,18 @@ test("Deny on Antigravity's question sends its reject option", async () => {
   assert.equal(optionFor({ ...p, options: [] }, "allow"), undefined);
   assert.equal(outsideAgent("llamacpp/qwen", "/p"), undefined);
 });
+
+test("Antigravity's own choices (model) are listed and can be picked; unknown values are refused", async () => {
+  const seen: { option?: string } = {};
+  const ext = outsideAgent("agent/antigravity", "/p", (h) => AcpAgent.connect(fakeAgent(seen), h))!;
+  try {
+    const opts = await ext.options();
+    assert.deepEqual(opts.map((o) => [o.id, o.current, o.choices.map((c) => c.value)]), [["model", "gemini-4-pro", ["gemini-4-pro", "gemini-4-flash"]]], "groups flattened, booleans left out");
+    const after = await ext.setOption("model", "gemini-4-flash");
+    assert.equal(seen.option, "model=gemini-4-flash");
+    assert.equal(after[0]?.current, "gemini-4-flash");
+    await assert.rejects(ext.setOption("model", "gpt-9"), /does not offer/);
+  } finally {
+    ext.close();
+  }
+});
