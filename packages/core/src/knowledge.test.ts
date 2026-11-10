@@ -67,3 +67,19 @@ test("search by meaning finds a passage that shares no words with the question",
   assert.ok(calls.includes("doc") && calls.includes("query"));
   k.close();
 });
+
+test("vectors from an older embedding model are not used against a new model's question", async () => {
+  const data = await mkdtemp(join(tmpdir(), "kesher-kb-"));
+  const docs = await mkdtemp(join(tmpdir(), "kesher-docs-"));
+  await writeFile(join(docs, "a.txt"), "Reading a file line by line in Python uses a for loop over the file object.");
+  await writeFile(join(docs, "b.txt"), "Texture compression settings for the editor icons.");
+  // The old model puts every passage right next to any question; the new one has other dimensions.
+  let model: { id: string; embed: (t: string[], kind: "query" | "doc") => Promise<number[][]> } = { id: "old", embed: async (t) => t.map(() => [1, 0]) };
+  const k = new Knowledge(data, () => model);
+  const base = await k.save({ name: "Docs", folders: [docs] });
+  await k.reindex(base.id);
+  model = { id: "new", embed: async (t) => t.map(() => [0, 0, 1]) };
+  const hits = await k.search("python file line by line");
+  assert.match(hits[0]!.source, /a\.txt/, "words still find it; the old vectors are left out");
+  assert.equal(hits.length, 1);
+});

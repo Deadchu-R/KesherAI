@@ -382,10 +382,16 @@ export class Knowledge {
     await this.load();
     const pick = baseName?.trim().toLowerCase();
     const bases = pick ? this.bases.filter((b) => b.id === pick || b.name.toLowerCase() === pick || b.name.toLowerCase().includes(pick)) : this.bases;
-    const all: Array<Passage & { base: string }> = [];
-    for (const b of bases) for (const f of Object.values(this.indexes.get(b.id)?.files ?? {})) for (const p of f.passages) all.push({ ...p, base: b.name });
-    const words = rank(all, query, Math.max(k * 4, 30));
     const e = this.embedder();
+    const all: Array<Passage & { base: string }> = [];
+    // Vectors count only when they come from the active embedding model: a base still being indexed again after the
+    // model changed keeps the old model's vectors, which mean nothing next to the new model's question.
+    for (const b of bases) {
+      const ix = this.indexes.get(b.id);
+      const sameModel = !!e && ix?.vecModel === e.id;
+      for (const f of Object.values(ix?.files ?? {})) for (const p of f.passages) all.push({ ...p, ...(sameModel ? {} : { vec: undefined }), base: b.name });
+    }
+    const words = rank(all, query, Math.max(k * 4, 30));
     const withVec = e ? all.filter((p) => p.vec?.length) : [];
     if (!e || !withVec.length) return words.slice(0, k).map(({ base, source, page, text, score }) => ({ base, source, page, text, score: Math.round(score * 100) / 100 }));
     // Both ways: by words (BM25) and by meaning (vectors), joined by rank (reciprocal rank fusion).
@@ -396,6 +402,7 @@ export class Knowledge {
       return words.slice(0, k).map(({ base, source, page, text, score }) => ({ base, source, page, text, score: Math.round(score * 100) / 100 }));
     }
     const meaning = withVec
+      .filter((p) => p.vec!.length === qv.length)
       .map((p) => ({ p, s: dot(qv, p.vec!) }))
       .sort((a, b) => b.s - a.s)
       .slice(0, Math.max(k * 4, 30));
