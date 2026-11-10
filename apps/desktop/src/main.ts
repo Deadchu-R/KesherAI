@@ -646,7 +646,13 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   const s = server;
   server = undefined;
+  // Never hang on the way out (a restart that never came back was seen on the PC): after 10 s, exit anyway, so a
+  // relaunch can start the new copy.
+  const force = setTimeout(() => app.exit(0), 10_000);
   void Promise.resolve(announceAway?.())
     .finally(() => s.close())
-    .finally(() => app.quit());
+    .finally(() => {
+      clearTimeout(force);
+      app.quit();
+    });
 });

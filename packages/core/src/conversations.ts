@@ -1699,6 +1699,9 @@ export class ConversationManager {
       s.stop();
       await this.saveNow(id);
     }
+    // Outside agents' CLIs (Antigravity) end with KesherAI; their session ids are saved above.
+    for (const a of this.outside.values()) a.close();
+    this.outside.clear();
   }
 }
 
