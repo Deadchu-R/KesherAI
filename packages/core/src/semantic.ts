@@ -81,7 +81,8 @@ export class Semantic {
 
   /** Starts the built-in engine with a model file and makes it the active embedding model. */
   async load(path: string): Promise<string> {
-    this.engine ??= new LlamaEngine({ dir: this.d.enginesDir, binaryPath: await this.d.binary(), port: 8082, args: ["--embedding", "-ngl", "99", "-c", "8192", "-ub", "8192", "-b", "8192"] });
+    // No forced GPU layers: when the chat model fills the card, this small model fits on the processor instead.
+    this.engine ??= new LlamaEngine({ dir: this.d.enginesDir, binaryPath: await this.d.binary(), ...(this.d.config.engines.llamaVersion ? { version: this.d.config.engines.llamaVersion } : {}), port: 8082, args: ["--embedding", "-c", "8192", "-ub", "8192", "-b", "8192"] });
     await this.engine.load(path, 180_000);
     if (!this.d.registry.get(EMBED_PROVIDER)) this.d.registry.add({ id: EMBED_PROVIDER, type: "openai-compatible", name: "KesherAI embeddings (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl });
     const id = `${EMBED_PROVIDER}/${basename(path).replace(/\.gguf$/i, "")}`;

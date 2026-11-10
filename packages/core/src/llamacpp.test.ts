@@ -70,3 +70,11 @@ test("a port another program listens on is seen as taken, and a free one is foun
   assert.equal(await portTaken(free), false);
   await new Promise((r) => srv.close(r));
 });
+
+test("new builds fit the GPU layers themselves (the old -ngl 99 default is dropped); old builds keep -ngl 99", () => {
+  assert.deepEqual(LlamaEngine.gpuArgs(["-ngl", "99"], "b12110"), []);
+  assert.deepEqual(LlamaEngine.gpuArgs([], "b12110"), []);
+  assert.deepEqual(LlamaEngine.gpuArgs(["-ngl", "40", "-c", "8192"], "b12110"), ["-ngl", "40", "-c", "8192"], "the user's own choice stays");
+  assert.deepEqual(LlamaEngine.gpuArgs([], "b6500"), ["-ngl", "99"]);
+  assert.deepEqual(LlamaEngine.gpuArgs(["-ngl", "99"], "b6500"), ["-ngl", "99"]);
+});

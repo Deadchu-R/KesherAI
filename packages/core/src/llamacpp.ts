@@ -320,6 +320,26 @@ export class LlamaEngine {
   }
 
   /**
+   * The GPU part of the arguments. New llama.cpp builds fit the model to the memory that is free (with other models,
+   * games or the editor using the card); "-ngl 99" turns that off and, when the card is full, Windows moves memory to
+   * system RAM and everything crawls (found on the PC: self-work waited forever once the embedding model had loaded
+   * next to Qwen3 Coder). So the old default "-ngl 99" is dropped on builds that fit by themselves (b7400 and newer),
+   * and kept for older ones, which put nothing on the GPU without it.
+   *
+   * @param args - Arguments from the config.
+   * @param version - The build tag, e.g. `b12110`.
+   * @returns The arguments to use.
+   */
+  static gpuArgs(args: readonly string[], version?: string): string[] {
+    const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
+    const fits = build >= 7400;
+    const oldDefault = args.length === 2 && args[0] === "-ngl" && args[1] === "99";
+    if (fits && oldDefault) return [];
+    if (!fits && !args.some((a) => a === "-ngl" || a === "--n-gpu-layers" || a === "--gpu-layers")) return [...args, "-ngl", "99"];
+    return [...args];
+  }
+
+  /**
    * How long loading a model file may take.
    *
    * @param bytes - Size of the file.
@@ -373,7 +393,7 @@ export class LlamaEngine {
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, true, p), ...gpuArgs], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p), ...gpuArgs], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {
@@ -381,7 +401,7 @@ export class LlamaEngine {
           // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
           if (!/jinja/i.test(this.log.join("\n"))) continue;
           try {
-            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(this.opts.args, false, p), ...gpuArgs], timeoutMs, plan?.env);
+            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, p), ...gpuArgs], timeoutMs, plan?.env);
             this.runningParallel = p;
             return;
           } catch (err2) {

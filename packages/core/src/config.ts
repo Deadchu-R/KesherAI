@@ -44,8 +44,8 @@ export const KesherConfigSchema = z.object({
       llamaServerPath: z.string().optional(),
       /** Port KesherAI starts llama-server on. */
       llamaServerPort: z.number().int().default(8081),
-      /** Extra arguments, e.g. `["-ngl", "99", "-c", "8192"]`. `--jinja` (tool calling) is always added. */
-      llamaServerArgs: z.array(z.string()).default(["-ngl", "99"]),
+      /** Extra arguments, e.g. `["-c", "8192"]`. `--jinja` (tool calling) is always added; the GPU layers are fitted by llama.cpp (see LlamaEngine.gpuArgs). */
+      llamaServerArgs: z.array(z.string()).default([]),
       /** llama.cpp release tag KesherAI installed, e.g. `b6500`. */
       llamaVersion: z.string().optional(),
       /** The GGUF file loaded last, loaded again on start-up when `autoLoadLast` is on. */
