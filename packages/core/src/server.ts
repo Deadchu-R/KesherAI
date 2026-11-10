@@ -1112,13 +1112,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   devices.start();
 
   // Protect the graphics card: hold local work while it is too hot or paused, unload idle models.
+  /** The last model's load at start-up, while it runs. */
+  let startLoad: Promise<unknown> | undefined;
   let comfyUsed = false;
   guard.add({
     name: "chat model",
     providers: ["llamacpp"],
-    loaded: () => engine.status().running,
+    // While the start-up load is still going, a message waits for it instead of failing.
+    loaded: () => engine.status().running && !startLoad,
     unload: () => engine.stop("unused for a while (Settings → graphics card: unload after)"),
     reload: async () => {
+      if (startLoad) return void (await startLoad);
       const path = config.engines.lastModel;
       if (path && existsSync(path) && engine.status().installed) await loadModel(services, path);
     },
@@ -1142,12 +1146,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // Bring back the model that was loaded last time, without delaying start-up.
   const last = config.engines.lastModel;
+  // The engine is chosen from the start, so a message sent while the model loads (or after Terminate, when it is
+  // not loaded) waits for it through the guard instead of failing with "No provider llamacpp" (found on the phone,
+  // and on the PC half a minute after an update).
+  if (last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
   if (config.engines.autoLoadLast && !afterTerminate && last && existsSync(last) && engine.status().installed) {
-    void loadModel(services, last).catch((err) => engine.fail(err));
+    startLoad = loadModel(services, last)
+      .catch((err) => engine.fail(err))
+      .finally(() => (startLoad = undefined));
   }
-  // After Terminate nothing is loaded, but the engine stays chosen: the first message loads the last model
-  // (through the guard, like after an idle unload) instead of failing with "No provider llamacpp" (found on the phone).
-  else if (afterTerminate && last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
 
   return {
     app,
