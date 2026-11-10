@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PermissionMode } from "@kesher/shared";
 import { api } from "./api";
-import { createConversation } from "./library";
-import { openWithDraft } from "./phone";
 import { getLocale, t } from "./i18n";
 import { Menu, MenuItem, MenuNote, MenuSeparator, MenuSub } from "./ui/Menu";
 
@@ -44,10 +42,10 @@ const boardCat = (t: BoardTask): BoardCat => t.category ?? (/^\s*\[cool\s*down\]
  * The shared task board as a message: the open tasks of one list (or all), highest priority first, with what
  * to do with them. Plain text, so it works for any model: the local one or Antigravity (Gemini, Claude).
  */
-async function boardMessage(cat: BoardCat | "all"): Promise<string> {
+async function boardMessage(cat: BoardCat | "all", paste = false): Promise<string> {
   // On the computer itself: the file, so the agent always reads the board as it is now (a local model with its
   // task_board tool, Antigravity with the board's folder added). Elsewhere (the phone): the tasks pasted in.
-  const file = await api<{ file: string }>("/api/self-work/board/file").then((r) => r.file, () => undefined);
+  const file = paste ? undefined : await api<{ file: string }>("/api/self-work/board/file").then((r) => r.file, () => undefined);
   if (file) {
     const which = cat === "all" ? L("כל המשימות הפתוחות", "all open tasks") : L(`המשימות הפתוחות בקטגוריה "${cat}"`, `the open tasks with category "${cat}"`);
     return `${L("לוח המשימות שלנו", "Our task board")}: ${file}\n${L(
@@ -114,26 +112,16 @@ export function AddMenu(p: AddMenuProps) {
     }
   };
   // The board's tasks are work on the project. In a plain chat there is no project folder (found on the phone:
-  // the model asked where the code is), so they go to a new code chat in self-work's project, same model,
-  // ready to send. A code chat (or no project known yet) gets them here.
+  // the model asked where the code is), so the board's project is granted to this chat first; the model then
+  // works on it right here. A code chat already has its folder.
   const toBoard = async (c: BoardCat | "all") => {
-    const text = await boardMessage(c);
-    const conv = p.convId ? await api<{ kind?: string; modelId?: string }>(`/api/conversations/${encodeURIComponent(p.convId)}`).catch(() => null) : null;
+    const conv = p.convId ? await api<{ kind?: string }>(`/api/conversations/${encodeURIComponent(p.convId)}`).catch(() => null) : null;
     if (conv && conv.kind !== "code") {
-      // Self-work's project, else the folder of the latest code chat.
-      const repo =
-        (await api<{ run?: { repo?: string } | null }>("/api/self-work").then((r) => r.run?.repo, () => undefined)) ??
-        (await api<Array<{ kind?: string; workspace?: string; updatedAt?: string }> | { conversations: Array<{ kind?: string; workspace?: string; updatedAt?: string }> }>("/api/conversations").then(
-          (r) => (Array.isArray(r) ? r : r.conversations).filter((x) => x.kind === "code" && x.workspace).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0]?.workspace,
-          () => undefined,
-        ));
-      if (repo) {
-        const id = await createConversation({ kind: "code", workspace: repo, ...(conv.modelId ? { modelId: conv.modelId } : {}) }, { open: false });
-        if (id) return openWithDraft(id, text);
-      }
-      return p.onInsert(`${text}\n${L("(שים לב: זו לא שיחת קוד. פתח שיחת קוד בתיקיית הפרויקט כדי שהמודל יגיע לקוד.)", "(Note: this is not a code chat. Open a code chat in the project's folder so the model can reach the code.)")}\n`);
+      const r = await api<{ line: string }>(`/api/conversations/${encodeURIComponent(p.convId!)}/board-project`, { method: "POST" }).catch((e: Error) => ({ line: `(${e.message})` }));
+      // A plain chat has no task_board tool and the board file is outside its folders: the tasks themselves.
+      return p.onInsert(`${r.line}\n${await boardMessage(c, true)}`);
     }
-    p.onInsert(text);
+    p.onInsert(await boardMessage(c));
   };
   const insertPage = async (id: string, title: string) => {
     const page = await api<{ title?: string; content?: string }>(`/api/pages/${encodeURIComponent(id)}`).catch(() => null);

@@ -404,6 +404,31 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** The Unity and Unreal projects found on this computer, to add to a chat (also from the phone). */
   app.get("/api/game-projects", async () => ({ projects: await gameProjects() }));
 
+  /**
+   * The task board's project for this chat (+ → Tasks from the board in a plain chat): the folder of the latest
+   * code chat that is a git project inside the home folder, granted to this chat so its model reaches the code
+   * here, without a new chat. The server picks the folder; the request never names one (also from the phone).
+   */
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/board-project", async (req, reply) => {
+    const home = homedir();
+    const inHome = (f: string) => f.toLowerCase().startsWith(join(home, "").toLowerCase()) && f.length > home.length + 1;
+    const folder = s.library
+      .listConversations()
+      .filter((c) => c.kind === "code" && typeof c.workspace === "string")
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map((c) => c.workspace as string)
+      .find((f) => inHome(f) && existsSync(join(f, ".git")));
+    if (!folder) return reply.code(404).send({ error: "No project yet: open a code chat in the project's folder once." });
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    try {
+      const path = await opened.session.grant(folder);
+      return { path, line: `[${basename(path)}: ${path}]` };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/project", async (req, reply) => {
     const folder = String(req.body?.path ?? "");
     // From the phone (remote): only a project found on the computer (never any folder by path).
