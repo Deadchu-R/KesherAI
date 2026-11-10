@@ -177,7 +177,25 @@ export class AcpAgent {
   async newSession(cwd: string): Promise<string> {
     const r = await this.ctx.request("session/new", { cwd, mcpServers: [] });
     this.sessionId = r.sessionId;
+    this.modes = (r.modes?.availableModes ?? []).map((m) => m.id);
+    this.mode = r.modes?.currentModeId;
     return r.sessionId;
+  }
+
+  /** The session's modes (Antigravity: default, accept-edits, plan) and the current one. */
+  modes: string[] = [];
+  mode?: string | undefined;
+
+  /**
+   * Switches the session's mode when the agent has it.
+   *
+   * @returns Whether it switched.
+   */
+  async setMode(modeId: string): Promise<boolean> {
+    if (!this.sessionId || !this.modes.includes(modeId) || this.mode === modeId) return false;
+    await this.ctx.request("session/set_mode", { sessionId: this.sessionId, modeId });
+    this.mode = modeId;
+    return true;
   }
 
   /**

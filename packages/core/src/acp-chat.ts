@@ -41,9 +41,10 @@ function previewOf(p: AcpPermission, step?: { diffs?: string; text?: string }): 
  * @param modelId - e.g. "agent/antigravity".
  * @param workspace - The conversation's folder.
  * @param start - Starts the connection (tests pass an in-process agent).
+ * @param modeOf - The chat's approvals mode, matched to the agent's own modes before each turn.
  * @returns The agent, or undefined when the id is not an outside agent.
  */
-export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>): (ExternalAgent & { close: () => void }) | undefined {
+export function outsideAgent(modelId: string, workspace: string | undefined, start?: (h: AcpHandlers) => Promise<AcpAgent>, modeOf?: () => string): (ExternalAgent & { close: () => void }) | undefined {
   const def = OUTSIDE_AGENTS[modelId];
   if (!def) return undefined;
   let conn: Promise<AcpAgent> | undefined;
@@ -99,6 +100,9 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
         conn = undefined;
         throw e;
       }
+      // KesherAI's mode → the agent's (ask before changes, accept edits, plan only); no match keeps its own.
+      const want = { ask: "default", "auto-edit": "accept-edits", plan: "plan" }[modeOf?.() ?? ""];
+      if (want) await agent.setMode(want).catch(() => false);
       const onAbort = () => void agent.cancel().catch(() => undefined);
       signal.addEventListener("abort", onAbort);
       try {

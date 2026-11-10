@@ -18,7 +18,8 @@ const until = (s: AgentSession, pred: (e: AgentEvent) => boolean) =>
   });
 
 test("a code chat on Antigravity (ACP): its edit asks with a normal approval card, and the diff shows", async () => {
-  const ext = outsideAgent("agent/antigravity", "/p", (h) => AcpAgent.connect(fakeAgent({}), h))!;
+  const seen: { mode?: string } = {};
+  const ext = outsideAgent("agent/antigravity", "/p", (h) => AcpAgent.connect(fakeAgent(seen), h), () => "ask")!;
   const s = new AgentSession({ id: "c", modelId: "agent/antigravity", model: async () => { throw new Error("unused"); }, external: ext, mode: "ask", tools: [], systemPrompt: "" });
   try {
     const asked = until(s, (e) => e.type === "approval_request");
@@ -34,6 +35,7 @@ test("a code chat on Antigravity (ACP): its edit asks with a normal approval car
     assert.match(result.diff ?? "", /^\+b$/m);
     assert.match(result.diff ?? "", /a\.ts/);
     assert.equal((s.events.find((e) => e.type === "assistant") as { text: string }).text, "Done.");
+    assert.equal(seen.mode, "default", "KesherAI's \"ask\" puts Antigravity in its asking mode");
   } finally {
     ext.close();
   }

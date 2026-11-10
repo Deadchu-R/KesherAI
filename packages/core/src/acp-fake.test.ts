@@ -1,7 +1,7 @@
 import { agent } from "@agentclientprotocol/sdk";
 
 /** A fake agent: one sign-in method; a prompt streams a thought, asks to edit a file, and answers. */
-export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unknown }) {
+export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unknown; mode?: string }) {
   return agent()
     .onRequest("initialize", ({ params }) => {
       seen.caps = params.clientCapabilities;
@@ -11,7 +11,11 @@ export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unk
       seen.auth = params.methodId;
       return {};
     })
-    .onRequest("session/new", () => ({ sessionId: "s1" }))
+    .onRequest("session/new", () => ({ sessionId: "s1", modes: { currentModeId: "accept-edits", availableModes: [{ id: "default", name: "Default" }, { id: "accept-edits", name: "Accept edits" }, { id: "plan", name: "Plan" }] } }))
+    .onRequest("session/set_mode", ({ params }) => {
+      seen.mode = params.modeId;
+      return {};
+    })
     .onNotification("session/cancel", () => {
       seen.cancelled = true;
     })

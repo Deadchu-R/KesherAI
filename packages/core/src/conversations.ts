@@ -1062,7 +1062,7 @@ export class ConversationManager {
     const workspace = this.workspaceOf(conversation);
     if (workspace && conversation.kind !== "code") await mkdir(workspace, { recursive: true });
     // A code chat on an outside agent (Antigravity CLI): it answers with its own tools, in the folder.
-    const outside = conversation.kind === "code" ? outsideAgent(conversation.modelId, workspace) : undefined;
+    const outside = conversation.kind === "code" ? outsideAgent(conversation.modelId, workspace, undefined, () => this.sessions.get(id)?.mode ?? conversation.mode) : undefined;
     if (outside) this.outside.set(id, outside);
     const session = new AgentSession({
       id,
