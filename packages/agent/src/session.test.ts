@@ -379,3 +379,19 @@ test("reminds the model of the user's language when it is not English", async ()
   assert.equal(languageNote("run check_code please"), "");
   assert.equal(languageNote("look at `שלום` only"), "", "a quoted word is not the user's language");
 });
+
+test("a request too long for the model's context is shortened and sent again, not failed", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-ctx-"));
+  let calls = 0;
+  const model: ModelTurn = async () => {
+    calls++;
+    if (calls === 1) throw new Error('POST http://127.0.0.1:8081/v1/chat/completions → 400 Bad Request: {"error":{"code":400,"message":"request (25883 tokens) exceeds the available context size (24576 tokens), try increasing it"}}');
+    return { text: "done", toolCalls: [] };
+  };
+  const session = new AgentSession({ id: "c", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", contextTokens: 26_000 });
+  session.send("hello");
+  await waitFor(session, (e) => e.type === "status" && e.status !== "running");
+  assert.ok(session.events.some((e) => e.type === "assistant" && e.text === "done"));
+  assert.ok(!session.events.some((e) => e.type === "status" && e.status === "error"));
+  assert.ok(session.contextTokens < 24_576, `window is now ${session.contextTokens}`);
+});

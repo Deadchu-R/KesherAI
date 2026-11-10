@@ -280,6 +280,8 @@ export class ConversationManager {
       personas?: Personas;
       /** SKILL.md skills, listed in the prompt and loaded with use_skill. */
       skills?: SkillStore;
+      /** The context each chat gets on KesherAI's own engine, as it reported it (2 chats at once share it). */
+      engineSlotTokens?(): number | undefined;
       /** Facts learned per project from its chats' failing commands (project-facts.ts). */
       projectFacts?: ProjectFacts;
       /** Every event of every open conversation (for notifications). */
@@ -914,7 +916,11 @@ export class ConversationManager {
     try {
       const { provider } = this.deps.registry.resolve(modelId);
       // KesherAI's own engine runs with 32K (see LlamaEngine.serverArgs); other local servers may load models smaller.
-      return provider.location === "cloud" ? 100_000 : provider.id === "llamacpp" ? 26_000 : 12_000;
+      // Its real share: with 2 chats at once each gets half of the context (found on the PC: 24,576, and self-work failed
+      // three times sending 26K). A little room is kept for the answer.
+      const slot = provider.id === "llamacpp" ? this.deps.engineSlotTokens?.() : undefined;
+      if (slot) return Math.floor(slot * 0.9);
+      return provider.location === "cloud" ? 100_000 : provider.id === "llamacpp" ? 22_000 : 12_000;
     } catch {
       return 12_000;
     }

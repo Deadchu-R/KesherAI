@@ -244,6 +244,14 @@ export class LlamaEngine {
   /** Slots the running server has (fewer than asked when memory was short). */
   private runningParallel = 0;
 
+  /** Tokens each chat (slot) can hold, as llama-server reported it (`n_ctx_slot`). */
+  private slotTokens?: number;
+
+  /** @returns The context each chat gets on the running server, if it said. */
+  slotContext(): number | undefined {
+    return this.proc && this.proc.exitCode === null ? this.slotTokens : undefined;
+  }
+
   /** The last prompt-reading speed llama-server reported (see {@link LlamaEngine.promptSpeed}). */
   private promptTps?: number;
 
@@ -452,9 +460,14 @@ export class LlamaEngine {
     this.proc = proc;
     this.modelPath = modelPath;
     this.promptTps = undefined;
+    this.slotTokens = undefined;
     const onData = (buf: Buffer) => {
       const lines = buf.toString().split(/\r?\n/).filter(Boolean);
-      for (const l of lines) this.promptTps = LlamaEngine.promptSpeed(l) ?? this.promptTps;
+      for (const l of lines) {
+        this.promptTps = LlamaEngine.promptSpeed(l) ?? this.promptTps;
+        const slot = /n_ctx_slot = (\d+)/.exec(l)?.[1];
+        if (slot) this.slotTokens = Number(slot);
+      }
       this.log.push(...lines);
       if (this.log.length > 300) this.log.splice(0, this.log.length - 300);
     };

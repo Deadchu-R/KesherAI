@@ -579,6 +579,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       personas,
       skills,
       projectFacts,
+      engineSlotTokens: () => engine.slotContext(),
       onEvent: (convId, e, title, lastAnswer) => {
         notifier.onConversationEvent(convId, title, e, lastAnswer);
         telegram.onConversationEvent(convId, e);

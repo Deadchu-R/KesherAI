@@ -523,7 +523,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const tok = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
     const system = this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt;
     const tools = this.specs().map((t) => ({ name: t.name, tokens: tok(JSON.stringify(t).length) }));
-    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - 2000;
+    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     const msgs = shortenOldToolOutputs(this.messages);
     let cut = 0;
     let summary: string | undefined;
@@ -568,7 +568,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private async fitContextRaw(signal: AbortSignal): Promise<AgentMessage[]> {
     const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
-    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - 2000;
+    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     const msgs = shortenOldToolOutputs(this.messages);
     if (sizeOf(msgs) <= budget) return [system, ...msgs];
     const cut = cutPoint(msgs, Math.floor(budget * 0.6));
@@ -639,6 +639,19 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             this.push({ type: "assistant_delta", turn, text }, false),
           );
         } catch (err) {
+          // Too long for the model after all (the estimate is in characters; a local server may share its context between
+          // chats): take the server's own numbers, make the window smaller and send a shorter conversation once.
+          const over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|exceeds? (?:the )?(?:maximum )?context (?:length|size|window)/i.exec((err as Error).message);
+          if (over && !abort.signal.aborted && this.contextTokens > 2000) {
+            const sent = Number(over[1] ?? 0);
+            const room = Number(over[2] ?? 0);
+            this.contextTokens = Math.max(2000, Math.floor(sent && room ? this.contextTokens * (room / sent) * 0.85 : this.contextTokens * 0.7));
+            this.push({ type: "note", text: `The conversation was too long for the model; KesherAI shortened it (older steps are summarised) and tried again.` });
+            const shorter = await this.fitContext(abort.signal);
+            result = await this.model({ messages: shorter, tools: this.specs() }, abort.signal, (text) =>
+              this.push({ type: "assistant_delta", turn, text }, false),
+            );
+          } else
           // Many local models reject the `tools` field. Retry once without tools.
           if (!this.toolsUnsupported && /tool|function/i.test((err as Error).message) && !abort.signal.aborted) {
             this.toolsUnsupported = true;
