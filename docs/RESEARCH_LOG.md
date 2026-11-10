@@ -285,3 +285,4 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - (d) Model picker from agy's session models; thinking level Low to Max.
   - (e) Check on the phone at 390 px.
 - **Where this stopped:** the design is ready. Next is building (a) and (b) once 0.6.60 is installed and checked on the PC.
+- **SDK 2.5.0, client side (read from the package):** `client().onRequest("session/request_permission", …).onNotification("session/update", …).connectWith(ndJsonStream(stdin, stdout), async (ctx) => …)`. The `ActiveSession` helper queues `session/update` notifications in the order they arrive. A `ClientApp` can connect directly to an in-process `AgentApp`, which gives tests a fake agent with no child process. The only peer dependency is `zod`, which is already in the repo. Terminals use a `TerminalHandle` (`release()` must be called).
