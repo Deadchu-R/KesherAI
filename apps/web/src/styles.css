@@ -1706,3 +1706,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .touch-editor .cm-editor { height: 100%; font-size: 14px; }
 .touch-editor .cm-scroller { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .kesher-monaco-overflow { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 1000; }
+/* What KesherAI learned about the project (code page), as wide as the self-work panel. */
+.project-facts { margin: 16px auto 0; width: min(720px, 100%); }
+.project-facts summary { cursor: pointer; }
+.project-facts .row { align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.project-facts .grow { min-width: 0; overflow-wrap: anywhere; }

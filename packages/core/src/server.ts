@@ -62,7 +62,9 @@ import { Copilot, copilotProvider } from "./copilot.js";
 import { managedPolicy, policyCheck } from "./business.js";
 import { copilotRoutes } from "./routes/copilot.js";
 import { unityRoutes, unrealRoutes } from "./routes/unreal.js";
+import { ProjectFacts } from "./project-facts.js";
 import { unrealSourceRoutes } from "./routes/unreal-source.js";
+import { projectFactsRoutes } from "./routes/project-facts.js";
 import { lspRoutes } from "./routes/lsp.js";
 import { codeRoutes } from "./routes/code.js";
 import { guardRoutes } from "./routes/guard.js";
@@ -553,6 +555,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // The task board self-work shares with Claude: a file on this computer only.
   const sharedDir = join(worker ? worker.mainRoot : paths.root, "self-work");
   const taskBoard = new TaskBoard(join(sharedDir, "board.json"));
+  const projectFacts = new ProjectFacts(join(paths.root, "project-facts.json"));
   const services: KesherServices = {
     browser,
     config,
@@ -563,6 +566,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     plugins,
     engine,
     library,
+    projectFacts,
     conversations: new ConversationManager({
       board: taskBoard,
       registry,
@@ -574,6 +578,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       checkpoints: new Checkpoints(join(paths.root, "checkpoints")),
       personas,
       skills,
+      projectFacts,
       onEvent: (convId, e, title, lastAnswer) => {
         notifier.onConversationEvent(convId, title, e, lastAnswer);
         telegram.onConversationEvent(convId, e);
@@ -1029,6 +1034,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);
   unrealSourceRoutes(app, services);
+  await projectFactsRoutes(app, services);
   lspRoutes(app, services);
   codeRoutes(app, services);
   await unityRoutes(app, services);

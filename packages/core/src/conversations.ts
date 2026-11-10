@@ -1,5 +1,6 @@
 import type { Checkpoints } from "./checkpoints.js";
 import { personaPrompt, type Personas } from "./personas.js";
+import type { ProjectFacts } from "./project-facts.js";
 import type { SkillStore } from "./skill-store.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
@@ -279,6 +280,8 @@ export class ConversationManager {
       personas?: Personas;
       /** SKILL.md skills, listed in the prompt and loaded with use_skill. */
       skills?: SkillStore;
+      /** Facts learned per project from its chats' failing commands (project-facts.ts). */
+      projectFacts?: ProjectFacts;
       /** Every event of every open conversation (for notifications). */
       onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
     },
@@ -963,7 +966,7 @@ export class ConversationManager {
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
-      toolNotes: [...notes, ...(await this.learnedNotes()), ...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean)],
+      toolNotes: [...notes, ...(await this.learnedNotes()), ...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean), ...(c.kind === "code" && workspace ? [(await this.deps.projectFacts?.note(workspace).catch(() => undefined)) ?? ""].filter(Boolean) : [])],
       ...(persona ? { persona: personaPrompt(persona) } : {}),
     });
   }
@@ -1084,6 +1087,9 @@ export class ConversationManager {
     // When the agent is free again, the next queued message goes; with a goal, it is checked first.
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type !== "status" || (e.status !== "idle" && e.status !== "error")) return;
+      // What this chat's commands showed about the project (a form that fails here, a tool that is missing).
+      const ws = conversation.kind === "code" ? this.workspaceOf(conversation) : undefined;
+      if (ws && this.deps.projectFacts) void this.deps.projectFacts.learn(ws, id, session.events).catch(() => undefined);
       if (e.status === "idle" && this.goals.has(id) && !session.queued.length) void this.checkGoal(id);
       else setTimeout(() => void this.drain(id), 50);
     });

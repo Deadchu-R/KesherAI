@@ -1,3 +1,4 @@
+import type { ProjectFacts } from "./project-facts.js";
 import type { SelfWork } from "./self-work.js";
 import type { TaskBoard } from "./task-board.js";
 import type { ProviderRegistry } from "@kesher/providers";
@@ -49,6 +50,8 @@ import type { Semantic } from "./semantic.js";
  * keeps them easy to test with fakes.
  */
 export interface KesherServices {
+  /** Facts learned per project from its chats (project-facts.ts). */
+  projectFacts: ProjectFacts;
   config: KesherConfig;
   paths: DataPaths;
   registry: ProviderRegistry;
