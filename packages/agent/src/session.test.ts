@@ -412,3 +412,18 @@ test("one huge tool output inside a long run is cut down so the request fits a s
   assert.ok(sizes.length >= 2);
   assert.ok(sizes.at(-1)! < 12_000 * 4, `second request was ${sizes.at(-1)} characters`);
 });
+
+test("when the model counts more tokens than the estimate, KesherAI learns its ratio and fits again (a second refusal too)", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-ratio-"));
+  let calls = 0;
+  const model: ModelTurn = async () => {
+    calls++;
+    if (calls <= 2) throw new Error(`400 Bad Request: {"error":{"message":"request (${calls === 1 ? 30000 : 24705} tokens) exceeds the available context size (24576 tokens), try increasing it"}}`);
+    return { text: "fits now", toolCalls: [] };
+  };
+  const session = new AgentSession({ id: "r", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", contextTokens: 22_000 });
+  session.send("hello");
+  await waitFor(session, (e) => e.type === "status" && e.status !== "running");
+  assert.ok(session.events.some((e) => e.type === "assistant" && e.text === "fits now"));
+  assert.ok(!session.events.some((e) => e.type === "status" && e.status === "error"));
+});

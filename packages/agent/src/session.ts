@@ -435,10 +435,20 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * @param result - What came back.
    */
   private recordUsage(modelId: string, role: "main" | TeamRole, sent: AgentMessage[], result: Awaited<ReturnType<ModelTurn>>): void {
+    // What the model really counted: code and Hebrew have fewer characters per token than English prose, so the
+    // window is measured with this model's own ratio from now on.
+    if (role === "main" && (result.usage?.inputTokens ?? 0) > 500) this.learnRatio(sizeOf(sent) + JSON.stringify(this.specs()).length, result.usage!.inputTokens!);
     const reported = result.usage?.inputTokens !== undefined && result.usage?.outputTokens !== undefined;
     const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
     this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name) });
+  }
+
+  /** Characters per token for this model, learned from what it reports (see {@link recordUsage}). */
+  private charsPerToken = CHARS_PER_TOKEN;
+
+  private learnRatio(chars: number, tokens: number): void {
+    if (tokens > 0) this.charsPerToken = Math.min(6, Math.max(1.5, chars / tokens));
   }
 
   /**
@@ -523,7 +533,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const tok = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
     const system = this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt;
     const tools = this.specs().map((t) => ({ name: t.name, tokens: tok(JSON.stringify(t).length) }));
-    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
+    const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     const msgs = shortenOldToolOutputs(this.messages);
     let cut = 0;
     let summary: string | undefined;
@@ -568,7 +578,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private async fitContextRaw(signal: AbortSignal): Promise<AgentMessage[]> {
     const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
-    const budget = this.contextTokens * CHARS_PER_TOKEN - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
+    const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     // One tool output may not take more than a quarter of the window (found on the PC: a whole ScriptNodes.tsx read
     // kept a 24K local model over its limit even after the older steps were summarised).
     const cap = Math.max(4000, Math.floor(budget * 0.25));
@@ -652,16 +662,30 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         } catch (err) {
           // Too long for the model after all (the estimate is in characters; a local server may share its context between
           // chats): take the server's own numbers, make the window smaller and send a shorter conversation once.
-          const over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|exceeds? (?:the )?(?:maximum )?context (?:length|size|window)/i.exec((err as Error).message);
+          let over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|exceeds? (?:the )?(?:maximum )?context (?:length|size|window)/i.exec((err as Error).message);
           if (over && !abort.signal.aborted && this.contextTokens > 2000) {
-            const sent = Number(over[1] ?? 0);
-            const room = Number(over[2] ?? 0);
-            this.contextTokens = Math.max(2000, Math.floor(sent && room ? this.contextTokens * (room / sent) * 0.85 : this.contextTokens * 0.7));
-            this.push({ type: "note", text: `The conversation was too long for the model; KesherAI shortened it (older steps are summarised) and tried again.` });
-            const shorter = await this.fitContext(abort.signal);
-            result = await this.model({ messages: shorter, tools: this.specs() }, abort.signal, (text) =>
-              this.push({ type: "assistant_delta", turn, text }, false),
-            );
+            let sentChars = sizeOf(conversation) + JSON.stringify(this.specs()).length;
+            // Up to two tries: learn the model's real characters per token from its own count, then fit again.
+            for (let attempt = 0; over && attempt < 2; attempt++) {
+              const sent = Number(over[1] ?? 0);
+              const room = Number(over[2] ?? 0);
+              if (sent) this.learnRatio(sentChars, sent);
+              if (room) this.contextTokens = Math.min(this.contextTokens, Math.floor(room * 0.9));
+              else this.contextTokens = Math.max(2000, Math.floor(this.contextTokens * 0.7));
+              if (attempt === 0) this.push({ type: "note", text: `The conversation was too long for the model; KesherAI shortened it (older steps are summarised) and tried again.` });
+              const shorter = await this.fitContext(abort.signal);
+              sentChars = sizeOf(shorter) + JSON.stringify(this.specs()).length;
+              try {
+                result = await this.model({ messages: shorter, tools: this.specs() }, abort.signal, (text) =>
+                  this.push({ type: "assistant_delta", turn, text }, false),
+                );
+                over = null;
+              } catch (again) {
+                over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/i.exec((again as Error).message);
+                if (!over || attempt === 1) throw again;
+              }
+            }
+            result = result!;
           } else
           // Many local models reject the `tools` field. Retry once without tools.
           if (!this.toolsUnsupported && /tool|function/i.test((err as Error).message) && !abort.signal.aborted) {
