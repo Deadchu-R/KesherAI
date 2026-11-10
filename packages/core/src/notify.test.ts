@@ -88,3 +88,20 @@ test("the button's address needs no token, only a code that is waiting", async (
     await server.close();
   }
 });
+
+test("the last notifications are kept in a file for the notifications page, without the Approve / Deny codes", async () => {
+  const { mkdtemp, readFile: rf } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const dir = await mkdtemp(j(tmpdir(), "kesher-notes-"));
+  const file = j(dir, "notifications.json");
+  const settings = { ntfy: { enabled: false, server: "https://ntfy.sh", topic: "t" }, desktop: false, minSeconds: 0, includeText: false, waiting: true, approveButtons: true, waitingSeconds: 60 };
+  const a = new Notifier(() => settings as never, { history: file });
+  await a.send({ title: "Done", body: "b", path: "#/c/1", actions: [{ label: "Allow", path: "/api/quick/SECRETCODE" }] });
+  await new Promise((r) => setTimeout(r, 1200));
+  const saved = await rf(file, "utf8");
+  assert.ok(saved.includes("Done") && !saved.includes("SECRETCODE"));
+  const b = new Notifier(() => settings as never, { history: file });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(b.sent[0]?.title, "Done");
+});

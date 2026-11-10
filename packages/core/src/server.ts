@@ -414,6 +414,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     publicUrl: () => tunnel.status().url,
     // The Approve / Deny buttons on the phone's (and watch's) notification.
     decide: async (convId, requestId, decision) => !!(await services.conversations.open(convId))?.session.approve(requestId, decision),
+    // The notifications page lists them after a restart too (only the main app; the worker sends through it).
+    ...(worker ? {} : { history: join(paths.root, "notifications.json") }),
   });
   downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => notifier.onDownload(job));
   // A nearly full drive (found on the PC: 27 MB left) breaks downloads, self-work and Windows itself: say so, once a day.

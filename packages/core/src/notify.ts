@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import type { AgentEvent } from "@kesher/shared";
 import type { KesherConfig } from "./config.js";
 
@@ -53,8 +54,32 @@ export class Notifier {
       /** Answers an approval request (the Approve / Deny buttons). */
       decide?: (convId: string, requestId: string, decision: "allow" | "deny") => Promise<boolean>;
       fetch?: typeof fetch;
+      /** Keeps the last notifications in this file, so the notifications page still lists them after a restart. */
+      history?: string;
     } = {},
-  ) {}
+  ) {
+    if (opts.history) void this.loadHistory(opts.history);
+  }
+
+  private saving?: NodeJS.Timeout;
+  private async loadHistory(file: string): Promise<void> {
+    const old = JSON.parse(await readFile(file, "utf8").catch(() => "[]")) as unknown;
+    if (!Array.isArray(old)) return;
+    const ok = old.filter((n): n is Note & { at: number; channels: string[] } => !!n && typeof n.title === "string" && typeof n.at === "number");
+    this.sent.unshift(...ok.map((n) => ({ title: n.title, body: String(n.body ?? ""), ...(typeof n.path === "string" ? { path: n.path } : {}), at: n.at, channels: Array.isArray(n.channels) ? n.channels.filter((c) => typeof c === "string") : [] })));
+    this.sent.splice(0, Math.max(0, this.sent.length - 50));
+  }
+  /** Writes the history a moment later (never the Approve / Deny buttons' one-time codes). */
+  private saveHistory(): void {
+    const file = this.opts.history;
+    if (!file || this.saving) return;
+    this.saving = setTimeout(() => {
+      this.saving = undefined;
+      const keep = this.sent.map((n) => ({ title: n.title, body: n.body, ...(n.path ? { path: n.path } : {}), at: n.at, channels: n.channels }));
+      void writeFile(file, JSON.stringify(keep)).catch(() => undefined);
+    }, 1000);
+    this.saving.unref?.();
+  }
 
   /** @returns A new long random topic, hard to guess. */
   static newTopic(): string {
@@ -115,6 +140,7 @@ export class Notifier {
     await Promise.all(jobs);
     this.sent.push({ ...n, at: Date.now(), channels });
     if (this.sent.length > 50) this.sent.shift();
+    this.saveHistory();
     return channels;
   }
 
