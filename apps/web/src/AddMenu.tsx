@@ -31,8 +31,27 @@ export interface AddMenuProps {
   onMode?: (mode: PermissionMode) => void;
 }
 
-type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | "projects" | "scripts" | null;
+type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | "projects" | "scripts" | "board" | null;
 interface Named { id: string; name?: string; title?: string; description?: string }
+
+type BoardCat = "normal" | "cooldown" | "fable";
+interface BoardTask { id: string; title: string; details?: string; status: string; category?: BoardCat; priority: number }
+const boardCat = (t: BoardTask): BoardCat => t.category ?? (/^\s*\[cool\s*down\]/i.test(t.title) ? "cooldown" : /^\s*\[fable\]/i.test(t.title) ? "fable" : "normal");
+
+/**
+ * The shared task board as a message: the open tasks of one list (or all), highest priority first, with what
+ * to do with them. Plain text, so it works for any model: the local one or Antigravity (Gemini, Claude).
+ */
+async function boardMessage(cat: BoardCat | "all"): Promise<string> {
+  const b = await api<{ tasks: BoardTask[] }>("/api/self-work/board");
+  const open = b.tasks.filter((t) => t.status === "open" && (cat === "all" || boardCat(t) === cat)).sort((x, y) => x.priority - y.priority);
+  if (!open.length) return L("(אין משימות פתוחות ברשימה הזו בלוח.)\n", "(No open tasks in that list on the board.)\n");
+  const list = open.map((t) => `- ${t.id} (p${t.priority}) ${t.title}${t.details ? `\n  ${t.details.replace(/\s+/g, " ").slice(0, 600)}` : ""}`).join("\n");
+  return `${L("משימות מהלוח שלנו", "Tasks from our board")} (${cat === "all" ? "all" : cat}):\n${list}\n\n${L(
+    "עבור עליהן אחת אחרי השנייה, לפי הסדר. לכל משימה: בצע אותה, הרץ את הבדיקות (pnpm -s typecheck && pnpm -s test), ועשה commit נפרד עם הסבר. בלי push. אם משימה נכשלת פעמיים, דלג עליה וכתוב למה. בסוף תן סיכום: מה נעשה ומה לא.",
+    "Go through them one after another, in this order. For each: do it, run the checks (pnpm -s typecheck && pnpm -s test), and make its own commit with an explanation. No push. If a task fails twice, skip it and say why. At the end, sum up what was done and what was not.",
+  )}\n`;
+}
 
 /**
  * The message box's +, modelled on the big apps (researched first): Gemini
@@ -149,6 +168,11 @@ export function AddMenu(p: AddMenuProps) {
       <MenuSeparator />
       <MenuItem icon="🌐" checked={p.web} keepOpen onSelect={() => p.onWeb(!p.web)}>{L("חיפוש באינטרנט", "Web search")}</MenuItem>
       <MenuItem icon="🔬" onSelect={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); }}>{L("מחקר מעמיק", "Deep research")}</MenuItem>
+      <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
+        {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (
+          <MenuItem key={c} keepOpen onSelect={() => void boardMessage(c).then((t) => { p.onInsert(t); done(); }, (e: Error) => { p.onInsert(`(${e.message})\n`); done(); })}>{label}</MenuItem>
+        ))}
+      </MenuSub>
       <MenuSub icon="📚" label={L("ידע וספריות", "Knowledge and libraries")} {...subProps("knowledge")}>
         {list((x) => <MenuItem key={x.id} dir="auto" onSelect={() => p.onInsert(`${L("חפש בבסיס הידע", "Search the knowledge base")} "${x.name}": `)}>{x.name}</MenuItem>)}
         <MenuItem icon="📦" href="#/libraries">{L("חנות ספריות", "Library store")}</MenuItem>
