@@ -235,7 +235,16 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - With the model alone, on E: (NVMe), and a 2 GB margin: **writing 38.8 tok/s, reading a 13K prompt at 1,297 tok/s**, 68.6K context per chat (2 chats). During the earlier run, with the card full to 0.5 GB, it was 18 and 80–120. So the slowdown was memory spilling to system RAM, and the 2 GB margin fixed it. The C: drive was also full, so Windows could not grow its page file, which may have made it worse.
 - The Qwen3.8 GGUF (unsloth UD-Q4_K_XL) **carries NextN (MTP) tensors** (`blk.64.nextn.*` in the load log). 0.6.58 turns on `--spec-type draft-mtp` for files whose header has `*.nextn_predict_layers > 0`. Next: measure the same two requests on 0.6.58 (writing speed, draft acceptance), and keep it only if it is faster.
 
+### MoE expert cache in llama.cpp, and Qwen3.8-Flash-Next
+- **`--moe-cache-mib N`** (llama.cpp PR #29887, 2026-10-07; multi-GPU a day later, [Developers Digest](https://www.developersdigest.tech/blog/llama-cpp-moe-offload-n-cpu-moe-vs-moe-cache-2026)): an LRU cache of MoE experts in VRAM, for models whose experts live in system RAM. Only cache misses cross PCIe. The author's numbers (Qwen3.8-Flash-Next): 1.6–2.2× faster writing than plain `--fit`. One RTX 3090 tester saw only 1–5% over a tuned `--n-cpu-moe`. It does nothing when the whole model fits in VRAM (Qwen3.8-27B today). Start at about 10% of the experts' size, and use it with `--fit` when every turn has long prompts (agents). The build on the PC (b12110) is older than the PR, so the engine needs an update first; check with `--help | grep moe-cache`.
+- **Qwen3.8-Flash-Next** (MoE, ~177B total, ~4.9B active, 512 experts; llama.cpp support from 2026-08-27; [GGUF](https://huggingface.co/batiai/Qwen3.8-Flash-Next-GGUF)): IQ3_XXS 85 GB, IQ4_XS 97.5 GB, Q4_K_M 119 GB. On Roee's PC (24 GB VRAM + 96 GB RAM), IQ3_XXS fits with the experts in RAM; IQ4_XS is tight. The card has no coding benchmarks against Qwen3.8-27B. It is described as a preview of Qwen4.
+- **What KesherAI can take:**
+  1. When a MoE model does not fit the card, add `--moe-cache-mib` (about 10% of the experts' size, within the free VRAM) on builds that have it.
+  2. Offer an engine update to a build with the cache.
+  3. A future experiment, like DeepSeek V4-Flash: Qwen3.8-Flash-Next IQ3_XXS (85 GB), measured against 27B on the same CoolDown task. Ask Roee before downloading.
+
 ### Where it stopped
+- MoE expert cache + Qwen3.8-Flash-Next: read (above). Next: engine update to a build with --moe-cache-mib; ask Roee about trying Flash-Next.
 - Qwen3.8 speed: baseline measured (above). Next: same requests on 0.6.58 with MTP.
 - Qwen3.8 vs 3.6: plan written (above). Next: run it after 0.6.55 is installed and the current run ends.
 - Engine speed on the PC: measured during the run (above). Next: load log + speeds after the 2 GB margin release.
