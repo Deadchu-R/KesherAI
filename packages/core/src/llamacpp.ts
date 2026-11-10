@@ -450,6 +450,9 @@ export class LlamaEngine {
       // context costs little memory (Qwen3.6: attention in only 16 of 64 layers) then get 100K+ per chat on one card
       // instead of a fixed 24K. Each chat keeps at least 32K (--fit-ctx is per chat).
       if (fits) args.push("--fit-ctx", "32768");
+      // fit leaves 1 GB free by default; with the context grown to fill the card, Windows then moved memory to system
+      // RAM at run time and the model wrote at half speed (found on the PC: 0.5 GB left, 18 instead of 40 tokens/s).
+      if (fits && !args.some((a) => a === "-fitt" || a === "--fit-target")) args.push("--fit-target", "2048");
       // Older builds: room for coding agents (their instructions and tools alone are thousands of tokens): 32K, 16K more per extra chat.
       else args.push("-c", String(32768 + 16384 * (own ? 0 : parallel - 1)));
     }
