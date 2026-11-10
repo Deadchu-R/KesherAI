@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanComputer } from "./model-scan.js";
+import { matchRecommended, scanComputer, type FoundModel } from "./model-scan.js";
 import { createKesherServer } from "./server.js";
 
 /** Writes a sparse file of `mb` megabytes starting with `head`. */
@@ -54,4 +54,15 @@ test("scan finds LM Studio, Ollama and Hugging Face models without copying them"
   } finally {
     await s.close();
   }
+});
+
+test("a recommended model already in another app's folder is found by its repo name and file pattern", () => {
+  const m = (path: string, size = 100, format: FoundModel["format"] = "gguf"): FoundModel => ({ path, name: path, size, source: "LM Studio", folder: "/x", format });
+  const found = [
+    m("/x/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf"),
+    m("/x/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", 17),
+    m("/x/Qwen3-8B-Q4_K_M.gguf"),
+  ];
+  assert.equal(matchRecommended(found, "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF", "Q4_K_M\\.gguf$")?.size, 17);
+  assert.equal(matchRecommended(found, "unsloth/Qwen3-14B-GGUF", "Q4_K_M\\.gguf$"), undefined);
 });

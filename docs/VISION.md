@@ -162,3 +162,4 @@ Not scheduled; kept here so they are not lost.
 - **Minecraft modding:** tools for Fabric/Forge/NeoForge mods (project setup, building, running a test client).
 - **Roblox:** Luau scripts and Roblox Studio (further out).
 - **Game modding in general:** tools for modding other games.
+- **No app is required, every app is welcome:** KesherAI should never depend on Ollama or LM Studio (or any one provider). They stay supported, but everything they do must also work without them: KesherAI's own engine runs the models (chat, code, embeddings, vision) and reuses model files already on the computer. The same goes for almost every provider: each is an option, never a requirement, and each has a built-in way to do the same job.

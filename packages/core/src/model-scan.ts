@@ -196,3 +196,25 @@ export function insideAny(path: string, folders: readonly string[]): boolean {
   const cmp = process.platform === "win32" ? (x: string) => x.toLowerCase() : (x: string) => x;
   return folders.some((f) => cmp(n).startsWith(cmp(normalize(f).replace(/[\\/]+$/, "") + sep)));
 }
+
+/**
+ * Finds a copy of a recommended model that is already on this computer (in
+ * KesherAI's folder or another app's), so setup uses it instead of
+ * downloading it again.
+ *
+ * The model's name comes from its repo (`unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF`
+ * → `qwen3-coder-30b-a3b-instruct`); a file matches when its name holds that
+ * name and the repo's file pattern (e.g. `Q4_K_M\.gguf$`).
+ *
+ * @param found - Models found on this computer.
+ * @param repo - Hugging Face repo of the recommended model.
+ * @param filePattern - Which file of the repo setup would download.
+ * @returns The biggest matching GGUF file, or undefined.
+ */
+export function matchRecommended(found: readonly FoundModel[], repo: string, filePattern: string): FoundModel | undefined {
+  const stem = (repo.split("/").pop() ?? repo).replace(/-gguf$/i, "").toLowerCase();
+  const pattern = new RegExp(filePattern, "i");
+  return found
+    .filter((m) => m.format === "gguf" && pattern.test(basename(m.path)) && basename(m.path).toLowerCase().includes(stem))
+    .sort((a, b) => b.size - a.size)[0];
+}

@@ -11,6 +11,8 @@ import { DownloadBar, useDownloads } from "../Downloads";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
+  /** Which app's folder the copy on this computer is in (LM Studio, Ollama…), when not KesherAI's. */
+  foundIn?: string;
   note: Record<string, string> & { en: string }; estimate: Estimate;
 }
 interface EngineStatus {
@@ -221,7 +223,7 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
             }} />
             <span className="grow"><strong>{m.name}</strong> <span className="muted">· {roles.get(m.id) ?? ""}</span></span>
             <RatingBadge e={m.estimate} />
-            <span className="muted mono" dir="ltr">{m.downloaded ? t("downloaded") : `${m.sizeGb} GB`}</span>
+            <span className="muted mono" dir="ltr">{m.downloaded ? (m.foundIn && m.foundIn !== "KesherAI" ? t("foundIn", { app: m.foundIn }) : t("downloaded")) : `${m.sizeGb} GB`}</span>
           </label>
         ))}
         {!shown.length && <p className="muted">{t("setupNothingFits")}</p>}
@@ -273,14 +275,24 @@ export function ModelsPage() {
   const doneCount = downloads.filter((j) => j.status === "done").length;
   useEffect(refreshLocal, [doneCount]);
 
+  // Loading a big model takes a minute or two: the button says so, and a note says when it is ready or what went wrong.
+  const [loadingPath, setLoadingPath] = useState("");
   async function loadInLlama(path: string, name?: string) {
     try {
       setError("");
-      await api("/api/engines/llamacpp/load", { method: "POST", body: { modelPath: path, ...(name ? { name } : {}) } });
+      setLoadingPath(path);
+      const r = await api<{ modelId?: string }>("/api/engines/llamacpp/load", { method: "POST", body: { modelPath: path, ...(name ? { name } : {}) } });
+      toast(t("modelLoaded", { model: r.modelId ?? name ?? path.split(/[\\/]/).pop() ?? "" }));
     } catch (e) {
       setError((e as Error).message);
+      toast((e as Error).message);
+    } finally {
+      setLoadingPath("");
     }
   }
+  const loadButton = (f: LocalFile) => (
+    <button type="button" disabled={!!loadingPath} onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{loadingPath === f.path ? t("loading") : t("load")}</button>
+  );
 
   const [tab, setTabState] = useState<string>(() => {
     try {
@@ -365,7 +377,7 @@ export function ModelsPage() {
                     <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                     {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                     {tab === "chat" && f.gguf && <BenchButton path={f.path} onDone={refreshLocal} />}
-                    {tab === "chat" && f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
+                    {tab === "chat" && f.gguf && loadButton(f)}
                   </div>
                 ))}
               </div>
@@ -386,7 +398,7 @@ export function ModelsPage() {
                 {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                 {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
-                {f.gguf && <button type="button" onClick={() => void loadInLlama(f.path, f.source === "Ollama" ? f.name : undefined)}>{t("load")}</button>}
+                {f.gguf && loadButton(f)}
               </div>
             ))}
             {!local.length && <p className="muted">{t("noLocalModels")}</p>}

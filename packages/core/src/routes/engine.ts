@@ -6,7 +6,7 @@ import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { findLlamaRelease, waitForDownload } from "../llamacpp.js";
-import { insideAny, looksLikeGguf } from "../model-scan.js";
+import { insideAny, looksLikeGguf, matchRecommended, scanComputer, scanFolder, type FoundModel } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
 
@@ -27,6 +27,25 @@ export async function ensureEngine(s: KesherServices): Promise<void> {
   s.config.engines.llamaServerPath = binaryPath;
   s.config.engines.llamaVersion = version;
   await s.saveConfig();
+}
+
+/** What the last look over this computer found (kept a minute: the models page asks often). */
+let found: { at: number; models: FoundModel[] } | undefined;
+
+/**
+ * GGUF models on this computer: KesherAI's own folder, the folders the user
+ * added and other apps' folders (LM Studio, Ollama, Hugging Face…).
+ *
+ * @param s - Services.
+ * @param fresh - Look again even if a recent look is kept.
+ * @returns Models found.
+ */
+async function modelsOnComputer(s: KesherServices, fresh = false): Promise<FoundModel[]> {
+  if (!fresh && found && Date.now() - found.at < 60_000) return found.models;
+  const own = await scanFolder({ folder: join(s.paths.models, "chat"), source: "KesherAI" }).catch(() => []);
+  const others = (await scanComputer(s.config.modelFolders).catch(() => [])).flatMap((f) => f.models);
+  found = { at: Date.now(), models: [...own, ...others] };
+  return found.models;
 }
 
 /**
@@ -201,11 +220,17 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
   /** The "Start here" list, with whether each model is already downloaded. */
   app.get("/api/models/recommended", async () => {
     const hw = await detectHardwareCached();
-    return RECOMMENDED_MODELS.map((m) => ({
+    const onComputer = await modelsOnComputer(s);
+    return RECOMMENDED_MODELS.map((m) => {
+      // Downloaded = the model file itself is on this computer (not just its folder, which a stopped download leaves).
+      const copy = matchRecommended(onComputer, m.repo, m.filePattern);
+      return {
       ...m,
-      downloaded: existsSync(join(s.paths.models, "chat", m.repo)),
+      downloaded: !!copy,
+      ...(copy ? { foundIn: copy.source } : {}),
       estimate: estimatePerformance(m.sizeGb * 1024 ** 3, hw, { ...(m.activeFraction ? { activeFraction: m.activeFraction } : {}) }),
-    }));
+      };
+    });
   });
 
   /**
@@ -316,7 +341,10 @@ async function setUp(s: KesherServices, models: RecommendedModel[]): Promise<voi
       );
       const file = files.find((f) => new RegExp(model.filePattern, "i").test(f.path));
       if (!file) throw new Error(`No file matching ${model.filePattern} in ${model.repo}`);
-      const dest = join(s.paths.models, "chat", model.repo, file.path);
+      let dest = join(s.paths.models, "chat", model.repo, file.path);
+      // Already on this computer (here or in another app's folder, like LM Studio): use it in place, no second download.
+      const copy = existsSync(dest) ? undefined : matchRecommended(await modelsOnComputer(s, true), model.repo, model.filePattern);
+      if (copy) dest = copy.path;
       if (!existsSync(dest)) {
         await s.engine.track("downloading-model", `Downloading ${model.name} (${model.sizeGb} GB)…`, async () => {
           const job = s.downloads.enqueue({
@@ -328,6 +356,7 @@ async function setUp(s: KesherServices, models: RecommendedModel[]): Promise<voi
           });
           setupJob = { id: job.id, skipped: false };
           await waitForDownload(s.downloads, job.id);
+          found = undefined;
         });
       }
       paths.push(dest);

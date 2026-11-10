@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmod, mkdir, readdir, rm } from "node:fs/promises";
+import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
@@ -319,6 +319,17 @@ export class LlamaEngine {
   }
 
   /**
+   * How long loading a model file may take.
+   *
+   * @param bytes - Size of the file.
+   * @returns Milliseconds: at least 5 minutes.
+   */
+  static loadTimeout(bytes: number): number {
+    // A big model read from a slow disk (or another app's folder on a hard drive) takes minutes: about 30 MB/s at worst.
+    return Math.max(300_000, Math.round(bytes / (30 * 1024 ** 2)) * 1000);
+  }
+
+  /**
    * The arguments llama-server gets: the config's, plus `--jinja` (needed
    * for tool calling), slots for chats answered at the same time, and a
    * context that gives each of them room (32k for one, 16k more per extra
@@ -345,10 +356,11 @@ export class LlamaEngine {
    * Starts llama-server with a model and waits until it answers.
    *
    * @param modelPath - Absolute path of a `.gguf` file.
-   * @param timeoutMs - How long loading may take.
+   * @param timeoutMs - How long loading may take (by default 5 minutes, more for big files: see loadTimeout).
    * @throws Error if the engine is not installed, or the server exits or does not become ready.
    */
-  async load(modelPath: string, timeoutMs = 300_000): Promise<void> {
+  async load(modelPath: string, timeoutMs?: number): Promise<void> {
+    timeoutMs ??= LlamaEngine.loadTimeout((await stat(modelPath).catch(() => undefined))?.size ?? 0);
     const binary = this.opts.binaryPath;
     if (!binary || !existsSync(binary)) throw new Error("The llama.cpp engine is not installed yet. Install it from the Models screen.");
     const plan = userChoseGpus(this.opts.args) ? undefined : await this.opts.gpuPlan?.(modelPath).catch(() => undefined);

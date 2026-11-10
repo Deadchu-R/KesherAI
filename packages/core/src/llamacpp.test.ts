@@ -52,3 +52,8 @@ test("server args always enable tool calling and a sane context", () => {
   assert.deepEqual(LlamaEngine.serverArgs(["-np", "4"], false, 2), ["-np", "4", "-c", "32768", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]);
   assert.deepEqual(LlamaEngine.serverArgs(["-ctk", "f16"], false), ["-ctk", "f16", "-c", "32768"]);
 });
+
+test("big models get longer to load than small ones", () => {
+  assert.equal(LlamaEngine.loadTimeout(2 * 1024 ** 3), 300_000);
+  assert.ok(LlamaEngine.loadTimeout(17.4 * 1024 ** 3) > 500_000);
+});
