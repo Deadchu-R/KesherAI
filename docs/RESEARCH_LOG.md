@@ -311,3 +311,9 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 | 1 | llama.cpp's own | 61,440 | 62.1 / 60.4 |
 
 - **Conclusion:** 2 guesses ahead is as fast as llama.cpp's default and leaves more room, so 2 is now KesherAI's default. Running one chat at a time gives 75K per chat at the same speed. The cost is that self-work and a chat then wait for each other. The PC is set to 2 chats at once with 2 guesses ahead. (Prose; code gains more from MTP, so it was not measured here.)
+
+## 2026-11-10 (cont.) — Is a q4_0 KV cache worth it for Qwen3.8? No, for now
+- InventiveHQ (June 2026; Qwen2.5-Coder-7B, 8K context): q8_0 output stayed 81.6% similar to f16, but q4_0 dropped to 8.3%, a "quality cliff". On CUDA the speed barely changed, so speed alone would not reveal the loss.
+- Qwen3.8-27B is hybrid: only 16 of its 64 layers have a KV cache (3 DeltaNet layers to every attention layer), so its KV is small (~16 KB per token at f16, ~8 KB at q8_0; wal.sh). Going from q8_0 to q4_0 would save only about 1 GB at 100K tokens. The rest of the memory goes to weights, the recurrent state per slot, the MTP head and compute buffers.
+- **Decision:** keep q8_0. The context is better won back with parallel 1 or fewer MTP guesses, as measured above. TurboQuant (3-bit KV, matched fp16 in one test) can be re-checked when it is in mainline llama.cpp.
+- **Where this stopped:** KV cache research done; nothing to build.
