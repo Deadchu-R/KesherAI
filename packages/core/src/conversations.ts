@@ -7,7 +7,7 @@ import type { SkillStore } from "./skill-store.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
@@ -1496,7 +1496,9 @@ export class ConversationManager {
       }
       const updatedAt = chat.messages.at(-1)?.at ?? chat.createdAt;
       // A coding session (Claude Code) continues as a code chat in its folder, asking before changes.
-      const folder = chat.workspace && (await stat(chat.workspace).catch(() => undefined))?.isDirectory() ? chat.workspace : undefined;
+      // Not the whole home folder or a drive (found on the PC: a session that ran in C:\Users\user): then a plain chat.
+      const broad = (p: string) => { const r = resolvePath(p); return r === resolvePath(homedir()) || r === parsePath(r).root; };
+      const folder = chat.workspace && !broad(chat.workspace) && (await stat(chat.workspace).catch(() => undefined))?.isDirectory() ? chat.workspace : undefined;
       await this.deps.library.saveConversation({
         id,
         projectId,

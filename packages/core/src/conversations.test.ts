@@ -413,3 +413,22 @@ test("always-allow rules: scope, end time, and one command only", async () => {
   assert.equal(ruleAllows({ tool: "run_command", scope: "everywhere", command: "pnpm test" }, { ...c, command: "pnpm test > out.txt" }), false, "no redirect");
   assert.equal(ruleAllows({ tool: "run_command", scope: "everywhere", command: "git status" }, c), false);
 });
+
+test("an imported coding session becomes a code chat in its folder, but never one over the whole home folder", async () => {
+  const { server, dataDir } = await setup();
+  try {
+    const { homedir } = await import("node:os");
+    const msg = [{ role: "user" as const, text: "hi" }];
+    const r = await server.services.conversations.importChats([
+      { source: "claude-code", originalId: "p1", title: "proj", createdAt: new Date().toISOString(), messages: msg, workspace: dataDir },
+      { source: "claude-code", originalId: "h1", title: "home", createdAt: new Date().toISOString(), messages: msg, workspace: homedir() },
+    ]);
+    const [proj, home] = await Promise.all(r.ids.map((id) => server.services.library.getConversation(id)));
+    assert.equal(proj?.kind, "code");
+    assert.equal(proj?.workspace, dataDir);
+    assert.equal(home?.kind, "chat");
+    assert.equal(home?.workspace, undefined);
+  } finally {
+    await server.close();
+  }
+});
