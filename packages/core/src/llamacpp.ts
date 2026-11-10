@@ -510,6 +510,8 @@ export class LlamaEngine {
     };
     proc.stdout?.on("data", onData);
     proc.stderr?.on("data", onData);
+    // Say when it ends, and why if KesherAI ended it (the status shows the log): a silent stop looked like a crash.
+    proc.once("exit", (code, signal) => this.log.push(`KesherAI: llama-server ended (${signal ? `stopped: ${this.stopReason ?? signal}` : `exit code ${code}`}).`));
     const spawnError = new Promise<never>((_, reject) => proc.once("error", reject));
 
     const deadline = Date.now() + timeoutMs;
@@ -531,8 +533,16 @@ export class LlamaEngine {
     throw new Error(`llama-server did not become ready in ${Math.round(timeoutMs / 60_000)} minutes${last ? `; it last said: ${last}` : ""}`);
   }
 
-  /** Stops the server if it runs. */
-  async stop(): Promise<void> {
+  /** Why the server was last stopped (shown in its log). */
+  private stopReason?: string;
+
+  /**
+   * Stops the server if it runs.
+   *
+   * @param reason - Why, for the log (e.g. "unused for 20 minutes").
+   */
+  async stop(reason?: string): Promise<void> {
+    this.stopReason = reason;
     const proc = this.proc;
     this.proc = undefined;
     this.modelPath = undefined;

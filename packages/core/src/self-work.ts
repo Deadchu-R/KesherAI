@@ -45,6 +45,8 @@ export interface SelfWorkState {
   /** Why it ended, or what it waits for. */
   note?: string;
   failures: number;
+  /** Items given up on (their changes undone) so the run could go on with the next one. */
+  skipped?: Array<{ at: number; why: string }>;
 }
 
 /** What self-work needs from KesherAI (injected, so it can be tested). */
@@ -69,6 +71,9 @@ export interface SelfWorkDeps {
 
 const MAX_STEPS = 80;
 const MAX_FAILURES = 3;
+/** Items a run may give up on before it stops (a long unattended run should not end at the first hard item). */
+const MAX_SKIPS = 3;
+const L_SKIP = "Skipped an item";
 /** How long one item may run, and how long an approval may wait. */
 const STEP_MS = 45 * 60_000;
 const WAIT_MS = 30 * 60_000;
@@ -242,6 +247,31 @@ export class SelfWork {
     }
   }
 
+  /**
+   * Gives up on the current item and goes on with the next (an unattended run, e.g. overnight, should not end at the
+   * first item the model cannot do): its uncommitted changes are undone in the run's own worktree (never the
+   * project's checkout), and the model is told to note it on the board and take the next item.
+   *
+   * @param why - What went wrong.
+   * @returns Whether the run goes on (false after MAX_SKIPS items, or without a worktree of its own).
+   */
+  private async skip(why: string): Promise<boolean> {
+    const r = this.run_!;
+    r.skipped ??= [];
+    if (!r.worktree || r.skipped.length >= MAX_SKIPS) return false;
+    r.skipped.push({ at: Date.now(), why: why.slice(0, 300) });
+    r.failures = 0;
+    await this.d.git(r.worktree, ["reset", "--hard", "HEAD"]);
+    await this.d.git(r.worktree, ["clean", "-fd"]);
+    await this.save();
+    await this.d.notify(`🤖 ${L_SKIP}`, `Self-work: ${why.slice(0, 120)}`, `#/c/${r.convId}`);
+    await this.d.send(
+      r.convId,
+      `This item could not be finished (${why}). Its changes were undone. If it is a task on the board, mark it blocked there with the reason (task_board block), then take the next item (end with ITEM DONE / ALL DONE / BLOCKED).`,
+    );
+    return true;
+  }
+
   /** The loop: a turn, its outcome, the check, a commit, the next turn. */
   private async work(fresh: boolean): Promise<void> {
     const r = this.run_!;
@@ -255,12 +285,18 @@ export class SelfWork {
         r.steps++;
         if (st.status === "error") {
           r.failures++;
-          if (r.failures >= MAX_FAILURES) return await this.end("failed", "The model stopped with errors 3 times in a row.");
+          if (r.failures >= MAX_FAILURES) {
+            if (await this.skip("The model stopped with errors 3 times in a row.")) continue;
+            return await this.end("failed", "The model stopped with errors 3 times in a row.");
+          }
           await this.d.send(r.convId, "The last turn ended with an error. Continue with the current item.");
           continue;
         }
         let out = readOutcome(st.last);
-        if (out.kind === "blocked") return await this.end("blocked", out.text);
+        if (out.kind === "blocked") {
+          if (await this.skip(`Blocked: ${out.text}`)) continue;
+          return await this.end("blocked", out.text);
+        }
         // Local models often finish the work and forget the closing line (found on the PC with Qwen3 Coder): when the
         // worktree changed, the check decides, not the wording.
         if (out.kind === "none") {
@@ -269,7 +305,10 @@ export class SelfWork {
         }
         if (out.kind === "none") {
           r.failures++;
-          if (r.failures >= MAX_FAILURES) return await this.end("blocked", "The model did not say what it finished 3 times in a row.");
+          if (r.failures >= MAX_FAILURES) {
+            if (await this.skip("The model did not say what it finished 3 times in a row.")) continue;
+            return await this.end("blocked", "The model did not say what it finished 3 times in a row.");
+          }
           await this.d.send(r.convId, "End your turn with one line: ITEM DONE: <item>, ALL DONE, or BLOCKED: <why>. If the item is not finished, finish it first.");
           continue;
         }
@@ -278,7 +317,10 @@ export class SelfWork {
           if (c.code !== 0) {
             r.failures++;
             await this.save();
-            if (r.failures >= MAX_FAILURES) return await this.end("blocked", `\`${r.check}\` failed 3 times in a row.`);
+            if (r.failures >= MAX_FAILURES) {
+              if (await this.skip(`\`${r.check}\` failed 3 times in a row.`)) continue;
+              return await this.end("blocked", `\`${r.check}\` failed 3 times in a row.`);
+            }
             await this.d.send(r.convId, `\`${r.check}\` failed after your change. Fix it before the next item (end with ITEM DONE again):\n${c.out.slice(-3000)}`);
             continue;
           }

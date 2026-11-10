@@ -1077,7 +1077,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     name: "chat model",
     providers: ["llamacpp"],
     loaded: () => engine.status().running,
-    unload: () => engine.stop(),
+    unload: () => engine.stop("unused for a while (Settings → graphics card: unload after)"),
     reload: async () => {
       const path = config.engines.lastModel;
       if (path && existsSync(path) && engine.status().installed) await loadModel(services, path);

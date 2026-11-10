@@ -58,16 +58,19 @@ test("works item by item on its own branch, checks, commits, and ends when done"
   assert.ok(notes.includes("✅ Self-work finished"));
 });
 
-test("refuses a project git cannot read, and stops after 3 failed checks", async () => {
+test("refuses a project git cannot read; after 3 failed checks it undoes the item and goes on with the next", async () => {
   const dirty = await setup(["ITEM DONE: x"], { dirty: true });
   await assert.rejects(dirty.sw.start({ repo: dirty.repo, goal: "x" }), /git could not read/);
 
-  const failing = await setup(["ITEM DONE: x"], { checks: [1, 1, 1] });
+  const failing = await setup(["ITEM DONE: x", "ITEM DONE: x", "ITEM DONE: x", "ALL DONE"], { checks: [1, 1, 1, 0] });
   await failing.sw.start({ repo: failing.repo, goal: "x", check: "pnpm test" });
   await failing.sw.settled();
-  assert.equal(failing.sw.current?.status, "blocked");
-  assert.equal(failing.git.filter((a) => a[0] === "commit").length, 0, "nothing committed while the check fails");
   assert.match(failing.sent[1]!, /failed after your change/);
+  assert.match(failing.sw.current?.skipped?.[0]?.why ?? "", /failed 3 times/);
+  const reset = failing.git.findIndex((a) => a[0] === "reset");
+  assert.ok(reset >= 0, "the failed item's changes are undone");
+  assert.equal(failing.git.slice(0, reset).filter((a) => a[0] === "commit").length, 0, "nothing committed while the check fails");
+  assert.ok(failing.sent.some((m) => /could not be finished/.test(m)), "the model is told to go on with the next item");
 });
 
 test("a BLOCKED answer ends the run and tells the user", async () => {

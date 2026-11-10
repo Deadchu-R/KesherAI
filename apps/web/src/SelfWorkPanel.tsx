@@ -17,6 +17,7 @@ interface Run {
   until: number;
   steps: number;
   items: Array<{ at: number; text: string; commit?: string }>;
+  skipped?: Array<{ at: number; why: string }>;
   note?: string;
 }
 
@@ -105,6 +106,7 @@ export function SelfWorkPanel(p: { folder: string }) {
               ))}
               <ul className="self-work-items">
                 {run.items.map((i) => <li key={i.at}>✓ <span dir="auto">{i.text}</span>{i.commit && <code className="muted small"> {i.commit}</code>}</li>)}
+                {(run.skipped ?? []).map((i) => <li key={`s${i.at}`} className="muted">↷ {L("דילג", "Skipped")}: <span dir="auto">{i.why}</span></li>)}
               </ul>
               {log.lines.length > 0 && (
                 <details className="self-work-log">

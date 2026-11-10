@@ -64,6 +64,9 @@ async function modelsOnComputer(s: KesherServices, fresh = false): Promise<Found
  */
 export async function loadModel(s: KesherServices, modelPath: string, name?: string): Promise<string> {
   await s.engine.load(modelPath);
+  // A model just loaded is in use: without this, the idle unloader (20 minutes by default) stopped it seconds after
+  // loading when nothing had run for a while (found on the PC: Qwen3.6 loaded, then unloaded 3 s later).
+  s.guard.touch("llamacpp");
   s.registerEngineProvider();
   const modelId = `llamacpp/${(name ?? basename(modelPath)).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}`;
   s.config.engines.lastModel = modelPath;
