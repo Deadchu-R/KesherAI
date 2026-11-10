@@ -213,20 +213,21 @@ export function registerLspProviders(): void {
       const uri = l?.uriOf(model);
       if (!l || !uri) return { suggestions: [] };
       const r = await l.request<{ items?: Json[] } | Json[] | null>("textDocument/completion", { textDocument: { uri }, position: fromPos(pos) }).catch(() => null);
-      const items = (Array.isArray(r) ? r : r?.items ?? []) as Array<{ label: string; kind?: number; detail?: string; documentation?: string | { value: string }; insertText?: string; insertTextFormat?: number; textEdit?: TextEdit; filterText?: string; sortText?: string }>;
+      // textEdit may be a plain edit (range) or an insert/replace pair (Roslyn sends these).
+      const items = (Array.isArray(r) ? r : r?.items ?? []) as Array<{ label: string; kind?: number; detail?: string; documentation?: string | { value: string }; insertText?: string; insertTextFormat?: number; textEdit?: { newText: string; range?: LRange; insert?: LRange; replace?: LRange }; filterText?: string; sortText?: string }>;
       const word = model.getWordUntilPosition(pos);
       const range = new monaco.Range(pos.lineNumber, word.startColumn, pos.lineNumber, word.endColumn);
       return {
         suggestions: items.slice(0, 400).map((i) => ({
-          label: i.label,
+          label: String(i.label),
           kind: kind(i.kind),
           ...(i.detail ? { detail: i.detail } : {}),
           ...(i.documentation ? { documentation: typeof i.documentation === "string" ? i.documentation : { value: i.documentation.value } } : {}),
-          insertText: i.textEdit?.newText ?? i.insertText ?? i.label,
+          insertText: i.textEdit?.newText ?? i.insertText ?? String(i.label),
           ...(i.insertTextFormat === 2 ? { insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet } : {}),
           ...(i.filterText ? { filterText: i.filterText } : {}),
           ...(i.sortText ? { sortText: i.sortText } : {}),
-          range: i.textEdit ? toRange(i.textEdit.range) : range,
+          range: i.textEdit?.range ? toRange(i.textEdit.range) : i.textEdit?.insert && i.textEdit.replace ? { insert: toRange(i.textEdit.insert), replace: toRange(i.textEdit.replace) } : range,
         })),
       };
     },
