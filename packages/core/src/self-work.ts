@@ -163,6 +163,9 @@ export class SelfWork {
     if (this.run_ && (this.run_.status === "running" || this.run_.status === "waiting")) throw new Error("Self-work is already running. Stop it first.");
     const goal = o.goal.trim().slice(0, 4000);
     if (!goal) throw new Error("Say what to work on.");
+    // Outside agents (Antigravity) run only in chats the user drives: Google's terms forbid wrapping them in
+    // another tool's automatic loop, and accounts have been suspended for it (docs/RESEARCH_LOG.md).
+    if (o.modelId?.replace(/^main\//, "").startsWith("agent/")) throw new Error("Self-work cannot run on Antigravity: Google's terms allow it only in chats you drive yourself. Pick a local model.");
     if (!existsSync(join(o.repo, ".git"))) throw new Error("That folder is not a git project (no .git folder).");
     const head = await this.d.git(o.repo, ["rev-parse", "--verify", "HEAD"]);
     if (head.code !== 0) throw new Error(`git could not read the project: ${head.out.slice(0, 300)}`);

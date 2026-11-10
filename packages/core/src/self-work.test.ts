@@ -174,3 +174,9 @@ test("a commit the model makes inside its turn ends the turn, so the check runs 
   assert.equal(sw.current?.items[0]?.text, "feat: insertStep");
   assert.ok(sent.some((m) => /mark it done now/.test(m)));
 });
+
+test("never runs on an outside agent (Antigravity: Google's terms allow only chats the user drives)", async () => {
+  const { sw, repo } = await setup(["ALL DONE"]);
+  await assert.rejects(sw.start({ repo, goal: "x", check: "", hours: 1, modelId: "agent/antigravity" }), /cannot run on Antigravity/);
+  await assert.rejects(sw.start({ repo, goal: "x", check: "", hours: 1, modelId: "main/agent/antigravity" }), /cannot run on Antigravity/);
+});
