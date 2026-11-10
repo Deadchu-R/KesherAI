@@ -61,3 +61,36 @@ test("refuses other files and turns HTML into text", () => {
   assert.throws(() => readExport([{ hello: 1 }]), /not a chat export/);
   assert.equal(htmlToText("<ul><li>one</li><li>two</li></ul>"), "• one\n• two");
 });
+
+test("Open WebUI's chats export is recognised from its content and the branch the user saw is kept", async () => {
+  const { readExport } = await import("./chat-import.js");
+  const data = [{ id: "c1", created_at: 1762700000, chat: { title: "Shaders", history: { currentId: "m3", messages: {
+    m1: { id: "m1", parentId: null, role: "user", content: "How do I make a toon shader?", timestamp: 1762700000 },
+    m2: { id: "m2", parentId: "m1", role: "assistant", content: "Old answer" },
+    m3: { id: "m3", parentId: "m1", role: "assistant", content: "Use a ramp texture." },
+  } } } }];
+  const r = readExport(data);
+  assert.equal(r.source, "openwebui");
+  assert.deepEqual(r.chats[0]!.messages.map((m) => m.text), ["How do I make a toon shader?", "Use a ramp texture."]);
+  assert.equal(r.chats[0]!.title, "Shaders");
+});
+
+test("Jan's chats are read from its threads folder (string or OpenAI-style content)", async () => {
+  const { readJanThreads } = await import("./chat-import.js");
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "kesher-jan-"));
+  await mkdir(join(dir, "jan_1700000000"));
+  await writeFile(join(dir, "jan_1700000000", "thread.json"), JSON.stringify({ id: "jan_1700000000", title: "Tetris help", created: 1700000000 }));
+  await writeFile(join(dir, "jan_1700000000", "messages.jsonl"), [
+    JSON.stringify({ role: "user", content: [{ type: "text", text: { value: "Why does my piece fall through?", annotations: [] } }], created_at: 1700000001 }),
+    "not json",
+    JSON.stringify({ role: "assistant", content: "Check the collider." }),
+  ].join("\n"));
+  const chats = await readJanThreads(dir);
+  assert.equal(chats.length, 1);
+  assert.equal(chats[0]!.source, "jan");
+  assert.deepEqual(chats[0]!.messages.map((m) => m.text), ["Why does my piece fall through?", "Check the collider."]);
+  assert.deepEqual(await readJanThreads(join(dir, "missing")), []);
+});

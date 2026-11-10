@@ -13,7 +13,7 @@
  */
 
 /** Where an imported chat came from. */
-export type ImportSource = "chatgpt" | "claude" | "gemini";
+export type ImportSource = "chatgpt" | "claude" | "gemini" | "openwebui" | "jan";
 
 /** One message of an imported chat. */
 export interface ImportedMessage {
@@ -55,6 +55,8 @@ export function detectSource(data: unknown): ImportSource | undefined {
   const first = data.find(isObj);
   if (!first) return undefined;
   if (isObj(first.mapping)) return "chatgpt";
+  // Open WebUI: `{ chat: { title, history: { currentId, messages } } }`.
+  if (isObj(first.chat) && isObj((first.chat as Json).history)) return "openwebui";
   if (Array.isArray(first.chat_messages)) return "claude";
   if (typeof first.header === "string" && /gemini|bard/i.test(first.header)) return "gemini";
   if (data.some((d) => isObj(d) && typeof d.header === "string" && /gemini|bard/i.test(d.header))) return "gemini";
@@ -174,8 +176,80 @@ function fromGemini(data: unknown[]): ImportedChat[] {
  */
 export function readExport(data: unknown): { source: ImportSource; chats: ImportedChat[] } {
   const source = detectSource(data);
-  if (!source) throw new Error("This is not a chat export KesherAI knows. Use conversations.json from ChatGPT or Claude, or MyActivity.json (JSON format) from Google Takeout for Gemini.");
+  if (!source) throw new Error("This is not a chat export KesherAI knows. Use conversations.json from ChatGPT or Claude, the chats export of Open WebUI, or MyActivity.json (JSON format) from Google Takeout for Gemini.");
   const list = data as unknown[];
-  const chats = source === "chatgpt" ? fromChatGpt(list) : source === "claude" ? fromClaude(list) : fromGemini(list);
+  const chats = source === "chatgpt" ? fromChatGpt(list) : source === "claude" ? fromClaude(list) : source === "openwebui" ? fromOpenWebUi(list) : fromGemini(list);
   return { source, chats };
+}
+
+/**
+ * Open WebUI's chats export: a tree of messages (`parentId`); the branch from
+ * `currentId` up to the root is kept, as with ChatGPT.
+ *
+ * @param data - The export's array.
+ * @returns Chats.
+ */
+function fromOpenWebUi(data: unknown[]): ImportedChat[] {
+  const out: ImportedChat[] = [];
+  for (const c of data) {
+    if (!isObj(c) || !isObj(c.chat)) continue;
+    const chat = c.chat as Json;
+    const history = isObj(chat.history) ? chat.history : {};
+    const msgs = (isObj(history.messages) ? history.messages : {}) as Record<string, Json>;
+    let node = str(history.currentId);
+    const chain: Json[] = [];
+    const seen = new Set<string>();
+    while (node && msgs[node] && !seen.has(node)) {
+      seen.add(node);
+      chain.push(msgs[node]!);
+      node = str(msgs[node]!.parentId);
+    }
+    chain.reverse();
+    const messages: ImportedMessage[] = chain
+      .filter((m) => (m.role === "user" || m.role === "assistant") && str(m.content).trim())
+      .map((m) => ({ role: m.role as "user" | "assistant", text: str(m.content).trim(), ...(typeof m.timestamp === "number" ? { at: iso(m.timestamp) } : {}) }));
+    if (!messages.length) continue;
+    out.push({ source: "openwebui", originalId: str(c.id) || `${c.created_at}`, title: str(chat.title) || messages[0]!.text.slice(0, 60), createdAt: iso(c.created_at ?? chat.timestamp), messages });
+  }
+  return out;
+}
+
+/** The text of a Jan message: a string, or OpenAI-style parts (`{ type: "text", text: { value } }`). */
+function janText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((p) => (isObj(p) ? (typeof p.text === "string" ? p.text : isObj(p.text) ? str(p.text.value) : "") : "")).filter(Boolean).join("\n");
+}
+
+/**
+ * Jan's chats, from its data folder: `threads/<id>/thread.json` (title,
+ * created) and `messages.jsonl` (one message a line). Only read.
+ *
+ * @param threadsDir - Jan's `threads` folder.
+ * @returns Chats.
+ */
+export async function readJanThreads(threadsDir: string): Promise<ImportedChat[]> {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const out: ImportedChat[] = [];
+  for (const d of await readdir(threadsDir, { withFileTypes: true }).catch(() => [])) {
+    if (!d.isDirectory()) continue;
+    const thread = await readFile(join(threadsDir, d.name, "thread.json"), "utf8").then((t) => JSON.parse(t) as Json, () => ({}) as Json);
+    const lines = (await readFile(join(threadsDir, d.name, "messages.jsonl"), "utf8").catch(() => "")).split(/\r?\n/).filter(Boolean);
+    const messages: ImportedMessage[] = [];
+    for (const line of lines) {
+      let m: Json;
+      try {
+        m = JSON.parse(line) as Json;
+      } catch {
+        continue;
+      }
+      if (m.role !== "user" && m.role !== "assistant") continue;
+      const text = janText(m.content).trim();
+      if (text) messages.push({ role: m.role, text, ...(typeof m.created_at === "number" || typeof m.created === "number" ? { at: iso(m.created_at ?? m.created) } : {}) });
+    }
+    if (!messages.length) continue;
+    out.push({ source: "jan", originalId: str(thread.id) || d.name, title: str(thread.title) || messages[0]!.text.slice(0, 60), createdAt: iso(thread.created ?? thread.created_at ?? Date.now() / 1000), messages });
+  }
+  return out;
 }

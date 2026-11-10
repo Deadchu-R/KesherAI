@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { unzip } from "fflate";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
-const NAMES = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini" } as const;
+const NAMES = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", jan: "Jan" } as const;
 
 /** Takes the chats file out of an export's zip (only that file is read). */
 function chatsFileFromZip(file: File): Promise<string> {
@@ -28,6 +28,24 @@ export function ImportChats() {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  // Jan keeps its chats as files on this computer: offered in one click when there are some (computer only).
+  const [jan, setJan] = useState(0);
+  useEffect(() => {
+    void api<{ found: number }>("/api/import/jan").then((r) => setJan(r.found), () => setJan(0));
+  }, []);
+  const fromJan = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api<{ added: number; skipped: number }>("/api/import/jan", { method: "POST", body: {} });
+      setResult({ ok: true, text: L(`נוספו ${r.added} צ'אטים מ-Jan.`, `Added ${r.added} chats from Jan.`) + (r.skipped ? L(` ${r.skipped} כבר היו כאן.`, ` ${r.skipped} were here already.`) : "") });
+      setJan(0);
+    } catch (e) {
+      setResult({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const pick = async (file: File) => {
     setBusy(true);
@@ -60,14 +78,16 @@ export function ImportChats() {
   return (
     <section className="card stack">
       <h2>{L("ייבוא צ'אטים", "Import chats")}</h2>
-      <p className="muted">{L("הבא את היסטוריית הצ'אטים שלך מ-ChatGPT, Claude או Gemini. הם נשמרים כאן במחשב, ואפשר לחפש בהם ולהמשיך אותם.", "Bring your chat history from ChatGPT, Claude or Gemini. The chats are kept on this computer, and you can search and continue them.")}</p>
+      <p className="muted">{L("הבא את היסטוריית הצ'אטים שלך מ-ChatGPT, Claude, Gemini או Open WebUI. הם נשמרים כאן במחשב, ואפשר לחפש בהם ולהמשיך אותם.", "Bring your chat history from ChatGPT, Claude, Gemini or Open WebUI. The chats are kept on this computer, and you can search and continue them.")}</p>
       <ul className="muted small">
         <li><strong>ChatGPT</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא נתונים. מגיע מייל עם קובץ zip.", "Settings → Data controls → Export data. You get an email with a zip.")}</li>
         <li><strong>Claude</strong>: {L("הגדרות ← פרטיות ← ייצוא נתונים. מגיע מייל עם קובץ zip.", "Settings → Privacy → Export data. You get an email with a zip.")}</li>
+        <li><strong>Open WebUI</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא צ'אטים (קובץ json).", "Settings → Data Controls → Export Chats (a json file).")}</li>
         <li><strong>Gemini</strong>: {L("ב-takeout.google.com בחר רק ב-My Activity, ובתוכו Gemini Apps, בפורמט JSON.", "At takeout.google.com choose only My Activity, with Gemini Apps inside it, in JSON format.")}</li>
       </ul>
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => input.current?.click()}>{busy ? L("מייבא…", "Importing…") : L("בחר קובץ zip או json", "Choose the zip or json file")}</button>
+        {jan > 0 && <button type="button" disabled={busy} onClick={() => void fromJan()}>{L(`ייבוא ${jan} צ'אטים מ-Jan במחשב הזה`, `Import ${jan} chats from Jan on this computer`)}</button>}
         <input ref={input} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
       </div>
       {result && <p className={result.ok ? "pill good" : "error"} role="status">{result.text}</p>}

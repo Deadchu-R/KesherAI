@@ -8,7 +8,9 @@ import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } 
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
-import { readExport } from "../chat-import.js";
+import { readExport, readJanThreads } from "../chat-import.js";
+import { homedir } from "node:os";
+import { join as joinPath } from "node:path";
 import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-export.js";
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
@@ -91,6 +93,28 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
+  });
+
+  // Jan's chats, read from its data folder on this computer (only read; this computer only).
+  const janThreads = async () => {
+    const appData = process.env.APPDATA ?? joinPath(homedir(), "AppData", "Roaming");
+    for (const dir of [joinPath(appData, "Jan", "data", "threads"), joinPath(appData, "jan", "data", "threads"), joinPath(homedir(), "Library", "Application Support", "Jan", "data", "threads"), joinPath(homedir(), "jan", "threads")]) {
+      const chats = await readJanThreads(dir);
+      if (chats.length) return chats;
+    }
+    return [];
+  };
+  app.get("/api/import/jan", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    return { found: (await janThreads()).length };
+  });
+  app.post<{ Body: { projectId?: string | null } }>("/api/import/jan", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    const chats = await janThreads();
+    if (!chats.length) return reply.code(400).send({ error: "No Jan chats were found on this computer." });
+    const projectId = req.body?.projectId ?? null;
+    if (projectId && !s.library.getProject(projectId)) return reply.code(400).send({ error: "That project does not exist." });
+    return { source: "jan", found: chats.length, ...(await s.conversations.importChats(chats, projectId)) };
   });
 
   app.get<{ Querystring: { q?: string } }>("/api/search", async (req) => {
