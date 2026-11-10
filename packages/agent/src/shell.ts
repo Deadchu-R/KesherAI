@@ -13,6 +13,18 @@ export interface ShellResult {
 }
 
 /**
+ * The agent's own name in git: its commits never carry the user's name or email from the computer's git settings
+ * (Roee: nothing in git may show who he is). `.invalid` is a reserved domain, so the address reaches no one and
+ * belongs to no GitHub account.
+ */
+export const AGENT_GIT_IDENTITY = {
+  GIT_AUTHOR_NAME: "KesherAI",
+  GIT_AUTHOR_EMAIL: "kesherai@noreply.invalid",
+  GIT_COMMITTER_NAME: "KesherAI",
+  GIT_COMMITTER_EMAIL: "kesherai@noreply.invalid",
+} as const;
+
+/**
  * Runs a shell command (cmd on Windows, sh elsewhere), collecting its output.
  * Stopped on timeout or when `signal` aborts, with its child processes.
  *
@@ -25,7 +37,7 @@ export interface ShellResult {
  */
 export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void): Promise<ShellResult> {
   return new Promise<ShellResult>((resolvePromise) => {
-    const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, CI: "1", FORCE_COLOR: "0" } });
+    const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY } });
     let out = "";
     const onData = (b: Buffer) => {
       const text = b.toString();

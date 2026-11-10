@@ -19,3 +19,4 @@ export * from "./context.js";
 
 export { documentText, formatPages, readDocumentTool, type DocumentText } from "./documents.js";
 export { codeMap, symbolsOf } from "./code-intel.js";
+export { AGENT_GIT_IDENTITY } from "./shell.js";

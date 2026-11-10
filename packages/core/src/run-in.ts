@@ -1,3 +1,4 @@
+import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { spawn } from "node:child_process";
 
 /**
@@ -17,7 +18,7 @@ export function runIn(cwd: string, command: string, args: string[], shell: boole
     const add = (b: Buffer) => {
       out = (out + b.toString("utf8")).slice(-20_000);
     };
-    const child = spawn(command, args, { cwd, shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    const child = spawn(command, args, { cwd, shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY } });
     const timer = setTimeout(() => child.kill(), timeoutMs);
     child.stdout?.on("data", add);
     child.stderr?.on("data", add);
