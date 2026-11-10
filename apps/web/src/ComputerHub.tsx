@@ -117,6 +117,7 @@ function PcLoad() {
       ))}
       {busyNow && <p className="muted small" dir="auto">{busyNow}</p>}
       <button type="button" className="danger hub-terminate" disabled={busy} onClick={() => void terminate()}>⏻ {L("Terminate: לעצור הכל ולהפעיל מחדש", "Terminate: stop everything and restart")}</button>
+      <a className="muted small" href="#/settings/computer">{L("מתי מודל שלא בשימוש נפרק לבד (הגדרות)", "When an unused model unloads by itself (settings)")}</a>
     </div>
   );
 }

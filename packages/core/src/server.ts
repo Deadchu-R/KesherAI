@@ -374,7 +374,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const guard = new GpuGuard(
     () => config.guard,
     undefined,
-    (text) => void notifier.send({ title: "Graphics card", body: text, path: "#/settings", tags: ["thermometer"] }).catch(() => undefined),
+    (text) => void notifier.send({ title: "Graphics card", body: text, path: "#/settings/computer", tags: ["thermometer"] }).catch(() => undefined),
   );
   const onedrive = new OneDrive(config.onedrive, persist, options.onedriveEndpoints ?? ONEDRIVE_ENDPOINTS, process.env.KESHER_ONEDRIVE_CLIENT_ID || branding.onedrive.clientId || undefined);
   const onedriveSync = new DriveSync(onedrive, library, config.onedrive, persist);

@@ -1860,3 +1860,10 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 /* A "waiting" note that was answered: kept for the record, dimmed, with how it ended. */
 .inbox-notes li.resolved { opacity: .6; }
 .inbox-resolved { color: var(--muted); margin-inline-start: 8px; }
+
+/* Settings search: one box over every category (research: Open WebUI 0.11's single settings search). */
+.settings-search { display: flex; flex-direction: column; gap: 6px; margin-block: 4px 12px; max-width: 520px; }
+.settings-search input { height: 38px; }
+.settings-found { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings-found a { padding: 6px 12px; border: 1px solid var(--border); border-radius: calc(999px * var(--r-scale, 1)); text-decoration: none; color: var(--text); font-size: 13px; }
+.settings-found a:hover { background: var(--panel-2); }

@@ -362,3 +362,26 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **Stopped at:** maybe later:
   - Withdraw the phone's push itself when answered elsewhere (ntfy supports deleting a message by id).
   - Group several notes from one chat.
+
+## 2026-11-10: How settings are arranged (done) and the app's structure compared (first pass)
+- **Sources:**
+  - Open WebUI 0.11 ("the interface reorganized"): one Settings with personal and admin sections, one search over all, Notifications as its own section.
+  - LM Studio 0.4: Settings tabs Developer / Server / Chat; Hardware is its own page; per-model load settings stay in the loader, not in Settings; one "Developer mode" switch shows advanced options.
+  - Msty Studio: General (appearance, app info, reset), Local AI service, Remote service and data (backups), Shortcuts, Notifications and logs.
+  - Settings UX guides (setproduct, uxcel): side navigation for many categories, a search at the top, risky actions (reset) confirmed and kept apart, one subject per group.
+- **Done (KesherAI):**
+  - "General" was a drawer of five subjects. Notifications and Privacy & permissions now have their own categories.
+  - Appearance and accessibility are merged.
+  - Import and Reset moved to "Accounts, backup and data".
+  - Computer control moved to Privacy.
+  - A search over every category (Hebrew and English words).
+  - Old links work (#/settings/accessibility → appearance).
+  - The load panel links to the "unload after" setting.
+- **App structure compared:**
+  - Others keep 4–6 top areas: LM Studio has Chat, Developer, My models, Discover; Open WebUI has Chats and Workspace (models, knowledge, prompts, tools); LobeHub has Chat, Market, Settings.
+  - KesherAI has 27 pages in 4 groups plus pins. Its grouping is sound; ideas for later are in the Drive summary.
+- **Stopped at:** these ideas are not built yet:
+  - A "game development" group: Unity, Unreal and their flows, now under Create.
+  - The duplicate 📦 icon (Models and Libraries).
+  - "Watch" duplicates the 🔔 inbox.
+  - A developer-mode switch that hides advanced pages (LM Studio).

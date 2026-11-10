@@ -162,7 +162,7 @@ export function InboxPage() {
             </li>
           ))}
         </ul>
-        <p className="muted small"><a href="#/settings">{L("הגדרות התראות (טלפון ומחשב)", "Notification settings (phone and computer)")}</a></p>
+        <p className="muted small"><a href="#/settings/notifications">{L("הגדרות התראות (טלפון ומחשב)", "Notification settings (phone and computer)")}</a></p>
       </section>
     </div>
   );
