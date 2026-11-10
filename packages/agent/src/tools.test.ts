@@ -71,7 +71,9 @@ describe("list_files in a granted folder", () => {
     const all = await tool.run({ path: granted }, ctx);
     assert.match(all.output, /README\.md/);
     const md1 = await tool.run({ path: granted, glob: "*.md" }, ctx);
-    assert.ok(md1.output.split("\n").some((l) => l === j(granted, "README.md")), md1.output);
+    // In full (Windows may spell the temp folder as RUNNER~1 or runneradmin, so not compared letter for letter).
+    const { isAbsolute: abs, basename: base } = await import("node:path");
+    assert.ok(md1.output.split("\n").some((l) => abs(l) && base(l) === "README.md"), md1.output);
     assert.doesNotMatch(md1.output, /a\.md/, "the glob is relative to the granted folder");
   });
 });
