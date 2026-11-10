@@ -112,6 +112,7 @@ export function McpSection() {
         <button type="button" onClick={() => setAdding("custom")}>{t("mcpAddCustom")}</button>
         <button type="button" onClick={() => setAdding("import")}>{t("mcpImport")}</button>
       </div>
+      <FoundInOtherApps onAdded={load} />
       <GoogleApps />
 
       {ghDialog && (
@@ -361,5 +362,69 @@ function InstallRuntime({ tool, onDone }: { tool: "node" | "uv"; onDone: () => v
       <span className="muted">{t("rtNote")}</span>
       {error && <span className="error">{error}</span>}
     </div>
+  );
+}
+
+interface Found { app: string; name: string; transport: "stdio" | "http"; command?: string; args?: string[]; url?: string; envNames: string[]; headerNames: string[]; have: boolean }
+
+/**
+ * MCP servers other apps on this computer already set up (Claude Desktop,
+ * Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Jan), to add in one
+ * click: shown with their command, added turned off, keys copied only when
+ * ticked. Computer only (the list is not offered to the phone).
+ */
+function FoundInOtherApps({ onAdded }: { onAdded: () => Promise<void> }) {
+  const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+  const [found, setFound] = useState<Found[]>([]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [secrets, setSecrets] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api<{ found: Found[] }>("/api/mcp/found").then((r) => setFound(r.found.filter((f) => !f.have)), () => setFound([]));
+  }, []);
+  if (!found.length) return null;
+  const key = (f: Found) => `${f.app}\u0000${f.name}`;
+  const anyKeys = found.some((f) => picked.has(key(f)) && (f.envNames.length || f.headerNames.length));
+  const add = async () => {
+    setBusy(true);
+    try {
+      const items = found.filter((f) => picked.has(key(f))).map((f) => ({ app: f.app, name: f.name, withSecrets: secrets }));
+      const r = await api<{ added: string[] }>("/api/mcp/found/import", { method: "POST", body: { items } });
+      toast(L(`נוספו ${r.added.length} שרתים, כבויים: הדליקו כל אחד אחרי שבדקתם את הפקודה שלו.`, `Added ${r.added.length} servers, turned off: turn each on after checking its command.`));
+      setFound((fs) => fs.filter((f) => !picked.has(key(f))));
+      setPicked(new Set());
+      await onAdded();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <details className="card mcp-found">
+      <summary>{L(`נמצאו ${found.length} שרתי MCP באפליקציות אחרות במחשב`, `${found.length} MCP servers found in other apps on this computer`)}</summary>
+      <p className="muted small">{L("הקבצים שלהן רק נקראים. השרתים נוספים כבויים, כי קובץ הגדרות יכול להפעיל כל תוכנה: בדקו את הפקודה והדליקו.", "Their files are only read. Servers are added turned off, since a config file can start any program: check the command, then turn it on.")}</p>
+      <ul className="list">
+        {found.map((f) => (
+          <li key={key(f)}>
+            <label className="row mcp-found-item">
+              <input type="checkbox" checked={picked.has(key(f))} onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(key(f)); else n.delete(key(f)); return n; })} />
+              <span className="grow">
+                <strong>{f.name}</strong> <span className="pill">{f.app}</span>
+                <code className="small mcp-found-cmd" dir="ltr">{f.url ?? [f.command, ...(f.args ?? [])].join(" ")}</code>
+                {(f.envNames.length > 0 || f.headerNames.length > 0) && <span className="muted small" dir="ltr">{L("מפתחות: ", "Keys: ")}{[...f.envNames, ...f.headerNames].join(", ")}</span>}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {anyKeys && (
+        <label className="row small">
+          <input type="checkbox" checked={secrets} onChange={(e) => setSecrets(e.target.checked)} />
+          {L("להעתיק גם את ערכי המפתחות (בלי זה תמלאו אותם כאן)", "Copy the keys' values too (otherwise you fill them in here)")}
+        </label>
+      )}
+      <div className="row"><button type="button" className="primary" disabled={!picked.size || busy} onClick={() => void add()}>{L(`הוסף ${picked.size || ""}`, `Add ${picked.size || ""}`)}</button></div>
+    </details>
   );
 }

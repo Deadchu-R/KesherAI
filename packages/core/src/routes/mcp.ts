@@ -3,6 +3,7 @@ import { branding } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { MCP_PRESETS, type McpServerConfig } from "../mcp.js";
+import { findMcpServers, importMcpServer, type FoundMcpServer } from "../mcp-import.js";
 
 function page(title: string, text: string): string {
   const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -43,6 +44,31 @@ export async function mcpRoutes(app: FastifyInstance, s: KesherServices): Promis
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
+  });
+
+  // MCP servers other apps already set up (Claude Desktop, Cursor, VS Code, Windsurf, Gemini CLI, Jan): listed with their
+  // command (never the values of their keys), and added turned off. Their config files are only read.
+  app.get("/api/mcp/found", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: localOnly });
+    await s.mcp.load();
+    const mine = s.mcp.list();
+    const same = (f: FoundMcpServer) => mine.some((m) => (f.url ? m.url === f.url : m.command === f.command && JSON.stringify(m.args ?? []) === JSON.stringify(f.args ?? [])));
+    return { found: (await findMcpServers()).map((f) => ({ ...f, file: undefined, have: same(f) })) };
+  });
+
+  app.post<{ Body: { items?: Array<{ app?: string; name?: string; withSecrets?: boolean }> } }>("/api/mcp/found/import", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: localOnly });
+    await s.mcp.load();
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
+    const added: string[] = [];
+    for (const it of items) {
+      const taken = new Set(s.mcp.list().map((m) => m.id));
+      const config = await importMcpServer(String(it.app ?? ""), String(it.name ?? ""), it.withSecrets === true, taken);
+      if (!config) continue;
+      await s.mcp.upsert(config);
+      added.push(config.name);
+    }
+    return { added };
   });
 
   app.delete<{ Params: { id: string } }>("/api/mcp/servers/:id", async (req, reply) => {
