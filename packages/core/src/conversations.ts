@@ -1,3 +1,4 @@
+import type { PersonaParams } from "./personas.js";
 import type { Checkpoints } from "./checkpoints.js";
 import { personaPrompt, type Personas } from "./personas.js";
 import type { ProjectFacts } from "./project-facts.js";
@@ -66,8 +67,8 @@ export function onModelSpeed(fn: typeof speedRecorder): void {
  * @param modelId - Global model id.
  * @returns The turn function.
  */
-export function modelTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
-  const inner = rawTurnFor(registry, modelId);
+export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams): ModelTurn {
+  const inner = rawTurnFor(registry, modelId, params);
   return async (req, signal, onText) => {
     let first = 0;
     let chars = 0;
@@ -104,18 +105,20 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string): Model
   };
 }
 
-function rawTurnFor(registry: ProviderRegistry, modelId: string): ModelTurn {
+function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams): ModelTurn {
   return async (req, signal, onText) => {
     const { provider, providerModelId } = registry.resolve(modelId);
+    // A persona's own settings (temperature, top_p, stop), when it has them.
+    const sampling = { ...(params?.temperature !== undefined ? { temperature: params.temperature } : {}), ...(params?.topP !== undefined ? { topP: params.topP } : {}), ...(params?.stop?.length ? { stop: params.stop } : {}) };
     if (provider.chatWithTools) {
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools }, signal, onText);
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";
     const messages = req.messages
       .filter((m) => m.role !== "tool")
       .map((m) => ({ role: m.role, content: m.content }));
-    for await (const ev of provider.chat({ providerModelId, messages }, signal)) {
+    for await (const ev of provider.chat({ providerModelId, messages, ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}) }, signal)) {
       if (ev.type === "delta") {
         text += ev.text;
         onText(ev.text);
@@ -1056,7 +1059,7 @@ export class ConversationManager {
     const session = new AgentSession({
       id,
       modelId: conversation.modelId,
-      model: modelTurnFor(this.deps.registry, conversation.modelId),
+      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params),
       mode: conversation.mode,
       ...(workspace ? { workspace } : {}),
       tools,

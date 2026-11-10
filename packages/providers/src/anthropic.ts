@@ -133,6 +133,8 @@ export class AnthropicProvider implements Provider {
         model: request.providerModelId,
         max_tokens: request.maxTokens ?? Math.max(this.defaultMaxTokens, 8192),
         temperature: request.temperature,
+        // Claude takes temperature or top_p, not both; stop texts are its stop_sequences.
+        ...("stop" in request && request.stop?.length ? { stop_sequences: request.stop } : {}),
         ...(system ? { system } : {}),
         messages,
         ...(request.tools.length > 0

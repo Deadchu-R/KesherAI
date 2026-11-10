@@ -54,6 +54,10 @@ export interface ProviderToolChatRequest {
   /** Tools the model may call. May be empty. */
   tools: ToolSpec[];
   temperature?: number;
+  /** Nucleus sampling (0–1). */
+  topP?: number;
+  /** Texts that end the answer. */
+  stop?: string[];
   maxTokens?: number;
 }
 

@@ -1711,3 +1711,9 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .project-facts summary { cursor: pointer; }
 .project-facts .row { align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .project-facts .grow { min-width: 0; overflow-wrap: anywhere; }
+/* Persona editor: model settings and opening suggestions, folded away. */
+.persona-more { display: grid; gap: 10px; }
+.persona-more summary { cursor: pointer; }
+.persona-more label { display: grid; gap: 4px; }
+.persona-starters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 8px 0 16px; }
+.persona-starters button { max-width: 100%; white-space: normal; text-align: start; }

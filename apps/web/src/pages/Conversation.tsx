@@ -1,3 +1,4 @@
+import { usePersonas } from "../Personas";
 import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -48,6 +49,7 @@ export function ConversationPage({ id }: { id: string }) {
   /** Live output of running tools (builds, commands), by call id. */
   const [liveOut, setLiveOut] = useState<Record<string, string>>({});
   const [input, setInput] = useState("");
+  const personas = usePersonas();
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
@@ -277,6 +279,8 @@ export function ConversationPage({ id }: { id: string }) {
   const showIde = ideOpen ?? conv.kind === "code";
   // The server titles a conversation from its first message; the sidebar list has the latest title.
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
+  // The persona's opening suggestions, for an empty chat (a click puts one in the message box).
+  const starters = personas.find((p) => p.id === conv.personaId)?.starters;
   const send = async () => {
     // "/goal …": keep going until it is done (checked each time the agent stops); "/goal" alone stops it.
     const goal = /^\/goal(?:\s+([\s\S]*))?$/i.exec(input.trim());
@@ -434,6 +438,11 @@ export function ConversationPage({ id }: { id: string }) {
         <div className="messages" aria-live="polite">
           {events.length === 0 && (
             <p className="muted empty">{conv.kind === "code" ? t("emptyCode", { folder: info?.workspace ?? "" }) : t("emptyChat")}</p>
+          )}
+          {events.length === 0 && !!starters?.length && (
+            <div className="persona-starters">
+              {starters.map((s) => <button key={s} type="button" dir="auto" onClick={() => setInput(s)}>{s}</button>)}
+            </div>
           )}
           {blocks.length > shownBlocks && (
             <button type="button" className="show-earlier" onClick={() => setShownBlocks((n) => n + 150)}>

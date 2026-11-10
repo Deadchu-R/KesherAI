@@ -83,6 +83,19 @@ export function PersonasPage() {
               </select>
             </label>
           )}
+          <details className="persona-more">
+            <summary>{L("עוד: איך המודל כותב, והצעות פתיחה", "More: how the model writes, and opening suggestions")}</summary>
+            <label>
+              {L(`טמפרטורה: ${draft.params?.temperature ?? L("ברירת המחדל של המודל", "the model's default")}`, `Temperature: ${draft.params?.temperature ?? "the model's default"}`)}
+              <input type="range" min={0} max={2} step={0.1} value={draft.params?.temperature ?? 0.7} onChange={(e) => setDraft({ ...draft, params: { ...draft.params, temperature: Number(e.target.value) } })} />
+              <span className="muted small">{L("נמוך = יציב ומדויק (קוד), גבוה = מגוון ויצירתי (כתיבה).", "Low = steady and exact (code), high = varied and creative (writing).")}</span>
+            </label>
+            {draft.params?.temperature !== undefined && <button type="button" className="as-link small" onClick={() => { const { temperature: _t, ...rest } = draft.params ?? {}; setDraft({ ...draft, params: rest }); }}>{L("חזרה לברירת המחדל", "Back to the default")}</button>}
+            <label>
+              {L("הצעות פתיחה (אחת בכל שורה), מוצגות כשמתחילים צ'אט איתה", "Opening suggestions (one per line), shown when a chat starts with it")}
+              <textarea rows={3} dir="auto" value={(draft.starters ?? []).join("\n")} onChange={(e) => setDraft({ ...draft, starters: e.target.value.split("\n") })} />
+            </label>
+          </details>
           <div className="row">
             <button type="submit" className="primary" disabled={!draft.name.trim() || !draft.instructions.trim()}>{L("שמור", "Save")}</button>
             <button type="button" onClick={() => setDraft(null)}>{L("ביטול", "Cancel")}</button>

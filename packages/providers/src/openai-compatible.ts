@@ -186,6 +186,8 @@ export class OpenAICompatibleProvider implements Provider {
             }
           : {}),
         temperature: request.temperature,
+        ...(request.topP !== undefined ? { top_p: request.topP } : {}),
+        ...(request.stop?.length ? { stop: request.stop } : {}),
         max_tokens: request.maxTokens,
         stream: true,
         stream_options: { include_usage: true },

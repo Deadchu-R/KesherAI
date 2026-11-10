@@ -9,6 +9,34 @@ import { dirname } from "node:path";
  */
 
 /** A saved persona. */
+/** Sampling settings a persona asks of its model. */
+export interface PersonaParams {
+  /** 0–2: lower is steadier, higher more varied. */
+  temperature?: number;
+  /** 0–1. */
+  topP?: number;
+  /** Texts that end the answer. */
+  stop?: string[];
+}
+
+/**
+ * Keeps only valid settings (from a form or an imported file).
+ *
+ * @param p - Anything.
+ * @returns The settings, or undefined when none is valid.
+ */
+export function cleanParams(p: unknown): PersonaParams | undefined {
+  if (!p || typeof p !== "object") return undefined;
+  const o = p as Record<string, unknown>;
+  const num = (v: unknown, max: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined);
+  const temperature = num(o.temperature, 2);
+  const topP = num(o.topP, 1);
+  const stop = Array.isArray(o.stop) ? o.stop.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 40).slice(0, 4) : [];
+  const out: PersonaParams = { ...(temperature !== undefined ? { temperature } : {}), ...(topP !== undefined ? { topP } : {}), ...(stop.length ? { stop } : {}) };
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A saved assistant. */
 export interface Persona {
   id: string;
   name: string;
@@ -20,6 +48,10 @@ export interface Persona {
   modelId?: string;
   /** A knowledge base (its name) to search first. */
   knowledge?: string;
+  /** How the model writes for it (imported presets carry these; empty = the model's defaults). */
+  params?: PersonaParams;
+  /** Opening messages offered when a chat starts with it (Open WebUI's prompt suggestions, Modelfile examples). */
+  starters?: string[];
   updatedAt: string;
 }
 
@@ -82,6 +114,14 @@ export class Personas {
       instructions: input.instructions.trim().slice(0, 20_000),
       ...(input.modelId?.trim() ? { modelId: input.modelId.trim() } : {}),
       ...(input.knowledge?.trim() ? { knowledge: input.knowledge.trim() } : {}),
+      ...((): { params?: PersonaParams } => {
+        const params = cleanParams(input.params);
+        return params ? { params } : {};
+      })(),
+      ...((): { starters?: string[] } => {
+        const starters = (Array.isArray(input.starters) ? input.starters : []).filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim().slice(0, 300)).slice(0, 6);
+        return starters.length ? { starters } : {};
+      })(),
       updatedAt: new Date().toISOString(),
     };
     if (!p.name || !p.instructions) throw new Error("A persona needs a name and instructions.");
