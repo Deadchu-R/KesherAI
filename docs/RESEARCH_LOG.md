@@ -73,7 +73,11 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   4. **Terse mode** for local models (shorter answers, faster), and a "cost per finished item" counter in self-work.
 - **For Claude (this session):** it runs in Anthropic's cloud, so nothing can be installed into it; what applies is working practice (narrow reads, filtered command output, no repeated reads, one stable plan). On Roee's own Claude Code: TokenEconomizer (above), and Serena as an MCP server for symbol-level reading; rtk is optional (small gain, can break the cache).
 
+### Open WebUI workspace models (agents)
+- [Workspace models](https://docs.openwebui.com/features/workspace/models.md): a wrapper around a base model with a system prompt (variables like `{{USER_NAME}}`), parameters (temperature, stop…), bindings (knowledge, tools, skills, filters, actions), capabilities (vision, web search, code interpreter) and meta (name, id, avatar, description, tags, prompt suggestions). Export is one `.json` holding every model you can edit; import stops at the first id that is taken and that you cannot edit.
+- Mapping: system prompt → persona instructions (variables → KesherAI's own); params → model settings; base model → the model if it is local, else ask; knowledge bindings → a knowledge base of the same name if there is one (else listed as "to set up"); capabilities → tools on/off; prompt suggestions → the persona's starter prompts.
+
 ### Where it stopped
 - TokenEconomizer: done, internals included (above). Next for it: the design for KesherAI's project facts (form repair + env value first, templated, per workspace, shown in the project page).
-- Next: **Open WebUI models/agents** (its admin "Models" export), then **Jan assistants** and **AnythingLLM workspaces**.
+- Next: **Jan assistants** and **AnythingLLM workspaces**; then the design for KesherAI's project facts.
 - Next UX pages to look at, at 390 px: Unreal (C++ tab), Unity (Rider mode pill), Settings → Active models.
