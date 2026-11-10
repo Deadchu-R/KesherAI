@@ -1,4 +1,5 @@
 import { usePersonas } from "../Personas";
+import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -82,18 +83,6 @@ export function ConversationPage({ id }: { id: string }) {
   useEffect(() => {
     setSlot(document.getElementById("appbar-title"));
   }, []);
-  useEffect(() => {
-    if (!titleMenu) return;
-    const close = (e: Event) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest?.(".bar-conv")) setTitleMenu(false);
-    };
-    addEventListener("mousedown", close);
-    addEventListener("keydown", close);
-    return () => {
-      removeEventListener("mousedown", close);
-      removeEventListener("keydown", close);
-    };
-  }, [titleMenu]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [ideOpen, setIdeOpen] = useState<boolean | null>(null);
   // An Unreal Blueprint connected to this chat (the 🔷 Blueprint panel).
@@ -362,21 +351,26 @@ export function ConversationPage({ id }: { id: string }) {
             <input name="title" defaultValue={title} autoFocus aria-label={t("rename")} onBlur={() => setEditingTitle(false)} onKeyDown={(e) => e.key === "Escape" && setEditingTitle(false)} />
           </form>
         ) : (
-          <div className="bar-conv">
-            <button type="button" className="bar-title" data-slide-menu aria-haspopup="menu" aria-expanded={titleMenu} aria-label={t("convMenu")} onClick={() => setTitleMenu(!titleMenu)}>
+          <Menu
+            className="bar-conv"
+            popClassName="bar-pop"
+            triggerClassName="bar-title"
+            aria-label={t("convMenu")}
+            open={titleMenu}
+            onOpenChange={setTitleMenu}
+            trigger={<>
               <span className="bar-title-text" dir="auto">{conv.kind === "code" ? "</> " : ""}{title}</span>
               <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
-            {titleMenu && (
-              <div className="bar-pop" role="menu">
-                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); setEditingTitle(true); }}>{t("rename")}</button>
-                {info?.workspace && desktop()?.openPath && <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); void desktop()!.openPath!(info.workspace!); }}>{t("openFolder")}</button>}
-                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); exportChat(conv.id, "md"); }}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</button>
-                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); exportChat(conv.id, "pdf"); }}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</button>
-                <button type="button" role="menuitem" className="danger" onClick={() => { setTitleMenu(false); void remove(); }}>{t("delete")}</button>
-              </div>
-            )}
-          </div>
+            </>}
+          >
+            <MenuItem icon="✎" onSelect={() => setEditingTitle(true)}>{t("rename")}</MenuItem>
+            {info?.workspace && desktop()?.openPath && <MenuItem icon="📁" onSelect={() => void desktop()!.openPath!(info.workspace!)}>{t("openFolder")}</MenuItem>}
+            <MenuSeparator />
+            <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "md")}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</MenuItem>
+            <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "pdf")}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</MenuItem>
+            <MenuSeparator />
+            <MenuItem icon="🗑" danger onSelect={() => void remove()}>{t("delete")}</MenuItem>
+          </Menu>
         ),
         slot,
       )}

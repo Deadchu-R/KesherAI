@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PermissionMode } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
+import { Menu, MenuItem, MenuNote, MenuSeparator, MenuSub } from "./ui/Menu";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -56,18 +57,6 @@ export function AddMenu(p: AddMenuProps) {
     const t = setTimeout(() => void api<{ roots: string[]; scripts: Array<{ path: string; rel: string }> }>(`/api/conversations/${p.convId}/scripts?q=${encodeURIComponent(scriptQ)}`).then(setScripts, () => setScripts({ roots: [], scripts: [] })), 250);
     return () => clearTimeout(t);
   }, [sub, scriptQ, p.convId]);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) {
-        setOpen(false);
-        setSub(null);
-      }
-    };
-    addEventListener("mousedown", close);
-    return () => removeEventListener("mousedown", close);
-  }, [open]);
   const done = () => {
     setOpen(false);
     setSub(null);
@@ -112,58 +101,69 @@ export function AddMenu(p: AddMenuProps) {
     ["auto", t("modeAuto")],
   ];
   const list = (render: (x: Named) => React.ReactNode) =>
-    items === null ? <p className="muted small add-sub-note">…</p> : items.length === 0 ? <p className="muted small add-sub-note">{L("אין עדיין", "None yet")}</p> : items.map(render);
+    items === null ? <MenuNote>…</MenuNote> : items.length === 0 ? <MenuNote>{L("אין עדיין", "None yet")}</MenuNote> : items.map(render);
+  const subProps = (s: Exclude<Sub, null>) => ({ open: sub === s, onOpenChange: (o: boolean) => (o ? openSub(s) : setSub(null)) });
   return (
-    <div className="model-menu add-menu" ref={ref}>
-      <button type="button" className="chip" title={t("attachHint")} aria-label={t("attach")} aria-haspopup="menu" aria-expanded={open} onClick={() => (open ? done() : setOpen(true))}>+</button>
-      {open && (
-        <div className="model-pop add-pop" role="menu">
-          <button type="button" role="menuitem" onClick={() => { done(); p.onFiles(); }}>📎 {L("קבצים…", "Files…")}</button>
-          <button type="button" role="menuitem" onClick={() => { done(); p.onPhoto(); }}>📷 {L("מצלמה או תמונה", "Camera or photo")}</button>
-          {p.onAnnotate && (
-            <>
-              <button type="button" role="menuitem" onClick={() => { done(); p.onAnnotate!("screen"); }}>✏️ {L("צילום מסך של המחשב + סימון", "The computer's screen + mark it up")}</button>
-              <button type="button" role="menuitem" onClick={() => { done(); p.onAnnotate!("file"); }}>🖍 {L("סימון על תמונה", "Mark up a picture")}</button>
-            </>
-          )}
-          <button type="button" role="menuitem" aria-expanded={sub === "pages"} onClick={() => openSub("pages")}>📄 {L("מסמך מהדפים", "A document from Pages")} <span className="sub-arrow">›</span></button>
-          {sub === "pages" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => void insertPage(x.id, x.title ?? x.name ?? "")}>{x.title ?? x.name}</button>)}</div>}
-          <button type="button" role="menuitem" aria-expanded={sub === "chats"} onClick={() => openSub("chats")}>💬 {L("משיחה אחרת", "From another chat")} <span className="sub-arrow">›</span></button>
-          {sub === "chats" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => void insertChat(x.id, x.title ?? "")}>{x.title}</button>)}</div>}
-          {(p.onGameProject || p.onProject) && <button type="button" role="menuitem" aria-expanded={sub === "projects"} onClick={() => openSub("projects")}>🎮 {L("פרויקט Unity או Unreal", "A Unity or Unreal project")} <span className="sub-arrow">›</span></button>}
-          {sub === "projects" && (
-            <div className="add-sub">
-              {games === null ? <p className="muted small add-sub-note">…</p> : games.length === 0 ? <p className="muted small add-sub-note">{L("לא נמצאו פרויקטים במחשב.", "No projects found on the computer.")}</p> : games.map((g) => (
-                <button key={g.path} type="button" role="menuitem" dir="auto" title={g.path} onClick={() => { done(); p.onGameProject?.(g.path); }}>
-                  {g.kind === "unity" ? "◼ Unity" : "◆ Unreal"} · {g.name}{g.engine ? <span className="muted small"> {g.engine}</span> : null}
-                </button>
-              ))}
-              {p.onProject && <button type="button" role="menuitem" onClick={() => { done(); p.onProject!(); }}>📁 {L("תיקייה אחרת…", "Another folder…")}</button>}
-            </div>
-          )}
-          {p.onScript && p.convId && <button type="button" role="menuitem" aria-expanded={sub === "scripts"} onClick={() => openSub("scripts")}>📜 {L("סקריפט מהפרויקט", "A script from the project")} <span className="sub-arrow">›</span></button>}
-          {sub === "scripts" && (
-            <div className="add-sub">
-              <input className="add-sub-search" dir="auto" autoFocus value={scriptQ} onChange={(e) => setScriptQ(e.target.value)} placeholder={L("חיפוש: Player, Door.cpp…", "Find: Player, Door.cpp…")} aria-label={L("חיפוש סקריפט", "Find a script")} />
-              {scripts === null ? <p className="muted small add-sub-note">…</p> : !scripts.roots.length ? <p className="muted small add-sub-note">{L("קודם הוסיפו פרויקט לצ'אט (🎮 למעלה).", "Add a project to the chat first (🎮 above).")}</p> : scripts.scripts.length === 0 ? <p className="muted small add-sub-note">{L("לא נמצא.", "Nothing found.")}</p> : scripts.scripts.map((x) => (
-                <button key={x.path} type="button" role="menuitem" dir="ltr" title={x.path} onClick={() => { p.onScript!(x.path); done(); }}>{x.rel}</button>
-              ))}
-            </div>
-          )}
-          <hr />
-          <button type="button" role="menuitemcheckbox" aria-checked={p.web} onClick={() => p.onWeb(!p.web)}>🌐 {L("חיפוש באינטרנט", "Web search")} <span className="sub-arrow">{p.web ? "✓" : ""}</span></button>
-          <button type="button" role="menuitem" onClick={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); done(); }}>🔬 {L("מחקר מעמיק", "Deep research")}</button>
-          <button type="button" role="menuitem" aria-expanded={sub === "knowledge"} onClick={() => openSub("knowledge")}>📚 {L("ידע וספריות", "Knowledge and libraries")} <span className="sub-arrow">›</span></button>
-          {sub === "knowledge" && <div className="add-sub">{list((x) => <button key={x.id} type="button" role="menuitem" dir="auto" onClick={() => { p.onInsert(`${L("חפש בבסיס הידע", "Search the knowledge base")} "${x.name}": `); done(); }}>{x.name}</button>)}<a className="add-sub-link small" href="#/libraries" onClick={done}>📦 {L("חנות ספריות", "Library store")}</a></div>}
-          <button type="button" role="menuitem" aria-expanded={sub === "skills"} onClick={() => openSub("skills")}>🧩 {L("סקילים", "Skills")} <span className="sub-arrow">›</span></button>
-          {sub === "skills" && <div className="add-sub">{list((x) => <button key={x.id ?? x.name} type="button" role="menuitem" dir="auto" title={x.description} onClick={() => { p.onInsert(`${L("השתמש בסקיל", "Use the skill")} "${x.name}": `); done(); }}>{x.name}</button>)}</div>}
-          {p.onMode && <button type="button" role="menuitem" aria-expanded={sub === "approvals"} onClick={() => openSub("approvals")}>✅ {L("אישורים", "Approvals")} <span className="sub-arrow">›</span></button>}
-          {p.onMode && sub === "approvals" && <div className="add-sub">{modes.map(([m, label]) => <button key={m} type="button" role="menuitemradio" aria-checked={p.mode === m} onClick={() => { p.onMode!(m); done(); }}>{p.mode === m ? "● " : "○ "}{label}</button>)}</div>}
-          <hr />
-          <a role="menuitem" href="#/connections" onClick={done}>🔌 {L("קונקטורים ומכשירים", "Connectors and devices")}</a>
-          <a role="menuitem" href="#/memory" onClick={done}>🧠 {L("זיכרונות", "Memory")}</a>
-        </div>
+    <Menu
+      className="model-menu add-menu"
+      popClassName="model-pop add-pop"
+      triggerClassName="chip"
+      trigger="+"
+      title={t("attachHint")}
+      aria-label={t("attach")}
+      open={open}
+      onOpenChange={(o) => (o ? setOpen(true) : done())}
+    >
+      <MenuItem icon="📎" onSelect={p.onFiles}>{L("קבצים…", "Files…")}</MenuItem>
+      <MenuItem icon="📷" onSelect={p.onPhoto}>{L("מצלמה או תמונה", "Camera or photo")}</MenuItem>
+      {p.onAnnotate && (
+        <>
+          <MenuItem icon="✏️" onSelect={() => p.onAnnotate!("screen")}>{L("צילום מסך של המחשב + סימון", "The computer's screen + mark it up")}</MenuItem>
+          <MenuItem icon="🖍" onSelect={() => p.onAnnotate!("file")}>{L("סימון על תמונה", "Mark up a picture")}</MenuItem>
+        </>
       )}
-    </div>
+      <MenuSub icon="📄" label={L("מסמך מהדפים", "A document from Pages")} {...subProps("pages")}>
+        {list((x) => <MenuItem key={x.id} dir="auto" keepOpen onSelect={() => void insertPage(x.id, x.title ?? x.name ?? "")}>{x.title ?? x.name}</MenuItem>)}
+      </MenuSub>
+      <MenuSub icon="💬" label={L("משיחה אחרת", "From another chat")} {...subProps("chats")}>
+        {list((x) => <MenuItem key={x.id} dir="auto" keepOpen onSelect={() => void insertChat(x.id, x.title ?? "")}>{x.title}</MenuItem>)}
+      </MenuSub>
+      {(p.onGameProject || p.onProject) && (
+        <MenuSub icon="🎮" label={L("פרויקט Unity או Unreal", "A Unity or Unreal project")} {...subProps("projects")}>
+          {games === null ? <MenuNote>…</MenuNote> : games.length === 0 ? <MenuNote>{L("לא נמצאו פרויקטים במחשב.", "No projects found on the computer.")}</MenuNote> : games.map((g) => (
+            <MenuItem key={g.path} dir="auto" title={g.path} onSelect={() => p.onGameProject?.(g.path)} end={g.engine}>
+              {g.kind === "unity" ? "◼ Unity" : "◆ Unreal"} · {g.name}
+            </MenuItem>
+          ))}
+          {p.onProject && <MenuItem icon="📁" onSelect={p.onProject}>{L("תיקייה אחרת…", "Another folder…")}</MenuItem>}
+        </MenuSub>
+      )}
+      {p.onScript && p.convId && (
+        <MenuSub icon="📜" label={L("סקריפט מהפרויקט", "A script from the project")} {...subProps("scripts")}>
+          <input className="add-sub-search" dir="auto" autoFocus value={scriptQ} onChange={(e) => setScriptQ(e.target.value)} placeholder={L("חיפוש: Player, Door.cpp…", "Find: Player, Door.cpp…")} aria-label={L("חיפוש סקריפט", "Find a script")} />
+          {scripts === null ? <MenuNote>…</MenuNote> : !scripts.roots.length ? <MenuNote>{L("קודם הוסיפו פרויקט לצ'אט (🎮 למעלה).", "Add a project to the chat first (🎮 above).")}</MenuNote> : scripts.scripts.length === 0 ? <MenuNote>{L("לא נמצא.", "Nothing found.")}</MenuNote> : scripts.scripts.map((x) => (
+            <MenuItem key={x.path} dir="ltr" title={x.path} onSelect={() => p.onScript!(x.path)}>{x.rel}</MenuItem>
+          ))}
+        </MenuSub>
+      )}
+      <MenuSeparator />
+      <MenuItem icon="🌐" checked={p.web} keepOpen onSelect={() => p.onWeb(!p.web)}>{L("חיפוש באינטרנט", "Web search")}</MenuItem>
+      <MenuItem icon="🔬" onSelect={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); }}>{L("מחקר מעמיק", "Deep research")}</MenuItem>
+      <MenuSub icon="📚" label={L("ידע וספריות", "Knowledge and libraries")} {...subProps("knowledge")}>
+        {list((x) => <MenuItem key={x.id} dir="auto" onSelect={() => p.onInsert(`${L("חפש בבסיס הידע", "Search the knowledge base")} "${x.name}": `)}>{x.name}</MenuItem>)}
+        <MenuItem icon="📦" href="#/libraries">{L("חנות ספריות", "Library store")}</MenuItem>
+      </MenuSub>
+      <MenuSub icon="🧩" label={L("סקילים", "Skills")} {...subProps("skills")}>
+        {list((x) => <MenuItem key={x.id ?? x.name} dir="auto" title={x.description} onSelect={() => p.onInsert(`${L("השתמש בסקיל", "Use the skill")} "${x.name}": `)}>{x.name}</MenuItem>)}
+      </MenuSub>
+      {p.onMode && (
+        <MenuSub icon="✅" label={L("אישורים", "Approvals")} {...subProps("approvals")}>
+          {modes.map(([m, label]) => <MenuItem key={m} kind="radio" checked={p.mode === m} onSelect={() => p.onMode!(m)}>{label}</MenuItem>)}
+        </MenuSub>
+      )}
+      <MenuSeparator />
+      <MenuItem icon="🔌" href="#/connections">{L("קונקטורים ומכשירים", "Connectors and devices")}</MenuItem>
+      <MenuItem icon="🧠" href="#/memory">{L("זיכרונות", "Memory")}</MenuItem>
+    </Menu>
   );
 }

@@ -216,3 +216,12 @@ This review went through the code part by part. Each finding is listed with what
 - **Plugins:** the plugin sandbox and permissions, and the code the community store installs.
 - **The agent's file tools:** how folder boundaries handle symlinks and `..`, and the approval rules.
 - **Remote access:** token rotation and how the token is stored on the phone.
+
+## Scan 40 (2026-11-10): Select, model delete, Antigravity CLI buttons, notifications page, Menu
+
+- **`/api/inbox/answer`:** `requestId` must match `^[\w-]{8,64}$`. `conversationId` reaches `conversations.open`, which only opens known ids (it looks up the library's summaries, so no path is built from the request). Self-work answers go only to the worker address KesherAI started itself, never to an address from the request. Same access as `/api/approvals` and `/api/conversations/:id/approvals` (local, or a paired device's key).
+- **`/api/inbox` notes:** these are the bodies exactly as they went to the phone, so "include the text" still decides whether a message's content shows. The body is shown as text, and only `#/` paths become links.
+- **Terminal `agy*`:** still only named commands, never a command from the request. The installer is Google's own `install.ps1` over HTTPS and runs only when the user presses the button. PATH adds only `%LOCALAPPDATA%\agy\bin`.
+- **Model delete** (scan 39 follow-up): only inside the models folder, never the loaded model; checked.
+- **Performance:** the bell polls `/api/inbox` every 6s and skips hidden tabs. The worker query has a 3s timeout, and the worker is not asked when it is not running. The Menu adds no listeners while closed.
+- **Nothing to fix.**

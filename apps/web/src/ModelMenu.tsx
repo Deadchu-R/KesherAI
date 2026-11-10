@@ -91,7 +91,7 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
       </button>
       {open && (
-        <div className="model-pop" role="listbox" aria-label={t("pickModel")}>
+        <div className="model-pop kmenu" role="listbox" aria-label={t("pickModel")}>
           {devices.length > 0 && (
             <div className="segmented model-where" role="group" aria-label={t("runWhere")}>
               <button type="button" className={where === "" ? "on" : ""} aria-pressed={where === ""} onClick={() => setWhere("")}>💻 {t("thisComputer")}</button>

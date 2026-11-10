@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Menu, MenuItem } from "../ui/Menu";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { ComfySection } from "../ComfySection";
@@ -192,20 +193,11 @@ export function NodesPage() {
       <input dir="auto" value={request} onChange={(e) => setRequest(e.target.value)} placeholder={L("מה לשנות בזרימה? למשל: תוסיף LoRA של אנימה, 30 צעדים", "What to change in the flow? e.g. add an anime LoRA, 30 steps")} aria-label={L("שינוי במילים", "Change in words")} />
       <button type="submit" className="primary" disabled={busy || !request.trim()} title={L("שנה", "Change")}>{busy ? "…" : <>✨<span className="nodes-label"> {L("שנה", "Change")}</span></>}</button>
       <button type="button" disabled={!history.length || busy} onClick={() => void undo()} title={L("בטל", "Undo")}>↶<span className="nodes-label"> {L("בטל", "Undo")}</span></button>
-      <span className="nodes-flows">
-        <button type="button" data-slide-menu aria-haspopup="menu" aria-expanded={flowMenu} onClick={() => setFlowMenu(!flowMenu)} title={L("זרימות מוכנות", "Ready-made flows")}>📂<span className="nodes-label"> {L("זרימות מוכנות", "Ready-made")}</span></button>
-        {flowMenu && (
-          <div className="bar-pop" role="menu">
-            {flows.map((f) => (
-              <button key={f.id} type="button" role="menuitem" onClick={() => void chooseFlow(f)}>
-                <span>{f.icon}</span>
-                <span className="grow">{L(f.title.he, f.title.en)}</span>
-                <span className="muted small">{f.ready ? "" : f.downloading ? L("מוריד…", "Downloading…") : `\u2066⬇ ~${f.missingGb} GB\u2069`}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </span>
+      <Menu className="nodes-flows" popClassName="bar-pop" title={L("זרימות מוכנות", "Ready-made flows")} open={flowMenu} onOpenChange={setFlowMenu} trigger={<>📂<span className="nodes-label"> {L("זרימות מוכנות", "Ready-made")}</span></>}>
+        {flows.map((f) => (
+          <MenuItem key={f.id} icon={f.icon} keepOpen onSelect={() => void chooseFlow(f)} end={f.ready ? undefined : f.downloading ? L("מוריד…", "Downloading…") : `\u2066⬇ ~${f.missingGb} GB\u2069`}>{L(f.title.he, f.title.en)}</MenuItem>
+        ))}
+      </Menu>
       <button type="button" onClick={closeMessages} title={L("סגור הודעות", "Close messages")}>✕<span className="nodes-label"> {L("הודעות", "Messages")}</span></button>
       <button type="button" onClick={() => { setFull(!full); setAskOpen(false); }} title={full ? L("צא ממסך מלא", "Exit full screen") : L("מסך מלא", "Full screen")}>{full ? "⤡" : "⤢"}</button>
       {note && <span className="muted small nodes-note" dir="auto">{note}</span>}

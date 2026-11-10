@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 import { desktop } from "./library";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
@@ -50,7 +51,6 @@ export const NEW_CODE_EVENT = "kesher:new-code";
 export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { hash: string; online: boolean | null; sidebarOpen: boolean; onSidebar: () => void; onLocale: () => void }) {
   const [menu, setMenu] = useState(false);
   const [host, setHost] = useState("");
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api<{ name?: string }>("/api/remote/links").then((r) => setHost(r.name ?? ""), () => undefined);
@@ -58,19 +58,6 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   useEffect(() => {
     setMenu(false);
   }, [hash]);
-  useEffect(() => {
-    if (!menu) return;
-    const close = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
-    addEventListener("mousedown", close);
-    addEventListener("keydown", esc);
-    return () => {
-      removeEventListener("mousedown", close);
-      removeEventListener("keydown", esc);
-    };
-  }, [menu]);
 
   const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/connections" ? t("connections") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : hash === "#/plugins" ? t("pluginsNav") : hash === "#/community" ? t("communityNav") : "";
   const inCode = hash === "#/code" || (hash.startsWith("#/c/") && document.querySelector("[data-conv-kind='code']") !== null);
@@ -79,32 +66,33 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   return (
     <header className="appbar">
       <div className="appbar-start">
-        <div className="appbar-menu" ref={menuRef}>
-          <button type="button" data-slide-menu className="bar-btn" aria-label={t("menu")} aria-expanded={menu} aria-haspopup="menu" onClick={() => {
+        <Menu
+          className="appbar-menu"
+          popClassName="bar-pop"
+          triggerClassName="bar-btn"
+          aria-label={t("menu")}
+          open={menu}
+          onOpenChange={(o) => {
             // One menu at a time: on a phone the sidebar covers the screen.
-            if (!menu && sidebarOpen && matchMedia("(max-width: 760px)").matches) onSidebar();
-            setMenu(!menu);
-          }}>
-            {Icon.menu}
-          </button>
-          {menu && (
-            <div className="bar-pop" role="menu">
-              <a role="menuitem" href="#/">{t("newChat")}</a>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); dispatchEvent(new Event(NEW_CODE_EVENT)); }}>{t("newCode")}</button>
-              <hr />
-              {/* The tools themselves live in one place (the sidebar and "All tools"), not repeated here. */}
-              <a role="menuitem" href="#/apps">{t("allTools")}</a>
-              <a role="menuitem" href="#/settings">{t("settings")}</a>
-              <hr />
-              <button type="button" role="menuitem" onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); setMenu(false); onLocale(); }}>{t("language")}</button>
-              <a role="menuitem" href="#/updates">{t("checkUpdates")}</a>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); void reconnect({ restart: true }); }}>{t("restartComputerApp")}</button>
-              {appHome() && <a role="menuitem" href={`${appHome()!.replace(/\/$/, "")}/?switch=1`}>{t("switchComputer")}</a>}
-              {desktop()?.connectComputer && !isRemote() && <a role="menuitem" href="#/settings/phone">{getLocale() === "he" ? "התחבר למחשב אחר" : "Connect to another computer"}</a>}
-              {(appHome() || isRemote()) && <button type="button" role="menuitem" className="danger" onClick={() => { setMenu(false); if (confirm(t("disconnectSure"))) disconnectComputer(); }}>{t("disconnectComputer")}</button>}
-            </div>
-          )}
-        </div>
+            if (o && sidebarOpen && matchMedia("(max-width: 760px)").matches) onSidebar();
+            setMenu(o);
+          }}
+          trigger={Icon.menu}
+        >
+          <MenuItem icon="+" href="#/">{t("newChat")}</MenuItem>
+          <MenuItem icon="</>" onSelect={() => dispatchEvent(new Event(NEW_CODE_EVENT))}>{t("newCode")}</MenuItem>
+          <MenuSeparator />
+          {/* The tools themselves live in one place (the sidebar and "All tools"), not repeated here. */}
+          <MenuItem icon="▦" href="#/apps">{t("allTools")}</MenuItem>
+          <MenuItem icon="⚙" href="#/settings">{t("settings")}</MenuItem>
+          <MenuSeparator />
+          <MenuItem icon="🌐" onSelect={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{t("language")}</MenuItem>
+          <MenuItem icon="⟳" href="#/updates">{t("checkUpdates")}</MenuItem>
+          <MenuItem icon="↻" onSelect={() => void reconnect({ restart: true })}>{t("restartComputerApp")}</MenuItem>
+          {appHome() && <MenuItem icon="⇄" href={`${appHome()!.replace(/\/$/, "")}/?switch=1`}>{t("switchComputer")}</MenuItem>}
+          {desktop()?.connectComputer && !isRemote() && <MenuItem icon="🔗" href="#/settings/phone">{getLocale() === "he" ? "התחבר למחשב אחר" : "Connect to another computer"}</MenuItem>}
+          {(appHome() || isRemote()) && <MenuItem icon="⏏" danger onSelect={() => { if (confirm(t("disconnectSure"))) disconnectComputer(); }}>{t("disconnectComputer")}</MenuItem>}
+        </Menu>
         <button type="button" data-slide-menu className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={() => { setMenu(false); onSidebar(); }}>
           {Icon.sidebar}
         </button>

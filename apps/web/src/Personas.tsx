@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Menu, MenuItem, MenuNote, MenuSeparator } from "./ui/Menu";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 
@@ -36,46 +37,26 @@ export function usePersonas(): Persona[] {
  */
 export function PersonaChip({ value, onChange }: { value?: string | undefined; onChange: (p: Persona | null) => void }) {
   const personas = usePersonas();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: Event) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    addEventListener("mousedown", close);
-    addEventListener("keydown", close);
-    return () => {
-      removeEventListener("mousedown", close);
-      removeEventListener("keydown", close);
-    };
-  }, [open]);
   const current = personas.find((p) => p.id === value);
-  const pick = (p: Persona | null) => {
-    setOpen(false);
-    onChange(p);
-  };
   return (
-    <div className="model-menu persona-menu" ref={ref}>
-      <button type="button" className={`model-chip${current ? " on" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title={L("פרסונה: הוראות, מודל ומאגר ידע שמורים", "Persona: saved instructions, model and knowledge base")}>
-        {current ? `${current.icon ?? "🎭"} ${current.name}` : `🎭 ${L("פרסונה", "Persona")}`}
-      </button>
-      {open && (
-        <div className="model-pop persona-pop" role="menu" aria-label={L("פרסונה", "Persona")}>
-          <div className="model-pop-list">
-            <button type="button" role="menuitemradio" aria-checked={!current} className={!current ? "on" : ""} onClick={() => pick(null)}>{L("ללא פרסונה", "No persona")}</button>
-            {personas.map((p) => (
-              <button key={p.id} type="button" role="menuitemradio" aria-checked={p.id === value} className={p.id === value ? "on" : ""} onClick={() => pick(p)}>
-                <span>{p.icon ?? "🎭"} </span>
-                <span className="grow" dir="auto">{p.name}</span>
-                {p.instructions && <span className="muted small persona-hint" dir="auto">{p.instructions.replace(/\s+/g, " ").slice(0, 60)}</span>}
-              </button>
-            ))}
-            {!personas.length && <p className="muted small">{L("אין עדיין פרסונות.", "No personas yet.")}</p>}
-          </div>
-          <a className="model-pop-foot" href="#/personas" onClick={() => setOpen(false)}>＋ {L("פרסונה חדשה", "New persona")}</a>
-        </div>
-      )}
-    </div>
+    <Menu
+      className="model-menu persona-menu"
+      popClassName="model-pop persona-pop"
+      triggerClassName={`model-chip${current ? " on" : ""}`}
+      title={L("פרסונה: הוראות, מודל ומאגר ידע שמורים", "Persona: saved instructions, model and knowledge base")}
+      aria-label={L("פרסונה", "Persona")}
+      trigger={current ? `${current.icon ?? "🎭"} ${current.name}` : `🎭 ${L("פרסונה", "Persona")}`}
+    >
+      <MenuItem kind="radio" checked={!current} onSelect={() => onChange(null)}>{L("ללא פרסונה", "No persona")}</MenuItem>
+      {personas.map((p) => (
+        <MenuItem key={p.id} kind="radio" checked={p.id === value} icon={p.icon ?? "🎭"} dir="auto" onSelect={() => onChange(p)} title={p.instructions?.replace(/\s+/g, " ").slice(0, 200)}>
+          {p.name}
+          {p.instructions && <span className="muted small persona-hint" dir="auto"> {p.instructions.replace(/\s+/g, " ").slice(0, 60)}</span>}
+        </MenuItem>
+      ))}
+      {!personas.length && <MenuNote>{L("אין עדיין פרסונות.", "No personas yet.")}</MenuNote>}
+      <MenuSeparator />
+      <MenuItem icon="＋" href="#/personas">{L("פרסונה חדשה", "New persona")}</MenuItem>
+    </Menu>
   );
 }
