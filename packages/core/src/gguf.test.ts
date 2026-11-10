@@ -41,8 +41,8 @@ test("MTP: on for a model with an MTP head, with the chosen guesses ahead; 0 tur
   const dir = await mkdtemp(join(tmpdir(), "gguf-"));
   const a = join(dir, "Qwen3.8-27B.gguf");
   await writeFile(a, gguf([["qwen35.nextn_predict_layers", "u32", 1]]));
-  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110"), ["--spec-type", "draft-mtp"]);
-  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110", 2), ["--spec-type", "draft-mtp", "--spec-draft-n-max", "2"]);
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110"), ["--spec-type", "draft-mtp", "--spec-draft-n-max", "2"], "2 unless set (measured on the PC)");
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110", 4), ["--spec-type", "draft-mtp", "--spec-draft-n-max", "4"]);
   assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110", 0), []);
   assert.deepEqual(await LlamaEngine.mtpArgs(a, ["--spec-type", "ngram"], "b12110", 2), []);
   assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b11000", 2), [], "older engines have no MTP");

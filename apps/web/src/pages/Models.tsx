@@ -111,7 +111,7 @@ function StartHere({ onChange }: { onChange: () => void }) {
               value={engine.mtpDraft === undefined ? "auto" : String(engine.mtpDraft)}
               onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { mtpDraft: e.target.value === "auto" ? null : Number(e.target.value) } }).then(setEngine, (err: Error) => setError(err.message))}
             >
-              <option value="auto">{L("אוטומטי", "Automatic")}</option>
+              <option value="auto">{L("אוטומטי (2)", "Automatic (2)")}</option>
               {[1, 2, 3, 4, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
               <option value="0">{L("כבוי", "Off")}</option>
             </Select>

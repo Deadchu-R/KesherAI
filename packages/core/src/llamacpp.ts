@@ -427,10 +427,12 @@ export class LlamaEngine {
     if (draft === 0 || !((await mtpLayers(modelPath)) > 0)) return [];
     // How many tokens it guesses ahead: fewer guesses are checked faster and use less memory (2 was fastest on a
     // 24 GB card at Q4 in a published test; see docs/RESEARCH_LOG.md).
-    return ["--spec-type", "draft-mtp", ...(draft ? ["--spec-draft-n-max", String(draft)] : [])];
+    // Unset: 2. On the PC (Qwen3.8-27B Q4, 24 GB, two chats at once) it wrote as fast as llama.cpp's own number
+    // (62-69 tok/s) and left each chat 49K tokens instead of 45.5K.
+    return ["--spec-type", "draft-mtp", "--spec-draft-n-max", String(draft ?? 2)];
   }
 
-  /** Multi-token prediction's guesses ahead (undefined: llama.cpp's own number; 0: off). */
+  /** Multi-token prediction's guesses ahead (undefined: 2; 0: off). */
   setMtpDraft(n: number | undefined): void {
     if (n === undefined) delete this.opts.mtpDraft;
     else this.opts.mtpDraft = Math.min(16, Math.max(0, Math.round(n)));

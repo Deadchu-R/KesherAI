@@ -299,3 +299,15 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   2. **A q4_0 KV cache** (`--cache-type-k q4_0 --cache-type-v q4_0`) lets a 24 GB card reach 131K+ context with ~17 GB of weights; f16 was within 2% on some cards. KesherAI already uses q8_0 (llamacpp.ts). Going to q4_0 would roughly double the context, at some quality cost on long contexts. Next: an option for the KV cache type (q8_0 / q4_0), measured on the PC.
 - Benchmark with the desktop off the card: a compositor that shares the GPU halved speed with no error.
 - **Where this stopped:** when 0.6.62 is installed, measure n-max auto, 2 and 3 at parallel 2, then n-max 2 at parallel 1. Report tok/s and slot tokens.
+
+**Measured on the PC (0.6.62, Qwen3.8-27B UD-Q4_K_XL, b12110; KesherAI's 200-token prose benchmark, two runs each):**
+
+| chats at once | guesses ahead | tokens per chat | tok/s |
+|---|---|---|---|
+| 2 | llama.cpp's own | 45,568 | 69.1 / 62.2 |
+| 2 | 2 | **49,152** | 68.2 / 62.7 |
+| 2 | 3 | 45,568 | 65.5 / 63.7 |
+| 1 | 2 | **75,264** | 65.6 / 65.5 |
+| 1 | llama.cpp's own | 61,440 | 62.1 / 60.4 |
+
+- **Conclusion:** 2 guesses ahead is as fast as llama.cpp's default and leaves more room, so 2 is now KesherAI's default. Running one chat at a time gives 75K per chat at the same speed. The cost is that self-work and a chat then wait for each other. The PC is set to 2 chats at once with 2 guesses ahead. (Prose; code gains more from MTP, so it was not measured here.)
