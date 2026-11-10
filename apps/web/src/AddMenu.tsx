@@ -119,7 +119,9 @@ export function AddMenu(p: AddMenuProps) {
     if (conv && conv.kind !== "code") {
       const r = await api<{ line: string }>(`/api/conversations/${encodeURIComponent(p.convId!)}/board-project`, { method: "POST" }).catch((e: Error) => ({ line: `(${e.message})` }));
       // A plain chat has no task_board tool and the board file is outside its folders: the tasks themselves.
-      return p.onInsert(`${r.line}\n${await boardMessage(c, true)}`);
+      const path = r.line.match(/^\[[^:]+: (.+)\]$/)?.[1];
+      const where = path ? L(`הפרויקט: ${path} — עבוד בתוכו עם נתיבים מלאים (גם ב־list_files, path="${path}").`, `The project: ${path} — work inside it with full paths (also list_files, path="${path}").`) : r.line;
+      return p.onInsert(`${where}\n${await boardMessage(c, true)}`);
     }
     p.onInsert(await boardMessage(c));
   };

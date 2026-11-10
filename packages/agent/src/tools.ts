@@ -153,6 +153,10 @@ const listFiles: AgentTool = {
       if (!re || re.test(rel)) files.push(inside ? rel : f);
       if (files.length >= 1000) break;
     }
+    // A plain chat's own folder is often empty while its project was granted (+ → Tasks from the board): say
+    // where to look instead of "No files found" (found on the PC: the model listed "." again and again).
+    const grants = (ctx.extraRoots ?? []).filter((g) => g !== dir);
+    if (files.length === 0 && inside && grants.length) return { output: `No files in your own folder. You can also use: ${grants.join(", ")}. Pass one of them as path (in full), and use full paths inside it with the other tools.` };
     if (files.length === 0) return { output: "No files found." };
     return { output: files.join("\n") + (files.length >= 1000 ? "\n… (stopped at 1000 files; use a glob to narrow)" : "") };
   },

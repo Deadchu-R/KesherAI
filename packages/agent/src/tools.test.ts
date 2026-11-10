@@ -75,5 +75,7 @@ describe("list_files in a granted folder", () => {
     const { isAbsolute: abs, basename: base } = await import("node:path");
     assert.ok(md1.output.split("\n").some((l) => abs(l) && base(l) === "README.md"), md1.output);
     assert.doesNotMatch(md1.output, /a\.md/, "the glob is relative to the granted folder");
+    const own1 = await tool.run({}, ctx);
+    assert.ok(own1.output.includes(granted), "an empty own folder points at the granted one");
   });
 });
