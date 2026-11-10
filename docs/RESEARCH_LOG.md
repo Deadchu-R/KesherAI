@@ -333,3 +333,12 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **Quotas on Pro** (agentpedia): a 5-hour meter under a weekly ceiling, tracked per model group (Claude and GPT have their own group). An empty weekly meter locks that group for 5–7 days (forum reports). `/usage` in agy shows the meters. Switching to a group that has room is the way around it.
 - **Where this stopped:** the plan "Antigravity in self-work" is dropped; next is resuming a chat's session after a restart.
 - **0.6.67 on the PC (resume, done):** after an update, "Restart" from the interface came back in 12 s, with the new exit fix. The Antigravity chat then answered the code word it was given before the restart ("ענבר-ירוק"), using its saved session `1a5c5b45…`. The first attempt on 0.6.65 had failed because the id was saved only on edits; that is fixed and tested. The test chat was deleted.
+
+## 2026-11-10: Submenus on a phone (done)
+- **NN/g, Mobile Subnavigation:**
+  - An accordion (expand in place) is fine for fewer than 6 items.
+  - A drill-down (replace, with Back) fits more on a small screen, but people lose their place, and an in-menu Back is confused with the phone's Back. Naming the current level helps.
+- **Apple HIG, Menus:** a submenu opens in place of its parent and shows its title as the way back.
+- **Done:** on a computer, open in place. At 700px or narrower, the open flyout replaces the menu, and its row (sticky, bold, back chevron) names it and goes back.
+- **Found:** in a capped flex menu, the flyout (overflow:auto) shrank to 0 height. Fixed with flex-shrink 0.
+- **Stopped at:** nothing open. Maybe later: the phone's own Back closes a flyout first (history entry).
