@@ -1822,3 +1822,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .task-cat.cooldown > h4 > span:first-child::before { content: "🧊 "; }
 .task-cat.fable > h4 > span:first-child::before { content: "✨ "; }
 .task-cat.normal > h4 > span:first-child::before { content: "🧠 "; }
+.hub-load { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.hub-card { display: grid; gap: 4px; }
+.hub-terminate { margin-top: 4px; width: 100%; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+@media (pointer: coarse) { .hub-terminate { min-height: 44px; } }

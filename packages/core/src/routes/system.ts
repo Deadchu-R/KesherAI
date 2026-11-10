@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
-import { resolve, sep } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 import { Tailscale } from "../tailscale.js";
@@ -39,6 +39,56 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (!d) return reply.code(400).send({ error: "d must be allow or deny" });
     if (!(await s.notifier.quickDecide(req.params.code, d))) return reply.code(410).send({ error: "This button no longer works: the request was answered or is too old." });
     return { ok: true };
+  });
+
+  /**
+   * How loaded the computer is, for watching it from the phone: processor %, memory, each graphics card (load,
+   * its memory, temperature, power), the processor's temperature, and what KesherAI runs on it. Read fresh at
+   * most every 2.5 s, however many devices ask.
+   */
+  let lastCheck = 0;
+  app.get("/api/pc-status", async () => {
+    if (Date.now() - lastCheck > 2500) {
+      lastCheck = Date.now();
+      await s.guard.check().catch(() => undefined);
+    }
+    const g = s.guard.status();
+    const e = s.engine.status();
+    const sw = s.selfWork?.current;
+    return {
+      system: g.system,
+      cards: g.cards,
+      cooling: g.cooling,
+      running: g.running,
+      model: e.running && e.modelPath ? basename(e.modelPath) : null,
+      comfy: s.comfy.status().running,
+      selfWork: sw ? sw.status : s.workerHost?.url() ? "worker" : null,
+      at: Date.now(),
+    };
+  });
+
+  /**
+   * Terminate: frees the computer — stops self-work, every chat, every model engine, ComfyUI and outside agents
+   * (Antigravity) — and restarts KesherAI. For when remote work gets the computer stuck. Body
+   * `{ confirm: "terminate" }` (the page asks first).
+   */
+  app.post<{ Body: { confirm?: string } }>("/api/system/terminate", async (req, reply) => {
+    if (req.body?.confirm !== "terminate") return reply.code(400).send({ error: 'Send { "confirm": "terminate" }.' });
+    // Self-work first (in this process or in its worker), so it does not start the next step.
+    await s.selfWork?.stop().catch(() => undefined);
+    const worker = s.workerHost?.url();
+    if (worker) await fetch(`${worker}/api/self-work/stop`, { method: "POST", signal: AbortSignal.timeout(5000) }).catch(() => undefined);
+    if (s.restartApp) {
+      // The restart closes everything (chats, engines, ComfyUI, Antigravity) and exits within 10 s.
+      s.restarting = true;
+      setTimeout(() => s.restartApp?.(), 300);
+      return { ok: true, restarting: true };
+    }
+    // Run from the command line: free what can be freed; the user restarts it there.
+    await s.conversations.closeAll().catch(() => undefined);
+    await s.engine.stop().catch(() => undefined);
+    await s.comfy.stop().catch(() => undefined);
+    return { ok: true, restarting: false };
   });
 
   app.post("/api/system/restart", async (_req, reply) => {

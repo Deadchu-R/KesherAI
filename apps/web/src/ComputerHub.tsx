@@ -45,6 +45,81 @@ function Meter({ used, total, label }: { used: number; total: number; label: str
   );
 }
 
+interface PcStatus {
+  system?: { ramUsed: number; ramTotal: number; cpu: number; cpuTemp?: number };
+  cards: Array<{ index: number; name: string; temp: number; util: number; memUsed: number; memTotal: number; power?: number }>;
+  cooling: boolean;
+  running: number;
+  model: string | null;
+  comfy: boolean;
+  selfWork: string | null;
+}
+
+/** A percent bar (load). */
+function Pct({ label, pct, extra }: { label: string; pct: number; extra?: string }) {
+  const v = Math.max(0, Math.min(100, Math.round(pct)));
+  return (
+    <div className="hub-meter">
+      <div className="hub-meter-top">
+        <span>{label}</span>
+        <span className="muted" dir="ltr">{v}%{extra ? ` · ${extra}` : ""}</span>
+      </div>
+      <span className={`hub-bar ${v > 90 ? "hot" : ""}`}><span style={{ width: `${v}%` }} /></span>
+    </div>
+  );
+}
+
+const hot = (c?: number) => (c === undefined ? "" : `${c}°C`);
+
+/**
+ * The computer's load, live while the panel is open (from the phone too): processor and memory, each graphics
+ * card's load, memory, temperature and power, and what KesherAI runs. Terminate frees everything (self-work,
+ * chats, models, ComfyUI, Antigravity) and restarts KesherAI — for when remote work gets the computer stuck.
+ */
+function PcLoad() {
+  const [st, setSt] = useState<PcStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => void api<PcStatus>("/api/pc-status").then((r) => alive && setSt(r), () => undefined);
+    tick();
+    const id = setInterval(tick, 2500);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  if (!st) return null;
+  const terminate = async () => {
+    if (!confirm(L("לעצור הכל ולהפעיל מחדש את קשר?\n\nזה עוצר את העבודה העצמית, את כל השיחות, את המודלים, את ComfyUI ואת Antigravity, ומפעיל את קשר מחדש (עד כחצי דקה). עבודה שלא נשמרה בשיחה תיעצר.", "Stop everything and restart KesherAI?\n\nThis stops self-work, every chat, the models, ComfyUI and Antigravity, and restarts KesherAI (up to about half a minute). Work in progress in a chat is stopped."))) return;
+    setBusy(true);
+    try {
+      const r = await api<{ restarting: boolean }>("/api/system/terminate", { method: "POST", body: { confirm: "terminate" } });
+      toast(r.restarting ? L("עוצר הכל ומפעיל מחדש…", "Stopping everything and restarting…") : L("הכל נעצר. הפעל את קשר מחדש בחלון שלו.", "Everything stopped. Restart KesherAI in its window."));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const busyNow = [st.model && L(`מודל: ${st.model}`, `Model: ${st.model}`), st.running > 0 && L(`${st.running} עובדים עכשיו`, `${st.running} working now`), st.comfy && "ComfyUI", st.selfWork && L("עבודה עצמית", "Self-work")].filter(Boolean).join(" · ");
+  return (
+    <div className="hub-load">
+      <span className="muted small">{L("עומס עכשיו", "Load now")}{st.cooling ? L(" · ❄ מקרר", " · ❄ cooling down") : ""}</span>
+      {st.system && <Pct label={L("מעבד", "Processor")} pct={st.system.cpu} extra={hot(st.system.cpuTemp)} />}
+      {st.system && <Pct label={L("זיכרון (RAM)", "Memory (RAM)")} pct={(st.system.ramUsed / st.system.ramTotal) * 100} extra={`${fmt(st.system.ramUsed)} / ${fmt(st.system.ramTotal)}`} />}
+      {st.cards.map((c) => (
+        <div key={c.index} className="hub-card">
+          <Pct label={`${c.name.replace(/^NVIDIA (GeForce )?/i, "")} · ${L("עומס", "load")}`} pct={c.util} extra={[hot(c.temp), c.power ? `${Math.round(c.power)}W` : ""].filter(Boolean).join(" · ")} />
+          <Pct label="VRAM" pct={(c.memUsed / c.memTotal) * 100} extra={`${fmt(c.memUsed)} / ${fmt(c.memTotal)}`} />
+        </div>
+      ))}
+      {busyNow && <p className="muted small" dir="auto">{busyNow}</p>}
+      <button type="button" className="danger hub-terminate" disabled={busy} onClick={() => void terminate()}>⏻ {L("Terminate: לעצור הכל ולהפעיל מחדש", "Terminate: stop everything and restart")}</button>
+    </div>
+  );
+}
+
 /**
  * The computer icon at the end of the top bar. Hovering (or tapping) it
  * shows the connected computer: name, address, system, memory and each
@@ -119,8 +194,9 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
     <div
       className="hub"
       ref={ref}
-      onMouseEnter={() => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(true), 180); }}
-      onMouseLeave={() => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(false), 260); }}
+      // Hover opens it with a mouse only: on a phone a tap is the only way (a tap's emulated mouse events closed it again).
+      onPointerEnter={(e) => { if (e.pointerType !== "mouse") return; clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(true), 180); }}
+      onPointerLeave={(e) => { if (e.pointerType !== "mouse") return; clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(false), 260); }}
     >
       <button type="button" className={`bar-status ${online ? "ok" : online === false ? "off" : ""}`} aria-label={status} aria-expanded={open} onClick={() => setOpen(!open)}>
         {icon}
@@ -143,6 +219,7 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
                 <Meter key={i} label={`${g.name.replace(/^NVIDIA (GeForce )?/i, "")}${g.computeCap ? ` · CUDA ${g.computeCap}` : ""}`} used={g.vramTotal - g.vramFree} total={g.vramTotal} />
               ))}
               {hw.gpus.length === 0 && !hw.unifiedMemory && <p className="muted small">{t("hubNoGpu")}</p>}
+              <PcLoad />
             </>
           ) : (
             <p className="muted small">{t("barChecking")}</p>
