@@ -54,3 +54,24 @@ describe("shortenOldToolOutputs in steps", () => {
     assert.equal(short(shortenOldToolOutputs(msgs(17), 8)), 9, "step 1 keeps the old behaviour");
   });
 });
+
+describe("list_files in a granted folder", () => {
+  it("lists it by its own paths, so a glob matches and read_file can take them", async () => {
+    const { mkdtemp, mkdir: md, writeFile: wf } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: j } = await import("node:path");
+    const { CODE_TOOLS } = await import("./tools.js");
+    const own = await mkdtemp(j(tmpdir(), "kesher-own-"));
+    const granted = await mkdtemp(j(tmpdir(), "kesher-granted-"));
+    await md(j(granted, "docs"));
+    await wf(j(granted, "README.md"), "# hi");
+    await wf(j(granted, "docs", "a.md"), "a");
+    const tool = CODE_TOOLS.find((t) => t.spec.name === "list_files")!;
+    const ctx = { workspace: own, extraRoots: [granted] } as unknown as Parameters<typeof tool.run>[1];
+    const all = await tool.run({ path: granted }, ctx);
+    assert.match(all.output, /README\.md/);
+    const md1 = await tool.run({ path: granted, glob: "*.md" }, ctx);
+    assert.ok(md1.output.split("\n").some((l) => l === j(granted, "README.md")), md1.output);
+    assert.doesNotMatch(md1.output, /a\.md/, "the glob is relative to the granted folder");
+  });
+});

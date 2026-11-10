@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import type { ToolRisk, ToolSpec } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
@@ -144,9 +144,13 @@ const listFiles: AgentTool = {
     const dir = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path", false) || ".");
     const re = str(input, "glob", false) ? globToRegExp(str(input, "glob")) : undefined;
     const files: string[] = [];
+    // A granted folder outside the project (request_access, a project added to a plain chat): its files are
+    // matched relative to that folder and shown in full, so the glob works and read_file can take them
+    // (found on the PC: relative to the project they all began with "..", nothing matched, "No files found").
+    const inside = !relative(root, dir).startsWith("..") && !isAbsolute(relative(root, dir));
     for await (const f of walk(root, dir)) {
-      const rel = displayPath(root, f);
-      if (!re || re.test(rel)) files.push(rel);
+      const rel = inside ? displayPath(root, f) : relative(dir, f).split(sep).join("/");
+      if (!re || re.test(rel)) files.push(inside ? rel : f);
       if (files.length >= 1000) break;
     }
     if (files.length === 0) return { output: "No files found." };
