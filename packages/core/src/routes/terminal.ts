@@ -39,6 +39,18 @@ function loadPty(): PtyModule | null {
   return ptyModule;
 }
 
+/**
+ * Commands the code page can start in its terminal by name (never a command from the request). Gemini CLI is
+ * Google's own agent: it signs in with the user's Google account (a Google AI Pro subscription works there) and
+ * KesherAI only shows its terminal, so the sign-in never passes through KesherAI (Google forbids third-party apps
+ * from using the subscription's sign-in themselves; see docs/RESEARCH_LOG.md).
+ */
+export const AGENT_CLIS: Record<string, string> = {
+  gemini: "gemini",
+  "gemini-install": "npm install -g @google/gemini-cli",
+  "gemini-update": "npm install -g @google/gemini-cli@latest",
+};
+
 /** The user's shell. */
 function shell(): { file: string; args: string[] } {
   if (process.platform === "win32") return { file: process.env.ComSpec?.toLowerCase().includes("powershell") ? process.env.ComSpec : "powershell.exe", args: ["-NoLogo"] };
@@ -71,13 +83,28 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
     return c ? s.conversations.workspaceOf(c) : undefined;
   };
 
+  /** Whether Gemini CLI (and npm, to install it) is on this computer, for the terminal's buttons. */
+  app.get("/api/agent-clis", async () => {
+    const find = (cmd: string) =>
+      new Promise<string | undefined>((resolve) => {
+        const p = spawn(process.platform === "win32" ? "where" : "which", [cmd], { windowsHide: true });
+        let out = "";
+        p.stdout.on("data", (b: Buffer) => (out += b.toString()));
+        p.on("error", () => resolve(undefined));
+        p.on("close", (code) => resolve(code === 0 ? out.split(/\r?\n/)[0]?.trim() || undefined : undefined));
+      });
+    const [gemini, npm] = await Promise.all([find("gemini"), find("npm")]);
+    return { gemini: { installed: !!gemini }, npm: !!npm };
+  });
+
   /**
    * A terminal in the conversation's folder. Messages from the browser are
    * JSON: `{ "type": "input", "data": "…" }` or `{ "type": "resize", "cols", "rows" }`;
    * the server sends the terminal's output as plain text.
    */
-  app.get<{ Params: { id: string } }>("/api/conversations/:id/terminal", { websocket: true }, async (socket, req) => {
+  app.get<{ Params: { id: string }; Querystring: { run?: string } }>("/api/conversations/:id/terminal", { websocket: true }, async (socket, req) => {
     const cwd = await folderOf(req.params.id);
+    const run = req.query.run ? AGENT_CLIS[req.query.run] : undefined;
     if (!cwd || !(await stat(cwd).catch(() => undefined))?.isDirectory()) {
       socket.send("\r\nThis conversation has no folder.\r\n");
       socket.close();
@@ -89,6 +116,8 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
       ? mod.spawn(sh.file, sh.args, { name: "xterm-256color", cols: 100, rows: 30, cwd, env: { ...process.env, TERM: "xterm-256color" } })
       : pipeShell(cwd);
     if (!mod) socket.send("(Simple terminal: interactive programs may not work.)\r\n");
+    // A coding agent's own CLI (Gemini CLI): typed into the shell as if the user did, so it signs in and runs as itself.
+    if (run) setTimeout(() => term.write(`${run}\r`), 400);
     term.onData((d) => {
       if (socket.readyState === 1) socket.send(d);
     });

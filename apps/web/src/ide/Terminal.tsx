@@ -9,8 +9,9 @@ import { withToken } from "../api";
  * login shell elsewhere), running on the computer that runs KesherAI.
  *
  * @param props.convId - Conversation id.
+ * @param props.run - A command the server knows by name to start in it (e.g. "gemini" for Gemini CLI).
  */
-export function TerminalPane({ convId }: { convId: string }) {
+export function TerminalPane({ convId, run }: { convId: string; run?: string }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!box.current) return;
@@ -25,7 +26,7 @@ export function TerminalPane({ convId }: { convId: string }) {
     term.loadAddon(fit);
     term.open(box.current);
     fit.fit();
-    const url = new URL(withToken(`/api/conversations/${convId}/terminal`), location.href);
+    const url = new URL(withToken(`/api/conversations/${convId}/terminal${run ? `?run=${encodeURIComponent(run)}` : ""}`), location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(url);
     const send = (o: unknown) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(o));
@@ -45,6 +46,6 @@ export function TerminalPane({ convId }: { convId: string }) {
       ws.close();
       term.dispose();
     };
-  }, [convId]);
+  }, [convId, run]);
   return <div className="terminal-pane" ref={box} dir="ltr" />;
 }

@@ -1739,3 +1739,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .git-branches .list { max-height: 30vh; overflow: auto; }
 .git-panel textarea { width: 100%; font: inherit; }
 @media (max-width: 760px) { .git-head > .grow { display: none; } .git-head .primary { margin-inline-start: auto; } }
+.agent-cli-bar { padding: 6px 10px; gap: 8px; align-items: center; border-bottom: 1px solid var(--border); }
+.ws-terminal { display: flex; flex-direction: column; }
+.ws-terminal[hidden] { display: none; }
+.ws-terminal .terminal-pane { flex: 1; min-height: 0; height: auto; }

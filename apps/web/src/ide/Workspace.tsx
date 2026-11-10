@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import { EditorPane } from "./Editor";
 import { TerminalPane } from "./Terminal";
 import { GitPanel } from "./GitPanel";
+import { AgentCliBar } from "./AgentCliBar";
 
 interface FileItem { path: string; size: number }
 interface Node { name: string; path: string; children?: Map<string, Node> }
@@ -61,6 +62,8 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
   const [current, setCurrent] = useState("");
   // Keep the terminal alive while other tabs are shown.
   const [terminalStarted, setTerminalStarted] = useState(false);
+  // A fresh terminal (n) that may start a known command (Gemini CLI, or its install).
+  const [termRun, setTermRun] = useState<{ run?: string; n: number }>({ n: 0 });
 
   useEffect(() => {
     void api<{ files: FileItem[] }>(`/api/conversations/${convId}/files`).then((d) => setFiles(d.files)).catch(() => undefined);
@@ -129,7 +132,8 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
 
       {terminalStarted && (
         <div className="ws-terminal" hidden={tab !== "terminal"}>
-          <TerminalPane convId={convId} />
+          <AgentCliBar onRun={(r) => setTermRun({ run: r, n: termRun.n + 1 })} />
+          <TerminalPane key={termRun.n} convId={convId} {...(termRun.run ? { run: termRun.run } : {})} />
         </div>
       )}
     </aside>
