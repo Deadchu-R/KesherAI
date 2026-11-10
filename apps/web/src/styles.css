@@ -1817,3 +1817,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .cc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cc-list li { padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); align-items: center; gap: 8px; }
 .cc-list li .muted { overflow-wrap: anywhere; }
+.task-cat { margin-block: 10px; }
+.task-cat > h4 { margin: 6px 0; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.task-cat.cooldown > h4 > span:first-child::before { content: "🧊 "; }
+.task-cat.fable > h4 > span:first-child::before { content: "✨ "; }
+.task-cat.normal > h4 > span:first-child::before { content: "🧠 "; }

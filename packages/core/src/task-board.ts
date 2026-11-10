@@ -13,6 +13,21 @@ import { dirname } from "node:path";
 /** Who works on the board. */
 export type BoardActor = "claude" | "kesher" | "roee";
 
+/**
+ * Who a task is for: `normal` — Claude (Opus) in its sessions; `cooldown` — KesherAI's local model (self-work)
+ * while Claude's weekly usage is used up; `fable` — the bigger tasks kept for Claude Fable.
+ */
+export type BoardCategory = "normal" | "cooldown" | "fable";
+export const BOARD_CATEGORIES: readonly BoardCategory[] = ["normal", "cooldown", "fable"];
+
+/** A task's category: set, or from its title's "[CoolDown]" / "[Fable]" prefix (older tasks), else normal. */
+export function categoryOf(t: { title: string; category?: BoardCategory }): BoardCategory {
+  if (t.category && BOARD_CATEGORIES.includes(t.category)) return t.category;
+  if (/^\s*\[cool\s*down\]/i.test(t.title)) return "cooldown";
+  if (/^\s*\[fable\]/i.test(t.title)) return "fable";
+  return "normal";
+}
+
 /** One task: who has it, and what came of it. */
 export interface BoardTask {
   id: string;
@@ -20,6 +35,8 @@ export interface BoardTask {
   /** Details, links, acceptance checks. */
   details?: string;
   status: "open" | "claimed" | "done" | "blocked";
+  /** Normal (Claude Opus), CoolDown (the local model) or Fable; see {@link categoryOf}. */
+  category?: BoardCategory;
   owner?: BoardActor;
   /** What was done (commit, files, how it was checked). */
   result?: string;
@@ -48,13 +65,13 @@ const ACTORS = new Set<BoardActor>(["claude", "kesher", "roee"]);
 
 /** One change to the board. */
 export type BoardChange =
-  | { op: "add"; title: string; details?: string; priority?: number }
+  | { op: "add"; title: string; details?: string; priority?: number; category?: BoardCategory }
   | { op: "claim"; id: string }
   | { op: "release"; id: string }
   | { op: "done"; id: string; result: string }
   | { op: "block"; id: string; result: string }
   | { op: "reopen"; id: string }
-  | { op: "edit"; id: string; title?: string; details?: string; priority?: number }
+  | { op: "edit"; id: string; title?: string; details?: string; priority?: number; category?: BoardCategory }
   | { op: "note"; text: string; task?: string };
 
 /** The task board in a file. */
@@ -70,7 +87,9 @@ export class TaskBoard {
     if (!raw) return { rev: 0, tasks: [], notes: [] };
     try {
       const b = JSON.parse(raw) as Board;
-      return { rev: Number(b.rev) || 0, tasks: Array.isArray(b.tasks) ? b.tasks : [], notes: Array.isArray(b.notes) ? b.notes : [] };
+      // Every task says its category (older ones from their "[CoolDown]" title prefix).
+      const tasks = (Array.isArray(b.tasks) ? b.tasks : []).map((t) => ({ ...t, category: categoryOf(t) }));
+      return { rev: Number(b.rev) || 0, tasks, notes: Array.isArray(b.notes) ? b.notes : [] };
     } catch {
       return { rev: 0, tasks: [], notes: [] };
     }
@@ -103,7 +122,8 @@ export class TaskBoard {
             const title = text(c.title, 200);
             if (!title) throw new Error("A task needs a title.");
             const id = `t${(b.tasks.reduce((n, t) => Math.max(n, Number(t.id.slice(1)) || 0), 0) + 1)}`;
-            b.tasks.push({ id, title, ...(c.details ? { details: text(c.details, 4000) } : {}), status: "open", priority: Number(c.priority) || 5, updatedAt: now, updatedBy: by });
+            const category = categoryOf({ title, ...(c.category && BOARD_CATEGORIES.includes(c.category) ? { category: c.category } : {}) });
+            b.tasks.push({ id, title, ...(c.details ? { details: text(c.details, 4000) } : {}), status: "open", category, priority: Number(c.priority) || 5, updatedAt: now, updatedBy: by });
             break;
           }
           case "claim": {
@@ -140,6 +160,10 @@ export class TaskBoard {
             if (c.title !== undefined) t.title = text(c.title, 200) || t.title;
             if (c.details !== undefined) t.details = text(c.details, 4000);
             if (c.priority !== undefined) t.priority = Number(c.priority) || t.priority;
+            if (c.category !== undefined) {
+              if (!BOARD_CATEGORIES.includes(c.category)) throw new Error("The category is normal, cooldown or fable.");
+              t.category = c.category;
+            }
             Object.assign(t, { updatedAt: now, updatedBy: by });
             break;
           }
@@ -171,6 +195,8 @@ export class TaskBoard {
 export function boardText(b: Board, notes = 10): string {
   const order = { claimed: 0, open: 1, blocked: 2, done: 3 } as const;
   const tasks = [...b.tasks].sort((x, y) => order[x.status] - order[y.status] || x.priority - y.priority);
-  const line = (t: BoardTask) => `${t.id} [${t.status}${t.owner ? `: ${t.owner}` : ""}] p${t.priority} ${t.title}${t.result ? ` — ${t.result.split("\n")[0]!.slice(0, 160)}` : ""}`;
+  // The category is shown for CoolDown and Fable tasks (normal ones are Claude's): self-work takes only CoolDown ones.
+  const cat = (t: BoardTask) => { const c = categoryOf(t); return c === "normal" ? "" : ` {${c}}`; };
+  const line = (t: BoardTask) => `${t.id} [${t.status}${t.owner ? `: ${t.owner}` : ""}] p${t.priority}${cat(t)} ${t.title}${t.result ? ` — ${t.result.split("\n")[0]!.slice(0, 160)}` : ""}`;
   return [`Board revision ${b.rev}.`, ...tasks.filter((t) => t.status !== "done").map(line), ...(tasks.some((t) => t.status === "done") ? [`Done: ${tasks.filter((t) => t.status === "done").length} (latest: ${tasks.filter((t) => t.status === "done").slice(-3).map((t) => t.id).join(", ")})`] : []), ...(b.notes.length ? ["Notes:", ...b.notes.slice(-notes).map((n) => `${n.at.slice(0, 16)} ${n.from}${n.task ? ` (${n.task})` : ""}: ${n.text}`)] : [])].join("\n");
 }

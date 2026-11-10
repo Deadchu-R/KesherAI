@@ -31,3 +31,19 @@ test("writes in parallel never lose a change", async () => {
   assert.equal(b.rev, 20);
   assert.equal(new Set(b.tasks.map((t) => t.id)).size, 20);
 });
+
+test("tasks have a category: normal (Claude Opus), CoolDown (the local model) or Fable; old titles still count", async () => {
+  const board = new TaskBoard(join(await mkdtemp(join(tmpdir(), "board-")), "board.json"));
+  let b = await board.change("roee", [
+    { op: "add", title: "Refactor the composer" },
+    { op: "add", title: "[CoolDown] Small test" },
+    { op: "add", title: "Architecture review", category: "fable" },
+  ]);
+  assert.deepEqual(b.tasks.map((t) => t.category), ["normal", "cooldown", "fable"]);
+  b = await board.change("roee", [{ op: "edit", id: "t1", category: "cooldown" }]);
+  assert.equal(b.tasks[0]!.category, "cooldown");
+  await assert.rejects(board.change("roee", [{ op: "edit", id: "t1", category: "other" as never }]), /normal, cooldown or fable/);
+  const text = boardText(await board.read());
+  assert.match(text, /p5 \{cooldown\} \[CoolDown\] Small test/);
+  assert.match(text, /p5 \{fable\} Architecture review/);
+});
