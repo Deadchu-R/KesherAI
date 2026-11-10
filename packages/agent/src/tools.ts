@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { realpathSync } from "node:fs";
 import { createTwoFilesPatch } from "diff";
 import type { ToolRisk, ToolSpec } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
@@ -147,7 +148,10 @@ const listFiles: AgentTool = {
     // A granted folder outside the project (request_access, a project added to a plain chat): its files are
     // matched relative to that folder and shown in full, so the glob works and read_file can take them
     // (found on the PC: relative to the project they all began with "..", nothing matched, "No files found").
-    const inside = !relative(root, dir).startsWith("..") && !isAbsolute(relative(root, dir));
+    // Compared by real path: Windows may spell one folder two ways (a short name like RUNNER~1, found in CI).
+    const real = (f: string) => { try { return realpathSync.native(f); } catch { return f; } };
+    const rd = relative(real(root), real(dir));
+    const inside = !rd.startsWith("..") && !isAbsolute(rd);
     for await (const f of walk(root, dir)) {
       const rel = inside ? displayPath(root, f) : relative(dir, f).split(sep).join("/");
       if (!re || re.test(rel)) files.push(inside ? rel : f);
