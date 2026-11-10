@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { PermissionMode } from "@kesher/shared";
 import { api } from "./api";
+import { createConversation } from "./library";
+import { openWithDraft } from "./phone";
 import { getLocale, t } from "./i18n";
 import { Menu, MenuItem, MenuNote, MenuSeparator, MenuSub } from "./ui/Menu";
 
@@ -111,6 +113,28 @@ export function AddMenu(p: AddMenuProps) {
       setScriptQ("");
     }
   };
+  // The board's tasks are work on the project. In a plain chat there is no project folder (found on the phone:
+  // the model asked where the code is), so they go to a new code chat in self-work's project, same model,
+  // ready to send. A code chat (or no project known yet) gets them here.
+  const toBoard = async (c: BoardCat | "all") => {
+    const text = await boardMessage(c);
+    const conv = p.convId ? await api<{ kind?: string; modelId?: string }>(`/api/conversations/${encodeURIComponent(p.convId)}`).catch(() => null) : null;
+    if (conv && conv.kind !== "code") {
+      // Self-work's project, else the folder of the latest code chat.
+      const repo =
+        (await api<{ run?: { repo?: string } | null }>("/api/self-work").then((r) => r.run?.repo, () => undefined)) ??
+        (await api<Array<{ kind?: string; workspace?: string; updatedAt?: string }> | { conversations: Array<{ kind?: string; workspace?: string; updatedAt?: string }> }>("/api/conversations").then(
+          (r) => (Array.isArray(r) ? r : r.conversations).filter((x) => x.kind === "code" && x.workspace).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0]?.workspace,
+          () => undefined,
+        ));
+      if (repo) {
+        const id = await createConversation({ kind: "code", workspace: repo, ...(conv.modelId ? { modelId: conv.modelId } : {}) }, { open: false });
+        if (id) return openWithDraft(id, text);
+      }
+      return p.onInsert(`${text}\n${L("(שים לב: זו לא שיחת קוד. פתח שיחת קוד בתיקיית הפרויקט כדי שהמודל יגיע לקוד.)", "(Note: this is not a code chat. Open a code chat in the project's folder so the model can reach the code.)")}\n`);
+    }
+    p.onInsert(text);
+  };
   const insertPage = async (id: string, title: string) => {
     const page = await api<{ title?: string; content?: string }>(`/api/pages/${encodeURIComponent(id)}`).catch(() => null);
     const text = (page?.content ?? "").slice(0, 6000);
@@ -180,7 +204,7 @@ export function AddMenu(p: AddMenuProps) {
       <MenuItem icon="🔬" onSelect={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); }}>{L("מחקר מעמיק", "Deep research")}</MenuItem>
       <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
         {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (
-          <MenuItem key={c} keepOpen onSelect={() => void boardMessage(c).then((t) => { p.onInsert(t); done(); }, (e: Error) => { p.onInsert(`(${e.message})\n`); done(); })}>{label}</MenuItem>
+          <MenuItem key={c} keepOpen onSelect={() => void toBoard(c).then(done, (e: Error) => { p.onInsert(`(${e.message})\n`); done(); })}>{label}</MenuItem>
         ))}
       </MenuSub>
       <MenuSub icon="📚" label={L("ידע וספריות", "Knowledge and libraries")} {...subProps("knowledge")}>
