@@ -538,7 +538,10 @@ setInterval(() => {
   const remote = server?.services.config.remote;
   // Also while serving other apps and devices through the API, until a minute after the last request.
   const serving = Date.now() - (server?.services.lastServed?.() ?? 0) < 60_000;
-  const want = (!!remote?.enabled && !!remote.keepAwake) || serving;
+  // And while self-work runs (in the worker, which has its own copy of this loop): an overnight run must not stop
+  // because Windows went to sleep.
+  const working = server?.services.selfWork?.current?.status === "running";
+  const want = (!!remote?.enabled && !!remote.keepAwake) || serving || working;
   if (want && awakeBlocker === undefined) awakeBlocker = powerSaveBlocker.start("prevent-app-suspension");
   if (!want && awakeBlocker !== undefined) {
     powerSaveBlocker.stop(awakeBlocker);
