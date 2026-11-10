@@ -66,7 +66,7 @@ function ActiveModels() {
               {c.label[getLocale()] ?? c.label.en}
               <select value={current} onChange={(e) => void set(c.id, e.target.value)}>
                 <option value="">{t("none")}</option>
-                {current && !options.some((m) => m.id === current) && <option value={current}>{current}</option>}
+                {current && !options.some((m) => m.id === current) && <option value={current}>{current.split(/[\\/]/).pop()}</option>}
                 {options.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.providerId}</option>)}
               </select>
             </label>

@@ -100,7 +100,9 @@ export function DownloadsButton() {
   };
 
   return (
-    <div className="dl-corner">
+    // On the phone a finished-downloads button covered buttons under it (found at 390 px on the Unity page): it
+    // shows there only while something downloads or failed (finished ones are on the Models page).
+    <div className={`dl-corner${!active.length && !failed && !open ? " idle" : ""}`}>
       {open && (
         <div className="dl-panel card" role="dialog" aria-label={t("downloads")}>
           <div className="row"><strong className="grow">{t("downloads")}</strong><button type="button" onClick={() => setOpen(false)} aria-label={t("cancel")}>✕</button></div>
