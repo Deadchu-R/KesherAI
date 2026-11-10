@@ -273,3 +273,15 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Cost: the slot fell from 68.6K to 45.5K tokens.
 - Others' results: a 3090 at Q4_K_XL found `--spec-draft-n-max 2` best (+60% overall, +92% on code; hackmd thc1006). A 24 GB Blackwell run found n=8 best with NVFP4 (dev.to/pich). Each extra draft slot costs about 150 MiB.
 - **Decision:** keep MTP on. Next, try `--spec-draft-n-max 2` to win back VRAM and context.
+
+## 2026-11-10 (cont.) — Antigravity over ACP: may KesherAI host it?
+
+- **Terms of use:** a Google AI forum thread from July 23, 2026 asked whether a single-user editor may run `agy` as a child process. The September 16 reply says that is compliant: the unmodified binary runs under the user's own login, and tokens are never extracted, stored or forwarded. Normal, prompt-driven turns only count against the user's quota and do not trigger abuse flags. The officially supported path is the "Antigravity ACP Server" (`agy acp`). Reading agy's local databases is allowed read-only, but their schema can change, so we will not depend on it. (The page does not say whether the person who answered works at Google.)
+- **The ACP registry** lists Antigravity under Zed's ACP pages (`agy_acp_server.par`, a binary distribution); the CLI's own path is `agy acp`.
+- **Design (updates the Gemini CLI plan above):**
+  - (a) An ACP client in core, using `@agentclientprotocol/sdk` 2.5.0 (approved), tested against a fake agent.
+  - (b) An "Antigravity" engine for code chats: spawn `agy acp --add-dir <project>`, with no token handling in KesherAI. `authenticate` uses agy's own methods, and `agy acp --login` covers the case with no browser.
+  - (c) `session/request_permission` becomes KesherAI's approval card, so it also shows on the new 🔔 page and on the phone. Tool calls map to cards with diffs, and agent `plan` updates map to the plan card.
+  - (d) Model picker from agy's session models; thinking level Low to Max.
+  - (e) Check on the phone at 390 px.
+- **Where this stopped:** the design is ready. Next is building (a) and (b) once 0.6.60 is installed and checked on the PC.
