@@ -428,8 +428,9 @@ export class LlamaEngine {
       if (ok) return;
       await new Promise((r) => setTimeout(r, 500));
     }
+    const last = this.log.slice(-2).join(" | ");
     await this.stop();
-    throw new Error("llama-server did not become ready in time");
+    throw new Error(`llama-server did not become ready in ${Math.round(timeoutMs / 60_000)} minutes${last ? `; it last said: ${last}` : ""}`);
   }
 
   /** Stops the server if it runs. */
