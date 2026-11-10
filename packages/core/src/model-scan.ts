@@ -58,6 +58,8 @@ export function knownModelFolders(home = homedir(), env: NodeJS.ProcessEnv = pro
     { folder: join(appData, "Jan", "data", "models"), source: "Jan" },
     { folder: join(localAppData, "nomic.ai", "GPT4All"), source: "GPT4All" },
     { folder: join(home, "Library", "Application Support", "nomic.ai", "GPT4All"), source: "GPT4All" },
+    { folder: join(appData, "anythingllm-desktop", "storage", "models"), source: "AnythingLLM" },
+    { folder: join(home, "Library", "Application Support", "anythingllm-desktop", "storage", "models"), source: "AnythingLLM" },
     { folder: join(home, "ComfyUI", "models"), source: "ComfyUI" },
     { folder: join(home, "Documents", "ComfyUI", "models"), source: "ComfyUI" },
   ];
