@@ -45,7 +45,11 @@ Sources: [EveryDev summary](https://www.everydev.ai/tools/tokeneconomizer), [exp
   3. **Failure-loop guard on checks**: the same check failing the same way after edits (self-work's check, check_code) triggers one redirect note ("step back, read the error, try another approach"), never a stop. Today's guard counts identical actions only.
   4. **Measure it**: chat-stats already counts waste; show tokens per finished item in self-work.
 
+### LobeHub agent format
+- [lobe-chat-agents](https://github.com/lobehub/lobe-chat-agents) `agent-template-full.json` (schema `schema/lobeAgentSchema_v1.json`): `{ identifier, author, homepage, locale, meta: { title, description, avatar (emoji or URL), tags[] }, config: { systemRole, model, params: { temperature, top_p, frequency_penalty, presence_penalty }, displayMode, enableHistoryCount, historyCount, inputTemplate ("{{text}}" is the user's input) } }`.
+- Mapping: `meta.title/description/avatar/tags` → persona name, description, icon, tags; `config.systemRole` → persona instructions; `params` → model settings; `historyCount` → how many past messages it keeps; `inputTemplate` → a prompt template (KesherAI prompts.ts).
+
 ### Where it stopped
 - TokenEconomizer: done (above). Next for it: read the repo's plugin/README for the exact fact format and the prune thresholds before building item 1.
-- Next: **LobeHub agent JSON**: read `agent-template-full.json` and `schema/` in [lobe-chat-agents](https://github.com/lobehub/lobe-chat-agents) (fields `identifier`, `meta`, `config.systemRole`…), then **Open WebUI models/agents** (its admin "Models" export), then **Jan assistants** and **AnythingLLM workspaces**.
+- Next: **Open WebUI models/agents** (its admin "Models" export), then **Jan assistants** and **AnythingLLM workspaces**.
 - Next UX pages to look at, at 390 px: Unreal (C++ tab), Unity (Rider mode pill), Settings → Active models.
