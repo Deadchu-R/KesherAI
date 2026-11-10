@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -16,7 +17,12 @@ export async function knowledgeRoutes(app: FastifyInstance, s: KesherServices): 
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Knowledge bases can be changed only on the computer they are on." });
   };
 
-  app.get("/api/knowledge", async () => ({ bases: await s.knowledge.list(), semantic: s.semantic.status() }));
+  app.get("/api/knowledge", async () => {
+    const semantic = s.semantic.status();
+    // Not on yet: say which model setup will use, so the page does not promise a download that will not happen.
+    const found = semantic.usable ? undefined : await s.semantic.onComputer().catch(() => undefined);
+    return { bases: await s.knowledge.list(), semantic: { ...semantic, ...(found ? { found: { name: basename(found.path).replace(/\.gguf$/i, ""), source: found.source } } : {}) } };
+  });
   /** Turns on search by meaning: downloads and starts KesherAI's embedding model (the user presses the button). */
   app.post("/api/knowledge/semantic/setup", { preHandler: local }, async () => {
     void s.semantic.setup().catch(() => undefined);

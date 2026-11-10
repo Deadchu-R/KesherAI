@@ -5,7 +5,7 @@ import { desktop, toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Semantic { active: string | null; usable: boolean; builtIn: boolean; phase?: string; message?: string; model: { name: string; sizeGb: number } }
+interface Semantic { active: string | null; usable: boolean; builtIn: boolean; phase?: string; message?: string; model: { name: string; sizeGb: number }; found?: { name: string; source: string } }
 interface Base { id: string; name: string; description?: string; folders: string[]; urls: string[]; files: number; passages: number; embedded?: number; indexing: boolean; indexedAt: string | null; error: string | null }
 interface Hit { base: string; source: string; page: number; text: string; score: number }
 
@@ -103,7 +103,9 @@ export function KnowledgePage() {
           <p className="muted small">
             {sem.usable
               ? L(`המודל ${sem.active?.split("/").pop()} מבין שאלות גם כשאין בהן אותן מילים כמו במסמך ("איך מקבלים את הכסף בחזרה" ימצא את מדיניות ההחזרים).`, `${sem.active?.split("/").pop()} understands questions even without the document's exact words ("how do I get my money back" finds the refund policy).`)
-              : L(`כרגע החיפוש לפי מילים. מודל Embeddings קטן (${sem.model.name}, ${sem.model.sizeGb} GB, מבין גם עברית) ירוץ במחשב ויחפש לפי משמעות.`, `Search is by words now. A small embedding model (${sem.model.name}, ${sem.model.sizeGb} GB, Hebrew too) runs on this computer and searches by meaning.`)}
+              : sem.found
+                ? <>{L("כרגע החיפוש לפי מילים. מודל ה־Embeddings ", "Search is by words now. The embedding model ")}<bdi dir="ltr">{sem.found.name}</bdi>{L(` כבר נמצא במחשב (${sem.found.source}): הוא ירוץ במנוע של KesherAI ויחפש לפי משמעות, בלי הורדה.`, ` is already on this computer (${sem.found.source}): it runs in KesherAI's engine and searches by meaning, no download.`)}</>
+                : <>{L("כרגע החיפוש לפי מילים. מודל Embeddings קטן ", "Search is by words now. A small embedding model ")}<bdi dir="ltr">({sem.model.name}, {sem.model.sizeGb} GB)</bdi>{L(", שמבין גם עברית, ירוץ במחשב ויחפש לפי משמעות.", ", Hebrew too, runs on this computer and searches by meaning.")}</>}
           </p>
           {!sem.usable && !sem.phase && <div className="row"><button type="button" className="primary" onClick={() => void api<Semantic>("/api/knowledge/semantic/setup", { method: "POST" }).then(setSem, (e: Error) => toast(e.message))}>{L("הפעלת חיפוש לפי משמעות", "Turn on search by meaning")}</button></div>}
           {sem.message && <p className={sem.phase === "error" ? "error small" : "muted small"}>{sem.message}</p>}

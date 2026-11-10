@@ -4,7 +4,7 @@ import { listHubFiles } from "@kesher/downloads";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { DownloadManager } from "@kesher/downloads";
 import { LlamaEngine, waitForDownload } from "./llamacpp.js";
-import { pickEmbedding, scanComputer, scanFolder } from "./model-scan.js";
+import { pickEmbedding, scanComputer, scanFolder, type FoundModel } from "./model-scan.js";
 import type { Embedder } from "./knowledge.js";
 import type { KesherConfig } from "./config.js";
 
@@ -98,14 +98,29 @@ export class Semantic {
     if (p && existsSync(p) && (!this.d.config.activeModels.embedding || this.d.config.activeModels.embedding.startsWith(`${EMBED_PROVIDER}/`))) await this.load(p);
   }
 
+  private seen?: { at: number; model: FoundModel | undefined };
+
+  /**
+   * An embedding model already on this computer (KesherAI's folder or another app's), kept five minutes.
+   *
+   * @param fresh - Look again now.
+   * @returns The file setup would use, or undefined (then it downloads Qwen3 Embedding).
+   */
+  async onComputer(fresh = false): Promise<FoundModel | undefined> {
+    if (!fresh && this.seen && Date.now() - this.seen.at < 300_000) return this.seen.model;
+    const own = await scanFolder({ folder: join(this.d.modelsDir(), "embedding"), source: "KesherAI" }, 6).catch(() => []);
+    const model = pickEmbedding([...own, ...(await scanComputer(this.d.config.modelFolders).catch(() => [])).flatMap((f) => f.models)]);
+    this.seen = { at: Date.now(), model };
+    return model;
+  }
+
   /** Downloads the built-in model if needed, starts it, and re-indexes. Started by the user. */
   async setup(): Promise<void> {
     this.phase = "downloading";
     this.message = `Finding ${EMBEDDING_MODEL.name}…`;
     try {
       // Already on this computer (LM Studio, Ollama, Hugging Face…): use it where it is, no download.
-      const own = await scanFolder({ folder: join(this.d.modelsDir(), "embedding"), source: "KesherAI" }, 6).catch(() => []);
-      const onComputer = pickEmbedding([...own, ...(await scanComputer(this.d.config.modelFolders).catch(() => [])).flatMap((f) => f.models)]);
+      const onComputer = await this.onComputer(true);
       if (onComputer) {
         this.phase = "loading";
         this.message = `Starting ${basename(onComputer.path)} (already on this computer, from ${onComputer.source})…`;
