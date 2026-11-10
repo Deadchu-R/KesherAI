@@ -165,6 +165,13 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** inline suggestions and the AI bubble send the code around the cursor (at most 6 KB before and 2 KB after) or the file to the model the user chose (or the active one); answers are only shown or put into the editor, never saved or run until the user saves. Off when no inline model is chosen.
     - **Checked:** code coloured for reading (chat blocks, translations) is the editor's own escaped output; nothing from a model is put into the page as HTML.
 
+34. **Scan after 0.6.37** (self-work's model pick and LM Studio loading, models found on the computer, the built-in engine's port, approval wording).
+    - **Checked:** self-work talks only to the LM Studio address in the user's own provider settings (never one a sender gives) and only lists, unloads and loads the chosen model there.
+    - **Checked:** "Set it up for me" now loads a copy of a recommended model it finds in another app's folder (LM Studio, Ollama, Hugging Face…). It only reads it, checks it is GGUF by its first bytes, and never copies, moves or deletes it. "Load" by path still accepts only KesherAI's folder and folders the user added.
+    - **Checked:** when another program answers on the engine's port, the engine starts on a free port on 127.0.0.1 (never on the network), so the health check cannot be answered by that program.
+    - **Fixed:** the approval card said PowerShell's `Format-List`/`Format-Table` "can erase a disk". Now only `format X:`, `Format-Volume`, `mkfs`, `diskpart` and `fdisk` get that warning. A mention of a file such as `llama-server.exe` no longer makes KesherAI push the model to build a program.
+    - **Performance:** looking for models on the computer walks big folders (ComfyUI, the Hugging Face cache), so the result is kept five minutes and dropped when the model folders change.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.

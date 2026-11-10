@@ -7,6 +7,7 @@ import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { scanComputer, scanFolder } from "../model-scan.js";
+import { forgetFoundModels } from "./engine.js";
 import { isLocalRequest } from "../auth.js";
 import { assertWritableFolder } from "../library.js";
 import { engineRoutes } from "./engine.js";
@@ -141,6 +142,7 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
           if (!list.some((x) => x.folder === f.folder)) list.push({ folder: f.folder, source: f.source || "Folder" });
         }
         s.config.modelFolders = list;
+        forgetFoundModels();
       }
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });

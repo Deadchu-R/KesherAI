@@ -29,7 +29,7 @@ export async function ensureEngine(s: KesherServices): Promise<void> {
   await s.saveConfig();
 }
 
-/** What the last look over this computer found (kept a minute: the models page asks often). */
+/** What the last look over this computer found (kept five minutes: the models page asks often, and big ComfyUI or Hugging Face folders take a while to walk). */
 let found: { at: number; models: FoundModel[] } | undefined;
 
 /**
@@ -40,8 +40,13 @@ let found: { at: number; models: FoundModel[] } | undefined;
  * @param fresh - Look again even if a recent look is kept.
  * @returns Models found.
  */
+/** Forgets the last look (the user changed the model folders). */
+export function forgetFoundModels(): void {
+  found = undefined;
+}
+
 async function modelsOnComputer(s: KesherServices, fresh = false): Promise<FoundModel[]> {
-  if (!fresh && found && Date.now() - found.at < 60_000) return found.models;
+  if (!fresh && found && Date.now() - found.at < 300_000) return found.models;
   const own = await scanFolder({ folder: join(s.paths.models, "chat"), source: "KesherAI" }).catch(() => []);
   const others = (await scanComputer(s.config.modelFolders).catch(() => [])).flatMap((f) => f.models);
   found = { at: Date.now(), models: [...own, ...others] };
