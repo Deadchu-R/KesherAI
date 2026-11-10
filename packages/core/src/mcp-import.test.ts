@@ -37,3 +37,13 @@ test("found servers show their command and only the names of their keys; import 
   assert.equal(await importMcpServer("Cursor", "bad", true, new Set(), sources), undefined, "only http(s) addresses");
   assert.equal(await importMcpServer("Cursor", "GitHub Tools", true, new Set(), sources), undefined, "a name is looked up in that app only");
 });
+
+test("Claude Desktop from the Microsoft Store is found in its package folder", async () => {
+  const { storeAppSources } = await import("./mcp-import.js");
+  const home = await mkdtemp(join(tmpdir(), "kesher-msix-"));
+  await mkdir(join(home, "AppData", "Local", "Packages", "Claude_pzs8sxrjxfjjc"), { recursive: true });
+  await mkdir(join(home, "AppData", "Local", "Packages", "Microsoft.Other_1"), { recursive: true });
+  const s = await storeAppSources(home, {});
+  assert.equal(s.length, 1);
+  assert.match(s[0]!.file, /Claude_pzs8sxrjxfjjc[\\/]LocalCache[\\/]Roaming[\\/]Claude[\\/]claude_desktop_config\.json$/);
+});

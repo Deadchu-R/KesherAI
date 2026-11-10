@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { McpServerConfig } from "./mcp.js";
@@ -54,7 +54,28 @@ export function mcpSources(home = homedir(), env: NodeJS.ProcessEnv = process.en
     { app: "Gemini CLI", file: join(home, ".gemini", "settings.json") },
     { app: "Jan", file: join(appData, "Jan", "data", "extensions", "mcp", "servers.json") },
     { app: "Jan", file: join(mac, "Jan", "data", "extensions", "mcp", "servers.json") },
+    { app: "Copilot CLI", file: join(home, ".copilot", "mcp-config.json") },
+    { app: "Antigravity", file: join(home, ".gemini", "antigravity", "mcp_config.json") },
   ];
+}
+
+/**
+ * Claude Desktop installed from the Microsoft Store keeps its config inside
+ * its package folder (`Packages\Claude_<id>\LocalCache\Roaming\Claude`),
+ * found on Roee's PC.
+ *
+ * @param home - Home folder.
+ * @param env - Environment (`LOCALAPPDATA`).
+ * @returns Those files; they may not exist.
+ */
+export async function storeAppSources(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<McpSource[]> {
+  const packages = join(env.LOCALAPPDATA ?? join(home, "AppData", "Local"), "Packages");
+  const dirs = await readdir(packages).catch(() => [] as string[]);
+  return dirs.filter((d) => /^Claude_/i.test(d)).map((d) => ({ app: "Claude Desktop", file: join(packages, d, "LocalCache", "Roaming", "Claude", "claude_desktop_config.json") }));
+}
+
+async function allSources(): Promise<McpSource[]> {
+  return [...mcpSources(), ...(await storeAppSources())];
 }
 
 type Entry = { command?: unknown; args?: unknown; env?: unknown; url?: unknown; serverUrl?: unknown; httpUrl?: unknown; headers?: unknown; type?: unknown };
@@ -101,7 +122,8 @@ function describe(app: string, file: string, name: string, e: Entry): FoundMcpSe
  * @param sources - Files to read (default: {@link mcpSources}).
  * @returns What was found, per server.
  */
-export async function findMcpServers(sources = mcpSources()): Promise<FoundMcpServer[]> {
+export async function findMcpServers(given?: McpSource[]): Promise<FoundMcpServer[]> {
+  const sources = given ?? (await allSources());
   const out: FoundMcpServer[] = [];
   for (const s of sources) {
     const text = await readFile(s.file, "utf8").catch(() => undefined);
@@ -128,7 +150,8 @@ export async function findMcpServers(sources = mcpSources()): Promise<FoundMcpSe
  * @param sources - Files to read.
  * @returns The config to add, or undefined when it is not there.
  */
-export async function importMcpServer(app: string, name: string, withSecrets: boolean, taken: ReadonlySet<string>, sources = mcpSources()): Promise<McpServerConfig | undefined> {
+export async function importMcpServer(app: string, name: string, withSecrets: boolean, taken: ReadonlySet<string>, given?: McpSource[]): Promise<McpServerConfig | undefined> {
+  const sources = given ?? (await allSources());
   for (const s of sources.filter((x) => x.app === app)) {
     const json = await readFile(s.file, "utf8").then((t) => JSON.parse(t) as unknown, () => undefined);
     const hit = serversIn(json).find((x) => x.name === name);
