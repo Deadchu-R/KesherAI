@@ -112,8 +112,9 @@ export function outsideAgent(modelId: string, workspace: string | undefined, sta
       io = turnIo;
       steps.clear();
       const agent = await ready();
-      // KesherAI's mode → the agent's (ask before changes, accept edits, plan only); no match keeps its own.
-      const want = { ask: "default", "auto-edit": "accept-edits", plan: "plan" }[modeOf?.() ?? ""];
+      // KesherAI's mode → the agent's (ask before changes, accept edits, plan only, auto: Antigravity's own Auto,
+      // which still reviews risky commands); a mode the agent lacks keeps its own.
+      const want = { ask: "default", "auto-edit": "accept-edits", plan: "plan", auto: "auto" }[modeOf?.() ?? ""];
       if (want) await agent.setMode(want).catch(() => false);
       const onAbort = () => void agent.cancel().catch(() => undefined);
       signal.addEventListener("abort", onAbort);

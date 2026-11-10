@@ -23,12 +23,13 @@ export function AgentChip({ convId, modelId }: { convId?: string; modelId: strin
   useEffect(() => {
     if (!open || !convId || opts) return;
     setErr("");
-    void api<{ options: AgentOption[] }>(`/api/conversations/${convId}/agent-options`).then((r) => setOpts(r.options), (e: Error) => setErr(e.message));
+    // The mode is the chat's own approvals menu next to this chip, so it is not repeated here.
+    void api<{ options: AgentOption[] }>(`/api/conversations/${convId}/agent-options`).then((r) => setOpts(r.options.filter((o) => o.category !== "mode")), (e: Error) => setErr(e.message));
   }, [open, convId, opts]);
   const model = opts?.find((o) => o.category === "model");
   const current = model?.choices.find((c) => c.value === model.current)?.name;
   const pick = (o: AgentOption, value: string) =>
-    void api<{ options: AgentOption[] }>(`/api/conversations/${convId}/agent-options`, { method: "PUT", body: { configId: o.id, value } }).then((r) => setOpts(r.options), (e: Error) => toast(e.message));
+    void api<{ options: AgentOption[] }>(`/api/conversations/${convId}/agent-options`, { method: "PUT", body: { configId: o.id, value } }).then((r) => setOpts(r.options.filter((x) => x.category !== "mode")), (e: Error) => toast(e.message));
   return (
     <Menu
       triggerClassName="model-chip"
