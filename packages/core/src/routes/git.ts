@@ -45,7 +45,13 @@ export async function gitRoutes(app: FastifyInstance, s: KesherServices): Promis
     if (!r) return;
     const path = String(req.query.path ?? "");
     if (path.length > 1000 || path.startsWith("-")) return reply.code(400).send({ error: "Which file?" });
-    return gitDiff(r.repo, path || undefined, req.query.untracked === "1");
+    if (req.query.untracked === "1") {
+      // `git diff --no-index` reads any path, so only a new file git itself lists in this project (scan 38).
+      const state = await gitState(r.repo);
+      if (!state.files.some((f) => f.state === "?" && f.path === path)) return reply.code(400).send({ error: "That is not a new file in this project." });
+      return gitDiff(r.repo, path, true);
+    }
+    return gitDiff(r.repo, path || undefined);
   });
 
   app.post<{ Params: { id: string }; Body: { model?: string } }>("/api/conversations/:id/git/message", async (req, reply) => {

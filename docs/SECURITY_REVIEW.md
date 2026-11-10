@@ -191,6 +191,14 @@ This review went through the code part by part. Each finding is listed with what
     - **Checked:** the learned characters-per-token ratio is held between 1.5 and 6, and a refused request is retried at most twice per step.
     - **Fixed (release):** the three builds used to create two releases with one tag. Now one draft is made first, the builds upload into it, and it is published with its notes at the end, only if the draft step succeeded (verified with 0.6.49: one release, 11 files, notes).
 
+38. **Scan after 0.6.52** (the code page's git panel, looser edit_file, the write_file guard, context from memory, sampling defaults, self-work skipping items).
+    - **Fixed:** a new file's diff used `git diff --no-index`, which reads any path on the computer, and the path came from the request. Now only a new file that git itself lists in the chat's project is shown.
+    - **Checked:** the git routes find the project from the chat (never a folder from the request). File paths go after `--`, and a path that starts with `-` is refused. Branch names must look like branch names (no option, no `..`). The message goes to git as one argument. One git write runs at a time per project. Push needs a confirmation in the panel. `GIT_TERMINAL_PROMPT=0` means a push that needs a password fails with git's message instead of waiting.
+    - **Checked:** the paired phone can commit and push too. That is by design, since the phone is the owner's device with its own revocable token. The push still asks first.
+    - **Checked:** a skipped self-work item is undone with `reset --hard` and `clean -fd` only in the run's own worktree, never in the project's checkout. Files git ignores are kept.
+    - **Checked:** looseEdit changes the file only when the loose match is unique, and the change still goes through the same approval and diff as edit_file.
+    - **Performance:** the context is no longer fixed. llama.cpp's fit shrinks it before moving layers to system memory, so a model that fits the card keeps its full speed.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
