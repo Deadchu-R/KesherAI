@@ -582,7 +582,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // One tool output may not take more than a quarter of the window (found on the PC: a whole ScriptNodes.tsx read
     // kept a 24K local model over its limit even after the older steps were summarised).
     const cap = Math.max(4000, Math.floor(budget * 0.25));
-    const msgs = shortenOldToolOutputs(this.messages).map((m) =>
+    // Shortening older outputs saves room but makes a local engine read the conversation again from there: only
+    // when the conversation takes more than half the window, and then in steps of 8 messages (see shortenOldToolOutputs).
+    const roomy = sizeOf(this.messages) <= budget * 0.5;
+    const msgs = (roomy ? this.messages : shortenOldToolOutputs(this.messages, 8, 8)).map((m) =>
       m.role === "tool" && m.content.length > cap
         ? { ...m, content: `${m.content.slice(0, Math.floor(cap * 0.65))}\n… [${m.content.length - Math.floor(cap * 0.95)} characters left out: too long for this model's context. Read the part you need (read_file with offset and limit, or search for it).] …\n${m.content.slice(-Math.floor(cap * 0.3))}` }
         : m,

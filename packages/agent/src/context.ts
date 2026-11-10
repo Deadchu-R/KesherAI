@@ -25,13 +25,19 @@ export function sizeOf(messages: readonly AgentMessage[]): number {
 /**
  * Shortens the outputs of older tool calls.
  *
+ * The line between shortened and full moves in steps of `step` messages, not with every message: a local engine
+ * keeps what it already read only up to the first change, so a line that moved every turn made it read thousands
+ * of tokens again on each step (found on the PC: 6,345 tokens, 53 s per step, with Qwen3.6).
+ *
  * @param messages - The conversation.
- * @param keepFull - How many recent messages stay untouched.
+ * @param keepFull - How many recent messages stay untouched (at least).
+ * @param step - How many messages the line moves at a time (1: every message).
  * @returns A copy with long older tool outputs cut to their start and end.
  */
-export function shortenOldToolOutputs(messages: readonly AgentMessage[], keepFull = KEEP_FULL): AgentMessage[] {
+export function shortenOldToolOutputs(messages: readonly AgentMessage[], keepFull = KEEP_FULL, step = 1): AgentMessage[] {
+  const line = Math.floor(Math.max(0, messages.length - keepFull) / Math.max(1, step)) * Math.max(1, step);
   return messages.map((m, i) =>
-    i < messages.length - keepFull && m.role === "tool" && m.content.length > 1500
+    i < line && m.role === "tool" && m.content.length > 1500
       ? { ...m, content: `${m.content.slice(0, 700)}\n… [shortened to save space; the full output is still in the conversation] …\n${m.content.slice(-500)}` }
       : m,
   );

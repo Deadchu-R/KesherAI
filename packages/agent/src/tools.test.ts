@@ -39,3 +39,18 @@ describe("guardRewrite", () => {
     assert.doesNotThrow(() => guardRewrite("a.tsx", big, `${big}\nmore`));
   });
 });
+
+import { shortenOldToolOutputs } from "./context.js";
+
+describe("shortenOldToolOutputs in steps", () => {
+  const msgs = (n: number) => Array.from({ length: n }, (_, i) => ({ role: "tool" as const, content: `out ${i} ${"x".repeat(2000)}`, toolCallId: `c${i}` }));
+  const short = (list: ReturnType<typeof shortenOldToolOutputs>) => list.filter((m) => m.content.includes("[shortened")).length;
+
+  it("moves the line 8 messages at a time, so a local engine's cache survives most steps", () => {
+    assert.equal(short(shortenOldToolOutputs(msgs(16), 8, 8)), 8);
+    assert.equal(short(shortenOldToolOutputs(msgs(17), 8, 8)), 8, "one more message: the earlier messages are unchanged");
+    assert.equal(short(shortenOldToolOutputs(msgs(23), 8, 8)), 8);
+    assert.equal(short(shortenOldToolOutputs(msgs(24), 8, 8)), 16);
+    assert.equal(short(shortenOldToolOutputs(msgs(17), 8)), 9, "step 1 keeps the old behaviour");
+  });
+});
