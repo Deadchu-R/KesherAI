@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -399,7 +399,28 @@ export async function loadConfig(paths: DataPaths): Promise<KesherConfig> {
  * @param paths - Data paths.
  * @param config - Config to write.
  */
-export async function saveConfig(paths: DataPaths, config: KesherConfig): Promise<void> {
-  await writeFile(paths.config, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-  await chmod(paths.config, 0o600).catch(() => undefined);
+export function saveConfig(paths: DataPaths, config: KesherConfig): Promise<void> {
+  // One write at a time, each to a new file then renamed over the old: two saves at once (on closing) wrote over
+  // each other and left text after the JSON, so the next start could not read the settings (found in CI).
+  const run = configWrites.then(async () => {
+    const tmp = `${paths.config}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    for (let i = 0; ; i++) {
+      try {
+        await rename(tmp, paths.config);
+        break;
+      } catch (e) {
+        // Windows: a reader or a virus scanner holding the file makes the rename fail for a moment.
+        if (i >= 8 || !["EPERM", "EACCES", "EBUSY"].includes((e as NodeJS.ErrnoException).code ?? "")) {
+          await rm(tmp, { force: true }).catch(() => undefined);
+          throw e;
+        }
+        await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+      }
+    }
+    await chmod(paths.config, 0o600).catch(() => undefined);
+  });
+  configWrites = run.catch(() => undefined);
+  return run;
 }
+let configWrites: Promise<unknown> = Promise.resolve();

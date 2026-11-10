@@ -1856,3 +1856,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .kmenu-subwrap.open > .kmenu-sub { padding-inline-start: 0; max-height: none; overflow: visible; margin: 4px 0 0; }
   .kmenu-subwrap.open > .kmenu-sub .kmenu-item { font-size: 15.5px; }
 }
+
+/* A "waiting" note that was answered: kept for the record, dimmed, with how it ended. */
+.inbox-notes li.resolved { opacity: .6; }
+.inbox-resolved { color: var(--muted); margin-inline-start: 8px; }

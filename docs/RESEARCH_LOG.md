@@ -342,3 +342,23 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **Done:** on a computer, open in place. At 700px or narrower, the open flyout replaces the menu, and its row (sticky, bold, back chevron) names it and goes back.
 - **Found:** in a capped flex menu, the flyout (overflow:auto) shrank to 0 height. Fixed with flex-shrink 0.
 - **Stopped at:** nothing open. Maybe later: the phone's own Back closes a flyout first (history entry).
+
+## 2026-11-10: Approvals and notifications for agent chats (done, first round)
+- **Sources:**
+  - Claude Code Remote Control: push when an action is needed; prompts stay open until answered.
+  - Happy: the push opens the same chat with the exact command, approved there.
+  - Greenlight and Pushary: Approve/Deny on the notification itself, in one queue across agents.
+  - Open WebUI Computer: Allow/Deny inline on the tool's card, per mode.
+- **Rules taken:**
+  - The approval lives on the step's card in the chat. Notifications are a doorway to it, so they open the chat, not a separate page.
+  - Answered anywhere means gone everywhere. A "waiting" note that was answered is marked with how it ended and is no longer counted.
+  - The end of a run says how it ended: Done, Stopped by you (no "Done" note), or an error with the error itself.
+  - A run's state on the phone must not depend on one live stream: catch up when it stalls.
+- **Found on the PC:**
+  - A start-up routine ran on every restart (15 in a day, each "No answer" because LM Studio was not running).
+  - A stopped run was announced as "Done".
+  - Waiting notes linked to #/watch and stayed "new" after being answered.
+  - The phone kept "Working…" after Stop.
+- **Stopped at:** maybe later:
+  - Withdraw the phone's push itself when answered elsewhere (ntfy supports deleting a message by id).
+  - Group several notes from one chat.

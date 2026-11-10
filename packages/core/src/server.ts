@@ -567,10 +567,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         await new Promise((r) => setTimeout(r, 1500));
         const opened = await services.conversations.open(c.id);
         const st = opened?.session.info().status;
-        if (st === "waiting") return { ok: true, message: "Waiting for your approval.", link: "#/watch" };
+        if (st === "waiting") return { ok: true, message: "Waiting for your approval.", link: `#/c/${c.id}` };
         if (st !== "running" || Date.now() > end) {
           const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");
-          return { ok: st !== "error" && !!last, message: last && last.type === "assistant" ? last.text.replace(/\s+/g, " ").slice(0, 300) : "No answer.", link: `#/c/${c.id}` };
+          const lastErr = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "status" && e.status === "error");
+          const err = st === "error" && lastErr?.type === "status" ? lastErr.message : undefined;
+          return { ok: st !== "error" && !!last, message: last && last.type === "assistant" ? last.text.replace(/\s+/g, " ").slice(0, 300) : err ? `It stopped: ${err.slice(0, 280)}` : "No answer.", link: `#/c/${c.id}` };
         }
       }
     },

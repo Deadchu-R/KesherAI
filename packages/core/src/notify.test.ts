@@ -105,3 +105,20 @@ test("the last notifications are kept in a file for the notifications page, with
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(b.sent[0]?.title, "Done");
 });
+
+test("a waiting note is marked answered, opens the chat, and a stopped run is not called Done", async () => {
+  const n = new Notifier(() => ({ ...settings, waitingSeconds: 0, desktop: false }), { fetch: (async () => new Response("")) as unknown as typeof fetch });
+  n.onConversationEvent("c9", () => "x", ev({ type: "status", status: "running" }), () => undefined);
+  n.onConversationEvent("c9", () => "x", ev({ type: "approval_request", requestId: "r1", name: "run_command", preview: "git status" }), () => undefined);
+  await new Promise((r) => setTimeout(r, 30));
+  const waiting = n.sent.find((s) => s.title.startsWith("Waiting for you"))!;
+  assert.equal(waiting.path, "#/c/c9", "the chat, where its card is");
+  assert.equal(waiting.resolved, undefined);
+  n.onConversationEvent("c9", () => "x", ev({ type: "approval_result", requestId: "r1", decision: "allow" }), () => undefined);
+  assert.equal(waiting.resolved, "approved");
+  n.onConversationEvent("c9", () => "x", ev({ type: "note", text: "Stopped." }), () => undefined);
+  n.onConversationEvent("c9", () => "x", ev({ type: "status", status: "idle" }), () => undefined);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!n.sent.some((s) => s.title.startsWith("Done")), "stopped by the user: no Done");
+  n.close();
+});

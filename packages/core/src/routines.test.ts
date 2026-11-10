@@ -114,3 +114,11 @@ test("a self-work routine starts a run with its project, goal and check", async 
   assert.deepEqual(started, [{ repo: "C:/p", goal: "do the [CoolDown] tasks", hours: 8, check: "pnpm test" }]);
   assert.equal((await rs.list()).find((x) => x.id === r.id)?.lastStatus, "done");
 });
+
+test("a start-up routine waits 6 hours after its last run (restarts for updates are not new days)", async () => {
+  const { nextRun } = await import("./routines.js");
+  const start = Date.parse("2026-11-10T20:00:00Z");
+  const ranOneHourBefore = start - 3_600_000;
+  assert.equal(nextRun({ kind: "startup", delayMinutes: 3 }, start, ranOneHourBefore, start), ranOneHourBefore + 6 * 3_600_000);
+  assert.equal(nextRun({ kind: "startup", delayMinutes: 3 }, start, start - 7 * 3_600_000, start), start + 3 * 60_000, "long enough ago: 3 minutes after the start");
+});

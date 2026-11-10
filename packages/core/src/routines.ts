@@ -88,7 +88,10 @@ export function nextRun(s: Schedule, after: number, last?: number, startedAt?: n
   if (s.kind === "startup") {
     // Once per start: a few minutes after KesherAI started, and not again until the next start.
     const at = (startedAt ?? after) + Math.min(120, Math.max(0, s.delayMinutes ?? 3)) * 60_000;
-    return last && startedAt && last >= startedAt ? Infinity : Math.max(after, at);
+    // Restarts for updates or Terminate are not new days: not again within 6 hours of the last run (found on the
+    // PC: 15 restarts in a day ran it 15 times, each a new chat and a notification).
+    if (last && startedAt && last >= startedAt) return Infinity;
+    return last ? Math.max(after, at, last + 6 * 3_600_000) : Math.max(after, at);
   }
   if (s.kind === "every") {
     const step = Math.max(5, s.minutes) * 60_000;

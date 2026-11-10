@@ -24,6 +24,10 @@ export interface Note {
   priority?: 1 | 2 | 3 | 4 | 5;
   /** Buttons on the phone's notification (and a watch's): each one POSTs to its path through "Access from anywhere". */
   actions?: Array<{ label: string; path: string }>;
+  /** A note about a chat waiting for the user: its conversation, so the note is marked answered when it is. */
+  ref?: string;
+  /** How a waiting note ended ("answered", "stopped"…): shown in the list, not counted as new. */
+  resolved?: string;
 }
 
 /** How long an Approve / Deny button works. */
@@ -39,6 +43,8 @@ export class Notifier {
   private quick = new Map<string, { convId: string; requestId: string; expires: number }>();
   /** Last notifications, newest last (for tests and the settings page). */
   readonly sent: Array<Note & { at: number; channels: string[] }> = [];
+  /** Chats the user stopped, until their run's end is seen. */
+  private readonly stoppedBy = new Set<string>();
 
   /**
    * @param settings - The user's notification settings (read each time).
@@ -66,7 +72,7 @@ export class Notifier {
     const old = JSON.parse(await readFile(file, "utf8").catch(() => "[]")) as unknown;
     if (!Array.isArray(old)) return;
     const ok = old.filter((n): n is Note & { at: number; channels: string[] } => !!n && typeof n.title === "string" && typeof n.at === "number");
-    this.sent.unshift(...ok.map((n) => ({ title: n.title, body: String(n.body ?? ""), ...(typeof n.path === "string" ? { path: n.path } : {}), at: n.at, channels: Array.isArray(n.channels) ? n.channels.filter((c) => typeof c === "string") : [] })));
+    this.sent.unshift(...ok.map((n) => ({ title: n.title, body: String(n.body ?? ""), ...(typeof n.path === "string" ? { path: n.path } : {}), ...(typeof n.ref === "string" ? { ref: n.ref } : {}), ...(typeof n.resolved === "string" ? { resolved: n.resolved } : {}), at: n.at, channels: Array.isArray(n.channels) ? n.channels.filter((c) => typeof c === "string") : [] })));
     this.sent.splice(0, Math.max(0, this.sent.length - 50));
   }
   /** Writes the history a moment later (never the Approve / Deny buttons' one-time codes). */
@@ -75,7 +81,7 @@ export class Notifier {
     if (!file || this.saving) return;
     this.saving = setTimeout(() => {
       this.saving = undefined;
-      const keep = this.sent.map((n) => ({ title: n.title, body: n.body, ...(n.path ? { path: n.path } : {}), at: n.at, channels: n.channels }));
+      const keep = this.sent.map((n) => ({ title: n.title, body: n.body, ...(n.path ? { path: n.path } : {}), ...(n.ref ? { ref: n.ref } : {}), ...(n.resolved ? { resolved: n.resolved } : {}), at: n.at, channels: n.channels }));
       void writeFile(file, JSON.stringify(keep)).catch(() => undefined);
     }, 1000);
     this.saving.unref?.();
@@ -155,7 +161,9 @@ export class Notifier {
    */
   onConversationEvent(convId: string, title: () => string, e: AgentEvent, lastAnswer: () => string | undefined): void {
     const s = this.settings();
+    if (e.type === "note" && /^Stopped\.?$/.test(e.text)) this.stoppedBy.add(convId);
     if (e.type === "status") {
+      if (e.status !== "waiting" && e.status !== "running") this.resolve(convId, e.status === "error" ? "ended with an error" : this.stoppedBy.has(convId) ? "stopped" : "finished");
       if (e.status === "running") {
         if (!this.started.has(convId)) this.started.set(convId, Date.now());
         this.clearWaiting(convId);
@@ -165,8 +173,12 @@ export class Notifier {
       const t0 = this.started.get(convId);
       this.started.delete(convId);
       this.clearWaiting(convId);
+      if (t0 === undefined && this.stoppedBy.delete(convId)) return;
       if (t0 === undefined || Date.now() - t0 < s.minSeconds * 1000) return;
       const failed = e.status === "error";
+      // Stopped by the user is not "Done" (found on the phone: a stopped run said "Done… Finished after 2 min").
+      const stopped = this.stoppedBy.delete(convId) && !failed;
+      if (stopped) return;
       const text = s.includeText ? (lastAnswer() ?? "").replace(/\s+/g, " ").trim().slice(0, 200) : "";
       void this.send({
         title: failed ? `Stopped with an error: ${title()}` : `Done: ${title()}`,
@@ -187,7 +199,9 @@ export class Notifier {
         void this.send({
           title: `Waiting for you: ${title()}`,
           body: approval ? `The agent needs your approval to go on (${what}).` : "The agent asked you a question.",
-          path: approval ? "#/watch" : `#/c/${convId}`,
+          // The chat itself: its card shows the whole step, in context (as Remote Control and Happy do).
+          path: `#/c/${convId}`,
+          ref: convId,
           tags: ["raised_hand"],
           priority: 4,
           ...(code ? { actions: [{ label: "Approve", path: `api/quick-approve/${code}?d=allow` }, { label: "Deny", path: `api/quick-approve/${code}?d=deny` }] } : {}),
@@ -197,7 +211,21 @@ export class Notifier {
       this.waiting.set(convId, t);
       return;
     }
-    if (e.type === "approval_result" || e.type === "answer") this.clearWaiting(convId);
+    if (e.type === "approval_result" || e.type === "answer") {
+      this.clearWaiting(convId);
+      this.resolve(convId, e.type === "answer" ? "answered" : e.decision === "allow" || e.decision === "always" ? "approved" : e.decision === "expired" ? "expired" : "denied");
+    }
+  }
+
+  /** Marks a chat's open "waiting" notes as ended, so the list and the 🔔 do not keep asking. */
+  private resolve(convId: string, how: string): void {
+    let changed = false;
+    for (const n of this.sent) {
+      if (n.ref !== convId || n.resolved) continue;
+      n.resolved = how;
+      changed = true;
+    }
+    if (changed) this.saveHistory();
   }
 
   /**

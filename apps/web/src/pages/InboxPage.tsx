@@ -8,7 +8,11 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 /** Something an agent waits for the user to approve (a chat, or the self-work run). */
 export interface InboxApproval { kind: "chat" | "self-work"; conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }
 /** A notification that went out (to the phone and/or this computer). */
-export interface InboxNote { title: string; body: string; path?: string; at: number; channels: string[] }
+export interface InboxNote { title: string; body: string; path?: string; at: number; channels: string[]; resolved?: string }
+
+/** How a "waiting" note ended, in the user's words. */
+const resolvedLabel = (how: string): string =>
+  ({ approved: L("אושר", "Approved"), denied: L("נדחה", "Denied"), answered: L("נענה", "Answered"), expired: L("פג תוקף", "Expired"), stopped: L("נעצר", "Stopped"), finished: L("הסתיים", "Finished"), "ended with an error": L("נגמר בשגיאה", "Ended with an error") })[how] ?? how;
 interface Inbox { approvals: InboxApproval[]; notes: InboxNote[] }
 
 const SEEN_KEY = "kesher-inbox-seen";
@@ -48,7 +52,8 @@ export function InboxBell() {
     addEventListener(SEEN_EVENT, on);
     return () => removeEventListener(SEEN_EVENT, on);
   }, []);
-  const unread = box.notes.filter((x) => x.at > seen).length;
+  // A "waiting" note that was answered (here, on the phone, or by Stop) is no longer new.
+  const unread = box.notes.filter((x) => x.at > seen && !x.resolved).length;
   const count = box.approvals.length + unread;
   const label = box.approvals.length ? L(`התראות: ${box.approvals.length} מחכים לאישור`, `Notifications: ${box.approvals.length} waiting for approval`) : unread ? L(`התראות: ${unread} חדשות`, `Notifications: ${unread} new`) : L("התראות", "Notifications");
   return (
@@ -131,9 +136,10 @@ export function InboxPage() {
         {box.notes.length === 0 && <p className="muted">{L("עוד לא נשלחו התראות. הן מגיעות כשעבודה ארוכה נגמרת, כשהורדה מסתיימת או כשסוכן מחכה לך.", "No notifications yet. They come when long work ends, a download finishes, or an agent waits for you.")}</p>}
         <ul className="inbox-notes">
           {box.notes.map((n) => (
-            <li key={`${n.at}-${n.title}`} className={n.at > seen ? "new" : ""}>
+            <li key={`${n.at}-${n.title}`} className={n.resolved ? "resolved" : n.at > seen ? "new" : ""}>
               {n.path?.startsWith("#/") ? <a href={n.path} dir="auto"><strong>{n.title}</strong></a> : <strong dir="auto">{n.title}</strong>}
               <span className="muted small">{time(n.at)}</span>
+              {n.resolved && <span className="inbox-resolved small">✓ {resolvedLabel(n.resolved)}</span>}
               {n.body && <p dir="auto">{n.body}</p>}
             </li>
           ))}

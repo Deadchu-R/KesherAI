@@ -51,7 +51,7 @@ export async function inboxRoutes(app: FastifyInstance, s: KesherServices): Prom
     notes: s.notifier.sent
       .slice()
       .reverse()
-      .map((n) => ({ title: n.title, body: n.body, path: n.path, at: n.at, channels: n.channels })),
+      .map((n) => ({ title: n.title, body: n.body, path: n.path, at: n.at, channels: n.channels, ...(n.resolved ? { resolved: n.resolved } : {}) })),
   }));
 
   /** Allow or deny one approval from the notifications page (or the phone app). */
