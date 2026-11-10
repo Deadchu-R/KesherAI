@@ -81,6 +81,26 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **Jan** ([data folder](https://www.mintlify.com/janhq/jan/desktop/data-folder)): `models/<provider>/<model>/` (the `.gguf` + `model.json`), `threads/<id>/thread.json` (title, model, assistants) + `messages.jsonl` (one `{role, content}` per line), `assistants/<id>.json` (name, instructions, temperature…), `settings.json`, `extensions/mcp/servers.json` (`command`, `args`, `env`, `enabled`). Everything is plain files, easy to import: chats, assistants → personas, MCP servers, and models in place (add `models/` to the model scan).
 - **AnythingLLM** ([guide](https://betterstack.com/community/guides/ai/anythingllm-local-llm/)): a workspace holds chats, documents and settings, and documents are indexed in an embedded LanceDB. There's a REST API (create workspaces, upload documents); export and file layout aren't documented in what was read. Lower priority: import its documents folder as a knowledge base rather than its vectors.
 
+### Design: KesherAI "project facts" (from TokenEconomizer's envfacts, Cursor and Windsurf memories)
+- **How others do it:** Cursor has a side model that pulls memories out of chats, scoped to the project and managed in Settings → Rules ([docs](https://docs.cursor.com/context/memories)). Windsurf creates memories automatically and lists them for the user to delete. TokenEconomizer uses templated facts from repeated failures only, with no model calls (`envfacts.py`): FormRepair, Boundary, EmptyProbe, ArgRepair, EnvValue, AbsentTool, each with its own retire rule.
+- **KesherAI v1 (templated, no model calls, per workspace):**
+  - **Families, Windows first:**
+    - *form repair*: a command form fails with an infrastructure error and a later form with the same intent works (e.g. `python` → `py -3`, `pytest` → `python -m pytest`, `npm test` → `pnpm test`);
+    - *shell syntax*: PowerShell rejects `&&`/`export`, and the cmd form works;
+    - *absent tool*: command not found and nothing else worked;
+    - *env value*: a missing variable that a later run sets.
+  - **Source:** run_command/check_code results in chats with a workspace and in self-work runs (events already store the command, its output and ok/failed).
+  - **Lifecycle:** active after 3 different chats confirm it; retired on contradiction (2 in a row for a form); at most 4 facts and about 150 tokens.
+  - **Text:** fixed templates filled with the observed command forms only, never model text (repository output can carry prompt injection).
+  - **Where:** KesherAI's data folder (`project-facts/<workspace hash>.json`), not the repo.
+  - **Shown:** on the project page (phone too), each fact with "remove" and how many chats proved it.
+  - **Injected:** at the start of the system part (it changes only between chats, so it doesn't break llama.cpp's cache mid-chat), and into self-work's handoff.
+
+
+- Project facts: design written (above). Next: read `lifecycle.py` for the exact retire and firing-gate code; then implement v1 (the form-repair family first, with tests built from real Windows failures).
+- Importer: LM Studio presets still unread; then write the importer's design.
+- UX pages still to look at, at 390 px: Unity (Rider mode pill), Settings → Active models (long select names).
+
 ### Where it stopped
 - TokenEconomizer: done, internals included (above). Next for it: the design for KesherAI's project facts (form repair + env value first, templated, per workspace, shown in the project page).
 - Importer research is complete enough to design it (LM Studio presets still unread). Next: the design for KesherAI's project facts; then LM Studio presets.
