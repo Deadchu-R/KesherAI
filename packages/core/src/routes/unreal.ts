@@ -39,6 +39,8 @@ const atLeast = (a: string, b: string) => {
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
+/** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
+export const UNITY_PACKAGE_VERSION = "0.2.2";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -83,7 +85,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     },
   }, (socket) => unreal.attach(socket as unknown as WebSocket));
 
-  app.get(base, async () => ({ ...(await b.status()), latestBridge: kind === "unreal" ? BRIDGE_VERSION : "0.2.0", download: kind === "unreal" ? BRIDGE_DOWNLOAD : UNITY_PACKAGE_URL }));
+  app.get(base, async () => ({ ...(await b.status()), latestBridge: kind === "unreal" ? BRIDGE_VERSION : UNITY_PACKAGE_VERSION, download: kind === "unreal" ? BRIDGE_DOWNLOAD : UNITY_PACKAGE_URL }));
 
   app.get(`${base}/blueprints`, async () => b.list());
 
