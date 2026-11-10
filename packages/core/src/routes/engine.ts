@@ -157,7 +157,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     try {
       if (s.engine.status().modelPath !== path || !s.engine.status().running) await loadModel(s, path);
       const body = { prompt: "Write a short story about a lighthouse keeper, in plain English.", n_predict: 200, temperature: 0.7, cache_prompt: false };
-      const res = await fetch(`http://127.0.0.1:${s.config.engines.llamaServerPort}/completion`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(300_000) });
+      const res = await fetch(`${s.engine.baseUrl.replace(/\/v1$/, "")}/completion`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(300_000) });
       if (!res.ok) throw new Error(`The engine answered ${res.status}`);
       const j = (await res.json()) as { timings?: { predicted_n?: number; predicted_ms?: number; predicted_per_second?: number; prompt_per_second?: number } };
       const n = j.timings?.predicted_n ?? 0;

@@ -57,3 +57,16 @@ test("big models get longer to load than small ones", () => {
   assert.equal(LlamaEngine.loadTimeout(2 * 1024 ** 3), 300_000);
   assert.ok(LlamaEngine.loadTimeout(17.4 * 1024 ** 3) > 500_000);
 });
+
+test("a port another program listens on is seen as taken, and a free one is found", async () => {
+  const { createServer } = await import("node:net");
+  const { freePort, portTaken } = await import("./llamacpp.js");
+  const srv = createServer();
+  await new Promise<void>((r) => srv.listen({ host: "127.0.0.1", port: 0 }, r));
+  const port = (srv.address() as { port: number }).port;
+  assert.equal(await portTaken(port), true);
+  const free = await freePort();
+  assert.notEqual(free, port);
+  assert.equal(await portTaken(free), false);
+  await new Promise((r) => srv.close(r));
+});

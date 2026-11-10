@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -398,6 +399,13 @@ export class LlamaEngine {
   private async start(binary: string, modelPath: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<void> {
     await this.stop();
     this.log.length = 0;
+    // Another app (another llama-server, a dev server…) may already hold the port: then the health check talks to it and
+    // the load never finishes. Move to a free port and say so.
+    if (await portTaken(this.opts.port)) {
+      const before = this.opts.port;
+      this.opts.port = await freePort();
+      this.log.push(`KesherAI: port ${before} is used by another app, so the engine uses port ${this.opts.port}.`);
+    }
     const alias = basename(modelPath).replace(/\.gguf$/i, "");
     const proc = spawn(binary, ["-m", modelPath, "--host", "127.0.0.1", "--port", String(this.opts.port), "--alias", alias, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -451,4 +459,40 @@ export class LlamaEngine {
       });
     });
   }
+}
+
+/**
+ * Whether something on this computer already uses a port: it answers there,
+ * or the port cannot be taken.
+ *
+ * @param port - Port on 127.0.0.1.
+ * @returns True if taken.
+ */
+export async function portTaken(port: number): Promise<boolean> {
+  const answers = await new Promise<boolean>((done) => {
+    const c = createConnection({ host: "127.0.0.1", port });
+    c.setTimeout(800);
+    c.once("connect", () => (c.destroy(), done(true)));
+    c.once("timeout", () => (c.destroy(), done(false)));
+    c.once("error", () => done(false));
+  });
+  if (answers) return true;
+  return new Promise<boolean>((done) => {
+    const srv = createServer();
+    srv.once("error", () => done(true));
+    srv.listen({ host: "127.0.0.1", port, exclusive: true }, () => srv.close(() => done(false)));
+  });
+}
+
+/** @returns A port nothing on 127.0.0.1 uses right now. */
+export function freePort(): Promise<number> {
+  return new Promise((done, fail) => {
+    const srv = createServer();
+    srv.once("error", fail);
+    srv.listen({ host: "127.0.0.1", port: 0 }, () => {
+      const addr = srv.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      srv.close(() => done(port));
+    });
+  });
 }
