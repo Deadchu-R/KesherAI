@@ -3,6 +3,7 @@ import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
+import { mtpLayers } from "./gguf.js";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
 import { userChoseGpus, type GpuPlan } from "./gpus.js";
 
@@ -408,6 +409,21 @@ export class LlamaEngine {
   }
 
   /**
+   * `--spec-type draft-mtp` for a model file that has an MTP head, on builds that have it (b12000+), unless the
+   * config sets its own speculative decoding.
+   *
+   * @param modelPath - The model file.
+   * @param args - Arguments from the config.
+   * @param version - The build tag.
+   * @returns Arguments to add.
+   */
+  static async mtpArgs(modelPath: string, args: readonly string[] = [], version?: string): Promise<string[]> {
+    const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
+    if (build < 12000 || args.some((a) => a.startsWith("--spec") || a === "-md" || a === "--model-draft")) return [];
+    return (await mtpLayers(modelPath)) > 0 ? ["--spec-type", "draft-mtp"] : [];
+  }
+
+  /**
    * Whether a build fits the model to the free memory by itself (`--fit`, on by default since b7400).
    *
    * @param version - The build tag, e.g. `b12110`.
@@ -478,14 +494,29 @@ export class LlamaEngine {
     await this.track("loading", `Loading ${basename(modelPath)}…${plan?.summary ? ` ${plan.summary}.` : ""}`, async () => {
       const parallel = this.opts.parallel ?? 1;
       let failure: unknown;
+      // Multi-token prediction: a model that carries its own MTP head (Qwen3.5–3.8 GGUFs with NextN tensors) guesses
+      // a few tokens ahead and the main model checks them, so it writes faster. Only on builds that have it, and
+      // dropped again if the server will not start with it.
+      let mtp = await LlamaEngine.mtpArgs(modelPath, this.opts.args, this.opts.version);
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version), ...mtp], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {
           failure = err;
+          if (mtp.length) {
+            mtp = [];
+            try {
+              await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)], timeoutMs, plan?.env);
+              this.log.push("KesherAI: started without multi-token prediction (the engine refused it).");
+              this.runningParallel = p;
+              return;
+            } catch (err3) {
+              failure = err3;
+            }
+          }
           // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
           if (!/jinja/i.test(this.log.join("\n"))) continue;
           try {
