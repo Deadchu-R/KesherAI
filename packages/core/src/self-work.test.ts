@@ -135,3 +135,42 @@ test("a run that ended can be resumed where it stopped", async () => {
   assert.ok(sent.some((m) => /^Resumed by you\./.test(m)));
   await assert.rejects(sw.resume(), /finished its goal/);
 });
+
+test("a commit the model makes inside its turn ends the turn, so the check runs before the next item", async () => {
+  const root = await mkdtemp(join(tmpdir(), "selfwork-"));
+  const repo = join(root, "repo");
+  await mkdir(join(repo, ".git"), { recursive: true });
+  let clock = 0;
+  let turn = -1;
+  let head = "aaa";
+  const stopped: string[] = [];
+  const sent: string[] = [];
+  const checks: string[] = [];
+  const sw = new SelfWork(join(root, "selfwork.json"), {
+    createChat: async () => "c1",
+    send: async (_id, text) => {
+      sent.push(text);
+      turn++;
+    },
+    state: async () => {
+      // Turn 0 keeps running; after a while the model commits by itself.
+      if (turn === 0 && clock > 60_000) head = "bbb";
+      return turn === 0 ? { status: "running", last: "", events: Math.floor(clock / 2000) } : { status: "idle", last: "ALL DONE", events: 99 };
+    },
+    stopTurn: (id) => void stopped.push(id),
+    git: async (_r, args) => ({ code: 0, out: args[0] === "rev-parse" && args[1] === "HEAD" ? `${head}\n` : args[0] === "log" ? "feat: insertStep\n" : args[0] === "rev-parse" ? "abc\n" : "" }),
+    check: async (_r, cmd) => {
+      checks.push(cmd);
+      return { code: 0, out: "" };
+    },
+    notify: async () => undefined,
+    sleep: async () => void (clock += 2000),
+    now: () => clock,
+  });
+  await sw.start({ repo, goal: "x", check: "pnpm test", hours: 2 });
+  await sw.settled();
+  assert.deepEqual(stopped, ["c1"], "the turn was ended at the commit");
+  assert.ok(checks.includes("pnpm test"), "the check ran");
+  assert.equal(sw.current?.items[0]?.text, "feat: insertStep");
+  assert.ok(sent.some((m) => /mark it done now/.test(m)));
+});

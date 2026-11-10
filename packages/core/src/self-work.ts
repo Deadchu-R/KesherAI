@@ -257,10 +257,25 @@ export class SelfWork {
     let waitingSince = 0;
     let seen = -1;
     let movedAt = this.now();
+    // The model may finish an item, commit it itself and go straight on to the next in the same turn (found on the PC:
+    // Qwen3.6 did t8 and started t9 in one turn), and then KesherAI's check never ran between them. A new commit ends
+    // the turn, so the check runs before the next item.
+    const wt = r.worktree ?? r.repo;
+    const headOf = async () => (await this.d.git(wt, ["rev-parse", "HEAD"]).catch(() => ({ code: 1, out: "" }))).out.trim();
+    const head0 = this.d.stopTurn ? await headOf() : "";
+    let polls = 0;
     for (;;) {
       await this.sleep(2000);
       if (this.stopRequested) return undefined;
       const st = await this.d.state(r.convId);
+      if (head0 && st.status === "running" && ++polls % 15 === 0) {
+        const head = await headOf();
+        if (head && head !== head0) {
+          this.d.stopTurn!(r.convId);
+          const subject = (await this.d.git(wt, ["log", "-1", "--format=%s"]).catch(() => ({ code: 1, out: "" }))).out.trim();
+          return { status: "idle", last: `ITEM DONE: ${subject || "committed in the chat"}` };
+        }
+      }
       if (st.events !== undefined && st.events !== seen) {
         seen = st.events;
         movedAt = this.now();
@@ -395,7 +410,7 @@ export class SelfWork {
         if (out.kind === "all") return await this.end("done", out.text || "The goal is met.");
         await this.save();
         await this.d.between?.();
-        await this.d.send(r.convId, "Next item from .kesher-self/plan.md (end with ITEM DONE / ALL DONE / BLOCKED).");
+        await this.d.send(r.convId, "Checked. If that item is on the board and not marked done yet, mark it done now. Then take the next item from .kesher-self/plan.md, and end your turn after that one item with ITEM DONE / ALL DONE / BLOCKED.");
       }
     } catch (e) {
       await this.end("failed", (e as Error).message);
