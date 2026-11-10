@@ -217,7 +217,7 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   4. Keep the user's and Claude's text in full. Tool calls and results become one short line each ("ran: …", "edited: path"), so the history fits a local model.
   5. End with a note: "This continues a Claude Code session; read the last steps and go on".
 - **Local only:** session files can hold secrets from commands. They are never read from the phone, and the import is shown first.
-- **Also from Codex:** `~/.codex/sessions/**/rollout-*.jsonl`. Read a real file before building.
+- **Also from Codex** (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, [schema notes](https://lin-guanguo.github.io/llm-memory-research/agent-cli/codex-session-file-schema/)): each line is `{ timestamp, type, payload }`. `session_meta` comes first (`payload.cwd`). `response_item` lines hold `message` (role, content blocks `input_text` / `output_text`), `function_call` (name, arguments as a JSON string, call_id), `function_call_output` (call_id, output) and `reasoning` (encrypted: skipped). `turn_context` holds cwd. `compacted` is the summary history. The same mapping works: text kept, tool calls as one line each. Codex is not on Roee's PC (no `~/.codex`), so it can wait.
 
 ### Where it stopped
 - Engine speed on the PC: measured during the run (above). Next: load log + speeds after the 2 GB margin release.
