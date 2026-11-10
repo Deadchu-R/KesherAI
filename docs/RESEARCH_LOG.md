@@ -18,6 +18,19 @@ Research done while nothing could run on the PC and no release could ship. Each 
 - Knowledge page: the setup text always promised a 0.64 GB download, and the brackets around the model name flipped in Hebrew. Fixed: it names the model already on the computer ("no download") and keeps the name in its own LTR span.
 - Models page on the phone: fine; the "Qwen3 4B" name wraps next to its speed chip (minor, left as is).
 
+### Importer formats (continued)
+- **Open WebUI** ([Import & Export](https://docs.openwebui.com/features/chat-conversations/data-controls/import-export.md)): chats export as a JSON array of `{ chat: { title, models, history: { currentId, messages: { id → { id, parentId, childrenIds, role, content, model, timestamp } } } }, meta.tags, pinned, archived, folder_id, created_at }`. Messages are a tree, like ChatGPT's `mapping` (which Open WebUI also reads). Its docs page covers chats only; agents/prompts export is not documented there.
+- **Ollama Modelfile** ([reference](https://docs.ollama.com/modelfile.md)): `FROM` (model, GGUF or folder), `PARAMETER` (`num_ctx`, `temperature`, `top_k`, `top_p`, `min_p`, `repeat_penalty`, `repeat_last_n`, `seed`, `stop`, `num_predict`), `TEMPLATE`, `SYSTEM`, `MESSAGE` (example turns), `LICENSE`, `REQUIRES`, `CAPABILITY`. `ollama show --modelfile <name>` prints one; KesherAI already reads the manifests in `.ollama/models` to find the GGUF.
+- **Draft mapping to KesherAI** (for the importer):
+
+  | From | KesherAI |
+  |---|---|
+  | Modelfile `SYSTEM` + `MESSAGE` | a persona (instructions + example turns) |
+  | Modelfile `PARAMETER temperature/top_p/num_ctx/stop` | the persona's model settings |
+  | Modelfile `FROM` (a GGUF) | the model, used in place (model-scan) |
+  | Open WebUI chat (`history.messages` tree, `currentId` branch) | a chat (same as the ChatGPT tree reader) |
+  | Open WebUI `meta.tags`, `pinned`, `folder_id` | chat tags / pinned / project |
+
 ### Where it stopped
-- Next: the **Open WebUI export format** (agents/models JSON, prompts) and **Ollama Modelfile** fields, to write the importer's mapping table; then **LobeHub agent JSON**.
+- Next: **LobeHub agent JSON**: read `agent-template-full.json` and `schema/` in [lobe-chat-agents](https://github.com/lobehub/lobe-chat-agents) (fields `identifier`, `meta`, `config.systemRole`…), then **Open WebUI models/agents** (its admin "Models" export), then **Jan assistants** and **AnythingLLM workspaces**.
 - Next UX pages to look at, at 390 px: Unreal (C++ tab), Unity (Rider mode pill), Settings → Active models.
