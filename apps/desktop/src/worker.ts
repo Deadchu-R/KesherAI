@@ -1,7 +1,34 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, readdir, readFile, rename, rm } from "node:fs/promises";
+import { readdir, readFile, rename } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
+
+/**
+ * Electron's fs treats `app.asar` as a folder (and fails on copying it:
+ * "Invalid package"); `original-fs` is the plain file system, used to copy and
+ * remove the app's files. Outside Electron (tests) it is Node's own fs.
+ */
+const plainFs = (() => {
+  const req = createRequire(import.meta.url);
+  try {
+    return (req("original-fs") as typeof import("node:fs")).promises;
+  } catch {
+    return (req("node:fs") as typeof import("node:fs")).promises;
+  }
+})();
+const rm = plainFs.rm;
+
+/** Copies a folder file by file with the plain file system (fs.cp may go through Electron's asar layer). */
+async function cp(from: string, to: string, _o?: { recursive: boolean }): Promise<void> {
+  await plainFs.mkdir(to, { recursive: true });
+  for (const e of await plainFs.readdir(from, { withFileTypes: true })) {
+    const a = join(from, e.name);
+    const b = join(to, e.name);
+    if (e.isDirectory()) await cp(a, b);
+    else if (e.isFile()) await plainFs.copyFile(a, b);
+  }
+}
 
 /**
  * The self-work worker: a second, window-less KesherAI that runs the long
