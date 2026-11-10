@@ -172,6 +172,12 @@ This review went through the code part by part. Each finding is listed with what
     - **Fixed:** the approval card said PowerShell's `Format-List`/`Format-Table` "can erase a disk". Now only `format X:`, `Format-Volume`, `mkfs`, `diskpart` and `fdisk` get that warning. A mention of a file such as `llama-server.exe` no longer makes KesherAI push the model to build a program.
     - **Performance:** looking for models on the computer walks big folders (ComfyUI, the Hugging Face cache), so the result is kept five minutes and dropped when the model folders change.
 
+35. **Scan after 0.6.39** (embedding models found on the computer, search by meaning while indexing again, the window place, check_code wording, LM Studio's bundled models).
+    - **Checked:** setting up search by meaning is still allowed only from this computer. The model it may pick comes from KesherAI's own folder or another app's model folder (never from a request), is only read, and runs in KesherAI's embedding engine on 127.0.0.1.
+    - **Fixed:** after the embedding model changed, a base that was still being indexed again was searched with the old model's vectors, so the results meant nothing. Search now uses only vectors from the active model, of the same size, and falls back to words for the rest.
+    - **Checked:** the window place file holds only positions and sizes. A hidden window's place is no longer written.
+    - **Performance:** the computer is looked over once per setup, and the models page keeps the result for five minutes. LM Studio's bundled-models folder is small.
+
 ## Known, not yet fixed
 
 - ~~**zod 3:**~~ fixed in 0.5.96: moved to zod 4.6.7 (GHSA-mrhx-c7xc-m3w5 no longer applies; the audit has no exceptions). `.default({})` became `.prefault({})` so nested defaults still fill in; the parsed config of an empty and of partial files is identical to before.
