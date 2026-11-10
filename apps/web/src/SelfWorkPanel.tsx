@@ -79,6 +79,11 @@ export function SelfWorkPanel(p: { folder: string }) {
     }
   };
   const [nightly, setNightly] = useState("01:00");
+  const [copies, setCopies] = useState<string | null>(null);
+  useEffect(() => {
+    void api<{ folder: string | null }>("/api/self-work/folder").then((r) => setCopies(r.folder ?? ""), () => setCopies(null));
+  }, []);
+  const saveCopies = () => void api<{ folder: string | null }>("/api/self-work/folder", { method: "PUT", body: { folder: copies || null } }).then((r) => toast(r.folder ? L(`העותקים יישמרו ב־${r.folder}`, `Copies go to ${r.folder}`) : L("העותקים יישמרו ליד הפרויקט", "Copies go next to the project")), (e: Error) => toast(e.message));
   // The same run, every night (a routine; it shows in Pipelines → Routines too, where it can be changed or removed).
   const saveNightly = () =>
     void api("/api/routines", {
@@ -145,6 +150,12 @@ export function SelfWorkPanel(p: { folder: string }) {
                 <label className="small">{L("או כל לילה בשעה", "Or every night at")} <input type="time" value={nightly} onChange={(e) => setNightly(e.target.value)} /></label>
                 <button type="button" disabled={!goal.trim() || !p.folder} onClick={saveNightly} title={L("שומר את זה כשגרה: מתחיל לבד כל לילה (אם קשר פועל), עם התראה", "Saves it as a routine: starts by itself every night (while KesherAI runs), with a notification")}>{L("שמירה כשגרה", "Save as a routine")}</button>
               </div>
+              {copies !== null && (
+                <div className="row wrap">
+                  <label className="small grow">{L("איפה לשמור את העותקים (למשל כונן גדול)", "Where to keep the copies (e.g. a big drive)")} <input dir="ltr" value={copies} placeholder={L("ליד הפרויקט", "Next to the project")} onChange={(e) => setCopies(e.target.value)} /></label>
+                  <button type="button" onClick={saveCopies}>{L("שמירה", "Save")}</button>
+                </div>
+              )}
             </>
           )}
           <TaskBoardView />

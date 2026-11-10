@@ -23,6 +23,8 @@ export interface SelfWorkStart {
   /** Run after every item, e.g. "pnpm test"; empty = no check. */
   check?: string;
   modelId?: string;
+  /** Where the run's copy goes (a folder per run inside it); next to the project when not set. */
+  worktrees?: string;
 }
 
 /** What a run did, for the page and the phone. */
@@ -168,7 +170,7 @@ export class SelfWork {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
     const branch = `kesher-self/${stamp}`;
     // A separate working folder next to the project: the user's checkout (and the running app) stay as they are.
-    const worktree = join(dirname(o.repo), `${basename(o.repo)}-self-work`, stamp);
+    const worktree = o.worktrees ? join(o.worktrees, basename(o.repo), stamp) : join(dirname(o.repo), `${basename(o.repo)}-self-work`, stamp);
     // Start from the newest code on GitHub when there is one (fetch only reads; nothing is pushed), else from this copy's HEAD.
     await this.d.git(o.repo, ["fetch", "--quiet", "origin"]).catch(() => undefined);
     const remote = await this.d.git(o.repo, ["rev-parse", "--verify", "--quiet", "origin/main"]);

@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, resolve, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
@@ -33,7 +34,7 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
 
   app.get("/api/self-work", async () => ({ run: await current(), ...(host ? { worker: !!host.url() } : {}), ...(s.worker ? { version: s.worker.version } : {}) }));
 
-  app.post<{ Body: { repo?: string; goal?: string; hours?: number; check?: string; modelId?: string } }>("/api/self-work/start", async (req, reply) => {
+  app.post<{ Body: { repo?: string; goal?: string; hours?: number; check?: string; modelId?: string; worktrees?: string } }>("/api/self-work/start", async (req, reply) => {
     const b = req.body ?? {};
     const repo = resolve(String(b.repo ?? ""));
     const check = String(b.check ?? "").trim();
@@ -45,10 +46,12 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     if (!b.repo || !isAbsolute(String(b.repo)) || !(repo + sep).startsWith(home + sep)) return reply.code(400).send({ error: "The project must be a folder inside your home folder." });
     // A run makes a copy of the project and installs its packages: on a full disk every check fails (found on the PC
     // with 0.2 GB left: the tests themselves failed) and Windows itself gets unstable.
-    const free = await freeSpace(repo).catch(() => undefined);
+    // The copies' folder: this app's setting (a worker gets it from the main app, which is a local request).
+    const worktrees = (isLocalRequest(req) && typeof b.worktrees === "string" && isAbsolute(b.worktrees) ? b.worktrees : undefined) ?? s.config.selfWorkDir;
+    const free = await freeSpace(worktrees ?? repo).catch(() => undefined);
     if (free !== undefined && free < 5 * 1024 ** 3) return reply.code(507).send({ error: `The drive has only ${(free / 1024 ** 3).toFixed(1)} GB free. Self-work needs at least 5 GB (a copy of the project and its packages). Free some space first.` });
     if (b.modelId !== undefined && typeof b.modelId !== "string") return reply.code(400).send({ error: "modelId is text." });
-    const start = { repo, goal: String(b.goal ?? ""), ...(b.hours !== undefined ? { hours: Number(b.hours) } : {}), check };
+    const start = { repo, goal: String(b.goal ?? ""), ...(b.hours !== undefined ? { hours: Number(b.hours) } : {}), check, ...(worktrees ? { worktrees } : {}) };
     try {
       // No model chosen: the best one for long coding runs on this computer (see code-model.ts), else the active chat model.
       const auto = b.modelId ? undefined : pickCodeModel(await s.registry.listAllModels().then((r) => r.models.filter((m) => !m.id.startsWith("main/")), () => []));
@@ -81,6 +84,20 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     } catch (e) {
       return reply.code((e as { code?: number }).code === 409 ? 409 : 400).send({ error: (e as Error).message });
     }
+  });
+
+  // Where self-work makes its copies (e.g. a big second drive). Only from this computer.
+  app.get("/api/self-work/folder", async () => ({ folder: s.config.selfWorkDir ?? null }));
+  app.put<{ Body: { folder?: string | null } }>("/api/self-work/folder", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Choose the folder on the computer that runs KesherAI." });
+    const f = req.body?.folder;
+    if (f) {
+      if (!isAbsolute(f)) return reply.code(400).send({ error: "Give a full path, e.g. E:\\KesherAI\\self-work." });
+      await mkdir(f, { recursive: true });
+      s.config.selfWorkDir = resolve(f);
+    } else delete s.config.selfWorkDir;
+    await s.saveConfig();
+    return { folder: s.config.selfWorkDir ?? null };
   });
 
   // Resume the last run where it ended (also from the phone: same project, branch and check).

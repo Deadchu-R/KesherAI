@@ -68,6 +68,8 @@ export const KesherConfigSchema = z.object({
     .prefault({}),
   /** Where KesherAI downloads models. Defaults to `models` in the data folder. */
   modelsDir: z.string().optional(),
+  /** Where self-work makes its copies of a project (a folder per run). Defaults to `<project>-self-work` next to it. */
+  selfWorkDir: z.string().optional(),
   /** Other folders with models (from "Scan computer" or added by hand). KesherAI only reads them. */
   modelFolders: z.array(z.object({ folder: z.string(), source: z.string() })).default([]),
   /**
