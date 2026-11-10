@@ -20,6 +20,7 @@ interface EngineStatus {
   job?: { phase: string; message: string };
   parallel?: number;
   runningParallel?: number;
+  promptTps?: number;
 }
 
 /** A newer llama.cpp: shown with an Update button (it downloads only when pressed). */
@@ -100,6 +101,7 @@ function StartHere({ onChange }: { onChange: () => void }) {
         )}
       </div>
       {engine?.installed && <EngineUpdate onStarted={setEngine} />}
+      {engine?.running && engine.promptTps !== undefined && engine.promptTps < 100 && <p className="error small">{t("engineSlowPrompt", { tps: engine.promptTps })}</p>}
       {engine?.running && engine.runningParallel !== undefined && engine.parallel !== undefined && engine.runningParallel < engine.parallel && <p className="muted small">{t("parallelFellBack")}</p>}
       {engine?.job && (
         <p className={engine.job.phase === "error" ? "error" : "muted"}>

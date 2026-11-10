@@ -78,3 +78,9 @@ test("new builds fit the GPU layers themselves (the old -ngl 99 default is dropp
   assert.deepEqual(LlamaEngine.gpuArgs([], "b6500"), ["-ngl", "99"]);
   assert.deepEqual(LlamaEngine.gpuArgs(["-ngl", "99"], "b6500"), ["-ngl", "99"]);
 });
+
+test("the prompt-reading speed is read from llama-server's timing lines", () => {
+  assert.equal(LlamaEngine.promptSpeed("3.25.293.298 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   2048, progress = 0.35, t = 101.45 s / 20.19 tokens per second"), 20.2);
+  assert.equal(LlamaEngine.promptSpeed("prompt eval time =    1234.56 ms /  5000 tokens (    0.25 ms per token,  4050.00 tokens per second)"), 4050);
+  assert.equal(LlamaEngine.promptSpeed("       eval time =    500.00 ms /   100 tokens (    5.00 ms per token,   200.00 tokens per second)"), undefined);
+});

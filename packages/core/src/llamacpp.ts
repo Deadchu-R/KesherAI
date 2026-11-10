@@ -191,6 +191,8 @@ export interface EngineStatus {
   parallel: number;
   /** Slots the running server really has (fewer when memory was short). */
   runningParallel?: number;
+  /** How fast the model last read a prompt, in tokens a second (slow means the graphics card is too full). */
+  promptTps?: number;
 }
 
 /**
@@ -230,6 +232,7 @@ export class LlamaEngine {
       ...(this.gpuSummary ? { gpus: this.gpuSummary } : {}),
       parallel: this.opts.parallel ?? 1,
       ...(this.runningParallel ? { runningParallel: this.runningParallel } : {}),
+      ...(this.promptTps !== undefined && this.proc ? { promptTps: this.promptTps } : {}),
     };
   }
 
@@ -240,6 +243,20 @@ export class LlamaEngine {
 
   /** Slots the running server has (fewer than asked when memory was short). */
   private runningParallel = 0;
+
+  /** The last prompt-reading speed llama-server reported (see {@link LlamaEngine.promptSpeed}). */
+  private promptTps?: number;
+
+  /**
+   * The prompt-reading speed in a llama-server log line, if it has one.
+   *
+   * @param line - One line of output.
+   * @returns Tokens a second, or undefined.
+   */
+  static promptSpeed(line: string): number | undefined {
+    const m = /prompt (?:processing|eval time).*?([\d.]+) tokens per second/i.exec(line);
+    return m ? Math.round(Number(m[1]) * 10) / 10 : undefined;
+  }
 
   /**
    * Sets how many chats are answered at once; applies the next time a model loads.
@@ -434,8 +451,11 @@ export class LlamaEngine {
     });
     this.proc = proc;
     this.modelPath = modelPath;
+    this.promptTps = undefined;
     const onData = (buf: Buffer) => {
-      this.log.push(...buf.toString().split(/\r?\n/).filter(Boolean));
+      const lines = buf.toString().split(/\r?\n/).filter(Boolean);
+      for (const l of lines) this.promptTps = LlamaEngine.promptSpeed(l) ?? this.promptTps;
+      this.log.push(...lines);
       if (this.log.length > 300) this.log.splice(0, this.log.length - 300);
     };
     proc.stdout?.on("data", onData);
