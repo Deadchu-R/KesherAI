@@ -14,6 +14,22 @@ export class PageBoundary extends Component<{ children: ReactNode; page: string 
     return { error };
   }
 
+  /**
+   * After an update the window may still run the old page, whose code files are gone ("Failed to fetch
+   * dynamically imported module", found on the PC): load the new version once instead of showing an error.
+   */
+  componentDidCatch(error: Error): void {
+    if (!/dynamically imported module|Importing a module script failed|Loading chunk|error loading dynamically/i.test(error.message)) return;
+    try {
+      const last = Number(sessionStorage.getItem("kesher-reloaded") ?? 0);
+      if (Date.now() - last < 30_000) return;
+      sessionStorage.setItem("kesher-reloaded", String(Date.now()));
+    } catch {
+      /* no storage: reload anyway, once per error */
+    }
+    location.reload();
+  }
+
   componentDidUpdate(prev: { page: string }): void {
     if (prev.page !== this.props.page && this.state.error) this.setState({ error: undefined });
   }
@@ -25,7 +41,7 @@ export class PageBoundary extends Component<{ children: ReactNode; page: string 
         <h1>{L("משהו השתבש בדף הזה", "Something went wrong on this page")}</h1>
         <p className="muted" dir="ltr">{this.state.error.message}</p>
         <p className="row">
-          <button type="button" className="primary" onClick={() => this.setState({ error: undefined })}>{L("נסה שוב", "Try again")}</button>
+          <button type="button" className="primary" onClick={() => (/dynamically imported module|Loading chunk/i.test(this.state.error?.message ?? "") ? location.reload() : this.setState({ error: undefined }))}>{L("נסה שוב", "Try again")}</button>
           <a href="#/">{L("לדף הבית", "Home")}</a>
         </p>
       </div>
