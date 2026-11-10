@@ -81,7 +81,7 @@ export function InstallIntoProject() {
       {mcpMsg && <p className="pill">{mcpMsg}</p>}
       <div className="row">
         {bridge && <button type="button" disabled={running} onClick={() => void pick()}>📁 {L("התקן לתוך פרויקט אחר…", "Install into another project…")}</button>}
-        <span className="muted small">{L("עובד גם בפרויקט Blueprint בלבד, בלי C++. ", "Works in Blueprint-only projects too, no C++. ")}{info.engines.length ? `${L("נמצאו", "Found")}: UE ${info.engines.map((e) => e.version).join(", ")}` : L("לא נמצא Unreal במחשב.", "No Unreal found on this computer.")}</span>
+        <span className="muted small">{L("עובד גם בפרויקט Blueprint בלבד, בלי \u2066C++\u2069. ", "Works in Blueprint-only projects too, no C++. ")}{info.engines.length ? `${L("נמצאו", "Found")}: UE ${info.engines.map((e) => e.version).join(", ")}` : L("לא נמצא Unreal במחשב.", "No Unreal found on this computer.")}</span>
       </div>
       {job && (
         <div className="stack">

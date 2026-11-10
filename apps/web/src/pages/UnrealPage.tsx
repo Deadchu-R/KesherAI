@@ -310,7 +310,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <div className="row ue-projects">
           <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
             <button type="button" role="tab" aria-selected={source !== "cpp"} className={source !== "cpp" ? "on" : ""} onClick={() => setSource("graphs")}>Blueprints</button>
-            <button type="button" role="tab" aria-selected={source === "cpp"} className={source === "cpp" ? "on" : ""} onClick={() => setSource("cpp")} title={L("קוד ה-C++ של הפרויקט", "The project's C++ code")}>C++</button>
+            <button type="button" role="tab" aria-selected={source === "cpp"} className={source === "cpp" ? "on" : ""} onClick={() => setSource("cpp")} title={L("קוד ה-C++ של הפרויקט", "The project's C++ code")}><bdi dir="ltr">C++</bdi></button>
           </span>
         </div>
       )}
