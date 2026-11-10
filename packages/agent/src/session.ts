@@ -483,7 +483,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const built = this.events.some((e) => e.type === "tool_result" && e.name === "build_executable" && e.ok && e.seq > (users.at(-3) ?? lastUser).seq);
     const buildFailed = since.some((e) => e.type === "tool_result" && e.name === "build_executable" && !e.ok);
     // The request may have been made a message or two earlier ("make it an exe" … "continue").
-    const wantsProgram = users.slice(-3).some((u) => /\bexe\b|\.exe|executable|installer|setup file|installable|איאקסאי|אקסה|קובץ הפעלה|קובץ הרצה|להתקנה|תוכנה שאפשר להתקין/i.test(u.text));
+    // A file name that ends in .exe (`tasklist … llama-server.exe`) is not a request for a program.
+    const wantsProgram = users.slice(-3).some((u) => /(?<![\w.-])exe\b|\b(into|as|an?|to)\s+\.exe\b|(make|build|create|compile|package|turn|convert|give me|want)\b[^.\n]{0,40}\bexecutable|installer|setup file|installable|איאקסאי|אקסה|קובץ הפעלה|קובץ הרצה|להתקנה|תוכנה שאפשר להתקין/i.test(u.text));
     if (wantsProgram && !built && buildFailed && this.tools.has("build_executable")) {
       return {
         note: "KesherAI asked the model to fix the build and try again.",

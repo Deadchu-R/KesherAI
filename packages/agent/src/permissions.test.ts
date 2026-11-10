@@ -9,3 +9,10 @@ test("installing system software always asks, even with always-allow", () => {
   }
   for (const c of ["dir", "npm install", "pip install requests", "cmd /c dir C:\\"]) assert.equal(dangerReason(c), undefined, c);
 });
+
+test("PowerShell's Format-List and Format-Table are not disk erasers; format C: and Format-Volume are", () => {
+  assert.equal(dangerReason("Get-Process llama-server | Format-List Id,CPU"), undefined);
+  assert.equal(dangerReason("Get-NetTCPConnection -LocalPort 8081 | Format-Table State"), undefined);
+  assert.equal(dangerReason("format C: /q"), "can erase a disk");
+  assert.equal(dangerReason("Format-Volume -DriveLetter D"), "can erase a disk");
+});
