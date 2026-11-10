@@ -1,4 +1,4 @@
-import { NAMESPACE_OF, UNITY_API, type ApiMember } from "./unity-api";
+import { NAMESPACE_OF, UNITY_API, UNITY_ATTRIBUTES, type ApiMember } from "./unity-api";
 
 /**
  * Unity C# help that needs no editor (shared by the desktop editor and the
@@ -141,6 +141,10 @@ export const close = (a: string, b: string) => {
 export function suggestAt(text: string, offset: number): Array<{ label: string; detail?: string; doc?: string; kind: "method" | "prop" | "const" | "class" | "field" | "keyword" | "snippet"; insert: string }> {
   const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
   const line = text.slice(lineStart, offset);
+  // Inside [ ]: Unity's attributes.
+  if (/\[\s*[\w.]*$/.test(line) && !/=\s*[^\]]*\[\s*[\w.]*$/.test(line)) {
+    return UNITY_ATTRIBUTES.map((a) => ({ label: a.name, kind: "snippet" as const, doc: a.doc, insert: a.insert }));
+  }
   const chain = /\.\w*$/.test(line) ? chainBefore(line) : undefined;
   if (chain) {
     const found = membersAfter(text, chain);

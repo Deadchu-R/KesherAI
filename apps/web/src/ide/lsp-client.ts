@@ -27,12 +27,8 @@ const toPos = (p: Pos) => ({ lineNumber: p.line + 1, column: p.character + 1 });
 const toRange = (r: LRange) => new monaco.Range(r.start.line + 1, r.start.character + 1, r.end.line + 1, r.end.character + 1);
 const fromPos = (p: monaco.IPosition): Pos => ({ line: p.lineNumber - 1, character: p.column - 1 });
 
-/** A file path on the computer as an LSP URI (`C:\a b\x.cs` → `file:///c%3A/a%20b/x.cs`). */
-export function fileUri(path: string): string {
-  const n = path.replace(/\\/g, "/");
-  const withSlash = n.startsWith("/") ? n : `/${n}`;
-  return `file://${withSlash.split("/").map((s, i) => (i === 1 && /^[A-Za-z]:$/.test(s) ? `${s[0]!.toLowerCase()}%3A` : encodeURIComponent(s))).join("/")}`;
-}
+export { fileUri } from "./lsp-uri";
+import { fileUri } from "./lsp-uri";
 
 class LspLink {
   private ws: WebSocket;

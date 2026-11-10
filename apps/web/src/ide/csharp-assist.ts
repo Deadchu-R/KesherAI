@@ -1,6 +1,6 @@
 import * as monaco from "monaco-editor";
 import { lspServes } from "./lsp-client";
-import { NAMESPACE_OF, UNITY_API, UNITY_EVENTS_SNIPPETS, type ApiMember } from "./unity-api";
+import { NAMESPACE_OF, UNITY_API, UNITY_ATTRIBUTES, UNITY_EVENTS_SNIPPETS, type ApiMember } from "./unity-api";
 import { KEYWORDS, bracketProblems, chainBefore, close, membersAfter, missingUsings, ownMembers, projectTypes } from "./csharp-suggest";
 export { bracketProblems, missingUsings, setProjectTypes } from "./csharp-suggest";
 
@@ -20,13 +20,16 @@ export function registerCSharpAssist(): void {
   if (registered) return;
   registered = true;
   monaco.languages.registerCompletionItemProvider("csharp", {
-    triggerCharacters: ["."],
+    triggerCharacters: [".", "["],
     provideCompletionItems(model, pos) {
       if (lspServes(model)) return { suggestions: [] };
       const line = model.getLineContent(pos.lineNumber).slice(0, pos.column - 1);
       const word = model.getWordUntilPosition(pos);
       const range = new monaco.Range(pos.lineNumber, word.startColumn, pos.lineNumber, word.endColumn);
       const text = model.getValue();
+      if (/\[\s*[\w.]*$/.test(line) && !/=\s*[^\]]*\[\s*[\w.]*$/.test(line)) {
+        return { suggestions: UNITY_ATTRIBUTES.map((x) => ({ label: x.name, kind: monaco.languages.CompletionItemKind.Snippet, documentation: x.doc, insertText: x.insert, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range })) };
+      }
       const chain = /\.\w*$/.test(line) ? chainBefore(line) : undefined;
       if (chain) {
         const found = membersAfter(text, chain);

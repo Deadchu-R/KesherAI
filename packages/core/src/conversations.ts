@@ -909,7 +909,9 @@ export class ConversationManager {
 
   private contextFor(modelId: string): number {
     try {
-      return this.deps.registry.resolve(modelId).provider.location === "cloud" ? 100_000 : 12_000;
+      const { provider } = this.deps.registry.resolve(modelId);
+      // KesherAI's own engine runs with 32K (see LlamaEngine.serverArgs); other local servers may load models smaller.
+      return provider.location === "cloud" ? 100_000 : provider.id === "llamacpp" ? 26_000 : 12_000;
     } catch {
       return 12_000;
     }

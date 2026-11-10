@@ -321,8 +321,8 @@ export class LlamaEngine {
   /**
    * The arguments llama-server gets: the config's, plus `--jinja` (needed
    * for tool calling), slots for chats answered at the same time, and a
-   * context that gives each of them room (16k for one, 12k more per extra
-   * chat) unless the config sets its own.
+   * context that gives each of them room (32k for one, 16k more per extra
+   * chat, kept at 8 bits) unless the config sets its own.
    *
    * @param extra - Arguments from the config.
    * @param withJinja - Whether to add `--jinja`.
@@ -334,7 +334,10 @@ export class LlamaEngine {
     if (withJinja && !args.includes("--jinja")) args.push("--jinja");
     const own = args.some((a) => a === "-np" || a === "--parallel");
     if (parallel > 1 && !own) args.push("-np", String(parallel));
-    if (!args.some((a) => a === "-c" || a === "--ctx-size")) args.push("-c", String(16384 + 12288 * (own ? 0 : parallel - 1)));
+    // Room for coding agents (their instructions and tools alone are thousands of tokens): 32K, 16K more per extra chat.
+    if (!args.some((a) => a === "-c" || a === "--ctx-size")) args.push("-c", String(32768 + 16384 * (own ? 0 : parallel - 1)));
+    // The context's memory at 8 bits (half of the default 16), so the bigger context fits next to the model.
+    if (!args.some((a) => a.startsWith("--cache-type") || a === "-ctk" || a === "-ctv")) args.push("--cache-type-k", "q8_0", "--cache-type-v", "q8_0");
     return args;
   }
 

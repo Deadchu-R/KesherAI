@@ -81,6 +81,29 @@ export const UNITY_API: Record<string, { doc: string; members: ApiMember[]; ns?:
   string: { doc: "Text", members: [p("Length", "int"), m("Contains", "Contains(string value)", "bool"), m("StartsWith", "StartsWith(string value)", "bool"), m("Substring", "Substring(int startIndex, int length)", "string"), m("ToUpper", "ToUpper()", "string"), m("ToLower", "ToLower()", "string"), m("Trim", "Trim()", "string"), m("Split", "Split(char separator)", "string[]"), m("Replace", "Replace(string oldValue, string newValue)", "string"), sm("IsNullOrEmpty", "IsNullOrEmpty(string value)", "bool"), sm("Format", "Format(string format, params object[] args)", "string")] },
 };
 
+/** Unity's attributes (inside [ ]): the ones scripts use most. */
+export const UNITY_ATTRIBUTES: Array<{ name: string; insert: string; doc: string }> = [
+  { name: "SerializeField", insert: "SerializeField", doc: "Shows a private field in the Inspector and saves it" },
+  { name: "HideInInspector", insert: "HideInInspector", doc: "Hides a public field from the Inspector" },
+  { name: "Header", insert: 'Header("$1")', doc: "A bold title above the next fields in the Inspector" },
+  { name: "Tooltip", insert: 'Tooltip("$1")', doc: "Text shown when the mouse is over the field" },
+  { name: "Range", insert: "Range($1, $2)", doc: "A slider between two numbers" },
+  { name: "Min", insert: "Min($1)", doc: "The smallest value allowed" },
+  { name: "Space", insert: "Space", doc: "Empty space above the field in the Inspector" },
+  { name: "TextArea", insert: "TextArea", doc: "A multi-line text box for a string" },
+  { name: "Multiline", insert: "Multiline", doc: "A multi-line text box for a string" },
+  { name: "ColorUsage", insert: "ColorUsage(true, true)", doc: "Color picker options (alpha, HDR)" },
+  { name: "FormerlySerializedAs", insert: 'UnityEngine.Serialization.FormerlySerializedAs("$1")', doc: "Keeps the saved value after a rename" },
+  { name: "RequireComponent", insert: "RequireComponent(typeof($1))", doc: "Adds the needed component with this script" },
+  { name: "DisallowMultipleComponent", insert: "DisallowMultipleComponent", doc: "Only one of this script on an object" },
+  { name: "ExecuteAlways", insert: "ExecuteAlways", doc: "Runs in the editor too, not only in Play Mode" },
+  { name: "AddComponentMenu", insert: 'AddComponentMenu("$1")', doc: "Where the script shows in Add Component" },
+  { name: "CreateAssetMenu", insert: 'CreateAssetMenu(fileName = "$1", menuName = "$2")', doc: "Makes a ScriptableObject creatable from the Assets menu" },
+  { name: "ContextMenu", insert: 'ContextMenu("$1")', doc: "Runs a method from the component's ⋮ menu" },
+  { name: "System.Serializable", insert: "System.Serializable", doc: "Lets a class or struct show and save inside the Inspector" },
+  { name: "SerializeReference", insert: "SerializeReference", doc: "Saves a field by reference (interfaces, polymorphism)" },
+];
+
 /** Unity's messages: typing their name in a class writes the whole method. */
 export const UNITY_EVENTS_SNIPPETS: Array<{ label: string; body: string; doc: string }> = [
   { label: "Awake", body: "void Awake()\n{\n\t$0\n}", doc: "Once, when the object is created (before Start)" },
