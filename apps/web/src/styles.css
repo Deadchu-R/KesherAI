@@ -1826,3 +1826,33 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .hub-card { display: grid; gap: 4px; }
 .hub-terminate { margin-top: 4px; width: 100%; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
 @media (pointer: coarse) { .hub-terminate { min-height: 44px; } }
+
+/* Phone: the chat keeps its room. The tool buttons scroll sideways in one row, the folder is one line, the IDE
+   (when opened) takes a fixed half and scrolls by itself, and menus from the composer open as a sheet over
+   everything (inside the scrolling chat they were cut off, so + → board could not be reached). */
+@media (max-width: 700px) {
+  .conv-tools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .conv-tools::-webkit-scrollbar { display: none; }
+  .conv-tools > * { flex: none; }
+  .conv-tools > .grow { display: none; }
+  .workspace-bar { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-split.with-ide .chat { flex: 1 1 0; min-height: 0; }
+  .conv-split.with-ide .workspace { flex: none; height: 45dvh; }
+  .composer .model-pop { position: fixed; inset-inline: 8px; bottom: max(8px, env(safe-area-inset-bottom)); top: auto; width: auto; max-width: none; max-height: 75dvh; overflow-y: auto; z-index: 1000; }
+}
+/* A full menu (a phone) is a capped flex column: its rows and an open flyout must not shrink to nothing
+   (the board's lists showed as an empty flyout); the menu scrolls instead. */
+.kmenu > *, .kmenu-sub > * { flex-shrink: 0; }
+
+/* Flyouts. On a computer they open in place under their row. On a phone (research: Apple's menus, NN/g) the
+   open one replaces the menu, and its row becomes the way back, naming where you are. */
+.kmenu-subwrap { display: contents; }
+.kmenu-subwrap > * { flex-shrink: 0; }
+@media (max-width: 700px) {
+  .kmenu:has(> .kmenu-subwrap.open) > :not(.kmenu-subwrap.open) { display: none; }
+  .kmenu-subwrap.open > .kmenu-item { position: sticky; top: -8px; z-index: 1; background: var(--panel-2); border-bottom: 1px solid var(--border); border-radius: 0; font-weight: 600; }
+  .kmenu-subwrap.open > .kmenu-item .kmenu-arrow { order: -1; transform: scaleX(-1); margin-inline: 0 6px; }
+  [dir="rtl"] .kmenu-subwrap.open > .kmenu-item .kmenu-arrow { transform: none; }
+  .kmenu-subwrap.open > .kmenu-sub { padding-inline-start: 0; max-height: none; overflow: visible; margin: 4px 0 0; }
+  .kmenu-subwrap.open > .kmenu-sub .kmenu-item { font-size: 15.5px; }
+}

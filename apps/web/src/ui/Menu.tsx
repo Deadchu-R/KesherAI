@@ -53,6 +53,11 @@ const ITEM = '[role^="menuitem"]:not([disabled]):not([aria-disabled="true"])';
 export function Menu(p: MenuProps) {
   const [own, setOwn] = useState(false);
   const open = p.open ?? own;
+  // A flyout opened near the bottom of a long menu (a phone) scrolls into view, so its choices are seen.
+  const group = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (open) group.current?.scrollIntoView?.({ block: "nearest" });
+  }, [open]);
   const setOpen = (o: boolean) => {
     if (p.open === undefined) setOwn(o);
     p.onOpenChange?.(o);
@@ -227,21 +232,27 @@ export function MenuLabel({ children, end }: { children: ReactNode; end?: ReactN
 export function MenuSub(p: { label: ReactNode; icon?: ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void; onOpen?: () => void; children: ReactNode }) {
   const [own, setOwn] = useState(false);
   const open = p.open ?? own;
+  // A flyout opened near the bottom of a long menu (a phone) scrolls into view, so its choices are seen.
+  const group = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (open) group.current?.scrollIntoView?.({ block: "nearest" });
+  }, [open]);
   const toggle = () => {
     const o = !open;
     if (p.open === undefined) setOwn(o);
     p.onOpenChange?.(o);
     if (o) p.onOpen?.();
   };
+  // On a phone the open flyout takes the whole menu, with this row as its back button (styles.css).
   return (
-    <>
+    <div className={`kmenu-subwrap${open ? " open" : ""}`}>
       <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open} className="kmenu-item" tabIndex={-1} onClick={toggle}>
         {p.icon !== undefined && <span className="kmenu-icon" aria-hidden="true">{p.icon}</span>}
         <span className="kmenu-text">{p.label}</span>
         <span className="kmenu-end kmenu-arrow" aria-hidden="true">›</span>
       </button>
-      {open && <div className="kmenu-sub" role="group">{p.children}</div>}
-    </>
+      {open && <div ref={group} className="kmenu-sub" role="group">{p.children}</div>}
+    </div>
   );
 }
 

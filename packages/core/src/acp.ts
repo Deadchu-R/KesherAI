@@ -27,6 +27,10 @@ export interface AcpPermission {
   toolCallId: string;
   title: string;
   toolKind?: string;
+  /** The change it asks to make, when it says (edits). */
+  diffs?: Array<{ path: string; oldText?: string; newText: string }>;
+  /** What the step gets (a command, a file and its text…), as the agent sent it. */
+  rawInput?: string;
   options: Array<{ optionId: string; name: string; kind: PermissionOption["kind"] }>;
 }
 
@@ -140,6 +144,8 @@ export class AcpAgent {
           toolCallId: params.toolCall.toolCallId,
           title: params.toolCall.title ?? params.toolCall.name ?? "",
           ...(params.toolCall.kind ? { toolKind: params.toolCall.kind } : {}),
+          ...(diffsOf(params.toolCall.content).length ? { diffs: diffsOf(params.toolCall.content) } : {}),
+          ...(params.toolCall.rawInput != null ? { rawInput: JSON.stringify(params.toolCall.rawInput, null, 1).slice(0, 6000) } : {}),
           options: params.options.map((o) => ({ optionId: o.optionId, name: o.name, kind: o.kind })),
         }).catch(() => undefined);
         return { outcome: optionId && params.options.some((o) => o.optionId === optionId) ? { outcome: "selected", optionId } : { outcome: "cancelled" } };

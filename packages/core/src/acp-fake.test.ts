@@ -34,7 +34,7 @@ export function fakeAgent(seen: { auth?: string; cancelled?: boolean; caps?: unk
       await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call", toolCallId: "t1", title: "Edit a.ts", kind: "edit", status: "pending" } });
       const r = await client.request("session/request_permission", {
         sessionId,
-        toolCall: { toolCallId: "t1", title: "Edit a.ts", kind: "edit" },
+        toolCall: { toolCallId: "t1", title: "Edit a.ts", kind: "edit", content: [{ type: "diff", path: "/p/a.ts", oldText: "a", newText: "b" }] },
         options: [
           { optionId: "yes", name: "Allow", kind: "allow_once" },
           { optionId: "no", name: "Deny", kind: "reject_once" },

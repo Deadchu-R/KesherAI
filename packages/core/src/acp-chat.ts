@@ -32,7 +32,10 @@ export function optionFor(p: AcpPermission, decision: "allow" | "always" | "deny
 
 /** What the approval card shows for an agent's question. */
 function previewOf(p: AcpPermission, step?: { diffs?: string; text?: string }): string {
-  return [p.title, step?.diffs, step?.text].filter(Boolean).join("\n\n").slice(0, 8000) || p.toolKind || "(the agent did not say)";
+  // The change itself, so an edit is not approved blind: the diff it asks for, else what the step gets.
+  const asked = p.diffs?.length ? p.diffs.map((d) => makeDiff(d.path, d.oldText ?? null, d.newText)).join("\n") : undefined;
+  const raw = !asked && !step?.diffs && p.rawInput && p.rawInput !== "{}" ? p.rawInput : undefined;
+  return [p.title, asked ?? step?.diffs, raw, step?.text].filter(Boolean).join("\n\n").slice(0, 8000) || p.toolKind || "(the agent did not say)";
 }
 
 /** An outside agent in a code chat. */

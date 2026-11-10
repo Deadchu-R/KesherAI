@@ -27,6 +27,7 @@ test("a code chat on Antigravity (ACP): its edit asks with a normal approval car
     const req = (await asked) as Extract<AgentEvent, { type: "approval_request" }>;
     assert.equal(req.name, "Edit a.ts");
     assert.match(req.reason, /Antigravity CLI asks/);
+    assert.match(req.preview ?? "", /^\+b$/m, "the card shows the change it asks to make");
     s.approve(req.requestId, "allow");
     await until(s, (e) => e.type === "status" && e.status === "idle");
     const result = s.events.find((e) => e.type === "tool_result") as Extract<AgentEvent, { type: "tool_result" }>;

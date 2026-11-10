@@ -264,8 +264,8 @@ export function ConversationPage({ id }: { id: string }) {
   if (!conv) return <div className="page">{error ? <p className="error">{error}</p> : <p className="muted">…</p>}</div>;
 
   const busy = info?.status === "running" || info?.status === "waiting";
-  // Code sessions open with the IDE panel; chats can open it with the button.
-  const showIde = ideOpen ?? conv.kind === "code";
+  // Code sessions open with the IDE panel on a wide screen; on a phone the chat comes first (the IDE button opens it).
+  const showIde = ideOpen ?? (conv.kind === "code" && !(typeof matchMedia === "function" && matchMedia("(max-width: 700px)").matches));
   // The server titles a conversation from its first message; the sidebar list has the latest title.
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
   // The persona's opening suggestions, for an empty chat (a click puts one in the message box).
