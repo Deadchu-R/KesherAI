@@ -101,7 +101,12 @@ test("connect, upload on save, and a second computer downloads it", async () => 
     const synced = (await a.app.inject({ method: "POST", url: "/api/google/sync" })).json() as { uploaded: number };
     // The save itself may already have uploaded it (a slow runner reaches the debounced upload first): then the sync has nothing to send.
     assert.ok(synced.uploaded <= 1, `sync answered ${JSON.stringify(synced)}; projects ${made.body.slice(0, 300)}`);
-    const uploaded = [...g.files.values()].filter((f) => f.appProperties?.kind === "projects");
+    // An upload the save started may still be on its way (slow Windows runners): wait for it a little.
+    let uploaded = [...g.files.values()].filter((f) => f.appProperties?.kind === "projects");
+    for (let i = 0; i < 50 && !uploaded.length; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      uploaded = [...g.files.values()].filter((f) => f.appProperties?.kind === "projects");
+    }
     assert.equal(uploaded.length, 1);
     assert.match(uploaded[0]!.body ?? "", /Drive project/);
   } finally {
