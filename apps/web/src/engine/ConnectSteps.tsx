@@ -24,7 +24,7 @@ export function ConnectSteps(p: { unity: boolean; download: string }) {
           <ol className="ue-steps">
             <li>{L("Unity 6 ומעלה, עם Visual Scripting.", "Unity 6 or newer, with Visual Scripting.")}</li>
             <li>{L("\"הוסף לפרויקט\" מעתיק את חבילת KesherAI Bridge לפרויקט ומוסיף את חבילת ה-Pipeline של Unity דרך ה-CLI. Unity מקמפל לבד — בלי Visual Studio.", "“Add to a project” copies the KesherAI Bridge package into the project and adds Unity's Pipeline package through the CLI. Unity compiles it by itself — no Visual Studio.")}</li>
-            <li>{L("כש-Unity פתוח, השינויים קורים בו מיד (Ctrl+Z מבטל). כשהוא סגור, KesherAI מריץ את Unity ברקע, משנה ושומר — לוקח קצת יותר זמן.", "With Unity open, changes happen in it at once (Ctrl+Z undoes them). With it closed, KesherAI runs Unity in the background, changes and saves — a little slower.")}</li>
+            <li>{L("כש-Unity פתוח, השינויים קורים בו מיד (\u2066Ctrl+Z\u2069 מבטל). כשהוא סגור, KesherAI מריץ את Unity ברקע, משנה ושומר — לוקח קצת יותר זמן.", "With Unity open, changes happen in it at once (Ctrl+Z undoes them). With it closed, KesherAI runs Unity in the background, changes and saves — a little slower.")}</li>
           </ol>
         </>
       ) : (
