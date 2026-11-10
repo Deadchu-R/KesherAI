@@ -39,7 +39,8 @@ export function ComposerBar(p: {
       {p.extra}
       {p.onDictate && <Mic onText={p.onDictate} />}
       {p.persona && <PersonaChip value={p.persona.value} onChange={p.persona.onChange} />}
-      {p.model && <ModelMenu models={p.model.models} value={p.model.value} onChange={p.model.onChange} />}
+      {/* A chat answered by an outside agent (Antigravity) keeps it: it is not a model to switch. */}
+      {p.model && (p.model.value.startsWith("agent/") ? <span className="model-chip" title={p.model.value}>✦ {p.model.value === "agent/antigravity" ? "Antigravity" : p.model.value.slice(6)}</span> : <ModelMenu models={p.model.models} value={p.model.value} onChange={p.model.onChange} />)}
       {p.mode && (
         <Select className="model-chip" value={p.mode.value} onChange={(e) => p.mode!.onChange(e.target.value as PermissionMode)} aria-label={t("mode")}>
           <option value="plan">{t("modePlan")}</option>
