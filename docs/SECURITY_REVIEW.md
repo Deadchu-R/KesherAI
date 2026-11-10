@@ -225,3 +225,12 @@ This review went through the code part by part. Each finding is listed with what
 - **Model delete** (scan 39 follow-up): only inside the models folder, never the loaded model; checked.
 - **Performance:** the bell polls `/api/inbox` every 6s and skips hidden tabs. The worker query has a 3s timeout, and the worker is not asked when it is not running. The Menu adds no listeners while closed.
 - **Nothing to fix.**
+
+## Scan 41 (2026-11-10): ACP client, Antigravity code chats, saved notifications, MTP setting
+
+- **ACP spawn:** the command comes from a fixed table (`agy acp`), never from the request. The only input is the code chat's own folder, which is an absolute path that must exist, passed as one argument after `--add-dir`. No shell is used. Only code chats get it. Processes end with the chat and when KesherAI quits.
+- **Sign-in and permissions:** KesherAI advertises no file-system or terminal capability and never handles tokens. Each permission answer is mapped to one of the agent's own options, and anything else is a cancel; a test checks this. KesherAI never passes `--dangerously-skip-permissions`.
+- **notifications.json:** title, body as sent, `#/` path, time and channels only; the one-time Approve / Deny codes are never written. A test checks this.
+- **`/api/engines/llamacpp/settings` `mtpDraft`:** an integer from 0 to 16, or null; anything else is a 400. It has the same access as the existing `parallel` setting.
+- **Performance:** one agent process per open Antigravity chat, started on its first message. Saving notifications is debounced to once a second.
+- **Nothing to fix.**

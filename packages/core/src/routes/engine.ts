@@ -178,16 +178,32 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
   });
 
-  /** How many chats the engine answers at once. A running model is loaded again with it. */
-  app.put<{ Body: { parallel?: number } }>("/api/engines/llamacpp/settings", async (req, reply) => {
-    const n = Number(req.body?.parallel);
-    if (!Number.isInteger(n) || n < 1 || n > 8) return reply.code(400).send({ error: "Chats at once: a number from 1 to 8." });
-    s.config.engines.parallel = n;
-    s.engine.setParallel(n);
+  /**
+   * How many chats the engine answers at once, and multi-token prediction's guesses ahead (`mtpDraft`: a number,
+   * 0 for off, null for llama.cpp's own). A running model is loaded again with them.
+   */
+  app.put<{ Body: { parallel?: number; mtpDraft?: number | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
+    const b = req.body ?? {};
+    let reload = false;
+    if (b.parallel !== undefined) {
+      const n = Number(b.parallel);
+      if (!Number.isInteger(n) || n < 1 || n > 8) return reply.code(400).send({ error: "Chats at once: a number from 1 to 8." });
+      reload ||= s.config.engines.parallel !== n;
+      s.config.engines.parallel = n;
+      s.engine.setParallel(n);
+    }
+    if (b.mtpDraft !== undefined) {
+      const d = b.mtpDraft === null ? undefined : Number(b.mtpDraft);
+      if (d !== undefined && (!Number.isInteger(d) || d < 0 || d > 16)) return reply.code(400).send({ error: "Guesses ahead: a number from 0 to 16." });
+      reload ||= s.config.engines.mtpDraft !== d;
+      if (d === undefined) delete s.config.engines.mtpDraft;
+      else s.config.engines.mtpDraft = d;
+      s.engine.setMtpDraft(d);
+    }
     await s.saveConfig();
     const st = s.engine.status();
-    if (st.running && st.modelPath && st.runningParallel !== n) void loadModel(s, st.modelPath).catch((err) => s.engine.fail(err));
-    return s.engine.status();
+    if (reload && st.running && st.modelPath) void loadModel(s, st.modelPath).catch((err) => s.engine.fail(err));
+    return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null };
   });
 
   app.post("/api/engines/llamacpp/stop", async () => {

@@ -196,6 +196,8 @@ export interface EngineStatus {
   promptTps?: number;
   /** The context each chat gets (llama-server's n_ctx_slot). */
   slotTokens?: number;
+  /** Multi-token prediction's guesses ahead (the setting; unset: llama.cpp's own). */
+  mtpDraft?: number;
 }
 
 /**
@@ -218,7 +220,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
   ) {}
 
   /** @returns The engine's state. */
@@ -237,6 +239,7 @@ export class LlamaEngine {
       ...(this.runningParallel ? { runningParallel: this.runningParallel } : {}),
       ...(this.promptTps !== undefined && this.proc ? { promptTps: this.promptTps } : {}),
       ...(this.slotContext() ? { slotTokens: this.slotContext() } : {}),
+      ...(this.opts.mtpDraft !== undefined ? { mtpDraft: this.opts.mtpDraft } : {}),
     };
   }
 
@@ -415,12 +418,22 @@ export class LlamaEngine {
    * @param modelPath - The model file.
    * @param args - Arguments from the config.
    * @param version - The build tag.
+   * @param draft - Tokens guessed ahead (`--spec-draft-n-max`); 0 turns it off.
    * @returns Arguments to add.
    */
-  static async mtpArgs(modelPath: string, args: readonly string[] = [], version?: string): Promise<string[]> {
+  static async mtpArgs(modelPath: string, args: readonly string[] = [], version?: string, draft?: number): Promise<string[]> {
     const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
     if (build < 12000 || args.some((a) => a.startsWith("--spec") || a === "-md" || a === "--model-draft")) return [];
-    return (await mtpLayers(modelPath)) > 0 ? ["--spec-type", "draft-mtp"] : [];
+    if (draft === 0 || !((await mtpLayers(modelPath)) > 0)) return [];
+    // How many tokens it guesses ahead: fewer guesses are checked faster and use less memory (2 was fastest on a
+    // 24 GB card at Q4 in a published test; see docs/RESEARCH_LOG.md).
+    return ["--spec-type", "draft-mtp", ...(draft ? ["--spec-draft-n-max", String(draft)] : [])];
+  }
+
+  /** Multi-token prediction's guesses ahead (undefined: llama.cpp's own number; 0: off). */
+  setMtpDraft(n: number | undefined): void {
+    if (n === undefined) delete this.opts.mtpDraft;
+    else this.opts.mtpDraft = Math.min(16, Math.max(0, Math.round(n)));
   }
 
   /**
@@ -497,7 +510,7 @@ export class LlamaEngine {
       // Multi-token prediction: a model that carries its own MTP head (Qwen3.5–3.8 GGUFs with NextN tensors) guesses
       // a few tokens ahead and the main model checks them, so it writes faster. Only on builds that have it, and
       // dropped again if the server will not start with it.
-      let mtp = await LlamaEngine.mtpArgs(modelPath, this.opts.args, this.opts.version);
+      let mtp = await LlamaEngine.mtpArgs(modelPath, this.opts.args, this.opts.version, this.opts.mtpDraft);
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {

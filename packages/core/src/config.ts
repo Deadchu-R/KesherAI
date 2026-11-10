@@ -55,6 +55,8 @@ export const KesherConfigSchema = z.object({
       embedModel: z.string().optional(),
       /** How many chats the built-in engine answers at the same time (llama-server slots). */
       parallel: z.number().int().min(1).max(8).default(2),
+      /** Multi-token prediction: tokens guessed ahead (unset: llama.cpp's number; 0: off). */
+      mtpDraft: z.number().int().min(0).max(16).optional(),
       /** How models use the graphics cards (see gpus.ts). */
       gpus: z
         .object({

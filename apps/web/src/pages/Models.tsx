@@ -24,6 +24,8 @@ interface EngineStatus {
   parallel?: number;
   runningParallel?: number;
   promptTps?: number;
+  slotTokens?: number;
+  mtpDraft?: number;
 }
 
 /** A newer llama.cpp: shown with an Update button (it downloads only when pressed). */
@@ -99,6 +101,19 @@ function StartHere({ onChange }: { onChange: () => void }) {
               onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { parallel: Number(e.target.value) } }).then(setEngine, (err: Error) => setError(err.message))}
             >
               {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </Select>
+          </label>
+        )}
+        {engine?.installed && (
+          <label className="row parallel-pick" title={L("מודלים עם ראש MTP (כמו Qwen3.8) מנחשים כמה מילים קדימה, והמודל בודק אותן: כותב מהר יותר, אבל לוקח קצת זיכרון מהשיחה. פחות ניחושים = פחות זיכרון.", "Models with an MTP head (like Qwen3.8) guess a few words ahead and the model checks them: it writes faster, but takes some memory from the chat. Fewer guesses = less memory.")}>
+            <span className="muted small">{L("ניחוש קדימה (MTP)", "Guess ahead (MTP)")}</span>
+            <Select
+              value={engine.mtpDraft === undefined ? "auto" : String(engine.mtpDraft)}
+              onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { mtpDraft: e.target.value === "auto" ? null : Number(e.target.value) } }).then(setEngine, (err: Error) => setError(err.message))}
+            >
+              <option value="auto">{L("אוטומטי", "Automatic")}</option>
+              {[1, 2, 3, 4, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+              <option value="0">{L("כבוי", "Off")}</option>
             </Select>
           </label>
         )}

@@ -35,3 +35,15 @@ test("reads a GGUF header and finds the MTP layers", async () => {
   await writeFile(c, "not a model");
   assert.equal(await readGgufHeader(c), undefined);
 });
+
+test("MTP: on for a model with an MTP head, with the chosen guesses ahead; 0 turns it off; own --spec args win", async () => {
+  const { LlamaEngine } = await import("./llamacpp.js");
+  const dir = await mkdtemp(join(tmpdir(), "gguf-"));
+  const a = join(dir, "Qwen3.8-27B.gguf");
+  await writeFile(a, gguf([["qwen35.nextn_predict_layers", "u32", 1]]));
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110"), ["--spec-type", "draft-mtp"]);
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110", 2), ["--spec-type", "draft-mtp", "--spec-draft-n-max", "2"]);
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110", 0), []);
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, ["--spec-type", "ngram"], "b12110", 2), []);
+  assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b11000", 2), [], "older engines have no MTP");
+});
