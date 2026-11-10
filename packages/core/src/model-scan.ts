@@ -50,6 +50,8 @@ export function knownModelFolders(home = homedir(), env: NodeJS.ProcessEnv = pro
   return [
     { folder: join(home, ".lmstudio", "models"), source: "LM Studio" },
     { folder: join(home, ".cache", "lm-studio", "models"), source: "LM Studio" },
+    // Models LM Studio ships with (its nomic embedding model lives here, not in models/).
+    { folder: join(home, ".lmstudio", ".internal", "bundled-models"), source: "LM Studio" },
     { folder: env.OLLAMA_MODELS ?? join(home, ".ollama", "models"), source: "Ollama" },
     { folder: join(env.HF_HOME ?? join(home, ".cache", "huggingface"), "hub"), source: "Hugging Face" },
     { folder: join(home, "jan", "models"), source: "Jan" },
