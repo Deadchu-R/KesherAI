@@ -187,11 +187,14 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     if (!s.board) return reply.code(503).send({ error: "No board." });
     return { file: s.board.file };
   });
-  app.post<{ Body: { changes?: BoardChange[]; rev?: number } }>("/api/self-work/board", async (req, reply) => {
+  app.post<{ Body: { changes?: BoardChange[]; rev?: number; as?: string } }>("/api/self-work/board", async (req, reply) => {
     if (!s.board) return reply.code(503).send({ error: "No board." });
     const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+    // Claude works the board through this computer's KesherAI too: it says so, so its tasks show as Claude's and not
+    // as Roee's ("In progress · You" looked like self-work had not finished). Only from this computer.
+    const by = req.body?.as === "claude" && isLocalRequest(req) ? "claude" : "roee";
     try {
-      return await s.board.change("roee", changes, typeof req.body?.rev === "number" ? req.body.rev : undefined);
+      return await s.board.change(by, changes, typeof req.body?.rev === "number" ? req.body.rev : undefined);
     } catch (e) {
       return reply.code((e as { code?: number }).code === 409 ? 409 : 400).send({ error: (e as Error).message });
     }
