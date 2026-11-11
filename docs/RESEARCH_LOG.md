@@ -410,3 +410,25 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - A calibration screen that runs this matrix on any computer.
   - Slimming the plain chat's tools.
   - Trying ik_llama.cpp as a second engine.
+
+## 2026-11-11: A calibration screen in KesherAI (research, stopped before building)
+- **Others:**
+  - LM Studio has no built-in benchmark or auto-tune: users read the live tok/s or time API calls. Measured 31–52% slower than tuned llama.cpp (older bundled build, cautious context and offload, FA sometimes off); insiderllm.com.
+  - Ollama has none either.
+  - Outside tools (llmspeed, benchmarkLLM) only measure. They do not choose settings.
+  - So choosing settings from measurements on the user's own computer would set KesherAI apart.
+- **Ours already:**
+  - `/api/models/benchmark`: one 200-token run, speed kept next to the model.
+  - `llama-bench.exe` ships in the engine folder (b12110).
+  - The engine starts with fit, FA, q8_0 KV, MTP, and the model card's sampling.
+- **Design (to build):**
+  - Models → a model's ⋯ → "Calibrate for this computer".
+  - Runs llama-bench in the background with the chat model unloaded: FA on, KV f16/q8_0, depth 0/16K/48K, chats at once 1/2. About 5 minutes, with progress and Stop.
+  - Shows a table: reading and writing speed per setup, plus memory.
+  - Recommends three: "longest context", "fastest", "balanced". One tap applies (chats at once, KV type).
+  - Results are kept per model and graphics card, and shown on the phone too.
+  - Guard: refuse while a chat or self-work is running; touch the guard during the run.
+- **Stopped at:** design only. Next: an API (`POST /api/models/calibrate`, a background job), parsing `-o json` from llama-bench, then the screen.
+- **Open for Roee:**
+  - A Q5/Q6 download for accuracy.
+  - ik_llama.cpp as a second engine; techyon measured about 73 tok/s at 156K on one 3090.
