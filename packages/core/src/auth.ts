@@ -188,15 +188,18 @@ export function registerRemoteAuth(
     const given = header ?? query ?? inPath;
     const who = clientAddress(request);
     const f = failures.get(who);
-    if (f && Date.now() - f.since < WINDOW_MS && f.count >= MAX_FAILURES) {
-      await reply.code(429).send({ error: "Too many wrong tokens. Try again in a few minutes." });
-      return;
-    }
     // Through the internet link (Cloudflare connects from this computer and says who is behind it).
     // Tailscale Funnel marks what it brings from the internet too (anyone may send that header, but it only makes the rules stricter).
     const viaTunnel = (isLoopback(request.ip) && request.headers["cf-connecting-ip"] !== undefined) || request.headers["tailscale-funnel-request"] !== undefined;
     const device = devices?.find(given);
     const shared = !!token && !!given && safeEqual(given, token);
+    // The lockout stops guessing; a right key cannot be a guess. Without this, the user's own phone was locked out
+    // for 10 minutes because an old code it sent a minute earlier (after an app update) counted against its address,
+    // which on a mobile network it shares with many others.
+    if (!device && !shared && f && Date.now() - f.since < WINDOW_MS && f.count >= MAX_FAILURES) {
+      await reply.code(429).send({ error: "Too many wrong tokens. Try again in a few minutes." });
+      return;
+    }
     if (device) {
       // A connector key (for an AI app) opens KesherAI's MCP server and nothing else.
       if ((device as { scope?: string }).scope === "mcp" && path !== "/mcp") {

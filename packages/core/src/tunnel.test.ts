@@ -40,8 +40,11 @@ test("requests through a tunnel are remote even though they come from 127.0.0.1"
 
     // Guessing the token is cut off after 20 tries from one address.
     for (let i = 0; i < 20; i++) await s.app.inject({ method: "GET", url: "/api/health", headers: { "cf-connecting-ip": "198.51.100.1", authorization: "Bearer wrong" } });
-    const locked = await s.app.inject({ method: "GET", url: "/api/health", headers: { "cf-connecting-ip": "198.51.100.1", authorization: `Bearer ${token}` } });
+    const locked = await s.app.inject({ method: "GET", url: "/api/health", headers: { "cf-connecting-ip": "198.51.100.1", authorization: "Bearer wrong-again" } });
     assert.equal(locked.statusCode, 429);
+    // The right key still comes in (a phone sharing a mobile network's address with a guesser, or itself after an old code).
+    const right = await s.app.inject({ method: "GET", url: "/api/health", headers: { "cf-connecting-ip": "198.51.100.1", authorization: `Bearer ${token}` } });
+    assert.notEqual(right.statusCode, 429);
   } finally {
     await s.close();
   }
