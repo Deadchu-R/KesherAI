@@ -116,6 +116,11 @@ jobs:
               // The image engine runs as a program from the app's native folder, so it must be unpacked there.
               packaging { jniLibs { useLegacyPackaging true } }
           }
+          // UnifiedPush's encryption library (Tink) brings protobuf-javalite; the phone's model engines bring the
+          // full protobuf-java, which holds the same classes. Keep the full one (two copies fail as duplicate classes).
+          configurations.configureEach {
+              exclude group: "com.google.protobuf", module: "protobuf-javalite"
+          }
           GRADLE
       - name: Build the APK
         working-directory: apps/android/android
