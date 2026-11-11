@@ -770,7 +770,8 @@ export class ConversationManager {
       ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id, () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[]))
       : [];
     // Fewer tokens: the long Unity guide and every Unity tool only while a Unity project is in use.
-    if (unity.length && this.deps.unity?.activeProject) media.notes.push(UNITY_NOTE);
+    if (unity.length && this.unityInChat(id)) media.notes.push(UNITY_NOTE);
+    else if (unity.length && this.deps.unity?.activeProject) media.notes.push(`The user's Unity project is ${basename(this.deps.unity.activeProject)}. For Unity work, load its tools with find_tools (unity_status first); their guide comes with them.`);
     else if (unity.length) media.notes.push("Unity's CLI is installed here: for Unity work, ask the user to pick or create a Unity project (+ → Project, or the Unity page); unity_status shows what is ready.");
     // Graphs in words from any chat: Unity Script/State Graphs, and Unreal Blueprints (KesherAI Bridge plugin).
     const chatModel = () => this.defaultChatModel();
@@ -1103,8 +1104,11 @@ export class ConversationManager {
           local = true;
         }
         if (!(local && this.deps.config.toolSearch !== false)) return undefined;
-        // A Unity project in use: its tools are always sent in full, so the model never works blind and guesses.
-        return [...CORE_TOOLS, ...(this.deps.unity?.activeProject ? UNITY_TOOL_NAMES : []), ...(this.unrealState.project || this.deps.unity?.activeProject ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.connected ? UNREAL_GRAPH_TOOLS : [])];
+        // A Unity chat gets every Unity tool in full, so the model never works blind and guesses.
+        // Only in a chat that is about Unity: the project is chosen for the whole app, and every other chat paid
+        // ~1,600 tokens of Unity tools plus its guide (found on the PC: 8,300 tokens before the first word).
+        const unityHere = this.unityInChat(id);
+        return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.connected ? UNREAL_GRAPH_TOOLS : [])];
       },
       isAlwaysAllowed: (tool, modelId, command) => this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
     });
@@ -1302,6 +1306,22 @@ export class ConversationManager {
    * Gives a running session its tools and prompt again, mid-answer (an Unreal project was just created or
    * opened, so its full tools come now, not only from the next message).
    */
+  /**
+   * Whether a chat is about the active Unity project: it works in the project's folder, used a Unity tool, or the
+   * user named Unity or the project. Re-read on every message, so naming Unity brings the tools from the next step.
+   */
+  private unityInChat(id?: string): boolean {
+    const project = this.deps.unity?.activeProject;
+    if (!project) return false;
+    if (!id) return true;
+    const c = this.deps.library.summary(id);
+    const norm = (p: string) => resolvePath(p).toLowerCase();
+    if (c?.workspace && norm(c.workspace) === norm(project)) return true;
+    const name = basename(project).toLowerCase();
+    const words = new RegExp(`unity|יוניטי${name.length > 2 ? `|${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` : ""}`, "i");
+    return (this.sessions.get(id)?.events ?? []).some((e) => (e.type === "tool_call" && e.name.startsWith("unity_")) || (e.type === "user" && words.test(e.text)));
+  }
+
   private async refreshTools(id?: string): Promise<void> {
     if (!id) return;
     const session = this.sessions.get(id);
