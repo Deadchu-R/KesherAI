@@ -9,5 +9,6 @@ docs/api/
 coverage/
 apps/android/android/
 .kesher-update.json
+.kesher-self/
 apps/android/www/google-client.json
 ui-check/
