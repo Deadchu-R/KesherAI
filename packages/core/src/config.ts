@@ -239,7 +239,7 @@ export const KesherConfigSchema = z.object({
       /** The user's own Cloudflare tunnel (mode "cloudflare"). */
       cloudflare: z.object({ hostname: z.string().optional(), tunnelId: z.string().optional() }).prefault({}),
       /** A key of its own for each paired device (only a hash is kept), so one can be removed without the others. */
-      devices: z.array(z.object({ id: z.string(), name: z.string(), hash: z.string(), createdAt: z.string(), lastSeen: z.string().optional(), lastAddress: z.string().optional(), scope: z.literal("mcp").optional() })).default([]),
+      devices: z.array(z.object({ id: z.string(), name: z.string(), hash: z.string(), createdAt: z.string(), lastSeen: z.string().optional(), lastAddress: z.string().optional(), scope: z.literal("mcp").optional(), push: z.object({ endpoint: z.string().max(1000), p256dh: z.string().max(200), auth: z.string().max(100) }).optional() })).default([]),
       /** Through the internet link, only devices with their own key (not the shared token, which the QR code and other computers use). */
       anywhereDevicesOnly: z.boolean().default(false),
       /** Through the internet link, a device key not used for this many days stops working (0 = never). */

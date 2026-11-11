@@ -129,6 +129,8 @@ export interface KesherServices {
   prompts: Prompts;
   /** Notifications on the phone (ntfy) and this computer. */
   notifier: Notifier;
+  /** The phone app's own notifications (phone-push.ts). */
+  phonePush: import("./phone-push.js").PhonePush;
   /** SKILL.md skills. */
   skills: SkillStore;
   /** Pipelines: chains of steps with conditions and loops. */

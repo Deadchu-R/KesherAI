@@ -53,6 +53,7 @@ import { comfyRoutes } from "./routes/comfy.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
 import { transcribeWith } from "./speech-tools.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { PhonePush } from "./phone-push.js";
 import { inboxRoutes } from "./routes/inbox.js";
 import { promptRoutes } from "./routes/prompts.js";
 import { personaRoutes } from "./routes/personas.js";
@@ -418,7 +419,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     config.notifications.ntfy.topic = Notifier.newTopic();
     void persist().catch(() => undefined);
   }
+  // The phone app's own notifications (live connection, or UnifiedPush through ntfy).
+  const phonePush = new PhonePush(() => config.remote.devices, persist);
   const notifier = new Notifier(() => config.notifications, {
+    app: phonePush,
     ...(options.notify ? { desktop: options.notify } : {}),
     publicUrl: () => tunnel.status().url,
     // The Approve / Deny buttons on the phone's (and watch's) notification.
@@ -743,6 +747,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     semantic: semantic!,
     conversationSearch: new ConversationSearch(library),
     notifier,
+    phonePush,
     prompts: new Prompts(join(paths.root, "prompts.json")),
     whisper,
     speakers,
@@ -1187,6 +1192,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       journal.close();
       knowledge.close();
       notifier.close();
+      phonePush.close();
       telegram.stop();
       void comfy.stop();
       routines.close();

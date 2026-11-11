@@ -16,6 +16,8 @@ export interface DeviceKey {
   lastAddress?: string;
   /** "mcp": the key opens only /mcp (a connector for an AI app such as Claude), nothing else of KesherAI. */
   scope?: "mcp";
+  /** The phone app's UnifiedPush address and Web Push keys (see phone-push.ts). Removed with the device. */
+  push?: { endpoint: string; p256dh: string; auth: string };
 }
 
 const hashOf = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -67,8 +69,8 @@ export class DeviceKeys {
   }
 
   /** @returns The devices for Settings (no hashes). */
-  devices(): Array<Omit<DeviceKey, "hash">> {
-    return this.list().map(({ hash: _h, ...d }) => d);
+  devices(): Array<Omit<DeviceKey, "hash" | "push"> & { push?: boolean }> {
+    return this.list().map(({ hash: _h, push, ...d }) => ({ ...d, ...(push ? { push: true } : {}) }));
   }
 
   /** Removes one device: its key stops working at once. */

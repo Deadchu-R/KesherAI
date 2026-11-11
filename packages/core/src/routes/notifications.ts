@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
-import { isLocalRequest, pairedDeviceOf } from "../auth.js";
+import { isLocalRequest, pairedDeviceIdOf, pairedDeviceOf } from "../auth.js";
 import { Notifier } from "../notify.js";
+import { checkEndpoint } from "../phone-push.js";
 
 /**
  * Notification settings and a test: on this computer, and from a paired
@@ -55,5 +56,35 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     } catch (e) {
       return reply.code(502).send({ error: `The phone notification did not go out: ${(e as Error).message}` });
     }
+  });
+
+  // The phone app's own notifications: only a paired device with its own key (so removing the device stops them).
+  const device = (req: FastifyRequest) => {
+    const id = pairedDeviceIdOf(req);
+    return id ? s.config.remote.devices.find((d) => d.id === id) : undefined;
+  };
+  const deviceOnly = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!device(req)) return reply.code(403).send({ error: "Only the paired phone app (with its own key) gets its own notifications." });
+  };
+  app.get("/api/phone-push", { preHandler: deviceOnly }, async (req) => s.phonePush.status(device(req)!.id));
+  /** The live connection: an event stream of notifications for as long as the phone keeps it open. */
+  app.get("/api/phone-push/stream", { preHandler: deviceOnly }, async (req, reply) => {
+    reply.hijack();
+    s.phonePush.attach(device(req)!.id, reply.raw);
+  });
+  /** The phone's UnifiedPush address and Web Push keys, checked first (https, a public server). */
+  app.put<{ Body: { endpoint?: string; p256dh?: string; auth?: string } }>("/api/phone-push/endpoint", { preHandler: deviceOnly }, async (req, reply) => {
+    const { endpoint = "", p256dh = "", auth = "" } = req.body ?? {};
+    if (!/^[\w-]{86,88}$/.test(p256dh) || !/^[\w-]{21,24}$/.test(auth)) return reply.code(400).send({ error: "The phone's push keys are missing or not valid." });
+    const bad = await checkEndpoint(endpoint);
+    if (bad) return reply.code(400).send({ error: bad });
+    device(req)!.push = { endpoint, p256dh, auth };
+    await s.saveConfig();
+    return s.phonePush.status(device(req)!.id);
+  });
+  app.delete("/api/phone-push/endpoint", { preHandler: deviceOnly }, async (req) => {
+    delete device(req)!.push;
+    await s.saveConfig();
+    return s.phonePush.status(device(req)!.id);
   });
 }

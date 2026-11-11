@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import type { AgentEvent } from "@kesher/shared";
 import type { KesherConfig } from "./config.js";
+import type { PhoneMessage } from "./phone-push.js";
+import { phoneMessage } from "./phone-push.js";
 
 /**
  * Notifications: on the phone (ntfy) and on this computer, when a long chat
@@ -62,6 +64,8 @@ export class Notifier {
       fetch?: typeof fetch;
       /** Keeps the last notifications in this file, so the notifications page still lists them after a restart. */
       history?: string;
+      /** The KesherAI phone app's own notifications (live or UnifiedPush; phone-push.ts). */
+      app?: { deliver: (m: PhoneMessage) => Promise<boolean>; hasReceivers: () => boolean };
     } = {},
   ) {
     if (opts.history) void this.loadHistory(opts.history);
@@ -106,7 +110,10 @@ export class Notifier {
     if (s.desktop && this.opts.desktop) {
       jobs.push(Promise.resolve(this.opts.desktop(n)).then((shown) => shown && channels.push("desktop"), () => undefined));
     }
-    if ((s.ntfy.enabled || force) && s.ntfy.topic) {
+    // The phone app first: when it got the note, ntfy is not sent too (one notification, not two).
+    const inApp = this.opts.app ? await this.opts.app.deliver(phoneMessage(n)).catch(() => false) : false;
+    if (inApp) channels.push("app");
+    if ((s.ntfy.enabled || force) && s.ntfy.topic && (!inApp || force)) {
       const base = this.opts.publicUrl?.();
       const headers: Record<string, string> = { Title: ascii(n.title), Priority: String(n.priority ?? 3) };
       if (n.tags?.length) headers.Tags = n.tags.join(",");
@@ -193,7 +200,8 @@ export class Notifier {
       const t = setTimeout(() => {
         this.waiting.delete(convId);
         const approval = e.type === "approval_request";
-        const buttons = approval && s.approveButtons && !!this.opts.decide && !!this.opts.publicUrl?.();
+        // The phone app sends its buttons to this computer itself, so it needs no internet link.
+        const buttons = approval && s.approveButtons && !!this.opts.decide && (!!this.opts.publicUrl?.() || !!this.opts.app?.hasReceivers());
         const code = buttons ? this.quickCode(convId, e.requestId) : undefined;
         const what = approval ? (s.includeText && e.preview ? `${e.name}: ${e.preview.replace(/\s+/g, " ").slice(0, 160)}` : e.name) : "";
         void this.send({
@@ -225,6 +233,8 @@ export class Notifier {
       n.resolved = how;
       changed = true;
     }
+    // Like messaging apps clearing what was read elsewhere: the phone removes this chat's waiting notification.
+    if (changed) void this.opts.app?.deliver({ t: "clear", id: convId }).catch(() => undefined);
     if (changed) this.saveHistory();
   }
 

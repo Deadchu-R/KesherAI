@@ -96,6 +96,13 @@ export function pairedDeviceOf(request: Pick<FastifyRequest, "raw">): string | u
   return pairedDevice.get(request.raw);
 }
 
+const pairedDeviceId = new WeakMap<object, string>();
+
+/** @returns The id of the paired device that sent this request (with its own key), or undefined. */
+export function pairedDeviceIdOf(request: Pick<FastifyRequest, "raw">): string | undefined {
+  return pairedDeviceId.get(request.raw);
+}
+
 /**
  * Requires the remote token from every request that does not come from this
  * computer. The token is accepted as `Authorization: Bearer <token>` or, for
@@ -204,6 +211,7 @@ export function registerRemoteAuth(
       devices!.seen(device, who);
       deviceOf.set(request.raw, device.name);
       pairedDevice.set(request.raw, device.name);
+      if (device.id) pairedDeviceId.set(request.raw, device.id);
       return;
     }
     if (shared && viaTunnel && devices?.devicesOnly()) {
@@ -220,7 +228,7 @@ export function registerRemoteAuth(
 
 /** Device keys, for registerRemoteAuth (see device-keys.ts). */
 export interface DeviceAuth {
-  find(key: string | undefined): { name: string; lastSeen?: string } | undefined;
+  find(key: string | undefined): { id?: string; name: string; lastSeen?: string } | undefined;
   seen(device: { name: string; lastSeen?: string }, address: string): void;
   /** Through the internet link, only device keys (not the shared token). */
   devicesOnly(): boolean;
