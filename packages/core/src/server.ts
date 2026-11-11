@@ -323,6 +323,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     args: config.engines.llamaServerArgs,
     parallel: config.engines.parallel,
     ...(config.engines.mtpDraft !== undefined ? { mtpDraft: config.engines.mtpDraft } : {}),
+    ...(config.engines.fitTargetMiB !== undefined ? { fitTargetMiB: config.engines.fitTargetMiB } : {}),
     gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
   });
   downloads.limit = config.downloadLimitMBps * 1024 * 1024;

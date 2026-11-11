@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
 import { Select } from "./ui/Select";
+import { FitMargin } from "./FitPreview";
 
 interface Engine { installed: boolean; running: boolean; parallel?: number; runningParallel?: number; slotTokens?: number }
 
@@ -45,6 +46,8 @@ export function ChatsAtOnce({ card = false }: { card?: boolean }) {
         {e.running && e.slotTokens ? ` ${he ? `עכשיו: ${Math.round(e.slotTokens / 1000)}K טוקנים לכל צ׳אט.` : `Now: ${Math.round(e.slotTokens / 1000)}K tokens per chat.`}` : ""}
       </p>
       {e.running && e.runningParallel !== undefined && e.parallel !== undefined && e.runningParallel < e.parallel && <p className="muted small">{t("parallelFellBack")}</p>}
+      <FitMargin />
+      <p className="muted small">{he ? "כשמשחק, Unreal או Unity רצים על אותו כרטיס: השאירו להם יותר. המודל ייטען מחדש." : "When a game, Unreal or Unity runs on the same card: leave them more. The model loads again."}</p>
       {err && <p className="error small">{err}</p>}
     </section>
   );

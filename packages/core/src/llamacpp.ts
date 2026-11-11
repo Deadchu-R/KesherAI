@@ -2,7 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { parseFit, type FitPlan } from "./fit-preview.js";
 import { mtpLayers } from "./gguf.js";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
 import { userChoseGpus, type GpuPlan } from "./gpus.js";
@@ -220,7 +221,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
   ) {}
 
   /** @returns The engine's state. */
@@ -439,6 +440,53 @@ export class LlamaEngine {
   }
 
   /**
+   * How much graphics memory fitting leaves free (MiB): room for a game or the Unreal/Unity editor on the same card.
+   *
+   * @param mib - The margin; undefined for the default (2 GB).
+   */
+  setFitTarget(mib: number | undefined): void {
+    if (mib === undefined) delete this.opts.fitTargetMiB;
+    else this.opts.fitTargetMiB = Math.min(16384, Math.max(512, Math.round(mib)));
+  }
+
+  /**
+   * What llama.cpp will do with a model before loading it: runs llama-fit-params (same fitting as llama-server's
+   * start, test allocations only) with the arguments this engine would use. See fit-preview.ts.
+   *
+   * @param modelPath - The GGUF file.
+   * @returns The plan.
+   * @throws Error when the engine or its fit tool is not installed, or the build has no fitting.
+   */
+  async fitPreview(modelPath: string): Promise<FitPlan> {
+    const binary = this.opts.binaryPath;
+    if (!binary || !existsSync(binary)) throw new Error("The llama.cpp engine is not installed yet. Install it from the Models screen.");
+    if (!LlamaEngine.fits(this.opts.version)) throw new Error("This llama.cpp build cannot plan the memory ahead (update the engine).");
+    const tool = join(dirname(binary), basename(binary).replace(/llama-server/, "llama-fit-params"));
+    if (!existsSync(tool)) throw new Error("This llama.cpp build has no llama-fit-params.");
+    const args = ["-m", modelPath, ...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)];
+    const t0 = Date.now();
+    return await new Promise<FitPlan>((resolve, reject) => {
+      const p = spawn(tool, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      let log = "";
+      p.stdout.on("data", (d: Buffer) => (out += d.toString()).length > 100_000 && p.kill());
+      // Only the lines the plan needs (the full log is long).
+      let rest = "";
+      p.stderr.on("data", (d: Buffer) => {
+        const lines = (rest + d.toString()).split("\n");
+        rest = lines.pop() ?? "";
+        for (const l of lines) if (/n_layer|MiB used|fit params|failed to fit/.test(l)) log += `${l}\n`;
+      });
+      const timer = setTimeout(() => p.kill(), 120_000);
+      p.once("error", (e) => (clearTimeout(timer), reject(e)));
+      p.once("close", () => {
+        clearTimeout(timer);
+        resolve(parseFit(log + rest, out, Date.now() - t0));
+      });
+    });
+  }
+
+  /**
    * Whether a build fits the model to the free memory by itself (`--fit`, on by default since b7400).
    *
    * @param version - The build tag, e.g. `b12110`.
@@ -468,9 +516,10 @@ export class LlamaEngine {
    * @param withJinja - Whether to add `--jinja`.
    * @param parallel - Chats answered at once.
    * @param fits - Whether the build fits the model to memory by itself (see gpuArgs).
+   * @param fitTargetMiB - Graphics memory to leave free when fitting (default 2 GB; see setFitTarget).
    * @returns The full argument list besides model, host and port.
    */
-  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false): string[] {
+  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false, fitTargetMiB = 2048): string[] {
     const args = [...extra];
     if (withJinja && !args.includes("--jinja")) args.push("--jinja");
     const own = args.some((a) => a === "-np" || a === "--parallel");
@@ -483,7 +532,7 @@ export class LlamaEngine {
       if (fits) args.push("--fit-ctx", "32768");
       // fit leaves 1 GB free by default; with the context grown to fill the card, Windows then moved memory to system
       // RAM at run time and the model wrote at half speed (found on the PC: 0.5 GB left, 18 instead of 40 tokens/s).
-      if (fits && !args.some((a) => a === "-fitt" || a === "--fit-target")) args.push("--fit-target", "2048");
+      if (fits && !args.some((a) => a === "-fitt" || a === "--fit-target")) args.push("--fit-target", String(fitTargetMiB));
       // Older builds: room for coding agents (their instructions and tools alone are thousands of tokens): 32K, 16K more per extra chat.
       else args.push("-c", String(32768 + 16384 * (own ? 0 : parallel - 1)));
     }
@@ -516,7 +565,7 @@ export class LlamaEngine {
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version), ...mtp], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version), this.opts.fitTargetMiB), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version), ...mtp], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {

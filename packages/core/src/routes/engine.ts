@@ -91,7 +91,7 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
  * @param s - Services.
  */
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
-  app.get("/api/engines/llamacpp", async () => s.engine.status());
+  app.get("/api/engines/llamacpp", async () => ({ ...s.engine.status(), fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048 }));
 
   /**
    * The graphics cards and how models use them: each card (PCI order, memory,
@@ -185,7 +185,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
    * How many chats the engine answers at once, and multi-token prediction's guesses ahead (`mtpDraft`: a number,
    * 0 for off, null for llama.cpp's own). A running model is loaded again with them.
    */
-  app.put<{ Body: { parallel?: number; mtpDraft?: number | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
+  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; fitTargetMiB?: number | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
     const b = req.body ?? {};
     let reload = false;
     if (b.parallel !== undefined) {
@@ -203,10 +203,39 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       else s.config.engines.mtpDraft = d;
       s.engine.setMtpDraft(d);
     }
+    // Graphics memory to leave free (for a game or the Unreal/Unity editor on the same card); null: the default.
+    if (b.fitTargetMiB !== undefined) {
+      const m = b.fitTargetMiB === null ? undefined : Number(b.fitTargetMiB);
+      if (m !== undefined && (!Number.isInteger(m) || m < 512 || m > 16384)) return reply.code(400).send({ error: "Memory to leave free: 512 to 16384 MB." });
+      reload ||= s.config.engines.fitTargetMiB !== m;
+      if (m === undefined) delete s.config.engines.fitTargetMiB;
+      else s.config.engines.fitTargetMiB = m;
+      s.engine.setFitTarget(m);
+    }
     await s.saveConfig();
     const st = s.engine.status();
     if (reload && st.running && st.modelPath) void loadModel(s, st.modelPath).catch((err) => s.engine.fail(err));
-    return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null };
+    return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null, fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048 };
+  });
+
+  /**
+   * What llama.cpp will do with a model before it is loaded (llama-fit-params): layers on each graphics card,
+   * memory used and left, context, and whether it fits next to what is loaded now. Kept a minute per model.
+   */
+  const fitCache = new Map<string, { at: number; plan: unknown }>();
+  app.post<{ Body: { modelPath?: string } }>("/api/models/fit", async (req, reply) => {
+    const path = req.body?.modelPath ?? "";
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added can be checked" });
+    if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "The memory check runs on GGUF files" });
+    const hit = fitCache.get(path);
+    if (hit && Date.now() - hit.at < 60_000) return hit.plan;
+    try {
+      const plan = { ...(await s.engine.fitPreview(path)), loadedNow: s.engine.status().running ? basename(s.engine.status().modelPath ?? "") : null, marginMiB: s.config.engines.fitTargetMiB ?? 2048 };
+      fitCache.set(path, { at: Date.now(), plan });
+      return plan;
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
   });
 
   app.post("/api/engines/llamacpp/stop", async () => {

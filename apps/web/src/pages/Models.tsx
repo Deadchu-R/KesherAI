@@ -12,6 +12,7 @@ import { HubBrowser } from "../HubBrowser";
 import { DownloadBar, useDownloads } from "../Downloads";
 import { Select } from "../ui/Select";
 import { ChatsAtOnce } from "../ChatsAtOnce";
+import { FitButton } from "../FitPreview";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -398,6 +399,7 @@ export function ModelsPage() {
                     <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                     {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                     {tab === "chat" && f.gguf && <BenchButton path={f.path} onDone={refreshLocal} />}
+                    {tab === "chat" && f.gguf && <FitButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
                     {tab === "chat" && f.gguf && loadButton(f)}
                   </div>
                 ))}

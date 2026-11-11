@@ -476,3 +476,20 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
     - Otherwise the current ntfy topic.
   - **No duplicates:** the server sends each note one way only.
 - **Stopped at:** iOS is not in scope (no iOS app).
+
+## 2026-11-11: Engine memory, visible (t22): llama-fit-params
+- **How llama.cpp fits** (discussion ggml-org/llama.cpp#18049):
+  - `--fit` is on by default. It checks whether everything fits, then shrinks the context, then moves tensors to system memory (dense ones first, MoE experts last), using test allocations only.
+  - `--fit-target` is the memory left free on each card (1 GB default; ours 2 GB, see the 2026-11-11 calibration).
+  - `--fit-ctx` is the smallest context it may set.
+  - Setting `-ngl`, `--tensor-split` or `-ot` by hand turns fitting off for all of them.
+  - `llama-fit-params` runs the same fitting without loading the weights and prints the chosen arguments.
+- **Measured on Roee's PC** (b12110, Qwen3.8-27B Q4_K_XL, with self-work's model already on the card):
+  - stdout: `-c 49152 -ngl 60`.
+  - The log's summary line: `- CUDA0 (NVIDIA GeForce RTX 3090): 60 layers, 16727 MiB used, 1237 MiB free`, then `successfully fit params`. With another model loaded, 60 of 65 layers fit.
+  - It took about 1.5 s of fitting, and up to about 40 s in all while the card was busy.
+- **Others:** LM Studio shows a "fits / partial offload" estimate from file size. Ollama shows nothing before loading. Neither uses llama.cpp's own fitting, so KesherAI's answer is the exact one.
+- **Built (0.6.104):**
+  - "What fits?" next to each GGUF on the Models page (`POST /api/models/fit`, kept a minute): fits entirely, partly, or does not fit now; per card: layers, GB used, GB left; context; and which model was loaded during the check.
+  - "Leave free on the graphics card" (1–8 GB, default 2) in Settings → Computer, for a game or the Unreal/Unity editor on the same card. It is `--fit-target`; the model loads again.
+- **Stopped at:** the calibration part of t22 (llama-bench matrix, three recommendations) is not built yet. Design: the 2026-11-11 entry above.
