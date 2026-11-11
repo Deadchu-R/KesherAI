@@ -143,8 +143,13 @@ test("paths outside the project are refused", async () => {
     (e: NodeJS.ErrnoException) => (e.code === "EPERM" || e.code === "EACCES" ? false : Promise.reject(e)),
   );
   if (!linked) return;
-  await symlink(join(tmpdir(), `kesher-nowhere-${Date.now()}`), join(workspace, "dangling"));
   await assert.rejects(resolveInWorkspace(workspace, "out/x.txt"), /outside/);
+  // A dangling link needs a regular (not junction) link; skip that part when those are not allowed either.
+  const dangling = await symlink(join(tmpdir(), `kesher-nowhere-${Date.now()}`), join(workspace, "dangling")).then(
+    () => true,
+    (e: NodeJS.ErrnoException) => (e.code === "EPERM" || e.code === "EACCES" ? false : Promise.reject(e)),
+  );
+  if (!dangling) return;
   await assert.rejects(resolveInWorkspace(workspace, "dangling"), /outside/);
   await assert.rejects(resolveInWorkspace(workspace, "dangling/x.txt"), /outside/);
 });

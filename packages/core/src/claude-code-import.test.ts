@@ -30,6 +30,9 @@ test("a Claude Code session becomes a chat: words kept, tool calls as short line
   for (const gone of ["secret plan", "AWS_SECRET", "sub work", "old branch", "system-reminder"]) assert.ok(!all.includes(gone), gone);
   assert.match(chat.messages.at(-1)!.text, /continues a Claude Code session/);
   assert.equal(toolLine("WebSearch", { query: "q" }), "searched the web: q");
+  assert.equal(toolLine("Task", { description: "check the API", subagent_type: "Explore", prompt: "read the routes" }), "delegated: check the API");
+  assert.equal(toolLine("Task", { subagent_type: "Explore" }), "delegated: Explore");
+  assert.equal(toolLine("Task", {}), "delegated a subtask");
 });
 
 test("sessions are found under ~/.claude/projects, and nothing outside it is read", async () => {

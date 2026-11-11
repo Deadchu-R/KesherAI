@@ -67,6 +67,7 @@ export function toolLine(name: string, input: Record<string, unknown> = {}): str
   if (name === "Read") return `read: ${s("file_path")}`;
   if (name === "Bash") return `ran: ${short(s("command").replace(/\s+/g, " "))}`;
   if (name === "Grep" || name === "Glob") return `searched: ${short(s("pattern"))}`;
+  if (name === "Task") return s("description") || s("subagent_type") || s("prompt") ? `delegated: ${short(s("description") || s("subagent_type") || s("prompt"))}` : "delegated a subtask";
   if (name === "WebSearch") return `searched the web: ${short(s("query"))}`;
   if (name === "WebFetch") return `read the page: ${short(s("url"))}`;
   if (name === "TodoWrite" || name === "TaskCreate" || name === "TaskUpdate") return "updated the task list";
