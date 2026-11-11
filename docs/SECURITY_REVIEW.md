@@ -249,3 +249,30 @@ This review went through the code part by part. Each finding is listed with what
 - **`/api/pc-status`:** read only, with the same access as the rest of the API (local, or a paired device's key). It shows the card's name, load and memory, never files or processes. The guard's measurement is throttled to once every 2.5 s whoever polls. The page skips the poll while its tab is hidden (fixed now).
 - **`/api/system/terminate`:** needs `{confirm:"terminate"}`, and the page asks first. It needs a JSON body, so a cross-site form cannot send it. It stops self-work (and its worker, only at the address KesherAI started), ComfyUI and the engine, then restarts. It leaves a `terminated` mark in the data folder, so the next start, within 10 minutes and once only, loads no model and starts no ComfyUI. Found on the PC: without it, both came back by themselves. Tested.
 - **Fixed:** the hidden-tab poll, and the start after Terminate.
+
+## Scan 44 (2026-11-11): 0.6.73–0.6.86 (phone menus, board in plain chats, notifications, settings, git identity, engine fixes)
+- **`POST /api/conversations/:id/board-project`:** the request names no folder. The server picks the newest code chat's folder that is a git project inside the home folder (not the home folder itself) and grants that to the chat. From the phone, the most this can do is open a folder the user already works in to one of their chats.
+- **`list_files` and `search` in granted folders:**
+  - Both still go through `resolveForTool`, which accepts only the workspace or the granted roots.
+  - `search` gained a `path`, checked the same way.
+  - Folders are compared by real path (8.3 short names on Windows), so nothing outside them is reached.
+- **Antigravity approval cards** now show the diff or raw input the agent sends (capped at 6 KB), so edits are not approved blind.
+- **`saveConfig`:**
+  - Writes a new file with mode 0600, then renames it, one write at a time. Two writes at once had corrupted config.json (found in CI).
+  - The temporary file is removed when the rename fails.
+- **The agent's git identity:** `KesherAI <kesherai@noreply.invalid>` for every command the agent runs and for self-work's git. The user's own git email never reaches an agent commit (`.invalid` is a reserved domain).
+- **Notifications:**
+  - A waiting note keeps only the conversation id (`ref`) and how it ended.
+  - The history file still keeps no actions or one-time codes.
+  - A stopped run sends no "Done".
+- **Live stream:**
+  - The server pings every 10 s.
+  - The page reopens a stream that is quiet for 25 s, and only while the page is visible. There is no new endpoint.
+- **Start-up routines:** at most once in 6 hours. Repeated restarts no longer make a chat and a notification each time.
+- **Unity gating:**
+  - The project name goes into a RegExp only after escaping.
+  - Matching only decides which tools go to the model. It grants no access.
+- **Not changed, noted:**
+  - A saved rule (Nov 7) lets run_command run everywhere without asking. It is the user's choice; dangerous commands still ask. It is listed for Roee in his Thursday list.
+  - Destructive git on the PC (reset --hard) was refused by the safety check and left for the user.
+- **Result:** nothing to fix.
