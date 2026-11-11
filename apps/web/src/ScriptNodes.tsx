@@ -151,9 +151,9 @@ export function ScriptNodes() {
   const fresh = (kind: "call" | "set" | "if" | "local", target?: string): CsStmt => {
     const id = newId();
     return kind === "call" ? { id, kind, target: "Debug", name: "Log", args: ['"Hello"'], src: "", dirty: true }
-    : kind === "set" ? { id, kind, target: target ?? cls?.fields[0]?.name ?? "value", op: "=", value: target ? (cls?.fields.find((f) => f.name === target)?.value ?? "0") : "0", src: "", dirty: true }
-    : kind === "local" ? { id, kind, type: "var", name: "x", value: "0", src: "", dirty: true }
-    : { id, kind, cond: "true", then: [], src: "", dirty: true };
+      : kind === "set" ? { id, kind, target: target ?? cls?.fields[0]?.name ?? "value", op: "=", value: target ? (cls?.fields.find((f) => f.name === target)?.value ?? "0") : "0", src: "", dirty: true }
+      : kind === "local" ? { id, kind, type: "var", name: "x", value: "0", src: "", dirty: true }
+      : { id, kind, cond: "true", then: [], src: "", dirty: true };
   };
   /** Adds a new step after the chosen one (or at the end of the method). */
   const add = (kind: "call" | "set" | "if" | "local", target?: string) => {
@@ -342,15 +342,15 @@ export function ScriptNodes() {
                     <button type="button" onClick={() => add("set")}>+ {L("שינוי ערך", "Change a value")}</button>
                     <button type="button" onClick={() => add("if")}>+ {L("תנאי", "Condition")}</button>
                     <button type="button" onClick={() => add("local")}>+ {L("משתנה", "Variable")}</button>
-                    </div>
-                    {st && (st.kind === "if" || st.kind === "loop") && (
+                  </div>
+                  {st && (st.kind === "if" || st.kind === "loop") && (
                     <div className="row wrap script-add" aria-label={L("הוספה בפנים", "Add inside")}>
                       <span className="muted small">{st.kind === "loop" ? L("הוסף בפנים הלולאה:", "Add inside the loop:") : L("הוסף בתנאי:", "Add inside the condition:")}</span>
                       <button type="button" onClick={() => addInside("then")}>+ {st.kind === "loop" ? L("בלולאה", "In the loop") : L("כשהתנאי נכון", "When true")}</button>
                       {st.kind === "if" && <button type="button" onClick={() => addInside("else")}>+ {L("אחרת", "Otherwise")}</button>}
                     </div>
-                    )}
-                    {!st ? (
+                  )}
+                  {!st ? (
                     <p className="muted small">{L("בחרו נוד כדי לשנות אותו.", "Choose a node to change it.")}</p>
                   ) : (
                     <>

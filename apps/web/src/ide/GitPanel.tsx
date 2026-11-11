@@ -58,39 +58,39 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
       // Keep watching while a run is queued or running (GitHub may take a few seconds to start one).
       if (!r.reason && (r.runs.length === 0 || r.runs.some((x) => x.status !== "completed"))) runTimer.current = setTimeout(() => loadRuns(sha), 15_000);
     }, () => undefined);
-    };
+  };
 
-    /** The new-file line number a diff line sits at (tracked from its hunk headers). 0 for hunk headers. */
-    const lineOf = (diff: string, idx: number): number => {
-      const lines = diff.split("\n");
-      let n = 0;
-      for (let i = 0; i < idx; i++) {
-        const l = lines[i]!;
-        const m = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(l);
-        if (m) n = Number(m[1]);
-        else if (l.startsWith("+") && !l.startsWith("+++")) n++;
-        else if (l.startsWith(" ") || l === "") n++;
-        // "-" (deleted) lines and the file headers (diff/index/---/+++) consume no new line.
-      }
-      const l = lines[idx]!;
-      if (l.startsWith("+") && !l.startsWith("+++")) return n;
-      if (l.startsWith("-") && !l.startsWith("---")) return n;
-      if (l.startsWith("@@")) return 0;
-      return n;
-    };
+  /** The new-file line number a diff line sits at (tracked from its hunk headers). 0 for hunk headers. */
+  const lineOf = (diff: string, idx: number): number => {
+    const lines = diff.split("\n");
+    let n = 0;
+    for (let i = 0; i < idx; i++) {
+      const l = lines[i]!;
+      const m = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(l);
+      if (m) n = Number(m[1]);
+      else if (l.startsWith("+") && !l.startsWith("+++")) n++;
+      else if (l.startsWith(" ") || l === "") n++;
+      // "-" (deleted) lines and the file headers (diff/index/---/+++) consume no new line.
+    }
+    const l = lines[idx]!;
+    if (l.startsWith("+") && !l.startsWith("+++")) return n;
+    if (l.startsWith("-") && !l.startsWith("---")) return n;
+    if (l.startsWith("@@")) return 0;
+    return n;
+  };
 
-    /** Send a comment on the picked diff line to the chat, with the line quoted. */
-    const comment = (path: string) => {
-      if (!picked || !onFixInChat || !cNote.trim()) return;
-      const q = picked.text.trim();
-      const where = picked.line ? L(`שורה ${picked.line}`, `line ${picked.line}`) : L("שורה שנמחקת", "a deleted line");
-      const fence = q.includes("```") ? "````" : "```";
-      onFixInChat(L(`תגובה שלי על ${path} (${where}):\n${fence}\n${q}\n${fence}\n${cNote.trim()}`, `My comment on ${path} (${where}):\n${fence}\n${q}\n${fence}\n${cNote.trim()}`));
-      setPicked(null);
-      setCNote("");
-    };
+  /** Send a comment on the picked diff line to the chat, with the line quoted. */
+  const comment = (path: string) => {
+    if (!picked || !onFixInChat || !cNote.trim()) return;
+    const q = picked.text.trim();
+    const where = picked.line ? L(`שורה ${picked.line}`, `line ${picked.line}`) : L("שורה שנמחקת", "a deleted line");
+    const fence = q.includes("```") ? "````" : "```";
+    onFixInChat(L(`תגובה שלי על ${path} (${where}):\n${fence}\n${q}\n${fence}\n${cNote.trim()}`, `My comment on ${path} (${where}):\n${fence}\n${q}\n${fence}\n${cNote.trim()}`));
+    setPicked(null);
+    setCNote("");
+  };
 
-    if (!st) return null;
+  if (!st) return null;
   if (!st.repo) return <p className="muted">{L("התיקייה הזו לא מנוהלת ב־git.", "This folder is not a git repository.")}</p>;
 
   const step = async (name: string, fn: () => Promise<GitResult>) => {
@@ -264,7 +264,7 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
                 {picked?.path === f.path && (
                   <div className="diff-comment">
                     <p className="muted small mono" dir="ltr">{picked.line ? `L${picked.line}` : "del"} · {picked.text.trim() || "(empty line)"}</p>
-                    <textarea rows={2} value={cNote} onChange={(e) => setCNote(e.target.value)} onKeyDown={(e) => { if (e.key === "enter" && !e.shiftKey) { e.preventDefault(); comment(f.path); } }} placeholder={L("תגובה לשורה — Enter לשליחה לשיחה", "Comment on this line — Enter sends it to the chat")} />
+                    <textarea rows={2} value={cNote} onChange={(e) => setCNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); comment(f.path); } }} placeholder={L("תגובה לשורה — Enter לשליחה לשיחה", "Comment on this line — Enter sends it to the chat")} />
                     <button type="button" disabled={!cNote.trim()} onClick={() => comment(f.path)}>{L("תגובה", "Comment")}</button>
                   </div>
                 )}
