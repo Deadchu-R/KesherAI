@@ -449,3 +449,30 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **List UI write-ups (eleken, saasframe):** keep one line of metadata, use dividers rather than cards, and put the status where the eye starts.
 - **Taken here (0.6.95):** no box and no pill; a status mark (○ open, ◐ in progress, ⊘ blocked, ● done); the title cut at two lines (shown in full once opened); one quiet line: number, status, who. Categories fold and show a count; the explanation moved to a tooltip. The task in progress stays first.
 - **Stopped at:** drag to reorder and swipe actions on the phone (Todoist-style) were not built; tap to open is enough for now.
+
+## 2026-11-11: Phone notifications from the KesherAI app itself (like other phone apps)
+- **Question:** Roee wants the phone app to notify "normally", like other phone apps, not only through the ntfy app. He chose both ways of delivering: KesherAI's own connection, and through ntfy.
+- **Google's push service (Firebase/FCM):** needs a Firebase project (an account) and its server key. Not used (no accounts; it would also pass every notification through Google).
+- **Home Assistant (Android "persistent connection" / local push):** the app holds a websocket in a foreground service. A permanent notification is required; users minimize its channel. It costs some battery, and Android can drop it when the phone sleeps (forum reports). No Firebase. Source: companion.home-assistant.io/docs/notifications/notification-local.
+- **UnifiedPush (Element, Tusky, others):** an installed distributor app (ntfy) keeps one connection for all apps and hands each message to the app (KesherAI), which shows it as its own notification. The app registers and gets an endpoint, the server POSTs to it: 1–4096 bytes, no redirects, 2xx means accepted, 404/410 means stop using it, 429 means slow down. The spec asks servers to guard against SSRF: http/https only, no private addresses, checked when registered. The connector library (`org.unifiedpush.android:connector`) decrypts Web Push (RFC 8291, aes128gcm). Sources: unifiedpush.org/developers/spec/server, unifiedpush.org/@dev/kdoc/connector, rfc-editor.org/rfc/rfc8291.
+- **How phone apps notify (Android guidelines):**
+  - One channel per kind, so the user can mute each in Android settings. High (sound and pop-up) only for what needs you now.
+  - Tapping opens the exact place.
+  - Action buttons for things done without opening the app; sensitive ones only on an unlocked phone (`setAuthenticationRequired`).
+  - Update one notification instead of stacking duplicates; group several under a summary.
+  - Remove a notification once it no longer applies, the way messaging apps clear what was read on another device.
+  - Badges on the icon. Android 15 softens rapid repeats.
+  - Source: developer.android.com/develop/ui/compose/notifications.
+- **Plan for KesherAI:**
+  - **Channels:**
+    - "Waiting for you": high, pops up, with Approve/Deny that need an unlocked phone.
+    - "Finished": default.
+    - "Downloads": low.
+    - "Connection": minimal, for the live connection's permanent notification.
+  - **One notification per chat:** it is updated, not stacked, and grouped under KesherAI. It is cleared on the phone as soon as the chat is answered anywhere.
+  - **Delivery:**
+    - Over the live connection when it is up.
+    - Otherwise through UnifiedPush (ntfy), encrypted end to end so ntfy only sees ciphertext.
+    - Otherwise the current ntfy topic.
+  - **No duplicates:** the server sends each note one way only.
+- **Stopped at:** iOS is not in scope (no iOS app).
