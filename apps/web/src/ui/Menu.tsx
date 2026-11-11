@@ -53,11 +53,6 @@ const ITEM = '[role^="menuitem"]:not([disabled]):not([aria-disabled="true"])';
 export function Menu(p: MenuProps) {
   const [own, setOwn] = useState(false);
   const open = p.open ?? own;
-  // A flyout opened near the bottom of a long menu (a phone) scrolls into view, so its choices are seen.
-  const group = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (open) group.current?.scrollIntoView?.({ block: "nearest" });
-  }, [open]);
   const setOpen = (o: boolean) => {
     if (p.open === undefined) setOwn(o);
     p.onOpenChange?.(o);

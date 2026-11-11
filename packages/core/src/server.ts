@@ -124,6 +124,7 @@ import { detectHardwareCached, freeSpace } from "@kesher/downloads";
 import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes, TERMINATED_FILE } from "./routes/system.js";
+import { shortcutRoutes } from "./routes/shortcuts.js";
 import { modelRoutes } from "./routes/models.js";
 import { generateRoutes } from "./routes/generate.js";
 import { downloadRoutes } from "./routes/downloads.js";
@@ -1047,6 +1048,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
 
   await systemRoutes(app, services);
+  shortcutRoutes(app, services);
   await modelRoutes(app, services);
   await generateRoutes(app, services);
   if (features.downloads) await downloadRoutes(app, services);

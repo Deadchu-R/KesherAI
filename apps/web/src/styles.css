@@ -1867,3 +1867,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .settings-found { display: flex; flex-wrap: wrap; gap: 6px; }
 .settings-found a { padding: 6px 12px; border: 1px solid var(--border); border-radius: calc(999px * var(--r-scale, 1)); text-decoration: none; color: var(--text); font-size: 13px; }
 .settings-found a:hover { background: var(--panel-2); }
+
+/* The user's sidebar shortcuts: the ⋯ shows on hover (always on touch screens). */
+.nav-shortcuts { margin-bottom: 6px; }
+.nav-shortcut { display: flex; align-items: center; }
+.nav-shortcut > .nav-link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-shortcut .nav-shortcut-more { opacity: 0; }
+.nav-shortcut:hover .nav-shortcut-more, .nav-shortcut:focus-within .nav-shortcut-more { opacity: 1; }
+@media (pointer: coarse) { .nav-shortcut .nav-shortcut-more { opacity: 1; } }

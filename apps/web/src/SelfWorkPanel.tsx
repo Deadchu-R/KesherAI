@@ -38,9 +38,9 @@ const STATUS: Record<Run["status"], [string, string]> = {
  *
  * @param p.folder - The project folder chosen on the code screen.
  */
-export function SelfWorkPanel(p: { folder: string }) {
+export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
   const [run, setRun] = useState<Run | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!p.startOpen);
   const [goal, setGoal] = useState("");
   const [hours, setHours] = useState(2);
   const [check, setCheck] = useState("");
