@@ -20,3 +20,7 @@ pnpm apk        # → android/app/build/outputs/apk/debug/app-debug.apk
 ## Connecting from outside your home
 
 The phone talks to the computer over plain HTTP with the pairing token. Inside your home network that is fine. Outside it, install [Tailscale](https://tailscale.com) on both the computer and the phone and use the `100.x.x.x` link Settings → Phone shows; Tailscale encrypts the connection. Never forward KesherAI's port on your router.
+
+## Notifications
+
+The app shows KesherAI's notifications itself (the `notify` plugin, `plugins/notify`): over a live connection to the computer, or through UnifiedPush (ntfy) when it cannot reach the computer. Settings → Notifications in the app turns each way on. When you build the APK yourself, add the same `configurations.configureEach { exclude group: "com.google.protobuf", module: "protobuf-javalite" }` that `.github/workflows/android.yml` adds to `app/build.gradle`. UnifiedPush's encryption library and the phone's model engines would otherwise each bring a copy of protobuf.
