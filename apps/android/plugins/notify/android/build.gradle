@@ -21,7 +21,11 @@ repositories {
 dependencies {
     implementation project(':capacitor-android')
     // UnifiedPush (Apache-2.0): ntfy or another distributor delivers while the computer cannot be reached directly.
-    implementation "org.unifiedpush.android:connector:3.0.9"
+    // Its encryption library (Tink) brings protobuf-javalite; the phone's model engines bring the full protobuf-java,
+    // which holds the same classes. Keep only the full one (two copies fail the build as duplicate classes).
+    implementation("org.unifiedpush.android:connector:3.0.9") {
+        exclude group: "com.google.protobuf", module: "protobuf-javalite"
+    }
     // getActivity() returns an AppCompatActivity (for the permission request and the open page).
     implementation "androidx.appcompat:appcompat:${project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.0'}"
     implementation "androidx.core:core:${project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.15.0'}"
