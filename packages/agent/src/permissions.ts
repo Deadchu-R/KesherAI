@@ -13,8 +13,9 @@ const DANGEROUS: Array<[RegExp, string]> = [
   [/\b(rmdir|rd)\s+\/s\b/i, "deletes a folder tree"],
   [/\bdel\s+.*\/[sq]\b/i, "deletes files in bulk"],
   [/\bRemove-Item\b.*-Recurse/i, "deletes a folder tree"],
-  // `format C:` and Format-Volume erase a disk; Format-List/Format-Table/Format-Wide only lay out text.
-  [/\b(format(?!-(list|table|wide|custom|hex|number))|mkfs|diskpart|fdisk)\b/i, "can erase a disk"],
+  // `format C:` and Format-Volume erase a disk; Format-List/Format-Table/Format-Wide only lay out text, and wmic's
+  // `/format:list` only lays out its output (found in self-work: a disk-space check was held as "can erase a disk").
+  [/\b((?<![/-])format(?!-(list|table|wide|custom|hex|number)|:)|mkfs|diskpart|fdisk)\b/i, "can erase a disk"],
   [/\bgit\s+(push|reset\s+--hard|clean\s+-[a-z]*f|checkout\s+--\s|rebase|filter-branch)\b/i, "rewrites or publishes git history"],
   [/\b(npm|pnpm|yarn)\s+publish\b/i, "publishes a package"],
   [/\b(curl|wget|iwr|Invoke-WebRequest)\b.*\|\s*(sh|bash|zsh|iex|powershell|pwsh)\b/i, "runs code downloaded from the internet"],

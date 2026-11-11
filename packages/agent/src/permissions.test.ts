@@ -14,5 +14,7 @@ test("PowerShell's Format-List and Format-Table are not disk erasers; format C: 
   assert.equal(dangerReason("Get-Process llama-server | Format-List Id,CPU"), undefined);
   assert.equal(dangerReason("Get-NetTCPConnection -LocalPort 8081 | Format-Table State"), undefined);
   assert.equal(dangerReason("format C: /q"), "can erase a disk");
+  assert.equal(dangerReason("wmic logicaldisk get caption,freespace,size /format:list"), undefined, "wmic's output layout");
+  assert.equal(dangerReason("Format-Volume -DriveLetter D"), "can erase a disk");
   assert.equal(dangerReason("Format-Volume -DriveLetter D"), "can erase a disk");
 });
