@@ -66,7 +66,8 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
   const deviceOnly = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!device(req)) return reply.code(403).send({ error: "Only the paired phone app (with its own key) gets its own notifications." });
   };
-  app.get("/api/phone-push", { preHandler: deviceOnly }, async (req) => s.phonePush.status(device(req)!.id));
+  // With the computer's internet link, so the phone's live connection reaches it away from home too.
+  app.get("/api/phone-push", { preHandler: deviceOnly }, async (req) => ({ ...s.phonePush.status(device(req)!.id), internet: s.tunnel.status().url ?? null }));
   /** The live connection: an event stream of notifications for as long as the phone keeps it open. */
   app.get("/api/phone-push/stream", { preHandler: deviceOnly }, async (req, reply) => {
     reply.hijack();

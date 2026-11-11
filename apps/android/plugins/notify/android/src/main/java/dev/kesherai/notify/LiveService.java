@@ -28,6 +28,9 @@ public class LiveService extends Service {
     static final int ID = 7422;
     /** Whether the stream is open now (for the app's settings). */
     static volatile boolean connected;
+    /** The address the stream is open on now (home or internet link), for acks and buttons. */
+    static volatile String working = "";
+    private int attempt;
     private volatile boolean running;
     private volatile HttpURLConnection current;
     private Thread thread;
@@ -72,9 +75,12 @@ public class LiveService extends Service {
     private void loop() {
         long wait = 5000;
         while (running) {
-            String base = Prefs.base(this);
+            // Home address first, then the internet link (Access from anywhere), in turn.
+            java.util.List<String> bases = new java.util.ArrayList<>();
+            for (String b : new String[] { Prefs.base(this), Prefs.alt(this) }) if (!b.isEmpty()) bases.add(b);
             String key = Prefs.key(this);
-            if (base.isEmpty() || key.isEmpty()) break;
+            if (bases.isEmpty() || key.isEmpty()) break;
+            String base = bases.get(attempt++ % bases.size());
             try {
                 HttpURLConnection h = (HttpURLConnection) new URL(base.replaceAll("/+$", "") + "/api/phone-push/stream").openConnection();
                 current = h;
@@ -85,8 +91,10 @@ public class LiveService extends Service {
                 h.setRequestProperty("Authorization", "Bearer " + key);
                 h.setRequestProperty("Accept", "text/event-stream");
                 if (h.getResponseCode() != 200) throw new java.io.IOException("status " + h.getResponseCode());
+                working = base;
                 show(true);
                 wait = 5000;
+                attempt--;
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while (running && (line = r.readLine()) != null) {
@@ -109,6 +117,8 @@ public class LiveService extends Service {
             }
             show(false);
             if (!running) break;
+            // Try the other address straight away before waiting.
+            if (attempt % Math.max(1, bases.size()) != 0) continue;
             try {
                 Thread.sleep(wait);
             } catch (InterruptedException e) {

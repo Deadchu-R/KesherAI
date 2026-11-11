@@ -1,4 +1,4 @@
-import { deviceKey } from "./api";
+import { api, deviceKey } from "./api";
 
 /**
  * The Android app's own notifications (the KesherNotify native plugin): the live connection to the
@@ -18,7 +18,7 @@ export interface PhoneNotifyState {
 }
 
 interface Plugin {
-  configure(o: { base: string; key: string; live: boolean; push: boolean }): Promise<PhoneNotifyState>;
+  configure(o: { base: string; key: string; alt?: string; live: boolean; push: boolean }): Promise<PhoneNotifyState>;
   status(): Promise<PhoneNotifyState>;
   clear(o: { id: string }): Promise<void>;
   takeOpen(): Promise<{ path?: string }>;
@@ -43,7 +43,9 @@ export async function setPhoneNotify(live: boolean, push: boolean): Promise<Phon
   const key = deviceKey();
   if (!p) throw new Error("Update the KesherAI app on the phone to get its own notifications.");
   if (!key) throw new Error("This phone has no key of its own: pair it again in Settings → Phone on the computer.");
-  return p.configure({ base: location.origin, key, live, push });
+  // The computer's internet link: the live connection uses it away from home (no other app needed).
+  const internet = await api<{ internet?: string | null }>("/api/phone-push").then((r) => r.internet ?? "", () => "");
+  return p.configure({ base: location.origin, key, alt: internet, live, push });
 }
 
 /**

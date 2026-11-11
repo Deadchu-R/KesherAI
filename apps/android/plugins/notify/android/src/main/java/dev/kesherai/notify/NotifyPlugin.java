@@ -76,6 +76,11 @@ public class NotifyPlugin extends Plugin {
         });
     }
 
+    /** The internet link, only https (it travels over the internet). */
+    private static String altOf(String alt) {
+        return alt != null && alt.matches("^https://[^\\s/]+.*") ? alt : "";
+    }
+
     private static String originOf(String url) {
         try {
             java.net.URL u = new java.net.URL(url);
@@ -99,6 +104,7 @@ public class NotifyPlugin extends Plugin {
         Prefs.of(getContext()).edit()
             .putString("base", base)
             .putString("key", key)
+            .putString("alt", altOf(call.getString("alt", "")))
             .putBoolean("live", Boolean.TRUE.equals(call.getBoolean("live", false)))
             .putBoolean("push", Boolean.TRUE.equals(call.getBoolean("push", false)))
             .apply();

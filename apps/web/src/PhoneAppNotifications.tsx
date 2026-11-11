@@ -40,14 +40,14 @@ export function PhoneAppNotifications() {
     <section className="card stack">
       <h2>{L("התראות באפליקציה הזו", "Notifications in this app")}</h2>
       {!s.permission && (s.live || s.push) && <p className="error">{L("ההתראות של KesherAI כבויות באנדרואיד. הפעילו אותן כדי לקבל אותן.", "KesherAI's notifications are off in Android. Turn them on to get them.")}</p>}
-      {s.live && <p className={s.connected ? "muted" : "muted small"}>{s.connected ? L("🟢 מחובר למחשב: התראות מגיעות ישירות.", "🟢 Connected to the computer: notifications arrive directly.") : L("⚪ מחפש את המחשב (בבית, או דרך Tailscale). בינתיים: דרך ntfy, אם הוא פעיל.", "⚪ Looking for the computer (at home, or through Tailscale). Meanwhile: through ntfy, if on.")}</p>}
+      {s.live && <p className={s.connected ? "muted" : "muted small"}>{s.connected ? L("🟢 מחובר למחשב: התראות מגיעות ישירות.", "🟢 Connected to the computer: notifications arrive directly.") : L("⚪ מחפש את המחשב (ברשת הבית, ואז דרך הקישור מכל מקום).", "⚪ Looking for the computer (on the home network, then through the link from anywhere).")}</p>}
       <label className="check">
         <input type="checkbox" checked={s.live} onChange={(e) => void set(e.target.checked, s.push)} />
-        <span>{L("חיבור ישיר למחשב", "A direct connection to the computer")}<br /><span className="muted small">{L("הכי מהיר, ובלי אפליקציה נוספת. אנדרואיד מחייב הודעה קבועה קטנה (אפשר להסתיר אותה), וזה לוקח קצת סוללה.", "Fastest, with no other app. Android requires a small fixed notification (it can be hidden), and it uses some battery.")}</span></span>
+        <span>{L("חיבור ישיר למחשב", "A direct connection to the computer")}<br /><span className="muted small">{L("בבית וגם בחוץ (דרך הקישור \"גישה מכל מקום\" של המחשב), בלי שום אפליקציה נוספת. אנדרואיד מחייב הודעה קבועה קטנה (אפשר להסתיר אותה), וזה לוקח קצת סוללה.", "At home and away (through the computer's \"Access from anywhere\" link), with no other app. Android requires a small fixed notification (it can be hidden), and it uses some battery.")}</span></span>
       </label>
       <label className="check">
         <input type="checkbox" checked={s.push} onChange={(e) => void set(s.live, e.target.checked)} />
-        <span>{L("כשהמחשב לא זמין: דרך ntfy", "When the computer is out of reach: through ntfy")}<br /><span className="muted small">{pushNote || L("ntfy מחזיק חיבור אחד לכל האפליקציות ומעביר ל-KesherAI. חסכוני בסוללה.", "ntfy keeps one connection for all apps and hands KesherAI its messages. Easy on the battery.")}</span></span>
+        <span>{L("גיבוי (לא חובה): דרך ntfy", "Backup (optional): through ntfy")}<br /><span className="muted small">{pushNote || L("ntfy מחזיק חיבור אחד לכל האפליקציות ומעביר ל-KesherAI. חסכוני בסוללה.", "ntfy keeps one connection for all apps and hands KesherAI its messages. Easy on the battery.")}</span></span>
       </label>
       <p className="muted small">{L("כל שיחה מקבלת התראה אחת שמתעדכנת. \"מחכה לך\" קופצת עם צליל ועם אשר/דחה (רק בטלפון פתוח), ונעלמת כשעונים במחשב.", "Each chat gets one notification that updates. \"Waiting for you\" pops up with sound and Approve/Deny (only on an unlocked phone), and goes away once answered on the computer.")}</p>
       <div className="row wrap">

@@ -15,6 +15,20 @@ final class Prefs {
         return of(c).getString("base", "");
     }
 
+    /** The computer's internet link (Access from anywhere), for when the home address cannot be reached. */
+    static String alt(Context c) {
+        return of(c).getString("alt", "");
+    }
+
+    /** The addresses to try, the one that worked last first. */
+    static java.util.List<String> bases(Context c) {
+        java.util.List<String> l = new java.util.ArrayList<>();
+        for (String b : new String[] { LiveService.working, base(c), alt(c) }) {
+            if (b != null && !b.isEmpty() && !l.contains(b)) l.add(b);
+        }
+        return l;
+    }
+
     static String key(Context c) {
         return of(c).getString("key", "");
     }

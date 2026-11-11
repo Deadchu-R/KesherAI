@@ -17,8 +17,15 @@ final class Http {
      * @return The status, or -1 when the computer could not be reached.
      */
     static int send(Context c, String method, String path, String json) {
-        String base = Prefs.base(c);
-        if (base.isEmpty()) return -1;
+        // At home the home address, away the internet link: whichever answers.
+        for (String base : Prefs.bases(c)) {
+            int status = sendTo(c, base, method, path, json);
+            if (status != -1) return status;
+        }
+        return -1;
+    }
+
+    private static int sendTo(Context c, String base, String method, String path, String json) {
         HttpURLConnection h = null;
         try {
             h = (HttpURLConnection) new URL(base.replaceAll("/+$", "") + "/" + path.replaceAll("^/+", "")).openConnection();
