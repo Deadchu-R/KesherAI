@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SelfWork, readOutcome, type SelfWorkDeps } from "./self-work.js";
+import { REVIEW, SelfWork, readOutcome, tickedItem, type SelfWorkDeps } from "./self-work.js";
 
 test("reads the model's outcome line", () => {
   assert.deepEqual(readOutcome("did it\n**ITEM DONE: add the button**"), { kind: "item", text: "add the button" });
@@ -179,4 +179,19 @@ test("never runs on an outside agent (Antigravity: Google's terms allow only cha
   const { sw, repo } = await setup(["ALL DONE"]);
   await assert.rejects(sw.start({ repo, goal: "x", check: "", hours: 1, modelId: "agent/antigravity" }), /cannot run on Antigravity/);
   await assert.rejects(sw.start({ repo, goal: "x", check: "", hours: 1, modelId: "main/agent/antigravity" }), /cannot run on Antigravity/);
+});
+
+test("each changed item reviews its own diff once before the commit, and keeps its name", async () => {
+  const { sw, repo, git, sent } = await setup(["ITEM DONE: t26: access log keeps the key kind", "fixed the indentation\nITEM DONE", "ALL DONE"], { changed: true });
+  await sw.start({ repo, goal: "board tasks", check: "pnpm test", hours: 1 });
+  await sw.settled();
+  assert.equal(sent.filter((m) => m === REVIEW).length, 2, "once for the item, once for the last change");
+  const commits = git.filter((a) => a[0] === "commit");
+  assert.equal(commits[0]![2], "self-work: t26: access log keeps the key kind");
+  assert.equal(sw.current?.status, "done");
+});
+
+test("an item finished without its closing line is named from the plan line it ticked", () => {
+  assert.equal(tickedItem("@@ -3 +3 @@\n-- [ ] t27: Hebrew errors\n+- [x] t27: Hebrew errors"), "t27: Hebrew errors");
+  assert.equal(tickedItem("+- [ ] new item"), undefined);
 });

@@ -47,6 +47,10 @@ export interface SelfWorkState {
   /** Why it ended, or what it waits for. */
   note?: string;
   failures: number;
+  /** The current item passed its check and was sent back once for the model to review its own diff (see REVIEW). */
+  reviewing?: boolean;
+  /** What the item was called before its review (the review turn may only say "ITEM DONE"). */
+  reviewLabel?: string;
   /** Items given up on (their changes undone) so the run could go on with the next one. */
   skipped?: Array<{ at: number; why: string }>;
 }
@@ -88,6 +92,32 @@ const WAIT_MS = 30 * 60_000;
 /** A turn with no new step (no tool call, no answer) for this long is stuck: it is stopped and the item resumed. */
 const STALL_MS = 12 * 60_000;
 
+/**
+ * The self-review an item gets after its check passes and before it is committed, from the small bugs Claude's
+ * reviews found in self-work's commits (2026-11-11): broken indentation, a key name in the wrong case ("enter"),
+ * a task done again that already existed, and commits that did not say which item they were.
+ */
+export const REVIEW = [
+  "The check passed. Before KesherAI commits, review your own change once:",
+  "1. Read the whole diff (run_command: git diff, or read_file on each file you changed) as a reviewer would.",
+  "2. Indentation and style match the lines around them exactly (spaces, quotes, semicolons, line length); no code reformatted that you did not need to touch.",
+  "3. Names are exact: event keys (\"Enter\", \"Escape\"), CSS classes and API paths exist where you use them (search for them), props and imports are used.",
+  "4. Anything new a user sees has Hebrew and English (L(he, en)), and works at 390 px on a phone; every new exported function has a TSDoc comment.",
+  "5. Nothing left over: debug output, commented-out code, unrelated edits, files you did not mean to add.",
+  "Fix what you find (run check_code again if you changed anything), then end with the same line: ITEM DONE: <task id if it has one>: <the item>.",
+].join("\n");
+
+/**
+ * Names an item the model finished without saying so: the plan line it ticked in this change.
+ *
+ * @param planDiff - `git diff` of .kesher-self/plan.md for this item.
+ * @returns The item's text, or undefined.
+ */
+export function tickedItem(planDiff: string): string | undefined {
+  const m = /^\+\s*-\s*\[x\]\s*(.+)$/im.exec(planDiff);
+  return m?.[1]?.trim().slice(0, 150) || undefined;
+}
+
 /** The rules the model gets with the goal. */
 export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check">, hours: number, shared?: string): string {
   return [
@@ -101,6 +131,9 @@ export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check"
     `3. End every turn with one line: "ITEM DONE: <the item>", or "ALL DONE" when the goal is met, or "BLOCKED: <why>" when you need the user (a decision, a password, an approval).${s.check ? ` After ITEM DONE KesherAI runs \`${s.check}\`; if it fails you get its output to fix first.` : ""}`,
     "4. Never push, merge, switch branches, rewrite history or delete files you did not create. Do not install programs. Stay inside this project.",
     "5. Small and safe beats big: if an item is too large, split it in the plan.",
+    "6. Before building a task, search whether it already exists. If it does, check it works and mark it done on the board with where it is, instead of building it again.",
+    "7. Follow the project's own rules (AGENTS.md) and the code around you: same indentation, naming and patterns; change only what the item needs.",
+    "8. Name the item: ITEM DONE: <task id>: <what changed> (for example: ITEM DONE: t26: access log keeps the key kind). After the check passes KesherAI asks you once to review your diff before it commits.",
   ].join("\n");
 }
 
@@ -379,7 +412,8 @@ export class SelfWork {
         // worktree changed, the check decides, not the wording.
         if (out.kind === "none") {
           const changed = (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim();
-          if (changed) out = { kind: "item", text: "Changes (the model did not name the item)" };
+          // Named from the plan line it ticked, when it did.
+          if (changed) out = { kind: "item", text: tickedItem((await this.d.git(r.worktree ?? r.repo, ["diff", "--", ".kesher-self/plan.md"])).out) ?? "Changes (the model did not name the item)" };
         }
         if (out.kind === "none") {
           r.failures++;
@@ -403,8 +437,19 @@ export class SelfWork {
             continue;
           }
         }
+        // Once per item: the model reviews its own diff before the commit (catches the small bugs a check does not).
+        if (!r.reviewing && (out.kind === "item" || out.kind === "all") && (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim()) {
+          r.reviewing = true;
+          r.reviewLabel = out.text;
+          await this.save();
+          await this.d.send(r.convId, REVIEW);
+          continue;
+        }
+        const named = out.text && !/did not name the item|^An item$/.test(out.text) ? out.text : r.reviewLabel || out.text;
+        r.reviewing = false;
+        delete r.reviewLabel;
         r.failures = 0;
-        const label = out.text || "Plan";
+        const label = named || "Plan";
         await this.d.git(r.worktree ?? r.repo, ["add", "-A"]);
         const committed = await this.d.git(r.worktree ?? r.repo, ["commit", "-m", `self-work: ${label.slice(0, 150)}`, "-m", `Goal: ${r.goal.slice(0, 500)}`]);
         const sha = committed.code === 0 ? (await this.d.git(r.worktree ?? r.repo, ["rev-parse", "--short", "HEAD"])).out.trim() : undefined;

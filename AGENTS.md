@@ -28,3 +28,11 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 ## Safety
 - Never type passwords, keys or tokens. Never change system or security settings.
 - Ask before deleting files outside the project, and before downloads.
+
+## Quality (from reviews of self-work's commits)
+- Before you build a task, search whether it already exists. If it does, check it and mark it done with where it is.
+- Match the code around you: the same indentation, quotes and naming. Change only what the item needs; do not reformat.
+- Names must be exact: event keys (`"Enter"`, not `"enter"`), CSS classes and API paths that exist (search for them).
+- Text a user sees: Hebrew and English (`L(he, en)`), and it works on a 390 px phone.
+- Before you say ITEM DONE, read your own diff once, the way a reviewer would.
+- Name the item with its board id: `ITEM DONE: t26: what changed`.
