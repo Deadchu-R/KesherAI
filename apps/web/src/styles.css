@@ -1877,3 +1877,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .nav-shortcut .nav-shortcut-more { opacity: 0; }
 .nav-shortcut:hover .nav-shortcut-more, .nav-shortcut:focus-within .nav-shortcut-more { opacity: 1; }
 @media (pointer: coarse) { .nav-shortcut .nav-shortcut-more { opacity: 1; } }
+/* Phone: messages rise above the bottom tabs (they were drawn under them, so an error could not be read). */
+@media (max-width: 760px) {
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 60; text-align: center; }
+}
