@@ -1,3 +1,8 @@
+/**
+ * Cards on the Models page for the kinds beyond chat and images (video, speech-to-text, text-to-speech,
+ * embeddings; music and 3D through ComfyUI): what each kind does, which engine runs it, what is installed and
+ * active, a picker for the active one, and what to download when there is none.
+ */
 import { useEffect, useState } from "react";
 import type { ModelInfo } from "@kesher/shared";
 import { api, withToken } from "./api";

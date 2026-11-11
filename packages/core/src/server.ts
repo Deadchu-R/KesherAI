@@ -1,3 +1,10 @@
+/**
+ * KesherAI's core server: `createKesherServer` builds everything in one place, in order: the settings and
+ * data folders, model providers, plugins, the services (conversations, the llama.cpp engine, the graphics card
+ * guard, notifications, self-work, the task board…), every route under /api and /v1, the remote-access check,
+ * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
+ * docs/ARCHITECTURE.md for the walk-through.
+ */
 import type { AgentTool } from "@kesher/agent";
 import { mkdir, readFile as readFileFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";

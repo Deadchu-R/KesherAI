@@ -1,3 +1,8 @@
+/**
+ * `KesherServices`: the one object every route receives (`s` in routes/*.ts). It holds the live parts of the
+ * app (provider registry, conversation manager, engine, guard, notifier, downloads, config…), so a route never
+ * creates its own and everything shares one state.
+ */
 import type { ProjectFacts } from "./project-facts.js";
 import type { SelfWork } from "./self-work.js";
 import type { TaskBoard } from "./task-board.js";

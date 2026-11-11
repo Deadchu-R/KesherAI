@@ -1,3 +1,8 @@
+/**
+ * Pipelines: saved multi-step jobs that chain models and tools, with conditions and loops (e.g. transcribe →
+ * summarize → an email per action item). The page lists them, fills their inputs, runs them through
+ * /api/pipelines and shows each run's steps and files. The engine is packages/core/src/pipelines.ts.
+ */
 import { useEffect, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale } from "../i18n";

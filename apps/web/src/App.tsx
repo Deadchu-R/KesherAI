@@ -1,3 +1,8 @@
+/**
+ * The app shell: the top bar, the sidebar, and which page shows for the address after `#` (`#/c/<id>` a chat,
+ * `#/settings/<category>`, `#/models`…). There is no router library: `useHash` reads `location.hash` and `App`
+ * picks the page. Pages load lazily (their code is fetched the first time they open).
+ */
 import { GuardBanner } from "./GuardSection";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";

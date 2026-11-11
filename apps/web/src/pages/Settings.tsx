@@ -1,3 +1,8 @@
+/**
+ * The Settings page: categories on the side (chips on a phone), one search over all of them, and the sections
+ * they hold. `SETTINGS_CATS` is the map of what lives where; most sections are their own components, in this
+ * file or next to it (GuardSection, NotificationsSection…). Research behind the order: docs/RESEARCH_LOG.md.
+ */
 import { ImportChats } from "../ImportChats";
 import { ComputersSection } from "../ComputersSection";
 import { AppearanceSection } from "../AppearanceSection";

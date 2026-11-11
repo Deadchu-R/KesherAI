@@ -1,3 +1,7 @@
+/**
+ * The IDE panel beside a code chat: the project's files, the changes the agent made (with diffs), and a
+ * terminal in the project folder. On a phone it opens on demand at half the screen.
+ */
 import { useEffect, useMemo, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "../api";

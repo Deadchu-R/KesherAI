@@ -1,3 +1,8 @@
+/**
+ * Search and download models from Hugging Face: a query, a category (chat, image, voice…), the files of each
+ * repository with their size and whether they fit this computer, and a download button that hands the file to
+ * the core's DownloadManager.
+ */
 import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES } from "@kesher/shared";
 import { api } from "./api";
