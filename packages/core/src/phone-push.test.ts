@@ -79,7 +79,7 @@ test("live phones get it over the stream; others through their push address; a g
   }) as unknown as typeof fetch, 50);
   const written: string[] = [];
   // The live phone confirms what it gets, as the app does.
-  const res = { writeHead: () => undefined, write: (s: string) => { written.push(s); const seq = /"seq":(\d+)/.exec(s)?.[1]; if (seq) setTimeout(() => push.ack(Number(seq)), 5); }, on: () => undefined, end: () => undefined };
+  const res = { writeHead: () => undefined, write: (s: string) => { written.push(s); const seq = /"seq":(\d+)/.exec(s)?.[1]; if (seq) setTimeout(() => (push.ack(Number(seq), "b"), push.ack(Number(seq), "a")), 5); }, on: () => undefined, end: () => undefined };
   push.attach("a", res as never);
   assert.equal(push.hasReceivers(), true);
   assert.equal(await push.deliver({ t: "show", id: "c1", ch: "waiting", title: "T", body: "B" }), true);

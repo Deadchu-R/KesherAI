@@ -69,10 +69,31 @@ public class NotifyPlugin extends Plugin {
     /** { base, key, live, push }: saves them, asks for the notification permission once, and applies them. */
     @PluginMethod
     public void configure(PluginCall call) {
+        // Only the computer the app has open may point notifications at itself (not another page).
+        getActivity().runOnUiThread(() -> {
+            String page = getBridge().getWebView().getUrl();
+            new Thread(() -> configureFrom(call, page)).start();
+        });
+    }
+
+    private static String originOf(String url) {
+        try {
+            java.net.URL u = new java.net.URL(url);
+            return u.getProtocol() + "://" + u.getAuthority();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void configureFrom(PluginCall call, String page) {
         String base = call.getString("base", "");
         String key = call.getString("key", "");
         if (base == null || !base.matches("^https?://[^\\s/]+.*") || key == null || !key.startsWith("kd_")) {
             call.reject("This phone needs its own key from the computer (pair it again in Settings → Phone).");
+            return;
+        }
+        if (page == null || !originOf(page).equals(originOf(base))) {
+            call.reject("Notifications can be set only from the computer the app has open.");
             return;
         }
         Prefs.of(getContext()).edit()
@@ -82,7 +103,7 @@ public class NotifyPlugin extends Plugin {
             .putBoolean("push", Boolean.TRUE.equals(call.getBoolean("push", false)))
             .apply();
         if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
-            requestPermissionForAlias("notifications", call, "afterPermission");
+            getActivity().runOnUiThread(() -> requestPermissionForAlias("notifications", call, "afterPermission"));
             return;
         }
         apply(call);

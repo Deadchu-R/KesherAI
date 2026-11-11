@@ -73,7 +73,7 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     s.phonePush.attach(device(req)!.id, reply.raw);
   });
   app.post<{ Body: { seq?: number } }>("/api/phone-push/ack", { preHandler: deviceOnly }, async (req) => {
-    s.phonePush.ack(Number(req.body?.seq));
+    s.phonePush.ack(Number(req.body?.seq), device(req)!.id);
     return { ok: true };
   });
   /** The phone's UnifiedPush address and Web Push keys, checked first (https, a public server). */

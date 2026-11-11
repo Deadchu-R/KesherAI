@@ -136,7 +136,7 @@ export class PhonePush {
   private readonly live = new Map<string, Set<ServerResponse>>();
   private readonly ping: NodeJS.Timeout;
   private seq = 0;
-  private readonly waitingAck = new Map<number, () => void>();
+  private readonly waitingAck = new Map<number, { device: string; done: () => void }>();
 
   /**
    * @param devices - The paired devices (config.remote.devices; a removed device gets nothing).
@@ -167,6 +167,14 @@ export class PhonePush {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
     res.write(": connected\n\n");
     const set = this.live.get(deviceId) ?? new Set();
+    // At most 3 connections per phone (a reconnecting app must not pile them up): the oldest goes.
+    if (set.size >= 3) {
+      const oldest = set.values().next().value;
+      if (oldest) {
+        set.delete(oldest);
+        oldest.end();
+      }
+    }
     set.add(res);
     this.live.set(deviceId, set);
     res.on("close", () => {
@@ -205,7 +213,7 @@ export class PhonePush {
           const acked = new Promise<boolean>((resolve) => {
             const t = setTimeout(() => (this.waitingAck.delete(seq), resolve(false)), this.ackMs);
             t.unref?.();
-            this.waitingAck.set(seq, () => (clearTimeout(t), this.waitingAck.delete(seq), resolve(true)));
+            this.waitingAck.set(seq, { device: d.id, done: () => (clearTimeout(t), this.waitingAck.delete(seq), resolve(true)) });
           });
           for (const r of live) r.write(`data: ${JSON.stringify({ ...m, seq })}\n\n`);
           if (await acked) return true;
@@ -236,9 +244,11 @@ export class PhonePush {
    * The phone confirms a message it got on the live connection.
    *
    * @param seq - The message's number.
+   * @param deviceId - The device confirming (only the device it was sent to counts).
    */
-  ack(seq: number): void {
-    this.waitingAck.get(seq)?.();
+  ack(seq: number, deviceId: string): void {
+    const w = this.waitingAck.get(seq);
+    if (w?.device === deviceId) w.done();
   }
 
   /** Stops the keep-alive timer (tests). */
