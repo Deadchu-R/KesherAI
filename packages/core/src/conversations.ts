@@ -205,6 +205,8 @@ function steerImagesToEngine(tool: AgentTool): AgentTool {
  * tools) and saves them as they change.
  */
 export class ConversationManager {
+  /** The message each conversation is sending right now (read by unityInChat before it becomes an event). */
+  private readonly incoming = new Map<string, string>();
   /** Outside agents (their CLI processes) of open conversations. */
   private readonly outside = new Map<string, OutsideAgent>();
   /** Outside agents' session ids, saved with the chat. */
@@ -1311,6 +1313,7 @@ export class ConversationManager {
    * user named Unity or the project. Re-read on every message, so naming Unity brings the tools from the next step.
    */
   private unityInChat(id?: string): boolean {
+    // (`incoming`: the message being sent right now, before it is an event.)
     const project = this.deps.unity?.activeProject;
     if (!project) return false;
     if (!id) return true;
@@ -1319,6 +1322,7 @@ export class ConversationManager {
     if (c?.workspace && norm(c.workspace) === norm(project)) return true;
     const name = basename(project).toLowerCase();
     const words = new RegExp(`unity|יוניטי${name.length > 2 ? `|${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` : ""}`, "i");
+    if (words.test(this.incoming.get(id) ?? "")) return true;
     return (this.sessions.get(id)?.events ?? []).some((e) => (e.type === "tool_call" && e.name.startsWith("unity_")) || (e.type === "user" && words.test(e.text)));
   }
 
@@ -1354,7 +1358,9 @@ export class ConversationManager {
       }
     }
     if (unrealDir) this.unrealState.project = unrealDir;
-    // Rebuild tools and prompt so new active models and project changes apply.
+    // Rebuild tools and prompt so new active models and project changes apply. The message being sent counts for
+    // unityInChat: its first message about Unity already gets the Unity guide, not only the next one.
+    this.incoming.set(id, text);
     const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     session.setTools(tools);
     session.systemPrompt = await this.promptFor(conversation, notes);
