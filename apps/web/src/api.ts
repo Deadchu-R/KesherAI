@@ -68,6 +68,12 @@ export function disconnectComputer(): void {
   }
 })();
 
+/** @returns This device's own key (kd_…) when it has one, for the phone app's native parts. */
+export function deviceKey(): string | undefined {
+  const t = token();
+  return t?.startsWith("kd_") ? t : undefined;
+}
+
 function token(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY);

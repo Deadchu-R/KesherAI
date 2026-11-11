@@ -3,6 +3,7 @@
  * `#/settings/<category>`, `#/models`…). There is no router library: `useHash` reads `location.hash` and `App`
  * picks the page. Pages load lazily (their code is fetched the first time they open).
  */
+import { clearPhoneNotes } from "./phoneNotify";
 import { GuardBanner } from "./GuardSection";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
@@ -225,6 +226,9 @@ export function App() {
   // On a phone the sidebar is a full-screen menu; close it when the user navigates.
   useEffect(() => {
     setMenuOpen(false);
+    // The Android app: an open chat's notifications go from the phone's notification shade.
+    const chat = /^#\/c\/([\w-]+)/.exec(hash)?.[1];
+    if (chat) clearPhoneNotes(chat);
   }, [hash]);
 
   useEffect(() => {

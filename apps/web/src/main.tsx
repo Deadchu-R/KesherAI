@@ -11,6 +11,7 @@ import { startPhoneShare } from "./phone";
 import { installSlideMenus } from "./slideMenus";
 import { loadAppearance } from "./appearance";
 import { startPlacement } from "./placement";
+import { startPhoneNotify } from "./phoneNotify";
 
 setLocale(getLocale());
 // Pages refresh themselves every few seconds; in a hidden tab (or the phone app in the background)
@@ -53,6 +54,8 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 
 // Inside the Android app: things shared from other apps, and the home-screen widget.
 startPhoneShare();
+// The Android app's own notifications: open the page a tapped notification asked for.
+startPhoneNotify();
 // Press a menu button, slide to an item, let go to choose it.
 installSlideMenus();
 

@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { Select } from "./ui/Select";
+import { PhoneAppNotifications } from "./PhoneAppNotifications";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -46,13 +47,15 @@ export function NotificationsSection() {
     setError("");
     try {
       const r = await api<{ channels: string[] }>("/api/notifications/test", { method: "POST" });
-      setMsg(r.channels.includes("phone") ? L("נשלחה התראת בדיקה לטלפון.", "A test notification went to the phone.") : L("נשלח. אם הטלפון לא קיבל — בדקו שנרשמתם לנושא באפליקציית ntfy.", "Sent. If the phone got nothing, check you subscribed to the topic in the ntfy app."));
+      setMsg(r.channels.includes("app") ? L("נשלחה התראת בדיקה לאפליקציה בטלפון.", "A test notification went to the phone app.") : r.channels.includes("phone") ? L("נשלחה התראת בדיקה לטלפון.", "A test notification went to the phone.") : L("נשלח. אם הטלפון לא קיבל — בדקו שנרשמתם לנושא באפליקציית ntfy.", "Sent. If the phone got nothing, check you subscribed to the topic in the ntfy app."));
     } catch (e) {
       setError((e as Error).message);
     }
   };
   if (!s) return error ? <section className="card stack"><h2>{L("התראות", "Notifications")}</h2><p className="muted">{error}</p></section> : null;
   return (
+    <>
+    <PhoneAppNotifications />
     <section className="card stack">
       <h2>{L("התראות", "Notifications")}</h2>
       <p className="muted">{L("הודעה כשעבודה ארוכה מסתיימת (צ׳אט, סוכן או הורדה), או כשסוכן מחכה לאישור שלכם — גם כשאתם רחוקים מהמחשב.", "A message when long work ends (a chat, an agent or a download), or when an agent waits for your approval — even away from the computer.")}</p>
@@ -105,5 +108,6 @@ export function NotificationsSection() {
       </div>
       {error && <p className="error small">{error}</p>}
     </section>
+    </>
   );
 }
