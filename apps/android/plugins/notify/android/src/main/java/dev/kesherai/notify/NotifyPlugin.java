@@ -17,9 +17,6 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
-import org.unifiedpush.android.connector.UnifiedPush;
-
-import java.util.List;
 
 /**
  * KesherAI's own notifications on the phone (window.Capacitor.Plugins.KesherNotify): the web app tells
@@ -27,13 +24,17 @@ import java.util.List;
  */
 @CapacitorPlugin(name = "KesherNotify", permissions = { @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }) })
 public class NotifyPlugin extends Plugin {
-    private static final String NTFY = "io.heckel.ntfy";
 
     @Override
     public void load() {
-        Notes.channels(getContext());
+        // Nothing here may stop the plugin from loading (then the app would have no notifications at all).
         Notes.foreground = true;
-        remember(getActivity() != null ? getActivity().getIntent() : null);
+        try {
+            Notes.channels(getContext());
+            remember(getActivity() != null ? getActivity().getIntent() : null);
+        } catch (Throwable t) {
+            // channels are made again before each notification
+        }
     }
 
     /** A tapped notification opened the app: keep its page until the web app asks (takeOpen). */
@@ -134,13 +135,9 @@ public class NotifyPlugin extends Plugin {
             c.stopService(live);
         }
         if (Prefs.push(c)) {
-            List<String> all = UnifiedPush.getDistributors(c);
-            String saved = UnifiedPush.getAckDistributor(c);
-            if (saved == null && !all.isEmpty()) UnifiedPush.saveDistributor(c, all.contains(NTFY) ? NTFY : all.get(0));
-            if (saved != null || !all.isEmpty()) UnifiedPush.register(c, "default", "KesherAI", null);
-            else Prefs.of(c).edit().putString("pushState", "no-distributor").apply();
-        } else if (UnifiedPush.getAckDistributor(c) != null) {
-            UnifiedPush.unregister(c, "default");
+            if (!Up.register(c)) Prefs.of(c).edit().putString("pushState", "no-distributor").apply();
+        } else {
+            Up.unregister(c);
         }
         call.resolve(state());
     }
@@ -153,8 +150,8 @@ public class NotifyPlugin extends Plugin {
         o.put("connected", LiveService.connected);
         o.put("push", Prefs.push(c));
         o.put("pushState", Prefs.of(c).getString("pushState", ""));
-        o.put("distributor", UnifiedPush.getAckDistributor(c));
-        o.put("distributors", UnifiedPush.getDistributors(c).size());
+        o.put("distributor", Up.distributor(c));
+        o.put("distributors", Up.count(c));
         return o;
     }
 
