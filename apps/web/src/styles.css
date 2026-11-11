@@ -582,6 +582,8 @@ html, body { overflow-x: hidden; }
 .hub-led { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 4px rgb(255 120 120 / .12); flex: none; }
 .hub-led.ok { background: var(--good); box-shadow: 0 0 0 4px rgb(111 211 165 / .14); }
 .hub-line { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Phone: a short screen and several graphics cards put the load and Terminate below the fold; the panel scrolls. */
+@media (max-width: 700px) { .hub-pop { max-height: calc(100dvh - var(--bar-h) - 16px); overflow-y: auto; overscroll-behavior: contain; } }
 .hub-meter { display: grid; gap: 5px; font-size: 12.5px; }
 .hub-meter-top { display: flex; justify-content: space-between; gap: 8px; }
 .hub-bar { height: 6px; border-radius: calc(3px * var(--r-scale, 1)); background: var(--raised); overflow: hidden; }
