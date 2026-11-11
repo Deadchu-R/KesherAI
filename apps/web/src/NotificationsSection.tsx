@@ -6,6 +6,9 @@ import { Select } from "./ui/Select";
 import { PhoneAppNotifications } from "./PhoneAppNotifications";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+// The server's long 403 for these settings is in English ("Where notifications go … changed only
+// on the computer itself."); on the phone, say it in the page's language. Other errors stay as they are.
+const say = (e: Error) => (e.message.includes("changed only on the computer itself") ? L("הגדרה שזמינה רק במחשב עצמו.", "a setting only the computer itself may change.") : e.message);
 
 interface Settings {
   ntfy: { enabled: boolean; server: string; topic?: string };
@@ -29,7 +32,7 @@ export function NotificationsSection() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
-    api<Settings>("/api/notifications").then(setS, (e: Error) => setError(e.message));
+    api<Settings>("/api/notifications").then(setS, (e: Error) => setError(say(e)));
   }, []);
   useEffect(() => {
     if (s?.subscribeUrl) void QRCode.toDataURL(s.subscribeUrl, { margin: 1, width: 168 }).then(setQr, () => setQr(""));
@@ -39,7 +42,7 @@ export function NotificationsSection() {
     try {
       setS(await api<Settings>("/api/notifications", { method: "PUT", body }));
     } catch (e) {
-      setError((e as Error).message);
+      setError(say(e as Error));
     }
   };
   const test = async () => {
@@ -49,7 +52,7 @@ export function NotificationsSection() {
       const r = await api<{ channels: string[] }>("/api/notifications/test", { method: "POST" });
       setMsg(r.channels.includes("app") ? L("נשלחה התראת בדיקה לאפליקציה בטלפון.", "A test notification went to the phone app.") : r.channels.includes("phone") ? L("נשלחה התראת בדיקה לטלפון.", "A test notification went to the phone.") : L("נשלח. אם הטלפון לא קיבל — בדקו שנרשמתם לנושא באפליקציית ntfy.", "Sent. If the phone got nothing, check you subscribed to the topic in the ntfy app."));
     } catch (e) {
-      setError((e as Error).message);
+      setError(say(e as Error));
     }
   };
   if (!s) return error ? <section className="card stack"><h2>{L("התראות", "Notifications")}</h2><p className="muted">{error}</p></section> : null;
