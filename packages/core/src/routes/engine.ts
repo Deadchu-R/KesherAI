@@ -63,6 +63,9 @@ async function modelsOnComputer(s: KesherServices, fresh = false): Promise<Found
  * @returns The model id, e.g. `llamacpp/Qwen3-8B-Q4_K_M`.
  */
 export async function loadModel(s: KesherServices, modelPath: string, name?: string): Promise<string> {
+  // Before too: the guard checks every few seconds, and a load takes up to a minute; after a long idle time it
+  // stopped the server while it was still loading (found on the PC: "stopped: unused for a while" twice in a row).
+  s.guard.touch("llamacpp");
   await s.engine.load(modelPath);
   // A model just loaded is in use: without this, the idle unloader (20 minutes by default) stopped it seconds after
   // loading when nothing had run for a while (found on the PC: Qwen3.6 loaded, then unloaded 3 s later).

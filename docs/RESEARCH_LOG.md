@@ -385,3 +385,28 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - The duplicate 📦 icon (Models and Libraries).
   - "Watch" duplicates the 🔔 inbox.
   - A developer-mode switch that hides advanced pages (LM Studio).
+
+## 2026-11-11: Calibrating to Roee's PC (RTX 3090 24 GB, Ryzen 9 9950X3D, 94 GB) — measured
+- **llama-bench (b12110), Qwen3.8-27B UD-Q4_K_XL, all on the GPU, no MTP**, in tokens per second:
+
+| Setup | Reading 2K | Writing | Reading at 16K | Writing at 16K | Reading at 49K | Writing at 49K |
+| --- | --- | --- | --- | --- | --- | --- |
+| FA off, f16 KV | 1,502 | 41.0 | 1,035 | 33.2 | – | – |
+| FA on, f16 KV | 1,521 | 41.0 | 1,253 | 38.9 | – | – |
+| FA on, q8_0 KV (ours) | 1,499 | 40.6 | 1,236 | 36.9 | 913 | 31.0 |
+
+- **FA:** helps from 16K on (+21% reading, +17% writing). It is on in our server, because a q8_0 V cache needs it.
+- **q8_0 KV:** costs about 5% writing at 16K and halves the context memory. Kept.
+- **Our server, live:**
+  - 2 slots × 49,152 context.
+  - MTP gives 60.8 tok/s writing (66% of guesses accepted), about 1.5× the 40.6 without it.
+  - The prompt cache works: the next message re-read 30 tokens of 9,155 (f_keep 0.996).
+- **A plain chat's instructions and tools are 9,058 tokens:** 6.7 s before the first word of a new chat. Slimming them is the next real gain.
+- **Bug found and fixed:** after 20+ idle minutes, loading a model by hand was stopped by the idle unloader while still loading.
+- **Research:**
+  - ik_llama.cpp: about 73 tok/s at 156K on one 3090 with MTP; techyon.pages.dev.
+  - DFlash: about 2×, but Linux, greedy decoding and its own fork only.
+- **Stopped at:** these are not built yet:
+  - A calibration screen that runs this matrix on any computer.
+  - Slimming the plain chat's tools.
+  - Trying ik_llama.cpp as a second engine.
