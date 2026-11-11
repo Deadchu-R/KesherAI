@@ -11,7 +11,8 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/out/**", "**/node_modules/**", "docs/api/**", "apps/android/www/vendor/**", "vendor/**"] },
+  // .kesher-self/ is the self-work agent's own scratch area (plan.md + throwaway scripts) — never linted.
+  { ignores: ["**/dist/**", "**/out/**", "**/node_modules/**", "docs/api/**", "apps/android/www/vendor/**", "vendor/**", ".kesher-self/**"] },
   js.configs.recommended,
   { files: ["scripts/**", "apps/desktop/**"], languageOptions: { globals: globals.node } },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
