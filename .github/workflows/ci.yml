@@ -33,7 +33,16 @@ jobs:
       - run: node scripts/smoke.mjs
       # The interface on every version: every main screen at computer and phone width, no page errors,
       # nothing wider than the screen. The pictures are kept when it fails.
-      - run: pnpm exec playwright install --with-deps chromium
+      # Up to 3 tries: the runner's package mirrors sometimes fail to resolve for a few minutes (seen 2026-11-11,
+      # twice in a row), and that alone failed a release.
+      - run: |
+          for i in 1 2 3; do
+            pnpm exec playwright install --with-deps chromium && exit 0
+            echo "Browser install failed (try $i); waiting and trying again."
+            sleep 60
+            sudo apt-get update -q || true
+          done
+          exit 1
       - run: node scripts/ui-check.mjs ui-check
       - if: failure()
         uses: actions/upload-artifact@v4
