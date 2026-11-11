@@ -211,8 +211,8 @@ export class PhonePush {
           // A phone asleep (Doze) keeps a connection that looks open: without its confirmation, use UnifiedPush.
           const seq = ++this.seq;
           const acked = new Promise<boolean>((resolve) => {
+            // Not unref'd: a short wait someone is awaiting (an unref'd timer let the process end under it in CI).
             const t = setTimeout(() => (this.waitingAck.delete(seq), resolve(false)), this.ackMs);
-            t.unref?.();
             this.waitingAck.set(seq, { device: d.id, done: () => (clearTimeout(t), this.waitingAck.delete(seq), resolve(true)) });
           });
           for (const r of live) r.write(`data: ${JSON.stringify({ ...m, seq })}\n\n`);
