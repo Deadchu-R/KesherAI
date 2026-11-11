@@ -32,3 +32,24 @@ test("the access log counts visitors, keeps refusals without tokens, and alerts 
   assert.deepEqual(alerts, ["Someone tried to get into KesherAI", "A device was refused a few times"]);
   await app.close();
 });
+
+test("refused requests record the kind of key sent, never its text", async () => {
+  const log = new AccessLog(join(await mkdtemp(join(tmpdir(), "kesher-al-")), "access-log.json"));
+  const app = Fastify();
+  registerRemoteAuth(app, () => "the-token-123", {}, (r) => log.note(r));
+  app.get("/api/conversations", async () => []);
+  await app.ready();
+  // A device key that is no longer paired (an old code after an app update).
+  await app.inject({ url: "/api/conversations", remoteAddress: "192.168.1.20", headers: { host: "192.168.1.5:7420", authorization: "Bearer kd_old-code-after-an-update" } });
+  // A stranger's key: not a device key, not the shared token.
+  await app.inject({ url: "/api/conversations", remoteAddress: "203.0.113.7", headers: { host: "x.trycloudflare.com", "cf-connecting-ip": "203.0.113.7", authorization: "Bearer stranger-key-42" } });
+  // No key at all.
+  await app.inject({ url: "/api/conversations", remoteAddress: "203.0.113.9", headers: { host: "x.trycloudflare.com", "cf-connecting-ip": "203.0.113.9" } });
+  // The right shared token, but sent by another website: still "shared", not "different".
+  await app.inject({ url: "/api/conversations", remoteAddress: "203.0.113.10", headers: { host: "x.trycloudflare.com", "cf-connecting-ip": "203.0.113.10", origin: "http://evil.example", authorization: "Bearer the-token-123" } });
+  const l = await log.list();
+  // Newest first: the token, no key, the stranger's key, the old device key.
+  assert.deepEqual(l.refused.map((r) => r.kind), ["shared", "none", "other", "device-key"]);
+  assert.doesNotMatch(JSON.stringify(l), /kd_old|stranger-key-42|the-token/);
+  await app.close();
+});

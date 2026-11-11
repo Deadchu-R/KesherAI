@@ -13,7 +13,7 @@ interface Dev { id: string; name: string; createdAt: string; lastSeen?: string; 
 interface Log {
   requests?: Req[];
   visitors: Array<{ address: string; first: string; last: string; count: number; via: "tunnel" | "network"; agent?: string }>;
-  refused: Array<{ at: string; address: string; method: string; path: string; status: number; via: "tunnel" | "network"; device?: string }>;
+  refused: Array<{ at: string; address: string; method: string; path: string; status: number; via: "tunnel" | "network"; device?: string; kind?: "device-key" | "shared" | "other" | "none" }>;
 }
 
 /** Settings → Phone: who came in from outside, and who was refused. */
@@ -24,6 +24,7 @@ export function AccessLogSection() {
   useEffect(load, []);
   if (!log) return null;
   const why = (s: number) => (s === 401 ? L("טוקן שגוי או חסר", "wrong or missing token") : s === 403 ? L("אתר אחר / לא מורשה", "another website / not allowed") : L("יותר מדי ניסיונות", "too many tries"));
+  const keyOf = (k: "device-key" | "shared" | "other" | "none") => (k === "none" ? L("ללא טוקן", "no token") : k === "other" ? L("מפתח שונה / לא ידוע", "different or unknown key") : k === "device-key" ? L("מפתח מכשיר", "device key") : L("טוקן גישה מרחוק", "remote access token"));
   const via = (v: "tunnel" | "network") => (v === "tunnel" ? L("דרך האינטרנט", "through the internet") : L("ברשת הביתית", "on your network"));
   return (
     <section className="card stack access-log">
@@ -45,7 +46,7 @@ export function AccessLogSection() {
       {log.refused.length ? (
         <ul className="al-list bad-list">
           {log.refused.slice(0, 50).map((r, i) => (
-            <li key={r.at + i}><b dir="ltr">{r.device ?? r.address}</b> <span className="muted">· {when(r.at)} · {via(r.via)} · {r.device && r.status === 403 ? L("המכשיר שלך: הגדרה שזמינה רק במחשב עצמו", "your device: a setting only the computer itself may change") : why(r.status)} · <span dir="ltr">{r.method} {r.path}</span></span></li>
+            <li key={r.at + i}><b dir="ltr">{r.device ?? r.address}</b> <span className="muted">· {when(r.at)} · {via(r.via)} · {r.device && r.status === 403 ? L("המכשיר שלך: הגדרה שזמינה רק במחשב עצמו", "your device: a setting only the computer itself may change") : why(r.status)}{r.kind ? ` · ${keyOf(r.kind)}` : ""} · <span dir="ltr">{r.method} {r.path}</span></span></li>
           ))}
         </ul>
       ) : <p className="muted">{L("לא היו ניסיונות שנחסמו.", "No refused tries.")}</p>}

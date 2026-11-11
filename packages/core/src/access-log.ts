@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { KeyKind } from "./auth.js";
 
 /**
  * Who reached KesherAI from outside this computer (the phone, the tunnel,
@@ -24,6 +25,8 @@ export interface Refused {
   via: "tunnel" | "network";
   /** A paired device that came in with its own key and asked for a page only this computer may use (not an intrusion). */
   device?: string;
+  /** The kind of key the request sent (never the value): tells an old phone code from a stranger. */
+  kind?: KeyKind;
 }
 
 /** One request from outside, for the full request log. */
@@ -90,8 +93,9 @@ export class AccessLog {
    * @param r.status - 200 when it got in, else the refusal.
    * @param r.via - Through the tunnel or the home network.
    * @param r.agent - The User-Agent header.
+   * @param r.kind - The kind of key the request sent (refusals only; never the value).
    */
-  note(r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string; device?: string; ms?: number }): void {
+  note(r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string; device?: string; kind?: KeyKind; ms?: number }): void {
     const at = new Date().toISOString();
     // Every request, one by one (the last 1000): when, who, what, how it went.
     this.requests.unshift({ at, address: r.address, method: r.method, path: PATH_KEEP.exec(r.path)?.[0] ?? "/", status: r.status, via: r.via, ...(r.device ? { device: r.device } : {}), ...(r.ms !== undefined ? { ms: r.ms } : {}) });
@@ -103,7 +107,7 @@ export class AccessLog {
       else this.visitors.set(r.address, { address: r.address, first: at, last: at, count: 1, via: r.via, ...(agent ? { agent } : {}) });
       if (this.visitors.size > 100) this.visitors.delete([...this.visitors.values()].sort((a, b) => a.last.localeCompare(b.last))[0]!.address);
     } else {
-      this.refused.unshift({ at, address: r.address, method: r.method, path: PATH_KEEP.exec(r.path)?.[0] ?? r.path.slice(0, 1).replace(/[^/]/g, ""), status: r.status, via: r.via, ...(r.device ? { device: r.device } : {}) });
+      this.refused.unshift({ at, address: r.address, method: r.method, path: PATH_KEEP.exec(r.path)?.[0] ?? r.path.slice(0, 1).replace(/[^/]/g, ""), status: r.status, via: r.via, ...(r.device ? { device: r.device } : {}), ...(r.kind ? { kind: r.kind } : {}) });
       this.refused.length = Math.min(this.refused.length, 200);
       // The user's own paired device opening a computer-only page is not someone trying to get in: no alert.
       if (r.device && r.status === 403) {

@@ -64,6 +64,9 @@ export function allowedOrigin(origin: string, host: string | undefined, path: st
   return false;
 }
 
+/** What kind of key a request presented, for the access log (never the value itself). */
+export type KeyKind = "device-key" | "shared" | "other" | "none";
+
 /**
  * The visitor's address, for counting failed attempts: the real one behind a tunnel.
  *
@@ -125,10 +128,12 @@ export function registerRemoteAuth(
   app: FastifyInstance,
   getToken: () => string | undefined,
   keys: { verify?: (key: string | undefined) => unknown; requireLocally?: () => boolean } = {},
-  log?: (r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string; device?: string; ms?: number }) => void,
+  log?: (r: { address: string; method: string; path: string; status: number; via: "tunnel" | "network"; agent?: string; device?: string; kind?: KeyKind; ms?: number }) => void,
   devices?: DeviceAuth,
 ): void {
   const deviceOf = new WeakMap<object, string>();
+  // The kind of key on requests refused in onRequest (a 429 lockout has no device name).
+  const refusedKind = new WeakMap<object, KeyKind>();
   // What came from outside this computer, for Settings → Phone (never tokens or query strings).
   if (log) {
     app.addHook("onResponse", async (request, reply) => {
@@ -139,7 +144,7 @@ export function registerRemoteAuth(
       const status = reply.statusCode;
       if (status < 400 && /^\/api\/(downloads\/events|activity|computer\/status)/.test(path)) return;
       const device = deviceOf.get(request.raw);
-      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] ? "tunnel" : "network", ms: Math.round(reply.elapsedTime), ...(device ? { device } : {}), ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
+      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] ? "tunnel" : "network", ms: Math.round(reply.elapsedTime), ...(device ? { device } : {}), ...(status >= 400 ? { kind: refusedKind.get(request.raw) ?? "none" } : {}), ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
     });
   }
   app.addHook("onRequest", async (request, reply) => {
@@ -152,6 +157,21 @@ export function registerRemoteAuth(
       return;
     }
     path = path.replace(/\/{2,}/g, "/");
+    // What the request presented as its key, read once so every refusal below can log the key's kind (never the value).
+    const token = getToken();
+    const xKey = request.headers["x-api-key"];
+    const header = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? (typeof xKey === "string" ? xKey : undefined);
+    const query = (request.query as Record<string, string | undefined> | undefined)?.token;
+    // Plugin pages run in a sandboxed frame that cannot add headers or cookies, so their files
+    // are served under /api/plugin-files/<token>/…, and relative links keep the token.
+    const inPath = /^\/api\/plugin-files\/([^/]+)\//.exec(path)?.[1];
+    const given = header ?? query ?? inPath;
+    // The kind of key, for the access log (never the value): a device key starts with kd_ (even one
+    // no longer paired, so the user sees "an old phone code" instead of a stranger), the shared token
+    // is the one the user set, anything else is "other". Set once, read back only when the request
+    // ends up refused (a 4xx).
+    const kind: KeyKind = given?.startsWith("kd_") ? "device-key" : token && given && safeEqual(given, token) ? "shared" : given ? "other" : "none";
+    refusedKind.set(request.raw, kind);
     // Other websites open in the user's browser must not use this computer's KesherAI
     // (cross-site requests, even simple form posts, are refused for /api).
     // The same for ComfyUI's editor (its API can run any workflow) and KesherAI's MCP server (it reads your knowledge).
@@ -177,15 +197,7 @@ export function registerRemoteAuth(
       if (request.method === "POST" && path === "/api/pair") return;
       if (request.method === "GET" && path !== "/api/pair") return;
     }
-    const token = getToken();
-    const xKey = request.headers["x-api-key"];
-    const header = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? (typeof xKey === "string" ? xKey : undefined);
     if (apiPath && keys.verify?.(header)) return;
-    const query = (request.query as Record<string, string | undefined> | undefined)?.token;
-    // Plugin pages run in a sandboxed frame that cannot add headers or cookies, so their files
-    // are served under /api/plugin-files/<token>/…, and relative links keep the token.
-    const inPath = /^\/api\/plugin-files\/([^/]+)\//.exec(path)?.[1];
-    const given = header ?? query ?? inPath;
     const who = clientAddress(request);
     const f = failures.get(who);
     // Through the internet link (Cloudflare connects from this computer and says who is behind it).
