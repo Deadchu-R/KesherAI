@@ -1921,3 +1921,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .fit-plan .fit-good { color: var(--good); }
 .fit-plan .fit-mid { color: var(--warn); }
 .fit-plan .fit-bad { color: var(--bad); }
+.cal-table { border-collapse: collapse; width: 100%; max-width: 420px; font-variant-numeric: tabular-nums; }
+.cal-table th, .cal-table td { padding: 3px 6px; text-align: start; border-bottom: 1px solid var(--border); }
+.cal-table th { color: var(--muted); font-weight: 500; }

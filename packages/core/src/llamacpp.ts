@@ -221,7 +221,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
   ) {}
 
   /** @returns The engine's state. */
@@ -450,6 +450,51 @@ export class LlamaEngine {
   }
 
   /**
+   * The context memory's type: 8 bits (default: twice the context in the same memory) or 16 bits (faster on some
+   * cards). Chosen by calibration (calibrate.ts) or by the user.
+   *
+   * @param t - "q8_0", "f16", or undefined for the default.
+   */
+  setKvType(t: "f16" | "q8_0" | undefined): void {
+    if (t === undefined) delete this.opts.kvType;
+    else this.opts.kvType = t;
+  }
+
+  /**
+   * Measures a model with llama-bench: reading 512 and writing 64 tokens, twice each, at the given depths, with
+   * flash attention and the context memory type given. The chat model should be unloaded first (the whole card).
+   *
+   * @param modelPath - The GGUF file.
+   * @param kv - Context memory type.
+   * @param depths - Tokens already in the context.
+   * @param signal - Stops it.
+   * @returns llama-bench's JSON output.
+   */
+  async bench(modelPath: string, kv: "f16" | "q8_0", depths: number[], signal?: AbortSignal): Promise<string> {
+    const binary = this.opts.binaryPath;
+    if (!binary || !existsSync(binary)) throw new Error("The llama.cpp engine is not installed yet. Install it from the Models screen.");
+    const tool = join(dirname(binary), basename(binary).replace(/llama-server/, "llama-bench"));
+    if (!existsSync(tool)) throw new Error("This llama.cpp build has no llama-bench.");
+    const args = ["-m", modelPath, "-p", "512", "-n", "64", "-r", "2", "-fa", "1", "-ctk", kv, "-ctv", kv, "-d", depths.join(","), "-o", "json"];
+    return await new Promise<string>((resolve, reject) => {
+      const p = spawn(tool, args, { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      let out = "";
+      p.stdout.on("data", (d: Buffer) => (out += d.toString()));
+      const stop = () => p.kill();
+      signal?.addEventListener("abort", stop, { once: true });
+      const timer = setTimeout(stop, 15 * 60_000);
+      p.once("error", (e) => (clearTimeout(timer), reject(e)));
+      p.once("close", (code) => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", stop);
+        if (signal?.aborted) reject(new Error("Stopped."));
+        else if (code !== 0 && !out.includes("[")) reject(new Error(`llama-bench stopped (code ${code}); the setup may not fit in memory.`));
+        else resolve(out);
+      });
+    });
+  }
+
+  /**
    * What llama.cpp will do with a model before loading it: runs llama-fit-params (same fitting as llama-server's
    * start, test allocations only) with the arguments this engine would use. See fit-preview.ts.
    *
@@ -463,7 +508,7 @@ export class LlamaEngine {
     if (!LlamaEngine.fits(this.opts.version)) throw new Error("This llama.cpp build cannot plan the memory ahead (update the engine).");
     const tool = join(dirname(binary), basename(binary).replace(/llama-server/, "llama-fit-params"));
     if (!existsSync(tool)) throw new Error("This llama.cpp build has no llama-fit-params.");
-    const args = ["-m", modelPath, ...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)];
+    const args = ["-m", modelPath, ...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)];
     const t0 = Date.now();
     return await new Promise<FitPlan>((resolve, reject) => {
       const p = spawn(tool, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -517,9 +562,10 @@ export class LlamaEngine {
    * @param parallel - Chats answered at once.
    * @param fits - Whether the build fits the model to memory by itself (see gpuArgs).
    * @param fitTargetMiB - Graphics memory to leave free when fitting (default 2 GB; see setFitTarget).
+   * @param kvType - The context memory's type (default 8 bits; see setKvType).
    * @returns The full argument list besides model, host and port.
    */
-  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false, fitTargetMiB = 2048): string[] {
+  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false, fitTargetMiB = 2048, kvType: "f16" | "q8_0" = "q8_0"): string[] {
     const args = [...extra];
     if (withJinja && !args.includes("--jinja")) args.push("--jinja");
     const own = args.some((a) => a === "-np" || a === "--parallel");
@@ -537,7 +583,7 @@ export class LlamaEngine {
       else args.push("-c", String(32768 + 16384 * (own ? 0 : parallel - 1)));
     }
     // The context's memory at 8 bits (half of the default 16), so the bigger context fits next to the model.
-    if (!args.some((a) => a.startsWith("--cache-type") || a === "-ctk" || a === "-ctv")) args.push("--cache-type-k", "q8_0", "--cache-type-v", "q8_0");
+    if (!args.some((a) => a.startsWith("--cache-type") || a === "-ctk" || a === "-ctv")) args.push("--cache-type-k", kvType, "--cache-type-v", kvType);
     return args;
   }
 
@@ -565,7 +611,7 @@ export class LlamaEngine {
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version), this.opts.fitTargetMiB), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version), ...mtp], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version), this.opts.fitTargetMiB, this.opts.kvType), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version), ...mtp], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {

@@ -493,3 +493,10 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - "What fits?" next to each GGUF on the Models page (`POST /api/models/fit`, kept a minute): fits entirely, partly, or does not fit now; per card: layers, GB used, GB left; context; and which model was loaded during the check.
   - "Leave free on the graphics card" (1–8 GB, default 2) in Settings → Computer, for a game or the Unreal/Unity editor on the same card. It is `--fit-target`; the model loads again.
 - **Stopped at:** the calibration part of t22 (llama-bench matrix, three recommendations) is not built yet. Design: the 2026-11-11 entry above.
+- **Calibration built (2026-11-11, 0.6.105), finishing t22:**
+  - Models → a GGUF → **Calibrate**: llama-bench with the context memory at 8 and 16 bits, at 0, 16K and 48K tokens deep (48K dropped if it does not fit). The chat model is unloaded for it, about 5 minutes with progress and Stop, then loaded back.
+  - The table shows reading and writing per setup. KesherAI recommends 16-bit only when it writes 10% or more faster deep into a chat. On Roee's PC it was +5% at 16K, so 8-bit stays.
+  - **Use this** sets it (`engines.kvType`). Results are kept per model and card.
+  - It is refused while a chat or self-work is answering.
+  - llama-bench's `-o json` gives one row per test: `type_k`, `n_depth`, `n_prompt` or `n_gen`, `avg_ts`.
+  - Left out: chats at once (llama-bench cannot measure slots); that stays the "Chats at once" setting.

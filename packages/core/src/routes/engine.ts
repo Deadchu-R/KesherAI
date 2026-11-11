@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js";
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -185,7 +186,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
    * How many chats the engine answers at once, and multi-token prediction's guesses ahead (`mtpDraft`: a number,
    * 0 for off, null for llama.cpp's own). A running model is loaded again with them.
    */
-  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; fitTargetMiB?: number | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
+  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; fitTargetMiB?: number | null; kvType?: "f16" | "q8_0" | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
     const b = req.body ?? {};
     let reload = false;
     if (b.parallel !== undefined) {
@@ -212,10 +213,68 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       else s.config.engines.fitTargetMiB = m;
       s.engine.setFitTarget(m);
     }
+    // The context memory's type (calibration's "Use this", or by hand); null: the default (8 bits).
+    if (b.kvType !== undefined) {
+      if (b.kvType !== null && b.kvType !== "f16" && b.kvType !== "q8_0") return reply.code(400).send({ error: "Context memory: f16 or q8_0." });
+      const k = b.kvType ?? undefined;
+      reload ||= s.config.engines.kvType !== k;
+      if (k === undefined) delete s.config.engines.kvType;
+      else s.config.engines.kvType = k;
+      s.engine.setKvType(k);
+    }
     await s.saveConfig();
     const st = s.engine.status();
     if (reload && st.running && st.modelPath) void loadModel(s, st.modelPath).catch((err) => s.engine.fail(err));
-    return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null, fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048 };
+    return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null, fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, kvType: s.config.engines.kvType ?? "q8_0" };
+  });
+
+  /**
+   * Calibrate a model to this computer (calibrate.ts): llama-bench with the context memory at 8 and at 16 bits,
+   * at 0, 16K and 48K tokens deep, with the chat model unloaded for the run (about 5 minutes), then loaded back.
+   * One run at a time; refused while a chat or self-work is answering. The result is kept per model and card.
+   */
+  let cal: { model: string; status: "running" | "done" | "failed" | "stopped"; step: number; steps: number; rows: CalRow[]; advice?: CalAdvice; error?: string; startedAt: string; ctrl?: AbortController } | undefined;
+  const calView = () => (cal ? { model: cal.model, status: cal.status, step: cal.step, steps: cal.steps, rows: cal.rows, ...(cal.advice ? { advice: cal.advice } : {}), ...(cal.error ? { error: cal.error } : {}), startedAt: cal.startedAt } : null);
+  app.get("/api/models/calibrate", async () => ({ run: calView(), kvType: s.config.engines.kvType ?? "q8_0", saved: s.config.engines.calibrations }));
+  app.post<{ Body: { modelPath?: string } }>("/api/models/calibrate", async (req, reply) => {
+    const path = req.body?.modelPath ?? "";
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added can be calibrated" });
+    if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "Calibration runs on GGUF files" });
+    if (cal?.status === "running") return reply.code(409).send({ error: "A calibration is already running." });
+    if (engineBusy(s) || Object.values(s.conversations.activity()).includes("running")) return reply.code(409).send({ error: "A chat or self-work is answering now. Calibrate when it is quiet (it needs the whole graphics card for about 5 minutes)." });
+    const before = s.engine.status().running ? s.engine.status().modelPath : undefined;
+    const ctrl = new AbortController();
+    cal = { model: basename(path), status: "running", step: 0, steps: 2, rows: [], startedAt: new Date().toISOString(), ctrl };
+    const run = cal;
+    void (async () => {
+      try {
+        await s.engine.stop();
+        let gpu = "";
+        for (const kv of ["q8_0", "f16"] as const) {
+          s.guard.touch("llamacpp");
+          // 48K deep may not fit with 16-bit context on a smaller card: then the shallower depths only.
+          const out = await s.engine.bench(path, kv, [0, 16384, 49152], ctrl.signal).catch((e: Error) => (ctrl.signal.aborted ? Promise.reject(e) : s.engine.bench(path, kv, [0, 16384], ctrl.signal)));
+          gpu ||= /"gpu_info":\s*"([^"]*)"/.exec(out)?.[1] ?? "";
+          run.rows.push(...parseBench(out));
+          run.step++;
+        }
+        run.advice = advise(run.rows);
+        run.status = "done";
+        s.config.engines.calibrations[run.model] = { at: new Date().toISOString(), gpu, rows: run.rows, kv: run.advice.kv };
+        await s.saveConfig();
+      } catch (e) {
+        run.status = ctrl.signal.aborted ? "stopped" : "failed";
+        run.error = (e as Error).message;
+      } finally {
+        delete run.ctrl;
+        if (before) await loadModel(s, before).catch((err) => s.engine.fail(err));
+      }
+    })();
+    return { run: calView() };
+  });
+  app.post("/api/models/calibrate/stop", async () => {
+    cal?.ctrl?.abort();
+    return { run: calView() };
   });
 
   /**
