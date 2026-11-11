@@ -22,5 +22,7 @@ dependencies {
     implementation project(':capacitor-android')
     // UnifiedPush (Apache-2.0): ntfy or another distributor delivers while the computer cannot be reached directly.
     implementation "org.unifiedpush.android:connector:3.0.9"
+    // getActivity() returns an AppCompatActivity (for the permission request and the open page).
+    implementation "androidx.appcompat:appcompat:${project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.0'}"
     implementation "androidx.core:core:${project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.15.0'}"
 }
