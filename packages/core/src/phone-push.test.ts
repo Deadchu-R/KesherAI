@@ -76,9 +76,10 @@ test("live phones get it over the stream; others through their push address; a g
   const push = new PhonePush(() => devices, async () => void saved++, (async (url: string, init: RequestInit) => {
     posts.push({ url, body: Buffer.from(init.body as Uint8Array), init });
     return new Response(null, { status });
-  }) as unknown as typeof fetch);
+  }) as unknown as typeof fetch, 50);
   const written: string[] = [];
-  const res = { writeHead: () => undefined, write: (s: string) => void written.push(s), on: () => undefined, end: () => undefined };
+  // The live phone confirms what it gets, as the app does.
+  const res = { writeHead: () => undefined, write: (s: string) => { written.push(s); const seq = /"seq":(\d+)/.exec(s)?.[1]; if (seq) setTimeout(() => push.ack(Number(seq)), 5); }, on: () => undefined, end: () => undefined };
   push.attach("a", res as never);
   assert.equal(push.hasReceivers(), true);
   assert.equal(await push.deliver({ t: "show", id: "c1", ch: "waiting", title: "T", body: "B" }), true);
@@ -87,6 +88,12 @@ test("live phones get it over the stream; others through their push address; a g
   assert.equal(posts[0]!.init.redirect, "manual");
   assert.equal((posts[0]!.init.headers as Record<string, string>).urgency, "high");
   assert.equal(JSON.parse(decrypt(posts[0]!.body, k.ua, k.auth)).id, "c1");
+  // A sleeping phone that does not confirm: UnifiedPush takes over for it.
+  const sleeping = new PhonePush(() => [{ ...devices[1]!, id: "s" }], async () => undefined, (async () => (posts.push({ url: "s", body: Buffer.alloc(0), init: {} }), new Response(null, { status: 201 }))) as unknown as typeof fetch, 30);
+  sleeping.attach("s", { writeHead: () => undefined, write: () => undefined, on: () => undefined, end: () => undefined } as never);
+  assert.equal(await sleeping.deliver({ t: "show", id: "c2" }), true);
+  assert.equal(posts.at(-1)!.url, "s");
+  sleeping.close();
   status = 410;
   await push.deliver({ t: "clear", id: "c1" });
   assert.equal(devices[1]!.push, undefined);

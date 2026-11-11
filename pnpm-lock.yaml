@@ -78,6 +78,9 @@ importers:
       capacitor-kesher-llm:
         specifier: file:./plugins/llm
         version: file:apps/android/plugins/llm(@capacitor/core@8.6.0)
+      capacitor-kesher-notify:
+        specifier: file:./plugins/notify
+        version: file:apps/android/plugins/notify(@capacitor/core@8.6.0)
       capacitor-kesher-screen:
         specifier: file:./plugins/screen
         version: file:apps/android/plugins/screen(@capacitor/core@8.6.0)
@@ -1925,6 +1928,11 @@ packages:
 
   capacitor-kesher-llm@file:apps/android/plugins/llm:
     resolution: {directory: apps/android/plugins/llm, type: directory}
+    peerDependencies:
+      '@capacitor/core': ^8.0.0
+
+  capacitor-kesher-notify@file:apps/android/plugins/notify:
+    resolution: {directory: apps/android/plugins/notify, type: directory}
     peerDependencies:
       '@capacitor/core': ^8.0.0
 
@@ -5663,6 +5671,10 @@ snapshots:
       '@capacitor/core': 8.6.0
 
   capacitor-kesher-llm@file:apps/android/plugins/llm(@capacitor/core@8.6.0):
+    dependencies:
+      '@capacitor/core': 8.6.0
+
+  capacitor-kesher-notify@file:apps/android/plugins/notify(@capacitor/core@8.6.0):
     dependencies:
       '@capacitor/core': 8.6.0
 

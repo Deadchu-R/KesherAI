@@ -33,7 +33,12 @@ export interface PhoneMessage {
   path?: string;
   /** Buttons: each POSTs to its path on this computer. */
   actions?: Array<{ label: string; path: string }>;
+  /** On the live connection: the phone confirms it with POST /api/phone-push/ack (a sleeping phone's connection can look open). */
+  seq?: number;
 }
+
+/** How long a live phone has to confirm a message before it goes through UnifiedPush instead. */
+const ACK_MS = 8000;
 
 /** The largest UnifiedPush message (the spec allows 4096 bytes; encryption adds 103). */
 const MAX_PLAIN = 3900;
@@ -130,16 +135,20 @@ export class PhonePush {
   /** Live connections, by device id. */
   private readonly live = new Map<string, Set<ServerResponse>>();
   private readonly ping: NodeJS.Timeout;
+  private seq = 0;
+  private readonly waitingAck = new Map<number, () => void>();
 
   /**
    * @param devices - The paired devices (config.remote.devices; a removed device gets nothing).
    * @param save - Persists the config (a push address that stopped working is dropped).
    * @param doFetch - For tests.
+   * @param ackMs - How long a live phone has to confirm (tests use less).
    */
   constructor(
     private readonly devices: () => DeviceKey[],
     private readonly save: () => Promise<void>,
     private readonly doFetch: typeof fetch = fetch,
+    private readonly ackMs = ACK_MS,
   ) {
     // Keeps the connections open through proxies and lets the phone notice a dead one.
     this.ping = setInterval(() => {
@@ -191,8 +200,15 @@ export class PhonePush {
       this.devices().map(async (d) => {
         const live = this.live.get(d.id);
         if (live?.size) {
-          for (const r of live) r.write(`data: ${plain.toString()}\n\n`);
-          return true;
+          // A phone asleep (Doze) keeps a connection that looks open: without its confirmation, use UnifiedPush.
+          const seq = ++this.seq;
+          const acked = new Promise<boolean>((resolve) => {
+            const t = setTimeout(() => (this.waitingAck.delete(seq), resolve(false)), this.ackMs);
+            t.unref?.();
+            this.waitingAck.set(seq, () => (clearTimeout(t), this.waitingAck.delete(seq), resolve(true)));
+          });
+          for (const r of live) r.write(`data: ${JSON.stringify({ ...m, seq })}\n\n`);
+          if (await acked) return true;
         }
         if (!d.push) return false;
         try {
@@ -214,6 +230,15 @@ export class PhonePush {
       }),
     );
     return results.some(Boolean);
+  }
+
+  /**
+   * The phone confirms a message it got on the live connection.
+   *
+   * @param seq - The message's number.
+   */
+  ack(seq: number): void {
+    this.waitingAck.get(seq)?.();
   }
 
   /** Stops the keep-alive timer (tests). */

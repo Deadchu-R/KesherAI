@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-notify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KesherAI's own phone notifications: a live connection to the computer, or UnifiedPush (ntfy) when away.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

@@ -20,6 +20,7 @@
     "capacitor-kesher-google": "file:./plugins/google",
     "capacitor-kesher-image": "file:./plugins/image",
     "capacitor-kesher-llm": "file:./plugins/llm",
+    "capacitor-kesher-notify": "file:./plugins/notify",
     "capacitor-kesher-screen": "file:./plugins/screen",
     "capacitor-kesher-share": "file:./plugins/share",
     "capacitor-kesher-speech": "file:./plugins/speech",

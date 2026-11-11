@@ -1,0 +1,164 @@
+package dev.kesherai.notify;
+
+import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+
+import org.unifiedpush.android.connector.UnifiedPush;
+
+import java.util.List;
+
+/**
+ * KesherAI's own notifications on the phone (window.Capacitor.Plugins.KesherNotify): the web app tells
+ * it where the computer is and this phone's key, and which ways are on (live connection, UnifiedPush).
+ */
+@CapacitorPlugin(name = "KesherNotify", permissions = { @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }) })
+public class NotifyPlugin extends Plugin {
+    private static final String NTFY = "io.heckel.ntfy";
+
+    @Override
+    public void load() {
+        Notes.channels(getContext());
+        Notes.foreground = true;
+        remember(getActivity() != null ? getActivity().getIntent() : null);
+    }
+
+    /** A tapped notification opened the app: keep its page until the web app asks (takeOpen). */
+    private void remember(Intent i) {
+        if (i == null) return;
+        String path = i.getStringExtra(Notes.EXTRA_PATH);
+        if (path == null || !path.startsWith("#/")) return;
+        i.removeExtra(Notes.EXTRA_PATH);
+        Prefs.of(getContext()).edit().putString("open", path).apply();
+        JSObject o = new JSObject();
+        o.put("path", path);
+        notifyListeners("open", o);
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        remember(intent);
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        Notes.foreground = true;
+    }
+
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        Notes.foreground = false;
+    }
+
+    /** { base, key, live, push }: saves them, asks for the notification permission once, and applies them. */
+    @PluginMethod
+    public void configure(PluginCall call) {
+        String base = call.getString("base", "");
+        String key = call.getString("key", "");
+        if (base == null || !base.matches("^https?://[^\\s/]+.*") || key == null || !key.startsWith("kd_")) {
+            call.reject("This phone needs its own key from the computer (pair it again in Settings → Phone).");
+            return;
+        }
+        Prefs.of(getContext()).edit()
+            .putString("base", base)
+            .putString("key", key)
+            .putBoolean("live", Boolean.TRUE.equals(call.getBoolean("live", false)))
+            .putBoolean("push", Boolean.TRUE.equals(call.getBoolean("push", false)))
+            .apply();
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "afterPermission");
+            return;
+        }
+        apply(call);
+    }
+
+    @PermissionCallback
+    private void afterPermission(PluginCall call) {
+        apply(call);
+    }
+
+    private void apply(PluginCall call) {
+        Context c = getContext();
+        Intent live = new Intent(c, LiveService.class);
+        if (Prefs.live(c)) {
+            try {
+                ContextCompat.startForegroundService(c, live);
+            } catch (Exception e) {
+                call.reject("Android did not let the live connection start: " + e.getMessage());
+                return;
+            }
+        } else {
+            c.stopService(live);
+        }
+        if (Prefs.push(c)) {
+            List<String> all = UnifiedPush.getDistributors(c);
+            String saved = UnifiedPush.getAckDistributor(c);
+            if (saved == null && !all.isEmpty()) UnifiedPush.saveDistributor(c, all.contains(NTFY) ? NTFY : all.get(0));
+            if (saved != null || !all.isEmpty()) UnifiedPush.register(c, "default", "KesherAI", null);
+            else Prefs.of(c).edit().putString("pushState", "no-distributor").apply();
+        } else if (UnifiedPush.getAckDistributor(c) != null) {
+            UnifiedPush.unregister(c, "default");
+        }
+        call.resolve(state());
+    }
+
+    private JSObject state() {
+        Context c = getContext();
+        JSObject o = new JSObject();
+        o.put("permission", NotificationManagerCompat.from(c).areNotificationsEnabled());
+        o.put("live", Prefs.live(c));
+        o.put("connected", LiveService.connected);
+        o.put("push", Prefs.push(c));
+        o.put("pushState", Prefs.of(c).getString("pushState", ""));
+        o.put("distributor", UnifiedPush.getAckDistributor(c));
+        o.put("distributors", UnifiedPush.getDistributors(c).size());
+        return o;
+    }
+
+    @PluginMethod
+    public void status(PluginCall call) {
+        call.resolve(state());
+    }
+
+    /** { id }: the app opened this chat, so its notifications go (as in messaging apps). */
+    @PluginMethod
+    public void clear(PluginCall call) {
+        String id = call.getString("id");
+        if (id != null) Notes.cancel(getContext(), id);
+        call.resolve();
+    }
+
+    /** The page a tapped notification asked for, once. */
+    @PluginMethod
+    public void takeOpen(PluginCall call) {
+        String path = Prefs.of(getContext()).getString("open", null);
+        Prefs.of(getContext()).edit().remove("open").apply();
+        JSObject o = new JSObject();
+        if (path != null) o.put("path", path);
+        call.resolve(o);
+    }
+
+    /** Opens Android's notification settings for KesherAI (each kind can be muted there). */
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        Intent i = new Intent("android.settings.APP_NOTIFICATION_SETTINGS").putExtra("android.provider.extra.APP_PACKAGE", getContext().getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(i);
+        call.resolve();
+    }
+}

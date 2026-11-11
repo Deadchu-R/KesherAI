@@ -72,6 +72,10 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     reply.hijack();
     s.phonePush.attach(device(req)!.id, reply.raw);
   });
+  app.post<{ Body: { seq?: number } }>("/api/phone-push/ack", { preHandler: deviceOnly }, async (req) => {
+    s.phonePush.ack(Number(req.body?.seq));
+    return { ok: true };
+  });
   /** The phone's UnifiedPush address and Web Push keys, checked first (https, a public server). */
   app.put<{ Body: { endpoint?: string; p256dh?: string; auth?: string } }>("/api/phone-push/endpoint", { preHandler: deviceOnly }, async (req, reply) => {
     const { endpoint = "", p256dh = "", auth = "" } = req.body ?? {};
