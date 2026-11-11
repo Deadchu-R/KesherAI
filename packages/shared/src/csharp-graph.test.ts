@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp } from "./csharp-graph.js";
+import { addField, csValue, fieldUses, findStmt, insertStep, methodToNodes, newId, parseCSharp, plainValue, removeField, updateField, writeCSharp } from "./csharp-graph.js";
 
 const SCRIPT = `using UnityEngine;
 using System.Collections;
@@ -162,4 +162,68 @@ test("variables: other attributes stay, locked declarations are not touched, a c
   assert.equal(addField(empty, b, { type: "GameObject", name: "target", shown: true }), `public class B : MonoBehaviour\n{\n    public GameObject target;\n\n    void Start() { }\n}\n`);
   assert.deepEqual([csValue("float", "2.5"), csValue("string", 'a"b'), csValue("bool", "TRUE"), csValue("int", "")], ["2.5f", '"a\\"b"', "true", ""]);
   assert.deepEqual([plainValue("float", "2.5f"), plainValue("string", '"a\\"b"')], ["2.5", 'a"b']);
-});
+  });
+
+  test("insertStep adds a step at the given index in a method body", () => {
+  const classes = parseCSharp(SCRIPT);
+  const start = classes[0]!.methods[0]!;
+  assert.equal(start.body.length, 2);
+
+  insertStep(start.body, 1, { kind: "call", target: "Debug", name: "Log", args: ['"Inserted"'], src: "" });
+  assert.equal(start.body.length, 3);
+  assert.equal(start.body[1]!.kind, "call");
+  assert.equal(start.body[1]!.name, "Log");
+  assert.ok(start.body[1]!.dirty);
+  assert.ok(start.body[1]!.id.startsWith("s"));
+
+  const out = writeCSharp(SCRIPT, classes);
+  const bodyText = out.slice(out.indexOf("void Start"), out.indexOf("void Update"));
+  assert.ok(bodyText.includes('Debug.Log("Inserted");'), bodyText);
+  });
+
+  test("insertStep at beginning and end of body", () => {
+  const classes = parseCSharp(SCRIPT);
+  const start = classes[0]!.methods[0]!;
+
+  insertStep(start.body, 0, { kind: "call", target: "Debug", name: "Log", args: ['"First"'], src: "" });
+  assert.equal(start.body[0]!.name, "Log");
+
+  insertStep(start.body, start.body.length, { kind: "call", target: "Debug", name: "Log", args: ['"Last"'], src: "" });
+  assert.equal(start.body[start.body.length - 1]!.name, "Log");
+  });
+
+  test("insertStep clamps out-of-range index", () => {
+  const classes = parseCSharp(SCRIPT);
+  const start = classes[0]!.methods[0]!;
+  const before = start.body.length;
+
+  insertStep(start.body, -1, { kind: "call", target: "Debug", name: "Log", args: ['"Clamped"'], src: "" });
+  assert.equal(start.body.length, before + 1);
+  assert.equal(start.body[0]!.name, "Log");
+
+  insertStep(start.body, 999, { kind: "call", target: "Debug", name: "Log", args: ['"Clamped end"'], src: "" });
+  assert.equal(start.body[start.body.length - 1]!.name, "Log");
+  });
+
+  test("insertStep in branch and loop bodies", () => {
+    const classes = parseCSharp(SCRIPT);
+    const update = classes[0]!.methods[1]!;
+    const branch = update.body[1]!;
+    assert.equal(branch.kind, "if");
+
+    insertStep(branch.then, 0, { kind: "call", target: "Debug", name: "Log", args: ['"In branch"'], src: "" });
+    assert.equal(branch.then.length, 2);
+    assert.ok(branch.then[0]!.dirty);
+
+    const loop = update.body[2]!;
+    assert.equal(loop.kind, "loop");
+    insertStep(loop.body, 0, { kind: "call", target: "Debug", name: "Log", args: ['"In loop"'], src: "" });
+    assert.equal(loop.body.length, 2);
+    assert.ok(loop.body[0]!.dirty);
+  });
+
+  test("newId produces unique ids", () => {
+  const ids = Array.from({ length: 5 }, () => newId());
+  assert.equal(new Set(ids).size, 5);
+  ids.forEach(id => assert.ok(id.startsWith("s")));
+  });

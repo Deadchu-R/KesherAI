@@ -163,7 +163,8 @@ export function splitArgs(s: string): string[] {
 }
 
 let nextId = 0;
-const newId = () => `s${++nextId}`;
+/** Generate a new unique statement id. */
+export function newId(): string { return `s${++nextId}`; }
 
 /** Where the statement starting at i ends (exclusive), and whether it is a block statement. */
 function statementEnd(t: string, i: number): number {
@@ -335,6 +336,19 @@ function topComma(type: string): boolean {
 }
 
 const CONTROL = /^(if|for|foreach|while|switch|catch|using|lock|return|new|else|get|set|add|remove|init)$/;
+
+/**
+ * Insert a new statement into a body array at the given index.
+ * The statement is marked dirty and gets a fresh id.
+ *
+ * @param body - The method body or branch/loop body to insert into.
+ * @param index - Position to insert at (0 = beginning, body.length = end).
+ * @param stmt - Partial statement (id is optional and will be replaced).
+ */
+export function insertStep(body: CsStmt[], index: number, stmt: Omit<CsStmt, "id">): void {
+  const step = { ...stmt, id: newId(), dirty: true } as CsStmt;
+  body.splice(Math.max(0, Math.min(index, body.length)), 0, step);
+}
 
 /**
  * Reads a C# file: its classes, their fields and methods, and each method's

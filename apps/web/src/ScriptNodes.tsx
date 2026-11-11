@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { addField, csValue, fieldUses, findStmt, methodToNodes, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsAccess, type CsClass, type CsStmt } from "@kesher/shared";
+import { addField, csValue, fieldUses, findStmt, insertStep, methodToNodes, newId, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsAccess, type CsClass, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
@@ -147,18 +147,31 @@ export function ScriptNodes() {
     setSel("");
     setTick((t) => t + 1);
   };
+  /** A fresh statement of the chosen kind (the defaults a person without code expects). */
+  const fresh = (kind: "call" | "set" | "if" | "local", target?: string): CsStmt => {
+    const id = newId();
+    return kind === "call" ? { id, kind, target: "Debug", name: "Log", args: ['"Hello"'], src: "", dirty: true }
+    : kind === "set" ? { id, kind, target: target ?? cls?.fields[0]?.name ?? "value", op: "=", value: target ? (cls?.fields.find((f) => f.name === target)?.value ?? "0") : "0", src: "", dirty: true }
+    : kind === "local" ? { id, kind, type: "var", name: "x", value: "0", src: "", dirty: true }
+    : { id, kind, cond: "true", then: [], src: "", dirty: true };
+  };
   /** Adds a new step after the chosen one (or at the end of the method). */
   const add = (kind: "call" | "set" | "if" | "local", target?: string) => {
     if (!m) return;
-    const id = `n${Date.now()}`;
-    const stmt: CsStmt =
-      kind === "call" ? { id, kind, target: "Debug", name: "Log", args: ['"Hello"'], src: "", dirty: true }
-      : kind === "set" ? { id, kind, target: target ?? cls?.fields[0]?.name ?? "value", op: "=", value: target ? (cls?.fields.find((f) => f.name === target)?.value ?? "0") : "0", src: "", dirty: true }
-      : kind === "local" ? { id, kind, type: "var", name: "x", value: "0", src: "", dirty: true }
-      : { id, kind, cond: "true", then: [], src: "", dirty: true };
+    const stmt = fresh(kind, target);
     const list = found ? found.list : m.body;
     list.splice(found ? found.index + 1 : list.length, 0, stmt);
-    setSel(id);
+    setSel(stmt.id);
+    setTick((t) => t + 1);
+  };
+  /** Adds a new step inside the chosen Branch (True, or False — created when it has none) or Loop. */
+  const addInside = (where: "then" | "else" | "body") => {
+    if (!st) return;
+    const body = st.kind === "loop" ? st.body : st.kind === "if" ? (where === "else" ? (st.else ??= []) : st.then) : undefined;
+    if (!body) return;
+    const at = body.length;
+    insertStep(body, at, fresh("call"));
+    setSel(body[at]!.id);
     setTick((t) => t + 1);
   };
   /** Unity compiles the scripts now; this script's errors are marked on their lines. */
@@ -329,8 +342,15 @@ export function ScriptNodes() {
                     <button type="button" onClick={() => add("set")}>+ {L("שינוי ערך", "Change a value")}</button>
                     <button type="button" onClick={() => add("if")}>+ {L("תנאי", "Condition")}</button>
                     <button type="button" onClick={() => add("local")}>+ {L("משתנה", "Variable")}</button>
-                  </div>
-                  {!st ? (
+                    </div>
+                    {st && (st.kind === "if" || st.kind === "loop") && (
+                    <div className="row wrap script-add" aria-label={L("הוספה בפנים", "Add inside")}>
+                      <span className="muted small">{st.kind === "loop" ? L("הוסף בפנים הלולאה:", "Add inside the loop:") : L("הוסף בתנאי:", "Add inside the condition:")}</span>
+                      <button type="button" onClick={() => addInside("then")}>+ {st.kind === "loop" ? L("בלולאה", "In the loop") : L("כשהתנאי נכון", "When true")}</button>
+                      {st.kind === "if" && <button type="button" onClick={() => addInside("else")}>+ {L("אחרת", "Otherwise")}</button>}
+                    </div>
+                    )}
+                    {!st ? (
                     <p className="muted small">{L("בחרו נוד כדי לשנות אותו.", "Choose a node to change it.")}</p>
                   ) : (
                     <>
