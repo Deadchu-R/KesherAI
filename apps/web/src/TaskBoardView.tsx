@@ -12,6 +12,10 @@ interface Task {
   details?: string;
   status: "open" | "claimed" | "done" | "blocked";
   category?: Category;
+  /** Small ones are self-work's, big ones Claude's. */
+  size?: "small" | "big";
+  /** Handed to self-work by Roee: it takes this one first. */
+  forKesher?: boolean;
   owner?: "claude" | "kesher" | "roee";
   result?: string;
   priority: number;
@@ -21,13 +25,18 @@ interface Note { at: string; from: "claude" | "kesher" | "roee"; text: string; t
 interface Board { rev: number; tasks: Task[]; notes: Note[] }
 
 type Category = "normal" | "cooldown" | "fable";
-/** The board's three lists: Claude Opus's, the local model's (while Claude's usage is used up), Claude Fable's. */
+/**
+ * One list that Claude and self-work share (Roee, 2026-11-11): self-work takes the small tasks, Claude the big
+ * ones, and a task can be handed to self-work. Fable's tasks stay apart (another model).
+ */
 const CATS: Array<[Category, string, string, string, string]> = [
-  ["normal", "Normal", "Normal", "מה ש־Claude (Opus) עובד עליו", "What Claude (Opus) works on"],
-  ["cooldown", "CoolDown", "CoolDown", "המודל המקומי, כשה־usage של Claude נגמר", "The local model, while Claude's usage is used up"],
+  ["normal", "משימות", "Tasks", "קטנות: העבודה העצמית. גדולות: Claude.", "Small: self-work. Big: Claude."],
   ["fable", "Fable", "Fable", "משימות גדולות ל־Claude Fable", "Bigger tasks for Claude Fable"],
 ];
-const catOf = (t: Task): Category => t.category ?? (/^\s*\[cool\s*down\]/i.test(t.title) ? "cooldown" : /^\s*\[fable\]/i.test(t.title) ? "fable" : "normal");
+const catOf = (t: Task): Category => (t.category === "fable" || /^\s*\[fable\]/i.test(t.title) ? "fable" : "normal");
+const sizeOf = (t: Task): "small" | "big" => t.size ?? (t.category === "cooldown" || /^\s*\[cool\s*down\]/i.test(t.title) ? "small" : "big");
+/** What a new task is: small, big, or Fable's. */
+type Kind = "small" | "big" | "fable";
 
 const WHO: Record<string, [string, string]> = { claude: ["Claude", "Claude"], kesher: ["KesherAI", "KesherAI"], roee: ["אתה", "You"] };
 const STATUS: Record<Task["status"], [string, string]> = { open: ["פתוחה", "Open"], claimed: ["בעבודה", "In progress"], done: ["הושלמה", "Done"], blocked: ["תקועה", "Blocked"] };
@@ -44,7 +53,7 @@ export function TaskBoardView() {
   const [note, setNote] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [open, setOpen] = useState<string>("");
-  const [cat, setCat] = useState<Category>("normal");
+  const [kind, setKind] = useState<Kind>("small");
   const [folded, setFolded] = useState<Category[]>([]);
 
   useEffect(() => {
@@ -95,6 +104,8 @@ export function TaskBoardView() {
                       <span dir="ltr">{t.id}</span>
                       <span className={`task-state ${t.status}`}>{L(...STATUS[t.status])}</span>
                       {t.owner && <span>{L(...WHO[t.owner]!)}</span>}
+                      {c === "normal" && <span>{sizeOf(t) === "small" ? L("קטנה", "Small") : L("גדולה", "Big")}</span>}
+                      {t.forKesher && t.status !== "done" && <span className="task-state claimed">🤖 {L("לעבודה העצמית", "For self-work")}</span>}
                     </span>
                   </span>
                 </button>
@@ -103,9 +114,16 @@ export function TaskBoardView() {
                     {t.details && <p dir="auto">{t.details}</p>}
                     {t.result && <p dir="auto"><strong>{L("תוצאה:", "Result:")}</strong> {t.result}</p>}
                     <div className="row wrap">
-                      <Select value={catOf(t)} aria-label={L("קטגוריה", "Category")} onChange={(e) => change([{ op: "edit", id: t.id, category: e.target.value }])}>
-                        {CATS.map(([c, en]) => <option key={c} value={c}>{en}</option>)}
+                      <Select value={catOf(t) === "fable" ? "fable" : sizeOf(t)} aria-label={L("גודל", "Size")} onChange={(e) => change([e.target.value === "fable" ? { op: "edit", id: t.id, category: "fable" } : { op: "edit", id: t.id, category: "normal", size: e.target.value }])}>
+                        <option value="small">{L("קטנה (עבודה עצמית)", "Small (self-work)")}</option>
+                        <option value="big">{L("גדולה (Claude)", "Big (Claude)")}</option>
+                        <option value="fable">Fable</option>
                       </Select>
+                      {t.status !== "done" && (
+                        <button type="button" onClick={() => change([{ op: "edit", id: t.id, forKesher: !t.forKesher }])} title={L("העבודה העצמית תיקח אותה ראשונה, בלי קשר לגודל", "Self-work takes it first, whatever its size")}>
+                          {t.forKesher ? L("בטל: לא לעבודה העצמית", "Undo: not for self-work") : L("🤖 תן לעבודה העצמית", "🤖 Give to self-work")}
+                        </button>
+                      )}
                       {(t.status === "done" || t.status === "blocked" || t.status === "claimed") && <button type="button" onClick={() => change([{ op: "reopen", id: t.id }])}>{L("החזר לפתוחה", "Reopen")}</button>}
                       <button type="button" onClick={() => change([{ op: "edit", id: t.id, priority: Math.max(1, t.priority - 1) }])} title={L("עדיפות גבוהה יותר", "Higher priority")}>↑ p{t.priority}</button>
                     </div>
@@ -118,10 +136,12 @@ export function TaskBoardView() {
           </details>
         );
       })}
-      <form className="row" onSubmit={(e) => { e.preventDefault(); if (title.trim()) { change([{ op: "add", title: title.trim(), category: cat }]); setTitle(""); } }}>
+      <form className="row" onSubmit={(e) => { e.preventDefault(); if (title.trim()) { change([kind === "fable" ? { op: "add", title: title.trim(), category: "fable" } : { op: "add", title: title.trim(), category: "normal", size: kind }]); setTitle(""); } }}>
         <input className="grow" dir="auto" value={title} placeholder={L("משימה חדשה…", "A new task…")} onChange={(e) => setTitle(e.target.value)} />
-        <Select value={cat} aria-label={L("קטגוריה", "Category")} onChange={(e) => setCat(e.target.value as Category)}>
-          {CATS.map(([c, en]) => <option key={c} value={c}>{en}</option>)}
+        <Select value={kind} aria-label={L("גודל", "Size")} onChange={(e) => setKind(e.target.value as Kind)}>
+          <option value="small">{L("קטנה", "Small")}</option>
+          <option value="big">{L("גדולה", "Big")}</option>
+          <option value="fable">Fable</option>
         </Select>
         <button type="submit" disabled={!title.trim()}>{L("הוסף", "Add")}</button>
       </form>

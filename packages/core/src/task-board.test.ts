@@ -18,7 +18,7 @@ test("two agents share tasks: claim once, done with a result, notes, revisions",
   assert.equal(b.notes[0]!.from, "kesher");
   await assert.rejects(board.change("claude", [{ op: "done", id: "t2", result: "x" }]), /belongs to kesher/);
   const text = boardText(await board.read());
-  assert.match(text, /t1 \[open\] p1 Refactor the composer/);
+  assert.match(text, /t1 \[open\] p1 {big} Refactor the composer/);
   assert.match(text, /Done: 1/);
   assert.match(text, /kesher \(t2\): t2 done/);
 });
@@ -32,18 +32,26 @@ test("writes in parallel never lose a change", async () => {
   assert.equal(new Set(b.tasks.map((t) => t.id)).size, 20);
 });
 
-test("tasks have a category: normal (Claude Opus), CoolDown (the local model) or Fable; old titles still count", async () => {
+test("one list with sizes: self-work takes small ones and tasks handed to it, Claude big ones; Fable stays apart", async () => {
   const board = new TaskBoard(join(await mkdtemp(join(tmpdir(), "board-")), "board.json"));
   let b = await board.change("roee", [
     { op: "add", title: "Refactor the composer" },
     { op: "add", title: "[CoolDown] Small test" },
     { op: "add", title: "Architecture review", category: "fable" },
+    { op: "add", title: "Add a test", size: "small" },
   ]);
-  assert.deepEqual(b.tasks.map((t) => t.category), ["normal", "cooldown", "fable"]);
+  // CoolDown joins Normal as a small task (old agents may still say "cooldown").
+  assert.deepEqual(b.tasks.map((t) => [t.category, t.size]), [["normal", "big"], ["normal", "small"], ["fable", "big"], ["normal", "small"]]);
   b = await board.change("roee", [{ op: "edit", id: "t1", category: "cooldown" }]);
-  assert.equal(b.tasks[0]!.category, "cooldown");
+  assert.deepEqual([b.tasks[0]!.category, b.tasks[0]!.size], ["normal", "small"]);
+  b = await board.change("roee", [{ op: "edit", id: "t1", size: "big", forKesher: true }]);
+  assert.deepEqual([b.tasks[0]!.size, b.tasks[0]!.forKesher], ["big", true]);
   await assert.rejects(board.change("roee", [{ op: "edit", id: "t1", category: "other" as never }]), /normal, cooldown or fable/);
+  await assert.rejects(board.change("roee", [{ op: "edit", id: "t1", size: "huge" as never }]), /small or big/);
   const text = boardText(await board.read());
-  assert.match(text, /p5 \{cooldown\} \[CoolDown\] Small test/);
+  assert.match(text, /p5 \{big\} \{for self-work\} Refactor the composer/);
+  assert.match(text, /p5 \{small\} \[CoolDown\] Small test/);
   assert.match(text, /p5 \{fable\} Architecture review/);
+  b = await board.change("roee", [{ op: "edit", id: "t1", forKesher: false }]);
+  assert.equal(b.tasks[0]!.forKesher, undefined);
 });

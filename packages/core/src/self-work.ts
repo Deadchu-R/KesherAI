@@ -93,7 +93,7 @@ export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check"
   return [
     `Self-work mode: you work on this project by yourself for up to ${hours} hours, in a separate copy of it (a git worktree) on the branch ${s.branch}; KesherAI commits for you. The user's own copy and the running app are not touched.`,
     `The goal: ${s.goal}`,
-    ...(shared ? ["", `First read ${shared}/handoff.md (the project's rules, the owner's preferences, the priority list) and the task_board (read). Take only tasks marked {cooldown} on the board (the others are Claude's: normal ones for Claude Opus, {fable} ones for Claude Fable). Work only on tasks you claimed; Claude works on the same board, so never take a task Claude claimed, and mark yours done with the commit and how you tested it.`] : []),
+    ...(shared ? ["", `First read ${shared}/handoff.md (the project's rules, the owner's preferences, the priority list) and the task_board (read). Which tasks are yours: first any marked {for self-work} (the owner handed them to you), then open {small} ones, lowest p number first. {big} ones are Claude Opus's and {fable} ones Claude Fable's: never take those unless marked {for self-work}. Claim a task before you start it. Work only on tasks you claimed; Claude works on the same board, so never take a task Claude claimed, and mark yours done with the commit and how you tested it.`] : []),
     "",
     "How to work:",
     "1. First write .kesher-self/plan.md: a checklist (- [ ] item) of small, separate items that reach the goal, plus Decisions and Blockers sections. Keep it up to date: it is how the user follows you.",
