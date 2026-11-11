@@ -15,7 +15,11 @@ export function PhoneAppNotifications() {
   const [error, setError] = useState("");
   useEffect(() => {
     if (!plugin) return;
-    const load = () => void plugin.status().then(setS, () => undefined);
+    const load = () =>
+      void plugin.status().then(
+        (st) => (setS(st), setError("")),
+        (e: Error) => setError(e?.message || String(e)),
+      );
     load();
     const t = window.setInterval(() => !document.hidden && load(), 4000);
     return () => window.clearInterval(t);
@@ -30,7 +34,15 @@ export function PhoneAppNotifications() {
         <a className="button" href="#/updates">{L("לעדכונים", "Go to updates")}</a>
       </section>
     );
-  if (!plugin || !s) return null;
+  if (!plugin) return null;
+  // The phone could not say how its notifications are set: show why, rather than nothing.
+  if (!s)
+    return (
+      <section className="card stack">
+        <h2>{L("התראות באפליקציה הזו", "Notifications in this app")}</h2>
+        <p className={error ? "error" : "muted"} dir="auto">{error ? L(`הטלפון לא הצליח לקרוא את מצב ההתראות: ${error}`, `The phone could not read its notification state: ${error}`) : L("טוען…", "Loading…")}</p>
+      </section>
+    );
   const set = async (live: boolean, push: boolean) => {
     setError("");
     try {
