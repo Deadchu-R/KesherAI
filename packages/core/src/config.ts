@@ -54,7 +54,8 @@ export const KesherConfigSchema = z.object({
       /** The embedding model file the built-in engine runs for search by meaning. */
       embedModel: z.string().optional(),
       /** How many chats the built-in engine answers at the same time (llama-server slots). */
-      parallel: z.number().int().min(1).max(8).default(2),
+      // One chat at a time by default: the whole context for it (Roee, Nov 11). Settings → Computer offers up to 8.
+      parallel: z.number().int().min(1).max(8).default(1),
       /** Multi-token prediction: tokens guessed ahead (unset: 2; 0: off). */
       mtpDraft: z.number().int().min(0).max(16).optional(),
       /** How models use the graphics cards (see gpus.ts). */

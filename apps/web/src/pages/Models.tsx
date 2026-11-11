@@ -11,6 +11,7 @@ import { desktop, toast } from "../library";
 import { HubBrowser } from "../HubBrowser";
 import { DownloadBar, useDownloads } from "../Downloads";
 import { Select } from "../ui/Select";
+import { ChatsAtOnce } from "../ChatsAtOnce";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -93,17 +94,7 @@ function StartHere({ onChange }: { onChange: () => void }) {
         {!engine?.installed && !busy && (
           <button type="button" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/install", { method: "POST" }).then(setEngine)}>{t("installEngine")}</button>
         )}
-        {engine?.installed && (
-          <label className="row parallel-pick" title={t("parallelHint")}>
-            <span className="muted small">{t("parallelLabel")}</span>
-            <Select
-              value={engine.parallel ?? 2}
-              onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { parallel: Number(e.target.value) } }).then(setEngine, (err: Error) => setError(err.message))}
-            >
-              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-            </Select>
-          </label>
-        )}
+        {engine?.installed && <ChatsAtOnce />}
         {engine?.installed && (
           <label className="row parallel-pick" title={L("מודלים עם ראש MTP (כמו Qwen3.8) מנחשים כמה מילים קדימה, והמודל בודק אותן: כותב מהר יותר, אבל לוקח קצת זיכרון מהשיחה. פחות ניחושים = פחות זיכרון.", "Models with an MTP head (like Qwen3.8) guess a few words ahead and the model checks them: it writes faster, but takes some memory from the chat. Fewer guesses = less memory.")}>
             <span className="muted small">{L("ניחוש קדימה (MTP)", "Guess ahead (MTP)")}</span>

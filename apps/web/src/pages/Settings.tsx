@@ -29,6 +29,7 @@ import { api, isRemote, type ModelListing } from "../api";
 import { desktop, useLibrary } from "../library";
 import { getLocale, t } from "../i18n";
 import { Select } from "../ui/Select";
+import { ChatsAtOnce } from "../ChatsAtOnce";
 
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 interface Remote {
@@ -432,7 +433,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; w
   { id: "general", icon: "⚙", en: "General", he: "כללי", words: "model models default chat image voice speech microphone read aloud מודל מודלים ברירת מחדל צאט קול דיבור הקראה מיקרופון", render: () => <><ActiveModels /><SpeechSection /></> },
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },
-  { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", words: "gpu graphics card vram temperature unload idle minutes ram cpu limit guard performance כרטיס מסך טמפרטורה פריקה לפרוק דקות זיכרון מעבד הגבלה ביצועים עומס", render: () => <><GpuSection /><GuardSection /></> },
+  { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", words: "parallel chats at once slots context במקביל צאטים שיחות הקשר gpu graphics card vram temperature unload idle minutes ram cpu limit guard performance כרטיס מסך טמפרטורה פריקה לפרוק דקות זיכרון מעבד הגבלה ביצועים עומס", render: () => <><GpuSection /><ChatsAtOnce card /><GuardSection /></> },
   { id: "privacy", icon: "🛡", en: "Privacy and permissions", he: "פרטיות והרשאות", words: "permissions always allow approve rules computer control screen mouse access log privacy הרשאות תמיד לאשר כללים שליטה במחשב מסך עכבר יומן גישה פרטיות", render: () => <><PermissionsSection /><ComputerSection /></> },
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", words: "phone remote anywhere tunnel qr pair device keys tailscale telegram computers start with computer access log טלפון מרחוק מכל מקום מנהרה קוד סריקה מכשירים מפתחות טלגרם מחשבים הפעלה עם המחשב יומן גישה", render: () => <><Phone /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },
   { id: "accounts", icon: "☁", en: "Accounts, backup and data", he: "חשבונות, גיבוי ונתונים", words: "google drive onedrive sync backup import chats chatgpt claude reset delete data גוגל דרייב סנכרון גיבוי ייבוא שיחות איפוס מחיקה נתונים", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /><ImportChats /><ResetSection /></> },
