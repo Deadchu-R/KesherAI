@@ -27,5 +27,8 @@ test("the access log counts visitors, keeps refusals without tokens, and alerts 
   assert.equal(l.refused[0]!.via, "tunnel");
   assert.doesNotMatch(JSON.stringify(l), /guess|the-token/);
   assert.deepEqual(alerts, ["Someone tried to get into KesherAI"]);
+  // The phone's own address refused (an old code after an app update): said without the alarm.
+  for (let i = 0; i < 5; i++) await app.inject({ url: "/api/conversations", remoteAddress: "192.168.1.20", headers: { host: "192.168.1.5:7420", authorization: "Bearer old-code" + i } });
+  assert.deepEqual(alerts, ["Someone tried to get into KesherAI", "A device was refused a few times"]);
   await app.close();
 });

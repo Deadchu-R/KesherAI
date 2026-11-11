@@ -118,7 +118,13 @@ export class AccessLog {
       this.refusedTimes = [...this.refusedTimes.filter((x) => now - x < 3_600_000), now];
       if (this.refusedTimes.length === 40) this.alert("Many refused tries on KesherAI", "40 requests were refused in the last hour, from several addresses. Your key is long and cannot be guessed, but if this goes on, turn on \"only paired devices through the internet link\" or make a new token (Settings → Phone).");
       if (times.length === 5) {
-        this.alert("Someone tried to get into KesherAI", `${r.address} was refused 5 times in 10 minutes (${r.via === "tunnel" ? "through the internet link" : "on your network"}). If it was not you, turn off remote access or make a new token (Settings → Phone).`);
+        // An address a paired device used successfully in the last hour: most likely that device coming back with
+        // an old code (seen: the phone app updating). Still said, since a mobile network shares one address among
+        // many people, but without the alarm.
+        const seen = this.visitors.get(r.address);
+        const known = !!seen && now - Date.parse(seen.last) < 3_600_000;
+        if (known) this.alert("A device was refused a few times", `${r.address} was refused 5 times in 10 minutes. It is the address one of your devices used in the last hour, so most likely that device reconnecting with an old code (for example after an app update). If it keeps happening, pair that device again (Settings → Phone).`);
+        else this.alert("Someone tried to get into KesherAI", `${r.address} was refused 5 times in 10 minutes (${r.via === "tunnel" ? "through the internet link" : "on your network"}). If it was not you, turn off remote access or make a new token (Settings → Phone).`);
       }
     }
     this.save();
