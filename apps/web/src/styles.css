@@ -1889,3 +1889,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 /* Task rows grow with their title (on a phone a fixed button height made titles run over the next row). */
 .task-head { height: auto; min-height: 40px; white-space: normal; flex-wrap: wrap; line-height: 1.35; }
 .task-head > .grow { min-width: 0; flex: 1 1 60%; overflow-wrap: anywhere; }
+
+.self-work-approval { border-color: var(--warn, #c9a227); }

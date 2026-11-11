@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
@@ -49,6 +49,8 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
   const [log, setLog] = useState<{ lines: string[]; waiting: Array<{ requestId: string; name: string; preview: string; reason: string }> }>({ lines: [], waiting: [] });
   // The task it holds on the board now (found on the phone: "0 items" and a closed log said nothing about it).
   const [onTask, setOnTask] = useState<{ id: string; title: string } | null>(null);
+  // Each new request is brought into view once.
+  const seenAsk = useRef(new Set<string>());
 
   useEffect(() => {
     let alive = true;
@@ -105,18 +107,16 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
     <section className="self-work">
       <button type="button" className="self-work-head" aria-expanded={open || !!active} onClick={() => setOpen((v) => !v)}>
         <span>🤖 {L("עבודה עצמית", "Self-work")}</span>
+        {log.waiting.length > 0 && <span className="pill small warn">✋ {L(`מחכה לאישור (${log.waiting.length})`, `Waiting for approval (${log.waiting.length})`)}</span>}
         {run && <span className="muted small">{L(...STATUS[run.status])}{active ? ` · ${run.items.length} ${L("הושלמו", "done")}` : ""}</span>}
       </button>
       {(open || active) && (
         <div className="self-work-body">
           {active && run ? (
             <>
-              {onTask && <p className="self-work-now" dir="auto">🔧 <strong>{L("עובד על", "Working on")} {onTask.id}:</strong> {onTask.title}</p>}
-              <p className="muted small" dir="auto">{run.goal}</p>
-              <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{run.modelId ? ` · ${run.modelId.replace(/^main\//, "").split("/").pop()}` : ""}</p>
-              {run.note && <p className="small">{run.note}</p>}
+              {/* Approvals first: answered right here, from the computer or the phone (Roee: without leaving self-work). */}
               {log.waiting.map((w) => (
-                <div key={w.requestId} className="card approval">
+                <div key={w.requestId} className="card approval self-work-approval" ref={(el) => { if (el && !seenAsk.current.has(w.requestId)) { seenAsk.current.add(w.requestId); el.scrollIntoView({ block: "center", behavior: "smooth" }); } }}>
                   <strong>✋ {L("מחכה לאישור שלך", "Waiting for your approval")}: <code>{w.name}</code></strong>
                   <p className="muted small">{w.reason}</p>
                   <pre className="code" dir="ltr">{w.preview}</pre>
@@ -126,6 +126,10 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
                   </div>
                 </div>
               ))}
+              {onTask && <p className="self-work-now" dir="auto">🔧 <strong>{L("עובד על", "Working on")} {onTask.id}:</strong> {onTask.title}</p>}
+              <p className="muted small" dir="auto">{run.goal}</p>
+              <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{run.modelId ? ` · ${run.modelId.replace(/^main\//, "").split("/").pop()}` : ""}</p>
+              {run.note && <p className="small">{run.note}</p>}
               <ul className="self-work-items">
                 {run.items.map((i) => <li key={i.at}>✓ <span dir="auto">{i.text}</span>{i.commit && <code className="muted small"> {i.commit}</code>}</li>)}
                 {(run.skipped ?? []).map((i) => <li key={`s${i.at}`} className="muted">↷ {L("דילג", "Skipped")}: <span dir="auto">{i.why}</span></li>)}
