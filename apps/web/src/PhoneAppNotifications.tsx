@@ -26,7 +26,7 @@ export function PhoneAppNotifications() {
     return (
       <section className="card stack">
         <h2>{L("התראות באפליקציה הזו", "Notifications in this app")}</h2>
-        <p className="muted">{L("הגרסה של האפליקציה בטלפון ישנה מדי להתראות משלה. עדכנו אותה (בדף העדכונים, "האפליקציה בטלפון"), פתחו אותה מחדש, והכרטיס הזה יציג את המתגים.", "This phone app is too old for its own notifications. Update it (the Updates page, "The phone app"), open it again, and this card shows the switches.")}</p>
+        <p className="muted">{L("הגרסה של האפליקציה בטלפון ישנה מדי להתראות משלה. עדכנו אותה (בדף העדכונים, תחת האפליקציה בטלפון), פתחו אותה מחדש, והכרטיס הזה יציג את המתגים.", "This phone app is too old for its own notifications. Update it (the Updates page, under the phone app), open it again, and this card shows the switches.")}</p>
         <a className="button" href="#/updates">{L("לעדכונים", "Go to updates")}</a>
       </section>
     );
