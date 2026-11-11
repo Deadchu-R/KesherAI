@@ -190,7 +190,7 @@ export class SelfWork {
     this.stopRequested = false;
     await this.save();
     await this.d.send(convId, selfWorkBrief(this.run_, hours, this.d.shared));
-    await this.d.notify("🤖 Self-work started", `${goal.slice(0, 120)} (branch ${branch}, up to ${hours} h, in ${worktree})`, `#/c/${convId}`);
+    await this.d.notify("🤖 Self-work started", `${goal.slice(0, 120)} (branch ${branch}, up to ${hours} h, in ${worktree})`, "#/self-work");
     this.loop = this.work(true);
     return this.run_;
   }
@@ -252,7 +252,7 @@ export class SelfWork {
     r.note = note;
     await this.save();
     const title = status === "done" ? "✅ Self-work finished" : status === "blocked" ? "✋ Self-work needs you" : "⏹ Self-work stopped";
-    await this.d.notify(title, `${note} ${r.items.length} item(s) committed on ${r.branch}.`, `#/c/${r.convId}`);
+    await this.d.notify(title, `${note} ${r.items.length} item(s) committed on ${r.branch}.`, "#/self-work");
   }
 
   /** Waits for the chat to finish its turn. */
@@ -291,7 +291,7 @@ export class SelfWork {
           r.status = "waiting";
           r.note = "Waiting for your approval in the chat.";
           await this.save();
-          await this.d.notify("✋ Self-work waits for your approval", r.goal.slice(0, 120), `#/c/${r.convId}`);
+          await this.d.notify("✋ Self-work waits for your approval", r.goal.slice(0, 120), "#/self-work");
         } else if (this.now() - waitingSince > WAIT_MS) {
           await this.end("blocked", "An approval waited more than 30 minutes.");
           return undefined;
@@ -342,7 +342,7 @@ export class SelfWork {
     // Keep the run's own notes (.kesher-self/plan.md): found on the PC, the plan was gone after a skip.
     await this.d.git(r.worktree, ["clean", "-fd", "-e", ".kesher-self"]);
     await this.save();
-    await this.d.notify(`🤖 ${L_SKIP}`, `Self-work: ${why.slice(0, 120)}`, `#/c/${r.convId}`);
+    await this.d.notify(`🤖 ${L_SKIP}`, `Self-work: ${why.slice(0, 120)}`, "#/self-work");
     await this.d.send(
       r.convId,
       `This item could not be finished (${why}). Its changes were undone. If it is a task on the board, mark it blocked there with the reason (task_board block), then take the next item (end with ITEM DONE / ALL DONE / BLOCKED).`,
@@ -411,7 +411,7 @@ export class SelfWork {
         if (out.kind === "item" || sha) {
           r.items.push({ at: Date.now(), text: label, ...(sha ? { commit: sha } : {}) });
           await this.save();
-          await this.d.notify(`🤖 ${label.slice(0, 80)}`, `Self-work: item ${r.items.length}${sha ? ` (${sha})` : ""}. ${r.goal.slice(0, 80)}`, `#/c/${r.convId}`);
+          await this.d.notify(`🤖 ${label.slice(0, 80)}`, `Self-work: item ${r.items.length}${sha ? ` (${sha})` : ""}. ${r.goal.slice(0, 80)}`, "#/self-work");
         }
         if (out.kind === "all") return await this.end("done", out.text || "The goal is met.");
         await this.save();
