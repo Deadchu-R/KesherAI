@@ -12,7 +12,9 @@ Goal: work the {cooldown} tasks from the board, in priority order.
 - [x] t17 (p3, CLAIMED → DONE): claude-code-import — also turn Task (subagent) tool calls into one line.
   - Added a `Task` case to `toolLine` (packages/core/src/claude-code-import.ts): shows the subagent's `description` (falls back to `subagent_type`, then `prompt`; "delegated a subtask" when empty). +3 test assertions in claude-code-import.test.ts.
   - Full `pnpm lint && pnpm typecheck && pnpm test` green (385/0/4). Core-only change, no UI.
-- [ ] t11 (p4): Settings.tsx — StartupToggle and HttpsCard to their own files.
+- [x] t11 (p4, CLAIMED → DONE): Settings.tsx — StartupToggle and HttpsCard to their own files.
+  - `apps/web/src/settings/StartupToggle.tsx` (with its TSDoc) and `apps/web/src/settings/HttpsCard.tsx` (with its `Https` interface). Imports added in Settings.tsx; both definitions removed (Settings.tsx 555→499 lines). `desktop`/`api`/`getLocale` still used by the rest of Settings.tsx, imports kept.
+  - Full `pnpm lint && pnpm typecheck && pnpm test` green (385/0/4).
 - [ ] t12 (p4): Settings.tsx — Phone section to its own file.
 - [ ] t13 (p4): git-panel — detached HEAD and "no commits yet" tests.
 - [ ] t14 (p5): Git panel — comment on a diff line (only if time remains; needs UI + server, may be too big).
