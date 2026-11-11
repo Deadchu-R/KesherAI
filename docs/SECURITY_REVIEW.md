@@ -276,3 +276,11 @@ This review went through the code part by part. Each finding is listed with what
   - A saved rule (Nov 7) lets run_command run everywhere without asking. It is the user's choice; dangerous commands still ask. It is listed for Roee in his Thursday list.
   - Destructive git on the PC (reset --hard) was refused by the safety check and left for the user.
 - **Result:** nothing to fix.
+
+## Scan 45 (2026-11-11): 0.6.87–0.6.95 (chats at once, shortcuts, pins, unified menu, self-work panel, board rows)
+- **Shortcuts (`PUT /api/shortcuts`):** an address must be `#/…` (a fixed character set) or http/https up to 500 characters; `javascript:`, `data:` and `file:` are refused (tested). Web shortcuts open with `rel="noopener noreferrer"`. Up to 25, names up to 40 characters.
+- **Pins (`PUT /api/pins`):** app pages only (`#/` and word characters), up to 40, de-duplicated.
+- **`POST /api/conversations/:id/board-project`:** grants only a folder that was already a code chat's workspace, inside the home folder and with `.git`; never a path from the request. The grant goes through the session's own checks.
+- **Self-work approvals in its panel:** the same `decide()`/`dangerReason()` gate; nothing new can approve without a click. The disk-erase rule no longer flags `wmic … /format:list` (tests added), and still flags `format C:` and `Format-Volume`.
+- **Performance:** the self-work panel and the board stopped polling every 5 s while the tab is hidden (the phone in a pocket). The board drew one bordered box and one pill per row; now plain rows with a divider.
+- **Privacy:** no email, Windows user name or personal path in the code or commit messages since scan 44 (checked with `git log -p` on the new commits).

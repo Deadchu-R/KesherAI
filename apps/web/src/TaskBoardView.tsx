@@ -51,7 +51,8 @@ export function TaskBoardView() {
     let alive = true;
     const load = () => void api<Board>("/api/self-work/board").then((b) => alive && setBoard(b), () => undefined);
     load();
-    const t = window.setInterval(load, 5000);
+    // A hidden tab (or the phone in a pocket) does not ask every 5 seconds.
+    const t = window.setInterval(() => !document.hidden && load(), 5000);
     return () => {
       alive = false;
       window.clearInterval(t);

@@ -66,7 +66,7 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
         }, () => undefined);
     }, () => undefined);
     load();
-    const t = window.setInterval(load, 5000);
+    const t = window.setInterval(() => !document.hidden && load(), 5000);
     return () => {
       alive = false;
       window.clearInterval(t);
