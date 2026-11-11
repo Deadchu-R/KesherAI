@@ -198,7 +198,9 @@ label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: c
   .mobile-bar button { width: 44px; height: 44px; padding: 0; font-size: 20px; }
   .sidebar { display: none; }
   .sidebar.open { display: flex; position: fixed; inset: var(--bar-h) 0 0 0; height: auto; z-index: 14; overflow-y: auto; flex-direction: column; }
-  .sidebar.open .sidebar-scroll { max-height: none; }
+  /* The whole menu scrolls: as a shrinking flex child the list (shortcuts, projects, chats) got no room under
+     the pins and the footer on a phone and showed nothing (found on the phone). */
+  .sidebar.open .sidebar-scroll { max-height: none; flex: none; overflow: visible; }
   .sidebar.open .sidebar-nav { flex-direction: column; }
   .sidebar.open .sidebar-foot { display: flex; }
   .topbar select { flex: 1 1 140px; min-width: 0; }
