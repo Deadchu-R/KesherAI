@@ -21,7 +21,8 @@ import { ModelPickerHost } from "./ModelPicker";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
-import { NAV_ICONS, Sidebar, useNavItems, usePins } from "./Sidebar";
+import { Sidebar } from "./Sidebar";
+import { useAppMenu } from "./AppMenu";
 import { ToolIcon } from "./ToolIcon";
 import { useAppearance } from "./appearance";
 import { HOME_SECTIONS } from "@kesher/shared";
@@ -129,8 +130,8 @@ function Home() {
   const homeSections = [...(look.homeOrder ?? []), ...HOME_SECTIONS].filter((x, i, a) => a.indexOf(x) === i && !look.homeHide?.includes(x));
   const { conversations } = useLibrary();
   const recent = conversations.slice(0, 5);
-  const [pins] = usePins();
-  const navItems = useNavItems();
+  // The same pinned tools as every menu (useAppMenu).
+  const app = useAppMenu();
   const ideas = role ? role.ideas[getLocale() === "he" ? "he" : "en"] : [t("ideaExe"), t("ideaImage"), t("ideaCode"), t("ideaExplain")];
   return (
     <div className="home">
@@ -176,9 +177,9 @@ function Home() {
             </nav>
           )
         ) : (
-          pins.length > 0 && (
+          app.pinned.length > 0 && (
             <nav key="pins" className="home-pins" aria-label={t("allTools")}>
-              {pins.map((href) => <a key={href} href={href}><span aria-hidden="true"><ToolIcon href={href} fallback={NAV_ICONS[href] ?? "•"} /></span> {navItems.find((n) => n.href === href)?.label ?? href}</a>)}
+              {app.pinned.map((e) => <a key={e.key} href={e.href}><span aria-hidden="true"><ToolIcon href={e.href!} fallback={e.icon} /></span> {e.label}</a>)}
             </nav>
           )
         ),

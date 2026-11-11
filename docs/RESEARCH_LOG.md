@@ -432,3 +432,12 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **Open for Roee:**
   - A Q5/Q6 download for accuracy.
   - ik_llama.cpp as a second engine; techyon measured about 73 tok/s at 156K on one 3090.
+
+## 2026-11-11: One menu on the computer and the phone (done)
+- **Material 3 adaptive navigation (developer.android.com):** destinations are defined once (`navigationSuiteItems`). The same items show as a bottom bar, a rail or a drawer, chosen by window size at run time.
+- **Apple iPadOS 18 (WWDC24 10147):** tabs are declared once; the tab bar turns into a sidebar with the same items. People add, remove and reorder; the order and visibility are saved. Syncing across devices is not stated.
+- **Notion:** sidebar shortcuts are personal.
+- **Done (KesherAI 0.6.90):**
+  - `useAppMenu()` is the one source: main actions, pinned tools, shortcuts. The sidebar (computer), the phone's menu drawer, the top bar's ☰ menu and the home screen all draw from it.
+  - Pins and shortcuts are kept on the computer (/api/pins, /api/shortcuts), so every device shows the same ones in the same order. A device whose pins were changed earlier gives them to the computer once.
+- **Stopped at:** the phone's bottom tabs (Chats, New, Tools, Settings) are still their own four. If wanted, they could come from useAppMenu too (Apple's "tab bar = sidebar" model).

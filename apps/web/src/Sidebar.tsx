@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
 import { SidebarShortcuts } from "./SidebarShortcuts";
+import { useAppMenu } from "./AppMenu";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
@@ -144,7 +145,10 @@ let pins: string[] | null = null;
 const pinListeners = new Set<() => void>();
 
 /**
- * The pages pinned to the top of the sidebar (remembered on this device).
+ * The pages pinned to the top of the sidebar: one list on the computer (/api/pins), so the phone and the computer
+ * show the same menu (Roee: "one unified menu"). A copy in this browser shows it at once; the computer's list
+ * replaces it when it arrives. A device whose pins were changed before this (kept only here) gives them to the
+ * computer once, when the computer has none yet.
  *
  * @returns The pinned pages and a toggle.
  */
@@ -156,27 +160,35 @@ export function usePins(): [string[], (href: string) => void] {
     return () => void pinListeners.delete(on);
   }, []);
   if (!pins) {
+    let local: string[] | null = null;
     try {
-      pins = JSON.parse(localStorage.getItem(PIN_KEY) ?? "null") as string[] | null;
+      local = JSON.parse(localStorage.getItem(PIN_KEY) ?? "null") as string[] | null;
     } catch {
-      pins = null;
+      local = null;
     }
-    pins ??= DEFAULT_PINS;
+    pins = local ?? DEFAULT_PINS;
+    if (!pinsAsked) {
+      pinsAsked = true;
+      void api<{ pins: string[] | null }>("/api/pins").then(
+        (r) => {
+          if (r.pins) applyPins(r.pins, false);
+          else if (local) void savePins(local);
+        },
+        () => undefined,
+      );
+    }
   }
   const toggle = (href: string) => {
-    pins = pins!.includes(href) ? pins!.filter((x) => x !== href) : [...pins!, href];
-    try {
-      localStorage.setItem(PIN_KEY, JSON.stringify(pins));
-    } catch {
-      // only for this visit
-    }
-    pinListeners.forEach((l) => l());
+    const next = pins!.includes(href) ? pins!.filter((x) => x !== href) : [...pins!, href];
+    applyPins(next, true);
   };
   return [pins, toggle];
 }
 
-/** Puts the pinned pages in a new order (long press and drag in the sidebar). */
-export function setPinOrder(next: string[]): void {
+let pinsAsked = false;
+const savePins = (next: string[]) => api("/api/pins", { method: "PUT", body: { pins: next } }).catch(() => undefined);
+/** Shows a list of pins (and keeps it on the computer when it is the user's change). */
+function applyPins(next: string[], save: boolean): void {
   pins = next;
   try {
     localStorage.setItem(PIN_KEY, JSON.stringify(pins));
@@ -184,6 +196,12 @@ export function setPinOrder(next: string[]): void {
     // only for this visit
   }
   pinListeners.forEach((l) => l());
+  if (save) void savePins(next);
+}
+
+/** Puts the pinned pages in a new order (long press and drag in the sidebar). */
+export function setPinOrder(next: string[]): void {
+  applyPins(next, true);
 }
 
 /**
@@ -318,10 +336,10 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       () => undefined,
     );
   }, []);
-  const navItems = useNavItems();
+  const app = useAppMenu();
   const [pinned] = usePins();
-  // Pinned tools in the user's own order (long press and drag to change it).
-  const pinnedItems = pinned.map((h) => navItems.find((n) => n.href === h)).filter((n): n is NonNullable<typeof n> => !!n);
+  // Pinned tools in the user's own order (long press and drag to change it), from the shared menu.
+  const pinnedItems = app.pinned.map((e) => ({ href: e.href!, label: e.label }));
   const pinDrag = useDragOrder(pinnedItems.map((n) => n.href), (order) => setPinOrder([...order, ...pinned.filter((h) => !order.includes(h))]));
 
   return (
@@ -329,15 +347,18 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       <QuickMenu />
       <ConversationSearch />
       {!searching && <div className="sidebar-actions">
-        <a className="nav-link new-chat" href="#/" aria-current={hash === "#/" ? "page" : undefined}>
-          <span className="plus" aria-hidden>+</span> {t("newChat")}
-        </a>
-        <button type="button" className="nav-link as-link" onClick={() => setDialog("code")}>
-          <span className="plus" aria-hidden>{"</>"}</span> {t("newCode")}
-        </button>
-        <a className="nav-link" href="#/apps" aria-current={hash === "#/apps" ? "page" : undefined}>
-          <span className="nav-ico" aria-hidden="true">▦</span> {t("allTools")}
-        </a>
+        {/* The same main actions as every other menu (useAppMenu). */}
+        {app.main.map((e) =>
+          e.run ? (
+            <button key={e.key} type="button" className="nav-link as-link" onClick={e.run}>
+              <span className="plus" aria-hidden>{e.icon}</span> {e.label}
+            </button>
+          ) : (
+            <a key={e.key} className={`nav-link${e.key === "new-chat" ? " new-chat" : ""}`} href={e.href} aria-current={hash === e.href ? "page" : undefined}>
+              <span className={e.icon === "+" ? "plus" : "nav-ico"} aria-hidden="true">{e.icon}</span> {e.label}
+            </a>
+          ),
+        )}
         {pinnedItems.length > 0 && (
           <div className={`nav-pins${pinDrag.dragging ? " reordering" : ""}`} title={t("dragToReorder")}>
             {pinnedItems.map((n) => (

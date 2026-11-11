@@ -12,7 +12,8 @@ import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Shortcut { id: string; label: string; icon?: string; href: string }
+/** A shortcut. */
+export interface Shortcut { id: string; label: string; icon?: string; href: string }
 
 let cache: Shortcut[] | null = null;
 const listeners = new Set<(s: Shortcut[]) => void>();
@@ -25,15 +26,21 @@ const save = (next: Shortcut[]) =>
     (e: Error) => toast(e.message),
   );
 
-/** The shortcuts and the ⭐ button. */
-export function SidebarShortcuts({ hash }: { hash: string }) {
+/** The user's shortcuts, one list for every menu (the sidebar, the top bar's menu), kept on the computer. */
+export function useShortcuts(): Shortcut[] {
   const [list, setList] = useState<Shortcut[]>(cache ?? []);
-  const nav = useNavItems();
   useEffect(() => {
     listeners.add(setList);
-    void api<{ shortcuts: Shortcut[] }>("/api/shortcuts").then((r) => ((cache = r.shortcuts), setList(r.shortcuts)), () => undefined);
+    if (!cache) void api<{ shortcuts: Shortcut[] }>("/api/shortcuts").then((r) => ((cache = r.shortcuts), listeners.forEach((l) => l(r.shortcuts))), () => undefined);
     return () => void listeners.delete(setList);
   }, []);
+  return list;
+}
+
+/** The shortcuts and the + button. */
+export function SidebarShortcuts({ hash }: { hash: string }) {
+  const list = useShortcuts();
+  const nav = useNavItems();
   // The page open now, named like the sidebar names it (or the window's title).
   const addHere = () => {
     const href = hash || "#/";

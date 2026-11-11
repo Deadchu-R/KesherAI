@@ -42,6 +42,15 @@ export function cleanShortcut(s: Partial<Shortcut>): Shortcut | { error: string 
  */
 export function shortcutRoutes(app: FastifyInstance, s: KesherServices): void {
   app.get("/api/shortcuts", async () => ({ shortcuts: s.config.shortcuts }));
+  // The pinned tools: one list for every device (Roee: one menu on the computer and the phone). null = the defaults.
+  app.get("/api/pins", async () => ({ pins: s.config.pins ?? null }));
+  app.put<{ Body: { pins?: unknown } }>("/api/pins", async (req, reply) => {
+    const pins = req.body?.pins;
+    if (!Array.isArray(pins) || pins.length > 40 || !pins.every((p) => typeof p === "string" && /^#\/[\w\-/]{1,98}$/.test(p))) return reply.code(400).send({ error: "Pins are app pages (#/…), up to 40." });
+    s.config.pins = [...new Set(pins as string[])];
+    await s.saveConfig();
+    return { pins: s.config.pins };
+  });
   // The whole list at once (add, rename, reorder and remove are all one PUT), so two devices never half-merge.
   app.put<{ Body: { shortcuts?: Array<Partial<Shortcut>> } }>("/api/shortcuts", async (req, reply) => {
     const list = req.body?.shortcuts;

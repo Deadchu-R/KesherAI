@@ -25,6 +25,11 @@ test("shortcuts are kept in the config: the whole list at once, up to 25", async
     assert.equal(got.shortcuts[0]!.label, "Self-work");
     assert.ok(got.shortcuts[0]!.id);
     assert.equal((await put([{ label: "bad", href: "javascript:x" }])).statusCode, 400);
+    const pins = (body: unknown) => server.app.inject({ method: "PUT", url: "/api/pins", payload: body });
+    assert.equal(((await server.app.inject({ method: "GET", url: "/api/pins" })).json() as { pins: null }).pins, null, "unset: the defaults");
+    assert.equal((await pins({ pins: ["#/self-work", "#/models"] })).statusCode, 200);
+    assert.deepEqual(((await server.app.inject({ method: "GET", url: "/api/pins" })).json() as { pins: string[] }).pins, ["#/self-work", "#/models"]);
+    assert.equal((await pins({ pins: ["javascript:x"] })).statusCode, 400);
     assert.equal((await put(Array.from({ length: 26 }, (_, i) => ({ label: `s${i}`, href: "#/models" })))).statusCode, 400);
   } finally {
     await server.close();

@@ -141,6 +141,8 @@ export const KesherConfigSchema = z.object({
    * The user's own sidebar shortcuts (any page of the app, or a web address), the same on every device. Checked in
    * routes/shortcuts.ts: a page `#/…` or an http(s) address, never a script.
    */
+  /** The sidebar's pinned tools in order (`#/images`…), the same on the computer and the phone; unset = the defaults. */
+  pins: z.array(z.string().max(100)).max(40).optional(),
   shortcuts: z.array(z.object({ id: z.string().max(40), label: z.string().max(40), icon: z.string().max(8).optional(), href: z.string().max(500) })).max(25).default([]),
   /** Looks the user saved by name (Settings → Appearance → My looks). */
   savedLooks: z.array(z.object({ name: z.string().max(60), appearance: z.record(z.string(), z.unknown()) })).max(40).default([]),

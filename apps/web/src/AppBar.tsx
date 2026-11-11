@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
+import { useAppMenu } from "./AppMenu";
 import { desktop } from "./library";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
@@ -50,6 +51,7 @@ export const NEW_CODE_EVENT = "kesher:new-code";
  */
 export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { hash: string; online: boolean | null; sidebarOpen: boolean; onSidebar: () => void; onLocale: () => void }) {
   const [menu, setMenu] = useState(false);
+  const app = useAppMenu();
   const [host, setHost] = useState("");
 
   useEffect(() => {
@@ -79,11 +81,16 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           }}
           trigger={Icon.menu}
         >
-          <MenuItem icon="+" href="#/">{t("newChat")}</MenuItem>
-          <MenuItem icon="</>" onSelect={() => dispatchEvent(new Event(NEW_CODE_EVENT))}>{t("newCode")}</MenuItem>
+          {/* The same entries as the sidebar (useAppMenu): main actions, pinned tools, shortcuts. */}
+          {[app.main, app.pinned, app.shortcuts].filter((part) => part.length).map((part, i) => (
+            <div key={i} className="kmenu-part">
+              {i > 0 && <MenuSeparator />}
+              {part.map((e) => (
+                <MenuItem key={e.key} icon={e.icon} {...(e.run ? { onSelect: e.run } : { href: e.href! })}>{e.label}{e.external ? " ↗" : ""}</MenuItem>
+              ))}
+            </div>
+          ))}
           <MenuSeparator />
-          {/* The tools themselves live in one place (the sidebar and "All tools"), not repeated here. */}
-          <MenuItem icon="▦" href="#/apps">{t("allTools")}</MenuItem>
           <MenuItem icon="⚙" href="#/settings">{t("settings")}</MenuItem>
           <MenuSeparator />
           <MenuItem icon="🌐" onSelect={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{t("language")}</MenuItem>
