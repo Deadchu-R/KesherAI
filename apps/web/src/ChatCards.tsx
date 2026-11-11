@@ -19,12 +19,20 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
-/** Colours a unified diff. */
-export function Diff({ diff }: { diff: string }) {
+/**
+ * Colours a unified diff.
+ *
+ * @param props - `diff` is the text; `onLine` (optional) fires with the line's index and text when a line is clicked.
+ */
+export function Diff({ diff, onLine }: { diff: string; onLine?: (i: number, line: string) => void }) {
   return (
-    <pre className="code diff" dir="ltr">
+    <pre className={`code diff${onLine ? " clickable" : ""}`} dir="ltr">
       {diff.split("\n").map((l, i) => (
-        <span key={i} className={l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : l.startsWith("@@") ? "hunk" : ""}>
+        <span
+          key={i}
+          className={l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : l.startsWith("@@") ? "hunk" : ""}
+          onClick={onLine ? () => onLine(i, l) : undefined}
+        >
           {l}
           {"\n"}
         </span>

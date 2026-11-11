@@ -17,6 +17,35 @@ test("status header and files are read", () => {
   assert.equal(parseStatus("## feature/x.y\n").branch, "feature/x.y");
 });
 
+test("parseStatus: detached HEAD and a no-upstream branch", () => {
+  assert.equal(parseStatus("## HEAD (no branch)\n M a.ts\n").branch, undefined);
+  assert.equal(parseStatus("## No commits yet on main\n?? a.txt\n").branch, "main");
+});
+
+test("a fresh repository (no commits yet) and a detached HEAD", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "kesher-git-empty-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: repo });
+  g("init", "-q");
+  g("config", "user.email", "t@t");
+  g("config", "user.name", "t");
+  await writeFile(join(repo, "a.txt"), "one\n");
+  const fresh = await gitState(repo);
+  assert.equal(fresh.repo, true);
+  assert.equal(fresh.branch, g("branch", "--show-current").toString().trim() || undefined); // no branch while there are no commits
+  assert.equal(fresh.head, undefined);
+  assert.deepEqual(fresh.files.map((f) => [f.path, f.state]), [["a.txt", "?"]]);
+  g("add", "-A");
+  g("commit", "-qm", "first");
+  const detached = await gitState(repo);
+  assert.equal(detached.branch, g("branch", "--show-current").toString().trim()); // commit moved onto the default branch
+  const sha = g("rev-parse", "HEAD").toString().trim();
+  g("checkout", "-q", "--detach", sha);
+  const det = await gitState(repo);
+  assert.equal(det.repo, true);
+  assert.equal(det.branch, undefined);
+  assert.equal(det.head?.sha, sha.slice(0, 7));
+});
+
 test("GitHub remotes and branch names", () => {
   assert.equal(githubRepo("https://github.com/someone/KesherAI.git"), "someone/KesherAI");
   assert.equal(githubRepo("git@github.com:a/b.c.git"), "a/b.c");

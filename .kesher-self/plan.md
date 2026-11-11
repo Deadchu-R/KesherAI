@@ -15,8 +15,12 @@ Goal: work the {cooldown} tasks from the board, in priority order.
 - [x] t11 (p4, CLAIMED → DONE): Settings.tsx — StartupToggle and HttpsCard to their own files.
   - `apps/web/src/settings/StartupToggle.tsx` (with its TSDoc) and `apps/web/src/settings/HttpsCard.tsx` (with its `Https` interface). Imports added in Settings.tsx; both definitions removed (Settings.tsx 555→499 lines). `desktop`/`api`/`getLocale` still used by the rest of Settings.tsx, imports kept.
   - Full `pnpm lint && pnpm typecheck && pnpm test` green (385/0/4).
-- [ ] t12 (p4): Settings.tsx — Phone section to its own file.
-- [ ] t13 (p4): git-panel — detached HEAD and "no commits yet" tests.
+- [x] t12 (p4, CLAIMED → DONE): Settings.tsx — Phone section to its own file.
+  - `apps/web/src/settings/PhoneSection.tsx` (was `Phone()`, renamed to `PhoneSection` to match the other extracted sections): moves the `Remote` interface, `APK_URL`, the QR/anywhere logic; imports `StartupToggle` + `HttpsCard` (rendered inside it). Settings.tsx: `<Phone />` → `<PhoneSection />`, removed `QRCode`/`AnywhereMode`/`TunnelInfo` imports and the `Remote` interface. File down to 358 lines.
+  - Full `pnpm lint && pnpm typecheck && pnpm test` green (385/0/4).
+- [x] t13 (p4, CLAIMED → DONE): git-panel — detached HEAD and "no commits yet" tests.
+  - `packages/core/src/git-panel.test.ts`: two new tests. `parseStatus` unit test — `## HEAD (no branch)` → branch undefined; `## No commits yet on main` → branch "main". And a real-repo test: a fresh repo (no commits) gives `repo: true`, no `head`, the untracked file listed; after the first commit the branch is the default one; after `git checkout --detach <sha>` the state has no branch but `head.sha` is that sha's short form.
+  - Full `pnpm lint && pnpm typecheck && pnpm test` green (387/0/4).
 - [ ] t14 (p5): Git panel — comment on a diff line (only if time remains; needs UI + server, may be too big).
 
 ## Decisions
