@@ -441,3 +441,11 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - `useAppMenu()` is the one source: main actions, pinned tools, shortcuts. The sidebar (computer), the phone's menu drawer, the top bar's ☰ menu and the home screen all draw from it.
   - Pins and shortcuts are kept on the computer (/api/pins, /api/shortcuts), so every device shows the same ones in the same order. A device whose pins were changed earlier gives them to the computer once.
 - **Stopped at:** the phone's bottom tabs (Chats, New, Tools, Settings) are still their own four. If wanted, they could come from useAppMenu too (Apple's "tab bar = sidebar" model).
+
+## 2026-11-11: How other apps show a task list (the self-work board)
+- **Question:** our board looked messy on a phone (a box around every row, a big pill at the end, rows overlapping). How do others do it?
+- **Linear (desktop and mobile):** one row per issue with no box. A small status mark at the start (empty circle = open, half-filled = in progress, a mark for blocked), then the title, then quiet details. Groups by status fold and show a count. Sources: linear.app/changelog/2024-09-19-introducing-linear-mobile, screensdesign.com/apps/linear-mobile.
+- **Material list items (two-line):** a leading icon, a primary line, a secondary line in a smaller muted style. Rows are at least 48px, and long text is cut with an ellipsis instead of pushing the layout. Sources: m2.material.io/go/design-lists, playbook.ebay.com/design-system/components/list-row.
+- **List UI write-ups (eleken, saasframe):** keep one line of metadata, use dividers rather than cards, and put the status where the eye starts.
+- **Taken here (0.6.95):** no box and no pill; a status mark (○ open, ◐ in progress, ⊘ blocked, ● done); the title cut at two lines (shown in full once opened); one quiet line: number, status, who. Categories fold and show a count; the explanation moved to a tooltip. The task in progress stays first.
+- **Stopped at:** drag to reorder and swipe actions on the phone (Todoist-style) were not built; tap to open is enough for now.

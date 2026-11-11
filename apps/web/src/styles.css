@@ -1615,8 +1615,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 /* The shared task board (self-work panel). */
 .task-board { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
 .task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.task-head { display: flex; gap: 8px; align-items: center; width: 100%; text-align: start; background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; color: inherit; font: inherit; }
-.task.done .task-head { opacity: .6; }
 .task-body { padding: 6px 8px; display: flex; flex-direction: column; gap: 6px; }
 .task-body p { margin: 0; white-space: pre-wrap; }
 .pill.claimed { background: color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -1819,11 +1817,9 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .cc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cc-list li { padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); align-items: center; gap: 8px; }
 .cc-list li .muted { overflow-wrap: anywhere; }
-.task-cat { margin-block: 10px; }
-.task-cat > h4 { margin: 6px 0; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.task-cat.cooldown > h4 > span:first-child::before { content: "🧊 "; }
-.task-cat.fable > h4 > span:first-child::before { content: "✨ "; }
-.task-cat.normal > h4 > span:first-child::before { content: "🧠 "; }
+.task-cat.cooldown .task-cat-name::before { content: "🧊 "; }
+.task-cat.fable .task-cat-name::before { content: "✨ "; }
+.task-cat.normal .task-cat-name::before { content: "🧠 "; }
 .hub-load { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .hub-card { display: grid; gap: 4px; }
 .hub-terminate { margin-top: 4px; width: 100%; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
@@ -1886,8 +1882,32 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .self-work-now { margin: 4px 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); }
 .self-work-log summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .self-work-log ol { max-height: 260px; overflow-y: auto; padding-inline-start: 22px; overflow-wrap: anywhere; }
-/* Task rows grow with their title (on a phone a fixed button height made titles run over the next row). */
-.task-head { height: auto; min-height: 40px; white-space: normal; flex-wrap: wrap; line-height: 1.35; }
-.task-head > .grow { min-width: 0; flex: 1 1 60%; overflow-wrap: anywhere; }
+/* Board rows, after Linear's lists and Material's two-line list item: a status mark, the title (two lines at
+   most), one quiet line under it. No boxes around each row and no pills; rows are divided by a hairline. */
+.task-cat { margin: 0; }
+.task-cat > summary { display: flex; align-items: center; gap: 8px; padding: 8px 2px; cursor: pointer; font-weight: 600; list-style: none; }
+.task-cat > summary::-webkit-details-marker { display: none; }
+.task-cat > summary::after { content: "▾"; margin-inline-start: auto; color: var(--muted); transition: transform .15s; }
+.task-cat:not([open]) > summary::after { transform: rotate(90deg); }
+.task-cat:not([open]) > summary:dir(ltr)::after { transform: rotate(-90deg); }
+.task-count { min-width: 20px; padding: 0 6px; border-radius: 10px; background: color-mix(in srgb, var(--text) 10%, transparent); font-size: 11.5px; font-weight: 500; text-align: center; line-height: 18px; }
+.task-cat .task-list { gap: 0; }
+.task-cat .task + .task { border-top: 1px solid var(--border); }
+.task-empty { margin: 0 0 6px; padding-inline-start: 26px; }
+.task-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; height: auto; min-height: 44px; padding: 8px 2px; text-align: start; background: transparent; border: 0; border-radius: 6px; color: inherit; font: inherit; white-space: normal; }
+.task-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.task-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.task-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.task-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.35; }
+.task-row[aria-expanded="true"] .task-title { display: block; }
+.task-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
+.task-state.claimed { color: var(--accent); }
+.task-state.blocked { color: var(--bad); }
+.task-mark { flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--muted); box-sizing: border-box; }
+.task-mark.claimed { border-color: var(--accent); background: conic-gradient(var(--accent) 0 50%, transparent 50% 100%); }
+.task-mark.blocked { border-color: var(--bad); background: linear-gradient(45deg, transparent 44%, var(--bad) 44% 56%, transparent 56%); }
+.task-mark.done { border-color: var(--muted); background: var(--muted); }
+.task.done .task-title { color: var(--muted); text-decoration: line-through; }
+.task-body { padding-block: 0 10px; padding-inline: 26px 2px; }
 
 .self-work-approval { border-color: var(--warn, #c9a227); }

@@ -45,6 +45,7 @@ export function TaskBoardView() {
   const [showDone, setShowDone] = useState(false);
   const [open, setOpen] = useState<string>("");
   const [cat, setCat] = useState<Category>("normal");
+  const [folded, setFolded] = useState<Category[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -73,17 +74,28 @@ export function TaskBoardView() {
       {CATS.map(([c, he, en, hintHe, hintEn]) => {
         const list = shown.filter((t) => catOf(t) === c);
         const all = tasks.filter((t) => catOf(t) === c && t.status !== "done").length;
+        // A list row like Linear's or Material's two-line item: a status mark, the title (two lines at most), and
+        // one quiet line under it (number, who, status). Sections fold like Linear's groups and show their count.
         return (
-          <section key={c} className={`task-cat ${c}`}>
-            <h4 className="row"><span className="grow">{L(he, en)} <span className="muted small">({all})</span></span><span className="muted small">{L(hintHe, hintEn)}</span></h4>
-            {list.length === 0 ? <p className="muted small">{L("אין משימות פתוחות.", "No open tasks.")}</p> : (
+          <details key={c} className={`task-cat ${c}`} open={!folded.includes(c)} onToggle={(e) => {
+            const isOpen = (e.currentTarget as HTMLDetailsElement).open;
+            setFolded((f) => (isOpen ? f.filter((x) => x !== c) : f.includes(c) ? f : [...f, c]));
+          }}>
+            <summary title={L(hintHe, hintEn)}><span className="task-cat-name">{L(he, en)}</span><span className="task-count">{all}</span></summary>
+            {list.length === 0 ? <p className="muted small task-empty">{L("אין משימות פתוחות.", "No open tasks.")}</p> : (
               <ul className="task-list">
                 {list.map((t) => (
               <li key={t.id} className={`task ${t.status}`}>
-                <button type="button" className="task-head" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? "" : t.id)}>
-                  <span className="muted small" dir="ltr">{t.id}</span>
-                  <span className="grow" dir="auto">{t.title}</span>
-                  <span className={`pill small ${t.status}`}>{L(...STATUS[t.status])}{t.owner ? ` · ${L(...WHO[t.owner]!)}` : ""}</span>
+                <button type="button" className="task-row" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? "" : t.id)}>
+                  <span className={`task-mark ${t.status}`} role="img" aria-label={L(...STATUS[t.status])} />
+                  <span className="task-text">
+                    <span className="task-title" dir="auto">{t.title.replace(/^\s*\[(cool\s*down|fable)\]\s*/i, "")}</span>
+                    <span className="task-meta">
+                      <span dir="ltr">{t.id}</span>
+                      <span className={`task-state ${t.status}`}>{L(...STATUS[t.status])}</span>
+                      {t.owner && <span>{L(...WHO[t.owner]!)}</span>}
+                    </span>
+                  </span>
                 </button>
                 {open === t.id && (
                   <div className="task-body small">
@@ -102,7 +114,7 @@ export function TaskBoardView() {
                 ))}
               </ul>
             )}
-          </section>
+          </details>
         );
       })}
       <form className="row" onSubmit={(e) => { e.preventDefault(); if (title.trim()) { change([{ op: "add", title: title.trim(), category: cat }]); setTitle(""); } }}>
