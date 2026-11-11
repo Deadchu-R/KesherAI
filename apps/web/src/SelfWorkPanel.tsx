@@ -47,6 +47,8 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
   const [busy, setBusy] = useState(false);
   // What the run did lately, and what it waits for (it runs in the worker, whose chat has no window here).
   const [log, setLog] = useState<{ lines: string[]; waiting: Array<{ requestId: string; name: string; preview: string; reason: string }> }>({ lines: [], waiting: [] });
+  // The task it holds on the board now (found on the phone: "0 items" and a closed log said nothing about it).
+  const [onTask, setOnTask] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -55,6 +57,11 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
       setRun(r.run);
       if (r.run && !check) setCheck(r.run.check);
       if (r.run && (r.run.status === "running" || r.run.status === "waiting")) void api<typeof log>("/api/self-work/log").then((l) => alive && setLog({ lines: l.lines ?? [], waiting: l.waiting ?? [] }), () => undefined);
+      if (r.run && (r.run.status === "running" || r.run.status === "waiting"))
+        void api<{ tasks: Array<{ id: string; title: string; status: string; owner?: string }> }>("/api/self-work/board").then((b) => {
+          const held = b.tasks.find((x) => x.status === "claimed" && x.owner === "kesher");
+          if (alive) setOnTask(held ? { id: held.id, title: held.title.replace(/^\s*\[cool\s*down\]\s*/i, "") } : null);
+        }, () => undefined);
     }, () => undefined);
     load();
     const t = window.setInterval(load, 5000);
@@ -98,13 +105,14 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
     <section className="self-work">
       <button type="button" className="self-work-head" aria-expanded={open || !!active} onClick={() => setOpen((v) => !v)}>
         <span>🤖 {L("עבודה עצמית", "Self-work")}</span>
-        {run && <span className="muted small">{L(...STATUS[run.status])}{active ? ` · ${run.items.length} ${L("פריטים", "items")}` : ""}</span>}
+        {run && <span className="muted small">{L(...STATUS[run.status])}{active ? ` · ${run.items.length} ${L("הושלמו", "done")}` : ""}</span>}
       </button>
       {(open || active) && (
         <div className="self-work-body">
           {active && run ? (
             <>
-              <p dir="auto">{run.goal}</p>
+              {onTask && <p className="self-work-now" dir="auto">🔧 <strong>{L("עובד על", "Working on")} {onTask.id}:</strong> {onTask.title}</p>}
+              <p className="muted small" dir="auto">{run.goal}</p>
               <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{run.modelId ? ` · ${run.modelId.replace(/^main\//, "").split("/").pop()}` : ""}</p>
               {run.note && <p className="small">{run.note}</p>}
               {log.waiting.map((w) => (
@@ -123,9 +131,9 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
                 {(run.skipped ?? []).map((i) => <li key={`s${i.at}`} className="muted">↷ {L("דילג", "Skipped")}: <span dir="auto">{i.why}</span></li>)}
               </ul>
               {log.lines.length > 0 && (
-                <details className="self-work-log">
-                  <summary className="small">{L("מה הוא עושה עכשיו", "What it is doing now")}</summary>
-                  <ol className="small" dir="auto">{log.lines.slice(-25).map((l, i) => <li key={i}>{l}</li>)}</ol>
+                <details className="self-work-log" open>
+                  <summary className="small">{L("מה הוא עושה עכשיו", "What it is doing now")}: <span dir="auto">{log.lines.at(-1)!.slice(0, 90)}</span></summary>
+                  <ol className="small" dir="auto" reversed>{log.lines.slice(-12).reverse().map((l, i) => <li key={i}>{l}</li>)}</ol>
                 </details>
               )}
               <div className="row">
@@ -135,7 +143,7 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
           ) : (
             <>
               <p className="muted small">{L("KesherAI עובד לבד על הפרויקט שבחרתם: ענף חדש, פריט אחד בכל פעם, בדיקה וקומיט אחרי כל פריט, והתראה לטלפון. הוא אף פעם לא דוחף ולא ממזג.", "KesherAI works on the chosen project by itself: a new branch, one item at a time, a check and a commit after each item, and a phone notification. It never pushes or merges.")}</p>
-              {run && <p className="small">{L("הריצה הקודמת", "Last run")}: {L(...STATUS[run.status])}{run.note ? ` · ${run.note}` : ""} · {run.items.length} {L("פריטים", "items")} · <span dir="ltr">{run.branch}</span></p>}
+              {run && <p className="small">{L("הריצה הקודמת", "Last run")}: {L(...STATUS[run.status])}{run.note ? ` · ${run.note}` : ""} · {run.items.length} {L("הושלמו", "done")} · <span dir="ltr">{run.branch}</span></p>}
               {run && run.status !== "done" && (
                 <div className="row wrap">
                   <button type="button" onClick={resume} title={L("ממשיך את אותה ריצה מאיפה שעצרה: אותו ענף, אותו צ'אט, הפריטים שכבר נעשו נשארים", "Goes on with the same run where it ended: same branch and chat; finished items stay")}>{L("↻ המשך מאיפה שעצר", "↻ Resume where it stopped")}</button>

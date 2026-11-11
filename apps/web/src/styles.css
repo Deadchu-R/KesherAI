@@ -1881,3 +1881,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 @media (max-width: 760px) {
   .toast { bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 60; text-align: center; }
 }
+
+/* Self-work: the task it works on, said plainly; the log open, newest first. */
+.self-work-now { margin: 4px 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); }
+.self-work-log summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.self-work-log ol { max-height: 260px; overflow-y: auto; padding-inline-start: 22px; overflow-wrap: anywhere; }
+/* Task rows grow with their title (on a phone a fixed button height made titles run over the next row). */
+.task-head { height: auto; min-height: 40px; white-space: normal; flex-wrap: wrap; line-height: 1.35; }
+.task-head > .grow { min-width: 0; flex: 1 1 60%; overflow-wrap: anywhere; }
