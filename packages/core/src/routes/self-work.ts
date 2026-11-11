@@ -1,6 +1,6 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { isLocalRequest } from "../auth.js";
 import { pickCodeModel } from "../code-model.js";
@@ -30,7 +30,24 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     if (!r.ok) throw Object.assign(new Error(data.error ?? `The worker answered ${r.status}.`), { code: r.status });
     return data;
   };
-  const current = async (): Promise<SelfWorkState | null> => (host ? (await toWorker<{ run: SelfWorkState | null }>("/api/self-work", "GET").catch(() => ({ run: null }))).run : (s.selfWork?.current ?? null));
+  /** The worker's last run, read from its file while the worker is not running (after it ended or KesherAI restarted). */
+  const lastWorkerRun = async (): Promise<SelfWorkState | null> => {
+    const raw = await readFile(join(s.paths.root, "worker", "self-work.json"), "utf8").catch(() => "");
+    try {
+      return raw ? (JSON.parse(raw) as SelfWorkState) : null;
+    } catch {
+      return null;
+    }
+  };
+  const current = async (): Promise<SelfWorkState | null> => {
+    if (!host) return s.selfWork?.current ?? null;
+    if (!host.url()) {
+      const last = await lastWorkerRun();
+      // Not running now, whatever the file last said (the worker ended or KesherAI restarted).
+      return last && (last.status === "running" || last.status === "waiting") ? { ...last, status: "stopped", note: last.note ?? "The worker is not running now." } : last;
+    }
+    return (await toWorker<{ run: SelfWorkState | null }>("/api/self-work", "GET").catch(() => ({ run: null }))).run ?? (await lastWorkerRun());
+  };
 
   app.get("/api/self-work", async () => ({ run: await current(), ...(host ? { worker: !!host.url() } : {}), ...(s.worker ? { version: s.worker.version } : {}) }));
 
