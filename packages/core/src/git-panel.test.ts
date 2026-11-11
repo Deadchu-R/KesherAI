@@ -18,7 +18,7 @@ test("status header and files are read", () => {
 });
 
 test("GitHub remotes and branch names", () => {
-  assert.equal(githubRepo("https://github.com/roeetal/KesherAI.git"), "roeetal/KesherAI");
+  assert.equal(githubRepo("https://github.com/someone/KesherAI.git"), "someone/KesherAI");
   assert.equal(githubRepo("git@github.com:a/b.c.git"), "a/b.c");
   assert.equal(githubRepo("https://gitlab.com/a/b"), undefined);
   assert.ok(validBranch("feature/git-panel"));
