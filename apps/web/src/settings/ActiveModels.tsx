@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { CategoryDefinition, ModelInfo } from "@kesher/shared";
-import { api, type ModelListing } from "./api";
-import { getLocale, t } from "./i18n";
-import { Select } from "./ui/Select";
+import { api, type ModelListing } from "../api";
+import { getLocale, t } from "../i18n";
+import { Select } from "../ui/Select";
 
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
-import { t } from "./i18n";
+import { api } from "../api";
+import { t } from "../i18n";
 
 interface OneDriveStatus { configured: boolean; connected: boolean; email: string | null; lastSync: string | null; lastError: string | null; customClient: boolean }
 

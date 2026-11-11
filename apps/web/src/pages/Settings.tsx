@@ -3,11 +3,11 @@
  * they hold. `SETTINGS_CATS` is the map of what lives where; every section is its own component next to it (GuardSection,
  * NotificationsSection…). Research behind the order: docs/RESEARCH_LOG.md.
  */
-import { ActiveModels } from "../ActiveModels";
-import { GoogleDriveSection } from "../GoogleDriveSection";
+import { ActiveModels } from "../settings/ActiveModels";
+import { GoogleDriveSection } from "../settings/GoogleDriveSection";
 import { ImportChats } from "../ImportChats";
-import { OneDriveSection } from "../OneDriveSection";
-import { Sync } from "../Sync";
+import { OneDriveSection } from "../settings/OneDriveSection";
+import { Sync } from "../settings/Sync";
 import { ComputersSection } from "../ComputersSection";
 import { AppearanceSection } from "../AppearanceSection";
 import { ResetSection } from "../ResetSection";

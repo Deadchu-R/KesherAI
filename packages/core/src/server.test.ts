@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,9 +60,6 @@ async function makeServer() {
   return createKesherServer({ dataDir, autodetect: false, pluginRoots: [pluginRoot] });
 }
 
-/** The repo's example plugin is built (its dist/ exists) — only then can a test load its built file. */
-const exampleHelloBuilt = existsSync(join(import.meta.dirname, "../../../plugins/example-hello/dist/index.js"));
-
 test("loads a plugin and serves its provider through /api/chat", async () => {
   const server = await makeServer();
   try {
@@ -107,19 +103,15 @@ test("OpenAI-compatible endpoint works without streaming", async () => {
   }
 });
 
-test(
-  "plugin tools run through /api/tools",
-  { skip: !exampleHelloBuilt ? "the repo's example plugin is not built (pnpm build:packages)" : false },
-  async () => {
-    const server = await makeServer();
-    try {
-      const res = await server.app.inject({ method: "POST", url: "/api/tools/reverse_text", payload: { text: "abc" } });
-      assert.deepEqual(res.json(), { result: "cba" });
-    } finally {
-      await server.close();
-    }
-  },
-  );
+test("plugin tools run through /api/tools", async () => {
+  const server = await makeServer();
+  try {
+    const res = await server.app.inject({ method: "POST", url: "/api/tools/reverse_text", payload: { text: "abc" } });
+    assert.deepEqual(res.json(), { result: "cba" });
+  } finally {
+    await server.close();
+  }
+});
 
 test("remote requests without the token are rejected", async () => {
   const server = await makeServer();

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
-import { desktop } from "./library";
-import { t } from "./i18n";
+import { api } from "../api";
+import { desktop } from "../library";
+import { t } from "../i18n";
 
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 
