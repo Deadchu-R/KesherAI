@@ -192,6 +192,16 @@ test("each changed item reviews its own diff once before the commit, and keeps i
 });
 
 test("an item finished without its closing line is named from the plan line it ticked", () => {
-  assert.equal(tickedItem("@@ -3 +3 @@\n-- [ ] t27: Hebrew errors\n+- [x] t27: Hebrew errors"), "t27: Hebrew errors");
-  assert.equal(tickedItem("+- [ ] new item"), undefined);
+  assert.equal(tickedItem("- [x] t26: done before\n- [x] t27: Hebrew errors\n- [ ] t28", ["t26: done before"]), "t27: Hebrew errors");
+  assert.equal(tickedItem("- [ ] new item"), undefined);
+});
+
+test("a BLOCKED that only says nothing is left is the goal met; a bare BLOCKED takes its reason from above", () => {
+  assert.equal(readOutcome("Blocked: t35 is done but there is no next item for self-work — no open {small}.").kind, "all");
+  assert.equal(readOutcome("BLOCKED: the check needs a decision on the database").kind, "blocked");
+  assert.equal(readOutcome("BLOCKED: there is no next item for self-work, no open {small} task left").kind, "all");
+  assert.equal(readOutcome("BLOCKED: ** אין item פנוי ל־self-work. כדי להמשיך: merge").kind, "all");
+  const bare = readOutcome("The check needs a password for the database.\n\nBLOCKED");
+  assert.deepEqual(bare, { kind: "blocked", text: "The check needs a password for the database." });
+  assert.equal(readOutcome("BLOCKED: **needs** a decision").text, "needs a decision");
 });

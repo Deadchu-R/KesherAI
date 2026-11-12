@@ -51,6 +51,8 @@ export interface SelfWorkState {
   reviewing?: boolean;
   /** What the item was called before its review (the review turn may only say "ITEM DONE"). */
   reviewLabel?: string;
+  /** Plan lines already ticked when the last item was committed (the plan file is not in git: .gitignore). */
+  planTicked?: string[];
   /** Items given up on (their changes undone) so the run could go on with the next one. */
   skipped?: Array<{ at: number; why: string }>;
 }
@@ -108,14 +110,24 @@ export const REVIEW = [
 ].join("\n");
 
 /**
- * Names an item the model finished without saying so: the plan line it ticked in this change.
+ * The plan's ticked lines ("- [x] …").
  *
- * @param planDiff - `git diff` of .kesher-self/plan.md for this item.
+ * @param plan - .kesher-self/plan.md.
+ * @returns Their text.
+ */
+export function tickedLines(plan: string): string[] {
+  return [...plan.matchAll(/^\s*-\s*\[x\]\s*(.+)$/gim)].map((m) => m[1]!.trim());
+}
+
+/**
+ * Names an item the model finished without saying so: a plan line it ticked since the last commit.
+ *
+ * @param plan - The plan now.
+ * @param before - Lines ticked at the last commit.
  * @returns The item's text, or undefined.
  */
-export function tickedItem(planDiff: string): string | undefined {
-  const m = /^\+\s*-\s*\[x\]\s*(.+)$/im.exec(planDiff);
-  return m?.[1]?.trim().slice(0, 150) || undefined;
+export function tickedItem(plan: string, before: string[] = []): string | undefined {
+  return tickedLines(plan).find((l) => !before.includes(l))?.slice(0, 150) || undefined;
 }
 
 /** The rules the model gets with the goal. */
@@ -128,7 +140,7 @@ export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check"
     "How to work:",
     "1. First write .kesher-self/plan.md: a checklist (- [ ] item) of small, separate items that reach the goal, plus Decisions and Blockers sections. Keep it up to date: it is how the user follows you.",
     "2. Each turn do ONE item: read the code you need, change it, run check_code, mark it - [x] in the plan.",
-    `3. End every turn with one line: "ITEM DONE: <the item>", or "ALL DONE" when the goal is met, or "BLOCKED: <why>" when you need the user (a decision, a password, an approval).${s.check ? ` After ITEM DONE KesherAI runs \`${s.check}\`; if it fails you get its output to fix first.` : ""}`,
+    `3. End every turn with one line: "ITEM DONE: <the item>", or "ALL DONE" when the goal is met, or "BLOCKED: <why>" when you need the user (a decision, a password, an approval). When no task on the board is left for you, that is ALL DONE, not BLOCKED.${s.check ? ` After ITEM DONE KesherAI runs \`${s.check}\`; if it fails you get its output to fix first.` : ""}`,
     "4. Never push, merge, switch branches, rewrite history or delete files you did not create. Do not install programs. Stay inside this project.",
     "5. Small and safe beats big: if an item is too large, split it in the plan.",
     "6. Before building a task, search whether it already exists. If it does, check it works and mark it done on the board with where it is, instead of building it again.",
@@ -137,6 +149,9 @@ export function selfWorkBrief(s: Pick<SelfWorkState, "goal" | "branch" | "check"
   ].join("\n");
 }
 
+/** A BLOCKED that only says no task is left for self-work (English or Hebrew). */
+const NOTHING_LEFT = /\bno (next |open |more )?(item|task)s?\b.*\b(for (self-work|you)|left)\b|\bnothing (left|more) (for|to)\b|אין (item|פריט|משימ)\S* (פנוי|פתוח|נוס)/i;
+
 /** Reads the model's last line: ITEM DONE / ALL DONE / BLOCKED. */
 export function readOutcome(text: string): { kind: "item" | "all" | "blocked" | "none"; text: string } {
   const lines = text.trim().split("\n").map((l) => l.replace(/^[\s*_>`#-]+|[\s*_`]+$/g, "")).reverse();
@@ -144,7 +159,14 @@ export function readOutcome(text: string): { kind: "item" | "all" | "blocked" | 
     let m = /^ALL DONE\b[:.\s-]*(.*)$/i.exec(l);
     if (m) return { kind: "all", text: m[1]!.trim() };
     m = /^BLOCKED\b[:.\s-]*(.*)$/i.exec(l);
-    if (m) return { kind: "blocked", text: m[1]!.trim() || "No reason given." };
+    if (m) {
+      // The reason may be on the lines before (seen: "BLOCKED" alone after a paragraph), and in Markdown bold.
+      const why = (m[1]!.trim() || text.trim().split(/\n\s*\n/).slice(0, -1).pop()?.trim() || "").replace(/\*\*|__|`/g, "").trim().slice(0, 400);
+      // Nothing left for self-work on the board is the goal met, not something for the user (seen: three
+      // "Self-work needs you" in a row, the last with no reason).
+      if (NOTHING_LEFT.test(why)) return { kind: "all", text: "Nothing left for self-work on the board." };
+      return { kind: "blocked", text: why || "No reason given." };
+    }
     m = /^ITEM DONE\b[:.\s-]*(.*)$/i.exec(l);
     if (m) return { kind: "item", text: m[1]!.trim() || "An item" };
   }
@@ -413,7 +435,7 @@ export class SelfWork {
         if (out.kind === "none") {
           const changed = (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim();
           // Named from the plan line it ticked, when it did.
-          if (changed) out = { kind: "item", text: tickedItem((await this.d.git(r.worktree ?? r.repo, ["diff", "--", ".kesher-self/plan.md"])).out) ?? "Changes (the model did not name the item)" };
+          if (changed) out = { kind: "item", text: tickedItem(await readFile(join(r.worktree ?? r.repo, ".kesher-self", "plan.md"), "utf8").catch(() => ""), r.planTicked) ?? "Changes (the model did not name the item)" };
         }
         if (out.kind === "none") {
           r.failures++;
@@ -448,6 +470,7 @@ export class SelfWork {
         const named = out.text && !/did not name the item|^An item$/.test(out.text) ? out.text : r.reviewLabel || out.text;
         r.reviewing = false;
         delete r.reviewLabel;
+        r.planTicked = tickedLines(await readFile(join(r.worktree ?? r.repo, ".kesher-self", "plan.md"), "utf8").catch(() => ""));
         r.failures = 0;
         const label = named || "Plan";
         await this.d.git(r.worktree ?? r.repo, ["add", "-A"]);
