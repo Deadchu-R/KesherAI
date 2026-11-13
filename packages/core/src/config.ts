@@ -48,6 +48,8 @@ export const KesherConfigSchema = z.object({
       llamaServerArgs: z.array(z.string()).default([]),
       /** llama.cpp release tag KesherAI installed, e.g. `b6500`. */
       llamaVersion: z.string().optional(),
+      /** Which build of llama.cpp is installed ("Linux, CPU", "Linux, Vulkan (…)"): a CPU build is replaced when a card shows up. */
+      llamaBuild: z.string().optional(),
       /** The GGUF file loaded last, loaded again on start-up when `autoLoadLast` is on. */
       lastModel: z.string().optional(),
       autoLoadLast: z.boolean().default(true),

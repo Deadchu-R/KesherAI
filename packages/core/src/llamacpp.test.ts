@@ -94,3 +94,20 @@ test("the prompt-reading speed is read from llama-server's timing lines", () => 
   assert.equal(LlamaEngine.promptSpeed("prompt eval time =    1234.56 ms /  5000 tokens (    0.25 ms per token,  4050.00 tokens per second)"), 4050);
   assert.equal(LlamaEngine.promptSpeed("       eval time =    500.00 ms /   100 tokens (    5.00 ms per token,   200.00 tokens per second)"), undefined);
 });
+
+test("Linux: AMD and Intel cards get Vulkan; NVIDIA without a CUDA build too; no Vulkan loader: CPU with a note", () => {
+  const noCuda = ASSETS.filter((n) => !/cuda/.test(n));
+  assert.equal(pickLlamaAssets(ASSETS, { platform: "linux", arch: "x64", nvidia: false, vulkan: true })?.main, "llama-b12110-bin-ubuntu-vulkan-x64.tar.gz");
+  assert.equal(pickLlamaAssets(noCuda, { platform: "linux", arch: "x64", nvidia: true, vulkan: true })?.main, "llama-b12110-bin-ubuntu-vulkan-x64.tar.gz");
+  const missing = pickLlamaAssets(ASSETS, { platform: "linux", arch: "x64", nvidia: false, vulkan: false, vulkanMissing: true });
+  assert.equal(missing?.main, "llama-b12110-bin-ubuntu-x64.tar.gz");
+  assert.match(missing!.label, /mesa-vulkan-drivers/);
+  assert.equal(pickLlamaAssets(ASSETS, { platform: "linux", arch: "x64", nvidia: false })?.main, "llama-b12110-bin-ubuntu-x64.tar.gz");
+});
+
+test("Windows on Snapdragon: the Adreno build when there is one, else Vulkan arm64; never CUDA on arm64", () => {
+  const withAdreno = [...ASSETS, "llama-b12110-bin-win-opencl-adreno-arm64.zip"];
+  assert.equal(pickLlamaAssets(withAdreno, { platform: "win32", arch: "arm64", nvidia: false, cpu: "Snapdragon(R) X Elite" })?.main, "llama-b12110-bin-win-opencl-adreno-arm64.zip");
+  assert.equal(pickLlamaAssets(ASSETS, { platform: "win32", arch: "arm64", nvidia: false, cpu: "Snapdragon(R) X Elite" })?.main, "llama-b12110-bin-win-vulkan-arm64.zip");
+  assert.equal(pickLlamaAssets(ASSETS, { platform: "win32", arch: "arm64", nvidia: true })?.main, "llama-b12110-bin-win-vulkan-arm64.zip");
+});

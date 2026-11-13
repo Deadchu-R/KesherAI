@@ -14,6 +14,45 @@ export interface PlatformInfo {
   arch: string;
   /** Whether an NVIDIA GPU was found (then the CUDA build is used). */
   nvidia: boolean;
+  /**
+   * Whether an AMD or Intel card (or an NVIDIA card with no CUDA build here) can run on Vulkan. On Linux this
+   * also needs Vulkan's loader (libvulkan.so.1); without it the processor build is used and the label says
+   * what to install.
+   */
+  vulkan?: boolean;
+  /** A graphics card is there but Linux has no Vulkan loader: what to tell the user. */
+  vulkanMissing?: boolean;
+  /** The processor's name (a Snapdragon gets the Windows arm64 build, also when the app runs as x64). */
+  cpu?: string;
+}
+
+/** Common places of Vulkan's loader on Linux (distributions differ). */
+const VULKAN_LOADERS = ["/usr/lib/x86_64-linux-gnu/libvulkan.so.1", "/usr/lib/aarch64-linux-gnu/libvulkan.so.1", "/usr/lib64/libvulkan.so.1", "/usr/lib/libvulkan.so.1", "/lib/x86_64-linux-gnu/libvulkan.so.1", "/usr/local/lib/libvulkan.so.1"];
+
+/**
+ * The facts that decide which llama.cpp build this computer gets.
+ *
+ * @param hw - Its hardware.
+ * @param hasFile - For tests.
+ * @returns Platform facts.
+ */
+export function enginePlatform(hw: { gpus: Array<{ vendor?: string; name: string; vramTotal: number }>; cpu: string }, hasFile: (p: string) => boolean = existsSync): PlatformInfo {
+  const nvidia = hw.gpus.some((g) => g.vendor === "nvidia" || /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name));
+  // A card with memory of its own, or Intel Arc (its memory is not always reported). Built-in graphics alone are
+  // not faster than the processor for this.
+  const other = hw.gpus.some((g) => (g.vendor === "amd" || g.vendor === "intel") && (g.vramTotal >= 2 * 1024 ** 3 || /arc|radeon rx|radeon pro|instinct/i.test(g.name)));
+  const loader = process.platform !== "linux" || VULKAN_LOADERS.some((f) => hasFile(f));
+  const gpu = nvidia || other;
+  // Windows on Snapdragon runs this app as x64 (emulated); the engine runs natively as arm64.
+  const arm = process.platform === "win32" && (/snapdragon|qualcomm/i.test(hw.cpu) || process.env.PROCESSOR_ARCHITEW6432 === "ARM64" || process.env.PROCESSOR_ARCHITECTURE === "ARM64");
+  return {
+    platform: process.platform,
+    arch: arm ? "arm64" : process.arch,
+    nvidia,
+    vulkan: gpu && loader,
+    ...(gpu && !loader ? { vulkanMissing: true } : {}),
+    cpu: hw.cpu,
+  };
 }
 
 /** The release files to download for this computer. */
@@ -32,8 +71,10 @@ export interface LlamaAssets {
  * number so new releases keep working.
  *
  * CUDA 12 is preferred over 13 on NVIDIA because it works with older drivers.
- * Without NVIDIA, Windows gets the Vulkan build (any GPU, falls back to CPU),
- * Linux the CPU build, macOS the Metal build.
+ * Without NVIDIA, Windows gets the Vulkan build (any GPU, falls back to CPU);
+ * Linux gets Vulkan for AMD and Intel cards (and NVIDIA without a CUDA build),
+ * otherwise the CPU build; macOS the Metal build; Windows on Snapdragon the
+ * Adreno build when there is one, else Vulkan arm64.
  *
  * @param names - Asset file names of the release.
  * @param p - Platform facts.
@@ -53,9 +94,14 @@ export function pickLlamaAssets(names: string[], p: PlatformInfo): LlamaAssets |
     return undefined;
   };
   if (p.platform === "win32") {
-    if (p.nvidia) {
+    if (p.nvidia && arch === "x64") {
       const c = cuda("win");
       if (c) return { ...c, label: `Windows, NVIDIA ${c.label}` };
+    }
+    // Snapdragon: llama.cpp's build for its Adreno graphics (OpenCL), when the release has one.
+    if (arch === "arm64" && /snapdragon|qualcomm/i.test(p.cpu ?? "")) {
+      const adreno = find(/^llama-b\d+-bin-win-.*(opencl|adreno).*arm64\.zip$/i);
+      if (adreno) return { main: adreno, label: "Windows on Snapdragon, Adreno (OpenCL)" };
     }
     const vulkan = find(new RegExp(`^llama-b\\d+-bin-win-vulkan-${arch}\\.zip$`));
     if (vulkan) return { main: vulkan, label: "Windows, Vulkan (any GPU)" };
@@ -67,12 +113,18 @@ export function pickLlamaAssets(names: string[], p: PlatformInfo): LlamaAssets |
     return mac ? { main: mac, label: `macOS ${arch === "arm64" ? "Apple Silicon (Metal)" : "Intel"}` } : undefined;
   }
   if (p.platform === "linux") {
-    if (p.nvidia) {
+    if (p.nvidia && arch === "x64") {
       const c = cuda("ubuntu");
       if (c) return { ...c, label: `Linux, NVIDIA ${c.label}` };
     }
+    // AMD and Intel cards, and NVIDIA where there is no CUDA build (arm64 such as DGX Spark, or a release without
+    // one): Vulkan, which their own drivers provide.
+    if (p.vulkan ?? p.nvidia) {
+      const vulkan = find(new RegExp(`^llama-b\\d+-bin-ubuntu-vulkan-${arch}\\.(zip|tar\\.gz)$`));
+      if (vulkan) return { main: vulkan, label: `Linux, Vulkan (${p.nvidia ? "NVIDIA" : "AMD / Intel"} graphics card)` };
+    }
     const cpu = find(new RegExp(`^llama-b\\d+-bin-ubuntu-${arch}\\.(zip|tar\\.gz)$`));
-    return cpu ? { main: cpu, label: "Linux, CPU" } : undefined;
+    return cpu ? { main: cpu, label: p.vulkanMissing ? "Linux, CPU (the graphics card needs Vulkan: install mesa-vulkan-drivers and libvulkan1, then update the engine)" : "Linux, CPU" } : undefined;
   }
   return undefined;
 }
@@ -325,7 +377,7 @@ export class LlamaEngine {
    * @param platform - Platform facts.
    * @returns The installed binary and its version.
    */
-  async install(downloads: DownloadManager, platform: PlatformInfo): Promise<{ binaryPath: string; version: string }> {
+  async install(downloads: DownloadManager, platform: PlatformInfo): Promise<{ binaryPath: string; version: string; build?: string }> {
     return this.track("installing", "Finding the latest llama.cpp release…", async () => {
       const release = await findLlamaRelease();
       const picked = pickLlamaAssets(release.assets.map((a) => a.name), platform);
@@ -348,7 +400,7 @@ export class LlamaEngine {
       if (process.platform !== "win32") await chmod(binaryPath, 0o755);
       this.opts.binaryPath = binaryPath;
       this.opts.version = release.tag_name;
-      return { binaryPath, version: release.tag_name };
+      return { binaryPath, version: release.tag_name, build: picked.label };
     });
   }
 

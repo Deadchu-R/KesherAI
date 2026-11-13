@@ -1,12 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js";
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
-import { findLlamaRelease, waitForDownload } from "../llamacpp.js";
+import { enginePlatform, findLlamaRelease, waitForDownload } from "../llamacpp.js";
 import { insideAny, looksLikeGguf, matchRecommended, scanComputer, scanFolder, type FoundModel } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
@@ -18,15 +18,19 @@ import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoM
  * @param s - Services.
  */
 export async function ensureEngine(s: KesherServices): Promise<void> {
-  if (s.engine.status().installed) return;
   const hw = await detectHardware();
-  const { binaryPath, version } = await s.engine.install(s.downloads, {
-    platform: process.platform,
-    arch: process.arch,
-    nvidia: hw.gpus.length > 0,
-  });
+  const platform = enginePlatform(hw);
+  // Installed for the processor alone (an older KesherAI did not know AMD or Intel cards, or Vulkan was missing),
+  // and now a card can be used: the right build replaces it, once.
+  const bin = s.engine.status().binaryPath;
+  const gpuLib = bin ? (await readdir(dirname(bin)).catch(() => [] as string[])).some((f) => /ggml-(cuda|vulkan|hip|sycl|opencl|metal)/i.test(f)) : true;
+  const cpuOnly = s.config.engines.llamaBuild ? /, CPU/.test(s.config.engines.llamaBuild) : !gpuLib;
+  const upgrade = s.engine.status().installed && process.platform === "linux" && cpuOnly && !!platform.vulkan && !s.engine.status().running;
+  if (s.engine.status().installed && !upgrade) return;
+  const { binaryPath, version, build } = await s.engine.install(s.downloads, platform);
   s.config.engines.llamaServerPath = binaryPath;
   s.config.engines.llamaVersion = version;
+  if (build) s.config.engines.llamaBuild = build;
   await s.saveConfig();
 }
 
@@ -137,6 +141,13 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     const text = await readFile(s.sd.logFile, "utf8").catch(() => "");
     return reply.type("text/plain; charset=utf-8").send(text || "The image engine has not run yet.");
   });
+
+  // On Linux, an engine installed for the processor alone is replaced once a graphics card can be used (AMD and
+  // Intel were not detected before 0.6.126). A little after start, so the server answers first.
+  if (process.platform === "linux") {
+    const t = setTimeout(() => s.engine.status().installed && void ensureEngine(s).catch(() => undefined), 20_000);
+    t.unref?.();
+  }
 
   /** Starts installing in the background; poll GET /api/engines/llamacpp for progress. */
   app.post("/api/engines/llamacpp/install", async () => {
@@ -320,9 +331,10 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     void (async () => {
       const running = s.engine.status();
       const hw = await detectHardware();
-      const { binaryPath, version } = await s.engine.install(s.downloads, { platform: process.platform, arch: process.arch, nvidia: hw.gpus.length > 0 });
+      const { binaryPath, version, build } = await s.engine.install(s.downloads, enginePlatform(hw));
       s.config.engines.llamaServerPath = binaryPath;
       s.config.engines.llamaVersion = version;
+      if (build) s.config.engines.llamaBuild = build;
       await s.saveConfig();
       if (running.running && running.modelPath) await loadModel(s, running.modelPath);
     })().catch((err) => s.engine.fail(err));
