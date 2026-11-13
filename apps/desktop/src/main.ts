@@ -12,7 +12,7 @@
  */
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, screen as displays } from "electron";
 import { join, resolve, sep } from "node:path";
-import { chmod, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import type { KesherServer } from "@kesher/core";
@@ -171,7 +171,7 @@ async function runInstaller(file: string): Promise<void> {
     await shell.openPath(file);
     return;
   }
-  if (process.platform === "linux") await chmod(file, 0o755);
+  if (process.platform === "linux") return linuxUpdate(file);
   // The new version starts by itself: keep the tunnel so the phone's link keeps working.
   if (server) server.services.restarting = true;
   // NSIS: /S installs without questions, --force-run opens the new version when done.
@@ -180,6 +180,51 @@ async function runInstaller(file: string): Promise<void> {
     quitting = true;
     app.quit();
   }, 1500);
+}
+
+/**
+ * Linux. Starting the downloaded copy beside the running one did not work: the new copy saw this one still open,
+ * gave way and closed, and the next start opened the old copy again (found on a brother's PC). So:
+ * - An AppImage (APPIMAGE is its path) is replaced by the new one in place, then this app restarts from it.
+ * - A .deb install is updated by the system's package tool, which asks for the computer's password in its own
+ *   window (pkexec); then this app restarts. Without pkexec, the .deb opens in the system's software installer.
+ *
+ * @param file - The downloaded AppImage or .deb.
+ */
+async function linuxUpdate(file: string): Promise<void> {
+  const restart = (execPath?: string) => {
+    if (server) server.services.restarting = true;
+    app.relaunch(execPath ? { execPath, args: process.argv.slice(1).filter((a) => !a.startsWith("--updated")) } : undefined);
+    quitting = true;
+    app.quit();
+  };
+  const image = process.env.APPIMAGE;
+  if (/\.AppImage$/i.test(file) && image) {
+    const next = `${image}.new`;
+    await copyFile(file, next);
+    await chmod(next, 0o755);
+    await rename(next, image);
+    restart(image);
+    return;
+  }
+  if (/\.deb$/i.test(file)) {
+    await new Promise<void>((resolve) => {
+      const p = spawn("pkexec", ["dpkg", "-i", file], { stdio: "ignore" });
+      p.on("error", () => {
+        void shell.openPath(file);
+        resolve();
+      });
+      p.on("exit", (code) => {
+        if (code === 0) restart();
+        else if (code !== 126 && code !== 127) void shell.openPath(file); // 126: the user closed the password window
+        resolve();
+      });
+    });
+    return;
+  }
+  // An AppImage downloaded for a copy that is not one (it was started from a folder): run the new one alone.
+  await chmod(file, 0o755);
+  restart(file);
 }
 
 function updateDownloaded(file: string): void {
@@ -637,7 +682,7 @@ let announceAway: (() => Promise<unknown>) | undefined;
 app.on("before-quit", (event) => {
   quitting = true;
   // A downloaded update installs as the app closes (silently on Windows).
-  if (readyInstaller && process.platform !== "darwin") {
+  if (readyInstaller && process.platform === "win32") {
     const { file } = readyInstaller;
     readyInstaller = undefined;
     spawn(file, process.platform === "win32" ? ["/S"] : [], { detached: true, stdio: "ignore" }).unref();

@@ -12,7 +12,7 @@ test("versions and installers", () => {
   const names = ["KesherAI-Setup-0.4.2.exe", "KesherAI-Setup-0.4.2.exe.blockmap", "KesherAI-0.4.2-arm64.dmg", "KesherAI-0.4.2.AppImage"];
   assert.equal(installerFor(names, "win32", "x64"), "KesherAI-Setup-0.4.2.exe");
   assert.equal(installerFor(names, "darwin", "arm64"), "KesherAI-0.4.2-arm64.dmg");
-  assert.equal(installerFor(names, "linux", "x64"), "KesherAI-0.4.2.AppImage");
+  assert.equal(installerFor(names, "linux", "x64", true), "KesherAI-0.4.2.AppImage");
 });
 
 test("an installed copy finds a newer release, downloads the installer and runs it", async () => {
@@ -49,4 +49,11 @@ test("an installed copy finds a newer release, downloads the installer and runs 
   assert.equal(sameCheck.building, "0.4.3");
   srv.closeAllConnections();
   srv.close();
+});
+
+test("Linux: an AppImage copy gets the AppImage, a .deb install gets the .deb", () => {
+  const names = ["KesherAI-0.6.127.AppImage", "KesherAI-0.6.127.deb", "latest-linux.yml"];
+  assert.equal(installerFor(names, "linux", "x64", true), "KesherAI-0.6.127.AppImage");
+  assert.equal(installerFor(names, "linux", "x64", false), "KesherAI-0.6.127.deb");
+  assert.equal(installerFor(["KesherAI-0.6.127.AppImage"], "linux", "x64", false), "KesherAI-0.6.127.AppImage");
 });

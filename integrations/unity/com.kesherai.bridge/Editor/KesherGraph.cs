@@ -501,6 +501,15 @@ namespace KesherAI.Bridge
                         if (unit == null) problem = "Node not found";
                         else graph.units.Remove(unit);
                     }
+                    else if (kind == "disconnect")
+                    {
+                        // Every connection of one port (Alt+click, or right-click a port, as in Unity's own editor).
+                        var unit = NodeOf(Json.Str(op, "node"));
+                        var pin = Json.Str(op, "pin");
+                        var port = unit != null ? (FindPort(unit, pin, true) ?? FindPort(unit, pin, false)) : null;
+                        if (port == null) problem = "Port not found: " + Json.Str(op, "node") + "." + pin;
+                        else port.Disconnect();
+                    }
                     else problem = "Unknown operation " + kind;
                 }
                 catch (Exception e)

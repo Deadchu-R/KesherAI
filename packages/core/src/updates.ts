@@ -84,10 +84,14 @@ export function compareVersions(a: string, b: string): number {
  * @param arch - `x64` or `arm64`.
  * @returns The file name, if there is one.
  */
-export function installerFor(names: string[], platform = process.platform, arch = process.arch): string | undefined {
+export function installerFor(names: string[], platform = process.platform, arch = process.arch, appImage = !!process.env.APPIMAGE): string | undefined {
   if (platform === "win32") return names.find((n) => /setup.*\.exe$/i.test(n)) ?? names.find((n) => /\.exe$/i.test(n));
   if (platform === "darwin") return names.find((n) => new RegExp(`${arch}.*\\.dmg$`, "i").test(n)) ?? names.find((n) => /\.dmg$/i.test(n));
-  return names.find((n) => /\.AppImage$/i.test(n));
+  // Linux: the same kind as the copy that runs (an AppImage replaces itself; a .deb install updates through the
+  // system's package tool).
+  const image = names.find((n) => /\.AppImage$/i.test(n));
+  const deb = names.find((n) => /\.deb$/i.test(n));
+  return appImage ? (image ?? deb) : (deb ?? image);
 }
 
 /** Updates KesherAI: a git checkout in place, or an installed copy from GitHub releases. */

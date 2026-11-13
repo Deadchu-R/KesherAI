@@ -224,8 +224,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (pinEl && editable) {
       const d = pinEl.dataset;
       if (e.altKey) {
-        if (unity) toast(L("ניתוק חוט ב-Unity: קליק ימני על הפורט ב-Unity עצמו (יגיע לכאן בעדכון החבילה).", "Breaking a link in Unity: right-click the port in Unity itself (comes here with the package update)."));
-        else void apply([{ op: "disconnect", node: d.node, pin: d.pin }]);
+        // Unity: the KesherAI package 0.2.3 and newer (an older one answers "Unknown operation").
+        void apply([{ op: "disconnect", node: d.node, pin: d.pin }]);
         return;
       }
       const a = pinAt.get(`${d.node}:${d.pin}`)!;
