@@ -26,7 +26,7 @@ interface PaneState {
  * - On the phone (or any other screen) the pane shows pictures of the computer's browser that refresh,
  *   and a tap on the picture is a click there.
  */
-export function BrowserPanel({ onClose }: { onClose: () => void }) {
+export function BrowserPanel() {
   // The pane is the computer's own app window; another computer's window or the phone sees pictures of it.
   const native = isRemote() ? undefined : desktop()?.browser;
   const [st, setSt] = useState<PaneState>({ tabs: [], notice: "" });
@@ -35,6 +35,7 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
   const [editing, setEditing] = useState(false);
   const area = useRef<HTMLDivElement>(null);
   const [shot, setShot] = useState(0);
+  const [noApp, setNoApp] = useState(false);
   const active = st.tabs.find((t) => t.active);
 
   // The tabs: pushed by the app on the computer, read every 2 seconds elsewhere.
@@ -52,7 +53,12 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
           setError("");
           setShot((n) => n + 1);
         },
-        (e: Error) => !stop && setError(e.message),
+        (e: Error) => {
+          if (stop) return;
+          // No KesherAI app open on the computer: no pane to show (the server says so in English).
+          if (/desktop app/.test(e.message)) setNoApp(true);
+          else setError(e.message);
+        },
       );
     read();
     const tm = setInterval(() => !document.hidden && read(), 2000);
@@ -113,6 +119,13 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
       .catch((err: Error) => setError(err.message));
   };
 
+  if (noApp)
+    return (
+      <section className="browser-pane" aria-label={L("דפדפן", "Browser")}>
+        <p className="muted small browser-empty">{L("הדפדפן של KesherAI רץ באפליקציה במחשב. פתחו את KesherAI במחשב, והדפדפן שלו יופיע כאן.", "KesherAI's browser runs in the app on the computer. Open KesherAI there and its browser shows here.")}</p>
+      </section>
+    );
+
   return (
     <section className="browser-pane" aria-label={L("דפדפן", "Browser")}>
       <div className="browser-tabs" role="tablist">
@@ -126,10 +139,10 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
           </div>
         ))}
         <button type="button" className="icon-btn" aria-label={L("לשונית חדשה", "New tab")} title={L("לשונית חדשה", "New tab")} onClick={() => void cmd("new")}>＋</button>
-        <span className="grow" />
-        <button type="button" className="icon-btn" aria-label={L("סגור את הדפדפן", "Close the browser")} onClick={onClose}>✕</button>
       </div>
+      {/* Browser controls read left to right in every language, as in every browser. */}
       <form
+        dir="ltr"
         className="browser-bar"
         onSubmit={(e) => {
           e.preventDefault();

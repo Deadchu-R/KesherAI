@@ -913,7 +913,7 @@ export function ConversationPage({ id }: { id: string }) {
             <button type="button" className="icon-btn" title={getLocale() === "he" ? "סגור את כל החלוניות (Ctrl+\\)" : "Close all panes (Ctrl+\\)"} aria-label={getLocale() === "he" ? "סגור את כל החלוניות" : "Close all panes"} onClick={closePanes}>✕</button>
           </div>
           <div className="conv-panes-body">
-            {browserOpen && <BrowserPanel onClose={() => setBrowserOpen(false)} />}
+            {browserOpen && <BrowserPanel />}
             {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
             {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
             {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
