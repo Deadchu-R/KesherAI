@@ -308,7 +308,7 @@ export class WhisperEngine {
     await writeFile(file, wav);
     try {
       const out = await new Promise<string>((resolve, reject) => {
-        execFile(exe, ["-m", st.model!, "-f", file, "-l", /^[a-z]{2,3}$|^auto$/.test(language) ? language : "auto", ...(timestamps ? [] : ["-nt"]), "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: Math.max(300_000, wav.length / 20), windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+        execFile(exe, ["-m", st.model!, "-f", file, "-l", /^[a-z]{2,3}$|^auto$/.test(language) ? language : "auto", ...(timestamps ? [] : ["-nt"]), "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: Math.round(Math.max(300_000, wav.length / 20)), windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
           if (err) reject(new Error(`The speech engine failed: ${(stderr || err.message).toString().trim().split("\n").slice(-3).join(" ")}`));
           else resolve(stdout.toString());
         });

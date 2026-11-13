@@ -14,6 +14,7 @@ import { useParts } from "./parts";
 import { QuickMenu } from "./QuickMenu";
 import { AccountButton } from "./AccountButton";
 import { Select } from "./ui/Select";
+import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 
 /** A dialog for a new code session or a new project. */
 function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () => void }) {
@@ -112,14 +113,38 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
 
 function ConversationLink({ c, active }: { c: ConversationSummary; active: boolean }) {
   const state = useActivity()[c.id];
+  const he = getLocale() === "he";
+  // Delete a chat from the list (asked for on Linux: there was no way to remove old chats).
+  const remove = async () => {
+    if (!confirm(he ? `למחוק את הצ'אט "${c.title}"? אי אפשר לבטל את זה.` : `Delete the chat "${c.title}"? This cannot be undone.`)) return;
+    try {
+      await api(`/api/conversations/${c.id}`, { method: "DELETE" });
+      if (active) location.hash = "#/";
+      await refreshLibrary();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  const rename = async () => {
+    const title = prompt(he ? "שם חדש לצ'אט" : "A new name for the chat", c.title)?.trim();
+    if (!title || title === c.title) return;
+    await api(`/api/conversations/${c.id}`, { method: "PATCH", body: { title } }).then(() => refreshLibrary(), (e: Error) => toast(e.message));
+  };
   return (
-    <a href={`#/c/${c.id}`} className="nav-link conv-link" aria-current={active ? "page" : undefined} title={c.title}>
-      <span className="conv-kind" aria-hidden="true">
-        {c.kind === "code" ? "</>" : "•"}
-      </span>
-      <span className="conv-title">{c.title}</span>
-      {state && <span className={`conv-live ${state}`} title={state === "running" ? t("convRunning") : t("convWaiting")} aria-label={state === "running" ? t("convRunning") : t("convWaiting")} />}
-    </a>
+    <div className="conv-row">
+      <a href={`#/c/${c.id}`} className="nav-link conv-link" aria-current={active ? "page" : undefined} title={c.title}>
+        <span className="conv-kind" aria-hidden="true">
+          {c.kind === "code" ? "</>" : "•"}
+        </span>
+        <span className="conv-title">{c.title}</span>
+        {state && <span className={`conv-live ${state}`} title={state === "running" ? t("convRunning") : t("convWaiting")} aria-label={state === "running" ? t("convRunning") : t("convWaiting")} />}
+      </a>
+      <Menu trigger="⋯" triggerClassName="icon-btn conv-more" aria-label={he ? `אפשרויות: ${c.title}` : `Options: ${c.title}`}>
+        <MenuItem icon="✏" onSelect={() => void rename()}>{he ? "שינוי שם" : "Rename"}</MenuItem>
+        <MenuSeparator />
+        <MenuItem icon="🗑" danger onSelect={() => void remove()}>{he ? "מחיקת הצ'אט" : "Delete the chat"}</MenuItem>
+      </Menu>
+    </div>
   );
 }
 

@@ -179,16 +179,66 @@ export function ConversationPage({ id }: { id: string }) {
     let scroller: HTMLElement | null = el.parentElement;
     while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
     const target: HTMLElement | Window = scroller ?? window;
+    const s = () => scroller ?? document.documentElement;
+    const gap = () => s().scrollHeight - s().scrollTop - s().clientHeight;
+    // Reading up while an answer is written (found on Linux: each new word pulled the view back down). A scroll
+    // the user makes (wheel, finger, keys, scrollbar) stops following at once; coming back near the end resumes it.
+    // The page's own scroll to the end is not the user's, so it does not count.
+    let userAt = 0;
+    const mark = () => {
+      userAt = Date.now();
+    };
     const onScroll = () => {
-      const s = scroller ?? document.documentElement;
-      following.current = s.scrollHeight - s.scrollTop - s.clientHeight < 320;
+      if (gap() < 80) following.current = true;
+      else if (Date.now() - userAt < 600) following.current = false;
+    };
+    const onWheel = (e: WheelEvent) => {
+      mark();
+      if (e.deltaY < 0) following.current = false;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (/^(ArrowUp|PageUp|Home)$/.test(e.key)) {
+        mark();
+        following.current = false;
+      }
     };
     target.addEventListener("scroll", onScroll, { passive: true });
-    return () => target.removeEventListener("scroll", onScroll);
+    target.addEventListener("wheel", onWheel as EventListener, { passive: true });
+    target.addEventListener("touchmove", mark, { passive: true });
+    target.addEventListener("pointerdown", mark, { passive: true });
+    addEventListener("keydown", onKey);
+    return () => {
+      target.removeEventListener("scroll", onScroll);
+      target.removeEventListener("wheel", onWheel as EventListener);
+      target.removeEventListener("touchmove", mark);
+      target.removeEventListener("pointerdown", mark);
+      removeEventListener("keydown", onKey);
+    };
   }, [id]);
   useEffect(() => {
     if (following.current) bottom.current?.scrollIntoView({ block: "end" });
   }, [events.length, streaming]);
+
+  // How long each answer took and how fast it was written (tokens per second, from the model's own counts): shown
+  // small under the answer, as LM Studio and Open WebUI do.
+  const answerStats = useMemo(() => {
+    const out = new Map<number, { seconds: number; tps?: number; tokens: number }>();
+    let from = 0;
+    let tokens = 0;
+    for (const e of events) {
+      if (e.type === "user") {
+        from = Date.parse(e.at);
+        tokens = 0;
+      } else if (e.type === "usage") tokens += e.output;
+      else if (e.type === "assistant" && from) {
+        const seconds = Math.max(0, (Date.parse(e.at) - from) / 1000);
+        out.set(e.seq, { seconds, tokens, ...(tokens && seconds > 0.2 ? { tps: tokens / seconds } : {}) });
+        from = Date.parse(e.at);
+        tokens = 0;
+      }
+    }
+    return out;
+  }, [events]);
 
   const byCall = useMemo(() => {
     const m = new Map<string, Ev<"tool_result">>();
@@ -610,6 +660,16 @@ export function ConversationPage({ id }: { id: string }) {
                               void api(`/api/conversations/${id}/regenerate`, { method: "POST" }).catch((err: Error) => setError(err.message));
                             }}>↻</button>
                           )}
+                          {(() => {
+                            const st2 = answerStats.get(e.seq);
+                            if (!st2 || !st2.seconds) return null;
+                            const secs = st2.seconds < 60 ? `${st2.seconds.toFixed(1)}s` : `${Math.floor(st2.seconds / 60)}m ${Math.round(st2.seconds % 60)}s`;
+                            return (
+                              <span className="answer-stats muted small" dir="ltr" title={getLocale() === "he" ? `${st2.tokens} טוקנים נכתבו ב-${secs}, כולל קריאת השאלה והכלים` : `${st2.tokens} tokens written in ${secs}, including reading the question and tools`}>
+                                {st2.tps ? `${st2.tps.toFixed(1)} tok/s · ` : ""}{secs}
+                              </span>
+                            );
+                          })()}
                         </span>
                       );
                     })()}
