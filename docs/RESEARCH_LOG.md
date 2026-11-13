@@ -500,3 +500,75 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - It is refused while a chat or self-work is answering.
   - llama-bench's `-o json` gives one row per test: `type_k`, `n_depth`, `n_prompt` or `n_gen`, `avg_ts`.
   - Left out: chats at once (llama-bench cannot measure slots); that stays the "Chats at once" setting.
+
+## 2026-11-13: How an app like KesherAI should work (deep research)
+- Written up in `docs/DESIGN_RESEARCH.md`: UI and UX, agent UX, accessibility, Hebrew and RTL, performance, developers, modders and plugins, modularity. Each part has what others do (sources), where KesherAI is (checked in the code), and what to do, with one prioritized list (board t39–t50).
+- The core's structure is in `docs/ARCHITECTURE_REVIEW.md` (t18).
+- **Fixed with it:** the chat was a live region, so a screen reader re-read the answer on every word. It is a log with one status line now. The import cycle through `conversations.ts` is gone.
+- **Stopped at:** game-mod ecosystems (Factorio) could not be read; look again before designing the public plugin list. No NVDA pass yet (needs Roee's PC, t50).
+
+## 2026-11-13: Plan — Antigravity through a list of board tasks, staying interactive (t19)
+- **The limit:** Antigravity runs in KesherAI only in chats the user drives. Google's forum reply (2026-09-16, above) covers a single user running the unmodified `agy` under their own sign-in. A loop that sends follow-up messages by itself is outside that. So: every message to Antigravity is sent by a press from the user.
+- **The idea:** a "work list" beside an Antigravity code chat. The user picks tasks from the board; KesherAI prepares the next message; the user presses **Next** to send it.
+- **The screen (in the chat's side panel, phone: a sheet):**
+  - The picked tasks in order, each with its board status.
+  - When Antigravity's turn ends: a card "Next: t24 — Disk space in view" with the message KesherAI wrote (the task's title, details, "claim it on the board, mark it done with the commit"). Buttons: **Send**, **Edit**, **Skip**.
+  - Nothing is sent without Send. If the user is away, it waits; the 🔔 inbox and the phone get "Antigravity finished t23. Next is ready to send."
+- **What KesherAI does by itself (allowed, it is not talking to Antigravity):**
+  - Marks the task claimed by "antigravity" when its message is sent, and reads the board when the turn ends.
+  - Runs the project's check (`pnpm typecheck && pnpm test`) after a turn and puts the result in the next card: "the check failed: …" becomes the suggested message.
+  - Saves a checkpoint before each message (already done for code chats).
+- **Approvals:** Antigravity's own permission requests already arrive in 🔔 with a preview (0.6.9x). Mode mapping stays: ask → default, auto-edit → accept-edits, plan → plan.
+- **What it must not have:** auto-send, "send all", a timer, or self-work using Antigravity. The Send button is not reachable by any agent tool or routine (same rule as approving danger-flagged requests).
+- **Pieces to build:**
+  1. `work-list.ts`: the list per conversation (task ids, position), kept with the chat.
+  2. `GET/PUT /api/conversations/:id/work-list`, and `POST …/work-list/next` that only returns the prepared text (it does not send).
+  3. `WorkListPanel.tsx` in the chat, with the Next card. Sending uses the normal message route, from the user's click.
+  4. A notification when the turn ends and a next task is ready.
+  5. Tests: the next message is built from the board; nothing in the server sends by itself (a test that no code path calls `send` for an outside agent without a request from the user).
+- **Open question for Roee:** should a failed check block Next (must fix first) or only warn?
+
+## 2026-11-13: Plan — fit across two graphics cards, and the DeepSeek V4-Flash experiment (t29)
+### Part 1: two cards, end to end
+- **What exists:** `gpus.ts` plans a split (`--tensor-split` by free memory, the fastest card as `--main-gpu`, one card alone when the model fits it). "What fits?" (`fit-preview.ts`) already reads one line per card from llama-fit-params.
+- **A conflict found while planning:** llama.cpp turns its own fitting off when `-ngl`, `--tensor-split` or `-ot` is set by hand (discussion #18049, in the 2026-11-11 entry). So when `planGpus` passes `--tensor-split`, fitting no longer shrinks the context or moves experts to system memory. On one card this never shows; on two it would.
+- **The plan:**
+  1. With two cards and `mode: auto`, pass only `--device` (which cards) and `--main-gpu`, and let fitting split the layers. Keep `--tensor-split` only when the user set shares.
+  2. "What fits?" runs with the same arguments, so it shows both cards (the parser already does).
+  3. "Fits my computer" in the model list counts the free memory of the cards in use plus system memory, the way fitting will use them, not the largest card alone.
+  4. `--fit-target` (memory to leave free) applies per card; the setting says so.
+  5. Tests with fake `nvidia-smi` output for two cards (the existing `gpus.test.ts` pattern) and a fit log with two device lines.
+- **Cannot be checked on Roee's PC today** (one RTX 3090). Steps 1–5 are built against tests; the real check waits for the second card.
+
+### Part 2: DeepSeek V4-Flash on today's PC
+- **The numbers:** the 3-bit GGUF is about 103 GB and needs about 110 GB. The PC has 24 GB on the card and 96 GB of system memory: 120 GB in all, of which Windows and other programs take 8–12 GB. It is tight. It can load only with almost everything else closed, and with `--fit-target` at its lowest (512 MB).
+- **Before downloading (103 GB, needs Roee's yes):** free disk space on E: (needs about 110 GB), and whether the file is split into parts.
+- **The test, in order. Stop at the first step that fails and write down where:**
+  1. **Fit preview only:** "What fits?" on the file. Expected: all layers "on the card" with the experts in system memory (MoE), a context of 8–16K. If fitting fails, try `--moe-cache-mib` (experts cached in VRAM, 2026-11-10 entry) and note it.
+  2. **Load:** time to ready, and memory left (Task Manager numbers go in the log).
+  3. **Speed:** "Calibrate" on it (reading and writing at 0 and 16K). 13B active parameters with experts in system memory: expect a few tokens per second writing. Under 3 tok/s is not usable for chat; under 8 is not usable for self-work.
+  4. **Tool calls:** a code chat with one small task (read a file, edit one line, run the check). Does it call tools in the right format, or does it need a chat template fix?
+  5. **Self-work:** one small board task, 30 minutes, compared with Qwen3.8-27B on the same task (time, did the check pass, did the review find bugs).
+- **What decides:** if step 5 is slower than Qwen and not clearly better, the 3-bit model is an experiment only, and the real question moves to the second 3090 + 128 GB (the 4-bit file, 155 GB).
+- **Alternative with less risk first:** Qwen3.8-Flash-Next IQ3_XXS (85 GB, 2026-11-10 entry) fits with room and tests the same path (a big MoE with experts in system memory).
+
+## 2026-11-13: Plan — instant phone notifications through Google's push, optional (t30)
+- **The problem:** the live connection can be cut when the phone sleeps deeply, so a notification may arrive late. Google's push (FCM) wakes the phone for a high-priority message.
+- **Found first: it may already work, with nothing to set up.** The ntfy app from Google Play uses Firebase for ntfy.sh ("uses Firebase only for the main host ntfy.sh, and only in the Google Play flavor", docs.ntfy.sh/subscribe/phone). KesherAI's backup path is UnifiedPush through ntfy, and its messages are already encrypted for the phone. So with ntfy from Google Play and the backup switch on, a sleeping phone should be woken by Google's push, and ntfy.sh sees only ciphertext.
+  - **To check on Roee's phone before building anything:** ntfy from Google Play (not F-Droid), backup switch on, the direct connection off for the test, phone asleep 30+ minutes, then a test notification from the computer. If it arrives within seconds, this plan's own FCM path is not needed.
+- **If KesherAI's own FCM is still wanted** (no ntfy app at all):
+  - **Why it cannot ship ready-made:** sending through FCM needs a server key (a Firebase service account). The docs say server keys "must not be included in applications". An open-source app cannot carry one, and a shared relay server run by the project would see every user's traffic metadata and cost money. So each user brings their own Firebase project. It is free.
+  - **What Roee sets up once (about 10 minutes):**
+    1. console.firebase.google.com → a new project (no Analytics needed).
+    2. Add an Android app with KesherAI's package name; download `google-services.json`.
+    3. Project settings → Service accounts → "Generate new private key" (a JSON file).
+    4. In KesherAI on the computer: Settings → Notifications → "Google push" → choose both files. They stay in the data folder on the computer, never in git, never sent anywhere else.
+  - **How it works:**
+    - The phone app does not need to be rebuilt: Firebase can be started in code from three values in `google-services.json` (project id, application id, API key: firebase.google.com/support/guides/init-options). They are identifiers, not secrets. The paired phone gets them from the computer over the existing connection.
+    - The phone gets an FCM token and gives it to the computer (`PUT /api/phone-push/fcm`, paired devices only, like the UnifiedPush address).
+    - The computer signs a short-lived Google token with the service account and POSTs to FCM's HTTP v1 API. The message carries the same encrypted body as today (RFC 8291, `phone-push.ts`), base64 in a `data` field, so Google sees only ciphertext. Limit: 4 KB, the same as now.
+    - Priority: high for "Waiting for you", normal for the rest. FCM lowers the priority of high-priority messages that do not end as a visible notification (firebase.blog, 2025-04), so every high one must show a notification. Ours do.
+    - Order of delivery: live connection (confirmed within 8 s) → FCM → UnifiedPush.
+  - **Pieces to build:** `fcm.ts` (token signing with `node:crypto`, send, drop a token on 404/UNREGISTERED), the route, the settings card with the two files and a test button, the Android side (`firebase-messaging`, runtime init, a service that decrypts and calls the existing `Notes.handle`), tests with a fake FCM endpoint.
+  - **Costs and risks:** one more Android library (Google Play services only; a phone without them keeps the other two paths). The service account file is a secret on the computer: stored like other tokens, shown as "set" only, never returned by the API.
+- **Recommendation:** run the ntfy check first. Build the own-FCM path only if that check fails or Roee wants no ntfy app.

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { ProviderRegistry } from "@kesher/providers";
 import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
-import { modelTurnFor } from "./conversations.js";
+import { modelTurnFor } from "./model-turn.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
 
 /** One line the game wrote while it ran. */

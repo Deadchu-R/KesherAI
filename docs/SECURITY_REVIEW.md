@@ -307,3 +307,11 @@ This review went through the code part by part. Each finding is listed with what
 - **Not changed, noted:** the calibration and fit endpoints answer a 500 with the engine tool's own error message, as the other engine routes do; it is a local tool's text, not user input.
 - **Not changed, noted (pre-existing):** self-work's `git add -A` picks up `.kesher-self/plan.md` (not gitignored), so the plan file keeps reaching main and a review removes it again (a732193 did; many earlier runs too). On the board.
 - **Privacy:** the new commits and code hold no email, user name or personal path (checked the whole range's diff).
+
+## Scan 48 (2026-11-13): 0.6.106–0.6.107 (self-work's four runs, the conversations.ts split, chat accessibility)
+- **Self-work's runs (t26–t28, t31, t36, t37, ModelFolders, gitState), reviewed before main:** the access log's key kind is derived from the key's shape and a constant-time compare with the shared token; the value is never stored (tested). `gitState` runs `status` before `diff` so two git processes do not open the index at once on Windows. No path, email or user name in the patches.
+- **The split (t7):** moves only. `ruleAllows` (the "always allow" rules) is byte-identical in `approval-rules.ts` and still covered by its tests; the tool builders became functions over the same services, with no new input reaching them.
+- **Import cycle removed:** `graph-edit.ts`, `blueprint-test.ts` and `widget-edit.ts` import `model-turn.ts`, not `conversations.ts`.
+- **Chat accessibility:** the history is `role="log"` with `aria-live="off"` and a separate polite status line; no user text goes into the status line (fixed phrases only).
+- **Performance:** the live region on the whole history made assistive technology re-process the answer on every token; that is gone. Nothing else changed at run time.
+- **Noted for later (docs/DESIGN_RESEARCH.md §7):** plugins still run inside the server's process with full access; permissions are declared, not enforced. It is the top item on the list (t39).

@@ -451,7 +451,10 @@ export function ConversationPage({ id }: { id: string }) {
 
       <div className={`conv-split ${showIde ? "with-ide" : ""}`}>
       <div className="chat">
-        <div className="messages" aria-live="polite">
+        {/* For screen readers: the history is a log that is not read aloud while it streams (a live region on it
+            re-read the answer on every word); one short line says what is happening instead. */}
+        <ChatStatus status={info?.status} waiting={(info?.pendingApprovals.length ?? 0) > 0} />
+        <div className="messages" role="log" aria-live="off" aria-busy={info?.status === "running"} aria-label={getLocale() === "he" ? "היסטוריית השיחה" : "Chat history"} tabIndex={0}>
           {events.length === 0 && (
             <p className="muted empty">{conv.kind === "code" ? t("emptyCode", { folder: info?.workspace ?? "" }) : t("emptyChat")}</p>
           )}
@@ -725,3 +728,24 @@ export function ConversationPage({ id }: { id: string }) {
   );
 }
 
+/**
+ * Tells a screen reader what the chat is doing, in one polite line that changes only when the state does:
+ * writing an answer, waiting for the user's approval, or done. Empty at first, so the region exists before
+ * its first message (docs/DESIGN_RESEARCH.md, accessibility).
+ *
+ * @param p.status - The conversation's status.
+ * @param p.waiting - Whether an approval waits for the user.
+ */
+function ChatStatus({ status, waiting }: { status: string | undefined; waiting: boolean }) {
+  const he = getLocale() === "he";
+  const now = waiting || status === "waiting" ? "waiting" : status === "running" ? "running" : "idle";
+  const [said, setSaid] = useState("");
+  const before = useRef("idle");
+  useEffect(() => {
+    if (before.current === now) return;
+    const was = before.current;
+    before.current = now;
+    setSaid(now === "running" ? (he ? "כותב תשובה" : "Writing an answer") : now === "waiting" ? (he ? "מחכה לאישור שלך" : "Waiting for your approval") : was === "running" || was === "waiting" ? (he ? "התשובה מוכנה" : "The answer is ready") : "");
+  }, [now, he]);
+  return <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{said}</div>;
+}

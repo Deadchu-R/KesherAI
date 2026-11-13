@@ -1,6 +1,6 @@
 import type { ProviderRegistry } from "@kesher/providers";
 import type { AgentTool } from "@kesher/agent";
-import { modelTurnFor } from "./conversations.js";
+import { modelTurnFor } from "./model-turn.js";
 import { blueprintPrompt, parseOps, unityPrompt, type UnrealBridge } from "./unreal-bridge.js";
 import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import type { UnityCli } from "./unity-cli.js";

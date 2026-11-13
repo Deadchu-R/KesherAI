@@ -1,5 +1,5 @@
 import type { ProviderRegistry } from "@kesher/providers";
-import { modelTurnFor } from "./conversations.js";
+import { modelTurnFor } from "./model-turn.js";
 import { parseOps, type UnrealBridge } from "./unreal-bridge.js";
 
 /**
