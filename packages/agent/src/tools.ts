@@ -56,6 +56,11 @@ export interface AgentTool {
   risk: ToolRisk;
   /** For `exec` tools: the command line, checked against the dangerous list. */
   commandOf?(input: Record<string, unknown>): string | undefined;
+  /**
+   * What "Always allow" covers for this call, when it is narrower than the whole tool: for the browser tools,
+   * the web site ("site:example.com"), shared by every tool with the same scope (like "Always allow on this site").
+   */
+  scopeOf?(input: Record<string, unknown>, ctx: ToolContext): Promise<string | undefined>;
   /** What the user sees in an approval request: a diff, a command. */
   preview?(input: Record<string, unknown>, ctx: ToolContext): Promise<string>;
   /** Runs the tool. Throw an Error to report a failure to the model. */

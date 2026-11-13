@@ -5,7 +5,7 @@ import { getLocale } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Info { connected: boolean; browser?: string; key: string; folder: string | null }
+interface Info { connected: boolean; extension?: boolean; browser?: string; key: string; folder: string | null }
 
 /** Settings → Browser: the extension that lets the agent work in the user's own browser. */
 export function BrowserSection() {
@@ -18,18 +18,20 @@ export function BrowserSection() {
     return () => clearInterval(id);
   }, []);
   if (!info) return null;
+  // "connected" also counts KesherAI's own browser pane; this card is about the extension.
+  const ext = info.extension ?? info.connected;
   return (
     <section className="card stack">
       <h2>{L("הדפדפן שלך", "Your browser")}</h2>
       <p className="muted">{L("עם התוסף של KesherAI הסוכן יכול לעבוד בדפדפן שלך, איפה שאתה כבר מחובר: לפתוח דפים, לקרוא, ללחוץ ולמלא. הוא שואל לפני כל פעולה (אלא אם בחרת מצב אוטומטי), ולעולם לא מקליד סיסמאות.", "With the KesherAI extension the agent can work in your own browser, where you are already signed in: open pages, read, click and fill in. It asks before each action (unless you chose the automatic mode) and never types passwords.")}</p>
       <p>
-        {info.connected ? (
+        {ext ? (
           <span className="pill good">{L(`מחובר${info.browser ? ` · ${info.browser}` : ""}`, `Connected${info.browser ? ` · ${info.browser}` : ""}`)}</span>
         ) : (
           <span className="pill">{L("התוסף לא מחובר", "The extension is not connected")}</span>
         )}
       </p>
-      {!info.connected && (
+      {!ext && (
         <>
         <ol className="small">
           <li>{L("פתח בדפדפן (Chrome, ‏Edge או Brave) את ", "In Chrome, Edge or Brave open ")}<code dir="ltr">chrome://extensions</code>{L(" והדלק את Developer mode.", " and turn on Developer mode.")}</li>
@@ -47,6 +49,35 @@ export function BrowserSection() {
         {info.folder && <a className="button" href={withToken("/api/browser/package?for=chrome")} download>{L("הורד zip ל-Chrome / Edge / Brave", "Download zip for Chrome / Edge / Brave")}</a>}
         {info.folder && <a className="button" href={withToken("/api/browser/package?for=firefox")} download>{L("הורד zip ל-Firefox", "Download zip for Firefox")}</a>}
       </div>
+    </section>
+  );
+}
+
+/**
+ * Settings → sites where KesherAI's browser tools act without asking ("Always on this site" in an approval),
+ * with a button to take each back. Works on the phone too.
+ */
+export function BrowserSitesSection() {
+  const [sites, setSites] = useState<string[] | null>(null);
+  const load = () => void api<{ sites: string[] }>("/api/browser/sites").then((r) => setSites(r.sites), () => setSites([]));
+  useEffect(load, []);
+  if (!sites) return null;
+  return (
+    <section className="card stack">
+      <h2>{L("אתרים שאושרו לדפדפן", "Sites approved for the browser")}</h2>
+      <p className="muted small">{L("באתרים האלה המודל פותח, לוחץ ומקליד בלי לשאול כל פעם (בחרתם \"תמיד באתר הזה\"). סיסמאות והורדות — אף פעם.", "On these sites the model opens, clicks and types without asking each time (you chose \"Always on this site\"). Passwords and downloads: never.")}</p>
+      {sites.length ? (
+        <ul className="plain-list">
+          {sites.map((site) => (
+            <li key={site} className="row">
+              <code dir="ltr" className="grow">{site}</code>
+              <button type="button" onClick={() => void api(`/api/browser/sites?site=${encodeURIComponent(site)}`, { method: "DELETE" }).then(load)}>{L("הסר", "Remove")}</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted small">{L("עוד אין. כשהמודל מבקש לפעול באתר, \"תמיד ב-…\" מוסיף אותו לכאן.", "None yet. When the model asks to act on a site, \"Always on …\" adds it here.")}</p>
+      )}
     </section>
   );
 }

@@ -291,6 +291,8 @@ export const KesherConfigSchema = z.object({
   downloadLimitMBps: z.number().min(0).default(0),
   /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
   browserKey: z.string().optional(),
+  /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */
+  browserSites: z.array(z.string()).default([]),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z
     .object({

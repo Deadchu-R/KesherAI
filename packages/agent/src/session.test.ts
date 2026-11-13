@@ -500,3 +500,36 @@ test("Stop during an outside agent's question denies it and ends the turn", asyn
   assert.equal(gotSignal?.aborted, true);
   assert.ok(s.events.some((e) => e.type === "note" && /Stopped/.test(e.text)));
 });
+
+test("a site-scoped tool: Always covers that site only, and the app keeps it", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const { model } = scripted([
+    { calls: [{ name: "web_click", arguments: { url: "https://a.test/x" } }] },
+    { calls: [{ name: "web_click", arguments: { url: "https://a.test/y" } }] },
+    { calls: [{ name: "web_click", arguments: { url: "https://b.test/" } }] },
+    { text: "Done." },
+  ]);
+  const kept = new Set<string>();
+  const ran: string[] = [];
+  const session = new AgentSession({
+    id: "s", modelId: "m", model, mode: "ask", workspace, systemPrompt: "sys",
+    tools: [{
+      risk: "exec",
+      spec: { name: "web_click", description: "click", inputSchema: { type: "object", properties: { url: { type: "string" } } } },
+      scopeOf: async (input) => `site:${new URL(String(input.url)).hostname}`,
+      run: async (input) => (ran.push(String(input.url)), { output: "ok" }),
+    }],
+    isAlwaysAllowed: (_t, _m, _c, scope) => !!scope && kept.has(scope),
+    onAlwaysScope: (scope) => kept.add(scope),
+  });
+  session.send("go");
+  const first = await waitFor(session, (e) => e.type === "approval_request");
+  assert.equal(first.type === "approval_request" && first.scope, "site:a.test");
+  session.approve(first.type === "approval_request" ? first.requestId : "", "always");
+  const second = await waitFor(session, (e) => e.type === "approval_request" && e.requestId !== (first.type === "approval_request" ? first.requestId : ""));
+  assert.equal(second.type === "approval_request" && second.scope, "site:b.test", "a.test/y ran without asking; b.test asks");
+  assert.deepEqual(ran, ["https://a.test/x", "https://a.test/y"]);
+  assert.deepEqual([...kept], ["site:a.test"]);
+  session.approve(second.type === "approval_request" ? second.requestId : "", "deny");
+  await waitFor(session, (e) => e.type === "assistant" && e.text === "Done.");
+});

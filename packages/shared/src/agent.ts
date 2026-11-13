@@ -100,6 +100,8 @@ export type AgentEvent = EventBase &
         purpose?: string;
         /** The folder the command runs in. */
         folder?: string;
+        /** What "Always" covers for this tool: a web site (browser tools), so Always means "on this site". */
+        scope?: string;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
     /** Plan mode: the agent's plan, for the user to approve (then it runs) or change. */

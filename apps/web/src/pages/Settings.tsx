@@ -24,7 +24,7 @@ import { openWelcome } from "../Welcome";
 import { NotificationsSection } from "../NotificationsSection";
 import { McpServerSection } from "../McpServerSection";
 import { PhoneTargetsSection } from "../PhoneTargetsSection";
-import { BrowserSection } from "../BrowserSection";
+import { BrowserSection, BrowserSitesSection } from "../BrowserSection";
 import { ApiKeysSection } from "../ApiKeysSection";
 import { PermissionsSection } from "../settings/PermissionsSection";
 import { PhoneSection } from "../settings/PhoneSection";
@@ -49,7 +49,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; w
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", words: "phone remote anywhere tunnel qr pair device keys tailscale telegram computers start with computer access log טלפון מרחוק מכל מקום מנהרה קוד סריקה מכשירים מפתחות טלגרם מחשבים הפעלה עם המחשב יומן גישה", render: () => <><PhoneSection /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },
   { id: "accounts", icon: "☁", en: "Accounts, backup and data", he: "חשבונות, גיבוי ונתונים", words: "google drive onedrive sync backup import chats chatgpt claude whatsapp instagram ווטסאפ וואטסאפ אינסטגרם reset delete data גוגל דרייב סנכרון גיבוי ייבוא שיחות איפוס מחיקה נתונים", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /><ImportChats /><ImportPeopleChats /><ResetSection /></> },
   { id: "business", icon: "🏢", en: "Organisation", he: "ארגון", words: "business organisation copilot team policy ארגון עסקי צוות מדיניות", render: () => <><CopilotSection /><BusinessSection /></> },
-  { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", words: "developer mcp server api keys browser extension phone targets מפתחים שרת מפתחות api תוסף דפדפן", render: () => <><McpServerSection /><PhoneTargetsSection /><BrowserSection /><ApiKeysSection />{isRemote() && <section className="card"><p className="muted small">{getLocale() === "he" ? "מפתחות גישה לאפליקציות ומפתח התוסף לדפדפן מוצגים רק במחשב עצמו: הם סודות שפותחים את KesherAI." : "App access keys and the browser extension's key are shown only on the computer itself: they are secrets that open KesherAI."}</p></section>}</> },
+  { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", words: "developer mcp server api keys browser sites אתרים extension phone targets מפתחים שרת מפתחות api תוסף דפדפן", render: () => <><McpServerSection /><PhoneTargetsSection /><BrowserSitesSection /><BrowserSection /><ApiKeysSection />{isRemote() && <section className="card"><p className="muted small">{getLocale() === "he" ? "מפתחות גישה לאפליקציות ומפתח התוסף לדפדפן מוצגים רק במחשב עצמו: הם סודות שפותחים את KesherAI." : "App access keys and the browser extension's key are shown only on the computer itself: they are secrets that open KesherAI."}</p></section>}</> },
 ];
 /** Old links keep working after the reorganisation. */
 const MOVED: Record<string, string> = { accessibility: "appearance" };

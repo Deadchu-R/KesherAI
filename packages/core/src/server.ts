@@ -635,6 +635,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       projectFacts,
       // A self-work worker uses the main app's engine (main/llamacpp/…): its share comes from there.
       engineSlotTokens: () => (worker ? mainSlot : engine.slotContext()),
+      saveConfig: () => persist(),
       onEvent: (convId, e, title, lastAnswer) => {
         notifier.onConversationEvent(convId, title, e, lastAnswer);
         telegram.onConversationEvent(convId, e);

@@ -524,7 +524,19 @@ export class ConversationManager {
         const unityHere = this.unityInChat(id);
         return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.connected ? UNREAL_GRAPH_TOOLS : [])];
       },
-      isAlwaysAllowed: (tool, modelId, command) => this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
+      isAlwaysAllowed: (tool, modelId, command, scope) =>
+        scope?.startsWith("site:")
+          ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
+          : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
+      onAlwaysScope: (scope) => {
+        if (!scope.startsWith("site:")) return;
+        const site = scope.slice(5);
+        const list = (this.deps.config.browserSites ??= []);
+        if (!list.includes(site)) {
+          list.push(site);
+          void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
+        }
+      },
     });
     this.sessions.set(id, session);
     if (this.deps.onEvent) {

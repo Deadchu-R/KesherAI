@@ -67,6 +67,15 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     return reply.type("application/zip").send(Buffer.from(zip));
   });
 
+  /** Sites where the browser tools act without asking ("Always on this site"), and taking one back. */
+  app.get("/api/browser/sites", async () => ({ sites: s.config.browserSites ?? [] }));
+  app.delete<{ Querystring: { site?: string } }>("/api/browser/sites", async (req) => {
+    const site = String(req.query.site ?? "");
+    s.config.browserSites = (s.config.browserSites ?? []).filter((x) => x !== site);
+    await s.saveConfig();
+    return { sites: s.config.browserSites };
+  });
+
   // KesherAI's own browser pane, for the phone: its tabs, a picture of the tab in front, taps and the address bar.
   const pane = async (reply: FastifyReply, run: () => Promise<unknown>) => {
     try {

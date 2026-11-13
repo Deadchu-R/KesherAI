@@ -91,7 +91,9 @@ export interface AgentSessionOptions {
    * Dangerous commands still always ask.
    */
   /** Whether a saved rule allows this tool (for a command: its text, matched against command rules). */
-  isAlwaysAllowed?(tool: string, modelId: string, command?: string): boolean;
+  isAlwaysAllowed?(tool: string, modelId: string, command?: string, scope?: string): boolean;
+  /** "Always" given for a scope (a web site): the app keeps it (Settings lists it and can take it back). */
+  onAlwaysScope?(scope: string): void;
   /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
   contextTokens?: number;
   /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
@@ -158,7 +160,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
   private readonly questions = new Map<string, (text: string) => void>();
   private readonly alwaysAllowed = new Set<string>();
-  private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string) => boolean;
+  private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
+  private readonly onAlwaysScope?: (scope: string) => void;
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
@@ -197,6 +200,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.maxSteps = opts.maxSteps ?? 60;
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
+    this.onAlwaysScope = opts.onAlwaysScope;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
     this.toolSearch = opts.toolSearch;
@@ -916,7 +920,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       recordChange: (path, before) => this.changes.push({ path, before }),
       progress: this.liveOutput(call.id),
     };
-    const always = this.alwaysAllowed.has(tool.spec.name) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments));
+    // A scoped tool (the browser) is "always allowed" per site, not as a whole.
+    let scope: string | undefined;
+    try {
+      scope = await tool.scopeOf?.(call.arguments, ctx);
+    } catch {
+      scope = undefined;
+    }
+    const alwaysKey = scope ?? tool.spec.name;
+    const always = this.alwaysAllowed.has(alwaysKey) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments), scope);
     const verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
     if (verdict.action === "deny") return fail(verdict.reason);
     if (verdict.action === "ask") {
@@ -932,7 +944,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         const given = typeof call.arguments.purpose === "string" ? call.arguments.purpose.trim() : "";
         const purpose = (given || this.lastSaid).slice(0, 400);
         const folder = tool.risk === "exec" ? this.workspace : undefined;
-        this.push({ type: "approval_request", requestId, callId: call.id, name: call.name, input: call.arguments, preview, reason: verdict.reason, ...(purpose ? { purpose } : {}), ...(folder ? { folder } : {}) });
+        this.push({ type: "approval_request", requestId, callId: call.id, name: call.name, input: call.arguments, preview, reason: verdict.reason, ...(purpose ? { purpose } : {}), ...(folder ? { folder } : {}), ...(scope ? { scope } : {}) });
         this.setStatus("waiting");
       });
       this.push({ type: "approval_result", requestId, decision, ...(feedback ? { feedback } : {}) });
@@ -942,7 +954,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         if (!signal.aborted) this.setStatus("running");
         return msg;
       }
-      if (decision === "always") this.alwaysAllowed.add(tool.spec.name);
+      if (decision === "always") {
+        // A site the app keeps (and can take back in Settings) is not also kept here, so taking it back works at once.
+        if (scope && this.onAlwaysScope) this.onAlwaysScope(scope);
+        else this.alwaysAllowed.add(alwaysKey);
+      }
       this.setStatus("running");
     }
 

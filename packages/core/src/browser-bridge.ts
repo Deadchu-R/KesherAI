@@ -158,7 +158,25 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
   };
   const pageText = (r: { url: string; title: string; text: string; elements: string[] }) =>
     `${r.title}\n${r.url}\n\n${r.text}\n\nElements you can use (ref: what it is):\n${r.elements.join("\n") || "(none)"}`;
-  return [
+  // "Always allow" for the browser is per web site (like Claude in Chrome): the site of the address, or of the tab.
+  const siteOf = (url: string): string | undefined => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      return host ? `site:${host}` : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const tabSite = async (input: Record<string, unknown>, signal?: AbortSignal): Promise<string | undefined> => {
+    const tabs = await b.call<BrowserTab[]>("tabs", { browser: input.browser }, signal);
+    const t = typeof input.tabId === "number" ? tabs.find((x) => x.id === input.tabId) : tabs.find((x) => x.active);
+    return t ? siteOf(t.url) : undefined;
+  };
+  const scoped = (t: AgentTool): AgentTool => ({
+    ...t,
+    scopeOf: async (input, ctx) => (t.spec.name === "browser_open" ? siteOf(String(input.url ?? "")) : tabSite(input, ctx.signal)),
+  });
+  const tools: AgentTool[] = [
     {
       risk: "read",
       spec: {
@@ -238,4 +256,5 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       },
     },
   ];
+  return tools.map((t) => (t.spec.name === "browser_tabs" ? t : scoped(t)));
 }

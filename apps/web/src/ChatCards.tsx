@@ -156,7 +156,14 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
       <input placeholder={t("noteForAgent")} value={note} onChange={(e) => setNote(e.target.value)} aria-label={t("noteForAgent")} />
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => void decide("allow")}>{t("allow")}</button>
-        <button type="button" disabled={busy} aria-expanded={scopeOpen} onClick={() => setScopeOpen(!scopeOpen)}>{t("allowAlways")} ▾</button>
+        {/* The browser: Allow once / Always on this site / Deny (like Claude in Chrome); sites are listed in Settings. */}
+        {ev.scope?.startsWith("site:") ? (
+          <button type="button" disabled={busy} onClick={() => void decide("always")} title={L("מתי שהוא עובד באתר הזה, בלי לשאול. אפשר לבטל בהגדרות ← דפדפן.", "Whenever it works on this site, without asking. Undo in Settings → Browser.")}>
+            {L(`תמיד ב-${ev.scope.slice(5)}`, `Always on ${ev.scope.slice(5)}`)}
+          </button>
+        ) : (
+          <button type="button" disabled={busy} aria-expanded={scopeOpen} onClick={() => setScopeOpen(!scopeOpen)}>{t("allowAlways")} ▾</button>
+        )}
         <button type="button" disabled={busy} onClick={() => void decide("deny")}>{t("deny")}</button>
       </div>
       {scopeOpen && (
@@ -178,9 +185,9 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
               <input dir="ltr" value={prefix} disabled={!onlyCmd} onChange={(e) => setPrefix(e.target.value)} aria-label={L("תחילת הפקודה", "The command's start")} />
             </label>
           )}
-          <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "conversation")}>{t("alwaysChat", { tool: ev.name })}</button>
-          <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "model")}>{t("alwaysModel", { tool: ev.name })}</button>
-          <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "everywhere")}>{t("alwaysEverywhere", { tool: ev.name })}</button>
+          {!ev.scope && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "conversation")}>{t("alwaysChat", { tool: ev.name })}</button>}
+          {!ev.scope && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "model")}>{t("alwaysModel", { tool: ev.name })}</button>}
+          {!ev.scope && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "everywhere")}>{t("alwaysEverywhere", { tool: ev.name })}</button>}
           <span className="muted small">{t("alwaysNote")}</span>
         </div>
       )}

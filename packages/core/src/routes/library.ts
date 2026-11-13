@@ -355,7 +355,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       if (d === "always") {
         // Remember it, so it also holds after a restart (and, by scope, in other conversations).
         const ev = opened.session.events.find((e) => e.type === "approval_request" && e.requestId === req.params.requestId);
-        const tool = ev && ev.type === "approval_request" ? ev.name : undefined;
+        // A site-scoped request (the browser): "Always" is for that site only, kept by the session in browserSites,
+        // never a rule for the whole tool.
+        const tool = ev && ev.type === "approval_request" && !ev.scope ? ev.name : undefined;
         const scope = req.body.scope ?? "conversation";
         if (tool) {
           const rule = {
