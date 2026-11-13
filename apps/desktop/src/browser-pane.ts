@@ -259,18 +259,40 @@ export class BrowserPane {
     }
     if (action === "screenshot") {
       if (t.id !== this.active) this.select(t.id);
-      const img = await t.view.webContents.capturePage();
+      const img = await this.picture(t);
+      if (img.isEmpty()) throw new Error("The page could not be pictured; open the Browser pane beside the chat and try again.");
       return { dataUrl: img.toDataURL() };
     }
     throw new Error(`Unknown action ${action}`);
+  }
+
+  /**
+   * A picture of a tab, also while it is not on screen (the pane closed on the computer, the phone looking):
+   * Electron paints only a page that is laid out in a window, so it is laid out just outside it for the picture.
+   */
+  private async picture(t: Tab): Promise<Electron.NativeImage> {
+    const wc = t.view.webContents;
+    const shown = !!this.bounds && t.id === this.active && this.win.contentView.children.includes(t.view);
+    if (shown) return wc.capturePage();
+    // Laid out just outside the window (so it has a size and paints) for the picture, then taken away again.
+    const width = this.bounds?.width ?? 1280;
+    const height = this.bounds?.height ?? 800;
+    this.win.contentView.addChildView(t.view);
+    t.view.setBounds({ x: -width - 50, y: 0, width, height });
+    try {
+      await new Promise((r) => setTimeout(r, 350));
+      return await wc.capturePage(undefined, { stayHidden: true });
+    } finally {
+      this.layout();
+    }
   }
 
   /** A picture of the tab in front (for the phone), as JPEG. */
   async shot(): Promise<Buffer | null> {
     const t = this.tabs.find((x) => x.id === this.active);
     if (!t) return null;
-    const img = await t.view.webContents.capturePage();
-    return img.toJPEG(70);
+    const img = await this.picture(t);
+    return img.isEmpty() ? null : img.toJPEG(70);
   }
 
   /** A tap from the phone at a point of the picture (0..1 across and down). */
