@@ -54,7 +54,8 @@ export class ConversationSearch {
   async search(query: string, limit = 20): Promise<ConversationHit[]> {
     const q = query.trim();
     if (!q) return [];
-    const convs = this.library.listConversations().slice(0, 2000);
+    // Incognito chats are left out of search (as in Claude).
+    const convs = this.library.listConversations().filter((c) => !c.incognito).slice(0, 2000);
     const all: Array<Passage & { conv: (typeof convs)[number] }> = [];
     for (const c of convs) {
       // The title counts as a passage too.

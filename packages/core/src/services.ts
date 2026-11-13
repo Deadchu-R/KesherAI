@@ -3,6 +3,7 @@
  * app (provider registry, conversation manager, engine, guard, notifier, downloads, config…), so a route never
  * creates its own and everything shares one state.
  */
+import type { MemoryStore } from "./memory-store.js";
 import type { ProjectFacts } from "./project-facts.js";
 import type { SelfWork } from "./self-work.js";
 import type { TaskBoard } from "./task-board.js";
@@ -107,6 +108,8 @@ export interface KesherServices {
   computer: ComputerControl;
   /** Suggests better prompts, tools and models from how conversations went; learns the user's habits. */
   coach: Coach;
+  /** The user's memory by topic (see memory-store.ts). */
+  memory: MemoryStore;
   /** MCP servers and their tools. */
   mcp: McpManager;
   /** Node.js and uv for MCP servers, installed by KesherAI on request. */

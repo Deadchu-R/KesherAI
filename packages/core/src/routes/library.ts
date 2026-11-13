@@ -257,7 +257,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** A session's worktree: its branch and what deleting the session would lose there. */
   app.get<{ Params: { id: string } }>("/api/conversations/:id/worktree", async (req) => (await s.conversations.worktreeWorkOf(req.params.id)) ?? null);
 
-  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean } }>(
+  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean; incognito?: boolean } }>(
     "/api/conversations",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -271,6 +271,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
           ...(b.workspace ? { workspace: b.workspace } : {}),
           ...(b.personaId ? { personaId: b.personaId } : {}),
           ...(b.worktree === true && b.kind === "code" ? { worktree: true } : {}),
+          ...(b.incognito === true ? { incognito: true } : {}),
         });
         const { messages: _m, events: _e, ...summary } = c;
         return summary;

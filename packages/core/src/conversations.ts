@@ -24,6 +24,7 @@ import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
 import { ruleAllows } from "./approval-rules.js";
 import { runIn } from "./run-in.js";
+import { filingPrompt, parseFiling, worthFiling } from "./memory-store.js";
 import { createSessionWorktree, removeSessionWorktree, worktreeName, worktreeWork, type Git, type SessionWorktree } from "./session-worktrees.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 import { lookTools, mediaTools } from "./chat-tools-media.js";
@@ -46,6 +47,8 @@ export interface NewConversation {
   source?: "telegram";
   /** A code session in its own git worktree and branch (see session-worktrees.ts). */
   worktree?: boolean;
+  /** No memory read or filed, left out of search. */
+  incognito?: boolean;
 }
 
 
@@ -233,7 +236,7 @@ export class ConversationManager {
     // "Check my change" (like Claude's browser pane): in a code chat with KesherAI's own browser, look at the result.
     const hasBrowserPane = [...media.tools, ...computer].some((t) => t.spec.name === "browser_open") && this.deps.browserPane?.() === true;
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
-    const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
+    const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
     if (id) all.push(this.delegateFor(id, all));
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
@@ -405,15 +408,54 @@ export class ConversationManager {
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
-      toolNotes: [...notes, ...(await this.learnedNotes()), ...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean), ...(c.kind === "code" && workspace ? [(await this.deps.projectFacts?.note(workspace).catch(() => undefined)) ?? ""].filter(Boolean) : [])],
+      toolNotes: [...notes, ...(await this.learnedNotes(c)), ...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean), ...(c.kind === "code" && workspace ? [(await this.deps.projectFacts?.note(workspace).catch(() => undefined)) ?? ""].filter(Boolean) : [])],
       ...(persona ? { persona: personaPrompt(persona) } : {}),
     });
   }
 
-  private async learnedNotes(): Promise<string[]> {
+  private async learnedNotes(c: Pick<Conversation, "id" | "projectId">): Promise<string[]> {
+    // An incognito chat reads no memory (and files none).
+    if (this.deps.library.summary(c.id)?.incognito) return [];
     const learned = (await this.deps.userNotes?.().catch(() => [])) ?? [];
-    return learned.length ? [`About this user (their memory in KesherAI, which they can see and edit; follow it unless they say otherwise): ${learned.join("; ")}`] : [];
+    const topics = (await this.deps.memory?.promptFor(c.projectId).catch(() => "")) ?? "";
+    return [
+      ...(learned.length ? [`How this user works (learned by KesherAI's coach; they can see and edit it on the Memory page): ${learned.join("; ")}`] : []),
+      ...(topics ? [topics] : []),
+    ];
   }
+
+  /**
+   * After a turn: a short pass with the chat's model files what the user said about themselves (like Claude's
+   * memory). Only when memory files by itself, not paused, not incognito, and the message may hold such a thing.
+   */
+  private async fileMemory(id: string, session: AgentSession): Promise<void> {
+    const memory = this.deps.memory;
+    if (!memory) return;
+    const d = await memory.data();
+    const c = this.deps.library.summary(id);
+    if (d.paused || !d.auto || !c || c.incognito || c.source === "telegram" || c.importedFrom) return;
+    const user = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
+    const answer = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant");
+    if (!user || !worthFiling(user.text) || this.filed.get(id) === user.seq) return;
+    this.filed.set(id, user.seq);
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), 90_000);
+    try {
+      const res = await modelTurnFor(this.deps.registry, session.modelId)(
+        { messages: [{ role: "user", content: filingPrompt(await memory.outline(c.projectId), user.text, answer?.text ?? "", !!c.projectId) }], tools: [] },
+        stop.signal,
+        () => undefined,
+      );
+      const plan = parseFiling(res.text);
+      for (const f of plan.forget) await memory.forget(f);
+      for (const a of plan.add) await memory.add({ topic: a.topic, text: a.fact, source: "auto", ...(a.project && c.projectId ? { project: c.projectId } : {}) }).catch(() => undefined);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** The last user message filed per chat (one pass per message). */
+  private readonly filed = new Map<string, number>();
 
   /**
    * What a coach needs to know about a conversation's setup.
@@ -468,6 +510,7 @@ export class ConversationManager {
       mode: opts.source === "telegram" ? "ask" : (opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit")),
       ...(worktree ? { workspace: worktree.path, worktree } : opts.workspace ? { workspace: opts.workspace } : {}),
       ...(folder ? { envFolder: folder } : {}),
+      ...(opts.incognito ? { incognito: true } : {}),
       messages: [],
       events: [],
       createdAt: now,
@@ -611,6 +654,8 @@ export class ConversationManager {
       // What this chat's commands showed about the project (a form that fails here, a tool that is missing).
       const ws = conversation.kind === "code" ? this.workspaceOf(conversation) : undefined;
       if (ws && this.deps.projectFacts) void this.deps.projectFacts.learn(ws, id, session.events).catch(() => undefined);
+      // Memory: filed a moment after the answer, when the computer is free again.
+      if (e.status === "idle" && !session.queued.length) setTimeout(() => void (session.busy ? undefined : this.fileMemory(id, session).catch(() => undefined)), 1500);
       if (e.status === "idle" && this.goals.has(id) && !session.queued.length) void this.checkGoal(id);
       else setTimeout(() => void this.drain(id), 50);
     });

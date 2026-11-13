@@ -634,3 +634,11 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   puts inline comments on the local diff. PR creation itself is not described there.
 - Built: the same with the GitHub account KesherAI already connects (no gh needed). Stopped at: "Review code"
   (the model's own inline comments on the diff) not built yet.
+
+## 2026-11-14 — Memory like Claude's (CLAUDE_PARITY_PLAN stage 6)
+- **Claude** (support.claude.com/en/articles/11817273): memory builds automatically as topics; per-project memory that
+  also uses non-project memory unless "Use account memory" is off; incognito chats (not saved to memory or history,
+  not searched); view/edit/delete topics; pause keeps memories; reset deletes all, projects included.
+- **ChatGPT** memory FAQ could not be fetched (client error); not used.
+- Built for KesherAI as above. Stopped at: no import of memory from other assistants yet; incognito chats are kept in
+  the chat list (only memory and search skip them).

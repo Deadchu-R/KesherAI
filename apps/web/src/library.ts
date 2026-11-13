@@ -82,6 +82,8 @@ export async function createConversation(body: {
   personaId?: string;
   /** A code session in its own git worktree and branch. */
   worktree?: boolean;
+  /** No memory read or filed, left out of search. */
+  incognito?: boolean;
 }, opts: { open?: boolean } = {}): Promise<string> {
   let c: { id: string };
   try {

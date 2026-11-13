@@ -2,6 +2,7 @@
  * What the conversation manager, and the tools it gives chats, need from the rest of KesherAI. One named type,
  * so the tool builders that moved out of conversations.ts (t7) take the same services the manager has.
  */
+import type { MemoryStore } from "./memory-store.js";
 import type { Checkpoints } from "./checkpoints.js";
 import { type Personas } from "./personas.js";
 import type { ProjectFacts } from "./project-facts.js";
@@ -67,7 +68,9 @@ export interface ConversationDeps {
   /** Notes the coach learned about how the user works, added to every system prompt. */
   userNotes?(): Promise<string[]>;
   /** The remember / forget tools for the user's memory (none when memory is off). */
-  memoryTools?(): AgentTool[];
+  memoryTools?(convId?: string): AgentTool[];
+  /** The user's memory by topic: read into prompts, filled after turns. */
+  memory?: MemoryStore;
   /** Saved personas. */
   personas?: Personas;
   /** SKILL.md skills, listed in the prompt and loaded with use_skill. */

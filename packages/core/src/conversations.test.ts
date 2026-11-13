@@ -25,6 +25,10 @@ const scriptedFactory: ProviderFactory = {
     listModels: async () => [{ id: `${config.id}/m`, providerId: config.id, providerModelId: "m", name: "m", category: "chat", location: "local" }],
     chatWithTools: async (req, _signal, onText) => {
       const last = req.messages.at(-1) as AgentMessage;
+      // The memory filing pass after a turn.
+      if (last.role === "user" && last.content.startsWith("You keep a memory about the user")) {
+        return { text: /Acme/.test(last.content) ? '{"add":[{"topic":"Work","fact":"Works at Acme"}],"forget":[]}' : '{"add":[],"forget":[]}', toolCalls: [] };
+      }
       if (last.role === "user" && /file/.test(last.content) && req.tools.some((t) => t.name === "write_file")) {
         return { text: "", toolCalls: [{ id: "w1", name: "write_file", arguments: { path: "out.txt", content: "from the agent" } }] };
       }
@@ -519,6 +523,31 @@ test("a code session in its own worktree: setup runs first, variables reach comm
     const plain = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", workspace: await mkdtemp(join(tmpdir(), "kesher-nogit-")), modelId: "fake/m", worktree: true } }));
     assert.equal(plain.statusCode, 400);
     assert.match((plain.json() as { error: string }).error, /not a git project/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("memory is filed after a turn (not in an incognito chat), and read into the next chat's prompt", async () => {
+  const { server } = await setup();
+  try {
+    const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "fake/m" } })).json() as { id: string };
+    await server.app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "I work at Acme as a game developer" } });
+    const mem = await until(async () => {
+      const d = (await server.app.inject({ method: "GET", url: "/api/memory" })).json() as { topics: Array<{ title: string; facts: Array<{ text: string; source: string }> }> };
+      return d.topics.length ? d : undefined;
+    }, 6000);
+    assert.deepEqual(mem.topics.map((t) => [t.title, t.facts.map((f) => `${f.text}/${f.source}`)]), [["Work", ["Works at Acme/auto"]]]);
+    assert.match(await server.services.memory.promptFor(null), /Works at Acme/);
+    // Incognito: nothing filed, nothing read, and left out of search.
+    await server.app.inject({ method: "POST", url: "/api/memory/reset" });
+    const g = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "fake/m", incognito: true } })).json() as { id: string; incognito?: boolean };
+    assert.equal(g.incognito, true);
+    await server.app.inject({ method: "POST", url: `/api/conversations/${g.id}/messages`, payload: { text: "I work at Acme, the secret one" } });
+    await new Promise((r) => setTimeout(r, 2500));
+    assert.equal(((await server.app.inject({ method: "GET", url: "/api/memory" })).json() as { topics: unknown[] }).topics.length, 0);
+    const hits = (await server.app.inject({ method: "GET", url: "/api/conversations/search?q=secret" })).json() as Array<{ id: string }>;
+    assert.ok(!hits.some((h) => h.id === g.id));
   } finally {
     await server.close();
   }

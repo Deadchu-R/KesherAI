@@ -91,6 +91,8 @@ import { BrowserBridge, browserTools } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
 import { memoryTools } from "./memory-tools.js";
+import { MemoryStore } from "./memory-store.js";
+import { memoryRoutes } from "./routes/memory.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
@@ -254,6 +256,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
   const coach = new Coach(paths.root);
+  const memory = new MemoryStore(join(paths.root, "memory.json"));
   // Stops conversations through a late-bound reference: the manager is created below.
   let stopConversation: (id: string) => void = () => undefined;
   const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)));
@@ -733,9 +736,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         },
       },
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
-      memoryTools: () => (config.coach?.learn === false ? [] : memoryTools(coach)),
+      memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
+      memory,
     }),
     coach,
+    memory,
     computer,
     mcp,
     speeds,
@@ -1070,6 +1075,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await app.register(websocket);
   await terminalRoutes(app, services);
   await coachRoutes(app, services);
+  await memoryRoutes(app, services);
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
   await speechRoutes(app, services);

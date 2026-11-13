@@ -46,6 +46,8 @@ export interface Conversation {
   workspace?: string;
   /** A code session in its own git worktree: the user's checkout, the worktree folder (= workspace), its branch. */
   worktree?: { repo: string; path: string; branch: string; base: string };
+  /** Incognito: memory is neither read nor filled, and the chat is left out of search (like Claude's incognito chats). */
+  incognito?: boolean;
   /** Watching the session's pull request: fix failing checks and/or merge when all checks pass (like Claude Code). */
   prWatch?: { autoFix: boolean; autoMerge: boolean; fixedSha?: string };
   /** The folder the session was started in (its environment is that folder's; with a worktree, not the worktree). */

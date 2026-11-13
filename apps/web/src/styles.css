@@ -2082,3 +2082,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .pr-section input, .pr-section textarea { width: 100%; box-sizing: border-box; }
 .pr-actions { gap: 6px; flex-wrap: wrap; }
 .pr-watch label { gap: 6px; align-items: center; }
+/* Memory by topic. */
+.memory-page .memory-group { margin-top: 14px; gap: 8px; }
+.memory-topic h3 { margin: 0; font-size: 1em; }
+.memory-add { flex-wrap: wrap; gap: 6px; }
+.memory-add input:first-child { flex: 0 1 150px; min-width: 110px; }
+.memory-add .grow { flex: 1 1 220px; min-width: 0; }
+.memory-list li { gap: 8px; align-items: center; flex-wrap: wrap; }
+.incognito-note { text-align: center; margin: 6px 0; }

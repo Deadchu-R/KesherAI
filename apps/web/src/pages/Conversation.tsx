@@ -619,6 +619,7 @@ export function ConversationPage({ id }: { id: string }) {
         <ChatStatus status={info?.status} waiting={(info?.pendingApprovals.length ?? 0) > 0} />
         <div className="messages" role="log" aria-live="off" aria-busy={info?.status === "running"} aria-label={getLocale() === "he" ? "היסטוריית השיחה" : "Chat history"} tabIndex={0}>
           {conv.kind === "code" && <SessionEnvBar convId={id} />}
+          {conv.incognito && <p className="muted small incognito-note">👻 {getLocale() === "he" ? "צ'אט בלי זיכרון: לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש." : "Incognito: no memory read or filed, left out of search."}</p>}
           {events.length === 0 && (
             <p className="muted empty">{conv.kind === "code" ? t("emptyCode", { folder: info?.workspace ?? "" }) : t("emptyChat")}</p>
           )}

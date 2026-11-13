@@ -108,6 +108,9 @@ Each stage is usable on its own, works on the phone (390 px) and gets its own re
 - **CI on the Changes card**, **Fix failing checks** (the model reads the failed job's log), **Merge when ready**.
 
 ### Stage 6: Memory like Claude's
+- ✅ Built (after 0.6.138): memory by topic (memory.json), filed after a turn by the chat's model (only what the user
+  stated; a cheap check first so most turns cost nothing), project memory + 'also reads the general memory' switch,
+  pause / file-by-itself / reset, 👻 incognito chats (no memory, out of search), remember/forget by topic.
 - **Saved by itself**: after a turn ends, a short background pass with the chat model reads the exchange and files
   what is durable. One explicit statement by the user is enough; the model's own guesses are not filed.
 - **Topics, not one list**: a file per subject (profile, preferences, projects, people).

@@ -87,6 +87,8 @@ function Home() {
   const [personaId, setPersonaId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [web, setWeb] = useWebSearch();
+  // 👻 Incognito: this chat neither reads nor files memory, and stays out of search (like Claude's incognito chat).
+  const [incognito, setIncognito] = useState(false);
   useEffect(() => {
     void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setModelId((m) => m || s.activeModels.chat || "")).catch(() => undefined);
   }, []);
@@ -96,7 +98,7 @@ function Home() {
   const [draftId, setDraftId] = useState<string>();
   const ensure = async () => {
     if (draftId) return draftId;
-    const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) }, { open: false });
+    const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}), ...(incognito ? { incognito: true } : {}) }, { open: false });
     if (id) setDraftId(id);
     return id;
   };
@@ -110,7 +112,7 @@ function Home() {
     if (!value || busy) return;
     setBusy(true);
     try {
-      const id = draftId ?? (await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) }));
+      const id = draftId ?? (await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}), ...(incognito ? { incognito: true } : {}) }));
       if (!id) return;
       if (draftId) {
         // Made by an attachment: the model or persona may have changed since, and now the chat opens.
@@ -162,6 +164,11 @@ function Home() {
             onDictate={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))}
             persona={{ value: personaId, onChange: (p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); } }}
             model={{ models, value: modelId, onChange: setModelId }}
+            extra={
+              <button type="button" className={`model-chip${incognito ? " on" : ""}`} aria-pressed={incognito} disabled={!!draftId} onClick={() => setIncognito(!incognito)} title={getLocale() === "he" ? "צ'אט בלי זיכרון: לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש" : "Incognito: no memory read or filed, left out of search"}>
+                👻{incognito ? (getLocale() === "he" ? " בלי זיכרון" : " Incognito") : ""}
+              </button>
+            }
             canSend={!!text.trim() && !busy}
           />
         </div>
