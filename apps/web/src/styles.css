@@ -2090,3 +2090,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .memory-add .grow { flex: 1 1 220px; min-width: 0; }
 .memory-list li { gap: 8px; align-items: center; flex-wrap: wrap; }
 .incognito-note { text-align: center; margin: 6px 0; }
+/* "Review code": the model's comments under the lines they are about, and the list of them. */
+.diff .diff-mark { display: block; white-space: pre-wrap; font-family: inherit; color: var(--text); background: rgba(250, 204, 21, 0.12); border-inline-start: 3px solid #facc15; padding: 2px 8px; margin: 2px 0; }
+.review-box { gap: 6px; margin: 6px 0; }
+.review-item { gap: 8px; align-items: flex-start; flex-wrap: wrap; }

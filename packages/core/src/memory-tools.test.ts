@@ -46,6 +46,10 @@ test("filing helpers", () => {
   assert.ok(worthFiling("I work at 3DVision as an Unreal dev"));
   assert.ok(worthFiling("אני עובד ב-3DVision כמפתח"));
   assert.ok(!worthFiling("fix the build"));
+  assert.ok(!worthFiling("can you give me a script that renames my files?"), "a task, not about the user");
+  assert.ok(!worthFiling("תן לי סקריפט שמשנה שמות של קבצים"));
+  assert.ok(worthFiling("my name is Roee"));
+  assert.ok(worthFiling("תזכור שאני מעדיף תשובות קצרות"));
   assert.ok(refusal("my api key is abc"));
   assert.equal(refusal("Prefers dark mode"), undefined);
 });

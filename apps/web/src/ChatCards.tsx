@@ -24,17 +24,25 @@ type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
  *
  * @param props - `diff` is the text; `onLine` (optional) fires with the line's index and text when a line is clicked.
  */
-export function Diff({ diff, onLine }: { diff: string; onLine?: (i: number, line: string) => void }) {
+export function Diff({ diff, onLine, marks }: { diff: string; onLine?: (i: number, line: string) => void; marks?: Record<number, string[]> }) {
   return (
     <pre className={`code diff${onLine ? " clickable" : ""}`} dir="ltr">
       {diff.split("\n").map((l, i) => (
-        <span
-          key={i}
-          className={l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : l.startsWith("@@") ? "hunk" : ""}
-          onClick={onLine ? () => onLine(i, l) : undefined}
-        >
-          {l}
-          {"\n"}
+        <span key={i}>
+          <span
+            className={l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : l.startsWith("@@") ? "hunk" : ""}
+            onClick={onLine ? () => onLine(i, l) : undefined}
+          >
+            {l}
+            {"\n"}
+          </span>
+          {/* Review comments on this line ("Review code"). */}
+          {marks?.[i]?.map((m, j) => (
+            <span key={j} className="diff-mark" dir="auto">
+              {m}
+              {"\n"}
+            </span>
+          ))}
         </span>
       ))}
     </pre>

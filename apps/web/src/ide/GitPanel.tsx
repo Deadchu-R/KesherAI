@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { Diff } from "../ChatCards";
+import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -28,6 +29,8 @@ const STATE: Record<ChangedFile["state"], [string, string]> = { A: ["נוסף", 
  * @param props.refresh - Changes whenever the agent may have changed files.
  * @param props.onFixInChat - Puts text into the chat's message box.
  */
+interface Finding { file: string; line: number; severity: "bug" | "risk" | "nit"; note: string }
+
 export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; refresh: number; onFixInChat?: (text: string) => void }) {
   const base = `/api/conversations/${convId}/git`;
   const [st, setSt] = useState<GitState | null>(null);
@@ -44,6 +47,8 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
   const [picked, setPicked] = useState<{ path: string; idx: number; line: number; text: string } | null>(null);
   const [cNote, setCNote] = useState("");
   const [reload, setReload] = useState(0);
+  // "Review code": the model's comments on lines of the uncommitted changes (like Claude Code's desktop).
+  const [review, setReview] = useState<{ findings: Finding[]; running: boolean } | null>(null);
   const runTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -81,6 +86,43 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
   };
 
   /** Send a comment on the picked diff line to the chat, with the line quoted. */
+  const runReview = async () => {
+    setReview({ findings: review?.findings ?? [], running: true });
+    try {
+      const r = await api<{ findings: Finding[] }>(`${base}/review`, { method: "POST" });
+      setReview({ findings: r.findings, running: false });
+      // Open the first file with comments, so the notes show on its lines (one file is open at a time).
+      const first = st?.files.find((x) => x.path === r.findings[0]?.file);
+      if (first && openFile !== first.path) toggleFile(first);
+    } catch (e) {
+      setReview(null);
+      toast((e as Error).message);
+    }
+  };
+  const fixText = (list: Finding[]) =>
+    L("תתקן את ההערות האלה מסקירת הקוד (שורות בגרסה החדשה של הקבצים):\n", "Fix these comments from the code review (lines in the new version of the files):\n") +
+    list.map((f) => `- ${f.file}${f.line ? `:${f.line}` : ""} [${f.severity}] ${f.note}`).join("\n");
+  /** Where a new-file line number sits in a diff (the inverse of lineOf). */
+  const indexOfLine = (diff: string, line: number): number => {
+    const lines = diff.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i]!;
+      if ((l.startsWith("+") && !l.startsWith("+++")) || l.startsWith(" ")) if (lineOf(diff, i) === line) return i;
+    }
+    return -1;
+  };
+  const marksFor = (path: string): Record<number, string[]> | undefined => {
+    const d = diffs[path];
+    const list = review?.findings.filter((f) => f.file === path && f.line > 0) ?? [];
+    if (!d || !list.length) return undefined;
+    const out: Record<number, string[]> = {};
+    for (const f of list) {
+      const i = indexOfLine(d, f.line);
+      if (i >= 0) (out[i] ??= []).push(`${f.severity === "bug" ? "⛔" : f.severity === "risk" ? "⚠" : "·"} ${f.note}`);
+    }
+    return out;
+  };
+
   const comment = (path: string) => {
     if (!picked || !onFixInChat || !cNote.trim()) return;
     const q = picked.text.trim();
@@ -176,6 +218,11 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
         )}
         <span className="grow" />
         {st.behind > 0 && <button type="button" disabled={!!busy} onClick={() => void step("pull", () => api<GitResult>(`${base}/pull`, { method: "POST" }))}>{busy === "pull" ? "…" : L(`משיכה (${st.behind})`, `Pull (${st.behind})`)}</button>}
+        {st.files.length > 0 && (
+          <button type="button" disabled={!!busy || review?.running} onClick={() => void runReview()} title={L("המודל עובר על השינויים ומעיר על שורות: באגים וסיכונים", "The model reads the changes and comments on lines: bugs and risks")}>
+            {review?.running ? L("סוקר…", "Reviewing…") : L("סקירת קוד", "Review code")}
+          </button>
+        )}
         {st.files.length > 0 ? (
           <button type="button" className="primary" disabled={!!busy || writing} onClick={() => setWriting(true)}>Commit</button>
         ) : (
@@ -249,6 +296,23 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
         </div>
       )}
 
+      {review && !review.running && (
+        <div className="card stack review-box">
+          <div className="row">
+            <strong className="grow">{review.findings.length ? L(`סקירת קוד: ${review.findings.length} הערות`, `Code review: ${review.findings.length} comments`) : L("סקירת קוד: לא נמצאו בעיות.", "Code review: no problems found.")}</strong>
+            {review.findings.length > 0 && onFixInChat && <button type="button" className="primary" onClick={() => onFixInChat(fixText(review.findings))}>{L("תקן הכול", "Fix all")}</button>}
+            <button type="button" className="icon-btn" aria-label={L("סגור", "Close")} onClick={() => setReview(null)}>✕</button>
+          </div>
+          {review.findings.map((f, i) => (
+            <div key={i} className="row review-item">
+              <span className={`pill ${f.severity === "bug" ? "bad" : f.severity === "risk" ? "warn" : ""}`}>{f.severity === "bug" ? L("באג", "bug") : f.severity === "risk" ? L("סיכון", "risk") : L("קטן", "nit")}</span>
+              <bdi className="mono small" dir="ltr">{f.file}{f.line ? `:${f.line}` : ""}</bdi>
+              <span className="grow small" dir="auto">{f.note}</span>
+              {onFixInChat && <button type="button" onClick={() => onFixInChat(fixText([f]))}>{L("תקן", "Fix")}</button>}
+            </div>
+          ))}
+        </div>
+      )}
       {st.origin && <PrSection convId={convId} refresh={refresh} />}
       {st.files.length === 0 && !writing && <p className="muted small">{L("אין שינויים מאז ה־commit האחרון", "No changes since the last commit")}{st.head ? <>: <bdi className="mono">{st.head.sha}</bdi> <bdi>{st.head.subject}</bdi></> : null}</p>}
       <div className="list git-files">
@@ -262,7 +326,7 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
             {openFile === f.path && diffs[f.path] === undefined && <p className="muted small">…</p>}
             {openFile === f.path && diffs[f.path] !== undefined && (
               <>
-                <Diff diff={diffs[f.path]!} onLine={(idx, line) => setPicked({ path: f.path, idx, line: line.startsWith("-") && !line.startsWith("---") ? 0 : lineOf(diffs[f.path]!, idx), text: line })} />
+                <Diff diff={diffs[f.path]!} marks={marksFor(f.path)} onLine={(idx, line) => setPicked({ path: f.path, idx, line: line.startsWith("-") && !line.startsWith("---") ? 0 : lineOf(diffs[f.path]!, idx), text: line })} />
                 {picked?.path === f.path && (
                   <div className="diff-comment">
                     <p className="muted small mono" dir="ltr">{picked.line ? `L${picked.line}` : "del"} · {picked.text.trim() || "(empty line)"}</p>
