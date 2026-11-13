@@ -78,6 +78,8 @@ export interface ConversationDeps {
   projectFacts?: ProjectFacts;
   /** Every event of every open conversation (for notifications). */
   onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
+  /** Whether KesherAI's own browser pane (the desktop app) is there. */
+  browserPane?(): boolean;
   /** Saves the settings (after "Always allow on this site" adds a site). */
   saveConfig?(): Promise<void> | void;
 }
