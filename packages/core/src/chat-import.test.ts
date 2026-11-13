@@ -104,5 +104,6 @@ test("reads Gemini activity from Takeout's HTML file", () => {
   const { source, chats } = readExport(items);
   assert.equal(source, "gemini");
   assert.equal(chats.length, 1);
+  assert.equal(readExport(items, "gap").chats.length, 1);
   assert.deepEqual(chats[0]!.messages.map((m) => [m.role, m.text]), [["user", "first question"], ["assistant", "A\n• x"], ["user", "second question"], ["assistant", "B & C"]]);
 });

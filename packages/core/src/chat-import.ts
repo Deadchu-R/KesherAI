@@ -173,7 +173,14 @@ export function geminiHtmlToActivity(html: string): Array<{ header: string; titl
   return out;
 }
 
-function fromGemini(data: unknown[]): ImportedChat[] {
+/**
+ * How Gemini's activity becomes chats. Google's export has no chat ids, only prompts with times, so the chats
+ * are a guess: `day` puts each day in one chat, `gap` starts a new chat after 30 quiet minutes (many small
+ * chats), `one` puts everything in a single chat.
+ */
+export type GeminiSplit = "day" | "gap" | "one";
+
+function fromGemini(data: unknown[], split: GeminiSplit = "day"): ImportedChat[] {
   const entries = data
     .filter((d): d is Json => isObj(d) && /gemini|bard/i.test(str(d.header)) && /^Prompted /.test(str(d.title)))
     .map((d) => ({
@@ -188,8 +195,10 @@ function fromGemini(data: unknown[]): ImportedChat[] {
   let last = 0;
   for (const e of entries) {
     const t = Date.parse(e.at);
-    if (!current || t - last > 30 * 60_000) {
-      current = { source: "gemini", originalId: e.at, title: e.prompt.slice(0, 60), createdAt: e.at, messages: [] };
+    const newChat = split === "one" ? false : split === "gap" ? t - last > 30 * 60_000 : new Date(t).toDateString() !== new Date(last).toDateString();
+    if (!current || newChat) {
+      // The id says how it was split, so importing again with another split adds its own chats.
+      current = { source: "gemini", originalId: split === "gap" ? e.at : `${split}:${e.at}`, title: split === "gap" ? e.prompt.slice(0, 60) : `${e.at.slice(0, 10)} · ${e.prompt.slice(0, 46)}`, createdAt: e.at, messages: [] };
       out.push(current);
     }
     last = t;
@@ -206,11 +215,11 @@ function fromGemini(data: unknown[]): ImportedChat[] {
  * @returns The source and its chats.
  * @throws Error when the file is not an export KesherAI knows.
  */
-export function readExport(data: unknown): { source: ImportSource; chats: ImportedChat[] } {
+export function readExport(data: unknown, geminiSplit: GeminiSplit = "day"): { source: ImportSource; chats: ImportedChat[] } {
   const source = detectSource(data);
   if (!source) throw new Error("This is not a chat export KesherAI knows. Use conversations.json from ChatGPT or Claude, the chats export of Open WebUI, or MyActivity.json (JSON format) from Google Takeout for Gemini.");
   const list = data as unknown[];
-  const chats = source === "chatgpt" ? fromChatGpt(list) : source === "claude" ? fromClaude(list) : source === "openwebui" ? fromOpenWebUi(list) : fromGemini(list);
+  const chats = source === "chatgpt" ? fromChatGpt(list) : source === "claude" ? fromClaude(list) : source === "openwebui" ? fromOpenWebUi(list) : fromGemini(list, geminiSplit);
   return { source, chats };
 }
 

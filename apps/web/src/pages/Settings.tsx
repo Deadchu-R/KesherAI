@@ -6,6 +6,7 @@
 import { ActiveModels } from "../settings/ActiveModels";
 import { GoogleDriveSection } from "../settings/GoogleDriveSection";
 import { ImportChats } from "../ImportChats";
+import { ImportPeopleChats } from "../ImportPeopleChats";
 import { OneDriveSection } from "../settings/OneDriveSection";
 import { Sync } from "../settings/Sync";
 import { ComputersSection } from "../ComputersSection";
@@ -46,7 +47,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; w
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", words: "parallel chats at once slots context במקביל צאטים שיחות הקשר gpu graphics card vram temperature unload idle minutes ram cpu limit guard performance כרטיס מסך טמפרטורה פריקה לפרוק דקות זיכרון מעבד הגבלה ביצועים עומס", render: () => <><GpuSection /><ChatsAtOnce card /><GuardSection /></> },
   { id: "privacy", icon: "🛡", en: "Privacy and permissions", he: "פרטיות והרשאות", words: "permissions always allow approve rules computer control screen mouse access log privacy הרשאות תמיד לאשר כללים שליטה במחשב מסך עכבר יומן גישה פרטיות", render: () => <><PermissionsSection /><ComputerSection /></> },
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", words: "phone remote anywhere tunnel qr pair device keys tailscale telegram computers start with computer access log טלפון מרחוק מכל מקום מנהרה קוד סריקה מכשירים מפתחות טלגרם מחשבים הפעלה עם המחשב יומן גישה", render: () => <><PhoneSection /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },
-  { id: "accounts", icon: "☁", en: "Accounts, backup and data", he: "חשבונות, גיבוי ונתונים", words: "google drive onedrive sync backup import chats chatgpt claude reset delete data גוגל דרייב סנכרון גיבוי ייבוא שיחות איפוס מחיקה נתונים", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /><ImportChats /><ResetSection /></> },
+  { id: "accounts", icon: "☁", en: "Accounts, backup and data", he: "חשבונות, גיבוי ונתונים", words: "google drive onedrive sync backup import chats chatgpt claude whatsapp instagram ווטסאפ וואטסאפ אינסטגרם reset delete data גוגל דרייב סנכרון גיבוי ייבוא שיחות איפוס מחיקה נתונים", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /><ImportChats /><ImportPeopleChats /><ResetSection /></> },
   { id: "business", icon: "🏢", en: "Organisation", he: "ארגון", words: "business organisation copilot team policy ארגון עסקי צוות מדיניות", render: () => <><CopilotSection /><BusinessSection /></> },
   { id: "developers", icon: "🔧", en: "For developers", he: "למפתחים", words: "developer mcp server api keys browser extension phone targets מפתחים שרת מפתחות api תוסף דפדפן", render: () => <><McpServerSection /><PhoneTargetsSection /><BrowserSection /><ApiKeysSection />{isRemote() && <section className="card"><p className="muted small">{getLocale() === "he" ? "מפתחות גישה לאפליקציות ומפתח התוסף לדפדפן מוצגים רק במחשב עצמו: הם סודות שפותחים את KesherAI." : "App access keys and the browser extension's key are shown only on the computer itself: they are secrets that open KesherAI."}</p></section>}</> },
 ];

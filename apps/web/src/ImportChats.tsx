@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { unzip } from "fflate";
 import { api, isRemote } from "./api";
 import { getLocale } from "./i18n";
+import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const NAMES = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", jan: "Jan" } as const;
@@ -92,6 +93,25 @@ export function ImportChats() {
     }
   };
 
+  // Gemini's export has no chat ids: how its prompts are grouped into chats is the user's choice.
+  const [split, setSplit] = useState<"day" | "gap" | "one">("day");
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const loadCounts = () => void api<{ counts: Record<string, number> }>("/api/import/chats/counts").then((r) => setCounts(r.counts), () => undefined);
+  useEffect(loadCounts, []);
+  const removeImported = async (source: keyof typeof NAMES) => {
+    if (!confirm(L(`למחוק את כל ${counts[source]} הצ'אטים שיובאו מ-${NAMES[source]}? אי אפשר לבטל את זה. הקובץ המקורי שלכם לא נמחק.`, `Delete all ${counts[source]} chats imported from ${NAMES[source]}? This cannot be undone. Your original file is not deleted.`))) return;
+    setBusy(true);
+    try {
+      const r = await api<{ removed: number }>(`/api/import/chats?source=${source}`, { method: "DELETE" });
+      setResult({ ok: true, text: L(`נמחקו ${r.removed} צ'אטים שיובאו מ-${NAMES[source]}.`, `Deleted ${r.removed} chats imported from ${NAMES[source]}.`) });
+      loadCounts();
+    } catch (e) {
+      setResult({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const pick = async (file: File) => {
     setBusy(true);
     setResult(null);
@@ -107,7 +127,7 @@ export function ImportChats() {
           throw new Error(L("הקובץ אינו קובץ ייצוא מוכר (JSON או MyActivity.html של Google).", "The file is not a known export (JSON, or Google's MyActivity.html)."));
         }
       }
-      const r = await api<{ source: keyof typeof NAMES; found: number; added: number; skipped: number }>("/api/import/chats", { method: "POST", body: isHtml ? { html: text } : { data } });
+      const r = await api<{ source: keyof typeof NAMES; found: number; added: number; skipped: number }>("/api/import/chats", { method: "POST", body: { ...(isHtml ? { html: text } : { data }), geminiSplit: split } });
       const from = NAMES[r.source];
       setResult({
         ok: true,
@@ -121,6 +141,7 @@ export function ImportChats() {
     } finally {
       setBusy(false);
       if (input.current) input.current.value = "";
+      loadCounts();
     }
   };
 
@@ -134,11 +155,27 @@ export function ImportChats() {
         <li><strong>Open WebUI</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא צ'אטים (קובץ json).", "Settings → Data Controls → Export Chats (a json file).")}</li>
         <li><strong>Gemini</strong>: {L("ב-takeout.google.com בחר רק ב-My Activity, ובתוכו Gemini Apps. אפשר להעלות את קובץ ה-zip שמתקבל, או את MyActivity.html (ברירת המחדל של Google) או MyActivity.json מתוכו.", "At takeout.google.com choose only My Activity, with Gemini Apps inside it. Upload the zip you get, or the MyActivity.html (Google's default) or MyActivity.json inside it.")}</li>
       </ul>
+      <label className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <span>{L("Gemini: איך לחלק לשיחות", "Gemini: how to group into chats")}</span>
+        <Select value={split} onChange={(e) => setSplit(e.target.value as typeof split)}>
+          <option value="day">{L("שיחה לכל יום", "One chat per day")}</option>
+          <option value="one">{L("הכול בשיחה אחת", "Everything in one chat")}</option>
+          <option value="gap">{L("שיחה חדשה אחרי חצי שעה של שקט (הרבה שיחות קטנות)", "A new chat after 30 quiet minutes (many small chats)")}</option>
+        </Select>
+      </label>
+      <p className="muted small">{L("בייצוא של Google אין סימון של שיחות, רק שאלות עם זמנים, ולכן החלוקה היא ניחוש.", "Google's export has no chat ids, only prompts with times, so the grouping is a guess.")}</p>
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => input.current?.click()}>{busy ? L("מייבא…", "Importing…") : L("בחר קובץ zip או json", "Choose the zip or json file")}</button>
         {jan > 0 && <button type="button" disabled={busy} onClick={() => void fromJan()}>{L(`ייבוא ${jan} צ'אטים מ-Jan במחשב הזה`, `Import ${jan} chats from Jan on this computer`)}</button>}
         <input ref={input} type="file" accept=".zip,.json,.html,.htm,application/zip,application/json,text/html" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
       </div>
+      {(Object.keys(counts) as Array<keyof typeof NAMES>).filter((k) => counts[k]! > 0 && k in NAMES && !isRemote()).length > 0 && (
+        <div className="row wrap">
+          {(Object.keys(counts) as Array<keyof typeof NAMES>).filter((k) => counts[k]! > 0 && k in NAMES).map((k) => (
+            <button key={k} type="button" className="danger small" disabled={busy} onClick={() => void removeImported(k)}>{L(`מחק ${counts[k]} צ'אטים שיובאו מ-${NAMES[k]}`, `Delete ${counts[k]} chats imported from ${NAMES[k]}`)}</button>
+          ))}
+        </div>
+      )}
       {result && <p className={result.ok ? "pill good" : "error"} role="status">{result.text}</p>}
       <ClaudeCodeSessions />
     </section>

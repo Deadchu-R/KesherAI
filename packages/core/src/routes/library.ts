@@ -9,6 +9,7 @@ import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
 import { geminiHtmlToActivity, readExport, readJanThreads } from "../chat-import.js";
+import { chatSlug, parseInstagram, parseWhatsApp, writePeopleChat } from "../people-chats.js";
 import { findClaudeSessions, readClaudeSession } from "../claude-code-import.js";
 import { homedir } from "node:os";
 import { join as joinPath } from "node:path";
@@ -84,16 +85,61 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
    * the parsed `conversations.json` or `MyActivity.json` (the page takes it
    * out of the export's zip), and optionally `projectId`.
    */
-  app.post<{ Body: { data?: unknown; html?: string; projectId?: string | null } }>("/api/import/chats", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
+  app.post<{ Body: { data?: unknown; html?: string; projectId?: string | null; geminiSplit?: string } }>("/api/import/chats", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
     try {
       // Google Takeout's default format is HTML (MyActivity.html): read it into the same list the JSON holds.
       const html = typeof req.body?.html === "string" ? geminiHtmlToActivity(req.body.html) : undefined;
       if (html && !html.length) return reply.code(400).send({ error: "This HTML file has no Gemini activity in it. Use MyActivity.html from Google Takeout (My Activity → Gemini Apps)." });
-      const { source, chats } = readExport(html ?? req.body?.data);
+      const split = req.body?.geminiSplit === "gap" || req.body?.geminiSplit === "one" ? req.body.geminiSplit : "day";
+      const { source, chats } = readExport(html ?? req.body?.data, split);
       if (!chats.length) return reply.code(400).send({ error: "The export has no chats with text in them." });
       const projectId = req.body?.projectId ?? null;
       if (projectId && !s.library.getProject(projectId)) return reply.code(400).send({ error: "That project does not exist." });
       return { source, found: chats.length, ...(await s.conversations.importChats(chats, projectId)) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /** Removes every chat that was imported from one assistant (to import it again another way). The user confirms in the app. */
+  app.delete<{ Querystring: { source?: string } }>("/api/import/chats", async (req, reply) => {
+    const source = String(req.query.source ?? "");
+    if (!["chatgpt", "claude", "gemini", "openwebui", "jan"].includes(source)) return reply.code(400).send({ error: "Which import?" });
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
+    const ids = s.library.listConversations().filter((c) => c.importedFrom === source).map((c) => c.id);
+    for (const id of ids) await s.conversations.delete(id).catch(() => undefined);
+    return { removed: ids.length };
+  });
+  app.get("/api/import/chats/counts", async () => {
+    const counts: Record<string, number> = {};
+    for (const c of s.library.listConversations()) if (c.importedFrom) counts[c.importedFrom] = (counts[c.importedFrom] ?? 0) + 1;
+    return { counts };
+  });
+
+  /**
+   * A chat with people (WhatsApp's "Export chat" text, or Instagram's message_N.json files of one thread):
+   * written as text in KesherAI's data folder and added as a knowledge base the models search. It stays on this
+   * computer. Importing the same chat again replaces it.
+   */
+  app.post<{ Body: { source?: string; title?: string; text?: string; parts?: unknown[] } }>("/api/import/people-chat", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+    try {
+      const b = req.body ?? {};
+      const title = String(b.title ?? "").trim().slice(0, 60);
+      const chat = b.source === "instagram" ? parseInstagram(Array.isArray(b.parts) ? b.parts.slice(0, 200) : []) : parseWhatsApp(String(b.text ?? ""), title || "WhatsApp");
+      if (title) chat.title = title;
+      if (chat.messages.length < 2) return reply.code(400).send({ error: "No messages were found in this file. For WhatsApp use the .txt from \"Export chat\"; for Instagram use message_1.json from messages/inbox/<the chat> (JSON format)." });
+      const dir = joinPath(s.paths.root, "people-chats", chatSlug(chat.source, chat.title));
+      const stats = await writePeopleChat(dir, chat);
+      const app = chat.source === "whatsapp" ? "WhatsApp" : "Instagram";
+      const old = (await s.knowledge.list()).find((k) => k.folders.length === 1 && k.folders[0] === dir);
+      const base = await s.knowledge.save({
+        ...(old ? { id: old.id } : {}),
+        name: `${app}: ${chat.title}`,
+        description: `A chat between people from ${app}: ${stats.messages} messages, ${stats.from} to ${stats.to}. ${stats.people.slice(0, 6).map((x) => x.name).join(", ")}. Start with summary.md; the messages are in one file per month.`,
+        folders: [dir],
+        urls: [],
+      });
+      return { baseId: base.id, name: base.name, source: chat.source, ...stats, replaced: !!old };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
