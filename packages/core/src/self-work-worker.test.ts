@@ -23,7 +23,7 @@ test("the main app passes self-work to the worker; both share one task board; th
     const viaMain = (await main.app.inject({ method: "GET", url: "/api/self-work" })).json() as { run: unknown; worker?: boolean };
     assert.deepEqual(viaMain, { run: null, worker: true });
     const log = (await main.app.inject({ method: "GET", url: "/api/self-work/log" })).json() as { lines: string[]; waiting: unknown[] };
-    assert.deepEqual(log, { lines: [], waiting: [] });
+    assert.deepEqual(log, { lines: [], waiting: [], steps: [] });
     // A start the main app refuses never reaches the worker; one that passes gets the worker's own answer.
     assert.equal((await main.app.inject({ method: "POST", url: "/api/self-work/start", payload: { repo: "/etc", goal: "x" } })).statusCode, 400);
     const plain = await mkdtemp(join(homedir(), "kesher-not-git-"));
