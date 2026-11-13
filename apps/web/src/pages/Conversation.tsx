@@ -103,6 +103,25 @@ export function ConversationPage({ id }: { id: string }) {
   // A live stream that went quiet (a phone's network, the tunnel) is opened again with the chat as it is now:
   // found on the phone, the page kept "Working…" and the stop button after the run had stopped.
   const [resync, setResync] = useState(0);
+  // "Try again": a run that has said nothing for two minutes (no text, no tool output) is shown as stuck.
+  const lastWork = useRef(Date.now());
+  const [stalled, setStalled] = useState(false);
+  const runStatus = info?.status;
+  useEffect(() => {
+    lastWork.current = Date.now();
+    setStalled(false);
+    if (runStatus !== "running") return;
+    const tm = setInterval(() => setStalled(Date.now() - lastWork.current > 120_000), 5000);
+    return () => clearInterval(tm);
+  }, [runStatus, id]);
+  const retry = () => {
+    setStalled(false);
+    setError("");
+    lastWork.current = Date.now();
+    void api(`/api/conversations/${id}/retry`, { method: "POST" })
+      .then(() => setTimeout(() => setResync((n) => n + 1), 1500))
+      .catch((err: Error) => setError(err.message));
+  };
   const shownId = useRef("");
   useEffect(() => {
     let es: EventSource | undefined;
@@ -131,6 +150,7 @@ export function ConversationPage({ id }: { id: string }) {
           heard = Date.now();
           const e = JSON.parse(m.data as string) as AgentEvent | ({ type: "info" } & AgentSessionInfo) | { type: "ping" };
           if (e.type === "ping") return;
+          lastWork.current = Date.now();
           if (e.type === "info") {
             const { type: _t, ...rest } = e;
             setInfo(rest);
@@ -740,7 +760,13 @@ export function ConversationPage({ id }: { id: string }) {
               case "undo":
                 return <p key={e.seq} className="muted note">{t("undone", { path: e.path })}</p>;
               case "status":
-                return e.status === "error" ? <p key={e.seq} className="error">{e.message}</p> : null;
+                if (e.status !== "error") return null;
+                return (
+                  <p key={e.seq} className="error row">
+                    <span className="grow">{e.message}</span>
+                    {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={retry}>{L("↻ נסה שוב", "↻ Try again")}</button>}
+                  </p>
+                );
               default:
                 return null;
             }
@@ -750,6 +776,13 @@ export function ConversationPage({ id }: { id: string }) {
           ))}
           {busy && (
             <p className="muted status-line">{info?.status === "waiting" ? t("waitingForYou") : t("working")}</p>
+          )}
+          {busy && stalled && (
+            <div className="card row resume-card" role="status">
+              <span className="grow small">{L("נראה שהצ'אט נתקע — לא הגיע ממנו כלום כבר שתי דקות.", "This chat looks stuck: nothing has come from it for two minutes.")}</span>
+              <button type="button" className="primary" onClick={retry}>{L("נסה שוב", "Try again")}</button>
+              <button type="button" onClick={() => { lastWork.current = Date.now(); setStalled(false); }}>{L("לחכות עוד", "Keep waiting")}</button>
+            </div>
           )}
           {conv.interruptedAt && !busy && (
             <div className="card row resume-card" role="status">

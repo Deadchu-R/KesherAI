@@ -1542,6 +1542,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .add-sub-link { padding: 6px 8px; color: inherit; }
 .resume-card { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; border-color: var(--accent, #9aa4ff); margin: 8px 0; }
 .resume-card .grow { min-width: 0; flex-basis: 220px; }
+.error.row { gap: 8px; align-items: center; flex-wrap: wrap; }
+.retry-btn { flex: none; font-size: 0.85em; padding: 3px 10px; }
 .ue-bubble-link { gap: 6px; align-items: center; padding: 0 10px 6px; }
 .ue-bubble-link select { flex: 1; min-width: 0; font-size: 0.85em; }
 .ue-test-pic { display: block; width: 100%; max-width: 360px; border-radius: 8px; margin-top: 6px; }

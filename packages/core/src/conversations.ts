@@ -986,6 +986,24 @@ export class ConversationManager {
   }
 
   /**
+   * "Try again" for a stuck or failed answer: stops whatever is running, waits
+   * for it to settle, then writes the last answer again.
+   *
+   * @param id - Conversation.
+   */
+  async retry(id: string): Promise<void> {
+    const opened = await this.open(id);
+    if (!opened) throw new Error("Conversation not found");
+    if (opened.session.busy) {
+      this.stop(id);
+      const until = Date.now() + 15_000;
+      while (opened.session.busy && Date.now() < until) await new Promise((r) => setTimeout(r, 200));
+      if (opened.session.busy) throw new Error("The chat did not stop. Try again in a moment.");
+    }
+    await this.regenerate(id);
+  }
+
+  /**
    * Stops a conversation's work (like pressing Stop in it).
    *
    * @param id - Conversation.

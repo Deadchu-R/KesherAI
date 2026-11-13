@@ -165,6 +165,27 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     if (path) loadBp(path);
     setChat([]);
   }, [path]);
+  // Live sync: a change made in the editor itself (a node added in Unreal or Unity) shows here too.
+  // Quiet reads every 10 seconds while connected; skipped right after a click or drag here, so nothing jumps under the mouse.
+  const touched = useRef(0);
+  useEffect(() => {
+    if (!connected || !path) return;
+    const mark = () => { touched.current = Date.now(); };
+    addEventListener("pointerdown", mark, true);
+    addEventListener("keydown", mark, true);
+    const tm = setInterval(() => {
+      if (document.hidden || Date.now() - touched.current < 8000) return;
+      void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(path)}`).then(
+        (r) => setBp((was) => (was && was.graph.path === r.graph.path && JSON.stringify(was) !== JSON.stringify(r) ? r : was)),
+        () => undefined,
+      );
+    }, 10_000);
+    return () => {
+      clearInterval(tm);
+      removeEventListener("pointerdown", mark, true);
+      removeEventListener("keydown", mark, true);
+    };
+  }, [connected, path]);
 
   if (!st) return <div className="page"><p className="muted">{L("בודק…", "Checking…")}</p></div>;
 

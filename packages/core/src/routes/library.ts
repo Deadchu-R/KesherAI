@@ -525,6 +525,16 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
+  /** "Try again" on a stuck or failed answer: stop, then answer the last message again. */
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/retry", async (req, reply) => {
+    try {
+      await s.conversations.retry(req.params.id);
+      return { ok: true };
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/conversations/:id/stop", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
