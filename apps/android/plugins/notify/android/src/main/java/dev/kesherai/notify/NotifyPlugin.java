@@ -170,7 +170,8 @@ public class NotifyPlugin extends Plugin {
         Intent live = new Intent(c, LiveService.class);
         if (Prefs.live(c)) {
             try {
-                ContextCompat.startForegroundService(c, live);
+                // Already running: starting it again would post the fixed notification again.
+                if (!LiveService.alive) ContextCompat.startForegroundService(c, live);
             } catch (Exception e) {
                 call.reject("Android did not let the live connection start: " + e.getMessage());
                 return;
@@ -231,7 +232,7 @@ public class NotifyPlugin extends Plugin {
         Prefs.of(c).edit().putBoolean("live", live).putBoolean("chosen", true).apply();
         Intent service = new Intent(c, LiveService.class);
         try {
-            if (live && !Prefs.base(c).isEmpty() && !Prefs.key(c).isEmpty()) ContextCompat.startForegroundService(c, service);
+            if (live && !Prefs.base(c).isEmpty() && !Prefs.key(c).isEmpty()) { if (!LiveService.alive) ContextCompat.startForegroundService(c, service); }
             else if (!live) c.stopService(service);
         } catch (Exception e) {
             call.reject("Android did not let the live connection start: " + e.getMessage());
@@ -261,6 +262,21 @@ public class NotifyPlugin extends Plugin {
         JSObject o = new JSObject();
         if (path != null) o.put("path", path);
         call.resolve(o);
+    }
+
+    /** Opens Android's settings for the fixed "connection" notification, where it can be turned off (the connection stays). */
+    @PluginMethod
+    public void hideFixed(PluginCall call) {
+        Intent i = new Intent("android.settings.CHANNEL_NOTIFICATION_SETTINGS")
+            .putExtra("android.provider.extra.APP_PACKAGE", getContext().getPackageName())
+            .putExtra("android.provider.extra.CHANNEL_ID", Notes.CONNECTION)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(String.valueOf(e.getMessage()));
+        }
     }
 
     /** Opens Android's notification settings for KesherAI (each kind can be muted there). */

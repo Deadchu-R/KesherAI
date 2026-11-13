@@ -113,6 +113,7 @@
     <p id="notifyState" class="small"></p>
     <label class="notify-row"><input id="notifyLive" type="checkbox" /> <span data-he="קבל התראות מהמחשב" data-en="Get notifications from the computer">קבל התראות מהמחשב</span></label>
     <button id="notifyAllow" type="button" hidden data-he="אשר התראות" data-en="Allow notifications">אשר התראות</button>
+    <button id="notifyHide" type="button" data-he="הסתר את ההתראה הקבועה &quot;מחובר&quot;" data-en="Hide the fixed &quot;connected&quot; notification">הסתר את ההתראה הקבועה</button>
     <button id="notifyAndroid" type="button" data-he="הגדרות ההתראות באנדרואיד" data-en="Android notification settings">הגדרות ההתראות באנדרואיד</button>
   </section>
   <button id="checkUpdate" type="button" data-he="בדוק עדכונים לאפליקציה" data-en="Check for app updates">בדוק עדכונים לאפליקציה</button>
@@ -621,6 +622,7 @@
       if (st && !st.permission) Notify.openSettings();
     };
     $("notifyAndroid").onclick = () => Notify.openSettings();
+    if (Notify.hideFixed) $("notifyHide").onclick = () => Notify.hideFixed(); else $("notifyHide").hidden = true;
     document.addEventListener("visibilitychange", () => document.hidden || Notify.status().then(showNotify, () => {}));
   }
   // A notification tapped while the app shows this screen: connect to the computer, whose page then opens the

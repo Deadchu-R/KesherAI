@@ -28,6 +28,8 @@ public class LiveService extends Service {
     static final int ID = 7422;
     /** Whether the stream is open now (for the app's settings). */
     static volatile boolean connected;
+    /** The service runs (the app does not start it again: each start posts the fixed notification again). */
+    static volatile boolean alive;
     /** The address the stream is open on now (home or internet link), for acks and buttons. */
     static volatile String working = "";
     private int attempt;
@@ -38,24 +40,31 @@ public class LiveService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Notes.channels(this);
-        Notification n = note(false);
+        Notification n = note();
         if (Build.VERSION.SDK_INT >= 34) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING);
         else startForeground(ID, n);
         if (thread == null) {
             running = true;
+            alive = true;
             thread = new Thread(this::loop, "kesher-live");
             thread.start();
         }
         return START_STICKY;
     }
 
-    private Notification note(boolean on) {
+    /**
+     * The fixed notification Android requires for a connection that stays open. One quiet text that never
+     * changes, so it is posted once: swiped away, it stays away (it used to come back on every reconnect).
+     * It can be hidden for good in Android's settings for this kind ("Connection to the computer").
+     */
+    private Notification note() {
         boolean he = "iw".equals(java.util.Locale.getDefault().getLanguage()) || "he".equals(java.util.Locale.getDefault().getLanguage());
         return new NotificationCompat.Builder(this, Notes.CONNECTION)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-            .setContentTitle(on ? (he ? "מחובר למחשב" : "Connected to your computer") : (he ? "מחפש את המחשב" : "Looking for your computer"))
-            .setContentText(on ? (he ? "התראות מגיעות ישירות" : "Notifications arrive directly") : (he ? "בינתיים התראות מגיעות דרך ntfy, אם הוא מותקן" : "Meanwhile notifications come through ntfy, if installed"))
-            .setOngoing(true)
+            .setContentTitle(he ? "התראות KesherAI פעילות" : "KesherAI notifications are on")
+            .setContentText(he ? "אפשר להסתיר: לחיצה ארוכה ← כיבוי" : "You can hide this: long press → turn off")
+            .setOngoing(false)
+            .setSilent(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setContentIntent(Notes.open(this, "#/settings/notifications", ID))
@@ -63,13 +72,7 @@ public class LiveService extends Service {
     }
 
     private void show(boolean on) {
-        if (connected == on) return;
         connected = on;
-        try {
-            NotificationManagerCompat.from(this).notify(ID, note(on));
-        } catch (SecurityException e) {
-            // no permission: the service still runs
-        }
     }
 
     private void loop() {
@@ -131,6 +134,7 @@ public class LiveService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        alive = false;
         connected = false;
         HttpURLConnection h = current;
         if (h != null) new Thread(h::disconnect).start();

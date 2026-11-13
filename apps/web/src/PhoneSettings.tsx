@@ -93,6 +93,8 @@ function PhoneNotifications({ inApp }: { inApp: boolean }) {
       </label>
       {s && !s.permission && <button type="button" className="primary" disabled={busy} onClick={() => void set(true)}>{L("אשר התראות", "Allow notifications")}</button>}
       <button type="button" onClick={() => void plugin.openSettings()}>🔔 {L("הגדרות ההתראות באנדרואיד (סוגים, צליל)", "Android notification settings (kinds, sound)")}</button>
+      {plugin.hideFixed && s?.live && <button type="button" onClick={() => void plugin.hideFixed!().catch((e: Error) => setError(e.message))}>🙈 {L("הסתר את ההתראה הקבועה \"מחובר\"", "Hide the fixed \"connected\" notification")}</button>}
+      {plugin.hideFixed && s?.live && <p className="muted small" dir="auto">{L("נפתח מסך של אנדרואיד: כבו שם את המתג. ההתראות עצמן ממשיכות להגיע.", "An Android screen opens: turn the switch off there. The notifications themselves keep arriving.")}</p>}
       {!deviceKey() && <p className="muted small" dir="auto">{L("לטלפון הזה אין מפתח משלו, ולכן החיבור הישיר למחשב לא יעבוד עד שתחברו אותו שוב (במחשב: הגדרות ← טלפון).", "This phone has no key of its own, so the direct connection will not work until you pair it again (on the computer: Settings → Phone).")}</p>}
       {error && <p className="error" dir="auto">{error}</p>}
     </>

@@ -27,6 +27,8 @@ interface Plugin {
   openSettings(): Promise<void>;
   /** Android's permission question (newer apps). */
   askPermission?(): Promise<PhoneNotifyState>;
+  /** Android's settings for the fixed connection notification, to turn it off (newer apps). */
+  hideFixed?(): Promise<void>;
   /** The app's own switch, without the computer (newer apps). */
   setLive?(o: { live: boolean }): Promise<PhoneNotifyState>;
   addListener(event: "open", cb: (e: { path: string }) => void): unknown;
