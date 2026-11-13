@@ -34,8 +34,10 @@ import type { UnrealBridge } from "./unreal-bridge.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 import { modelTurnFor } from "./model-turn.js";
+import { ruleAllows } from "./approval-rules.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
+export { ruleAllows } from "./approval-rules.js";
 
 /** Options for {@link ConversationManager.create}. */
 export interface NewConversation {
@@ -56,25 +58,6 @@ export interface NewConversation {
  * others are listed by name and loaded with find_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
-/**
- * Whether a saved "always allow" rule covers this call: the tool, the scope
- * (this chat, this model, everywhere), not past its end time, and, for a rule
- * kept for one command, a command that starts with it as a whole word and
- * chains nothing else after it (no ;, &&, |, backticks or $( ) ).
- */
-export function ruleAllows(r: { tool: string; scope: string; conversationId?: string; modelId?: string; until?: string; command?: string }, c: { tool: string; modelId: string; conversationId: string; command?: string }, now = Date.now()): boolean {
-  if (r.tool !== c.tool && r.tool !== "*") return false;
-  if (!(r.scope === "everywhere" || (r.scope === "model" && r.modelId === c.modelId) || (r.scope === "conversation" && r.conversationId === c.conversationId))) return false;
-  if (r.until && Date.parse(r.until) <= now) return false;
-  if (r.command) {
-    const cmd = (c.command ?? "").trim().replace(/\s+/g, " ");
-    const want = r.command.trim().replace(/\s+/g, " ");
-    if (!(cmd === want || cmd.startsWith(`${want} `))) return false;
-    if (/[;&|`\n]|\$\(|>\s*[^&\s]|<\(/.test(cmd.slice(want.length))) return false;
-  }
-  return true;
-}
-
 const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "code_map", "find_symbol", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
 
 /** The Blueprint tools: always in full while the Unreal Editor is connected (so a model never misses the Test tool). */
