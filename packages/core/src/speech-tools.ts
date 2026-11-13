@@ -40,6 +40,8 @@ export interface SpeechDeps {
   /** The user's choice: `auto`, `local` or `cloud:<id>`; and the spoken language. */
   speech: () => { stt: string; language: string };
   providers: () => ProviderConfig[];
+  /** FFmpeg's program, downloaded the first time it is needed (videos, and audio types whisper cannot read). */
+  ffmpeg?: () => Promise<string>;
 }
 
 /**
@@ -68,10 +70,10 @@ export async function transcribeWith(d: SpeechDeps, data: Buffer, ext: string, l
 }
 
 /** Converts any audio or video to 16 kHz mono WAV with ffmpeg, when it is installed. */
-async function toWav(path: string): Promise<Buffer> {
+async function toWav(path: string, ffmpeg: () => Promise<string> = async () => "ffmpeg"): Promise<Buffer> {
   const out = join(tmpdir(), `kesher-audio-${randomUUID()}.wav`);
   try {
-    await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", path, "-vn", "-ac", "1", "-ar", "16000", out], 1_800_000);
+    await run(await ffmpeg(), ["-hide_banner", "-loglevel", "error", "-y", "-i", path, "-vn", "-ac", "1", "-ar", "16000", out], 1_800_000);
     return await readFile(out);
   } catch (e) {
     if ((e as { code?: string }).code === "ENOENT") throw new Error(`This file type (${extname(path)}) needs FFmpeg to be read. Install it with install_tool (ffmpeg), or give a WAV, MP3, FLAC or OGG file.`);
@@ -148,7 +150,7 @@ export function speechTools(d: SpeechDeps): AgentTool[] {
         const st = await stat(path);
         if (st.size > 2 * 1024 ** 3) throw new Error("The file is over 2 GB.");
         const usable = WHISPER_READS.test(ext) && st.size < 400 * 1024 ** 2;
-        const data = usable ? await readFile(path) : await toWav(path);
+        const data = usable ? await readFile(path) : await toWav(path, d.ffmpeg);
         const lang = typeof input.language === "string" && input.language.trim() ? input.language.trim() : d.speech().language;
         const { text, engine } = await transcribeWith(d, data, usable ? ext : ".wav", lang, input.timestamps === true);
         if (!text.trim()) return { output: `${basename(path)}: no speech was found.` };

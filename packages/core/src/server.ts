@@ -5,6 +5,7 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
+import { ensureFfmpeg } from "./ffmpeg.js";
 import type { AgentTool } from "@kesher/agent";
 import { mkdir, readFile as readFileFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -645,7 +646,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         ...googleTools(google),
         ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
         ...(config.parts.browser === false ? [] : browserTools(browser)),
-        ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers })),
+        ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) })),
         ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
           spec,
           // Tools that only read run without asking; the rest ask, like any command.
