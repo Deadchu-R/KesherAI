@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { unzip } from "fflate";
 import { api, isRemote } from "./api";
+import { refreshLibrary } from "./library";
 import { getLocale } from "./i18n";
 import { Select } from "./ui/Select";
 
@@ -105,6 +106,7 @@ export function ImportChats() {
       const r = await api<{ removed: number }>(`/api/import/chats?source=${source}`, { method: "DELETE" });
       setResult({ ok: true, text: L(`נמחקו ${r.removed} צ'אטים שיובאו מ-${NAMES[source]}.`, `Deleted ${r.removed} chats imported from ${NAMES[source]}.`) });
       loadCounts();
+      void refreshLibrary();
     } catch (e) {
       setResult({ ok: false, text: (e as Error).message });
     } finally {
@@ -142,6 +144,7 @@ export function ImportChats() {
       setBusy(false);
       if (input.current) input.current.value = "";
       loadCounts();
+      void refreshLibrary();
     }
   };
 
