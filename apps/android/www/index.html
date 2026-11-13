@@ -22,6 +22,11 @@
     .error { color: var(--bad); }
     .update { border: 1px solid var(--accent); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
     .update[hidden] { display: none; }
+    .notify { border: 1px solid var(--border, #2c2d33); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; text-align: start; }
+    .notify[hidden], .notify button[hidden] { display: none; }
+    .notify p { margin: 0; }
+    .notify-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+    .notify-row input { width: 22px; height: 22px; flex: none; }
     .up-progress { display: flex; flex-direction: column; gap: 6px; }
     .up-progress[hidden] { display: none; }
     .up-progress p { margin: 0; }
@@ -103,6 +108,13 @@
   <div id="found" class="found" hidden></div>
   <button id="local" type="button" class="local" data-he="בלי מחשב: מודל על הטלפון" data-en="No computer: a model on this phone">בלי מחשב: מודל על הטלפון</button>
   <p id="status"></p>
+  <section id="notify" class="notify" hidden>
+    <strong data-he="התראות" data-en="Notifications">התראות</strong>
+    <p id="notifyState" class="small"></p>
+    <label class="notify-row"><input id="notifyLive" type="checkbox" /> <span data-he="קבל התראות מהמחשב" data-en="Get notifications from the computer">קבל התראות מהמחשב</span></label>
+    <button id="notifyAllow" type="button" hidden data-he="אשר התראות" data-en="Allow notifications">אשר התראות</button>
+    <button id="notifyAndroid" type="button" data-he="הגדרות ההתראות באנדרואיד" data-en="Android notification settings">הגדרות ההתראות באנדרואיד</button>
+  </section>
   <button id="checkUpdate" type="button" data-he="בדוק עדכונים לאפליקציה" data-en="Check for app updates">בדוק עדכונים לאפליקציה</button>
   <button id="lang" type="button">English</button>
   <p id="version" class="small" dir="ltr"></p>
@@ -559,6 +571,51 @@
     } catch (e) {
       box.textContent = String(e?.message || e);
     }
+  }
+
+  // ---------- Notifications: the permission is asked here, when the app opens, and can be changed here ----------
+  const Notify = window.Capacitor?.Plugins?.KesherNotify;
+  const F2 = (he, en) => (lang === "he" ? he : en);
+  function showNotify(st) {
+    if (!st) return;
+    $("notify").hidden = false;
+    $("notifyLive").checked = !!st.live;
+    $("notifyAllow").hidden = !!st.permission;
+    $("notifyState").textContent = !st.permission
+      ? F2("אנדרואיד עוד לא מרשה ל-KesherAI להציג התראות.", "Android does not let KesherAI show notifications yet.")
+      : !st.live ? F2("כבויות.", "Off.")
+      : st.connected ? F2("פעילות: מחובר למחשב.", "On: connected to the computer.")
+      : st.paired ? F2("פעילות: מתחבר למחשב…", "On: connecting to the computer…")
+      : F2("פעילות. יתחילו להגיע אחרי החיבור למחשב.", "On. They start after you connect to a computer.");
+  }
+  if (Notify?.askPermission) {
+    (async () => {
+      try {
+        let st = await Notify.status();
+        // The first time the app opens: Android's question, and notifications on (nothing else to set up).
+        if (!localStorage.getItem("notifyAsked")) {
+          localStorage.setItem("notifyAsked", "1");
+          if (!st.permission) st = await Notify.askPermission();
+          if (!st.chosen) st = await Notify.setLive({ live: true });
+        }
+        showNotify(st);
+      } catch (e) { /* an older app: the computer's settings still have the switch */ }
+    })();
+    $("notifyLive").onchange = async (e) => {
+      try {
+        let st = await Notify.setLive({ live: e.target.checked });
+        if (e.target.checked && !st.permission) st = await Notify.askPermission();
+        showNotify(st);
+      } catch (err) { $("notifyState").textContent = String(err?.message || err); }
+    };
+    $("notifyAllow").onclick = async () => {
+      const st = await Notify.askPermission().catch(() => null);
+      showNotify(st);
+      // Android stops asking after two refusals: its own settings are the way then.
+      if (st && !st.permission) Notify.openSettings();
+    };
+    $("notifyAndroid").onclick = () => Notify.openSettings();
+    document.addEventListener("visibilitychange", () => document.hidden || Notify.status().then(showNotify, () => {}));
   }
 
   // ---------- App updates (published by .github/workflows/android.yml) ----------

@@ -15,6 +15,8 @@ export interface PhoneNotifyState {
   pushState: string;
   distributor?: string;
   distributors: number;
+  /** The user set the switch on the app's home screen (newer apps). */
+  chosen?: boolean;
 }
 
 interface Plugin {
@@ -23,6 +25,8 @@ interface Plugin {
   clear(o: { id: string }): Promise<void>;
   takeOpen(): Promise<{ path?: string }>;
   openSettings(): Promise<void>;
+  /** Android's permission question (newer apps). */
+  askPermission?(): Promise<PhoneNotifyState>;
   addListener(event: "open", cb: (e: { path: string }) => void): unknown;
 }
 
@@ -87,7 +91,7 @@ export function startPhoneNotify(): void {
         asked = true;
       }
       // First time: the app's own notifications go on by themselves (no ntfy, nothing to set up).
-      const live = s.live || !asked;
+      const live = s.live || (!asked && !s.chosen);
       if (!live && !s.push) return hello({ plugin: true, permission: s.permission, live: false });
       try {
         const now = await setPhoneNotify(live, s.push);

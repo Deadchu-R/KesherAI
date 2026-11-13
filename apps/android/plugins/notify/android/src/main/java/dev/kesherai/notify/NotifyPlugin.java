@@ -148,11 +148,52 @@ public class NotifyPlugin extends Plugin {
         o.put("permission", NotificationManagerCompat.from(c).areNotificationsEnabled());
         o.put("live", Prefs.live(c));
         o.put("connected", LiveService.connected);
+        o.put("chosen", Prefs.of(c).getBoolean("chosen", false));
+        o.put("paired", !Prefs.base(c).isEmpty() && !Prefs.key(c).isEmpty());
         o.put("push", Prefs.push(c));
         o.put("pushState", Prefs.of(c).getString("pushState", ""));
         o.put("distributor", Up.distributor(c));
         o.put("distributors", Up.count(c));
         return o;
+    }
+
+    /**
+     * Asks Android for the notification permission (the app's home screen does this the first time it opens, and
+     * from its settings). Android shows its question at most twice; after that the state comes back unchanged
+     * and the app offers Android's own settings instead.
+     */
+    @PluginMethod
+    public void askPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+            getActivity().runOnUiThread(() -> requestPermissionForAlias("notifications", call, "afterAsk"));
+            return;
+        }
+        call.resolve(state());
+    }
+
+    @PermissionCallback
+    private void afterAsk(PluginCall call) {
+        call.resolve(state());
+    }
+
+    /**
+     * { live }: the app's own switch for notifications, from its home screen. It takes effect at once when the
+     * phone already knows a computer; otherwise at the next connection.
+     */
+    @PluginMethod
+    public void setLive(PluginCall call) {
+        Context c = getContext();
+        boolean live = Boolean.TRUE.equals(call.getBoolean("live", false));
+        Prefs.of(c).edit().putBoolean("live", live).putBoolean("chosen", true).apply();
+        Intent service = new Intent(c, LiveService.class);
+        try {
+            if (live && !Prefs.base(c).isEmpty() && !Prefs.key(c).isEmpty()) ContextCompat.startForegroundService(c, service);
+            else if (!live) c.stopService(service);
+        } catch (Exception e) {
+            call.reject("Android did not let the live connection start: " + e.getMessage());
+            return;
+        }
+        call.resolve(state());
     }
 
     @PluginMethod

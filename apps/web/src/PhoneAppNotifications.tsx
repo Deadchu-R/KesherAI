@@ -62,6 +62,21 @@ export function PhoneAppNotifications() {
     <section className="card stack">
       <h2>{L("התראות באפליקציה הזו", "Notifications in this app")}</h2>
       {!s.permission && (s.live || s.push) && <p className="error">{L("ההתראות של KesherAI כבויות באנדרואיד. הפעילו אותן כדי לקבל אותן.", "KesherAI's notifications are off in Android. Turn them on to get them.")}</p>}
+      {!s.permission && (
+        <button
+          type="button"
+          className="primary"
+          onClick={() =>
+            void (plugin.askPermission ? plugin.askPermission() : Promise.resolve(s)).then(
+              // Android stops asking after two refusals: its own settings are the way then.
+              (st) => (setS(st), st.permission || void plugin.openSettings()),
+              (e: Error) => setError(e.message),
+            )
+          }
+        >
+          {L("אשר התראות", "Allow notifications")}
+        </button>
+      )}
       {s.live && <p className={s.connected ? "muted" : "muted small"}>{s.connected ? L("🟢 מחובר למחשב: התראות מגיעות ישירות.", "🟢 Connected to the computer: notifications arrive directly.") : L("⚪ מחפש את המחשב (ברשת הבית, ואז דרך הקישור מכל מקום).", "⚪ Looking for the computer (on the home network, then through the link from anywhere).")}</p>}
       <label className="check">
         <input type="checkbox" checked={s.live} onChange={(e) => void set(e.target.checked, s.push)} />
