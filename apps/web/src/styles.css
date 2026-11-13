@@ -2047,3 +2047,22 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .conv-row .conv-more { opacity: 0; flex: none; }
 .conv-row:hover .conv-more, .conv-row:focus-within .conv-more { opacity: 1; }
 @media (pointer: coarse) { .conv-row .conv-more { opacity: .7; } }
+
+/* The Browser pane: KesherAI's own browser beside a chat (the app draws the page over .browser-area on the computer;
+   elsewhere it is a picture of it that refreshes). It takes the column's height. */
+.conv-panes-body > .browser-pane { flex: 1 1 auto !important; min-height: 420px; }
+.browser-pane { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.browser-tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.browser-tab { display: flex; align-items: center; max-width: 170px; border: 1px solid var(--border); border-radius: 8px; padding-inline-start: 8px; }
+.browser-tab.on { background: var(--panel, rgba(255,255,255,.06)); border-color: var(--accent, #9aa4ff); }
+.browser-tab-title { background: none; border: 0; padding: 4px 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82em; color: inherit; cursor: pointer; }
+.browser-bar { display: flex; align-items: center; gap: 4px; }
+.browser-bar input { flex: 1; min-width: 0; font-size: .85em; padding: 5px 9px; border-radius: 999px; }
+.browser-area { flex: 1; min-height: 360px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
+.browser-area img { display: block; width: 100%; height: auto; cursor: pointer; touch-action: manipulation; }
+.browser-empty { padding: 10px 4px; line-height: 1.5; }
+.browser-notice { margin: 0; }
+@media (max-width: 700px) {
+  .conv-panes-body > .browser-pane { min-height: 0; }
+  .browser-area { min-height: 220px; max-height: 38dvh; overflow-y: auto; }
+}

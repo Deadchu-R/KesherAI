@@ -35,4 +35,13 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   openDevice: (id: string): Promise<{ name?: string; error?: string }> => ipcRenderer.invoke("kesher:open-device", id),
   /** Forgets a saved computer (its key and its window's storage). */
   forgetComputer: (origin: string): Promise<void> => ipcRenderer.invoke("kesher:computer-forget", origin),
+  /** KesherAI's own browser pane: the page is drawn by the app over the area the page reports with bounds. */
+  browser: {
+    call: (cmd: string, arg?: unknown): Promise<unknown> => ipcRenderer.invoke("kesher:browser", cmd, arg),
+    onState: (fn: (s: unknown) => void): (() => void) => {
+      const on = (_e: unknown, s: unknown) => fn(s);
+      ipcRenderer.on("kesher:browser-state", on);
+      return () => ipcRenderer.removeListener("kesher:browser-state", on);
+    },
+  },
 });

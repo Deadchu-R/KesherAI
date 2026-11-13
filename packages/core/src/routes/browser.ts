@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import "@fastify/websocket";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
@@ -65,6 +65,32 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     const zip = await packExtension(folder, target);
     reply.header("content-disposition", `attachment; filename="KesherAI-extension-${target}.zip"`);
     return reply.type("application/zip").send(Buffer.from(zip));
+  });
+
+  // KesherAI's own browser pane, for the phone: its tabs, a picture of the tab in front, taps and the address bar.
+  const pane = async (reply: FastifyReply, run: () => Promise<unknown>) => {
+    try {
+      return await run();
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  };
+  app.get("/api/browser/pane", (_req, reply) => pane(reply, () => s.browser.paneCall("pane-state")));
+  app.get("/api/browser/pane/shot", async (_req, reply) => {
+    try {
+      const jpg = await s.browser.paneCall<Buffer | null>("pane-shot");
+      if (!jpg) return reply.code(404).send({ error: "No tab is open." });
+      return reply.header("cache-control", "no-store").type("image/jpeg").send(jpg);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+  app.post<{ Body: { cmd?: string; x?: number; y?: number; url?: string; what?: string; id?: number } }>("/api/browser/pane", (req, reply) => {
+    const b = req.body ?? {};
+    const cmd = String(b.cmd ?? "");
+    if (!["tap", "go", "nav", "select", "close", "new"].includes(cmd)) return reply.code(400).send({ error: "Unknown command." });
+    const args = cmd === "tap" ? { x: Number(b.x), y: Number(b.y) } : cmd === "go" ? { url: String(b.url ?? "").slice(0, 4000) } : cmd === "nav" ? { what: String(b.what ?? "") } : { id: Number(b.id) };
+    return pane(reply, async () => ({ ok: true, result: (await s.browser.paneCall(`pane-${cmd}`, args)) ?? null }));
   });
 
   app.get<{ Querystring: { key?: string; browser?: string; version?: string } }>("/api/browser/connect", { websocket: true }, (socket, req) => {

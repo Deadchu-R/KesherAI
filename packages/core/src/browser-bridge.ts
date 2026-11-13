@@ -54,6 +54,18 @@ export class BrowserBridge {
   }
 
   /**
+   * A command for the pane itself (its tabs, a picture of it, a tap), for the phone's view of it.
+   *
+   * @param action - pane-state, pane-shot, pane-tap, pane-go, pane-nav, pane-select, pane-close, pane-new.
+   * @param args - The command's arguments.
+   * @returns The pane's answer.
+   */
+  paneCall<T>(action: string, args: Record<string, unknown> = {}): Promise<T> {
+    if (!this.pane) return Promise.reject(new Error("KesherAI's browser is part of the desktop app: open KesherAI on the computer."));
+    return this.pane(action, args) as Promise<T>;
+  }
+
+  /**
    * Takes a new connection from the extension (replacing an older one).
    *
    * @param socket - The WebSocket.

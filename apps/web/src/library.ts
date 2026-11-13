@@ -57,6 +57,8 @@ interface DesktopBridge {
   connectComputer?(link: string): Promise<{ name?: string; error?: string }>;
   openComputer?(origin: string): Promise<{ error?: string }>;
   forgetComputer?(origin: string): Promise<void>;
+  /** KesherAI's own browser pane (desktop app 0.6.136 and newer). */
+  browser?: { call(cmd: string, arg?: unknown): Promise<unknown>; onState(fn: (s: unknown) => void): () => void };
   /** Opens one of "My devices" (same Google account). Missing before 0.5.22. */
   openDevice?(id: string): Promise<{ name?: string; error?: string }>;
 }

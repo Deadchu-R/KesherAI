@@ -34,3 +34,26 @@ test("browser bridge: tools appear only while the extension is connected, and ca
   sock.close();
   assert.equal(b.status().connected, false);
 });
+
+test("browser bridge: KesherAI's own pane comes first; the extension when asked for chrome", async () => {
+  const b = new BrowserBridge();
+  assert.equal(browserTools(b).length, 0);
+  const seen: string[] = [];
+  b.attachPane(async (action, args) => {
+    seen.push(`${action}:${JSON.stringify(args)}`);
+    return action === "tabs" ? [{ id: 1, title: "Pane", url: "https://a.test/", active: true }] : { url: "https://a.test/", title: "A", text: "hi", elements: [] };
+  });
+  assert.deepEqual(b.status().pane, true);
+  const tools = browserTools(b);
+  assert.ok(tools.length > 0, "tools with only the pane");
+  assert.equal(tools[0]!.spec.inputSchema.properties && "browser" in (tools[0]!.spec.inputSchema.properties as object), false, "no browser choice without the extension");
+  const tabs = tools.find((t) => t.spec.name === "browser_tabs")!;
+  assert.match((await tabs.run({}, { signal: new AbortController().signal } as never)).output, /Pane/);
+  b.attach(fakeSocket(() => [{ id: 9, title: "Chrome", url: "https://b.test/", active: true }]) as never, { browser: "Chrome" });
+  const both = browserTools(b).find((t) => t.spec.name === "browser_tabs")!;
+  assert.ok("browser" in (both.spec.inputSchema.properties as object), "a browser choice when both are there");
+  assert.match((await both.run({}, { signal: new AbortController().signal } as never)).output, /Pane/, "the pane by default");
+  assert.match((await both.run({ browser: "chrome" }, { signal: new AbortController().signal } as never)).output, /Chrome/, "the user's browser when asked");
+  assert.ok(seen.every((x) => !x.includes("browser")), "the choice is not passed on to the pane");
+  await assert.rejects(new BrowserBridge().paneCall("pane-state"), /desktop app/);
+});

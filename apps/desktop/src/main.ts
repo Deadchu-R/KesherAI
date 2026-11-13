@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import type { KesherServer } from "@kesher/core";
 import { branding } from "@kesher/shared";
+import { BrowserPane } from "./browser-pane.js";
 import { connectComputer, forgetComputer, listComputers, openComputer } from "./computers.js";
 import { WORKER_PORT, workerHost } from "./worker.js";
 
@@ -378,6 +379,7 @@ async function createWindow(url: string): Promise<void> {
 
   if (last?.maximized) win.maximize();
   rememberWindow(win);
+  setupBrowserPane(win);
 
   // Closing the window keeps KesherAI working in the background (chats, downloads, tasks), in the tray.
   win.on("close", (event) => {
@@ -392,6 +394,56 @@ async function createWindow(url: string): Promise<void> {
 
   await win.loadURL(url);
 }
+
+/** KesherAI's own browser pane in the app window (see browser-pane.ts). */
+let pane: BrowserPane | undefined;
+
+function setupBrowserPane(win: BrowserWindow): void {
+  const port = server?.services.config.port;
+  if (!server || !port) return;
+  const send = () => {
+    if (!win.isDestroyed() && pane) win.webContents.send("kesher:browser-state", { tabs: pane.list(), notice: pane.notice });
+  };
+  pane = new BrowserPane(win, port, send);
+  const p = pane;
+  // The model's browser tools and the phone's view of the pane go through the core's browser bridge.
+  server.services.browser.attachPane(async (action, a) => {
+    if (action === "pane-state") return { tabs: p.list(), notice: p.notice };
+    if (action === "pane-shot") return p.shot();
+    if (action === "pane-tap") return p.tap(Number(a.x), Number(a.y));
+    if (action === "pane-go") return (await p.open(String(a.url ?? ""), undefined, !p.list().length), true);
+    if (action === "pane-nav") return p.nav(a.what === "forward" ? "forward" : a.what === "reload" ? "reload" : a.what === "stop" ? "stop" : "back");
+    if (action === "pane-select") return p.select(Number(a.id));
+    if (action === "pane-close") return p.close(Number(a.id));
+    if (action === "pane-new") return (p.newTab(), true);
+    return p.run(action, a);
+  });
+  win.on("closed", () => {
+    server?.services.browser.attachPane(undefined);
+    pane = undefined;
+  });
+}
+
+ipcMain.handle("kesher:browser", async (event, cmd: unknown, arg: unknown) => {
+  if (!fromApp(event) || !pane) return { error: "Not allowed." };
+  try {
+    if (cmd === "state") return { tabs: pane.list(), notice: pane.notice };
+    if (cmd === "bounds") {
+      const b = arg as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null;
+      pane.setBounds(b && [b.x, b.y, b.width, b.height].every((v) => typeof v === "number" && Number.isFinite(v)) ? { x: b.x as number, y: b.y as number, width: b.width as number, height: b.height as number } : null);
+      return true;
+    }
+    if (cmd === "go" && typeof arg === "string" && arg.length < 4000) return (await pane.open(arg, undefined, !pane.list().length), true);
+    if (cmd === "nav" && (arg === "back" || arg === "forward" || arg === "reload" || arg === "stop")) return pane.nav(arg);
+    if (cmd === "select" && typeof arg === "number") return pane.select(arg);
+    if (cmd === "close" && typeof arg === "number") return pane.close(arg);
+    if (cmd === "new") return (pane.newTab(), true);
+    if (cmd === "dismiss") return ((pane.notice = ""), true);
+    return { error: "Unknown command." };
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+});
 
 let quitting = false;
 let toldAboutTray = false;

@@ -19,6 +19,7 @@ import { takeOpening } from "../phone";
 import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
+import { BrowserPanel } from "../BrowserPanel";
 import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
@@ -169,6 +170,7 @@ export function ConversationPage({ id }: { id: string }) {
           if (e.type === "assistant") setStreaming((s) => { const n = { ...s }; delete n[e.turn]; return n; });
           // "Read answers aloud": only answers that arrive now, not old ones replayed on opening.
           if (e.type === "assistant" && autoSpeak() && !voiceOn.current && Date.parse(e.at) > openedAt) void speak(e.text);
+          if (e.type === "tool_call" && e.name.startsWith("browser_") && Date.parse(e.at) > openedAt) setBrowserOpen(true);
           if (e.type === "status" && e.status === "error") setError(e.message ?? "Error");
           setEvents((prev) => (prev.some((p) => p.seq === e.seq) ? prev : [...prev, e]));
         };
@@ -333,6 +335,7 @@ export function ConversationPage({ id }: { id: string }) {
     return after.map((g) => groupSummary(g.steps)).filter(Boolean).slice(-8);
   }, [blocks, versions.lastUser]);
   const [stepsOpen, setStepsOpen] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
   const stepsAuto = useRef("");
   useEffect(() => {
     if (taskSteps.steps.length && taskSteps.current && stepsAuto.current !== id && innerWidth > 760) {
@@ -345,8 +348,9 @@ export function ConversationPage({ id }: { id: string }) {
   }, [id]);
 
   // The pane column: any of Steps, Files, Context, Coach. Its width is remembered on this device.
-  const anyPane = stepsOpen || filesOpen || contextOpen || coachOpen;
+  const anyPane = stepsOpen || filesOpen || contextOpen || coachOpen || browserOpen;
   const closePanes = () => {
+    setBrowserOpen(false);
     setStepsOpen(false);
     setFilesOpen(false);
     setContextOpen(false);
@@ -554,6 +558,15 @@ export function ConversationPage({ id }: { id: string }) {
             <path d="M9 4.6h6.4M9 10h6.4M9 15h6.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
           {taskSteps.steps.length > 0 && taskSteps.current && <span className="pane-btn-count">{taskSteps.steps.filter((x) => x.status === "done").length}/{taskSteps.steps.length}</span>}
+        </button>
+        {/* Browser: KesherAI's own browser, which the model uses while you watch (opens by itself when it does). */}
+        <button type="button" className={`pane-btn${browserOpen ? " on" : ""}`} aria-pressed={browserOpen} onClick={() => setBrowserOpen(!browserOpen)} aria-label={getLocale() === "he" ? "דפדפן" : "Browser"} title={getLocale() === "he" ? "דפדפן: הדפדפן של KesherAI, שבו המודל פותח דפים ואתם רואים" : "Browser: KesherAI's own browser, where the model opens pages while you watch"}>
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <rect x="1.8" y="2.8" width="14.4" height="12.4" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            <path d="M1.8 6.4h14.4" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="4.2" cy="4.6" r="0.7" fill="currentColor" />
+            <circle cx="6.3" cy="4.6" r="0.7" fill="currentColor" />
+          </svg>
         </button>
         <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
         <button type="button" className={contextOpen ? "on" : ""} aria-pressed={contextOpen} onClick={() => setContextOpen(!contextOpen)} title={t("contextHint")}>{t("contextNav")}</button>
@@ -900,6 +913,7 @@ export function ConversationPage({ id }: { id: string }) {
             <button type="button" className="icon-btn" title={getLocale() === "he" ? "סגור את כל החלוניות (Ctrl+\\)" : "Close all panes (Ctrl+\\)"} aria-label={getLocale() === "he" ? "סגור את כל החלוניות" : "Close all panes"} onClick={closePanes}>✕</button>
           </div>
           <div className="conv-panes-body">
+            {browserOpen && <BrowserPanel onClose={() => setBrowserOpen(false)} />}
             {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
             {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
             {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
