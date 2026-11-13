@@ -113,7 +113,9 @@ export class Notifier {
     // The phone app first: when it got the note, ntfy is not sent too (one notification, not two).
     const inApp = this.opts.app ? await this.opts.app.deliver(phoneMessage(n)).catch(() => false) : false;
     if (inApp) channels.push("app");
-    if ((s.ntfy.enabled || force) && s.ntfy.topic && (!inApp || force)) {
+    // ntfy only when it is on, and only when the phone app did not get the note (a test follows the same rule:
+    // it used to go through ntfy even with ntfy off, which looked as if the app's own notifications did not work).
+    if (s.ntfy.enabled && s.ntfy.topic && !inApp) {
       const base = this.opts.publicUrl?.();
       const headers: Record<string, string> = { Title: ascii(n.title), Priority: String(n.priority ?? 3) };
       if (n.tags?.length) headers.Tags = n.tags.join(",");

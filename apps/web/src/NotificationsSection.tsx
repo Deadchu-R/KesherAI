@@ -50,7 +50,11 @@ export function NotificationsSection() {
     setError("");
     try {
       const r = await api<{ channels: string[] }>("/api/notifications/test", { method: "POST" });
-      setMsg(r.channels.includes("app") ? L("נשלחה התראת בדיקה לאפליקציה בטלפון.", "A test notification went to the phone app.") : r.channels.includes("phone") ? L("נשלחה התראת בדיקה לטלפון.", "A test notification went to the phone.") : L("נשלח. אם הטלפון לא קיבל — בדקו שנרשמתם לנושא באפליקציית ntfy.", "Sent. If the phone got nothing, check you subscribed to the topic in the ntfy app."));
+      setMsg(
+        r.channels.includes("app") ? L("נשלחה התראת בדיקה לאפליקציה בטלפון.", "A test notification went to the phone app.")
+        : r.channels.includes("phone") ? L("האפליקציה בטלפון לא ענתה, אז ההתראה נשלחה דרך ntfy.", "The phone app did not answer, so the test went through ntfy.")
+        : L("לא נשלח לטלפון: האפליקציה בטלפון לא מחוברת כרגע, ו-ntfy כבוי. פתחו את האפליקציה בטלפון ונסו שוב.", "Nothing went to the phone: the phone app is not connected right now, and ntfy is off. Open the app on the phone and try again."),
+      );
     } catch (e) {
       setError(say(e as Error));
     }
