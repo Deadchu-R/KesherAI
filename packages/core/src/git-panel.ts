@@ -111,8 +111,11 @@ export function githubRepo(url: string): string | undefined {
 export async function gitState(repo: string): Promise<GitState> {
   const inside = await git(repo, ["rev-parse", "--is-inside-work-tree"]);
   if (!inside.ok || inside.out.trim() !== "true") return { repo: false, ahead: 0, behind: 0, files: [] };
-  const [status, numstat, remote, head] = await Promise.all([
-    git(repo, ["status", "--porcelain=v1", "--branch", "--untracked-files=all"]),
+  // `status` and `diff` both refresh the index, and two git processes may
+  // not open .git/index at once (Windows: "index file open failed:
+  // Permission denied"), so they run one after the other.
+  const status = await git(repo, ["status", "--porcelain=v1", "--branch", "--untracked-files=all"]);
+  const [numstat, remote, head] = await Promise.all([
     git(repo, ["diff", "HEAD", "--numstat", "-M"]),
     git(repo, ["remote", "get-url", "origin"]),
     git(repo, ["log", "-1", "--format=%h%x00%s"]),
