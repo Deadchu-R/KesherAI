@@ -185,8 +185,19 @@ export class Notifier {
       this.started.delete(convId);
       this.clearWaiting(convId);
       if (t0 === undefined && this.stoppedBy.delete(convId)) return;
-      if (t0 === undefined || Date.now() - t0 < s.minSeconds * 1000) return;
       const failed = e.status === "error";
+      const fromPhone = this.askedFromPhone.delete(convId);
+      if (t0 === undefined) return;
+      if (Date.now() - t0 < s.minSeconds * 1000) {
+        // A short answer to a message written on the phone: the phone app alone gets it, like a messaging app
+        // (it shows nothing while the app is open on screen). The computer's own notification, ntfy and the
+        // list keep the "long work only" rule.
+        if (fromPhone && !this.stoppedBy.delete(convId) && this.opts.app) {
+          const text = s.includeText ? (lastAnswer() ?? "").replace(/\s+/g, " ").trim().slice(0, 200) : "";
+          void this.opts.app.deliver(phoneMessage({ title: failed ? `Stopped with an error: ${title()}` : title(), body: text || (failed ? e.message ?? "Open KesherAI to see what happened." : "The answer is ready."), path: `#/c/${convId}` })).catch(() => undefined);
+        }
+        return;
+      }
       // Stopped by the user is not "Done" (found on the phone: a stopped run said "Done… Finished after 2 min").
       const stopped = this.stoppedBy.delete(convId) && !failed;
       if (stopped) return;
@@ -227,6 +238,18 @@ export class Notifier {
       this.clearWaiting(convId);
       this.resolve(convId, e.type === "answer" ? "answered" : e.decision === "allow" || e.decision === "always" ? "approved" : e.decision === "expired" ? "expired" : "denied");
     }
+  }
+
+  /** Chats whose running turn was asked from a phone (a paired device): their answer notifies the phone even when short. */
+  private readonly askedFromPhone = new Set<string>();
+
+  /**
+   * A message was sent to a chat from a paired device (not from the computer itself).
+   *
+   * @param convId - The conversation.
+   */
+  messageFromPhone(convId: string): void {
+    this.askedFromPhone.add(convId);
   }
 
   /** Marks a chat's open "waiting" notes as ended, so the list and the 🔔 do not keep asking. */

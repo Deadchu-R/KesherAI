@@ -1996,3 +1996,20 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .phone-set-leave { border-top: 1px solid var(--border); padding-top: 8px; }
 .phone-set-leave > summary { cursor: pointer; color: var(--muted); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
 .phone-set-leave[open] > summary { margin-bottom: 6px; }
+/* The Steps pane. */
+.steps-panel { margin: 8px 28px 0; padding: 12px 14px; max-height: 40vh; overflow: auto; display: grid; gap: 8px; }
+@media (max-width: 760px) { .steps-panel { margin: 8px 12px 0; } }
+.steps-head { align-items: center; }
+.steps-bar { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; display: flex; }
+.steps-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
+.steps-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.step { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--text-2, var(--text)); }
+.step.done { color: var(--muted); }
+.step.doing { color: var(--text); font-weight: 500; }
+.step-mark { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border-strong); position: relative; top: 2px; }
+.step.done .step-mark { background: var(--good); border-color: var(--good); }
+.step.done .step-mark::after { content: ""; position: absolute; inset-inline-start: 4px; top: 1.5px; width: 3px; height: 6px; border: solid var(--bg, #111); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.step.doing .step-mark { border-color: var(--accent); }
+.step.doing .step-mark::after { content: ""; position: absolute; inset: 2.5px; border-radius: 50%; background: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .step.live .step-mark::after { animation: step-pulse 1.2s ease-in-out infinite; } }
+@keyframes step-pulse { 50% { opacity: .35; } }

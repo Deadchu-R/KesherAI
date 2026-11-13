@@ -1,3 +1,4 @@
+import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
 import type { AcpOption } from "./acp.js";
 import { personaPrompt } from "./personas.js";
@@ -223,7 +224,9 @@ export class ConversationManager {
       const phones = chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[]);
       if (phones.length) media.notes.push(phoneNote(phones));
     }
-    const all = [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
+    // The task's steps, shown beside the chat (every kind of chat).
+    media.notes.push(STEPS_NOTE);
+    const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.() ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
     if (id) all.push(this.delegateFor(id, all));
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.

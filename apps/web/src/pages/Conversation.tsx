@@ -19,9 +19,10 @@ import { takeOpening } from "../phone";
 import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
+import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
-import { ActivityGroup, type Step } from "../Activity";
+import { ActivityGroup, groupSummary, type Step } from "../Activity";
 import { getLocale, t } from "../i18n";
 import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../BlueprintChatPanel";
 import { useChatAttach } from "../ChatAttach";
@@ -237,6 +238,7 @@ export function ConversationPage({ id }: { id: string }) {
     for (const e of versions.shown) {
       if (e.type === "tool_call") {
         if (e.name === "ask_user" || e.name === "request_access") continue; // their question card shows instead
+        if (e.name === "set_steps") continue; // the Steps pane shows the list
         if (!group) {
           group = [];
           out.push({ kind: "group", key: e.seq, steps: group });
@@ -251,6 +253,26 @@ export function ConversationPage({ id }: { id: string }) {
     }
     return out;
   }, [versions, byCall]);
+
+  // The task's steps (the model's set_steps list). The pane opens by itself the first time a list appears in
+  // this conversation, on a screen wide enough; closing it is remembered for the conversation.
+  const taskSteps = useMemo(() => currentSteps(events), [events]);
+  const stepsFallback = useMemo(() => {
+    const groups = blocks.filter((b): b is { kind: "group"; key: number; steps: Step[] } => b.kind === "group");
+    const after = groups.filter((g) => g.key > versions.lastUser);
+    return after.map((g) => groupSummary(g.steps)).filter(Boolean).slice(-8);
+  }, [blocks, versions.lastUser]);
+  const [stepsOpen, setStepsOpen] = useState(false);
+  const stepsAuto = useRef("");
+  useEffect(() => {
+    if (taskSteps.steps.length && taskSteps.current && stepsAuto.current !== id && innerWidth > 760) {
+      stepsAuto.current = id;
+      setStepsOpen(true);
+    }
+  }, [taskSteps, id]);
+  useEffect(() => {
+    setStepsOpen(false);
+  }, [id]);
 
   // Every finished tool may have changed files: refresh the Files count, and open the panel when a program was built.
   const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result").length, [events]);
@@ -403,6 +425,9 @@ export function ConversationPage({ id }: { id: string }) {
           const key = `${x.pluginId}/${x.id}`;
           return <button key={key} type="button" className={openPanel === key ? "on" : ""} aria-pressed={openPanel === key} onClick={() => setOpenPanel(openPanel === key ? "" : key)}>{x.title}</button>;
         })}
+        <button type="button" className={stepsOpen ? "on" : ""} aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} title={getLocale() === "he" ? "שלבי המשימה שהמודל עובד עליה" : "The steps of the task the model is working on"}>
+          {getLocale() === "he" ? "שלבים" : "Steps"}{taskSteps.steps.length > 0 && taskSteps.current ? ` ${taskSteps.steps.filter((x) => x.status === "done").length}/${taskSteps.steps.length}` : ""}
+        </button>
         <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
         <button type="button" className={contextOpen ? "on" : ""} aria-pressed={contextOpen} onClick={() => setContextOpen(!contextOpen)} title={t("contextHint")}>{t("contextNav")}</button>
         <span className="grow" />
@@ -432,6 +457,7 @@ export function ConversationPage({ id }: { id: string }) {
           )}
         </div>
       )}
+      {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
       {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
       {openPanel && (() => {
         const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);

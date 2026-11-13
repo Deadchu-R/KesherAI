@@ -287,6 +287,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (!text) return reply.code(400).send({ error: "Empty message" });
     try {
       const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true });
+      // Written on the phone: its answer notifies the phone even when it is short.
+      if (!isLocalRequest(req)) s.notifier.messageFromPhone(req.params.id);
       return { ok: true, ...r };
     } catch (err) {
       const msg = (err as Error).message;
