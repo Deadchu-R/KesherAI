@@ -274,6 +274,56 @@ export function ConversationPage({ id }: { id: string }) {
     setStepsOpen(false);
   }, [id]);
 
+  // The pane column: any of Steps, Files, Context, Coach. Its width is remembered on this device.
+  const anyPane = stepsOpen || filesOpen || contextOpen || coachOpen;
+  const closePanes = () => {
+    setStepsOpen(false);
+    setFilesOpen(false);
+    setContextOpen(false);
+    setCoachOpen(false);
+  };
+  const [paneWidth, setPaneWidth] = useState(() => {
+    try {
+      return Math.min(720, Math.max(260, Number(localStorage.getItem("kesher.paneWidth")) || 360));
+    } catch {
+      return 360;
+    }
+  });
+  const startPaneResize = (e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    const start = e.clientX;
+    const from = paneWidth;
+    // The column sits at the end of the row: in a right-to-left page that is the left side.
+    const sign = getComputedStyle(document.documentElement).direction === "rtl" ? 1 : -1;
+    let last = from;
+    const move = (ev: PointerEvent) => {
+      last = Math.min(720, Math.max(260, from + (ev.clientX - start) * sign));
+      setPaneWidth(last);
+    };
+    const end = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", end);
+      try {
+        localStorage.setItem("kesher.paneWidth", String(Math.round(last)));
+      } catch {
+        // only for this visit
+      }
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", end);
+  };
+  useEffect(() => {
+    if (!anyPane) return;
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        closePanes();
+      }
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, [anyPane]);
+
   // Every finished tool may have changed files: refresh the Files count, and open the panel when a program was built.
   const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result").length, [events]);
   const lastBuild = useMemo(() => [...events].reverse().find((e): e is Ev<"tool_result"> => e.type === "tool_result" && e.name === "build_executable" && e.ok), [events]);
@@ -425,8 +475,15 @@ export function ConversationPage({ id }: { id: string }) {
           const key = `${x.pluginId}/${x.id}`;
           return <button key={key} type="button" className={openPanel === key ? "on" : ""} aria-pressed={openPanel === key} onClick={() => setOpenPanel(openPanel === key ? "" : key)}>{x.title}</button>;
         })}
-        <button type="button" className={stepsOpen ? "on" : ""} aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} title={getLocale() === "he" ? "שלבי המשימה שהמודל עובד עליה" : "The steps of the task the model is working on"}>
-          {getLocale() === "he" ? "שלבים" : "Steps"}{taskSteps.steps.length > 0 && taskSteps.current ? ` ${taskSteps.steps.filter((x) => x.status === "done").length}/${taskSteps.steps.length}` : ""}
+        {/* Steps: an icon (a checklist) with the count beside it, like the pane buttons in Claude's title bar. */}
+        <button type="button" className={`pane-btn${stepsOpen ? " on" : ""}`} aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} aria-label={getLocale() === "he" ? "שלבים" : "Steps"} title={getLocale() === "he" ? "שלבים: שלבי המשימה שהמודל עובד עליה" : "Steps: the steps of the task the model is working on"}>
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M2.6 4.6l1.3 1.3 2.3-2.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <path d="M2.6 10.1l1.3 1.3 2.3-2.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <circle cx="4.3" cy="15" r="1.5" stroke="currentColor" strokeWidth="1.4" fill="none" />
+            <path d="M9 4.6h6.4M9 10h6.4M9 15h6.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          {taskSteps.steps.length > 0 && taskSteps.current && <span className="pane-btn-count">{taskSteps.steps.filter((x) => x.status === "done").length}/{taskSteps.steps.length}</span>}
         </button>
         <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
         <button type="button" className={contextOpen ? "on" : ""} aria-pressed={contextOpen} onClick={() => setContextOpen(!contextOpen)} title={t("contextHint")}>{t("contextNav")}</button>
@@ -457,8 +514,6 @@ export function ConversationPage({ id }: { id: string }) {
           )}
         </div>
       )}
-      {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
-      {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
       {openPanel && (() => {
         const panel = pluginUi.panels.find((x) => `${x.pluginId}/${x.id}` === openPanel);
         return panel ? <div className="plugin-panel"><PluginFrame pluginId={panel.pluginId} file={panel.file} title={panel.title} conversationId={id} onInsertPrompt={setInput} uses={panel.uses ?? []} /></div> : null;
@@ -472,8 +527,6 @@ export function ConversationPage({ id }: { id: string }) {
           onSend={(text) => void api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}` } }).catch((e: Error) => setError(e.message))}
         />
       )}
-      {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
-      {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
 
       <div className={`conv-split ${showIde ? "with-ide" : ""}`}>
       <div className="chat">
@@ -744,6 +797,23 @@ export function ConversationPage({ id }: { id: string }) {
           </div>
         </form>
       </div>
+      {/* The panes (Steps, Files, Context, Coach) open beside the chat, like the panes in Claude's sessions: one
+          column whose width can be dragged; on a phone, a sheet over the lower part of the chat. Ctrl+\ closes it. */}
+      {anyPane && (
+        <aside className="conv-panes" style={{ width: paneWidth }} aria-label={getLocale() === "he" ? "חלוניות" : "Panes"}>
+          <div className="conv-panes-grip" role="separator" aria-orientation="vertical" aria-label={getLocale() === "he" ? "שינוי רוחב החלוניות" : "Resize the panes"} onPointerDown={startPaneResize} />
+          <div className="conv-panes-head">
+            <span className="muted small grow">{getLocale() === "he" ? "חלוניות" : "Panes"}</span>
+            <button type="button" className="icon-btn" title={getLocale() === "he" ? "סגור את כל החלוניות (Ctrl+\\)" : "Close all panes (Ctrl+\\)"} aria-label={getLocale() === "he" ? "סגור את כל החלוניות" : "Close all panes"} onClick={closePanes}>✕</button>
+          </div>
+          <div className="conv-panes-body">
+            {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
+            {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
+            {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
+            {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
+          </div>
+        </aside>
+      )}
       {showIde && (
         <Suspense fallback={<aside className="workspace"><p className="muted ws-empty">{t("loading")}</p></aside>}>
           <Workspace convId={id} events={events} refresh={toolResults} onFixInChat={(txt) => setInput((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`)} />

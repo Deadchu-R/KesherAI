@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
-import { statfs } from "node:fs/promises";
+import { readFile, statfs, writeFile } from "node:fs/promises";
 import { detectHardwareCached, estimatePerformance, listHubFiles, modelSummary, searchHub, type DownloadJob, type HubSort } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { RECOMMENDED_IMAGE_MODELS, isMlx } from "../sdcpp.js";
@@ -189,23 +189,54 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     return { mbps: v };
   });
 
+  /**
+   * Downloads that were not finished when KesherAI closed (an update, a restart) start again by themselves and
+   * continue from their `.part` file. What is kept is only which file of which repo, never a token.
+   */
+  const pendingFile = join(s.paths.root, "downloads-pending.json");
+  const pending = new Map<string, DownloadBody>();
+  const savePending = () => writeFile(pendingFile, JSON.stringify([...pending.values()]), "utf8").catch(() => undefined);
+  const start = async (body: DownloadBody): Promise<DownloadJob | { refused: number; error: string }> => {
+    const files = await listHubFiles(body.repo, { token: token() });
+    const file = files.find((f) => f.path === body.path);
+    if (!file) return { refused: 404, error: "File not found in repo" };
+    const disk = await diskInfo(s.paths.models);
+    if (disk.freeGb !== undefined && disk.freeGb < file.size / 1024 ** 3 + 1) {
+      return { refused: 507, error: `Not enough disk space: the file needs ${(file.size / 1024 ** 3).toFixed(1)} GB and ${disk.freeGb.toFixed(1)} GB is free. Free some space or choose another models folder.` };
+    }
+    const job = s.downloads.enqueue({
+      url: file.url,
+      dest: destinationFor(s, body),
+      size: file.size,
+      ...(file.sha256 ? { sha256: file.sha256 } : {}),
+      ...(token() ? { headers: { authorization: `Bearer ${token()}` } } : {}),
+      label: `${body.repo} · ${body.path}`,
+    });
+    pending.set(job.id, { repo: body.repo, path: body.path, ...(body.category ? { category: body.category } : {}) });
+    void savePending();
+    return job;
+  };
+  // Finished, or cancelled by the user: no longer pending. A failed one stays, and is tried again at the next start.
+  s.downloads.on("update", (job: DownloadJob) => {
+    if ((job.status === "done" || job.status === "cancelled") && pending.delete(job.id)) void savePending();
+  });
+  void readFile(pendingFile, "utf8").then(
+    (text) => {
+      const list = (JSON.parse(text) as DownloadBody[]).filter((b) => typeof b?.repo === "string" && typeof b?.path === "string").slice(0, 50);
+      // A little after start, so the network and the models folder are ready.
+      const t = setTimeout(() => void (async () => {
+        for (const b of list) await start(b).catch(() => undefined);
+        void savePending();
+      })(), 8000);
+      t.unref?.();
+    },
+    () => undefined,
+  );
+
   app.post<{ Body: DownloadBody }>("/api/downloads", async (req, reply) => {
     try {
-      const files = await listHubFiles(req.body.repo, { token: token() });
-      const file = files.find((f) => f.path === req.body.path);
-      if (!file) return reply.code(404).send({ error: "File not found in repo" });
-      const disk = await diskInfo(s.paths.models);
-      if (disk.freeGb !== undefined && disk.freeGb < file.size / 1024 ** 3 + 1) {
-        return reply.code(507).send({ error: `Not enough disk space: the file needs ${(file.size / 1024 ** 3).toFixed(1)} GB and ${disk.freeGb.toFixed(1)} GB is free. Free some space or choose another models folder.` });
-      }
-      return s.downloads.enqueue({
-        url: file.url,
-        dest: destinationFor(s, req.body),
-        size: file.size,
-        ...(file.sha256 ? { sha256: file.sha256 } : {}),
-        ...(token() ? { headers: { authorization: `Bearer ${token()}` } } : {}),
-        label: `${req.body.repo} · ${req.body.path}`,
-      });
+      const r = await start(req.body);
+      return "refused" in r ? reply.code(r.refused).send({ error: r.error }) : r;
     } catch (err) {
       return reply.code(400).send({ error: hubError(err) });
     }

@@ -56,6 +56,42 @@ export async function phoneModels(s: Pick<KesherServices, "paths" | "config">): 
 }
 
 /**
+ * A model that comes in several files (`name-00001-of-00004.gguf`, …) is one model: one row with the whole
+ * size, pointing at the first part (the engine finds the rest beside it). A model with parts missing (a download
+ * that did not finish) says so, so it is not loaded half-there.
+ *
+ * @param files - Every model file found.
+ * @returns The list with each split model as one entry.
+ */
+export function joinSplitModels<T extends { path: string; name: string; size: number }>(files: T[]): Array<T & { parts?: { have: number; of: number } }> {
+  const part = /^(.*)-(\d{5})-of-(\d{5})(\.gguf)$/i;
+  const groups = new Map<string, { of: number; first?: T; size: number; have: Set<number>; at: number }>();
+  const out: Array<T & { parts?: { have: number; of: number } }> = [];
+  for (const f of files) {
+    const m = part.exec(f.path);
+    if (!m) {
+      out.push(f);
+      continue;
+    }
+    const key = `${m[1]!.toLowerCase()}|${m[3]}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { of: Number(m[3]), size: 0, have: new Set(), at: out.length };
+      groups.set(key, g);
+      out.push(f); // a place in the list, replaced below
+    }
+    g.size += f.size;
+    g.have.add(Number(m[2]));
+    if (Number(m[2]) === 1) g.first = f;
+  }
+  for (const g of groups.values()) {
+    const shown = g.first ?? out[g.at]!;
+    out[g.at] = { ...shown, name: shown.name.replace(/-\d{5}-of-\d{5}(\.gguf)$/i, "$1"), size: g.size, parts: { have: g.have.size, of: g.of } };
+  }
+  return out;
+}
+
+/**
  * Models, providers (connections) and local model files.
  *
  * @param app - Fastify instance.
@@ -106,7 +142,7 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
       const measured = await s.speeds.get(basename(m.path));
       return { path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw), ...(measured ? { measured } : {}) };
     }));
-    return [...own, ...others];
+    return joinSplitModels([...own, ...others]);
   });
 
   /**

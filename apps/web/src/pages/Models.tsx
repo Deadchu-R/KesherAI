@@ -266,7 +266,7 @@ function SetUpForMe(props: { models: Recommended[]; busy: boolean; onStarted: (s
   );
 }
 
-interface LocalFile { path: string; name: string; size: number; source?: string; gguf?: boolean; estimate?: Estimate; measured?: { tps: number; n: number } }
+interface LocalFile { path: string; name: string; size: number; source?: string; gguf?: boolean; estimate?: Estimate; measured?: { tps: number; n: number }; /** A model in several files: how many of them are here. */ parts?: { have: number; of: number } }
 interface Hardware { ramTotal: number; gpus: Array<{ name: string; vramTotal: number }>; unifiedMemory: boolean }
 
 const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
@@ -400,9 +400,10 @@ export function ModelsPage() {
                     <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                     {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                     {tab === "chat" && f.gguf && <BenchButton path={f.path} onDone={refreshLocal} />}
-                    {tab === "chat" && f.gguf && <FitButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
-                    {tab === "chat" && f.gguf && <CalibrateButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
-                    {tab === "chat" && f.gguf && loadButton(f)}
+                    {f.parts && f.parts.have < f.parts.of && <span className="pill warn" title={getLocale() === "he" ? "ההורדה לא הסתיימה. מצאו את המודל למטה ולחצו שוב על הורדה: היא ממשיכה מאיפה שנעצרה." : "The download did not finish. Find the model below and press Download again: it continues where it stopped."}>{getLocale() === "he" ? `חסרים חלקים (${f.parts.have}/${f.parts.of})` : `Parts missing (${f.parts.have}/${f.parts.of})`}</span>}
+                    {tab === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <FitButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
+                    {tab === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <CalibrateButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
+                    {tab === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && loadButton(f)}
                   </div>
                 ))}
               </div>

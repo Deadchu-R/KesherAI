@@ -2014,3 +2014,20 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 @media (prefers-reduced-motion: no-preference) { .step.live .step-mark::after { animation: step-pulse 1.2s ease-in-out infinite; } }
 @keyframes step-pulse { 50% { opacity: .35; } }
 .self-work-steps { display: grid; gap: 6px; padding: 10px 12px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); }
+/* The pane column beside the chat (Steps, Files, Context, Coach). */
+.conv-panes { position: relative; flex: none; display: flex; flex-direction: column; min-width: 0; border-inline-start: 1px solid var(--border); background: var(--bg); }
+.conv-panes-grip { position: absolute; inset-block: 0; inset-inline-start: -3px; width: 6px; cursor: col-resize; z-index: 2; touch-action: none; }
+.conv-panes-grip:hover, .conv-panes-grip:active { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.conv-panes-head { display: flex; align-items: center; padding: 6px 10px 0 14px; }
+.conv-panes-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 6px 12px 14px; }
+.conv-panes-body > * { margin: 0 !important; max-height: none !important; flex: none; }
+@media (max-width: 900px) {
+  /* No room for a column: the panes sit above the chat, under the buttons that open them. */
+  .conv-split { flex-direction: column; }
+  .conv-panes { order: -1; width: auto !important; max-height: 45dvh; border-inline-start: 0; border-bottom: 1px solid var(--border); }
+  .conv-panes-grip { display: none; }
+  .conv-split .chat { flex: 1; min-height: 0; }
+}
+.pane-btn { display: inline-flex; align-items: center; gap: 6px; padding-inline: 10px; }
+.pane-btn svg { flex: none; }
+.pane-btn-count { font-size: 12.5px; font-variant-numeric: tabular-nums; }
