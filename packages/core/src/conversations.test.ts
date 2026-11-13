@@ -357,6 +357,29 @@ test("conversation search finds words in messages and answers, Hebrew prefixes t
   }
 });
 
+test("a working chat is on disk at once (an update's installer gives no time to save), and updates wait for it", async () => {
+  const { server, dataDir } = await setup();
+  const folder = await mkdtemp(join(tmpdir(), "kesher-proj-"));
+  try {
+    const project = (await server.app.inject({ method: "POST", url: "/api/projects", payload: { name: "G", workspace: folder } })).json() as { id: string };
+    const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", projectId: project.id, modelId: "fake/m" } })).json() as { id: string };
+    await server.app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "make a file" } });
+    await until(async () => {
+      const r = (await server.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { session: { pendingApprovals: string[] } };
+      return r.session.pendingApprovals[0];
+    });
+    const { readdir: rd, readFile: rf } = await import("node:fs/promises");
+    const files = (await rd(dataDir, { recursive: true })).filter((f) => String(f).endsWith("working.json"));
+    assert.equal(files.length, 1, "working.json written");
+    await until(async () => ((await rf(join(dataDir, String(files[0])), "utf8")).includes(c.id) ? true : undefined));
+    const upd = await server.app.inject({ method: "POST", url: "/api/updates/apply", payload: {} });
+    assert.equal(upd.statusCode, 409);
+    assert.equal((upd.json() as { code?: string }).code, "chats-working");
+  } finally {
+    await server.close();
+  }
+});
+
 test("a chat working when KesherAI closes can continue after the restart", async () => {
   const { server, dataDir } = await setup();
   const folder = await mkdtemp(join(tmpdir(), "kesher-proj-"));

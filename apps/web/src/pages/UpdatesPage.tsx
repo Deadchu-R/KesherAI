@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { desktop } from "../library";
 import { reconnect } from "../Reconnect";
 import { getLocale, t } from "../i18n";
@@ -98,13 +98,19 @@ function Updates() {
   useEffect(() => {
     void api<{ running: Array<{ id: string; key: string; startedAt: string }> }>("/api/jobs").then((r) => setJobs(r.running), () => undefined);
   }, []);
-  const apply = async () => {
+  const apply = async (force = false) => {
     setError("");
     try {
-      setProgress(await api<UpdateProgress>("/api/updates/apply", { method: "POST" }));
+      setProgress(await api<UpdateProgress>("/api/updates/apply", { method: "POST", body: { force } }));
       // From the phone (or a browser): the computer's app installs and restarts; wait for it and reconnect.
       if (!desktop()?.restart) void reconnect({ update: true });
     } catch (e) {
+      // Chats are working: the update would stop them in the middle (they can continue afterwards).
+      if (e instanceof ApiError && e.code === "chats-working" && !force) {
+        const ok = confirm(getLocale() === "he" ? `יש צ'אטים שעובדים עכשיו. העדכון יפעיל מחדש את KesherAI ויעצור אותם (אפשר להמשיך אותם אחרי העדכון).\n\n${e.message}\n\nלעדכן בכל זאת?` : `${e.message}\n\nUpdate anyway?`);
+        if (ok) return apply(true);
+        return;
+      }
       setError((e as Error).message);
     }
   };

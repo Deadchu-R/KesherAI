@@ -532,6 +532,12 @@ export class ConversationManager {
       const lastAnswer = () => [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant")?.text;
       session.on("event", (e: AgentEvent) => this.deps.onEvent?.(id, e, title, lastAnswer));
     }
+    // A chat that is working is written down at once, so a restart that gives no time to save (an update's
+    // installer closing the app) still leaves "continue where it stopped" (found by Roee: a chat just stopped).
+    session.on("event", (e: { type: string; status?: string }) => {
+      if (e.type !== "status") return;
+      void this.noteWorking(id, e.status === "running" || e.status === "waiting");
+    });
     // When the agent is free again, the next queued message goes; with a goal, it is checked first.
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type !== "status" || (e.status !== "idle" && e.status !== "error")) return;
@@ -1113,6 +1119,48 @@ export class ConversationManager {
     return join(this.deps.outputsDir, "..", "interrupted.json");
   }
 
+  /** Chats working right now, on disk (left over after a crash or an update: they were stopped). */
+  private get workingFile(): string {
+    return join(this.deps.outputsDir, "..", "working.json");
+  }
+
+  private workingWrites: Promise<void> = Promise.resolve();
+  private recovered = false;
+
+  private async readList(file: string): Promise<Array<{ id: string; at: string }>> {
+    try {
+      const list = JSON.parse(await readFile(file, "utf8")) as unknown;
+      return Array.isArray(list) ? list.filter((x): x is { id: string; at: string } => !!x && typeof (x as { id?: unknown }).id === "string" && typeof (x as { at?: unknown }).at === "string").slice(0, 50) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Adds a chat to the working list, or takes it off (one write at a time). */
+  private noteWorking(id: string, on: boolean): Promise<void> {
+    this.workingWrites = this.workingWrites.then(async () => {
+      await this.recover();
+      const list = (await this.readList(this.workingFile)).filter((x) => x.id !== id);
+      if (on) list.push({ id, at: new Date().toISOString() });
+      await writeFile(this.workingFile, JSON.stringify(list)).catch(() => undefined);
+    });
+    return this.workingWrites;
+  }
+
+  /** Once after start: chats still on the working list were stopped by the last close, so they go to the interrupted list. */
+  private async recover(): Promise<void> {
+    if (this.recovered) return;
+    this.recovered = true;
+    const left = (await this.readList(this.workingFile)).filter((x) => {
+      const st = this.sessions.get(x.id)?.info().status;
+      return st !== "running" && st !== "waiting";
+    });
+    if (!left.length) return;
+    const before = (await this.readList(this.interruptedFile)).filter((x) => !left.some((l) => l.id === x.id));
+    await writeFile(this.interruptedFile, JSON.stringify([...before, ...left])).catch(() => undefined);
+    await writeFile(this.workingFile, "[]").catch(() => undefined);
+  }
+
   /**
    * Chats that were working when KesherAI last closed (an update, a restart):
    * they can continue from where they stopped.
@@ -1120,12 +1168,8 @@ export class ConversationManager {
    * @returns Their ids and when they stopped.
    */
   async interrupted(): Promise<Array<{ id: string; at: string }>> {
-    try {
-      const list = JSON.parse(await readFile(this.interruptedFile, "utf8")) as unknown;
-      return Array.isArray(list) ? list.filter((x): x is { id: string; at: string } => !!x && typeof (x as { id?: unknown }).id === "string").slice(0, 50) : [];
-    } catch {
-      return [];
-    }
+    await (this.workingWrites = this.workingWrites.then(() => this.recover()));
+    return this.readList(this.interruptedFile);
   }
 
   /**

@@ -34,7 +34,7 @@ export async function packExtension(folder: string, target: "chrome" | "firefox"
   }
   if (target === "firefox") {
     const manifest = JSON.parse(Buffer.from(files["manifest.json"]!).toString("utf8")) as Record<string, unknown>;
-    manifest.background = { scripts: ["background.js"] };
+    manifest.background = { scripts: ["page.js", "background.js"] };
     manifest.browser_specific_settings = { gecko: { id: "kesherai@deadchu-r.github.io", strict_min_version: "128.0", data_collection_permissions: { required: ["none"] } } };
     files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
   }

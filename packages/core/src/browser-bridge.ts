@@ -29,14 +29,28 @@ export interface BrowserTab {
  * commands (list tabs, open, read, click, type, screenshot). It acts in the
  * user's own browser, where they are already signed in.
  */
+/** KesherAI's own browser pane (the desktop app): carries out the same commands as the extension. */
+export type PaneHandler = (action: string, args: Record<string, unknown>) => Promise<unknown>;
+
+/** Sends the agent's browser commands to KesherAI's own pane or to the user's browser (the extension). */
 export class BrowserBridge {
   private socket: BridgeSocket | undefined;
+  private pane: PaneHandler | undefined;
   private pending = new Map<string, Pending>();
   private info: { browser?: string; version?: string; since?: number } = {};
 
   /** @returns Whether an extension is connected, and which browser. */
-  status(): { connected: boolean; browser?: string; version?: string; since?: number } {
-    return { connected: !!this.socket, ...this.info };
+  status(): { connected: boolean; browser?: string; version?: string; since?: number; pane: boolean; extension: boolean } {
+    return { connected: !!this.socket || !!this.pane, ...this.info, pane: !!this.pane, extension: !!this.socket };
+  }
+
+  /**
+   * The desktop app's own browser pane (replacing an older one); `undefined` removes it.
+   *
+   * @param handler - Carries out one command in the pane.
+   */
+  attachPane(handler: PaneHandler | undefined): void {
+    this.pane = handler;
   }
 
   /**
@@ -85,6 +99,16 @@ export class BrowserBridge {
    * @returns The extension's answer.
    */
   call<T>(action: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
+    // KesherAI's own pane first (the user watches it there); the user's browser when asked for, or without a pane.
+    const pane = this.pane;
+    if (pane && (args.browser !== "chrome" || !this.socket)) {
+      const { browser: _b, ...rest } = args;
+      return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`The browser did not answer "${action}" in time.`)), 60_000);
+        signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("Stopped.")); }, { once: true });
+        pane(action, rest).then((v) => { clearTimeout(timer); resolve(v as T); }, (e: Error) => { clearTimeout(timer); reject(e); });
+      });
+    }
     const socket = this.socket;
     if (!socket) return Promise.reject(new Error("The KesherAI browser extension is not connected. Install it from Settings → Browser, and keep the browser open."));
     const id = randomUUID();
@@ -115,7 +139,11 @@ export class BrowserBridge {
  */
 export function browserTools(b: BrowserBridge): AgentTool[] {
   if (!b.status().connected) return [];
-  const tabArg = { tabId: { type: "number", description: "The tab's id from browser_tabs. Leave out for the tab in front." } };
+  const both = b.status().pane && b.status().extension;
+  const tabArg = {
+    tabId: { type: "number", description: "The tab's id from browser_tabs. Leave out for the tab in front." },
+    ...(both ? { browser: { type: "string", enum: ["pane", "chrome"], description: "pane (default): KesherAI's own browser, which the user watches. chrome: the user's own browser, for sites where they are signed in." } } : {}),
+  };
   const pageText = (r: { url: string; title: string; text: string; elements: string[] }) =>
     `${r.title}\n${r.url}\n\n${r.text}\n\nElements you can use (ref: what it is):\n${r.elements.join("\n") || "(none)"}`;
   return [
@@ -123,11 +151,13 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       risk: "read",
       spec: {
         name: "browser_tabs",
-        description: "List the tabs open in the user's own browser (where they are signed in): id, title, address.",
-        inputSchema: { type: "object", properties: {} },
+        description: b.status().pane
+          ? "List the tabs open in KesherAI's own browser pane (or, with browser: chrome, the user's own browser): id, title, address."
+          : "List the tabs open in the user's own browser (where they are signed in): id, title, address.",
+        inputSchema: { type: "object", properties: both ? { browser: tabArg.browser } : {} },
       },
-      async run(_input, ctx) {
-        const tabs = await b.call<BrowserTab[]>("tabs", {}, ctx.signal);
+      async run(input, ctx) {
+        const tabs = await b.call<BrowserTab[]>("tabs", { browser: input.browser }, ctx.signal);
         return { output: tabs.map((t) => `${t.id}${t.active ? " (in front)" : ""}: ${t.title} — ${t.url}`).join("\n") || "No tabs." };
       },
     },
@@ -140,7 +170,7 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       },
       preview: async (input) => `Read the page in tab ${input.tabId ?? "in front"}`,
       async run(input, ctx) {
-        return { output: pageText(await b.call("read", { tabId: input.tabId }, ctx.signal)) };
+        return { output: pageText(await b.call("read", { tabId: input.tabId, browser: input.browser }, ctx.signal)) };
       },
     },
     {
@@ -152,7 +182,7 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       },
       preview: async (input) => `Take a picture of tab ${input.tabId ?? "in front"}`,
       async run(input, ctx) {
-        const r = await b.call<{ dataUrl: string }>("screenshot", { tabId: input.tabId }, ctx.signal);
+        const r = await b.call<{ dataUrl: string }>("screenshot", { tabId: input.tabId, browser: input.browser }, ctx.signal);
         const [, mimeType = "image/png", data = ""] = /^data:([^;]+);base64,(.*)$/.exec(r.dataUrl) ?? [];
         return { output: "(the screenshot)", images: [{ mimeType, data }] };
       },
@@ -168,7 +198,7 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       async run(input, ctx) {
         const url = String(input.url ?? "");
         if (!/^https?:\/\//i.test(url)) throw new Error("Only http and https addresses.");
-        return { output: pageText(await b.call("open", { url, tabId: input.tabId }, ctx.signal)) };
+        return { output: pageText(await b.call("open", { url, tabId: input.tabId, browser: input.browser }, ctx.signal)) };
       },
     },
     {
@@ -180,7 +210,7 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       },
       preview: async (input) => `Click element ${String(input.ref)} in tab ${input.tabId ?? "in front"}`,
       async run(input, ctx) {
-        return { output: pageText(await b.call("click", { ref: input.ref, tabId: input.tabId }, ctx.signal)) };
+        return { output: pageText(await b.call("click", { ref: input.ref, tabId: input.tabId, browser: input.browser }, ctx.signal)) };
       },
     },
     {
@@ -192,7 +222,7 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       },
       preview: async (input) => `Type "${String(input.text).slice(0, 200)}" into element ${String(input.ref)}${input.submit ? " and press Enter" : ""}`,
       async run(input, ctx) {
-        return { output: pageText(await b.call("type", { ref: input.ref, text: String(input.text ?? ""), submit: !!input.submit, tabId: input.tabId }, ctx.signal)) };
+        return { output: pageText(await b.call("type", { ref: input.ref, text: String(input.text ?? ""), submit: !!input.submit, tabId: input.tabId, browser: input.browser }, ctx.signal)) };
       },
     },
   ];

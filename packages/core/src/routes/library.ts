@@ -651,7 +651,13 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get("/api/jobs", async () => ({
     running: (await s.conversations.jobs().running()).map((j) => ({ id: j.id, key: j.key, startedAt: j.startedAt })),
   }));
-  app.post("/api/updates/apply", async (_req, reply) => {
+  app.post<{ Body: { force?: boolean } | undefined }>("/api/updates/apply", async (req, reply) => {
+    // Installing restarts KesherAI: a chat that is working would stop in the middle. Ask first.
+    const working = Object.keys(s.conversations.activity());
+    if (working.length && req.body?.force !== true) {
+      const titles = working.map((id) => s.library.summary(id)?.title ?? id).slice(0, 5);
+      return reply.code(409).send({ error: `${working.length} chat(s) are working now: ${titles.join(", ")}. The update restarts KesherAI and stops them (they can continue afterwards).`, code: "chats-working", chats: titles });
+    }
     try {
       return await s.updater.apply();
     } catch (err) {
