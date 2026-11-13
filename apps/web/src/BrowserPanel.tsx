@@ -36,6 +36,8 @@ export function BrowserPanel() {
   const area = useRef<HTMLDivElement>(null);
   const [shot, setShot] = useState(0);
   const [noApp, setNoApp] = useState(false);
+  const lastKey = useRef("");
+  const ticks = useRef(0);
   const active = st.tabs.find((t) => t.active);
 
   // The tabs: pushed by the app on the computer, read every 2 seconds elsewhere.
@@ -49,9 +51,14 @@ export function BrowserPanel() {
       void api<PaneState>("/api/browser/pane").then(
         (s) => {
           if (stop) return;
+          // A new picture when the page changed, and otherwise every third read (about 6 s): fewer pictures over
+          // a phone's connection (security and performance scan 50).
+          const key = JSON.stringify(s);
+          ticks.current++;
+          if (key !== lastKey.current || ticks.current % 3 === 0) setShot((n) => n + 1);
+          lastKey.current = key;
           setSt(s);
           setError("");
-          setShot((n) => n + 1);
         },
         (e: Error) => {
           if (stop) return;

@@ -50,6 +50,8 @@ test("encoded paths are checked as the router reads them", async () => {
 test("allowedOrigin", () => {
   assert.ok(allowedOrigin("chrome-extension://abcdef", "localhost:7420", "/api/browser/connect"));
   assert.ok(!allowedOrigin("chrome-extension://abcdef", "localhost:7420", "/api/conversations"));
+  assert.ok(!allowedOrigin("chrome-extension://abcdef", "localhost:7420", "/api/browser/pane/shot"), "not the pane's pictures");
+  assert.ok(!allowedOrigin("moz-extension://abc", "localhost:7420", "/api/browser/sites"));
 });
 
 test("the Unreal Editor's socket may send a bare loopback Origin; nothing else may", async () => {

@@ -45,7 +45,7 @@ export function localHost(host: string | undefined): boolean {
 /**
  * Whether a browser page from `origin` may call KesherAI's own API (`/api`).
  * The interface itself (same address), the Android app (http://localhost,
- * no port) and, for /api/browser only, the browser extension. Any other
+ * no port) and, for its socket (/api/browser/connect) only, the browser extension. Any other
  * website the user happens to visit cannot, even on this computer.
  *
  * @param origin - The Origin header.
@@ -56,7 +56,9 @@ export function localHost(host: string | undefined): boolean {
 export function allowedOrigin(origin: string, host: string | undefined, path: string): boolean {
   if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true;
   if (/^(https?|capacitor):\/\/localhost$/.test(origin)) return true;
-  if (/^(chrome|moz)-extension:\/\/[\w-]+$/.test(origin) && path.startsWith("/api/browser")) return true;
+  // Only its own socket: other /api/browser routes (the pane's pictures and commands, approved sites) are not for
+  // any extension installed in the user's browser (security scan 50).
+  if (/^(chrome|moz)-extension:\/\/[\w-]+$/.test(origin) && path === "/api/browser/connect") return true;
   // The Unreal Editor's WebSocket (libwebsockets) sends the address it connects to as its Origin, often
   // without a scheme or a port ("127.0.0.1"): accepted for the editor's own socket only (found testing the
   // bridge: every connection was refused with 403).

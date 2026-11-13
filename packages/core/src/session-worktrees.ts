@@ -76,7 +76,8 @@ export async function createSessionWorktree(folder: string, name: string, git: G
   // .worktreeinclude: ignored files (.env and the like) the new checkout needs.
   const want = existsSync(join(repo, ".worktreeinclude")) ? await readFile(join(repo, ".worktreeinclude"), "utf8") : "";
   if (want.trim()) {
-    const ignored = (await git(repo, ["ls-files", "--others", "--ignored", "--exclude-standard"]).catch(() => "")).split(/\r?\n/);
+    // --directory: an ignored folder (node_modules) is one line, so the list stays short and .env is not cut off.
+    const ignored = (await git(repo, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory"]).catch(() => "")).split(/\r?\n/);
     for (const f of includedFiles(want, ignored).filter((x) => !x.startsWith(".kesher/")).slice(0, 500)) {
       const to = join(path, f);
       await mkdir(dirname(to), { recursive: true });

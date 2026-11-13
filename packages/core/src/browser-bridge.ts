@@ -161,7 +161,8 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
   // "Always allow" for the browser is per web site (like Claude in Chrome): the site of the address, or of the tab.
   const siteOf = (url: string): string | undefined => {
     try {
-      const host = new URL(url).hostname.replace(/^www\./, "");
+      // The host with its port: "Always" on localhost:5173 (a dev server) is not every local service.
+      const host = new URL(url).host.replace(/^www\./, "");
       return host ? `site:${host}` : undefined;
     } catch {
       return undefined;
