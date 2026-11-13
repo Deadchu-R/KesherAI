@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
 import { SidebarShortcuts } from "./SidebarShortcuts";
+import { SidebarEdit } from "./SidebarEdit";
 import { useAppMenu } from "./AppMenu";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
@@ -140,7 +141,7 @@ export const NAV_ICONS: Record<string, string> = {
 };
 
 const PIN_KEY = "kesher.pins";
-const DEFAULT_PINS = ["#/images", "#/pages", "#/knowledge", "#/models"];
+export const DEFAULT_PINS = ["#/images", "#/pages", "#/knowledge", "#/models"];
 let pins: string[] | null = null;
 const pinListeners = new Set<() => void>();
 
@@ -199,9 +200,14 @@ function applyPins(next: string[], save: boolean): void {
   if (save) void savePins(next);
 }
 
-/** Puts the pinned pages in a new order (long press and drag in the sidebar). */
+/** Puts the pinned pages in a new order (long press and drag in the sidebar, or the ✏ edit mode). */
 export function setPinOrder(next: string[]): void {
   applyPins(next, true);
+}
+
+/** Shows pins that were changed on the computer (the design assistant's change_menu). */
+export function showPins(next: string[] | null): void {
+  applyPins(next ?? DEFAULT_PINS, false);
 }
 
 /**
@@ -312,6 +318,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const [dialog, setDialog] = useState<"code" | "project" | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const searching = useSearching();
+  // ✏: the menu becomes a list to reorder, hide and add to (like Linear's "Customize sidebar").
+  const [editing, setEditing] = useState(false);
   const [version, setVersion] = useState("");
   const activeId = hash.startsWith("#/c/") ? hash.slice(4) : "";
 
@@ -359,7 +367,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
             </a>
           ),
         )}
-        {pinnedItems.length > 0 && (
+        {!editing && pinnedItems.length > 0 && (
           <div className={`nav-pins${pinDrag.dragging ? " reordering" : ""}`} title={t("dragToReorder")}>
             {pinnedItems.map((n) => (
               <a key={n.href} href={n.href} className={`nav-link nav-pin${pinDrag.dragging === n.href ? " dragging" : ""}`} aria-current={hash === n.href ? "page" : undefined} {...pinDrag.props(n.href)}>
@@ -371,7 +379,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       </div>}
 
       <div className="sidebar-scroll">
-        {!searching && <SidebarShortcuts hash={hash} />}
+        {!searching && editing && <SidebarEdit onDone={() => setEditing(false)} />}
+        {!searching && !editing && <SidebarShortcuts hash={hash} />}
         {!searching && (<>
         <div className="section-head">
           <span>{t("projects")}</span>
@@ -418,6 +427,9 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       <div className="sidebar-foot">
       <div className="foot-row">
         <AccountButton />
+        <button type="button" className={`icon-btn foot-btn${editing ? " on" : ""}`} title={getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"} aria-label={getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"} aria-pressed={editing} onClick={() => setEditing(!editing)}>
+          <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 15l.7-3.2L12.2 3.3a1.4 1.4 0 0 1 2 0l.5.5a1.4 1.4 0 0 1 0 2L6.2 14.3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none" /></svg>
+        </button>
         <a className="icon-btn foot-btn" href="#/updates" title={t("updatesNav")} aria-label={t("updatesNav")}>⬆{newVersion && <span className="update-dot" aria-hidden="true">●</span>}</a>
         <button type="button" className="icon-btn foot-btn" title={t("language")} aria-label={t("language")} onClick={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{getLocale() === "he" ? "EN" : "ע"}</button>
         <a className="icon-btn foot-btn" href="#/settings" title={t("settings")} aria-label={t("settings")} aria-current={hash.startsWith("#/settings") ? "page" : undefined}>⚙</a>

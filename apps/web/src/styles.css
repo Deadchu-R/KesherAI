@@ -1933,3 +1933,49 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .task-mark, .pill, .toggle, button, .button { border: 1px solid ButtonText; }
   .task-mark.claimed, .task-mark.done { background: Highlight; }
 }
+
+/* Top-bar panels (the bell, the design assistant): a popover under the button; on a phone, across the screen. */
+.bar-pop-wrap { position: relative; display: inline-flex; }
+.bar-panel { width: 360px; max-height: min(560px, calc(100dvh - var(--bar-h) - 24px)); overflow-y: auto; overscroll-behavior: contain; gap: 10px; padding: 12px; }
+@media (max-width: 700px) { .bar-panel { position: fixed; top: calc(var(--bar-h) + env(safe-area-inset-top, 0px) + 4px); inset-inline: 8px; width: auto; } }
+.inbox-bell[aria-expanded="true"], .design-btn[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+.inbox-dot { position: absolute; inset-block-start: 5px; inset-inline-end: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+.inbox-pop-head { align-items: center; }
+.inbox-pop-head .icon-btn { text-decoration: none; }
+.inbox-pop-wait { gap: 8px; }
+.inbox-pop-approval { display: grid; gap: 6px; padding: 10px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); border-inline-start: 3px solid var(--accent); }
+.inbox-pop-approval pre { max-height: 140px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; }
+.inbox-pop-approval .row { gap: 8px; align-items: baseline; }
+.inbox-pop-title { color: var(--text); text-decoration: none; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-pop-notes { list-style: none; margin: 0 -4px; padding: 0; display: grid; gap: 1px; }
+.inbox-pop-notes li > a, .inbox-pop-notes li > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: calc(8px * var(--r-scale, 1)); color: var(--text); text-decoration: none; }
+.inbox-pop-notes li > a:hover { background: var(--raised); }
+.inbox-pop-notes li.new > * { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.inbox-pop-notes li.resolved { opacity: .6; }
+.inbox-pop-notes strong { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-pop-notes .row { gap: 10px; align-items: baseline; }
+.inbox-pop-body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.inbox-pop-empty { margin: 8px 2px; }
+.inbox-pop-foot { border-top: 1px solid var(--border); padding-top: 8px; font-size: 13px; align-items: center; }
+.inbox-pop-foot a { color: var(--accent); text-decoration: none; }
+.design-log { min-height: 90px; max-height: 300px; }
+.design-examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill-btn { flex: none; max-width: 100%; height: auto; padding: 5px 10px; font-size: 13px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text); text-align: start; }
+.pill-btn:hover { background: var(--raised); }
+.design-undo { margin-inline-start: 8px; font-size: 13px; }
+/* The sidebar's edit mode. */
+.side-edit { padding-bottom: 10px; }
+.side-edit-hint { margin: 0; padding: 0 12px 6px; }
+.side-edit-title { padding: 10px 12px 4px; font-size: 12.5px; color: var(--muted); }
+.side-edit-list { list-style: none; margin: 0; padding: 0 6px; display: grid; gap: 1px; }
+.side-edit-row { display: flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: calc(8px * var(--r-scale, 1)); }
+.side-edit-row:hover { background: var(--panel-2); }
+.side-edit-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.side-edit-row .icon-btn:disabled { opacity: .25; }
+.side-edit-add { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 12px; }
+.side-edit-reset { margin: 12px 12px 0; font-size: 13px; }
+.foot-btn.on { background: var(--panel-2); color: var(--accent); }
+@media (pointer: coarse) { .side-edit-row .icon-btn { min-width: 40px; min-height: 40px; } .pill-btn { min-height: 40px; } }
+.bar-panel .ue-ask { flex-wrap: nowrap; }
+.bar-panel .ue-ask input { flex-basis: auto; min-width: 0; }
+.side-edit-dialog { width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 6px 4px 12px; }

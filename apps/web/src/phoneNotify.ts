@@ -48,23 +48,55 @@ export async function setPhoneNotify(live: boolean, push: boolean): Promise<Phon
   return p.configure({ base: location.origin, key, alt: internet, live, push });
 }
 
+/** Tells the computer how this phone's notifications are set (shown in the computer's settings). */
+function hello(info: { plugin: boolean; permission?: boolean; live?: boolean; error?: string }): void {
+  if (deviceKey()) void api("/api/phone-push/hello", { method: "POST", body: info }).catch(() => undefined);
+}
+
+const ASKED = "kesher.notify.asked";
+
 /**
- * At start: opens the page a tapped notification asked for, follows later taps, and keeps the
- * phone's address and key current (after switching computers or pairing again).
+ * At start, in the Android app: opens the page a tapped notification asked for, follows later taps, keeps the
+ * phone's address and key current, and turns the app's own notifications on the first time (Android asks for
+ * the permission once; "off" in Settings stays off). It also tells the computer what happened, so a problem on
+ * the phone can be seen from the computer.
  */
 export function startPhoneNotify(): void {
+  const native = !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
   const p = phoneNotify();
-  if (!p) return;
+  if (!p) {
+    if (native) hello({ plugin: false });
+    return;
+  }
   const go = (path?: string) => {
     if (path && /^#\/[\w\-/]*$/.test(path)) location.hash = path;
   };
-  p.addListener("open", (e) => go(e.path));
+  try {
+    p.addListener("open", (e) => go(e.path));
+  } catch {
+    // an older app: taps still open the app
+  }
   void p.takeOpen().then((r) => go(r.path), () => undefined);
   void p.status().then(
-    (s) => {
-      if (s.live || s.push) void setPhoneNotify(s.live, s.push).catch(() => undefined);
+    async (s) => {
+      let asked = true;
+      try {
+        asked = localStorage.getItem(ASKED) === "1";
+        localStorage.setItem(ASKED, "1");
+      } catch {
+        asked = true;
+      }
+      // First time: the app's own notifications go on by themselves (no ntfy, nothing to set up).
+      const live = s.live || !asked;
+      if (!live && !s.push) return hello({ plugin: true, permission: s.permission, live: false });
+      try {
+        const now = await setPhoneNotify(live, s.push);
+        hello({ plugin: true, permission: now.permission, live: now.live });
+      } catch (e) {
+        hello({ plugin: true, permission: s.permission, live: s.live, error: (e as Error).message });
+      }
     },
-    () => undefined,
+    (e: Error) => hello({ plugin: true, error: e?.message || String(e) }),
   );
 }
 

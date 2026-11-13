@@ -59,25 +59,10 @@ export function NotificationsSection() {
   return (
     <>
     <PhoneAppNotifications />
+    <PhoneApps />
     <section className="card stack">
       <h2>{L("התראות", "Notifications")}</h2>
       <p className="muted">{L("הודעה כשעבודה ארוכה מסתיימת (צ׳אט, סוכן או הורדה), או כשסוכן מחכה לאישור שלכם — גם כשאתם רחוקים מהמחשב.", "A message when long work ends (a chat, an agent or a download), or when an agent waits for your approval — even away from the computer.")}</p>
-      <label className="check"><input type="checkbox" checked={s.ntfy.enabled} onChange={(e) => void put({ ntfy: { enabled: e.target.checked } })} /> {L("לטלפון, דרך האפליקציה החינמית ntfy", "On the phone, through the free ntfy app")}</label>
-      {s.ntfy.enabled && (
-        <div className="notify-phone">
-          {qr && <img src={qr} alt={L("קוד QR להרשמה", "QR code to subscribe")} width={168} height={168} />}
-          <ol className="muted small">
-            <li>{L("התקינו את ntfy מ-Google Play או F-Droid (או App Store).", "Install ntfy from Google Play or F-Droid (or the App Store).")}</li>
-            <li>{L("באפליקציה: + ← Subscribe to topic, והדביקו את שם הנושא:", "In the app: + → Subscribe to topic, and paste the topic name:")}</li>
-            <li className="notify-topic">
-              <code dir="ltr">{s.ntfy.topic}</code>
-              <button type="button" onClick={() => void navigator.clipboard?.writeText(s.ntfy.topic ?? "")}>{L("העתק", "Copy")}</button>
-            </li>
-            <li>{L("או סרקו את הקוד במצלמה של הטלפון.", "Or scan the code with the phone's camera.")}</li>
-          </ol>
-          <p className="muted small">{L("שם הנושא ארוך ואקראי, כך שרק מי שמכיר אותו מקבל את ההתראות. כברירת מחדל נשלחת רק כותרת השיחה, לא התוכן.", "The topic name is long and random, so only someone who knows it gets the notifications. By default only the chat's title is sent, not its content.")}</p>
-        </div>
-      )}
       <label className="check"><input type="checkbox" checked={s.desktop} onChange={(e) => void put({ desktop: e.target.checked })} /> {L("גם במחשב הזה, כשהחלון לא בחזית", "Also on this computer, when the window is not in front")}</label>
       <label className="check"><input type="checkbox" checked={s.waiting} onChange={(e) => void put({ waiting: e.target.checked })} /> {L("כשסוכן מחכה לאישור או לתשובה", "When an agent waits for an approval or an answer")}</label>
       {s.waiting && (
@@ -98,6 +83,33 @@ export function NotificationsSection() {
           {[0, 30, 60, 120, 300, 600].map((n) => <option key={n} value={n}>{n === 0 ? L("תמיד", "always") : n < 60 ? `${n} ${L("שניות", "s")}` : `${n / 60} ${L("דק׳", "min")}`}</option>)}
         </Select>
       </label>
+      <div className="row">
+        <button type="button" onClick={() => void test()}>{L("שלח התראת בדיקה", "Send a test")}</button>
+        {msg && <span className="muted small">{msg}</span>}
+      </div>
+      {error && <p className="error small">{error}</p>}
+    </section>
+    {/* ntfy is an add-on now: KesherAI's phone app notifies by itself, so this is only for a phone without the app. */}
+    <section className="card stack">
+      <details open={s.ntfy.enabled}>
+        <summary><strong>{L("הרחבה: ntfy", "Add-on: ntfy")}</strong> <span className="muted small">{s.ntfy.enabled ? L("פעיל", "on") : L("כבוי", "off")} · {L("לטלפון בלי האפליקציה של KesherAI (למשל iPhone)", "for a phone without KesherAI's app (an iPhone, say)")}</span></summary>
+        <div className="stack" style={{ marginTop: 10 }}>
+      <label className="check"><input type="checkbox" checked={s.ntfy.enabled} onChange={(e) => void put({ ntfy: { enabled: e.target.checked } })} /> {L("לטלפון, דרך האפליקציה החינמית ntfy", "On the phone, through the free ntfy app")}</label>
+      {s.ntfy.enabled && (
+        <div className="notify-phone">
+          {qr && <img src={qr} alt={L("קוד QR להרשמה", "QR code to subscribe")} width={168} height={168} />}
+          <ol className="muted small">
+            <li>{L("התקינו את ntfy מ-Google Play או F-Droid (או App Store).", "Install ntfy from Google Play or F-Droid (or the App Store).")}</li>
+            <li>{L("באפליקציה: + ← Subscribe to topic, והדביקו את שם הנושא:", "In the app: + → Subscribe to topic, and paste the topic name:")}</li>
+            <li className="notify-topic">
+              <code dir="ltr">{s.ntfy.topic}</code>
+              <button type="button" onClick={() => void navigator.clipboard?.writeText(s.ntfy.topic ?? "")}>{L("העתק", "Copy")}</button>
+            </li>
+            <li>{L("או סרקו את הקוד במצלמה של הטלפון.", "Or scan the code with the phone's camera.")}</li>
+          </ol>
+          <p className="muted small">{L("שם הנושא ארוך ואקראי, כך שרק מי שמכיר אותו מקבל את ההתראות. כברירת מחדל נשלחת רק כותרת השיחה, לא התוכן.", "The topic name is long and random, so only someone who knows it gets the notifications. By default only the chat's title is sent, not its content.")}</p>
+        </div>
+      )}
       <details>
         <summary className="muted small">{L("מתקדם", "Advanced")}</summary>
         <div className="stack">
@@ -105,12 +117,49 @@ export function NotificationsSection() {
           <div className="row"><button type="button" onClick={() => void put({ newTopic: true })}>{L("נושא חדש (הטלפון הישן יפסיק לקבל)", "New topic (the old phone stops getting them)")}</button></div>
         </div>
       </details>
-      <div className="row">
-        <button type="button" onClick={() => void test()} disabled={!s.ntfy.enabled && !s.desktop}>{L("שלח התראת בדיקה", "Send a test")}</button>
-        {msg && <span className="muted small">{msg}</span>}
-      </div>
-      {error && <p className="error small">{error}</p>}
+        </div>
+      </details>
     </section>
     </>
+  );
+}
+
+interface PhoneApp { id: string; name: string; connected: boolean; push: boolean; at: string; plugin: boolean; permission?: boolean; live?: boolean; error?: string }
+
+/**
+ * On the computer: the phone apps that get KesherAI's notifications, and what each one said the last time it
+ * opened: connected now, turned off, Android blocks its notifications, or the app needs an update. Nothing to
+ * set up here; it is on by itself the first time the app opens.
+ */
+function PhoneApps() {
+  const [phones, setPhones] = useState<PhoneApp[] | null>(null);
+  useEffect(() => {
+    const load = () => void api<{ phones: PhoneApp[] }>("/api/phone-push/phones").then((r) => setPhones(r.phones), () => setPhones(null));
+    load();
+    const t = window.setInterval(() => !document.hidden && load(), 5000);
+    return () => window.clearInterval(t);
+  }, []);
+  // Not this computer (the phone itself shows its own card), or nothing to show yet.
+  if (!phones) return null;
+  const say = (p: PhoneApp) =>
+    !p.plugin ? L("האפליקציה ישנה מדי להתראות משלה: עדכנו אותה (עדכונים ← האפליקציה בטלפון).", "The app is too old for its own notifications: update it (Updates → the phone app).")
+    : p.error ? L(`הטלפון דיווח על תקלה: ${p.error}`, `The phone reported a problem: ${p.error}`)
+    : p.permission === false ? L("אנדרואיד חוסם את ההתראות של KesherAI בטלפון הזה. הפעילו אותן בהגדרות הטלפון.", "Android blocks KesherAI's notifications on this phone. Turn them on in the phone's settings.")
+    : p.connected ? L("🟢 מחובר עכשיו: התראות מגיעות ישירות לאפליקציה.", "🟢 Connected now: notifications go straight to the app.")
+    : p.live ? L("⚪ פעיל, כרגע לא מחובר (הטלפון ישן או בלי רשת). ההתראה תגיע כשיתחבר.", "⚪ On, not connected right now (the phone sleeps or has no network). The notification arrives when it connects.")
+    : L("כבוי בטלפון הזה. מפעילים באפליקציה: הגדרות ← התראות.", "Off on this phone. Turn it on in the app: Settings → Notifications.");
+  return (
+    <section className="card stack">
+      <h2>{L("התראות לאפליקציה בטלפון", "Notifications to the phone app")}</h2>
+      {phones.length === 0 ? (
+        <p className="muted">{L("פתחו את אפליקציית KesherAI בטלפון: בפעם הראשונה היא מפעילה התראות בעצמה (אנדרואיד יבקש רשות פעם אחת), בלי ntfy ובלי הגדרות.", "Open the KesherAI app on the phone: the first time, it turns notifications on by itself (Android asks for permission once), with no ntfy and nothing to set up.")}</p>
+      ) : (
+        <ul className="al-list">
+          {phones.map((p) => (
+            <li key={p.id}><b dir="auto">{p.name}</b> <span className="muted" dir="auto">· {say(p)}</span></li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

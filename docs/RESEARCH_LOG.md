@@ -572,3 +572,26 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - **Pieces to build:** `fcm.ts` (token signing with `node:crypto`, send, drop a token on 404/UNREGISTERED), the route, the settings card with the two files and a test button, the Android side (`firebase-messaging`, runtime init, a service that decrypts and calls the existing `Notes.handle`), tests with a fake FCM endpoint.
   - **Costs and risks:** one more Android library (Google Play services only; a phone without them keeps the other two paths). The service account file is a secret on the computer: stored like other tokens, shown as "set" only, never returned by the API.
 - **Recommendation:** run the ntfy check first. Build the own-FCM path only if that check fails or Roee wants no ntfy app.
+
+## 2026-11-13: UX — the notification panel, the design assistant, editing the menu (Roee's request)
+- **Asked:** the bell opens a whole screen and should be a toggle; notifications from the app without ntfy (ntfy as an add-on); a 🎨 button next to the bell with a small model for the look and the side menu; a ✏ in the side menu to reorder it.
+- **Notification centers (GitHub, Linear, Slack, Notion; the pattern write-up on saasui.design):**
+  - The bell opens a **popover under it**, not a page. The full history is a separate page, linked from the popover's foot.
+  - Things that **need an answer come first and are answered in place** (approve, deny) without leaving the screen.
+  - The **badge counts only what is new**, is capped ("9+"), and **opening the panel clears it**. A count that never goes down (ours showed 50) teaches people to ignore it.
+  - "Mark all read" and a link to the settings sit in the panel.
+  - **Built:** `ui/BarPopover.tsx` (closes on outside click, Escape, and a page change; focus goes back to the button), `InboxBell` as a panel. The number shows only approvals waiting; other news is a dot that goes when the panel opens. On a phone the panel spans the screen under the bar.
+- **Customizing a sidebar (Linear "Customize sidebar", Slack sidebar preferences, Notion, Discord):**
+  - Editing is a **mode with a clear Done**; hiding **never deletes**, and hidden items stay one tap away.
+  - Drag is the fast way, but **arrows are needed too** (keyboard, screen readers, small touch targets). Slack and Linear give both.
+  - **Built:** `SidebarEdit.tsx`: pinned tools and shortcuts with ↑ ↓ ✕, "Add to the menu" with everything hidden, "Back to the default". ✏ in the sidebar's foot row on the computer; in the ≡ menu on the phone (as a dialog, since the phone has no sidebar on screen). Long press and drag in the sidebar still works.
+- **A small assistant for the look (Arc's theme tools, Raycast, Notion's and Linear's "ask AI" panels):**
+  - Small, next to what it changes; **examples to start from**; the change shows at once; **Undo next to each answer**.
+  - It must not be a second chat: two tools only (`change_look`, `change_menu`), six steps at most, approvals refused.
+  - **Built:** `design-assistant.ts` + `POST /api/design-assistant` + `DesignAssistant.tsx`. It uses the active chat model (a smaller dedicated model can come later: the request is short, so any small tool-calling model would do).
+- **Notifications without ntfy:** the app's own path already existed (live connection, then UnifiedPush) but Roee's phone never called `/api/phone-push`, so it was never on. Now the phone app turns the live connection on by itself at first start and reports what happened (`POST /api/phone-push/hello`: plugin loaded, permission, error); the computer shows each phone's state in plain words (Settings → Notifications). ntfy moved to a folded "Add-on: ntfy" card.
+- **Where this stopped / still open:**
+  - Notification **titles are English** inside a Hebrew interface ("Self-work needs you"): they are made on the server, which does not know the language. Needs the title as a key + parameters, translated where shown.
+  - Grouping notes by source in the panel (ten notes from one self-work run should be one line with a count).
+  - The design assistant has no model picker and no streaming; fine for short requests.
+  - General UX list from the competitor review stays in `docs/DESIGN_RESEARCH.md` (t39–t50): simple mode, command palette, run receipt with undo are the three biggest.

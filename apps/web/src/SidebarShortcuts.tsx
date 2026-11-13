@@ -17,6 +17,13 @@ export interface Shortcut { id: string; label: string; icon?: string; href: stri
 
 let cache: Shortcut[] | null = null;
 const listeners = new Set<(s: Shortcut[]) => void>();
+/** Shows shortcuts that were changed on the computer (the design assistant's change_menu). */
+export function showShortcuts(next: Shortcut[]): void {
+  cache = next;
+  listeners.forEach((l) => l(next));
+}
+/** Saves the whole list (add, rename, reorder and remove are one save). */
+export const saveShortcuts = (next: Shortcut[]) => save(next);
 const save = (next: Shortcut[]) =>
   api<{ shortcuts: Shortcut[] }>("/api/shortcuts", { method: "PUT", body: { shortcuts: next } }).then(
     (r) => {

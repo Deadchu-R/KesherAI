@@ -73,6 +73,17 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
     reply.hijack();
     s.phonePush.attach(device(req)!.id, reply.raw);
   });
+  /** The phone app reports its own notification state when it opens (PhonePush.hello). */
+  app.post<{ Body: { plugin?: boolean; permission?: boolean; live?: boolean; error?: string } }>("/api/phone-push/hello", { preHandler: deviceOnly }, async (req) => {
+    const b = req.body ?? {};
+    s.phonePush.hello(device(req)!.id, { plugin: b.plugin === true, ...(typeof b.permission === "boolean" ? { permission: b.permission } : {}), ...(typeof b.live === "boolean" ? { live: b.live } : {}), ...(typeof b.error === "string" ? { error: b.error } : {}) });
+    return { ok: true };
+  });
+  /** For the computer's settings: the phone apps that reported, and whether each is connected now. */
+  app.get("/api/phone-push/phones", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer itself." });
+    return { phones: s.phonePush.phones() };
+  });
   app.post<{ Body: { seq?: number } }>("/api/phone-push/ack", { preHandler: deviceOnly }, async (req) => {
     s.phonePush.ack(Number(req.body?.seq), device(req)!.id);
     return { ok: true };

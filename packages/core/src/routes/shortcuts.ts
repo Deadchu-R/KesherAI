@@ -1,38 +1,16 @@
-import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
+import { menuTool, runDesigner } from "../design-assistant.js";
+import { modelTurnFor } from "../model-turn.js";
+import { cleanShortcut, type Shortcut } from "../menu-shortcuts.js";
+
+export { cleanShortcut, type Shortcut } from "../menu-shortcuts.js";
 
 /**
  * The user's sidebar shortcuts (after Notion's: any page, renamed, reordered, up to 25; removing one only takes it
  * off the sidebar). Kept in the config so the phone shows the same ones. A shortcut opens a page of the app
  * (`#/…`) or a web address (http/https, opened outside the app); anything else, like `javascript:`, is refused.
  */
-
-/** A shortcut as kept. */
-export interface Shortcut { id: string; label: string; icon?: string; href: string }
-
-/**
- * Checks one shortcut.
- *
- * @param s - What the request sent.
- * @returns The cleaned shortcut, or an error to show.
- */
-export function cleanShortcut(s: Partial<Shortcut>): Shortcut | { error: string } {
-  const label = String(s.label ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
-  const href = String(s.href ?? "").trim();
-  const icon = s.icon ? [...String(s.icon).trim()].slice(0, 2).join("") : undefined;
-  if (!label) return { error: "A shortcut needs a name." };
-  const page = /^#\/[\w\-/.?=&%:~+]*$/.test(href);
-  let web = false;
-  try {
-    const u = new URL(href);
-    web = (u.protocol === "https:" || u.protocol === "http:") && href.length <= 500;
-  } catch {
-    web = false;
-  }
-  if (!page && !web) return { error: "A shortcut opens a page of KesherAI (#/…) or a web address (https://…)." };
-  return { id: s.id && /^[\w-]{1,40}$/.test(s.id) ? s.id : randomUUID(), label, ...(icon ? { icon } : {}), href };
-}
 
 /**
  * Registers the shortcut routes.
@@ -64,5 +42,45 @@ export function shortcutRoutes(app: FastifyInstance, s: KesherServices): void {
     s.config.shortcuts = out;
     await s.saveConfig();
     return { shortcuts: out };
+  });
+
+  /**
+   * The design assistant (the 🎨 panel): one request in words, done with change_look and change_menu only.
+   * One at a time. The pages come from the app (their names in the user's language) and are checked here.
+   */
+  let designing = false;
+  app.post<{ Body: { text?: string; pages?: Array<{ href?: string; label?: string }>; defaults?: string[]; hebrew?: boolean } }>("/api/design-assistant", async (req, reply) => {
+    const text = String(req.body?.text ?? "").trim().slice(0, 600);
+    if (!text) return reply.code(400).send({ error: "Say what to change." });
+    const modelId = s.config.activeModels.chat;
+    if (!modelId) return reply.code(400).send({ code: "no-model", error: "Choose a chat model first (Models)." });
+    if (designing) return reply.code(409).send({ error: "The design assistant is still working on the last request." });
+    const page = /^#\/[\w\-/]{0,98}$/;
+    const pages = (Array.isArray(req.body?.pages) ? req.body.pages : []).filter((p) => typeof p?.href === "string" && page.test(p.href)).slice(0, 60).map((p) => ({ href: p.href!, label: String(p.label ?? p.href).slice(0, 40) }));
+    const defaults = (Array.isArray(req.body?.defaults) ? req.body.defaults : []).filter((h) => typeof h === "string" && page.test(h)).slice(0, 40);
+    const store = {
+      pins: () => s.config.pins ?? null,
+      setPins: async (next: string[]) => {
+        s.config.pins = next;
+        await s.saveConfig();
+      },
+      shortcuts: () => s.config.shortcuts,
+      setShortcuts: async (next: Shortcut[]) => {
+        s.config.shortcuts = next;
+        await s.saveConfig();
+      },
+    };
+    const before = { pins: s.config.pins ?? null, shortcuts: [...s.config.shortcuts] };
+    const label = (h: string) => pages.find((p) => p.href === h)?.label ?? h;
+    const state = `Now pinned in the menu, in order: ${(before.pins ?? defaults).map(label).join(", ") || "(nothing)"}. Shortcuts: ${before.shortcuts.map((x) => x.label).join(", ") || "(none)"}.`;
+    designing = true;
+    try {
+      const r = await runDesigner({ text, tools: [...s.conversations.lookTools(), menuTool(store, pages, defaults)], modelId, model: modelTurnFor(s.registry, modelId), state, hebrew: req.body?.hebrew === true, signal: AbortSignal.timeout(180_000) });
+      return { reply: r.reply, look: r.used.includes("change_look"), menu: r.used.includes("change_menu"), before, pins: s.config.pins ?? null, shortcuts: s.config.shortcuts };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    } finally {
+      designing = false;
+    }
   });
 }

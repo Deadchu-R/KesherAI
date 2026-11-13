@@ -23,7 +23,7 @@ import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
 import { ruleAllows } from "./approval-rules.js";
 import type { ConversationDeps } from "./conversation-deps.js";
-import { mediaTools } from "./chat-tools-media.js";
+import { lookTools, mediaTools } from "./chat-tools-media.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
@@ -141,6 +141,11 @@ export class ConversationManager {
    */
   mediaTools(): { tools: AgentTool[]; notes: string[] } {
     return mediaTools(this.deps);
+  }
+
+  /** @returns The change_look tool alone, for the design assistant's panel (design-assistant.ts). */
+  lookTools(): AgentTool[] {
+    return lookTools(this.deps, []);
   }
 
   private pluginTools(): AgentTool[] {

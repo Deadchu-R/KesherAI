@@ -183,6 +183,28 @@ export class PhonePush {
     });
   }
 
+  /** What each phone app last said about itself (see hello). */
+  private readonly said = new Map<string, { at: string; plugin: boolean; permission?: boolean; live?: boolean; error?: string }>();
+
+  /**
+   * The phone app says, when it opens, whether it has its own notifications and how they are set, so the
+   * computer's settings can show "on", "needs an update" or the phone's error instead of leaving the user to guess.
+   *
+   * @param deviceId - The paired device.
+   * @param info - What it reported.
+   */
+  hello(deviceId: string, info: { plugin: boolean; permission?: boolean; live?: boolean; error?: string }): void {
+    this.said.set(deviceId, { at: new Date().toISOString(), plugin: info.plugin, ...(info.permission !== undefined ? { permission: info.permission } : {}), ...(info.live !== undefined ? { live: info.live } : {}), ...(info.error ? { error: info.error.slice(0, 200) } : {}) });
+  }
+
+  /** @returns Every paired phone app that has reported, with whether it is connected now. */
+  phones(): Array<{ id: string; name: string; connected: boolean; push: boolean; at: string; plugin: boolean; permission?: boolean; live?: boolean; error?: string }> {
+    return this.devices().flatMap((d) => {
+      const s = this.said.get(d.id);
+      return s ? [{ id: d.id, name: d.name, connected: this.live.has(d.id), push: !!d.push, ...s }] : [];
+    });
+  }
+
   /** @returns Whether any phone app can get notifications now (live, or with a push address). */
   hasReceivers(): boolean {
     return this.devices().some((d) => this.live.has(d.id) || !!d.push);

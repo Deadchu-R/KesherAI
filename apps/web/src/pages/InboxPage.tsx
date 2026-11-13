@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
+import { BarPopover } from "../ui/BarPopover";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -43,10 +44,37 @@ export function useInbox(every = 5000): [Inbox, () => void] {
   return [box, () => setN((x) => x + 1)];
 }
 
-/** The top bar's 🔔: how many things wait for approval, plus notifications not seen yet. */
+/** Marks everything up to `at` as seen (the bell's mark goes away). */
+function markSeen(at: number): void {
+  if (at <= seenAt()) return;
+  try {
+    localStorage.setItem(SEEN_KEY, String(at));
+  } catch {
+    /* private window: the bell keeps its mark */
+  }
+  dispatchEvent(new Event(SEEN_EVENT));
+}
+
+/** Answers an approval from the inbox (the panel and the page). */
+async function answerApproval(p: InboxApproval, decision: "allow" | "deny"): Promise<void> {
+  try {
+    await api("/api/inbox/answer", { method: "POST", body: { kind: p.kind, conversationId: p.conversationId, requestId: p.requestId, decision } });
+    toast(decision === "allow" ? L("אושר", "Allowed") : L("נדחה", "Denied"));
+  } catch (e) {
+    toast((e as Error).message);
+  }
+}
+
+/**
+ * The top bar's 🔔. It opens a small panel under it, like notification centers in GitHub, Linear and Slack
+ * (docs/RESEARCH_LOG.md, 2026-11-13): what waits for approval first, answered in place; then the latest
+ * notifications; "mark all read"; a link to the full page and to the settings. The mark on the bell counts only
+ * what needs you (approvals); other news shows as a dot, and opening the panel clears it.
+ */
 export function InboxBell() {
-  const [box] = useInbox(6000);
+  const [box, refresh] = useInbox(6000);
   const [seen, setSeen] = useState(seenAt);
+  const [busy, setBusy] = useState("");
   useEffect(() => {
     const on = () => setSeen(seenAt());
     addEventListener(SEEN_EVENT, on);
@@ -54,13 +82,86 @@ export function InboxBell() {
   }, []);
   // A "waiting" note that was answered (here, on the phone, or by Stop) is no longer new.
   const unread = box.notes.filter((x) => x.at > seen && !x.resolved).length;
-  const count = box.approvals.length + unread;
-  const label = box.approvals.length ? L(`התראות: ${box.approvals.length} מחכים לאישור`, `Notifications: ${box.approvals.length} waiting for approval`) : unread ? L(`התראות: ${unread} חדשות`, `Notifications: ${unread} new`) : L("התראות", "Notifications");
+  const waiting = box.approvals.length;
+  const label = waiting ? L(`התראות: ${waiting} מחכים לאישור`, `Notifications: ${waiting} waiting for approval`) : unread ? L(`התראות: ${unread} חדשות`, `Notifications: ${unread} new`) : L("התראות", "Notifications");
+  const newest = box.notes[0]?.at ?? 0;
+  const answer = async (p: InboxApproval, decision: "allow" | "deny") => {
+    setBusy(p.requestId);
+    await answerApproval(p, decision);
+    setBusy("");
+    refresh();
+  };
+  const notes = box.notes.slice(0, 8);
   return (
-    <a href="#/inbox" className={`bar-btn inbox-bell${box.approvals.length ? " urgent" : ""}`} aria-label={label} title={label}>
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M5 12.5V8a4 4 0 0 1 8 0v4.5l1.5 1.5h-11zM7.5 15.5a1.6 1.6 0 0 0 3 0" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none" /></svg>
-      {count > 0 && <span className="inbox-count">{count > 99 ? "99+" : count}</span>}
-    </a>
+    <BarPopover
+      className={`inbox-bell${waiting ? " urgent" : ""}`}
+      label={label}
+      title={L("התראות", "Notifications")}
+      icon={<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M5 12.5V8a4 4 0 0 1 8 0v4.5l1.5 1.5h-11zM7.5 15.5a1.6 1.6 0 0 0 3 0" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none" /></svg>}
+      badge={waiting > 0 ? <span className="inbox-count">{waiting > 9 ? "9+" : waiting}</span> : unread > 0 ? <span className="inbox-dot" /> : null}
+      // What the panel shows now has been seen: the dot goes, the highlight stays until the panel closes.
+      onOpen={() => window.setTimeout(() => markSeen(newest), 1500)}
+    >
+      {(close) => (
+        <>
+          <div className="row inbox-pop-head">
+            <strong className="grow">{L("התראות", "Notifications")}</strong>
+            <a className="icon-btn" href="#/settings/notifications" aria-label={L("הגדרות התראות", "Notification settings")} title={L("הגדרות התראות", "Notification settings")} onClick={close}>⚙</a>
+          </div>
+          {waiting > 0 && (
+            <div className="stack inbox-pop-wait">
+              {box.approvals.slice(0, 4).map((p) => (
+                <div key={p.requestId} className="inbox-pop-approval">
+                  <div className="row">
+                    <span aria-hidden="true">{p.kind === "self-work" ? "🤖" : "💬"}</span>
+                    <a className="grow inbox-pop-title" href={p.kind === "chat" ? `#/c/${p.conversationId}` : "#/self-work"} dir="auto" onClick={close}>{p.title || (p.kind === "self-work" ? L("עבודה עצמית", "Self-work") : L("שיחה", "Chat"))}</a>
+                    <span className="muted small">{time(p.at)}</span>
+                  </div>
+                  <div className="small" dir="auto"><code dir="ltr">{p.tool}</code> {p.purpose || p.reason}</div>
+                  <details>
+                    <summary className="muted small">{L("מה בדיוק", "Details")}</summary>
+                    <pre className="ctx-text" dir="ltr">{p.preview}</pre>
+                  </details>
+                  <div className="row">
+                    <button type="button" className="primary small" disabled={busy === p.requestId} onClick={() => void answer(p, "allow")}>{L("אשר", "Allow")}</button>
+                    <button type="button" className="small" disabled={busy === p.requestId} onClick={() => void answer(p, "deny")}>{L("דחה", "Deny")}</button>
+                  </div>
+                </div>
+              ))}
+              {waiting > 4 && <a className="muted small" href="#/inbox" onClick={close}>{L(`ועוד ${waiting - 4} מחכים`, `and ${waiting - 4} more waiting`)}</a>}
+            </div>
+          )}
+          {notes.length === 0 && waiting === 0 ? (
+            <p className="muted inbox-pop-empty">{L("אין התראות. הן מגיעות כשעבודה ארוכה נגמרת, כשהורדה מסתיימת או כשסוכן מחכה לך.", "Nothing here. Notifications arrive when long work ends, a download finishes, or an agent waits for you.")}</p>
+          ) : (
+            <ul className="inbox-pop-notes">
+              {notes.map((n) => {
+                const inner = (
+                  <>
+                    <span className="row">
+                      <strong className="grow" dir="auto">{n.title}</strong>
+                      <span className="muted small">{time(n.at)}</span>
+                    </span>
+                    {n.resolved ? <span className="inbox-resolved small">✓ {resolvedLabel(n.resolved)}</span> : n.body && <span className="muted small inbox-pop-body" dir="auto">{n.body}</span>}
+                  </>
+                );
+                const cls = n.resolved ? "resolved" : n.at > seen ? "new" : "";
+                return (
+                  <li key={`${n.at}-${n.title}`} className={cls}>
+                    {n.path?.startsWith("#/") ? <a href={n.path} onClick={close}>{inner}</a> : <div>{inner}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="row inbox-pop-foot">
+            <a href="#/inbox" onClick={close}>{L("כל ההתראות", "All notifications")}</a>
+            <span className="grow" />
+            {unread > 0 && <button type="button" className="link-btn" onClick={() => markSeen(newest)}>{L("סמן הכל כנקרא", "Mark all read")}</button>}
+          </div>
+        </>
+      )}
+    </BarPopover>
   );
 }
 
@@ -102,15 +203,9 @@ export function InboxPage() {
   };
   const answer = async (p: InboxApproval, decision: "allow" | "deny") => {
     setBusy(p.requestId);
-    try {
-      await api("/api/inbox/answer", { method: "POST", body: { kind: p.kind, conversationId: p.conversationId, requestId: p.requestId, decision } });
-      toast(decision === "allow" ? L("אושר", "Allowed") : L("נדחה", "Denied"));
-    } catch (e) {
-      toast((e as Error).message);
-    } finally {
-      setBusy("");
-      refresh();
-    }
+    await answerApproval(p, decision);
+    setBusy("");
+    refresh();
   };
   return (
     <div className="page inbox">

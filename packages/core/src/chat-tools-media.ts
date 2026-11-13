@@ -130,7 +130,7 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
  * "green accent", "put Work first") and the model changes KesherAI's look.
  * Only looks: checked by cleanAppearance, nothing else can change.
  */
-export function lookTools(deps: ConversationDeps, notes: string[]): AgentTool[] {
+export function lookTools(deps: Pick<ConversationDeps, "look" | "assets">, notes: string[]): AgentTool[] {
   const look = deps.look;
   if (!look) return [];
   notes.push(

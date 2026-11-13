@@ -7,6 +7,8 @@ import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
 import { reconnect } from "./Reconnect";
 import { InboxBell } from "./pages/InboxPage";
+import { DesignAssistant } from "./DesignAssistant";
+import { SidebarEdit } from "./SidebarEdit";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -51,6 +53,8 @@ export const NEW_CODE_EVENT = "kesher:new-code";
  */
 export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { hash: string; online: boolean | null; sidebarOpen: boolean; onSidebar: () => void; onLocale: () => void }) {
   const [menu, setMenu] = useState(false);
+  // The menu's ✏ (the phone has no sidebar on screen, so the edit list opens as a dialog).
+  const [editMenu, setEditMenu] = useState(false);
   const app = useAppMenu();
   const [host, setHost] = useState("");
 
@@ -91,6 +95,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
             </div>
           ))}
           <MenuSeparator />
+          <MenuItem icon="✏" onSelect={() => setEditMenu(true)}>{getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"}</MenuItem>
           <MenuItem icon="⚙" href="#/settings">{t("settings")}</MenuItem>
           <MenuSeparator />
           <MenuItem icon="🌐" onSelect={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{t("language")}</MenuItem>
@@ -117,9 +122,17 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {/* Pages render their own title here with a portal; React leaves this element's children to them. */}
           <div id="appbar-title" className="appbar-slot" />
         </div>
+        <DesignAssistant />
         <InboxBell />
         <ComputerHub online={online} status={status} icon={Icon.computer} />
       </div>
+      {editMenu && (
+        <div className="dialog-backdrop" role="presentation" onClick={() => setEditMenu(false)}>
+          <div className="dialog card side-edit-dialog" role="dialog" aria-modal="true" aria-label={getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"} onClick={(e) => e.stopPropagation()}>
+            <SidebarEdit onDone={() => setEditMenu(false)} />
+          </div>
+        </div>
+      )}
     </header>
   );
 }
