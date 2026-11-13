@@ -30,6 +30,8 @@ export interface Note {
   ref?: string;
   /** How a waiting note ended ("answered", "stopped"…): shown in the list, not counted as new. */
   resolved?: string;
+  /** "Send a test": the phone shows it even while its app is open on screen (a finished-work note stays quiet then). */
+  test?: boolean;
 }
 
 /** How long an Approve / Deny button works. */

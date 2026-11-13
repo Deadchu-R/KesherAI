@@ -51,7 +51,7 @@ export function NotificationsSection() {
     try {
       const r = await api<{ channels: string[] }>("/api/notifications/test", { method: "POST" });
       setMsg(
-        r.channels.includes("app") ? L("נשלחה התראת בדיקה לאפליקציה בטלפון.", "A test notification went to the phone app.")
+        r.channels.includes("app") ? L("הטלפון אישר שקיבל את התראת הבדיקה. התראות על עבודה שהסתיימה לא קופצות כשהאפליקציה פתוחה על המסך; \"מחכה לך\" קופצת תמיד.", "The phone confirmed it got the test. Notes about finished work do not pop up while the app is open on screen; \"waiting for you\" always does.")
         : r.channels.includes("phone") ? L("האפליקציה בטלפון לא ענתה, אז ההתראה נשלחה דרך ntfy.", "The phone app did not answer, so the test went through ntfy.")
         : L("לא נשלח לטלפון: האפליקציה בטלפון לא מחוברת כרגע, ו-ntfy כבוי. פתחו את האפליקציה בטלפון ונסו שוב.", "Nothing went to the phone: the phone app is not connected right now, and ntfy is off. Open the app on the phone and try again."),
       );

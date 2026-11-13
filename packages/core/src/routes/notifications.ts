@@ -51,7 +51,7 @@ export async function notificationRoutes(app: FastifyInstance, s: KesherServices
   );
   app.post("/api/notifications/test", { preHandler: local }, async (_req, reply) => {
     try {
-      const channels = await s.notifier.send({ title: "KesherAI", body: "Notifications work. You will get one when long work is done.", path: "#/", tags: ["tada"] }, true);
+      const channels = await s.notifier.send({ title: "KesherAI", body: "Notifications work. You will get one when long work is done.", path: "#/", tags: ["tada"], test: true }, true);
       return { channels };
     } catch (e) {
       return reply.code(502).send({ error: `The phone notification did not go out: ${(e as Error).message}` });

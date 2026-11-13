@@ -123,8 +123,10 @@ export async function checkEndpoint(endpoint: string, resolve: (host: string) =>
  */
 export function phoneMessage(n: Note): PhoneMessage {
   const chat = /^#\/c\/([\w-]+)/.exec(n.path ?? "")?.[1];
+  // A test goes as the "waiting" kind: the phone app hides the other kinds while it is open on screen, and a test
+  // sent with the app open looked as if nothing arrived.
   const id = n.ref ?? chat ?? (n.path === "#/models" ? "downloads" : `n-${n.title.slice(0, 40)}`);
-  const ch = n.tags?.includes("raised_hand") || (n.priority ?? 3) >= 4 ? "waiting" : n.tags?.includes("inbox_tray") || n.path === "#/models" ? "downloads" : "done";
+  const ch = n.test || n.tags?.includes("raised_hand") || (n.priority ?? 3) >= 4 ? "waiting" : n.tags?.includes("inbox_tray") || n.path === "#/models" ? "downloads" : "done";
   const m: PhoneMessage = { t: "show", id, ch, title: n.title.slice(0, 120), body: n.body.slice(0, 600), path: n.path?.startsWith("#/") ? n.path : "#/inbox", ...(n.actions?.length ? { actions: n.actions } : {}) };
   while (Buffer.byteLength(JSON.stringify(m)) > MAX_PLAIN && (m.body ?? "").length > 0) m.body = (m.body ?? "").slice(0, Math.floor((m.body ?? "").length / 2));
   return m;
