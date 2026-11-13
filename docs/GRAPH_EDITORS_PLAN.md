@@ -60,6 +60,7 @@ supports nothing. I want both to support everything the engines can do, synced w
 - State Graphs: states and transitions drawn as a state machine (today only flow graphs get the canvas).
 
 ### 2. The Blueprint canvas to the cheat sheet
+- ✅ 0.6.135: hold B / S / D / P + click empty space → Branch, Sequence, Delay, Event BeginPlay.
 - Hold-a-letter + click to place common nodes; drag a variable in for Get/Set; Ctrl+drag a pin to move its
   links; break one link (click a wire, Delete); hover highlight.
 - Reroute nodes; comments (C) with resize and colour; align; duplicate, copy, paste (inside one graph first).
@@ -68,6 +69,8 @@ supports nothing. I want both to support everything the engines can do, synced w
 - Compile result drawn on the nodes (error and warning badges), as the editor does.
 
 ### 3. Sync when a project opens
+- ✅ 0.6.134: the page reads the open graph again every 10 s while the editor is connected (changes made in the
+  editor show up), skipped right after a click or key on the page. The bridge's own "changed" event is still to do.
 - **Unreal:** the bridge connects by itself when the editor starts. Add: the page refreshes its Blueprint list and
   the open graph the moment the editor connects (today only on reload); queued changes made while the editor
   was closed are applied and shown one by one; the canvas reloads when the Blueprint changes in the editor

@@ -44,11 +44,21 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  * - wheel or pinch zooms; Home fits the graph; Delete removes the selected
  *   nodes; Ctrl+Z / Ctrl+Y undo and redo in the editor itself; Ctrl+F
  *   searches the nodes (Enter: next);
+ * - Unreal's hold-a-letter shortcuts: hold B / S / D / P and click empty space for Branch, Sequence, Delay,
+ *   Event BeginPlay (Epic's Blueprint cheat sheet);
  * Each change goes to the editor at once (one undo step there).
  * Without `editable` (the editor closed) it only looks: pan, zoom, search, and says why when the user tries to
  * change something. Unity: moving, connecting and deleting work (what its package supports); adding nodes and
  * breaking links wait for the package's next version.
  */
+/** Unreal's hold-a-letter nodes (Epic's Blueprint cheat sheet), by the letter held. */
+const QUICK: Record<string, Partial<Op>> = {
+  b: { op: "add", type: "branch" },
+  s: { op: "add", type: "sequence" },
+  d: { op: "add", type: "call", function: "KismetSystemLibrary:Delay" },
+  p: { op: "add", type: "event", event: "ReceiveBeginPlay" },
+};
+
 export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string }> }) {
   // Unity and Unreal share the canvas; each has its own routes.
   const engine = unity ? "unity" : "unreal";
@@ -167,6 +177,23 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     const r = frame.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
+  // Hold a letter and click empty space to place a common node, as in Unreal (not while typing in a field).
+  const held = useRef("");
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !(t && /INPUT|TEXTAREA|SELECT/.test(t.tagName))) held.current = e.key.toLowerCase();
+    };
+    const up = () => { held.current = ""; };
+    addEventListener("keydown", down);
+    addEventListener("keyup", up);
+    addEventListener("blur", up);
+    return () => {
+      removeEventListener("keydown", down);
+      removeEventListener("keyup", up);
+      removeEventListener("blur", up);
+    };
+  }, []);
   const world = (p: { x: number; y: number }) => ({ x: (p.x - view.x) / view.k, y: (p.y - view.y) / view.k });
 
   /** Sends operations to the editor (one undo step there) and reads the graph again. */
@@ -248,6 +275,12 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       if (editable) return setDrag({ kind: "move", sx: p.x, sy: p.y, moved: false });
       // Read-only: dragging a node pans, and a click on it keeps it selected.
       return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false, onNode: true });
+    }
+    const quick = !unity && editable && e.button === 0 ? QUICK[held.current] : undefined;
+    if (quick) {
+      const w = world(p);
+      void apply([{ ...quick, ref: "$n", x: Math.round(w.x / SCALE), y: Math.round(w.y / SCALE) } as Op]);
+      return;
     }
     if (touch || !editable) return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false });
     setDrag({ kind: "marquee", sx: p.x, sy: p.y, ex: p.x, ey: p.y, add: e.ctrlKey || e.shiftKey });
