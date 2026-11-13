@@ -49,7 +49,7 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  * change something. Unity: moving, connecting and deleting work (what its package supports); adding nodes and
  * breaking links wait for the package's next version.
  */
-export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string }) {
+export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string }> }) {
   // Unity and Unreal share the canvas; each has its own routes.
   const engine = unity ? "unity" : "unreal";
   const saidWhy = useRef(0);
@@ -171,6 +171,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
 
   /** Sends operations to the editor (one undo step there) and reads the graph again. */
   const apply = async (ops: Op[]): Promise<Array<{ ok: boolean; error?: string; node?: string }>> => {
+    if (onOps) {
+      const r = onOps(ops);
+      r.filter((x) => !x.ok).forEach((x) => toast(`⚠ ${x.error ?? ""}`));
+      return r;
+    }
     setBusy(true);
     try {
       const r = await api<{ results: Array<{ ok: boolean; error?: string; node?: string }>; failed: number }>(`/api/${engine}/apply`, { method: "POST", body: { path, graph, ops } });
@@ -184,10 +189,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       setBusy(false);
     }
   };
-  const undo = (redo: boolean) => void api(`/api/${engine}/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message));
+  const undo = (redo: boolean) => (onOps ? toast(L("ביטול: \"בטל שינויים\" למעלה מחזיר את הקובץ כמו שהוא שמור.", "Undo: \"Discard changes\" above puts the file back as it is saved.")) : void api(`/api/${engine}/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message)));
 
   const openMenu = (p: { x: number; y: number }, from?: Menu["from"]) => {
     if (!editable) return;
+    if (onOps) return toast(L("הוספת צעד: בלוח שמשמאל (+ פעולה, + שינוי ערך, + תנאי).", "Adding a step: in the panel beside the graph (+ Action, + Change a value, + Condition)."));
     const r = frame.current!.getBoundingClientRect();
     const w = world(p);
     setMenu({ left: Math.min(p.x, Math.max(0, r.width - 300)), top: Math.min(p.y, Math.max(0, r.height - 330)), wx: w.x, wy: w.y, ...(from ? { from } : {}) });

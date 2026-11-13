@@ -147,6 +147,98 @@ export function ScriptNodes() {
     setSel("");
     setTick((t) => t + 1);
   };
+  /**
+   * Wires drawn on the graph, turned into the C# they mean (Roee, 2026-11-13: "connecting nodes does not work"):
+   * - a flow wire (then → execute) puts the step right after the one it comes from (or first inside a Branch's
+   *   True/False or a Loop's body);
+   * - a value wire from the method's input (a parameter) to a step's input writes that name there;
+   * - Delete removes steps; Alt+click on an input clears it. Moving a node only moves the picture.
+   */
+  const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string }> => {
+    if (!m) return ops.map(() => ({ ok: false, error: L("אין מתודה פתוחה.", "No method is open.") }));
+    const results = ops.map((op): { ok: boolean; error?: string } => {
+      if (op.op === "move") return { ok: true };
+      if (op.op === "delete") {
+        const f = findStmt(m.body, String(op.node));
+        if (!f) return { ok: false, error: L("את הצומת הזה אי אפשר למחוק (זו נקודת הכניסה של המתודה).", "This node cannot be deleted (it is the method's entry).") };
+        f.list.splice(f.index, 1);
+        (m as typeof m & { dirty?: boolean }).dirty = true;
+        if (f.list[f.index]) f.list[f.index]!.dirty = true;
+        return { ok: true };
+      }
+      if (op.op === "disconnect") {
+        const f = findStmt(m.body, String(op.node));
+        const pin = String(op.pin);
+        if (!f) return { ok: true };
+        const s2 = f.stmt;
+        if (s2.kind === "call" && /^arg\d+$/.test(pin)) s2.args[Number(pin.slice(3))] = "0";
+        else if ((s2.kind === "set" || s2.kind === "local") && pin === "value") s2.value = "0";
+        else if (s2.kind === "if" && pin === "Condition") s2.cond = "true";
+        else return { ok: false, error: L("חיבורי זרימה משנים מקום על ידי גרירת חוט חדש.", "Flow wires change by drawing a new wire.") };
+        s2.dirty = true;
+        return { ok: true };
+      }
+      if (op.op !== "connect") return { ok: false, error: `${String(op.op)}?` };
+      const from = op.from as { node: string; pin: string };
+      const to = op.to as { node: string; pin: string };
+      const target = findStmt(m.body, to.node);
+      if (!target) return { ok: false, error: L("אי אפשר לחבר לנקודת הכניסה של המתודה.", "Nothing can connect into the method's entry.") };
+      const fromNode = nodes.find((n) => n.id === from.node);
+      const fromPin = fromNode?.pins.find((p) => p.name === from.pin);
+      if (fromPin?.type === "exec") {
+        if (to.pin !== "execute") return { ok: false, error: L("חוט זרימה מתחבר לכניסה של צעד.", "A flow wire goes into a step's entry.") };
+        const moving = target.stmt;
+        // A step cannot go inside itself (a wire from its own branch or loop back into it).
+        const inner = moving.kind === "if" ? [...moving.then, ...(moving.else ?? [])] : moving.kind === "loop" ? moving.body : [];
+        if (from.node === moving.id || findStmt(inner, from.node)) return { ok: false, error: L("צעד לא יכול להיכנס לתוך עצמו.", "A step cannot go inside itself.") };
+        // Take the step out of where it is…
+        target.list.splice(target.index, 1);
+        // …and put it after the step the wire starts from, or first in that step's branch or loop body.
+        let list: CsStmt[];
+        let at: number;
+        if (from.node === m.id) {
+          list = m.body;
+          at = 0;
+        } else {
+          const src = findStmt(m.body, from.node);
+          if (!src) {
+            target.list.splice(target.index, 0, moving);
+            return { ok: false, error: L("לא נמצא הצעד שהחוט יוצא ממנו.", "The step the wire starts from was not found.") };
+          }
+          const s3 = src.stmt;
+          if (s3.kind === "if" && from.pin === "True") {
+            list = s3.then;
+            at = 0;
+          } else if (s3.kind === "if" && from.pin === "False") {
+            list = s3.else ??= [];
+            at = 0;
+          } else if (s3.kind === "loop" && from.pin === "Loop Body") {
+            list = s3.body;
+            at = 0;
+          } else {
+            list = src.list;
+            at = src.index + 1;
+          }
+        }
+        list.splice(at, 0, moving);
+        moving.dirty = true;
+        (m as typeof m & { dirty?: boolean }).dirty = true;
+        return { ok: true };
+      }
+      // A value: the method's parameter (or any output with a name) written into the step's input.
+      const value = from.node === m.id ? from.pin : fromNode ? `${fromNode.title}.${from.pin}` : from.pin;
+      const s4 = target.stmt;
+      if (s4.kind === "call" && /^arg\d+$/.test(to.pin)) s4.args[Number(to.pin.slice(3))] = value;
+      else if (s4.kind === "call" && to.pin === "Target") s4.target = value;
+      else if ((s4.kind === "set" || s4.kind === "local" || s4.kind === "return") && to.pin === "value") s4.value = value;
+      else if (s4.kind === "if" && to.pin === "Condition") s4.cond = value;
+      else return { ok: false, error: L("לקלט הזה אי אפשר לחבר ערך.", "A value cannot go into this input.") };
+      s4.dirty = true;
+      return { ok: true };
+    });
+    if (results.some((r) => r.ok) && ops.some((o) => o.op !== "move")) setTick((t) => t + 1);
+    return results;
+  };
   /** A fresh statement of the chosen kind (the defaults a person without code expects). */
   const fresh = (kind: "call" | "set" | "if" | "local", target?: string): CsStmt => {
     const id = newId();
@@ -331,7 +423,7 @@ export function ScriptNodes() {
               <div className="script-graph">
                 <div className="script-canvas">
                   <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: כשהשחקן נוגע במטבע תוסיף נקודה", "e.g. when the player touches a coin add a point")} />
-                  {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable={false} unity onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
+                  {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable unity onOps={graphOps} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
                 <div className="script-side">
                 <aside className="script-vars card">{variables}</aside>
