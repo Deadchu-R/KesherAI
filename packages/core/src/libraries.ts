@@ -60,7 +60,7 @@ export interface InstalledLibrary {
 }
 
 /** Files kept from an archive: documentation and source text, no programs. */
-const KEEP = /\.(md|mdx|markdown|rst|txt|html?|cs|h|hpp|cpp|py|gd|ts|js|json|ya?ml|ini|xml)$/i;
+const KEEP = /\.(md|mdx|markdown|rst|rdoc|adoc|sgml|txt|html?|cs|h|hpp|cpp|c|java|py|gd|ts|js|json|ya?ml|ini|xml)$/i;
 const MAX_ARCHIVE = 400 * 1024 * 1024;
 
 /**
@@ -73,6 +73,23 @@ export function catalog(unrealHeaders: () => Promise<string[] | undefined>): Cat
     { id: "unity-cs-reference", name: "Unity C# reference source", description: "Unity's C# engine and editor source as published by Unity (UnityCsReference), for how the API really behaves.", category: "engine", version: "6000.3", sizeMb: 60, source: { kind: "github", repo: "Unity-Technologies/UnityCsReference", ref: "refs/heads/6000.3/staging", paths: ["Runtime", "Editor/Mono"] } },
     { id: "godot-docs", name: "Godot documentation", description: "The full Godot manual and class reference (stable).", category: "engine", version: "stable", sizeMb: 140, source: { kind: "github", repo: "godotengine/godot-docs", ref: "refs/heads/stable", paths: ["about", "getting_started", "tutorials", "classes"] } },
     { id: "python-docs", name: "Python 3.13 documentation", description: "The Python language and standard library documentation, as text.", category: "language", version: "3.13", sizeMb: 10, source: { kind: "zip", url: "https://docs.python.org/3.13/archives/python-3.13-docs-text.zip", paths: [""] } },
+    // The languages in common use (Roee, 2026-11-13). Each is the official or the most complete open documentation kept as text.
+    { id: "csharp-docs", name: "C# and .NET documentation", description: "Microsoft's C# guide and language reference, with the .NET fundamentals and standard library guides.", category: "language", version: "main", sizeMb: 350, source: { kind: "github", repo: "dotnet/docs", ref: "refs/heads/main", paths: ["docs/csharp", "docs/standard", "docs/fundamentals"] } },
+    { id: "cpp-docs", name: "C++ documentation", description: "Microsoft's C++ language reference and the C++ standard library reference.", category: "language", version: "main", sizeMb: 120, source: { kind: "github", repo: "MicrosoftDocs/cpp-docs", ref: "refs/heads/main", paths: ["docs/cpp", "docs/standard-library"] } },
+    { id: "c-docs", name: "C documentation", description: "Microsoft's C language reference and the C runtime library reference.", category: "language", version: "main", sizeMb: 120, source: { kind: "github", repo: "MicrosoftDocs/cpp-docs", ref: "refs/heads/main", paths: ["docs/c-language", "docs/c-runtime-library"] } },
+    { id: "java-source", name: "Java standard library (OpenJDK source)", description: "The java.* classes of OpenJDK with their documentation comments: lang, util, io, nio, net, time, math, text.", category: "language", version: "master", sizeMb: 250, source: { kind: "github", repo: "openjdk/jdk", ref: "refs/heads/master", paths: ["src/java.base/share/classes/java"] } },
+    { id: "javascript-mdn", name: "JavaScript (MDN)", description: "MDN's JavaScript guide and reference.", category: "language", version: "main", sizeMb: 150, source: { kind: "github", repo: "mdn/content", ref: "refs/heads/main", paths: ["files/en-us/web/javascript"] } },
+    { id: "html-css-mdn", name: "HTML and CSS (MDN)", description: "MDN's HTML and CSS guides and references.", category: "language", version: "main", sizeMb: 150, source: { kind: "github", repo: "mdn/content", ref: "refs/heads/main", paths: ["files/en-us/web/html", "files/en-us/web/css"] } },
+    { id: "nodejs-api", name: "Node.js API", description: "The Node.js API documentation.", category: "language", version: "main", sizeMb: 130, source: { kind: "github", repo: "nodejs/node", ref: "refs/heads/main", paths: ["doc/api"] } },
+    { id: "go-docs", name: "Go documentation", description: "go.dev: the language specification, Effective Go, the tutorials and the release notes.", category: "language", version: "master", sizeMb: 60, source: { kind: "github", repo: "golang/website", ref: "refs/heads/master", paths: ["_content/doc", "_content/ref"] } },
+    { id: "rust-book", name: "Rust: the book", description: "The Rust Programming Language book.", category: "language", version: "main", sizeMb: 10, source: { kind: "github", repo: "rust-lang/book", ref: "refs/heads/main", paths: ["src"] } },
+    { id: "rust-reference", name: "Rust reference", description: "The Rust language reference.", category: "language", version: "master", sizeMb: 5, source: { kind: "github", repo: "rust-lang/reference", ref: "refs/heads/master", paths: ["src"] } },
+    { id: "kotlin-docs", name: "Kotlin documentation", description: "The Kotlin language documentation.", category: "language", version: "master", sizeMb: 150, source: { kind: "github", repo: "JetBrains/kotlin-web-site", ref: "refs/heads/master", paths: ["docs/topics"] } },
+    { id: "swift-book", name: "Swift: the language book", description: "The Swift Programming Language (language guide and reference).", category: "language", version: "main", sizeMb: 10, source: { kind: "github", repo: "swiftlang/swift-book", ref: "refs/heads/main", paths: ["TSPL.docc"] } },
+    { id: "php-docs", name: "PHP manual", description: "The PHP manual's language reference and function reference (as its XML source).", category: "language", version: "master", sizeMb: 60, source: { kind: "github", repo: "php/doc-en", ref: "refs/heads/master", paths: ["language", "reference"] } },
+    { id: "ruby-docs", name: "Ruby documentation", description: "Ruby's own guides: syntax, the standard classes' guides, and the release notes.", category: "language", version: "master", sizeMb: 40, source: { kind: "github", repo: "ruby/ruby", ref: "refs/heads/master", paths: ["doc"] } },
+    { id: "dart-docs", name: "Dart documentation", description: "dart.dev: the language tour, the libraries and the tools.", category: "language", version: "main", sizeMb: 60, source: { kind: "github", repo: "dart-lang/site-www", ref: "refs/heads/main", paths: ["src/content"] } },
+    { id: "sql-postgres", name: "SQL (PostgreSQL manual)", description: "The PostgreSQL manual, with the SQL language and every command (as its SGML source).", category: "language", version: "master", sizeMb: 45, source: { kind: "github", repo: "postgres/postgres", ref: "refs/heads/master", paths: ["doc/src/sgml"] } },
     { id: "react-docs", name: "React documentation", description: "react.dev: learn and API reference.", category: "web", version: "main", sizeMb: 40, source: { kind: "github", repo: "reactjs/react.dev", ref: "refs/heads/main", paths: ["src/content"] } },
     { id: "typescript-handbook", name: "TypeScript handbook", description: "The TypeScript handbook and reference.", category: "language", version: "v2", sizeMb: 30, source: { kind: "github", repo: "microsoft/TypeScript-Website", ref: "refs/heads/v2", paths: ["packages/documentation/copy/en"] } },
   ];
@@ -202,7 +219,14 @@ export class Libraries {
       if (size > MAX_ARCHIVE) throw new Error(`The archive is ${Math.round(size / 1048576)} MB, more than the ${MAX_ARCHIVE / 1048576} MB limit.`);
       const buf = new Uint8Array(await res.arrayBuffer());
       if (buf.length > MAX_ARCHIVE) throw new Error("The archive is too big.");
-      const picked = pickFiles(unzipSync(buf, { filter: (f) => KEEP.test(f.name) }), e.source.paths, e.source.kind === "github");
+      // Only the wanted folders are unpacked: a big repository (OpenJDK, MDN) holds far more text than is kept.
+      const top = e.source.kind === "github";
+      const wanted = e.source.paths.map((w) => w.replace(/^\/+|\/+$/g, ""));
+      const inWanted = (name: string) => {
+        const rel = top ? name.slice(name.indexOf("/") + 1) : name;
+        return wanted.some((w) => w === "" || rel === w || rel.startsWith(`${w}/`));
+      };
+      const picked = pickFiles(unzipSync(buf, { filter: (f) => KEEP.test(f.name) && inWanted(f.name) }), e.source.paths, top);
       if (!picked.size) throw new Error("The archive had no documentation in the expected folders.");
       const folder = join(this.dir, e.id);
       folders = [folder];
