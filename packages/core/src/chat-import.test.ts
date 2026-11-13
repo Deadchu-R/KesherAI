@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectSource, htmlToText, readExport } from "./chat-import.js";
+import { detectSource, geminiHtmlToActivity, htmlToText, readExport } from "./chat-import.js";
 
 test("reads a ChatGPT export, keeping the branch the user last saw", () => {
   const data = [
@@ -93,4 +93,16 @@ test("Jan's chats are read from its threads folder (string or OpenAI-style conte
   assert.equal(chats[0]!.source, "jan");
   assert.deepEqual(chats[0]!.messages.map((m) => m.text), ["Why does my piece fall through?", "Check the collider."]);
   assert.deepEqual(await readJanThreads(join(dir, "missing")), []);
+});
+
+test("reads Gemini activity from Takeout's HTML file", () => {
+  const card = (first: string, when: string, answer: string, header = "Gemini Apps") =>
+    `<div class="outer-cell mdl-cell mdl-cell--12-col mdl-shadow--2dp"><div class="mdl-grid"><div class="header-cell mdl-cell mdl-cell--12-col"><p class="mdl-typography--title">${header}<br></p></div><div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1">${first}<br>${when}<br>${answer}</div><div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1 mdl-typography--text-right"></div><div class="content-cell mdl-cell mdl-cell--12-col mdl-typography--caption"><b>Products:</b><br>&emsp;Gemini Apps<br></div></div></div>`;
+  const html = `<html><body>${card("Prompted\u00a0second question", "Nov 13, 2026, 4:25:00\u202fPM GMT+02:00", "<p>B &amp; C</p>")}${card("Prompted first question", "Nov 13, 2026, 4:20:11 PM GMT+02:00", "<p>A</p><ul><li>x</li></ul>")}${card("Watched a video", "Nov 13, 2026, 4:00:00 PM GMT+02:00", "", "YouTube")}${card("Used an extension", "Nov 12, 2026, 4:00:00 PM GMT+02:00", "")}</body></html>`;
+  const items = geminiHtmlToActivity(html);
+  assert.equal(items.length, 2);
+  const { source, chats } = readExport(items);
+  assert.equal(source, "gemini");
+  assert.equal(chats.length, 1);
+  assert.deepEqual(chats[0]!.messages.map((m) => [m.role, m.text]), [["user", "first question"], ["assistant", "A\n• x"], ["user", "second question"], ["assistant", "B & C"]]);
 });

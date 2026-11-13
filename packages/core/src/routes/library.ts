@@ -8,7 +8,7 @@ import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } 
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
-import { readExport, readJanThreads } from "../chat-import.js";
+import { geminiHtmlToActivity, readExport, readJanThreads } from "../chat-import.js";
 import { findClaudeSessions, readClaudeSession } from "../claude-code-import.js";
 import { homedir } from "node:os";
 import { join as joinPath } from "node:path";
@@ -84,9 +84,12 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
    * the parsed `conversations.json` or `MyActivity.json` (the page takes it
    * out of the export's zip), and optionally `projectId`.
    */
-  app.post<{ Body: { data?: unknown; projectId?: string | null } }>("/api/import/chats", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
+  app.post<{ Body: { data?: unknown; html?: string; projectId?: string | null } }>("/api/import/chats", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
     try {
-      const { source, chats } = readExport(req.body?.data);
+      // Google Takeout's default format is HTML (MyActivity.html): read it into the same list the JSON holds.
+      const html = typeof req.body?.html === "string" ? geminiHtmlToActivity(req.body.html) : undefined;
+      if (html && !html.length) return reply.code(400).send({ error: "This HTML file has no Gemini activity in it. Use MyActivity.html from Google Takeout (My Activity → Gemini Apps)." });
+      const { source, chats } = readExport(html ?? req.body?.data);
       if (!chats.length) return reply.code(400).send({ error: "The export has no chats with text in them." });
       const projectId = req.body?.projectId ?? null;
       if (projectId && !s.library.getProject(projectId)) return reply.code(400).send({ error: "That project does not exist." });

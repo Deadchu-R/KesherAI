@@ -11,7 +11,7 @@ function chatsFileFromZip(file: File): Promise<string> {
   return file.arrayBuffer().then(
     (buf) =>
       new Promise<string>((resolve, reject) => {
-        unzip(new Uint8Array(buf), { filter: (f) => /(^|\/)(conversations|MyActivity)\.json$/i.test(f.name) || /(gemini|bard)[^/]*\/[^/]+\.json$/i.test(f.name) }, (err, files) => {
+        unzip(new Uint8Array(buf), { filter: (f) => /(^|\/)(conversations|MyActivity)\.json$/i.test(f.name) || /(gemini|bard)[^/]*\/[^/]+\.(json|html)$/i.test(f.name) }, (err, files) => {
           if (err) return reject(err);
           // Prefer conversations.json (ChatGPT, Claude); in a Takeout zip the Gemini folder's MyActivity.json.
           const names = Object.keys(files).sort((a, b) => Number(/conversations/i.test(b)) - Number(/conversations/i.test(a)) || Number(/gemini|bard/i.test(b)) - Number(/gemini|bard/i.test(a)));
@@ -97,13 +97,17 @@ export function ImportChats() {
     setResult(null);
     try {
       const text = /\.zip$/i.test(file.name) ? await chatsFileFromZip(file) : await file.text();
+      // Google Takeout gives My Activity as HTML unless JSON is chosen: both are read.
+      const isHtml = /^\s*<(!doctype|html)/i.test(text) || /class="outer-cell/.test(text.slice(0, 200_000));
       let data: unknown;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(L("הקובץ אינו JSON. ב-Google Takeout בחר בפורמט JSON ל-My Activity.", "The file is not JSON. In Google Takeout, choose JSON as the My Activity format."));
+      if (!isHtml) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(L("הקובץ אינו קובץ ייצוא מוכר (JSON או MyActivity.html של Google).", "The file is not a known export (JSON, or Google's MyActivity.html)."));
+        }
       }
-      const r = await api<{ source: keyof typeof NAMES; found: number; added: number; skipped: number }>("/api/import/chats", { method: "POST", body: { data } });
+      const r = await api<{ source: keyof typeof NAMES; found: number; added: number; skipped: number }>("/api/import/chats", { method: "POST", body: isHtml ? { html: text } : { data } });
       const from = NAMES[r.source];
       setResult({
         ok: true,
@@ -128,12 +132,12 @@ export function ImportChats() {
         <li><strong>ChatGPT</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא נתונים. מגיע מייל עם קובץ zip.", "Settings → Data controls → Export data. You get an email with a zip.")}</li>
         <li><strong>Claude</strong>: {L("הגדרות ← פרטיות ← ייצוא נתונים. מגיע מייל עם קובץ zip.", "Settings → Privacy → Export data. You get an email with a zip.")}</li>
         <li><strong>Open WebUI</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא צ'אטים (קובץ json).", "Settings → Data Controls → Export Chats (a json file).")}</li>
-        <li><strong>Gemini</strong>: {L("ב-takeout.google.com בחר רק ב-My Activity, ובתוכו Gemini Apps, בפורמט JSON.", "At takeout.google.com choose only My Activity, with Gemini Apps inside it, in JSON format.")}</li>
+        <li><strong>Gemini</strong>: {L("ב-takeout.google.com בחר רק ב-My Activity, ובתוכו Gemini Apps. אפשר להעלות את קובץ ה-zip שמתקבל, או את MyActivity.html (ברירת המחדל של Google) או MyActivity.json מתוכו.", "At takeout.google.com choose only My Activity, with Gemini Apps inside it. Upload the zip you get, or the MyActivity.html (Google's default) or MyActivity.json inside it.")}</li>
       </ul>
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => input.current?.click()}>{busy ? L("מייבא…", "Importing…") : L("בחר קובץ zip או json", "Choose the zip or json file")}</button>
         {jan > 0 && <button type="button" disabled={busy} onClick={() => void fromJan()}>{L(`ייבוא ${jan} צ'אטים מ-Jan במחשב הזה`, `Import ${jan} chats from Jan on this computer`)}</button>}
-        <input ref={input} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
+        <input ref={input} type="file" accept=".zip,.json,.html,.htm,application/zip,application/json,text/html" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
       </div>
       {result && <p className={result.ok ? "pill good" : "error"} role="status">{result.text}</p>}
       <ClaudeCodeSessions />

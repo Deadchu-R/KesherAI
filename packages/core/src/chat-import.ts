@@ -143,6 +143,36 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/**
+ * Google Takeout's "My Activity" in its default format, HTML (`MyActivity.html`), as the same list the JSON
+ * format holds. Each activity is one card: a header ("Gemini Apps"), then a cell with the prompt on its first
+ * line, the time on the second, and the answer after it. Times are written in the account's language; one that
+ * cannot be read keeps the card's place in the file (the file is newest first).
+ *
+ * @param html - The file's text.
+ * @returns Activities shaped like `MyActivity.json`'s.
+ */
+export function geminiHtmlToActivity(html: string): Array<{ header: string; title: string; time: string; safeHtmlItem: Array<{ html: string }> }> {
+  const out: Array<{ header: string; title: string; time: string; safeHtmlItem: Array<{ html: string }> }> = [];
+  let last = Date.now();
+  for (const card of html.split(/<div class="outer-cell\b/).slice(1)) {
+    const header = htmlToText(/class="[^"]*mdl-typography--title[^"]*">([\s\S]*?)<\/p>/.exec(card)?.[1] ?? "");
+    if (!/gemini|bard/i.test(header)) continue;
+    const cell = /class="content-cell[^"]*mdl-typography--body-1[^"]*">([\s\S]*?)<\/div>\s*<div class="content-cell/.exec(card)?.[1] ?? /class="content-cell[^"]*mdl-typography--body-1[^"]*">([\s\S]*)/.exec(card)?.[1] ?? "";
+    const parts = cell.split(/<br\s*\/?>/i);
+    const first = htmlToText(parts[0] ?? "");
+    const when = htmlToText(parts[1] ?? "").replace(/[\u202f\u00a0]/g, " ");
+    const answer = parts.slice(2).join("<br>").trim();
+    const parsed = Date.parse(when) || Date.parse(when.replace(/\s[A-Z]{2,5}$/, ""));
+    last = Number.isNaN(parsed) || !parsed ? last - 60_000 : parsed;
+    // English exports say "Prompted …"; in another language the first line is kept whole when an answer follows it.
+    const prompt = /^Prompted\s/.test(first) ? first.replace(/^Prompted\s+/, "") : answer ? first : "";
+    if (!prompt.trim()) continue;
+    out.push({ header, title: `Prompted ${prompt.trim()}`, time: new Date(last).toISOString(), safeHtmlItem: answer ? [{ html: answer }] : [] });
+  }
+  return out;
+}
+
 function fromGemini(data: unknown[]): ImportedChat[] {
   const entries = data
     .filter((d): d is Json => isObj(d) && /gemini|bard/i.test(str(d.header)) && /^Prompted /.test(str(d.title)))
