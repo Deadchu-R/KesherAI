@@ -27,6 +27,8 @@ interface Plugin {
   openSettings(): Promise<void>;
   /** Android's permission question (newer apps). */
   askPermission?(): Promise<PhoneNotifyState>;
+  /** The app's own switch, without the computer (newer apps). */
+  setLive?(o: { live: boolean }): Promise<PhoneNotifyState>;
   addListener(event: "open", cb: (e: { path: string }) => void): unknown;
 }
 

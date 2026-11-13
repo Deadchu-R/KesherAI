@@ -1992,3 +1992,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .phone-set-line { margin: 0; overflow-wrap: anywhere; }
 .phone-set-group > .card { padding: 12px; box-shadow: none; }
 .phone-set-group > .card h2 { font-size: 14px; margin: 0; }
+.phone-set-switch { min-height: 44px; align-items: center; }
+.phone-set-leave { border-top: 1px solid var(--border); padding-top: 8px; }
+.phone-set-leave > summary { cursor: pointer; color: var(--muted); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
+.phone-set-leave[open] > summary { margin-bottom: 6px; }

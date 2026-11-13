@@ -179,7 +179,7 @@ type PhoneUpdater = {
 const PHONE_VERSION_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
 
 /** Inside the Android app: the phone app's own updates, without leaving the computer's page. */
-function PhoneAppUpdates() {
+export function PhoneAppUpdates() {
   const up = (window as unknown as { Capacitor?: { Plugins?: { KesherUpdater?: PhoneUpdater } } }).Capacitor?.Plugins?.KesherUpdater;
   const [info, setInfo] = useState<Awaited<ReturnType<PhoneUpdater["check"]>> | null>(null);
   const [state, setState] = useState("");
