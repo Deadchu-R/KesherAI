@@ -98,8 +98,12 @@ test("the last notifications are kept in a file for the notifications page, with
   const settings = { ntfy: { enabled: false, server: "https://ntfy.sh", topic: "t" }, desktop: false, minSeconds: 0, includeText: false, waiting: true, approveButtons: true, waitingSeconds: 60 };
   const a = new Notifier(() => settings as never, { history: file });
   await a.send({ title: "Done", body: "b", path: "#/c/1", actions: [{ label: "Allow", path: "/api/quick/SECRETCODE" }] });
-  await new Promise((r) => setTimeout(r, 1200));
-  const saved = await rf(file, "utf8");
+  // The file is written a moment later; a slow machine (CI on Windows) can take longer than a second.
+  let saved = "";
+  for (let i = 0; i < 50 && !saved; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    saved = await rf(file, "utf8").catch(() => "");
+  }
   assert.ok(saved.includes("Done") && !saved.includes("SECRETCODE"));
   const b = new Notifier(() => settings as never, { history: file });
   await new Promise((r) => setTimeout(r, 50));

@@ -379,7 +379,12 @@ async function createWindow(url: string): Promise<void> {
 
   if (last?.maximized) win.maximize();
   rememberWindow(win);
-  setupBrowserPane(win);
+  // The browser pane is new: if it cannot start, the app still opens (the model uses the extension, if any).
+  try {
+    setupBrowserPane(win);
+  } catch (err) {
+    console.warn(`[browser pane] ${(err as Error).message}`);
+  }
 
   // Closing the window keeps KesherAI working in the background (chats, downloads, tasks), in the tray.
   win.on("close", (event) => {
