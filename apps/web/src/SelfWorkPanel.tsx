@@ -46,7 +46,7 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
   const [check, setCheck] = useState("");
   const [busy, setBusy] = useState(false);
   // What the run did lately, and what it waits for (it runs in the worker, whose chat has no window here).
-  const [log, setLog] = useState<{ lines: string[]; waiting: Array<{ requestId: string; name: string; preview: string; reason: string }> }>({ lines: [], waiting: [] });
+  const [log, setLog] = useState<{ lines: string[]; waiting: Array<{ requestId: string; name: string; preview: string; reason: string }>; steps?: Array<{ text: string; status: "pending" | "doing" | "done" }> }>({ lines: [], waiting: [] });
   // The task it holds on the board now (found on the phone: "0 items" and a closed log said nothing about it).
   const [onTask, setOnTask] = useState<{ id: string; title: string } | null>(null);
   // Each new request is brought into view once.
@@ -58,7 +58,7 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
       if (!alive) return;
       setRun(r.run);
       if (r.run && !check) setCheck(r.run.check);
-      if (r.run && (r.run.status === "running" || r.run.status === "waiting")) void api<typeof log>("/api/self-work/log").then((l) => alive && setLog({ lines: l.lines ?? [], waiting: l.waiting ?? [] }), () => undefined);
+      if (r.run && (r.run.status === "running" || r.run.status === "waiting")) void api<typeof log>("/api/self-work/log").then((l) => alive && setLog({ lines: l.lines ?? [], waiting: l.waiting ?? [], steps: l.steps ?? [] }), () => undefined);
       if (r.run && (r.run.status === "running" || r.run.status === "waiting"))
         void api<{ tasks: Array<{ id: string; title: string; status: string; owner?: string }> }>("/api/self-work/board").then((b) => {
           const held = b.tasks.find((x) => x.status === "claimed" && x.owner === "kesher");
@@ -134,6 +134,16 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
                 {run.items.map((i) => <li key={i.at}>✓ <span dir="auto">{i.text}</span>{i.commit && <code className="muted small"> {i.commit}</code>}</li>)}
                 {(run.skipped ?? []).map((i) => <li key={`s${i.at}`} className="muted">↷ {L("דילג", "Skipped")}: <span dir="auto">{i.why}</span></li>)}
               </ul>
+              {(log.steps?.length ?? 0) > 0 && (
+                <div className="self-work-steps">
+                  <strong className="small">{L("שלבי המשימה הנוכחית", "Steps of the current task")} · {log.steps!.filter((x) => x.status === "done").length}/{log.steps!.length}</strong>
+                  <ol className="steps-list">
+                    {log.steps!.map((x, i) => (
+                      <li key={i} className={`step ${x.status}${x.status === "doing" && run.status === "running" ? " live" : ""}`}><span className="step-mark" aria-hidden="true" /><span dir="auto">{x.text}</span></li>
+                    ))}
+                  </ol>
+                </div>
+              )}
               {log.lines.length > 0 && (
                 <details className="self-work-log" open>
                   <summary className="small">{L("מה הוא עושה עכשיו", "What it is doing now")}: <span dir="auto">{log.lines.at(-1)!.slice(0, 90)}</span></summary>

@@ -2013,3 +2013,4 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .step.doing .step-mark::after { content: ""; position: absolute; inset: 2.5px; border-radius: 50%; background: var(--accent); }
 @media (prefers-reduced-motion: no-preference) { .step.live .step-mark::after { animation: step-pulse 1.2s ease-in-out infinite; } }
 @keyframes step-pulse { 50% { opacity: .35; } }
+.self-work-steps { display: grid; gap: 6px; padding: 10px 12px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); }

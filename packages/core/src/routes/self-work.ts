@@ -1,3 +1,4 @@
+import { cleanSteps } from "../steps-tool.js";
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
@@ -149,7 +150,18 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
       .slice(-60);
     const answered = new Set((opened?.session.events ?? []).flatMap((e) => (e.type === "approval_result" ? [e.requestId] : [])));
     const waiting = (opened?.session.events ?? []).filter((e) => e.type === "approval_request" && !answered.has(e.requestId)).map((e) => (e.type === "approval_request" ? { requestId: e.requestId, name: e.name, preview: e.preview.slice(0, 800), reason: e.reason } : null)).filter(Boolean);
-    return { lines, waiting };
+    // The task's steps, as the model set them (the same list a chat's Steps pane shows).
+    let steps: ReturnType<typeof cleanSteps> = [];
+    for (const e of [...(opened?.session.events ?? [])].reverse()) {
+      if (e.type !== "tool_call" || e.name !== "set_steps") continue;
+      try {
+        steps = cleanSteps((e.input as { steps?: unknown }).steps);
+      } catch {
+        continue;
+      }
+      break;
+    }
+    return { lines: lines.filter((l) => !l.startsWith("🔧 set_steps")), waiting, steps };
   });
 
   // Approve or deny what the run waits for (the worker's chat has no window of its own).
