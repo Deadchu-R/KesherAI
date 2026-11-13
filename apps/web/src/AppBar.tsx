@@ -9,6 +9,7 @@ import { reconnect } from "./Reconnect";
 import { InboxBell } from "./pages/InboxPage";
 import { DesignAssistant } from "./DesignAssistant";
 import { SidebarEdit } from "./SidebarEdit";
+import { PhoneSettings } from "./PhoneSettings";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -105,6 +106,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {desktop()?.connectComputer && !isRemote() && <MenuItem icon="🔗" href="#/settings/phone">{getLocale() === "he" ? "התחבר למחשב אחר" : "Connect to another computer"}</MenuItem>}
           {(appHome() || isRemote()) && <MenuItem icon="⏏" danger onSelect={() => { if (confirm(t("disconnectSure"))) disconnectComputer(); }}>{t("disconnectComputer")}</MenuItem>}
         </Menu>
+        <PhoneSettings onLocale={onLocale} />
         <button type="button" data-slide-menu className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={() => { setMenu(false); onSidebar(); }}>
           {Icon.sidebar}
         </button>

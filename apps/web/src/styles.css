@@ -1983,3 +1983,12 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .side-edit-row.dragging { background: var(--raised); box-shadow: var(--shadow-2); }
 .side-edit-row.dragging .side-edit-grip { cursor: grabbing; color: var(--accent); }
 @media (pointer: coarse) { .side-edit-grip { padding: 12px 8px; } }
+/* The phone's own settings (next to the ≡ menu, on a connected phone). */
+.appbar-start .bar-panel { inset-inline-start: 0; inset-inline-end: auto; }
+.phone-set-note { margin: 0; }
+.phone-set-group { display: grid; gap: 6px; }
+.phone-set-group .side-edit-title { padding: 6px 2px 0; }
+.phone-set-group > button, .phone-set-group > a.button { text-align: start; justify-content: flex-start; min-height: 42px; }
+.phone-set-line { margin: 0; overflow-wrap: anywhere; }
+.phone-set-group > .card { padding: 12px; box-shadow: none; }
+.phone-set-group > .card h2 { font-size: 14px; margin: 0; }
