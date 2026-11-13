@@ -2066,3 +2066,15 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .conv-panes-body > .browser-pane { min-height: 0; }
   .browser-area { min-height: 220px; max-height: 38dvh; overflow-y: auto; }
 }
+
+/* Code sessions: the worktree branch and the setup step above the chat; the environment editor; action buttons. */
+.session-env { gap: 8px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 10px; }
+.session-setup summary { cursor: pointer; }
+.session-setup.failed summary { color: var(--danger, #e57373); }
+.session-setup pre { max-height: 240px; overflow: auto; font-size: .8em; background: var(--panel, rgba(255,255,255,.04)); padding: 8px; border-radius: 6px; white-space: pre-wrap; }
+.env-editor { max-width: 720px; margin: 12px auto; width: 100%; }
+.env-editor input, .env-editor textarea { width: 100%; box-sizing: border-box; }
+.env-action { gap: 6px; }
+.env-action input:first-child { width: 120px; flex: none; }
+.ws-actions { gap: 6px; flex-wrap: wrap; padding: 4px 8px; }
+.model-chip.on { border-color: var(--accent, #9aa4ff); }

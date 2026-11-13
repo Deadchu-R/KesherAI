@@ -80,6 +80,8 @@ export async function createConversation(body: {
   workspace?: string;
   modelId?: string;
   personaId?: string;
+  /** A code session in its own git worktree and branch. */
+  worktree?: boolean;
 }, opts: { open?: boolean } = {}): Promise<string> {
   let c: { id: string };
   try {

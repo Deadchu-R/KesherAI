@@ -1,3 +1,4 @@
+import { EnvironmentEditor } from "../CodeEnvironment";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ComposerBar } from "../ComposerBar";
 import { SelfWorkPanel } from "../SelfWorkPanel";
@@ -76,6 +77,23 @@ export function CodeHome() {
     }
   };
   const [web, setWeb] = useWebSearch();
+  // A session in its own git worktree and branch (remembered on this device), and the folder's environment.
+  const [worktree, setWorktree] = useState(() => {
+    try {
+      return localStorage.getItem("kesher.codeWorktree") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleWorktree = () => {
+    setWorktree(!worktree);
+    try {
+      localStorage.setItem("kesher.codeWorktree", worktree ? "0" : "1");
+    } catch {
+      // private window: not remembered
+    }
+  };
+  const [envOpen, setEnvOpen] = useState(false);
   // The same + menu as every chat box: the session is made in the chosen folder on the first thing added.
   const [draftId, setDraftId] = useState<string>();
   setDraftIdRef.current = setDraftId;
@@ -86,7 +104,7 @@ export function CodeHome() {
       toast(L("בחרו תיקייה לעבוד בה.", "Choose a folder to work in."));
       return undefined;
     }
-    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}) }, { open: false });
+    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}) }, { open: false });
     if (id) setDraftId(id);
     return id;
   };
@@ -101,7 +119,7 @@ export function CodeHome() {
     }
     setBusy(true);
     try {
-      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}) }));
+      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}) }));
       if (!id) return;
       if (draftId) location.hash = `#/c/${id}`;
       choose(folder.trim());
@@ -167,12 +185,23 @@ export function CodeHome() {
                     <option value={"\u0000type"}>{L("הקלדת נתיב…", "Type a path…")}</option>
                   </Select>
                 )}
+                {/* Worktree: the session works in its own copy and branch, so the folder itself is not touched
+                    and sessions do not collide (like Claude Code's and Codex's worktrees). */}
+                <button type="button" className={`model-chip${worktree ? " on" : ""}`} aria-pressed={worktree} onClick={toggleWorktree} title={L("worktree: הסשן עובד בעותק ובענף משלו (kesher/…), כך שהתיקייה שלכם לא משתנה וכמה סשנים לא מתנגשים. דורש פרויקט git.", "Worktree: the session works in its own copy and branch (kesher/…), so your folder is not changed and sessions do not collide. Needs a git project.")}>
+                  ⑂ {worktree ? L("worktree", "Worktree") : L("בתיקייה", "In the folder")}
+                </button>
+                {folder && (
+                  <button type="button" className="model-chip" onClick={() => setEnvOpen(!envOpen)} aria-expanded={envOpen} title={L("הסביבה: פקודת הכנה, פעולות ומשתנים לסשנים בתיקייה הזו", "Environment: setup command, actions and variables for sessions in this folder")}>
+                    ⚙ {L("סביבה", "Environment")}
+                  </button>
+                )}
               </>
             }
             send={<button type="submit" className="primary send" disabled={!text.trim() || busy} aria-label={L("התחל", "Start")}>↑</button>}
           />
         </div>
       </form>
+      {envOpen && folder && <EnvironmentEditor folder={folder} onClose={() => setEnvOpen(false)} />}
       {folder && !typing && <p className="muted small code-where" dir="ltr">{folder}</p>}
       {folder && <ProjectFacts folder={folder} />}
       <SelfWorkPanel folder={folder} />

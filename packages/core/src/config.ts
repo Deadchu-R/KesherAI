@@ -293,6 +293,8 @@ export const KesherConfigSchema = z.object({
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */
   browserSites: z.array(z.string()).default([]),
+  /** Code environments by folder (setup command, actions, variables), set on the Code page. */
+  codeEnvironments: z.record(z.string(), z.any()).default({}),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z
     .object({

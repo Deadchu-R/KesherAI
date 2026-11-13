@@ -303,6 +303,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      ignore:
+        specifier: 7.0.14
+        version: 7.0.14
       tesseract.js:
         specifier: ^6.0.1
         version: 6.0.1(encoding@0.1.14)

@@ -8,6 +8,7 @@ import { api, withToken } from "../api";
 import { t } from "../i18n";
 import { EditorPane } from "./Editor";
 import { TerminalPane } from "./Terminal";
+import { useSessionEnv } from "../CodeEnvironment";
 import { GitPanel } from "./GitPanel";
 import { AgentCliBar } from "./AgentCliBar";
 
@@ -68,6 +69,7 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
   const [terminalStarted, setTerminalStarted] = useState(false);
   // A fresh terminal (n) that may start a known command (Antigravity CLI, or its install).
   const [termRun, setTermRun] = useState<{ run?: string; n: number }>({ n: 0 });
+  const env = useSessionEnv(convId);
 
   useEffect(() => {
     void api<{ files: FileItem[] }>(`/api/conversations/${convId}/files`).then((d) => setFiles(d.files)).catch(() => undefined);
@@ -137,6 +139,14 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
       {terminalStarted && (
         <div className="ws-terminal" hidden={tab !== "terminal"}>
           <AgentCliBar convId={convId} onRun={(r) => setTermRun({ run: r, n: termRun.n + 1 })} />
+          {/* The folder's environment actions (Dev server, Tests): each starts in a fresh terminal. */}
+          {(env?.actions.length ?? 0) > 0 && (
+            <div className="row ws-actions small">
+              {env!.actions.map((name, i) => (
+                <button key={i} type="button" onClick={() => setTermRun({ run: `action:${i}`, n: termRun.n + 1 })}>▶ {name}</button>
+              ))}
+            </div>
+          )}
           <TerminalPane key={termRun.n} convId={convId} {...(termRun.run ? { run: termRun.run } : {})} />
         </div>
       )}

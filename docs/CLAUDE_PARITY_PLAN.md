@@ -85,6 +85,10 @@ Each stage is usable on its own, works on the phone (390 px) and gets its own re
 - The extension for the user's own browser stays, for sites where their own sign-in is needed.
 
 ### Stage 4: Environments
+- ✅ Built (on main after 0.6.137): worktree switch on the Code page (`.kesher/worktrees/<name>`, branch `kesher/<name>`,
+  `.worktreeinclude`), the folder's environment (setup command that the first message waits for, actions as terminal
+  buttons, variables for commands), branch + setup state above the session, delete keeps a worktree with work unless told.
+  Not yet: the environment chip as the first control on the Code start screen with a menu of named environments; SSH/WSL.
 - **A named environment**: folder(s), variables, a setup command that runs once before the first message (its
   output shown), and the approval mode it starts in. Kept in KesherAI's data folder; secrets are stored like other
   tokens and never shown to the model as text.

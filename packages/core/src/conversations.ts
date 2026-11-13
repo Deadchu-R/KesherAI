@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type TeamMember } from "@kesher/agent";
-import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
+import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
@@ -23,6 +23,8 @@ import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
 import { ruleAllows } from "./approval-rules.js";
+import { runIn } from "./run-in.js";
+import { createSessionWorktree, removeSessionWorktree, worktreeName, worktreeWork, type Git, type SessionWorktree } from "./session-worktrees.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 import { lookTools, mediaTools } from "./chat-tools-media.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
@@ -42,6 +44,8 @@ export interface NewConversation {
   personaId?: string;
   /** `telegram`: written from Telegram (fewer tools, always asks). */
   source?: "telegram";
+  /** A code session in its own git worktree and branch (see session-worktrees.ts). */
+  worktree?: boolean;
 }
 
 
@@ -441,14 +445,18 @@ export class ConversationManager {
     if (!modelId) throw new NoModelError("chat");
     const projectId = opts.projectId ?? null;
     if (projectId && !this.deps.library.getProject(projectId)) throw new Error("That project does not exist.");
+    let worktree: SessionWorktree | undefined;
+    let folder: string | undefined;
+    const id = randomUUID();
     if (opts.kind === "code") {
-      const folder = opts.workspace ?? (projectId ? this.deps.library.getProject(projectId)?.workspace : undefined);
+      folder = opts.workspace ?? (projectId ? this.deps.library.getProject(projectId)?.workspace : undefined);
       if (!folder) throw new Error("A code conversation needs a project folder.");
       await assertFolder(folder);
+      if (opts.worktree) worktree = await createSessionWorktree(folder, worktreeName(opts.title ?? "session"), this.git);
     }
     const now = new Date().toISOString();
-    return this.deps.library.saveConversation({
-      id: randomUUID(),
+    const saved = await this.deps.library.saveConversation({
+      id,
       projectId,
       title: opts.title ?? (opts.kind === "code" ? "New code session" : "New chat"),
       ...(persona ? { personaId: persona.id } : {}),
@@ -458,12 +466,55 @@ export class ConversationManager {
       // A chat writes only into its own outputs folder, so file edits need no approval there; commands still ask.
       // Telegram chats always ask (a message from far away should not change files by itself).
       mode: opts.source === "telegram" ? "ask" : (opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit")),
-      ...(opts.workspace ? { workspace: opts.workspace } : {}),
+      ...(worktree ? { workspace: worktree.path, worktree } : opts.workspace ? { workspace: opts.workspace } : {}),
+      ...(folder ? { envFolder: folder } : {}),
       messages: [],
       events: [],
       createdAt: now,
       updatedAt: now,
     });
+    // The project's setup command runs in the new worktree; the first message waits for it.
+    const env = this.environmentOf({ envFolder: folder, projectId });
+    const setup = process.platform === "win32" ? (env?.setupWindows || env?.setup) : env?.setup;
+    if (worktree && setup?.trim()) this.startSetup(id, worktree.path, setup.trim());
+    return saved;
+  }
+
+  /** Runs git (throws with git's words on failure). */
+  private readonly git: Git = async (cwd, args) => {
+    const r = await runIn(cwd, "git", args, false, 5 * 60_000);
+    if (r.code) throw new Error(r.out.trim() || `git ${args[0]} failed`);
+    return r.out;
+  };
+
+  /** A session's setup command: running, then its result (shown on the session's page). */
+  private readonly setups = new Map<string, { status: "running" | "done" | "failed"; log: string; done: Promise<void> }>();
+
+  private startSetup(id: string, folder: string, command: string): void {
+    const entry = { status: "running" as "running" | "done" | "failed", log: `$ ${command}\n`, done: Promise.resolve() };
+    entry.done = runIn(folder, command, [], true, 30 * 60_000, this.envFor(id)).then((r) => {
+      entry.status = r.code === 0 ? "done" : "failed";
+      entry.log = `${entry.log}${r.out}`.slice(-20_000);
+    });
+    this.setups.set(id, entry);
+  }
+
+  /** The setup command's state for a session (`undefined`: none). */
+  setupCommandOf(id: string): { status: "running" | "done" | "failed"; log: string } | undefined {
+    const e = this.setups.get(id);
+    return e ? { status: e.status, log: e.log } : undefined;
+  }
+
+  /** A session's environment: its folder's (set on the Code page), else its project's. */
+  environmentOf(c: { envFolder?: string | undefined; projectId?: string | null | undefined }): ProjectEnvironment | undefined {
+    const byFolder = c.envFolder ? (this.deps.config.codeEnvironments?.[c.envFolder] as ProjectEnvironment | undefined) : undefined;
+    return byFolder ?? (c.projectId ? this.deps.library.getProject(c.projectId)?.environment : undefined);
+  }
+
+  /** The environment variables for a session's commands. */
+  envFor(id: string): Record<string, string> {
+    const c = this.deps.library.summary(id);
+    return (c ? this.environmentOf(c)?.env : undefined) ?? {};
   }
 
   /**
@@ -531,6 +582,7 @@ export class ConversationManager {
         scope?.startsWith("site:")
           ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
           : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
+      env: () => this.envFor(id),
       onAlwaysScope: (scope) => {
         if (!scope.startsWith("site:")) return;
         const site = scope.slice(5);
@@ -650,6 +702,8 @@ export class ConversationManager {
   async send(id: string, text: string, opts: { web?: boolean } = {}): Promise<{ queued?: number }> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
+    // A new worktree's setup (npm install…) finishes before the model starts working in it.
+    await this.setups.get(id)?.done;
     const { session } = opened;
     // Busy: the message waits in the queue and goes as soon as the agent is free, like in Claude.
     if (session.busy || session.queued.length) {
@@ -1060,14 +1114,32 @@ export class ConversationManager {
     return a.setOption(configId, value);
   }
 
-  /** @param id - Conversation to delete; its session is stopped first. */
-  async delete(id: string): Promise<void> {
+  /**
+   * What deleting a session would lose in its worktree (changed files, commits of its own), if it has one.
+   *
+   * @param id - Conversation.
+   */
+  async worktreeWorkOf(id: string): Promise<{ branch: string; path: string; changed: number; commits: number } | undefined> {
+    const c = await this.deps.library.getConversation(id);
+    if (!c?.worktree) return undefined;
+    const w = await worktreeWork(c.worktree, this.git).catch(() => ({ changed: 0, commits: 0, gone: true }));
+    return { branch: c.worktree.branch, path: c.worktree.path, changed: w.changed, commits: w.commits };
+  }
+
+  /**
+   * @param id - Conversation to delete; its session is stopped first.
+   * @param worktree - Its worktree: `remove` (also with work in it; the user said so), `keep`, or by default
+   *   removed only when it holds no work.
+   */
+  async delete(id: string, worktree: "remove" | "keep" | "auto" = "auto"): Promise<void> {
+    const c = await this.deps.library.getConversation(id);
     this.sessions.get(id)?.stop();
     this.sessions.delete(id);
     this.outside.get(id)?.close();
     this.outside.delete(id);
     clearTimeout(this.saveTimers.get(id));
     await this.deps.library.deleteConversation(id);
+    if (c?.worktree && worktree !== "keep") await removeSessionWorktree(c.worktree, this.git, worktree === "remove").catch(() => false);
   }
 
   private scheduleSave(id: string): void {

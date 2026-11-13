@@ -117,8 +117,17 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
   // Delete a chat from the list (asked for on Linux: there was no way to remove old chats).
   const remove = async () => {
     if (!confirm(he ? `למחוק את הצ'אט "${c.title}"? אי אפשר לבטל את זה.` : `Delete the chat "${c.title}"? This cannot be undone.`)) return;
+    // A session in its own worktree: a clean one goes with it; one with work in it is the user's call.
+    let worktree = "";
+    if (c.worktree) {
+      const w = await api<{ branch: string; changed: number; commits: number } | null>(`/api/conversations/${c.id}/worktree`).catch(() => null);
+      if (w && (w.changed || w.commits)) {
+        const lose = he ? `${w.changed} קבצים ששונו ו-${w.commits} קומיטים בענף ${w.branch}` : `${w.changed} changed files and ${w.commits} commits on ${w.branch}`;
+        worktree = confirm(he ? `ב-worktree של הסשן יש עבודה: ${lose}.\n\nאישור = למחוק גם אותה. ביטול = להשאיר את ה-worktree והענף בדיסק.` : `The session's worktree holds work: ${lose}.\n\nOK = delete it too. Cancel = keep the worktree and branch on disk.`) ? "?worktree=remove" : "?worktree=keep";
+      }
+    }
     try {
-      await api(`/api/conversations/${c.id}`, { method: "DELETE" });
+      await api(`/api/conversations/${c.id}${worktree}`, { method: "DELETE" });
       if (active) location.hash = "#/";
       await refreshLibrary();
     } catch (e) {

@@ -43,6 +43,8 @@ export interface ToolContext {
   recordChange(absolutePath: string, before: string | null): void;
   /** Shows live output of a long tool while it runs (builds, commands). Optional. */
   progress?(text: string): void;
+  /** Environment variables for commands (the project's environment). */
+  env?: Record<string, string>;
 }
 
 /**
@@ -425,7 +427,7 @@ const runCommandTool: AgentTool = {
     const cwd = workspaceOf(ctx);
     const command = str(input, "command");
     const timeoutMs = Math.min(600, Math.max(1, Number(input.timeout_seconds ?? 120))) * 1000;
-    const r = await runShell(command, cwd, timeoutMs, ctx.signal, ctx.progress);
+    const r = await runShell(command, cwd, timeoutMs, ctx.signal, ctx.progress, ctx.env);
     return { output: truncate(`${r.output.trim() || "(no output)"}\n\n${r.status}`) };
   },
 };

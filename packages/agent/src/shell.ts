@@ -33,11 +33,12 @@ export const AGENT_GIT_IDENTITY = {
  * @param timeoutMs - Time limit.
  * @param signal - Abort to stop it.
  * @param onOutput - Gets the output as it comes (for a live view).
+ * @param extraEnv - More variables (the project's environment).
  * @returns Output and exit code.
  */
-export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void): Promise<ShellResult> {
+export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void, extraEnv: Record<string, string> = {}): Promise<ShellResult> {
   return new Promise<ShellResult>((resolvePromise) => {
-    const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY } });
+    const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, ...extraEnv, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY } });
     let out = "";
     const onData = (b: Buffer) => {
       const text = b.toString();

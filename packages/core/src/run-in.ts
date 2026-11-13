@@ -11,14 +11,15 @@ import { spawn } from "node:child_process";
  * @param args - Arguments (no shell).
  * @param shell - Run through the system shell.
  * @param timeoutMs - Killed after this (default 20 minutes).
+ * @param extraEnv - More environment variables (a project's environment).
  */
-export function runIn(cwd: string, command: string, args: string[], shell: boolean, timeoutMs = 20 * 60_000): Promise<{ code: number; out: string }> {
+export function runIn(cwd: string, command: string, args: string[], shell: boolean, timeoutMs = 20 * 60_000, extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
     let out = "";
     const add = (b: Buffer) => {
       out = (out + b.toString("utf8")).slice(-20_000);
     };
-    const child = spawn(command, args, { cwd, shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY } });
+    const child = spawn(command, args, { cwd, shell, windowsHide: true, env: { ...process.env, ...extraEnv, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY } });
     const timer = setTimeout(() => child.kill(), timeoutMs);
     child.stdout?.on("data", add);
     child.stderr?.on("data", add);

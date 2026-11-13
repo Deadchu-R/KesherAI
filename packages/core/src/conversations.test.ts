@@ -484,3 +484,42 @@ test("an outside agent's session id is saved with its chat (so a restart resumes
     await server.close();
   }
 });
+
+test("a code session in its own worktree: setup runs first, variables reach commands, delete keeps work unless told", async () => {
+  const { server } = await setup();
+  const { runIn } = await import("./run-in.js");
+  const { existsSync: ex } = await import("node:fs");
+  const { writeFile: wf } = await import("node:fs/promises");
+  const repo = await mkdtemp(join(tmpdir(), "kesher-wtc-"));
+  const g = (args: string[]) => runIn(repo, "git", args, false);
+  await g(["init", "-q", "-b", "main"]);
+  await wf(join(repo, "a.txt"), "a\n");
+  await g(["add", "."]);
+  await g(["commit", "-qm", "first"]);
+  try {
+    const put = await server.app.inject({ method: "PUT", url: `/api/code-environment?folder=${encodeURIComponent(repo)}`, payload: { setup: "node -e \"require('fs').writeFileSync('ready.txt', process.env.GREETING)\"", actions: [{ name: "Dev", command: "npm run dev" }, { name: "", command: "x" }], env: { GREETING: "hi", "bad name": "x" } } });
+    assert.deepEqual(put.json(), { setup: "node -e \"require('fs').writeFileSync('ready.txt', process.env.GREETING)\"", actions: [{ name: "Dev", command: "npm run dev" }], env: { GREETING: "hi" } });
+    const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", workspace: repo, modelId: "fake/m", worktree: true } })).json() as { id: string; workspace: string; worktree?: { branch: string; path: string } };
+    assert.ok(c.worktree && c.workspace === c.worktree.path && c.worktree.branch.startsWith("kesher/"));
+    let env: { actions: string[]; setup: { status: string } | null } = { actions: [], setup: null };
+    await until(async () => {
+      env = (await server.app.inject({ method: "GET", url: `/api/conversations/${c.id}/environment` })).json() as typeof env;
+      return env.setup?.status === "done" ? true : undefined;
+    });
+    assert.deepEqual(env.actions, ["Dev"]);
+    assert.ok(ex(join(c.workspace, "ready.txt")), "setup ran in the worktree with the variable");
+    assert.ok(!ex(join(repo, "ready.txt")), "the user's folder is untouched");
+    // Work in it: an ordinary delete keeps the worktree; "remove" takes it.
+    await server.app.inject({ method: "DELETE", url: `/api/conversations/${c.id}` });
+    assert.ok(ex(c.workspace), "kept: it holds an untracked file");
+    const d = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", workspace: repo, modelId: "fake/m", worktree: true } })).json() as { id: string; workspace: string };
+    await until(async () => ((await server.app.inject({ method: "GET", url: `/api/conversations/${d.id}/environment` })).json() as typeof env).setup?.status === "done" ? true : undefined);
+    await server.app.inject({ method: "DELETE", url: `/api/conversations/${d.id}?worktree=remove` });
+    assert.ok(!ex(d.workspace), "removed when told");
+    const plain = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", workspace: await mkdtemp(join(tmpdir(), "kesher-nogit-")), modelId: "fake/m", worktree: true } }));
+    assert.equal(plain.statusCode, 400);
+    assert.match((plain.json() as { error: string }).error, /not a git project/);
+  } finally {
+    await server.close();
+  }
+});

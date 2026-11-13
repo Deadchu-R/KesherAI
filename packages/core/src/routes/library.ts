@@ -55,9 +55,14 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.library.saveProject(project);
   });
 
-  app.patch<{ Params: { id: string }; Body: Partial<Pick<Project, "name" | "workspace" | "instructions">> }>("/api/projects/:id", async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: Partial<Pick<Project, "name" | "workspace" | "instructions" | "environment">> }>("/api/projects/:id", async (req, reply) => {
     const project = s.library.getProject(req.params.id);
     if (!project) return reply.code(404).send({ error: "Project not found" });
+    if (req.body.environment !== undefined) {
+      const env = cleanEnvironment(req.body.environment);
+      const { environment: _e, ...rest } = req.body;
+      return s.library.saveProject({ ...project, ...rest, ...(env ? { environment: env } : { environment: undefined }) });
+    }
     if (req.body.workspace) {
       try {
         await assertFolder(req.body.workspace);
@@ -220,7 +225,39 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** Which conversations are working right now (`running`) or waiting for an answer (`waiting`). */
   app.get("/api/conversations/activity", async () => s.conversations.activity());
 
-  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string } }>(
+  /** A folder's code environment (setup command, actions, variables), for the Code page. */
+  app.get<{ Querystring: { folder?: string } }>("/api/code-environment", async (req) => (s.config.codeEnvironments?.[String(req.query.folder ?? "")] as Project["environment"]) ?? {});
+  app.put<{ Querystring: { folder?: string }; Body: unknown }>("/api/code-environment", async (req, reply) => {
+    const folder = String(req.query.folder ?? "");
+    if (!folder) return reply.code(400).send({ error: "Which folder?" });
+    const env = cleanEnvironment(req.body);
+    const all = { ...(s.config.codeEnvironments ?? {}) };
+    if (env) all[folder] = env;
+    else delete all[folder];
+    s.config.codeEnvironments = all;
+    await s.saveConfig();
+    return env ?? {};
+  });
+
+  /** A code session's environment as its page needs it: action names, its worktree branch, its setup command's state. */
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/environment", async (req, reply) => {
+    const c = s.library.summary(req.params.id);
+    if (!c) return reply.code(404).send({ error: "Conversation not found" });
+    const env = s.conversations.environmentOf(c);
+    return {
+      folder: c.envFolder ?? c.workspace ?? null,
+      actions: (env?.actions ?? []).map((a) => a.name),
+      worktree: c.worktree ? { branch: c.worktree.branch, path: c.worktree.path } : null,
+      setup: s.conversations.setupCommandOf(req.params.id) ?? null,
+    };
+  });
+
+  /** A session's setup command (a new worktree's `npm install`): running, done or failed, with its output. */
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/setup", async (req) => s.conversations.setupCommandOf(req.params.id) ?? { status: "none", log: "" });
+  /** A session's worktree: its branch and what deleting the session would lose there. */
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/worktree", async (req) => (await s.conversations.worktreeWorkOf(req.params.id)) ?? null);
+
+  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean } }>(
     "/api/conversations",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -233,6 +270,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
           ...(b.mode ? { mode: b.mode } : {}),
           ...(b.workspace ? { workspace: b.workspace } : {}),
           ...(b.personaId ? { personaId: b.personaId } : {}),
+          ...(b.worktree === true && b.kind === "code" ? { worktree: true } : {}),
         });
         const { messages: _m, events: _e, ...summary } = c;
         return summary;
@@ -278,8 +316,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     },
   );
 
-  app.delete<{ Params: { id: string } }>("/api/conversations/:id", async (req) => {
-    await s.conversations.delete(req.params.id);
+  app.delete<{ Params: { id: string }; Querystring: { worktree?: string } }>("/api/conversations/:id", async (req) => {
+    const w = req.query.worktree;
+    await s.conversations.delete(req.params.id, w === "remove" || w === "keep" ? w : "auto");
     return { ok: true };
   });
 
@@ -666,4 +705,27 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       return reply.code(409).send({ error: (err as Error).message });
     }
   });
+}
+
+/** A project's environment as the user wrote it, checked: short texts, up to 10 actions, plain variable names. */
+export function cleanEnvironment(x: unknown): Project["environment"] | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const e = x as Record<string, unknown>;
+  const text = (v: unknown, max = 2000) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined);
+  const actions = (Array.isArray(e.actions) ? e.actions : [])
+    .map((a) => ({ name: text((a as { name?: unknown })?.name, 40), command: text((a as { command?: unknown })?.command) }))
+    .filter((a): a is { name: string; command: string } => !!a.name && !!a.command)
+    .slice(0, 10);
+  const env = Object.fromEntries(
+    Object.entries(e.env && typeof e.env === "object" ? (e.env as Record<string, unknown>) : {})
+      .filter(([k, v]) => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(k) && typeof v === "string" && v.length <= 4000)
+      .slice(0, 50) as Array<[string, string]>,
+  );
+  const out = {
+    ...(text(e.setup) ? { setup: text(e.setup)! } : {}),
+    ...(text(e.setupWindows) ? { setupWindows: text(e.setupWindows)! } : {}),
+    ...(actions.length ? { actions } : {}),
+    ...(Object.keys(env).length ? { env } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
 }

@@ -94,6 +94,8 @@ export interface AgentSessionOptions {
   isAlwaysAllowed?(tool: string, modelId: string, command?: string, scope?: string): boolean;
   /** "Always" given for a scope (a web site): the app keeps it (Settings lists it and can take it back). */
   onAlwaysScope?(scope: string): void;
+  /** Environment variables for the session's commands (read on each command). */
+  env?(): Record<string, string>;
   /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
   contextTokens?: number;
   /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
@@ -162,6 +164,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly alwaysAllowed = new Set<string>();
   private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
   private readonly onAlwaysScope?: (scope: string) => void;
+  private readonly envOf?: () => Record<string, string>;
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
@@ -201,6 +204,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.onAlwaysScope = opts.onAlwaysScope;
+    this.envOf = opts.env;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
     this.toolSearch = opts.toolSearch;
@@ -919,6 +923,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       signal,
       recordChange: (path, before) => this.changes.push({ path, before }),
       progress: this.liveOutput(call.id),
+      ...(this.envOf ? { env: this.envOf() } : {}),
     };
     // A scoped tool (the browser) is "always allowed" per site, not as a whole.
     let scope: string | undefined;

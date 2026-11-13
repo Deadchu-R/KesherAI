@@ -20,6 +20,7 @@ import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 import { BrowserPanel } from "../BrowserPanel";
+import { SessionEnvBar } from "../CodeEnvironment";
 import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
@@ -617,6 +618,7 @@ export function ConversationPage({ id }: { id: string }) {
             re-read the answer on every word); one short line says what is happening instead. */}
         <ChatStatus status={info?.status} waiting={(info?.pendingApprovals.length ?? 0) > 0} />
         <div className="messages" role="log" aria-live="off" aria-busy={info?.status === "running"} aria-label={getLocale() === "he" ? "היסטוריית השיחה" : "Chat history"} tabIndex={0}>
+          {conv.kind === "code" && <SessionEnvBar convId={id} />}
           {events.length === 0 && (
             <p className="muted empty">{conv.kind === "code" ? t("emptyCode", { folder: info?.workspace ?? "" }) : t("emptyChat")}</p>
           )}

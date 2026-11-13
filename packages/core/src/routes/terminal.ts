@@ -141,7 +141,12 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
    */
   app.get<{ Params: { id: string }; Querystring: { run?: string } }>("/api/conversations/:id/terminal", { websocket: true }, async (socket, req) => {
     const cwd = await folderOf(req.params.id);
-    const run = req.query.run ? AGENT_CLIS[req.query.run] : undefined;
+    // `action:<n>`: one of the project's environment actions (Dev server, Tests), by number, never a command from the request.
+    const actionNo = /^action:(\d{1,2})$/.exec(req.query.run ?? "")?.[1];
+    const summary = s.library.summary(req.params.id);
+    const environment = summary ? s.conversations.environmentOf(summary) : undefined;
+    const action = actionNo !== undefined ? environment?.actions?.[Number(actionNo)]?.command : undefined;
+    const run = action ?? (req.query.run ? AGENT_CLIS[req.query.run] : undefined);
     if (!cwd || !(await stat(cwd).catch(() => undefined))?.isDirectory()) {
       socket.send("\r\nThis conversation has no folder.\r\n");
       socket.close();
@@ -150,7 +155,7 @@ export async function terminalRoutes(app: FastifyInstance, s: KesherServices): P
     const mod = loadPty();
     const sh = shell();
     const port = Number(/:(\d+)$/.exec(String(req.headers.host ?? ""))?.[1] ?? 7420);
-    const extra = run && req.query.run ? agentEnv(req.query.run, port) : {};
+    const extra = { ...(environment?.env ?? {}), ...(run && req.query.run && !action ? agentEnv(req.query.run, port) : {}) };
     const term: Pty = mod
       ? mod.spawn(sh.file, sh.args, { name: "xterm-256color", cols: 100, rows: 30, cwd, env: { ...process.env, TERM: "xterm-256color", ...extra } })
       : pipeShell(cwd);

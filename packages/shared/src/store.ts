@@ -12,8 +12,22 @@ export interface Project {
   workspace?: string;
   /** Extra instructions for every conversation in the project. */
   instructions?: string;
+  /** How code sessions in this project get ready and what they can run (like Codex's local environments). */
+  environment?: ProjectEnvironment;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A project's environment for its code sessions. */
+export interface ProjectEnvironment {
+  /** Runs once in a new session worktree before the first message (e.g. `npm install`). */
+  setup?: string;
+  /** The same for Windows, when it differs. */
+  setupWindows?: string;
+  /** Named commands the session's page can start in its terminal (Dev server, Tests). */
+  actions?: Array<{ name: string; command: string }>;
+  /** Variables for the session's commands (not shown to the model). */
+  env?: Record<string, string>;
 }
 
 /** Which kind of conversation: plain chat, or a coding agent in a folder. */
@@ -30,6 +44,10 @@ export interface Conversation {
   mode: PermissionMode;
   /** For code conversations: the folder. Falls back to the project's. */
   workspace?: string;
+  /** A code session in its own git worktree: the user's checkout, the worktree folder (= workspace), its branch. */
+  worktree?: { repo: string; path: string; branch: string; base: string };
+  /** The folder the session was started in (its environment is that folder's; with a worktree, not the worktree). */
+  envFolder?: string;
   /** Other models that plan or review alongside the main one. */
   team?: Teammate[];
   /** Agent group: personas the chat's model leads, asking each for its part of a task. */

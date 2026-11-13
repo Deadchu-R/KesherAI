@@ -617,3 +617,13 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   the extension), phone view as refreshing pictures with taps, Allow once / Always on <site> / Deny, Settings list.
 - Stopped at: pane not yet checked live on the PC (waiting for a chat to finish before installing); next: watch the
   model use it end to end, then "check my change" (open the dev server after an edit).
+
+## 2026-11-14 — Environments and worktrees (CLAUDE_PARITY_PLAN stage 4)
+- **Claude Code** (code.claude.com/docs/en/worktrees): `--worktree` / desktop worktree option; `.claude/worktrees/<name>`,
+  branch `worktree-<name>`, from the default branch; `.worktreeinclude` (.gitignore syntax) copies ignored files such as
+  `.env`; on exit a clean worktree is removed, one with work asks keep/remove.
+- **Codex app** (learn.chatgpt.com/docs/environments/local-environment): local environments in `.codex/`; a setup script
+  runs when a worktree is made for a new chat (per-OS variants); "actions" (dev server, tests) in the top bar run in the
+  integrated terminal.
+- Built for KesherAI: both ideas, keyed by the folder (Code sessions are started by folder), stored in KesherAI's
+  settings rather than the repo. Stopped at: named environments menu; SSH/WSL left for when asked.
