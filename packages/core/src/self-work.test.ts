@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REVIEW, SelfWork, readOutcome, tickedItem, type SelfWorkDeps } from "./self-work.js";
+import { commitItem, REVIEW, SelfWork, readOutcome, tickedItem, type SelfWorkDeps } from "./self-work.js";
 
 test("reads the model's outcome line", () => {
   assert.deepEqual(readOutcome("did it\n**ITEM DONE: add the button**"), { kind: "item", text: "add the button" });
@@ -204,4 +204,36 @@ test("a BLOCKED that only says nothing is left is the goal met; a bare BLOCKED t
   const bare = readOutcome("The check needs a password for the database.\n\nBLOCKED");
   assert.deepEqual(bare, { kind: "blocked", text: "The check needs a password for the database." });
   assert.equal(readOutcome("BLOCKED: **needs** a decision").text, "needs a decision");
+});
+
+test("a plan-only change is not committed: .kesher-self/plan.md is gitignored, so nothing is staged and git commit fails", async () => {
+  // The real sequence the run uses (commitItem): git add -A, git commit, and only on success git rev-parse.
+  // A plan-only change leaves the worktree clean (the plan file is ignored), so `git add -A` stages nothing and
+  // `git commit` exits non-zero; the short hash is never read and no commit is made.
+  const calls: string[][] = [];
+  const planOnlyGit = async (repo: string, args: string[]): Promise<{ code: number; out: string }> => {
+    calls.push([repo, ...args]);
+    if (args[0] === "add") return { code: 0, out: "" };
+    if (args[0] === "commit") return { code: 1, out: "nothing to commit" }; // clean tree
+    if (args[0] === "rev-parse") return { code: 0, out: "abc1234\n" };
+    throw new Error(`unexpected git ${args[0]}`);
+  };
+  const sha = await commitItem(planOnlyGit, "/repo", { subject: "self-work: tick a plan line", body: "Goal: plan" });
+  assert.equal(sha, undefined, "no commit hash: nothing was committed");
+  assert.deepEqual(
+    calls.map((c) => c.slice(1)[0]),
+    ["add", "commit"],
+    "only add and commit ran; rev-parse was never reached",
+  );
+});
+
+test("a real change is committed and its short hash returned", async () => {
+  const head = "abc1234\n";
+  const git = async (_repo: string, args: string[]): Promise<{ code: number; out: string }> => {
+    if (args[0] === "add") return { code: 0, out: "" };
+    if (args[0] === "commit") return { code: 0, out: "1 file changed" };
+    if (args[0] === "rev-parse") return { code: 0, out: head };
+    throw new Error(`unexpected git ${args[0]}`);
+  };
+  assert.equal(await commitItem(git, "/repo", { subject: "self-work: the change", body: "Goal: go" }), "abc1234");
 });

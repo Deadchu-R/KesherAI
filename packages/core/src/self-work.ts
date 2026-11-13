@@ -173,6 +173,26 @@ export function readOutcome(text: string): { kind: "item" | "all" | "blocked" | 
   return { kind: "none", text: "" };
 }
 
+/**
+ * Commits the item: stages everything and commits it; when nothing is staged
+ * (a plan-only change: .kesher-self/plan.md is gitignored) the commit is not
+ * made and the short hash comes back undefined.
+ *
+ * @param git - Runs git (arguments as a list, no shell).
+ * @param repo - The repo or worktree.
+ * @param message - The commit subject (the item) and body (the goal).
+ * @returns The short commit hash, or undefined when nothing was committed.
+ */
+export async function commitItem(
+  git: (repo: string, args: string[]) => Promise<{ code: number; out: string }>,
+  repo: string,
+  message: { subject: string; body: string },
+): Promise<string | undefined> {
+  await git(repo, ["add", "-A"]);
+  const committed = await git(repo, ["commit", "-m", message.subject, "-m", message.body]);
+  return committed.code === 0 ? (await git(repo, ["rev-parse", "--short", "HEAD"])).out.trim() : undefined;
+}
+
 /** Runs self-work, one run at a time, kept in a file so a restart can continue it. */
 export class SelfWork {
   private run_?: SelfWorkState;
@@ -473,9 +493,7 @@ export class SelfWork {
         r.planTicked = tickedLines(await readFile(join(r.worktree ?? r.repo, ".kesher-self", "plan.md"), "utf8").catch(() => ""));
         r.failures = 0;
         const label = named || "Plan";
-        await this.d.git(r.worktree ?? r.repo, ["add", "-A"]);
-        const committed = await this.d.git(r.worktree ?? r.repo, ["commit", "-m", `self-work: ${label.slice(0, 150)}`, "-m", `Goal: ${r.goal.slice(0, 500)}`]);
-        const sha = committed.code === 0 ? (await this.d.git(r.worktree ?? r.repo, ["rev-parse", "--short", "HEAD"])).out.trim() : undefined;
+        const sha = await commitItem(this.d.git, r.worktree ?? r.repo, { subject: `self-work: ${label.slice(0, 150)}`, body: `Goal: ${r.goal.slice(0, 500)}` });
         if (out.kind === "item" || sha) {
           r.items.push({ at: Date.now(), text: label, ...(sha ? { commit: sha } : {}) });
           await this.save();
