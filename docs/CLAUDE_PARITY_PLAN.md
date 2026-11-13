@@ -99,6 +99,9 @@ Each stage is usable on its own, works on the phone (390 px) and gets its own re
 - Later, when asked for: SSH and WSL.
 
 ### Stage 5: Git to the end
+- ✅ Built (after 0.6.138): Create PR (model writes title and body; GitHub's compare page without an account), checks on
+  the Changes panel, Fix failing checks (failed jobs' logs to the chat), Merge (after a confirm), background watch:
+  fix failures once per commit, merge when green. Diff line comments already existed (into the message box).
 - **Comments on diff lines**: hover a line, +, write; "Send comments" gives them to the model as one message.
 - **Create PR**: push the branch and open the PR (through `gh` when installed; otherwise the link to open it).
   The model writes the title and body.

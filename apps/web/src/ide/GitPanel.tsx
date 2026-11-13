@@ -1,3 +1,4 @@
+import { PrSection } from "./PrSection";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
@@ -248,6 +249,7 @@ export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; ref
         </div>
       )}
 
+      {st.origin && <PrSection convId={convId} refresh={refresh} />}
       {st.files.length === 0 && !writing && <p className="muted small">{L("אין שינויים מאז ה־commit האחרון", "No changes since the last commit")}{st.head ? <>: <bdi className="mono">{st.head.sha}</bdi> <bdi>{st.head.subject}</bdi></> : null}</p>}
       <div className="list git-files">
         {st.files.map((f) => (

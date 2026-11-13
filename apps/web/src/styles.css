@@ -2078,3 +2078,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .env-action input:first-child { width: 120px; flex: none; }
 .ws-actions { gap: 6px; flex-wrap: wrap; padding: 4px 8px; }
 .model-chip.on { border-color: var(--accent, #9aa4ff); }
+.pr-section { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 6px 0; gap: 6px; }
+.pr-section input, .pr-section textarea { width: 100%; box-sizing: border-box; }
+.pr-actions { gap: 6px; flex-wrap: wrap; }
+.pr-watch label { gap: 6px; align-items: center; }

@@ -46,6 +46,8 @@ export interface Conversation {
   workspace?: string;
   /** A code session in its own git worktree: the user's checkout, the worktree folder (= workspace), its branch. */
   worktree?: { repo: string; path: string; branch: string; base: string };
+  /** Watching the session's pull request: fix failing checks and/or merge when all checks pass (like Claude Code). */
+  prWatch?: { autoFix: boolean; autoMerge: boolean; fixedSha?: string };
   /** The folder the session was started in (its environment is that folder's; with a worktree, not the worktree). */
   envFolder?: string;
   /** Other models that plan or review alongside the main one. */

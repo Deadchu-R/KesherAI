@@ -627,3 +627,10 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   integrated terminal.
 - Built for KesherAI: both ideas, keyed by the folder (Code sessions are started by folder), stored in KesherAI's
   settings rather than the repo. Stopped at: named environments menu; SSH/WSL left for when asked.
+
+## 2026-11-14 — Git to the end (CLAUDE_PARITY_PLAN stage 5)
+- **Claude Code desktop** (claude.com/blog/preview-review-and-merge-with-claude-code): PR status with CI checks (via
+  GitHub CLI), auto-fix of failing checks, auto-merge when all pass, keeps watching in the background; "Review code"
+  puts inline comments on the local diff. PR creation itself is not described there.
+- Built: the same with the GitHub account KesherAI already connects (no gh needed). Stopped at: "Review code"
+  (the model's own inline comments on the diff) not built yet.
