@@ -76,7 +76,11 @@ export function startPhoneNotify(): void {
     if (path && /^#\/[\w\-/]*$/.test(path)) location.hash = path;
   };
   try {
-    p.addListener("open", (e) => go(e.path));
+    p.addListener("open", (e) => {
+      go(e.path);
+      // The phone also keeps the page for a cold start: taken here, so the next start does not jump to it again.
+      void p.takeOpen().catch(() => undefined);
+    });
   } catch {
     // an older app: taps still open the app
   }

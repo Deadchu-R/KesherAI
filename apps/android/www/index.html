@@ -617,6 +617,11 @@
     $("notifyAndroid").onclick = () => Notify.openSettings();
     document.addEventListener("visibilitychange", () => document.hidden || Notify.status().then(showNotify, () => {}));
   }
+  // A notification tapped while the app shows this screen: connect to the computer, whose page then opens the
+  // notification's own page (the plugin keeps it until the interface asks).
+  try {
+    Notify?.addListener?.("open", () => { const saved = localStorage.getItem(KEY); if (saved) connect(saved); });
+  } catch (e) { /* an older app */ }
 
   // ---------- App updates (published by .github/workflows/android.yml) ----------
   const Updater = window.Capacitor?.Plugins?.KesherUpdater;
