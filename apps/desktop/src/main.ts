@@ -425,6 +425,7 @@ function setupBrowserPane(win: BrowserWindow): void {
   });
   win.on("closed", () => {
     server?.services.browser.attachPane(undefined);
+    p.destroy();
     pane = undefined;
   });
 }

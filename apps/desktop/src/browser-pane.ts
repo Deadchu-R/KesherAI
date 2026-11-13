@@ -13,7 +13,7 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { type BrowserWindow, WebContentsView, session, shell } from "electron";
+import { BaseWindow, type BrowserWindow, WebContentsView, session, shell } from "electron";
 
 export interface PaneTab {
   id: number;
@@ -268,23 +268,39 @@ export class BrowserPane {
 
   /**
    * A picture of a tab, also while it is not on screen (the pane closed on the computer, the phone looking):
-   * Electron paints only a page that is laid out in a window, so it is laid out just outside it for the picture.
+   * Electron paints only a page laid out in a shown window, so a hidden tab is pictured in an off-screen window.
    */
   private async picture(t: Tab): Promise<Electron.NativeImage> {
     const wc = t.view.webContents;
     const shown = !!this.bounds && t.id === this.active && this.win.contentView.children.includes(t.view);
     if (shown) return wc.capturePage();
-    // Laid out just outside the window (so it has a size and paints) for the picture, then taken away again.
+    // Tested in Electron 33: a page outside the window or under KesherAI's page is clipped or shows over it, and a
+    // hidden window paints nothing. A window placed off the screen (shown, never focused, not in the taskbar or
+    // Alt+Tab) paints, so the tab is moved there for the picture and back again.
     const width = this.bounds?.width ?? 1280;
     const height = this.bounds?.height ?? 800;
-    this.win.contentView.addChildView(t.view);
-    t.view.setBounds({ x: -width - 50, y: 0, width, height });
+    const helper = this.helperWindow(width, height);
+    if (this.win.contentView.children.includes(t.view)) this.win.contentView.removeChildView(t.view);
+    helper.contentView.addChildView(t.view);
+    t.view.setBounds({ x: 0, y: 0, width, height });
+    t.view.setVisible(true);
     try {
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 400));
       return await wc.capturePage(undefined, { stayHidden: true });
     } finally {
+      if (!helper.isDestroyed()) helper.contentView.removeChildView(t.view);
       this.layout();
     }
+  }
+
+  private helper: BaseWindow | undefined;
+
+  private helperWindow(width: number, height: number): BaseWindow {
+    if (!this.helper || this.helper.isDestroyed()) {
+      this.helper = new BaseWindow({ show: false, x: -20000, y: -20000, width, height, frame: false, skipTaskbar: true, focusable: false, ...(process.platform === "win32" ? { type: "toolbar" } : {}) });
+      this.helper.showInactive();
+    } else this.helper.setBounds({ x: -20000, y: -20000, width, height });
+    return this.helper;
   }
 
   /** A picture of the tab in front (for the phone), as JPEG. */
@@ -309,5 +325,6 @@ export class BrowserPane {
   /** Closes every tab (the app window is closing). */
   destroy(): void {
     for (const t of [...this.tabs]) this.close(t.id);
+    if (this.helper && !this.helper.isDestroyed()) this.helper.destroy();
   }
 }
