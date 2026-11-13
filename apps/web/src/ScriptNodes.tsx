@@ -299,7 +299,7 @@ export function ScriptNodes() {
     setSaving(true);
     try {
       await api(`/api/unity/script`, { method: "PUT", body: { path, text: out, mtime: file.mtime } });
-      toast(L("נשמר. Unity מקמפל את הסקריפט…", "Saved. Unity is compiling the script…"));
+      toast(L(`הוחל על ${path.split("/").pop() ?? "הסקריפט"}. Unity מקמפל אותו…`, `Applied to ${path.split("/").pop() ?? "the script"}. Unity is compiling it…`));
       open(path);
       setBeforeAi(null);
       void check(true);
@@ -378,7 +378,7 @@ export function ScriptNodes() {
                 <button type="button" role="tab" aria-selected={show === "code"} className={show === "code" ? "on" : ""} onClick={() => setShow("code")}>C#</button>
               </span>
               <button type="button" disabled={!changed || saving} onClick={() => open(path)}>{L("בטל שינויים", "Discard changes")}</button>
-              <button type="button" className="primary" disabled={!changed || saving} onClick={() => void save()}>{saving ? "…" : L("💾 שמור ל-C#", "💾 Save as C#")}</button>
+              <button type="button" className="primary" disabled={!changed || saving} onClick={() => void save()} title={L(`כותב את השינויים לתוך ${path.split("/").pop() ?? ""}: רק המתודות ששונו נכתבות מחדש`, `Writes the changes into ${path.split("/").pop() ?? ""}: only the methods you changed are rewritten`)}>{saving ? "…" : L("✓ החל על הסקריפט", "✓ Apply to the script")}</button>
             </div>
             {classes.length > 1 && (
               <label className="row small">
