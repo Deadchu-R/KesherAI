@@ -1,9 +1,6 @@
 import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
 import type { AcpOption } from "./acp.js";
-import type { Checkpoints } from "./checkpoints.js";
-import { personaPrompt, type Personas } from "./personas.js";
-import type { ProjectFacts } from "./project-facts.js";
-import type { SkillStore } from "./skill-store.js";
+import { personaPrompt } from "./personas.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { ImportedChat } from "./chat-import.js";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -12,12 +9,8 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type TeamMember } from "@kesher/agent";
 import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, branding, cleanAppearance, type Appearance, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type Teammate } from "@kesher/shared";
-import type { ProviderRegistry } from "@kesher/providers";
-import type { KesherConfig } from "./config.js";
-import type { AssetStore } from "./assets.js";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import { pickForHardware, runSplit, type RemoteLoad, type SplitWorker } from "./split-task.js";
-import type { UnityCli } from "./unity-cli.js";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
@@ -29,15 +22,13 @@ import { JobStore } from "./jobs.js";
 import { graphTools } from "./graph-edit.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
-import type { TaskBoard } from "./task-board.js";
-import type { UnrealBridge } from "./unreal-bridge.js";
-import type { PluginHost } from "./plugins.js";
-import type { Library } from "./library.js";
 import { modelTurnFor } from "./model-turn.js";
 import { ruleAllows } from "./approval-rules.js";
+import type { ConversationDeps } from "./conversation-deps.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
 export { ruleAllows } from "./approval-rules.js";
+export type { ConversationDeps } from "./conversation-deps.js";
 
 /** Options for {@link ConversationManager.create}. */
 export interface NewConversation {
@@ -141,67 +132,7 @@ export class ConversationManager {
 
   /** @param deps - Services the manager needs. */
   constructor(
-    private readonly deps: {
-      registry: ProviderRegistry;
-      library: Library;
-      assets: AssetStore;
-      plugins: PluginHost;
-      config: KesherConfig;
-      /** Folder for the files chats make (one sub-folder per conversation). */
-      outputsDir: string;
-      /** Saves the project folder before each message in coding sessions. */
-      checkpoints?: Checkpoints;
-      /**
-       * Finds an image model that runs on this computer when none usable is
-       * active: uses a downloaded one, or starts downloading the best fit.
-       */
-      ensureImageModel?(): Promise<{ modelId?: string; message?: string }>;
-      /** Video generation (Wan on stable-diffusion.cpp): finds or downloads the model, and makes a clip. */
-      video?: {
-        ensure(): Promise<{ path?: string; message?: string }>;
-        generate(path: string, req: { prompt: string; negativePrompt?: string; seconds?: number; seed: number }): Promise<{ data: Uint8Array; mimeType: string; meta?: Record<string, unknown> }>;
-      };
-      /** The ready-made ComfyUI flows (music, 3D), run from the chat. */
-      flows?: {
-        state(id: string): { ready: boolean; downloading: boolean; missingGb: number; installed: boolean; allowed: boolean };
-        setup(id: string): Promise<void>;
-        run(
-          id: string,
-          edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string) => Promise<string>) => Promise<void> | void,
-          signal: AbortSignal,
-        ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
-      };
-      /** Unity's CLI: the chat's Unity tools (when the CLI is installed). */
-      unity?: UnityCli;
-      /** The task board shared with Claude (self-work). */
-      board?: TaskBoard;
-      /** The KesherAI Bridge plugin in Unreal: the chat's Blueprint tools (when the editor is connected). */
-      unreal?: UnrealBridge;
-      /** How the app looks: the change_look tool reads and changes it (Undo keeps the last looks). */
-      look?: {
-        get(): Appearance;
-        set(next: Appearance): Promise<void>;
-        undo(): Promise<boolean>;
-      };
-      /** Computer-control tools for a conversation (empty when the user has not turned it on). */
-      computerTools?(conversationId: string): AgentTool[];
-      /** Tools from connected apps: Gmail and Calendar (Google sign-in) and MCP servers. */
-      mcpTools?(): AgentTool[];
-      /** Notes the coach learned about how the user works, added to every system prompt. */
-      userNotes?(): Promise<string[]>;
-      /** The remember / forget tools for the user's memory (none when memory is off). */
-      memoryTools?(): AgentTool[];
-      /** Saved personas. */
-      personas?: Personas;
-      /** SKILL.md skills, listed in the prompt and loaded with use_skill. */
-      skills?: SkillStore;
-      /** The context each chat gets on KesherAI's own engine, as it reported it (2 chats at once share it). */
-      engineSlotTokens?(): number | undefined;
-      /** Facts learned per project from its chats' failing commands (project-facts.ts). */
-      projectFacts?: ProjectFacts;
-      /** Every event of every open conversation (for notifications). */
-      onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
-    },
+    private readonly deps: ConversationDeps,
   ) {
     // Know at start whether Unreal is installed, so the first chat already has the Unreal tools.
     this.checkUnreal();
