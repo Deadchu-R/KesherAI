@@ -45,9 +45,14 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  *   nodes; Ctrl+Z / Ctrl+Y undo and redo in the editor itself; Ctrl+F
  *   searches the nodes (Enter: next);
  * Each change goes to the editor at once (one undo step there).
- * Without `editable` (Unity, or the editor closed) it only looks: pan, zoom, search.
+ * Without `editable` (the editor closed) it only looks: pan, zoom, search, and says why when the user tries to
+ * change something. Unity: moving, connecting and deleting work (what its package supports); adding nodes and
+ * breaking links wait for the package's next version.
  */
-export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void }) {
+export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string }) {
+  // Unity and Unreal share the canvas; each has its own routes.
+  const engine = unity ? "unity" : "unreal";
+  const saidWhy = useRef(0);
   const [moved, setMoved] = useState<Record<string, { x: number; y: number }>>({});
   useEffect(() => {
     setMoved({});
@@ -168,7 +173,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const apply = async (ops: Op[]): Promise<Array<{ ok: boolean; error?: string; node?: string }>> => {
     setBusy(true);
     try {
-      const r = await api<{ results: Array<{ ok: boolean; error?: string; node?: string }>; failed: number }>("/api/unreal/apply", { method: "POST", body: { path, graph, ops } });
+      const r = await api<{ results: Array<{ ok: boolean; error?: string; node?: string }>; failed: number }>(`/api/${engine}/apply`, { method: "POST", body: { path, graph, ops } });
       r.results.filter((x) => !x.ok).forEach((x) => toast(`⚠ ${x.error ?? ""}`));
       onChanged();
       return r.results;
@@ -179,10 +184,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       setBusy(false);
     }
   };
-  const undo = (redo: boolean) => void api(`/api/unreal/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message));
+  const undo = (redo: boolean) => (unity ? toast(L("ביטול וחזרה נעשים ב-Unity עצמו (Ctrl+Z שם): כל שינוי מכאן הוא צעד ביטול אחד.", "Undo and redo are done in Unity itself (Ctrl+Z there): each change from here is one undo step.")) : void api(`/api/unreal/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message)));
 
   const openMenu = (p: { x: number; y: number }, from?: Menu["from"]) => {
     if (!editable) return;
+    if (unity) return toast(L("הוספת צמתים ב-Unity: כתבו בבועת ה-AI מה להוסיף. תפריט הצמתים המלא יגיע בעדכון של חבילת KesherAI ל-Unity.", "Adding nodes in Unity: say what to add in the AI bubble. The full node menu comes with an update of the KesherAI Unity package."));
     const r = frame.current!.getBoundingClientRect();
     const w = world(p);
     setMenu({ left: Math.min(p.x, Math.max(0, r.width - 300)), top: Math.min(p.y, Math.max(0, r.height - 330)), wx: w.x, wy: w.y, ...(from ? { from } : {}) });
@@ -218,11 +224,17 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (pinEl && editable) {
       const d = pinEl.dataset;
       if (e.altKey) {
-        void apply([{ op: "disconnect", node: d.node, pin: d.pin }]);
+        if (unity) toast(L("ניתוק חוט ב-Unity: קליק ימני על הפורט ב-Unity עצמו (יגיע לכאן בעדכון החבילה).", "Breaking a link in Unity: right-click the port in Unity itself (comes here with the package update)."));
+        else void apply([{ op: "disconnect", node: d.node, pin: d.pin }]);
         return;
       }
       const a = pinAt.get(`${d.node}:${d.pin}`)!;
       return setDrag({ kind: "wire", node: d.node!, pin: d.pin!, dir: d.dir as "in" | "out", type: d.type!, ax: a.x, ay: a.y, ex: a.x, ey: a.y });
+    }
+    if (!editable && (pinEl || nodeEl) && Date.now() - saidWhy.current > 8000) {
+      // Dragging from a pin only moved the view, with no word about why (found by Roee).
+      saidWhy.current = Date.now();
+      toast(readOnlyWhy ?? L("הגרף פתוח לקריאה בלבד: כדי לחבר ולהזיז, פתחו את הפרויקט בעורך כשהוא מחובר ל-KesherAI.", "The graph is read-only: to connect and move, open the project in the editor with KesherAI connected."));
     }
     if (nodeEl) {
       const id = nodeEl.dataset.node!;
@@ -398,7 +410,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       <g key={`${side}${i}`}>
         <circle cx={cx} cy={cy} r={p.type === "exec" ? 4.5 : 4} fill={p.links?.length ? pinColor(p.type) : "none"} stroke={pinColor(p.type)} strokeWidth={1.6} />
         {/* A bigger, invisible target, so a finger can grab the pin too. */}
-        <circle cx={cx} cy={cy} r={10} fill="transparent" data-pin={p.name} data-node={n.id} data-dir={p.dir} data-type={p.type} className={editable ? "bp-pin" : undefined} />
+        <circle cx={cx} cy={cy} r={Math.min(ROW / 2 + 2, Math.max(10, 11 / view.k))} fill="transparent" data-pin={p.name} data-node={n.id} data-dir={p.dir} data-type={p.type} className={editable ? "bp-pin" : undefined} />
         <text x={side === "in" ? x + 10 : x + W - 10} y={cy + 4} textAnchor={side === "in" ? "start" : "end"} className="ue-pin">
           {p.type === "exec" && !p.label ? "" : p.label ?? p.name}
           {side === "in" && p.default !== undefined && !p.links?.length ? ` = ${p.default.length > 18 ? `${p.default.slice(0, 18)}…` : p.default}` : ""}

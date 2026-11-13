@@ -601,3 +601,8 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **Read:** Claude Code desktop docs (panes, environments, permission modes, git), the built-in browser docs (approvals, profile, what the agent can do), cloud environments, the memory help article.
 - **Not read yet (where this stopped):** how Cursor, Windsurf and Codex lay out the same panes (only Claude was asked for); the second half of the desktop docs page (it is long: the first 100,000 characters were read); the Electron `WebContentsView` API details for stage 3.
 - **Also found today:** Capacitor 8 gives its native bridge only to the app's own pages. The computer's pages in the phone app had no native plugin at all, which is why notifications were never set up from there. Fixed in the app (`RemoteBridge.java`, exact origins of paired computers, main frame only).
+
+## 2026-11-13: Research — editing Blueprints and Unity Visual Scripting graphs
+- Write-up and plan: `docs/GRAPH_EDITORS_PLAN.md`. Read: Epic's Blueprint cheat sheet, Unity's "Connect nodes" page, the 2026 Unreal MCP servers (forum listings only).
+- Found in the code: a read-only canvas panned silently on a pin drag; Unity editing was off in the page though the package applies operations.
+- **Where this stopped:** the MCP servers' source was not read (how they list actions and report compile errors); Unity's fuzzy finder API (`UnitOptionTree`) was not read; no check yet against Unreal 5.9.
