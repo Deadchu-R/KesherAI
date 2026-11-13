@@ -126,7 +126,7 @@ test("says what to install when a program is missing", () => {
 });
 
 test("Unity and Unreal use their official servers; old entries are updated", () => {
-  assert.equal(unityRelay("win32", "x64", "C:\\Users\\Roee Tal"), "C:\\Users\\Roee Tal\\.unity\\relay\\relay_win.exe");
+  assert.equal(unityRelay("win32", "x64", "C:\\Users\\Some One"), "C:\\Users\\Some One\\.unity\\relay\\relay_win.exe");
   assert.match(unityRelay("darwin", "arm64", "/Users/r"), /relay_mac_arm64\.app\/Contents\/MacOS\/relay_mac_arm64$/);
   const unreal = MCP_PRESETS.find((p) => p.id === "unreal")!;
   assert.equal(unreal.url, "http://127.0.0.1:8000/mcp");
