@@ -606,3 +606,14 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Write-up and plan: `docs/GRAPH_EDITORS_PLAN.md`. Read: Epic's Blueprint cheat sheet, Unity's "Connect nodes" page, the 2026 Unreal MCP servers (forum listings only).
 - Found in the code: a read-only canvas panned silently on a pin drag; Unity editing was off in the page though the package applies operations.
 - **Where this stopped:** the MCP servers' source was not read (how they list actions and report compile errors); Unity's fuzzy finder API (`UnitOptionTree`) was not read; no check yet against Unreal 5.9.
+
+## 2026-11-13 — Browser pane and per-site approvals (CLAUDE_PARITY_PLAN stage 3)
+- **Claude in Chrome** (support.claude.com/en/articles/12902446): modes Manually approve / Automatically approve /
+  Skip all approvals; per site: allow one action, always allow on this site, decline. Even with "always": downloads,
+  sensitive information and authorizations still ask. Blocked: purchases, account creation, card/ID data,
+  untrusted downloads, instructions found in web content. Approved sites listed in settings with revoke.
+- **ChatGPT Atlas** agent mode: help page could not be fetched (client error); not used.
+- Built (0.6.136–0.6.137): pane in the app window (WebContentsView, own storage, isolated-world helpers shared with
+  the extension), phone view as refreshing pictures with taps, Allow once / Always on <site> / Deny, Settings list.
+- Stopped at: pane not yet checked live on the PC (waiting for a chat to finish before installing); next: watch the
+  model use it end to end, then "check my change" (open the dev server after an edit).
