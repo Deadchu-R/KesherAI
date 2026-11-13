@@ -595,3 +595,9 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - Grouping notes by source in the panel (ten notes from one self-work run should be one line with a count).
   - The design assistant has no model picker and no streaming; fine for short requests.
   - General UX list from the competitor review stays in `docs/DESIGN_RESEARCH.md` (t39–t50): simple mode, command palette, run receipt with undo are the three biggest.
+
+## 2026-11-13: Research — a working experience like Claude's (Steps, Browser, Code environments, git, memory)
+- Full write-up and the six-stage plan: `docs/CLAUDE_PARITY_PLAN.md`.
+- **Read:** Claude Code desktop docs (panes, environments, permission modes, git), the built-in browser docs (approvals, profile, what the agent can do), cloud environments, the memory help article.
+- **Not read yet (where this stopped):** how Cursor, Windsurf and Codex lay out the same panes (only Claude was asked for); the second half of the desktop docs page (it is long: the first 100,000 characters were read); the Electron `WebContentsView` API details for stage 3.
+- **Also found today:** Capacitor 8 gives its native bridge only to the app's own pages. The computer's pages in the phone app had no native plugin at all, which is why notifications were never set up from there. Fixed in the app (`RemoteBridge.java`, exact origins of paired computers, main frame only).
