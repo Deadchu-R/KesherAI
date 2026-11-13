@@ -53,3 +53,16 @@ test("filing helpers", () => {
   assert.ok(refusal("my api key is abc"));
   assert.equal(refusal("Prefers dark mode"), undefined);
 });
+
+test("memory import: bullets and Topic: fact lines; secrets skipped", async () => {
+  const { createKesherServer } = await import("./server.js");
+  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-memimp-")), autodetect: false, pluginRoots: [] });
+  try {
+    const r = (await server.app.inject({ method: "POST", url: "/api/memory/import", payload: { text: "# What I know\n- Work: Unreal developer at 3DVision\n- Prefers answers in Hebrew\n2. password is hunter22\n" } })).json() as { added: number; skipped: number; topics: Array<{ title: string; facts: Array<{ text: string }> }> };
+    assert.equal(r.added, 2);
+    assert.equal(r.skipped, 1);
+    assert.deepEqual(r.topics.map((t) => [t.title, t.facts.map((f) => f.text)]), [["Work", ["Unreal developer at 3DVision"]], ["Imported", ["Prefers answers in Hebrew"]]]);
+  } finally {
+    await server.close();
+  }
+});

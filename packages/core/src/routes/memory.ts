@@ -54,6 +54,30 @@ export async function memoryRoutes(app: FastifyInstance, s: KesherServices): Pro
     return view();
   });
 
+  /**
+   * Import from another assistant (Claude and ChatGPT can both list what they remember): pasted text, one fact per
+   * line or bullet; "Topic: fact" lines keep their topic. Lines that look like secrets are skipped.
+   */
+  app.post<{ Body: { text?: string } }>("/api/memory/import", async (req) => {
+    const lines = String(req.body?.text ?? "")
+      .slice(0, 50_000)
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
+      .filter((l) => l.length >= 3 && !/^#/.test(l));
+    let added = 0;
+    let skipped = 0;
+    for (const l of lines.slice(0, 300)) {
+      const m = /^([^:]{2,40}):\s+(.{3,})$/.exec(l);
+      try {
+        await s.memory.add({ topic: m ? m[1]! : "Imported", text: m ? m[2]! : l, source: "you" });
+        added++;
+      } catch {
+        skipped++;
+      }
+    }
+    return { added, skipped, ...(await view()) };
+  });
+
   /** Deletes all memory (general and every project's). */
   app.post("/api/memory/reset", async () => {
     await s.memory.reset();

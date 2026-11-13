@@ -22,6 +22,7 @@ export function MemoryPage() {
   const [text, setText] = useState("");
   const [where, setWhere] = useState("");
   const [editing, setEditing] = useState<{ topic: string; i: number; text: string } | null>(null);
+  const [importText, setImportText] = useState<string | null>(null);
   const load = () => {
     void api<Memory>("/api/memory").then(setM, () => undefined);
     void api<Coach>("/api/coach/profile").then(setCoach, () => undefined);
@@ -89,6 +90,27 @@ export function MemoryPage() {
           )}
           <button type="submit" className="primary" disabled={!text.trim()}>{L("הוסף", "Add")}</button>
         </form>
+      </section>
+
+      <section className="card stack">
+        {importText === null ? (
+          <button type="button" style={{ alignSelf: "start" }} onClick={() => setImportText("")}>{L("ייבוא זיכרון מעוזר אחר…", "Import memory from another assistant…")}</button>
+        ) : (
+          <>
+            <h2>{L("ייבוא זיכרון", "Import memory")}</h2>
+            <p className="muted small">{L("בקשו מ-ChatGPT או מ-Claude: \"תכתוב רשימה של כל מה שאתה זוכר עליי, שורה לכל פרט\", והדביקו כאן. שורה בצורה \"נושא: פרט\" נשמרת תחת הנושא. סיסמאות ומספרים רגישים מדולגים.", "Ask ChatGPT or Claude: \"List everything you remember about me, one fact per line\", and paste it here. A \"Topic: fact\" line keeps its topic. Passwords and sensitive numbers are skipped.")}</p>
+            <textarea rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} dir="auto" aria-label={L("הטקסט לייבוא", "Text to import")} />
+            <div className="row">
+              <button type="button" className="primary" disabled={!importText.trim()} onClick={() => void call(async () => {
+                const r = await api<Memory & { added: number; skipped: number }>("/api/memory/import", { method: "POST", body: { text: importText } });
+                toast(L(`יובאו ${r.added} פרטים${r.skipped ? `, ${r.skipped} דולגו` : ""}.`, `Imported ${r.added} facts${r.skipped ? `, skipped ${r.skipped}` : ""}.`));
+                setImportText(null);
+                return r;
+              })}>{L("ייבוא", "Import")}</button>
+              <button type="button" onClick={() => setImportText(null)}>{L("ביטול", "Cancel")}</button>
+            </div>
+          </>
+        )}
       </section>
 
       {m.topics.length === 0 && <p className="muted">{L("עוד אין כלום בזיכרון.", "Nothing in memory yet.")}</p>}
