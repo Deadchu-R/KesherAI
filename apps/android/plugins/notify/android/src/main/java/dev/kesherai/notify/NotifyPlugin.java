@@ -37,6 +37,50 @@ public class NotifyPlugin extends Plugin {
         }
     }
 
+    /** The computers' pages get the native parts again after the app restarts (after every plugin is loaded). */
+    @Override
+    protected void handleOnStart() {
+        super.handleOnStart();
+        if (bridgeApplied) return;
+        bridgeApplied = true;
+        try {
+            getBridge().getWebView().post(() -> RemoteBridge.apply(getBridge()));
+        } catch (Throwable t) {
+            // the home screen asks again before it opens a computer
+        }
+    }
+
+    private boolean bridgeApplied;
+
+    /**
+     * { origins: ["http://192.168.1.5:7420", …] }: the paired computers whose pages may use the app's native
+     * parts. Only the app's own home screen may set this (a computer's page cannot add another origin).
+     */
+    @PluginMethod
+    public void allowBridge(PluginCall call) {
+        java.util.Set<String> origins = new java.util.HashSet<>();
+        try {
+            org.json.JSONArray list = call.getArray("origins");
+            for (int i = 0; list != null && i < list.length() && origins.size() < 40; i++) {
+                String o = RemoteBridge.origin(list.optString(i));
+                if (o != null) origins.add(o);
+            }
+        } catch (Exception e) {
+            // an empty list
+        }
+        getActivity().runOnUiThread(() -> {
+            String page = getBridge().getWebView().getUrl();
+            String own = getBridge().getScheme() + "://" + getBridge().getHost();
+            if (page == null || !own.equals(RemoteBridge.origin(page))) {
+                call.reject("Only the app's own screen can choose the computers.");
+                return;
+            }
+            String error = RemoteBridge.allow(getBridge(), origins);
+            if (error != null) call.reject(error);
+            else call.resolve();
+        });
+    }
+
     /** A tapped notification opened the app: keep its page until the web app asks (takeOpen). */
     private void remember(Intent i) {
         if (i == null) return;

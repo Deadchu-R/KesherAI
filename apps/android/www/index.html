@@ -440,6 +440,12 @@
       // Coming back here with the Back button shows this screen instead of connecting again.
       sessionStorage.setItem("kesherai-connected", "1");
       localStorage.setItem("kesherai-last-mode", "computer");
+      // The computers' pages may use the app's native parts (notifications, voice, updates): this computer and
+      // the other saved ones, by exact address. Without it the interface runs as a plain web page.
+      try {
+        const origins = [url.origin, ...loadComputers().flatMap((c) => c.links || []).map((l) => { try { return new URL(l).origin; } catch { return ""; } })].filter(Boolean);
+        await window.Capacitor?.Plugins?.KesherNotify?.allowBridge?.({ origins: [...new Set(origins)] });
+      } catch (e) { console.warn("bridge", e); }
       const open = new URL(url.href);
       open.searchParams.set("app", location.origin + "/");
       location.href = open.href; // the interface stores the token and removes it from the address

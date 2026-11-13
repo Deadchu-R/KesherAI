@@ -28,5 +28,7 @@ dependencies {
     }
     // getActivity() returns an AppCompatActivity (for the permission request and the open page).
     implementation "androidx.appcompat:appcompat:${project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.0'}"
+    // The bridge for the computers' pages (RemoteBridge) uses the same WebView library as Capacitor.
+    implementation "androidx.webkit:webkit:${project.hasProperty('androidxWebkitVersion') ? rootProject.ext.androidxWebkitVersion : '1.14.0'}"
     implementation "androidx.core:core:${project.hasProperty('androidxCoreVersion') ? rootProject.ext.androidxCoreVersion : '1.15.0'}"
 }
