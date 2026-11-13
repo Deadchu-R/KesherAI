@@ -14,7 +14,7 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.3";
+        const string Version = "0.2.4";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 
@@ -40,6 +40,15 @@ namespace KesherAI.Bridge
             var list = Json.Parse(ops) as List<object>;
             return list == null ? Out(new Dictionary<string, object> { ["error"] = "ops must be a JSON list" }) : Out(KesherGraph.Vars(path, list));
         }
+
+        [CliCommand("kesher_actions", "KesherAI Bridge: the nodes that can be added (like the fuzzy finder), narrowed by a query")]
+        static string Actions([CliArg("path", "Where the graph lives")] string path, [CliArg("query", "Words to look for")] string query = "") => Out(KesherGraph.Actions(query));
+
+        [CliCommand("kesher_undo", "KesherAI Bridge: undo the last change in the editor")]
+        static string Undo() { UnityEditor.Undo.PerformUndo(); return Out(new Dictionary<string, object> { ["ok"] = true }); }
+
+        [CliCommand("kesher_redo", "KesherAI Bridge: redo in the editor")]
+        static string Redo() { UnityEditor.Undo.PerformRedo(); return Out(new Dictionary<string, object> { ["ok"] = true }); }
 
         [CliCommand("kesher_check", "KesherAI Bridge: check a graph (missing inputs, broken ports)")]
         static string Check([CliArg("path", "Where the graph lives")] string path) => Out(KesherGraph.Check(path));

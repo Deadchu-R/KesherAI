@@ -40,7 +40,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.3";
+export const UNITY_PACKAGE_VERSION = "0.2.4";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -239,6 +239,28 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       return reply.code(502).send({ error: msg });
     }
   });
+
+  if (kind === "unity") {
+    /** The fuzzy finder's nodes, matching the words typed (Unity package 0.2.4+). */
+    app.get<{ Querystring: { path?: string; q?: string } }>(`${base}/actions`, async (req, reply) => {
+      try {
+        return await b.request("actions", { path: String(req.query.path ?? ""), query: String(req.query.q ?? "").slice(0, 100) }, 30_000);
+      } catch (err) {
+        const msg = (err as Error).message;
+        return reply.code(/kesher_actions/.test(msg) ? 409 : 502).send({ error: /kesher_actions/.test(msg) ? "The node menu needs the KesherAI Unity package 0.2.4. Update it from this page." : msg });
+      }
+    });
+    /** Ctrl+Z / Ctrl+Y in the page: Unity's own undo and redo (package 0.2.4+). */
+    for (const cmd of ["undo", "redo"] as const) {
+      app.post(`${base}/${cmd}`, async (_req, reply) => {
+        try {
+          return await b.request(cmd, {});
+        } catch (err) {
+          return reply.code(502).send({ error: (err as Error).message });
+        }
+      });
+    }
+  }
 
   for (const cmd of ["compile", "save", "open"] as const) {
     app.post<{ Body: { path?: string } }>(`${base}/${cmd}`, async (req, reply) => {

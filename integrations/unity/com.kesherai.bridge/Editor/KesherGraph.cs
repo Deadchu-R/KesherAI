@@ -856,6 +856,58 @@ namespace KesherAI.Bridge
             }
         }
 
+        /// <summary>
+        /// The nodes that can be added, like the fuzzy finder (right-click on the graph): every Visual Scripting
+        /// unit, variables, a custom event, and method calls on the common Unity types and the project's own
+        /// scripts. A query narrows the list (any word in the title or category); at most 60 are returned.
+        /// </summary>
+        public static Dictionary<string, object> Actions(string query)
+        {
+            var words = (query ?? "").ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            Func<string, string, bool> match = (title, category) =>
+            {
+                var hay = (title + " " + category).ToLowerInvariant();
+                return words.All(w => hay.Contains(w));
+            };
+            var list = new List<object>();
+            System.Action<Dictionary<string, object>> add = a =>
+            {
+                if (list.Count < 60 && match((string)a["title"], (string)a["category"])) list.Add(a);
+            };
+            add(new Dictionary<string, object> { ["title"] = "Get Variable", ["category"] = "Variables", ["type"] = "get" });
+            add(new Dictionary<string, object> { ["title"] = "Set Variable", ["category"] = "Variables", ["type"] = "set" });
+            add(new Dictionary<string, object> { ["title"] = "Custom Event", ["category"] = "Events", ["type"] = "custom_event" });
+            // Attributes are read by name, so a Visual Scripting version that moves them does not break this.
+            Func<Type, string, string, string> attr = (t, name, prop) =>
+            {
+                var a = t.GetCustomAttributes(true).FirstOrDefault(x => x.GetType().Name == name);
+                var pi = a != null ? a.GetType().GetProperty(prop) : null;
+                return pi != null ? pi.GetValue(a, null) as string : null;
+            };
+            var units = TypeCache.GetTypesDerivedFrom<IUnit>()
+                .Where(t => !t.IsAbstract && !t.IsGenericTypeDefinition && t.GetConstructor(Type.EmptyTypes) != null && t.Assembly.GetName().Name.StartsWith("Unity.VisualScripting", StringComparison.Ordinal))
+                .Select(t => new { t, title = attr(t, "UnitTitleAttribute", "title") ?? UnityEditor.ObjectNames.NicifyVariableName(t.Name), category = attr(t, "UnitCategoryAttribute", "fullName") ?? "Nodes" })
+                .Where(x => !x.category.StartsWith("Nesting", StringComparison.Ordinal))
+                .OrderBy(x => x.category).ThenBy(x => x.title);
+            foreach (var u in units) add(new Dictionary<string, object> { ["title"] = u.title, ["category"] = u.category, ["type"] = u.t.Name });
+            // Method calls: only when asked for (there are thousands), on common types and the project's scripts.
+            if (words.Length > 0)
+            {
+                var types = new List<Type> { typeof(Debug), typeof(Mathf), typeof(Vector3), typeof(Vector2), typeof(Quaternion), typeof(Transform), typeof(GameObject), typeof(Rigidbody), typeof(Rigidbody2D), typeof(Input), typeof(Time), typeof(Physics), typeof(UnityEngine.Random), typeof(UnityEngine.Object), typeof(Animator), typeof(AudioSource) };
+                types.AddRange(TypeCache.GetTypesDerivedFrom<MonoBehaviour>().Where(t => t.Assembly.GetName().Name.StartsWith("Assembly-CSharp", StringComparison.Ordinal)));
+                foreach (var t in types)
+                {
+                    foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(m => !m.IsSpecialName && !m.IsGenericMethodDefinition).GroupBy(m => m.Name).Select(g => g.First()))
+                    {
+                        var title = t.Name + "." + m.Name + "(" + string.Join(", ", m.GetParameters().Select(x => x.Name)) + ")";
+                        add(new Dictionary<string, object> { ["title"] = title, ["category"] = "Codebase/" + t.Name, ["type"] = "call", ["function"] = t.FullName + ":" + m.Name });
+                    }
+                    if (list.Count >= 60) break;
+                }
+            }
+            return new Dictionary<string, object> { ["actions"] = list };
+        }
+
         public static Dictionary<string, object> Save(string path)
         {
             var target = Load(path);

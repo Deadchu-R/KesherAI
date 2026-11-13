@@ -184,11 +184,10 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       setBusy(false);
     }
   };
-  const undo = (redo: boolean) => (unity ? toast(L("ביטול וחזרה נעשים ב-Unity עצמו (Ctrl+Z שם): כל שינוי מכאן הוא צעד ביטול אחד.", "Undo and redo are done in Unity itself (Ctrl+Z there): each change from here is one undo step.")) : void api(`/api/unreal/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message)));
+  const undo = (redo: boolean) => void api(`/api/${engine}/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message));
 
   const openMenu = (p: { x: number; y: number }, from?: Menu["from"]) => {
     if (!editable) return;
-    if (unity) return toast(L("הוספת צמתים ב-Unity: כתבו בבועת ה-AI מה להוסיף. תפריט הצמתים המלא יגיע בעדכון של חבילת KesherAI ל-Unity.", "Adding nodes in Unity: say what to add in the AI bubble. The full node menu comes with an update of the KesherAI Unity package."));
     const r = frame.current!.getBoundingClientRect();
     const w = world(p);
     setMenu({ left: Math.min(p.x, Math.max(0, r.width - 300)), top: Math.min(p.y, Math.max(0, r.height - 330)), wx: w.x, wy: w.y, ...(from ? { from } : {}) });
@@ -489,20 +488,20 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           <button type="button" onClick={() => setFind(null)} aria-label={L("סגור", "Close")}>✕</button>
         </div>
       )}
-      {menu && <ActionMenu path={path} menu={menu} onPick={(a) => void add(a)} onClose={() => setMenu(null)} />}
+      {menu && <ActionMenu engine={engine} path={path} menu={menu} onPick={(a) => void add(a)} onClose={() => setMenu(null)} />}
     </div>
   );
 }
 
 /** Unreal's "All Actions for this Blueprint": a search over the nodes the editor can add. */
-function ActionMenu({ path, menu, onPick, onClose }: { path: string; menu: Menu; onPick: (a: Action) => void; onClose: () => void }) {
+function ActionMenu({ engine, path, menu, onPick, onClose }: { engine: string; path: string; menu: Menu; onPick: (a: Action) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Action[] | null>(null);
   const [i, setI] = useState(0);
   useEffect(() => {
     let alive = true;
     const id = setTimeout(() => {
-      void api<{ actions: Action[] }>(`/api/unreal/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`).then(
+      void api<{ actions: Action[] }>(`/api/${engine}/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`).then(
         (r) => {
           if (!alive) return;
           setItems(r.actions);
