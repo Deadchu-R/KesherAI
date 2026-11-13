@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { parseFit, type FitPlan } from "./fit-preview.js";
 import { mtpLayers } from "./gguf.js";
@@ -24,6 +24,40 @@ export interface PlatformInfo {
   vulkanMissing?: boolean;
   /** The processor's name (a Snapdragon gets the Windows arm64 build, also when the app runs as x64). */
   cpu?: string;
+  /** With `vulkanMissing`: the command that installs Vulkan on this distribution. */
+  vulkanHint?: string;
+}
+
+function osRelease(): string {
+  try {
+    return readFileSync("/etc/os-release", "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/** Where Vulkan drivers register themselves on Linux (one JSON file each: radeon_icd…, intel_icd…, nvidia_icd…). */
+const VULKAN_ICD_DIRS = ["/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d", "/usr/local/share/vulkan/icd.d"];
+
+/** @returns The Vulkan driver files on this Linux computer. */
+export function vulkanIcds(list: (dir: string) => string[] = (d) => { try { return readdirSync(d); } catch { return []; } }): string[] {
+  return VULKAN_ICD_DIRS.flatMap((d) => list(d).filter((f) => f.endsWith(".json")));
+}
+
+/**
+ * What to install for Vulkan on this Linux distribution (Arch and CachyOS, Debian and Ubuntu, Fedora, openSUSE).
+ *
+ * @param vendor - The card's maker.
+ * @param osRelease - The text of /etc/os-release.
+ * @returns The command.
+ */
+export function vulkanInstallHint(vendor: string, osRelease: string): string {
+  const id = `${/^ID=(.*)$/m.exec(osRelease)?.[1] ?? ""} ${/^ID_LIKE=(.*)$/m.exec(osRelease)?.[1] ?? ""}`.replace(/"/g, "").toLowerCase();
+  const amd = vendor !== "intel";
+  if (/arch|cachyos|manjaro|endeavour/.test(id)) return `sudo pacman -S --needed vulkan-icd-loader ${amd ? "vulkan-radeon" : "vulkan-intel"}`;
+  if (/fedora|rhel|centos|nobara/.test(id)) return "sudo dnf install mesa-vulkan-drivers vulkan-loader";
+  if (/suse/.test(id)) return "sudo zypper install libvulkan1 libvulkan_radeon libvulkan_intel";
+  return "sudo apt install mesa-vulkan-drivers libvulkan1";
 }
 
 /** Common places of Vulkan's loader on Linux (distributions differ). */
@@ -41,7 +75,11 @@ export function enginePlatform(hw: { gpus: Array<{ vendor?: string; name: string
   // A card with memory of its own, or Intel Arc (its memory is not always reported). Built-in graphics alone are
   // not faster than the processor for this.
   const other = hw.gpus.some((g) => (g.vendor === "amd" || g.vendor === "intel") && (g.vramTotal >= 2 * 1024 ** 3 || /arc|radeon rx|radeon pro|instinct/i.test(g.name)));
-  const loader = process.platform !== "linux" || VULKAN_LOADERS.some((f) => hasFile(f));
+  // On Linux: the loader, and a driver for the card (Mesa's RADV for AMD, ANV for Intel; NVIDIA brings its own).
+  const icds = process.platform === "linux" ? vulkanIcds() : [];
+  const vendorIcd = (v: string) => (v === "amd" ? icds.some((f) => /radeon|amd/i.test(f)) : v === "intel" ? icds.some((f) => /intel/i.test(f)) : true);
+  const cardVendor = hw.gpus.find((g) => g.vendor === "amd" || g.vendor === "intel")?.vendor ?? "";
+  const loader = process.platform !== "linux" || (VULKAN_LOADERS.some((f) => hasFile(f)) && (nvidia || !cardVendor || vendorIcd(cardVendor) || icds.length === 0));
   const gpu = nvidia || other;
   // Windows on Snapdragon runs this app as x64 (emulated); the engine runs natively as arm64.
   const arm = process.platform === "win32" && (/snapdragon|qualcomm/i.test(hw.cpu) || process.env.PROCESSOR_ARCHITEW6432 === "ARM64" || process.env.PROCESSOR_ARCHITECTURE === "ARM64");
@@ -50,7 +88,7 @@ export function enginePlatform(hw: { gpus: Array<{ vendor?: string; name: string
     arch: arm ? "arm64" : process.arch,
     nvidia,
     vulkan: gpu && loader,
-    ...(gpu && !loader ? { vulkanMissing: true } : {}),
+    ...(gpu && !loader ? { vulkanMissing: true, vulkanHint: vulkanInstallHint(cardVendor, osRelease()) } : {}),
     cpu: hw.cpu,
   };
 }
@@ -124,7 +162,7 @@ export function pickLlamaAssets(names: string[], p: PlatformInfo): LlamaAssets |
       if (vulkan) return { main: vulkan, label: `Linux, Vulkan (${p.nvidia ? "NVIDIA" : "AMD / Intel"} graphics card)` };
     }
     const cpu = find(new RegExp(`^llama-b\\d+-bin-ubuntu-${arch}\\.(zip|tar\\.gz)$`));
-    return cpu ? { main: cpu, label: p.vulkanMissing ? "Linux, CPU (the graphics card needs Vulkan: install mesa-vulkan-drivers and libvulkan1, then update the engine)" : "Linux, CPU" } : undefined;
+    return cpu ? { main: cpu, label: p.vulkanMissing ? `Linux, CPU (the graphics card needs Vulkan: run "${p.vulkanHint ?? "sudo apt install mesa-vulkan-drivers libvulkan1"}", then restart KesherAI)` : "Linux, CPU" } : undefined;
   }
   return undefined;
 }

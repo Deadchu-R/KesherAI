@@ -111,3 +111,11 @@ test("Windows on Snapdragon: the Adreno build when there is one, else Vulkan arm
   assert.equal(pickLlamaAssets(ASSETS, { platform: "win32", arch: "arm64", nvidia: false, cpu: "Snapdragon(R) X Elite" })?.main, "llama-b12110-bin-win-vulkan-arm64.zip");
   assert.equal(pickLlamaAssets(ASSETS, { platform: "win32", arch: "arm64", nvidia: true })?.main, "llama-b12110-bin-win-vulkan-arm64.zip");
 });
+
+test("the Vulkan install command fits the distribution (CachyOS, Ubuntu, Fedora)", async () => {
+  const { vulkanInstallHint } = await import("./llamacpp.js");
+  assert.match(vulkanInstallHint("amd", 'NAME="CachyOS Linux"\nID=cachyos\nID_LIKE=arch'), /pacman .*vulkan-radeon/);
+  assert.match(vulkanInstallHint("intel", "ID=arch"), /vulkan-intel/);
+  assert.match(vulkanInstallHint("amd", "ID=ubuntu\nID_LIKE=debian"), /apt install mesa-vulkan-drivers/);
+  assert.match(vulkanInstallHint("amd", "ID=fedora"), /dnf/);
+});

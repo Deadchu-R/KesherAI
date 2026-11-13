@@ -2036,3 +2036,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .bar-update:hover { filter: brightness(1.08); }
 .bar-update-v { font-weight: 500; opacity: .85; font-size: 12.5px; }
 @media (max-width: 520px) { .bar-update-v { display: none; } .bar-update { padding: 0 10px; } }
+.gpu-check { margin-top: 4px; }
+.gpu-check > summary { cursor: pointer; }
+.gpu-check pre { max-height: 220px; overflow: auto; white-space: pre-wrap; }

@@ -1,3 +1,4 @@
+import { GpuCheck } from "../GpuCheck";
 import { ComfyOnlyKind, ModelKindCard } from "../ModelKinds";
 import { ComfySection } from "../ComfySection";
 import { useEffect, useState } from "react";
@@ -366,6 +367,7 @@ export function ModelsPage() {
             {disk?.freeGb !== undefined && ` · ${t("diskFree", { gb: disk.freeGb.toFixed(0) })}`}
           </p>
         )}
+        {hw && <GpuCheck />}
       </header>
 
       <nav className="tabs" role="tablist" aria-label={t("models")}>

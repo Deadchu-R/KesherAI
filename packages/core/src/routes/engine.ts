@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
-import { enginePlatform, findLlamaRelease, waitForDownload } from "../llamacpp.js";
+import { enginePlatform, findLlamaRelease, vulkanIcds, waitForDownload } from "../llamacpp.js";
 import { insideAny, looksLikeGguf, matchRecommended, scanComputer, scanFolder, type FoundModel } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
@@ -25,13 +25,18 @@ export async function ensureEngine(s: KesherServices): Promise<void> {
   const bin = s.engine.status().binaryPath;
   const gpuLib = bin ? (await readdir(dirname(bin)).catch(() => [] as string[])).some((f) => /ggml-(cuda|vulkan|hip|sycl|opencl|metal)/i.test(f)) : true;
   const cpuOnly = s.config.engines.llamaBuild ? /, CPU/.test(s.config.engines.llamaBuild) : !gpuLib;
-  const upgrade = s.engine.status().installed && process.platform === "linux" && cpuOnly && !!platform.vulkan && !s.engine.status().running;
+  const upgrade = s.engine.status().installed && process.platform === "linux" && cpuOnly && !!platform.vulkan;
   if (s.engine.status().installed && !upgrade) return;
+  // The last model loads by itself at start, so the engine is often already running: stop it, replace the build,
+  // and load the same model again on the card (found on a CachyOS computer: the upgrade never happened).
+  const was = s.engine.status();
+  if (upgrade && was.running) await s.engine.stop("Switching to the build for the graphics card");
   const { binaryPath, version, build } = await s.engine.install(s.downloads, platform);
   s.config.engines.llamaServerPath = binaryPath;
   s.config.engines.llamaVersion = version;
   if (build) s.config.engines.llamaBuild = build;
   await s.saveConfig();
+  if (upgrade && was.running && was.modelPath) await loadModel(s, was.modelPath).catch(() => undefined);
 }
 
 /** What the last look over this computer found (kept five minutes: the models page asks often, and big ComfyUI or Hugging Face folders take a while to walk). */
@@ -97,6 +102,27 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
  */
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   app.get("/api/engines/llamacpp", async () => ({ ...s.engine.status(), fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048 }));
+
+  /**
+   * "Check the graphics card": what KesherAI sees and which engine build it uses, in one place, to read out or
+   * send when a card is not used (AMD and Intel on Linux need Vulkan's driver; the log says whether the engine
+   * found the card).
+   */
+  app.get("/api/engines/gpu-check", async () => {
+    const hw = await detectHardware();
+    const platform = enginePlatform(hw);
+    const bin = s.engine.status().binaryPath;
+    const libs = bin ? (await readdir(dirname(bin)).catch(() => [] as string[])).filter((f) => /ggml/i.test(f)) : [];
+    const log = (s.engine.status().log ?? []).filter((l) => /vulkan|ggml_vk|offload|gpu|device|layers to/i.test(l)).slice(-25);
+    return {
+      gpus: hw.gpus.map((g) => ({ name: g.name, vendor: g.vendor ?? "", vramGb: Math.round((g.vramTotal / 1024 ** 3) * 10) / 10 })),
+      platform,
+      vulkanDrivers: process.platform === "linux" ? vulkanIcds() : [],
+      build: s.config.engines.llamaBuild ?? "",
+      engineLibs: libs,
+      engineLog: log,
+    };
+  });
 
   /**
    * The graphics cards and how models use them: each card (PCI order, memory,
