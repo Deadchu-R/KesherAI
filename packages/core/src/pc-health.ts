@@ -213,3 +213,28 @@ export function healthPrompt(r: HealthReading, items: HealthItem[], he: boolean)
     ...items.map((i) => `- [${i.level}] ${i.title}: ${i.fix}`),
   ].join("\n");
 }
+
+/**
+ * The daily check's decision (VISION: "a daily check sends a notification only when something needs attention"):
+ * a note when there is something bad, or a warning not in the last note; at most once a day, and a bad thing already
+ * told is told again only after three days.
+ *
+ * @param items - healthItems() of a fresh reading.
+ * @param last - The last note sent: when, and the titles it named.
+ * @returns The note to send (title, body, the titles to remember), or undefined.
+ */
+export function healthDigest(items: HealthItem[], last: { at: number; titles: string[] } | undefined, now = Date.now()): { title: string; body: string; titles: string[] } | undefined {
+  const need = items.filter((i) => i.level !== "ok");
+  if (!need.length) return undefined;
+  if (last && now - last.at < 24 * 3_600_000) return undefined;
+  const fresh = need.filter((i) => !last?.titles.includes(i.title));
+  const badAgain = need.some((i) => i.level === "bad") && (!last || now - last.at >= 3 * 24 * 3_600_000);
+  if (!fresh.length && !badAgain) return undefined;
+  const bad = need.filter((i) => i.level === "bad").length;
+  const shown = [...need].sort((a, b) => (a.level === b.level ? 0 : a.level === "bad" ? -1 : 1)).slice(0, 4);
+  return {
+    title: bad ? `PC Health: ${bad} thing${bad === 1 ? "" : "s"} to fix` : `PC Health: ${need.length} thing${need.length === 1 ? "" : "s"} worth a look`,
+    body: shown.map((i) => `• ${i.title}`).join("\n") + (need.length > shown.length ? `\n…and ${need.length - shown.length} more` : ""),
+    titles: need.map((i) => i.title),
+  };
+}

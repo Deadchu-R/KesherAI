@@ -30,3 +30,18 @@ test("folderSize counts files and stops at its limit", async () => {
   assert.deepEqual(await folderSize("t", d), { name: "t", path: d, bytes: 8 });
   assert.equal((await folderSize("t", d, 1)).partial, true);
 });
+
+test("health digest: a note for something bad or a new warning, at most once a day, a known bad thing again after 3 days", async () => {
+  const { healthDigest } = await import("./pc-health.js");
+  const bad = { level: "bad" as const, title: "Only 2 GB left on C:", fix: "" };
+  const warn = { level: "warn" as const, title: "Windows.old is still there", fix: "" };
+  const day = 24 * 3_600_000;
+  assert.equal(healthDigest([{ level: "ok", title: "fine", fix: "" }], undefined), undefined);
+  const first = healthDigest([bad, warn], undefined, 10 * day)!;
+  assert.match(first.title, /1 thing to fix/);
+  assert.deepEqual(first.titles, [bad.title, warn.title]);
+  assert.equal(healthDigest([bad, warn], { at: 10 * day, titles: first.titles }, 10.5 * day), undefined, "not twice a day");
+  assert.equal(healthDigest([warn], { at: 10 * day, titles: first.titles }, 12 * day), undefined, "a warning already told");
+  assert.ok(healthDigest([bad], { at: 10 * day, titles: first.titles }, 13 * day), "a bad thing again after 3 days");
+  assert.ok(healthDigest([{ ...warn, title: "New warning" }], { at: 10 * day, titles: first.titles }, 11.1 * day), "a new warning");
+});

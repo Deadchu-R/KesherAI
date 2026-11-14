@@ -842,3 +842,11 @@ Stopped at: a "wrong type" tip while dragging a wire onto a pin (Unreal's red "i
   before the run, asking first about any file changed since; the earlier files are kept on disk (undo/<chat>/<run>)
   so it works after a restart (newest 30 runs, up to 20 MB each).
 Stopped at: a diff view per file from the receipt, and undoing one file of a run.
+
+## 2026-11-14: PC Health with AI (board t23): what was left
+- Already built: the reading (drives, Windows.old, temp, KesherAI's folders, GPU, RAM, CPU, startup apps, a restart
+  waiting), the rules' list, "Ask the AI" (the chat model rewrites it as a short plain-language list), Storage and
+  "Fix it for me".
+- Built now (0.6.175): the daily check from VISION: a fresh reading every 6 hours, a note only when something is bad
+  or a warning is new, at most once a day, a bad thing again after 3 days; what was told is kept across restarts.
+Stopped at: OneDrive's offline size; the note in the user's language (board t57).

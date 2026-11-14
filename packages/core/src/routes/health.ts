@@ -1,3 +1,5 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { modelTurnFor } from "../conversations.js";
@@ -5,7 +7,7 @@ import { branding } from "@kesher/shared";
 import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
 import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
-import { healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
+import { healthDigest, healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
 import { fixActions, runFixes, type FixContext } from "../pc-fix.js";
 
 /**
@@ -26,6 +28,24 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
       .finally(() => (reading = undefined));
     return reading;
   };
+
+  // The daily check: a fresh reading every 6 hours (the first 10 minutes after start); a note only when something
+  // needs attention (healthDigest). What was told last is kept, so a restart does not tell it again.
+  const toldFile = join(s.paths.root, "pc-health-told.json");
+  const check = async () => {
+    try {
+      const told = JSON.parse(await readFile(toldFile, "utf8").catch(() => "null")) as { at: number; titles: string[] } | null;
+      const r = await read(true);
+      const note = healthDigest(healthItems(r, false), told ?? undefined);
+      if (!note) return;
+      await s.notifier.send({ title: note.title, body: note.body, path: "#/health", tags: ["computer"] });
+      await writeFile(toldFile, JSON.stringify({ at: Date.now(), titles: note.titles }), "utf8");
+    } catch {
+      /* the next check tries again */
+    }
+  };
+  setTimeout(() => void check(), 10 * 60_000).unref();
+  setInterval(() => void check(), 6 * 3_600_000).unref();
 
   app.get<{ Querystring: { lang?: string; fresh?: string } }>("/api/pc-health", async (req) => {
     const r = await read(req.query.fresh === "1");
