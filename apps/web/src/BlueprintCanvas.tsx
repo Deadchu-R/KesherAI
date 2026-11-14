@@ -15,6 +15,8 @@ const isKnot = (n: GNode) => n.class === "K2Node_Knot";
 const KNOT = 16;
 /** One node the "All Actions" menu offers. */
 export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
+import { wireFits } from "./wire-fits";
+
 type Op = Record<string, unknown>;
 /** What a variable row of the variables panel carries when it is dragged onto a graph ({ name, type }). */
 export const VAR_DRAG = "application/x-kesher-var";
@@ -157,6 +159,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
+  /** Over a pin while dragging a wire: whether it connects (shown by the mouse, as in Unreal). */
+  const [over, setOver] = useState<{ x: number; y: number; ok: boolean; why: string } | null>(null);
   /** A variable dropped on empty space: Get or Set (as in Unreal). */
   const [varMenu, setVarMenu] = useState<{ left: number; top: number; name: string; x: number; y: number } | null>(null);
   const [pinMenu, setPinMenu] = useState<{ left: number; top: number; node: string; pin: string; dir: "in" | "out"; type: string; wx: number; wy: number } | null>(null);
@@ -448,10 +452,19 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     else if (drag.kind === "wire") {
       const w = world(now);
       setDrag({ ...drag, ex: w.x, ey: w.y });
+      const t = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
+      const d = t?.dataset;
+      if (!d?.node || d.node === drag.node) setOver(null);
+      else if (d.dir === drag.dir && !drag.moveLinks) setOver({ x: now.x, y: now.y, ok: false, why: L("יציאה מתחברת לכניסה", "An output goes into an input") });
+      else {
+        const f = drag.dir === "out" ? wireFits(drag.type, d.type ?? "") : wireFits(d.type ?? "", drag.type);
+        setOver({ x: now.x, y: now.y, ok: f.ok, why: f.ok ? (f.why ? L(`המרה ${f.why}`, `Convert ${f.why}`) : L("חיבור", "Connect")) : f.why });
+      }
     }
   };
   const up = (e: React.PointerEvent) => {
     clearTimeout(press.current);
+    setOver(null);
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
     const d = drag;
@@ -1001,6 +1014,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               <li key={label}><button type="button" role="menuitem" onClick={() => { setNodeMenu(null); act(); }}>{label}</button></li>
             ))}
           </ul>
+        </div>
+      )}
+      {over && (
+        <div className={`bp-wire-tip ${over.ok ? "ok" : "bad"}`} style={{ left: over.x + 14, top: over.y + 14 }} role="status" dir="ltr">
+          {over.ok ? "✓" : "✗"} {over.why}
         </div>
       )}
       {varMenu && (

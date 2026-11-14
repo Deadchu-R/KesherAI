@@ -2216,3 +2216,6 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 }
 .bp-ctx { gap: 4px; align-items: center; white-space: nowrap; color: var(--muted); }
 .bp-ctx input { width: auto; min-height: 0; margin: 0; }
+.bp-wire-tip { position: absolute; z-index: 6; pointer-events: none; padding: 3px 8px; border-radius: 6px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border-strong); white-space: nowrap; }
+.bp-wire-tip.ok { color: #7bd88f; }
+.bp-wire-tip.bad { color: #ff7b7b; border-color: rgb(255 123 123 / 0.5); }
