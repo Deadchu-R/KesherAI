@@ -23,7 +23,44 @@ function inline(text: string, key: string): React.ReactNode[] {
   return out;
 }
 
-/** Renders a reply's Markdown: headings, lists, bold, code blocks and inline code. */
+/** A table row's cells ("| a | b |" or "a | b"); a "\\|" stays in its cell. */
+function cells(line: string): string[] {
+  const t = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return t.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+}
+
+/** Whether a line is a table's line under its header: "|---|:---:|--:|". */
+export function isTableRule(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(line) && line.includes("|");
+}
+
+/**
+ * A Markdown table (GitHub's way, which models write): a header row, the "|---|" line (":" sets alignment),
+ * then rows. Scrolls sideways on a narrow screen instead of squeezing.
+ */
+function table(lines: string[], k: string): React.ReactNode {
+  const head = cells(lines[0]!);
+  const align = cells(lines[1]!).map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "end" : c.startsWith(":") ? "start" : undefined));
+  const rows = lines.slice(2).map(cells);
+  return (
+    <div key={k} className="md-table-wrap">
+      <table className="md-table">
+        <thead>
+          <tr>{head.map((c, i) => <th key={i} dir="auto" style={align[i] ? { textAlign: align[i] } : undefined}>{inline(c, `${k}h${i}`)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, j) => (
+            <tr key={j}>
+              {head.map((_, i) => <td key={i} dir="auto" style={align[i] ? { textAlign: align[i] } : undefined}>{inline(r[i] ?? "", `${k}r${j}c${i}`)}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Renders a reply's Markdown: headings, lists, tables, bold, code blocks and inline code. */
 export function RichText({ text }: { text: string }) {
   const parts = text.split(/```(\w*)\n?([\s\S]*?)(?:```|$)/g);
   const out: React.ReactNode[] = [];
@@ -37,8 +74,22 @@ export function RichText({ text }: { text: string }) {
         out.push(list.ordered ? <ol key={k}>{list.items}</ol> : <ul key={k}>{list.items}</ul>);
         list = null;
       };
+      let skip = 0;
       lines.forEach((line, j) => {
         const k = `${i}-${j}`;
+        if (skip) {
+          skip--;
+          return;
+        }
+        // A table: this line has "|", the next is the "|---|" line; the rows go on while lines have "|".
+        if (line.includes("|") && lines[j + 1] !== undefined && isTableRule(lines[j + 1]!)) {
+          let end = j + 2;
+          while (end < lines.length && lines[end]!.includes("|") && lines[end]!.trim()) end++;
+          flush(`l${k}`);
+          out.push(table(lines.slice(j, end), `t${k}`));
+          skip = end - j - 1;
+          return;
+        }
         const h = /^(#{1,4})\s+(.*)$/.exec(line);
         const li = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(line);
         if (h) {

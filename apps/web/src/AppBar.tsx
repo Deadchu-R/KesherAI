@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 import { useAppMenu } from "./AppMenu";
 import { desktop } from "./library";
@@ -130,13 +131,39 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         <InboxBell />
         <ComputerHub online={online} status={status} icon={Icon.computer} />
       </div>
-      {editMenu && (
-        <div className="dialog-backdrop" role="presentation" onClick={() => setEditMenu(false)}>
-          <div className="dialog card side-edit-dialog" role="dialog" aria-modal="true" aria-label={getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"} onClick={(e) => e.stopPropagation()}>
-            <SidebarEdit onDone={() => setEditMenu(false)} />
-          </div>
-        </div>
-      )}
+      {editMenu && <EditMenuDialog onClose={() => setEditMenu(false)} />}
     </header>
+  );
+}
+
+/**
+ * "Edit the menu" on the phone, over the whole screen. Rendered at the page's root: inside the top bar it was
+ * placed against the bar (the bar's style makes "fixed" relative to it), half above the screen with Done out of
+ * reach (found by Roee on his phone). Escape and the phone's Back button close it.
+ */
+function EditMenuDialog({ onClose }: { onClose: () => void }) {
+  // The latest onClose, so the effect runs once (a new history entry per render would pile up).
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => e.key === "Escape" && close.current();
+    // Back on the phone: a history entry for the dialog, so Back closes it instead of leaving the page.
+    history.pushState({ kesherDialog: true }, "");
+    const back = () => close.current();
+    addEventListener("keydown", key);
+    addEventListener("popstate", back);
+    return () => {
+      removeEventListener("keydown", key);
+      removeEventListener("popstate", back);
+      if ((history.state as { kesherDialog?: boolean } | null)?.kesherDialog) history.back();
+    };
+  }, []);
+  return createPortal(
+    <div className="dialog-backdrop side-edit-backdrop" role="presentation" onClick={onClose}>
+      <div className="dialog card side-edit-dialog" role="dialog" aria-modal="true" aria-label={getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"} onClick={(e) => e.stopPropagation()}>
+        <SidebarEdit onDone={onClose} />
+      </div>
+    </div>,
+    document.body,
   );
 }

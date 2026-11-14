@@ -2110,3 +2110,10 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .web-prefs-form { min-width: min(320px, 86vw); gap: 8px; }
 .web-prefs-form fieldset { border: 0; padding: 0; margin: 0; gap: 4px; }
 .web-prefs-form input[type="text"], .web-prefs-form input:not([type]) { width: 100%; box-sizing: border-box; }
+/* Markdown tables in answers: they scroll sideways on a phone instead of squeezing. */
+.md-table-wrap { overflow-x: auto; margin: 8px 0; max-width: 100%; }
+.md-table { border-collapse: collapse; font-size: .92em; min-width: 50%; }
+.md-table th, .md-table td { border: 1px solid var(--border); padding: 5px 9px; text-align: start; vertical-align: top; }
+.md-table th { background: var(--panel, rgba(255,255,255,.05)); font-weight: 600; }
+.md-table tbody tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+.side-edit-backdrop { z-index: 60; }
