@@ -36,3 +36,20 @@ test("ide: a theme's include never reads outside its extension; bad font styles 
   assert.equal(th.colors["editor.background"], undefined);
   assert.deepEqual(th.rules, [{ token: "comment", foreground: "111111" }]);
 });
+
+test("a VS Code fork whose built-in themes cannot be read gets VS Code's own default theme", async () => {
+  const { VSCODE_DEFAULT_THEMES, VSCODE_DEFAULT_THEME_LABELS } = await import("./vscode-themes.js");
+  const { mkdtemp, mkdir: mk, writeFile: wf, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "kesher-vt-"));
+  try {
+    await mk(join(dir, "themes"));
+    for (const [n, t] of Object.entries(VSCODE_DEFAULT_THEMES)) await wf(join(dir, "themes", n), t);
+    const m = await vscodeThemeToMonaco(join(dir, "themes", VSCODE_DEFAULT_THEME_LABELS["Default Dark Modern"]!));
+    assert.equal(m.base, "vs-dark");
+    assert.equal(m.colors["editor.background"]?.toUpperCase(), "#1F1F1F");
+    assert.ok(m.rules.some((r) => r.token === "keyword"), "keyword colours from the include chain (Dark+ and Dark VS)");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

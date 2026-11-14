@@ -8,7 +8,7 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -198,6 +198,27 @@ async function findThemeFile(name: string, folders: string[]): Promise<{ file: s
   return undefined;
 }
 
+/**
+ * One of VS Code's own default themes ("Default Dark Modern", "Dark+"…), from KesherAI's copy, written once to a
+ * folder of its own (their "include" chain reads each other), for a fork whose own copies cannot be read.
+ */
+async function defaultThemeFile(name: string): Promise<{ file: string; ui?: string } | undefined> {
+  const { VSCODE_DEFAULT_THEMES, VSCODE_DEFAULT_THEME_LABELS } = await import("./vscode-themes.js");
+  const f = VSCODE_DEFAULT_THEME_LABELS[name.trim()];
+  if (!f) return undefined;
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  defaultThemesDir ??= (async () => {
+    const dir = await mkdtemp(join(tmpdir(), "kesher-vscode-themes-"));
+    // A themes/ folder inside it, so an "include" stays inside the folder the theme came from.
+    await mkdir(join(dir, "themes"), { recursive: true });
+    for (const [n, text] of Object.entries(VSCODE_DEFAULT_THEMES)) await writeFile(join(dir, "themes", n), text);
+    return dir;
+  })();
+  return { file: join(await defaultThemesDir, "themes", f) };
+}
+let defaultThemesDir: Promise<string> | undefined;
+
 /** Rider's look: its color scheme (.icls) and font. */
 async function riderStyle(config: string): Promise<IdeStyle> {
   const style: IdeStyle = { ide: "rider" };
@@ -251,7 +272,7 @@ export async function ideStyle(ide: Ide): Promise<IdeStyle> {
   style.fontFamily ??= platform() === "win32" ? "Consolas, 'Courier New', monospace" : platform() === "darwin" ? "Menlo, Monaco, 'Courier New', monospace" : "'Droid Sans Mono', 'monospace', monospace";
   style.fontSize ??= platform() === "darwin" ? 12 : 14;
   const v = vscodeLike().find((x) => x.id === ide.id)!;
-  const file = await findThemeFile(theme, [v.extensions, ...(await builtInExtensions(ide.exe))]);
+  const file = (await findThemeFile(theme, [v.extensions, ...(await builtInExtensions(ide.exe))])) ?? (await defaultThemeFile(theme));
   const read = file ? await vscodeThemeToMonaco(file.file).catch(() => undefined) : undefined;
   // The extension says dark, light or high contrast ("uiTheme"); the theme file often does not.
   if (read && file?.ui && ["vs", "vs-dark", "hc-black", "hc-light"].includes(file.ui)) read.base = file.ui as NonNullable<IdeStyle["theme"]>["base"];
