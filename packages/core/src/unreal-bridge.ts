@@ -242,11 +242,14 @@ export class UnrealBridge {
       // Only a real .uproject on this computer is kept (the chat's Unreal tools then work on that project).
       const pf = typeof msg.projectFile === "string" && /\.uproject$/i.test(msg.projectFile) && existsSync(msg.projectFile) ? msg.projectFile : undefined;
       const pid = typeof msg.pid === "number" && Number.isInteger(msg.pid) && msg.pid > 0 ? msg.pid : undefined;
-      this.info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), ...(pid ? { pid } : {}), connectedAt: new Date().toISOString() };
-      this.lastProject = this.info.project;
+      const info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), ...(pid ? { pid } : {}), connectedAt: new Date().toISOString() };
+      this.info = info;
+      this.lastProject = info.project;
       if (pf) this.lastProjectFile = pf;
+      // `info`, not this.info, after the awaits: the editor may disconnect meanwhile (this.info is cleared then; seen in CI).
       await mkdir(this.dir, { recursive: true });
-      await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: this.info.project, ...(this.lastProjectFile ? { projectFile: this.lastProjectFile } : {}) }));
+      await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: info.project, ...(this.lastProjectFile ? { projectFile: this.lastProjectFile } : {}) }));
+      if (socket !== this.socket) return;
       this.emit("connected");
       void this.afterConnect().catch(() => undefined);
       return;
