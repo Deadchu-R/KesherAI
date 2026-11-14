@@ -24,3 +24,15 @@ test("ide: a VS Code theme (with its parent) as a Monaco theme", async (t) => {
   assert.equal(th.rules.find((r) => r.token === "keyword")?.foreground, "C586C0");
   assert.equal(th.rules.find((r) => r.token === "type")?.foreground, "C586C0");
 });
+
+test("ide: a theme's include never reads outside its extension; bad font styles are dropped", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "ide-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(join(dir, "ext", "themes"), { recursive: true });
+  writeFileSync(join(dir, "outside.json"), JSON.stringify({ colors: { "editor.background": "#ABCDEF" } }));
+  writeFileSync(join(dir, "ext", "themes", "t.json"), JSON.stringify({ include: "../../outside.json", tokenColors: [{ scope: "comment", settings: { foreground: "#111111", fontStyle: "italic; color: red" } }] }));
+  const th = await vscodeThemeToMonaco(join(dir, "ext", "themes", "t.json"));
+  assert.equal(th.colors["editor.background"], undefined);
+  assert.deepEqual(th.rules, [{ token: "comment", foreground: "111111" }]);
+});

@@ -10,7 +10,7 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** One editor found here. */
 export interface Ide {
@@ -137,9 +137,12 @@ function monacoToken(scope: string): string | undefined {
  *
  * @param file - The theme's JSON.
  */
-export async function vscodeThemeToMonaco(file: string, depth = 0): Promise<NonNullable<IdeStyle["theme"]>> {
+export async function vscodeThemeToMonaco(file: string, depth = 0, root = dirname(dirname(file))): Promise<NonNullable<IdeStyle["theme"]>> {
   const j = parseJsonc(await readFile(file, "utf8")) as { type?: string; include?: string; colors?: Record<string, string>; tokenColors?: Array<{ scope?: string | string[]; settings?: { foreground?: string; fontStyle?: string } }> | string };
-  const parent = j.include && depth < 4 ? await vscodeThemeToMonaco(join(dirname(file), j.include), depth + 1).catch(() => undefined) : undefined;
+  // The parent theme: only inside the theme's own extension (an "include" never reads elsewhere on the computer).
+  const inc = j.include ? resolve(dirname(file), j.include) : "";
+  const inside = inc && !relative(root, inc).startsWith("..") && !isAbsolute(relative(root, inc));
+  const parent = inside && depth < 4 ? await vscodeThemeToMonaco(inc, depth + 1, root).catch(() => undefined) : undefined;
   const rules = [...(parent?.rules ?? [])];
   const tokenColors = Array.isArray(j.tokenColors) ? j.tokenColors : [];
   for (const t of tokenColors) {
@@ -147,7 +150,8 @@ export async function vscodeThemeToMonaco(file: string, depth = 0): Promise<NonN
     for (const sc of scopes) {
       const token = monacoToken(sc);
       const fg = hex(t.settings?.foreground);
-      if (token && (fg || t.settings?.fontStyle)) rules.push({ token, ...(fg ? { foreground: fg } : {}), ...(t.settings?.fontStyle ? { fontStyle: t.settings.fontStyle } : {}) });
+      const style = typeof t.settings?.fontStyle === "string" && /^[a-z ]{1,40}$/.test(t.settings.fontStyle) ? t.settings.fontStyle : undefined;
+      if (token && (fg || style)) rules.push({ token, ...(fg ? { foreground: fg } : {}), ...(style ? { fontStyle: style } : {}) });
     }
   }
   const colors: Record<string, string> = { ...(parent?.colors ?? {}) };
@@ -198,14 +202,16 @@ async function riderStyle(config: string): Promise<IdeStyle> {
   const opts = join(config, "options");
   const schemeXml = await readFile(join(opts, "colors.scheme.xml"), "utf8").catch(() => "");
   const name = /global_color_scheme name="([^"]+)"/.exec(schemeXml)?.[1];
-  if (name) style.themeName = name.replace(/^_@user_/, "");
+  // A name from the settings file goes into a path: its last part only.
+  const scheme = name ? basename(name.replace(/^_@user_/, "")) : "";
+  if (scheme) style.themeName = scheme;
   const fontXml = await readFile(join(opts, "editor-font.xml"), "utf8").catch(() => "");
   const family = /name="FONT_FAMILY" value="([^"]+)"/.exec(fontXml)?.[1];
   const size = /name="FONT_SIZE" value="(\d+)"/.exec(fontXml)?.[1];
   if (family) style.fontFamily = family;
   if (size) style.fontSize = Number(size);
   // A scheme of the person's own: its colors. Rider's built-in dark and light: their well-known colors.
-  const file = name ? join(config, "colors", `${name.replace(/^_@user_/, "")}.icls`) : "";
+  const file = scheme ? join(config, "colors", `${scheme}.icls`) : "";
   const icls = file ? await readFile(file, "utf8").catch(() => "") : "";
   const dark = !/light|intellij light/i.test(name ?? "") && !/parent_scheme="Default"/.test(icls);
   const attr = (key: string) => hex(`#${new RegExp(`<option name="${key}">[\\s\\S]*?FOREGROUND" value="([0-9a-fA-F]{6})"`).exec(icls)?.[1] ?? ""}`);
