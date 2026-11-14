@@ -36,8 +36,8 @@ type Drag =
   | { kind: "pan"; sx: number; sy: number; moved: boolean; right: boolean; onNode?: boolean }
   | { kind: "move"; sx: number; sy: number; moved: boolean }
   | { kind: "resize"; id: string; sx: number; sy: number; w0: number; h0: number }
-  | { kind: "marquee"; sx: number; sy: number; ex: number; ey: number; add: boolean }
-  | { kind: "wire"; node: string; pin: string; dir: "in" | "out"; type: string; ax: number; ay: number; ex: number; ey: number };
+  | { kind: "marquee"; sx: number; sy: number; ex: number; ey: number; add: boolean; remove?: boolean }
+  | { kind: "wire"; node: string; pin: string; dir: "in" | "out"; type: string; ax: number; ay: number; ex: number; ey: number; moveLinks?: boolean };
 interface Menu { left: number; top: number; wx: number; wy: number; from?: { node: string; pin: string; dir: "in" | "out"; type: string } }
 
 /**
@@ -53,8 +53,15 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  *   nodes; Ctrl+Z / Ctrl+Y undo and redo in the editor itself; Ctrl+F
  *   searches the nodes (Enter: next);
  * - Unreal's hold-a-letter shortcuts: hold B / S / D / P and click empty space for Branch, Sequence, Delay,
- *   Event BeginPlay; R + click: a reroute node; C with nodes selected: a comment box around them (moved by its
+ *   Event BeginPlay; G / F / M / N / O for Gate, For Each Loop, MultiGate, Do N, Do Once (plugin 0.1.14);
+ *   R + click: a reroute node; C with nodes selected: a comment box around them (moved by its
  *   title with the nodes inside, resized from its corner, renamed by double-clicking its title) (plugin 0.1.11);
+ * - as in Epic's Blueprint cheat sheet (researched 2026-11-14, docs/RESEARCH_LOG.md): Space opens the node search
+ *   at the mouse; right-click a pin for Break Pin Link(s) / Promote to Variable; right-click a node for Delete,
+ *   Cut, Copy, Duplicate, Break Node Links, Straighten Connections, Align; Ctrl+C / X / V / D copy, cut, paste
+ *   and duplicate (Unreal's own clipboard text, so it pastes into Unreal and back); Ctrl+drag from a pin moves its
+ *   wires to another pin; double-click a wire for a reroute node; Q straightens; arrow keys nudge; F2 edits the
+ *   node's comment; Shift+drag adds to the selection box, Ctrl+drag takes away; the hovered node's wires stand out;
  * Each change goes to the editor at once (one undo step there).
  * Without `editable` (the editor closed) it only looks: pan, zoom, search, and says why when the user tries to
  * change something. Unity: moving, connecting and deleting work (what its package supports); adding nodes and
@@ -67,9 +74,15 @@ const QUICK: Record<string, Partial<Op>> = {
   d: { op: "add", type: "call", function: "KismetSystemLibrary:Delay" },
   p: { op: "add", type: "event", event: "ReceiveBeginPlay" },
   r: { op: "add", type: "reroute" },
+  // Unreal's standard macros (plugin 0.1.14).
+  g: { op: "add", type: "macro", macro: "Gate" },
+  f: { op: "add", type: "macro", macro: "ForEachLoop" },
+  m: { op: "add", type: "macro", macro: "MultiGate" },
+  n: { op: "add", type: "macro", macro: "DoN" },
+  o: { op: "add", type: "macro", macro: "DoOnce" },
 };
 
-export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps, localActions }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string }>; /** The nodes the menu offers when the graph is changed here (onOps), filtered by the words typed. */ localActions?: (q: string) => Action[] }) {
+export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps, localActions }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>; /** The nodes the menu offers when the graph is changed here (onOps), filtered by the words typed. */ localActions?: (q: string) => Action[] }) {
   // Unity and Unreal share the canvas; each has its own routes.
   const engine = unity ? "unity" : "unreal";
   const saidWhy = useRef(0);
@@ -140,6 +153,12 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [menu, setMenu] = useState<Menu | null>(null);
   /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
   const [pinMenu, setPinMenu] = useState<{ left: number; top: number; node: string; pin: string; dir: "in" | "out"; type: string; wx: number; wy: number } | null>(null);
+  /** Right-click on a node, as in Unreal: Delete, Cut, Copy, Duplicate, Break Node Links, Straighten, Align. */
+  const [nodeMenu, setNodeMenu] = useState<{ left: number; top: number } | null>(null);
+  /** Copied nodes (Unreal's own clipboard text, or C# steps), for Ctrl+V. */
+  const clip = useRef("");
+  /** The node under the mouse: its wires are emphasized, as in Unreal. */
+  const [hot, setHot] = useState<string | undefined>();
   /** Where the mouse is (Space opens the node search there). */
   const hover = useRef<{ x: number; y: number } | null>(null);
   const [find, setFind] = useState<{ q: string; i: number } | null>(null);
@@ -233,7 +252,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const world = (p: { x: number; y: number }) => ({ x: (p.x - view.x) / view.k, y: (p.y - view.y) / view.k });
 
   /** Sends operations to the editor (one undo step there) and reads the graph again. */
-  const apply = async (ops: Op[]): Promise<Array<{ ok: boolean; error?: string; node?: string }>> => {
+  const apply = async (ops: Op[]): Promise<Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>> => {
     if (onOps) {
       const r = onOps(ops);
       r.filter((x) => !x.ok).forEach((x) => toast(`⚠ ${x.error ?? ""}`));
@@ -241,7 +260,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     }
     setBusy(true);
     try {
-      const r = await api<{ results: Array<{ ok: boolean; error?: string; node?: string }>; failed: number }>(`/api/${engine}/apply`, { method: "POST", body: { path, graph, ops } });
+      const r = await api<{ results: Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>; failed: number }>(`/api/${engine}/apply`, { method: "POST", body: { path, graph, ops } });
       r.results.filter((x) => !x.ok).forEach((x) => toast(`⚠ ${x.error ?? ""}`));
       onChanged();
       return r.results;
@@ -266,6 +285,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const down = (e: React.PointerEvent) => {
     if (menu && !(e.target as Element).closest(".bp-menu")) setMenu(null);
     if (pinMenu && !(e.target as Element).closest(".bp-menu")) setPinMenu(null);
+    if (nodeMenu && !(e.target as Element).closest(".bp-menu")) setNodeMenu(null);
     if ((e.target as Element).closest(".bp-menu, .ue-zoom, .bp-find")) return;
     frame.current?.focus();
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -313,6 +333,16 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       setPinMenu({ left: Math.min(p.x, Math.max(0, r.width - 240)), top: Math.min(p.y, Math.max(0, r.height - 140)), node: d.node!, pin: d.pin!, dir: d.dir as "in" | "out", type: d.type!, wx: w.x, wy: w.y });
       return;
     }
+    if (e.button === 2 && nodeEl && editable && !pinEl) {
+      // Right-click a node: its menu (the node joins the selection, as in Unreal).
+      const id = nodeEl.dataset.node!;
+      if (!selected.has(id)) setSelected(new Set([id]));
+      const r = frame.current!.getBoundingClientRect();
+      setMenu(null);
+      setPinMenu(null);
+      setNodeMenu({ left: Math.min(p.x, Math.max(0, r.width - 240)), top: Math.min(p.y, Math.max(0, r.height - 300)) });
+      return;
+    }
     if (e.button === 2) return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: true });
     if (pinEl && editable) {
       const d = pinEl.dataset;
@@ -322,7 +352,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         return;
       }
       const a = pinAt.get(`${d.node}:${d.pin}`)!;
-      return setDrag({ kind: "wire", node: d.node!, pin: d.pin!, dir: d.dir as "in" | "out", type: d.type!, ax: a.x, ay: a.y, ex: a.x, ey: a.y });
+      return setDrag({ kind: "wire", node: d.node!, pin: d.pin!, dir: d.dir as "in" | "out", type: d.type!, ax: a.x, ay: a.y, ex: a.x, ey: a.y, moveLinks: e.ctrlKey || e.metaKey });
     }
     if (!editable && (pinEl || nodeEl) && Date.now() - saidWhy.current > 8000) {
       // Dragging from a pin only moved the view, with no word about why (found by Roee).
@@ -337,6 +367,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       // Read-only: dragging a node pans, and a click on it keeps it selected.
       return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false, onNode: true });
     }
+    // A C# script: B + click makes a Branch there too.
+    if (onOps && localActions && editable && e.button === 0 && held.current === "b") {
+      void apply([{ op: "add", action: { title: "Branch", category: "Flow", type: "if" } }]);
+      return;
+    }
     const quick = !unity && editable && e.button === 0 ? QUICK[held.current] : undefined;
     if (quick) {
       const w = world(p);
@@ -344,10 +379,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       return;
     }
     if (touch || !editable) return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false });
-    setDrag({ kind: "marquee", sx: p.x, sy: p.y, ex: p.x, ey: p.y, add: e.ctrlKey || e.shiftKey });
+    // Shift adds to the selection, Ctrl takes away (as in Unreal).
+    setDrag({ kind: "marquee", sx: p.x, sy: p.y, ex: p.x, ey: p.y, add: e.shiftKey, remove: e.ctrlKey || e.metaKey });
   };
   const move = (e: React.PointerEvent) => {
     hover.current = local(e);
+    const over = ((e.target as Element).closest?.("[data-node]") as SVGElement | null)?.dataset.node;
+    if (over !== hot) setHot(over);
     const prev = pointers.current.get(e.pointerId);
     if (!prev) return;
     const now = local(e);
@@ -404,12 +442,21 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       const a = world({ x: Math.min(d.sx, d.ex), y: Math.min(d.sy, d.ey) });
       const z = world({ x: Math.max(d.sx, d.ex), y: Math.max(d.sy, d.ey) });
       const inside = boxes.filter((b) => b.x < z.x && b.x + b.w > a.x && b.y < z.y && b.y + b.h > a.y).map((b) => b.n.id);
-      setSelected((s) => new Set(d.add ? [...s, ...inside] : inside));
+      setSelected((s) => new Set(d.remove ? [...s].filter((x) => !inside.includes(x)) : d.add ? [...s, ...inside] : inside));
     } else if (d.kind === "wire") {
       const target = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
       if (target?.dataset.node && target.dataset.node !== d.node) {
         const t = target.dataset;
         if (t.dir === d.dir) return toast(L("חברו יציאה לכניסה.", "Connect an output to an input."));
+        if (d.moveLinks) {
+          // Ctrl+drag from a pin to another: its wires move there (as in Unreal).
+          if (t.dir !== d.dir) return toast(L("גררו לפין מאותו כיוון.", "Drag to a pin of the same direction."));
+          const others = linksOf(d.node, d.pin, d.dir);
+          if (!others.length) return;
+          const ops: Op[] = others.map((o) => (d.dir === "out" ? { op: "connect", from: { node: t.node, pin: t.pin }, to: o } : { op: "connect", from: o, to: { node: t.node, pin: t.pin } }));
+          void apply([{ op: "disconnect", node: d.node, pin: d.pin }, ...ops]);
+          return;
+        }
         const from = d.dir === "out" ? { node: d.node, pin: d.pin } : { node: t.node, pin: t.pin };
         const to = d.dir === "out" ? { node: t.node, pin: t.pin } : { node: d.node, pin: d.pin };
         void apply([{ op: "connect", from, to }]);
@@ -452,6 +499,93 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     } catch {
       // the node is there; the user can connect it by hand
     }
+  };
+
+  /** The pins a pin is wired to ({ node, pin } each). */
+  const linksOf = (node: string, pin: string, dir: "in" | "out"): Array<{ node: string; pin: string }> => {
+    if (dir === "out") return (nodes.find((x) => x.id === node)?.pins.find((x) => x.name === pin && x.dir === "out")?.links ?? []).map((l) => ({ node: l.slice(0, l.indexOf(":")), pin: l.slice(l.indexOf(":") + 1) }));
+    const out: Array<{ node: string; pin: string }> = [];
+    for (const n of nodes) for (const x of n.pins) if (x.dir === "out" && x.links?.includes(`${node}:${pin}`)) out.push({ node: n.id, pin: x.name });
+    return out;
+  };
+  /** Ctrl+C: Unreal's own clipboard text (it pastes into Unreal too), or the C# steps. */
+  const copy = async (cut = false) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const [r] = await apply([{ op: "copy", nodes: ids }]);
+    if (!r?.ok || !r.text) return;
+    clip.current = r.text;
+    try {
+      await navigator.clipboard.writeText(r.text);
+    } catch {
+      /* the page's own clipboard is enough */
+    }
+    if (cut) {
+      await apply(ids.map((id) => ({ op: "delete", node: id })));
+      setSelected(new Set());
+    } else toast(L(`הועתקו ${ids.length} נודים.`, `Copied ${ids.length} nodes.`));
+  };
+  /** Ctrl+V: at the mouse. */
+  const paste = async (at?: { x: number; y: number }) => {
+    let text = clip.current;
+    try {
+      const sys = await navigator.clipboard.readText();
+      // What Unreal copied (Begin Object…) pastes here too; in a C# script, steps copied from another script.
+      if (onOps ? sys.startsWith("[{") && sys.includes('"kind"') : sys.includes("Begin Object")) text = sys;
+    } catch {
+      /* no permission: the page's own copy */
+    }
+    if (!text) return toast(L("אין מה להדביק.", "Nothing to paste."));
+    const r0 = frame.current!.getBoundingClientRect();
+    const w = world(at ?? hover.current ?? { x: r0.width / 2, y: r0.height / 2 });
+    const [r] = await apply([{ op: "paste", text, x: Math.round(w.x / SCALE), y: Math.round(w.y / SCALE) }]);
+    if (r?.nodes?.length) setSelected(new Set(r.nodes));
+  };
+  /** Ctrl+D: a copy right beside. */
+  const duplicate = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const [r] = await apply([{ op: "copy", nodes: ids }]);
+    if (!r?.ok || !r.text) return;
+    const sel = boxes.filter((b) => selected.has(b.n.id));
+    const x = Math.min(...sel.map((b) => b.x)) + 40;
+    const y = Math.min(...sel.map((b) => b.y)) + 40;
+    const [p2] = await apply([{ op: "paste", text: r.text, x: Math.round(x / SCALE), y: Math.round(y / SCALE) }]);
+    if (p2?.nodes?.length) setSelected(new Set(p2.nodes));
+  };
+  /** Break Node Links: every wire of the chosen nodes. */
+  const breakNodeLinks = () => {
+    const ops: Op[] = [];
+    for (const id of selected) for (const p of nodes.find((x) => x.id === id)?.pins ?? []) if (linksOf(id, p.name, p.dir).length) ops.push({ op: "disconnect", node: id, pin: p.name });
+    if (ops.length) void apply(ops);
+  };
+  /** Q, Straighten Connections: each chosen node moves up or down so its first wired input lines up with the pin it comes from. */
+  const straighten = () => {
+    const ops: Op[] = [];
+    for (const b of boxes.filter((x) => selected.has(x.n.id))) {
+      for (const p of b.ins) {
+        const src = linksOf(b.n.id, p.name, "in")[0];
+        if (!src) continue;
+        const a = pinAt.get(`${src.node}:${src.pin}`);
+        const z = pinAt.get(`${b.n.id}:${p.name}`);
+        if (!a || !z) continue;
+        ops.push({ op: "move", node: b.n.id, x: Math.round(b.x / SCALE), y: Math.round((b.y + a.y - z.y) / SCALE) });
+        break;
+      }
+    }
+    if (ops.length) void apply(ops);
+  };
+  /** Alignment: the chosen nodes' top (or left) edges lined up. */
+  const align = (side: "top" | "left") => {
+    const sel = boxes.filter((b) => selected.has(b.n.id));
+    if (sel.length < 2) return;
+    const v = side === "top" ? Math.min(...sel.map((b) => b.y)) : Math.min(...sel.map((b) => b.x));
+    void apply(sel.map((b) => ({ op: "move", node: b.n.id, x: Math.round((side === "left" ? v : b.x) / SCALE), y: Math.round((side === "top" ? v : b.y) / SCALE) })));
+  };
+  /** Arrow keys: the chosen nodes move a little. */
+  const nudge = (dx: number, dy: number) => {
+    const sel = [...boxes, ...commentBoxes].filter((b) => selected.has(b.n.id));
+    if (sel.length) void apply(sel.map((b) => ({ op: "move", node: b.n.id, x: Math.round(b.x / SCALE) + dx, y: Math.round(b.y / SCALE) + dy })));
   };
 
   /** The pin menu's "Break Link(s)". */
@@ -514,6 +648,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     } else if (e.key === "Escape") {
       setMenu(null);
       setPinMenu(null);
+      setNodeMenu(null);
       setFind(null);
       setSelected(new Set());
     } else if (!editable) return;
@@ -526,6 +661,29 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     } else if (mod && e.key.toLowerCase() === "a") {
       e.preventDefault();
       setSelected(new Set(boxes.map((b) => b.n.id)));
+    } else if (mod && e.key.toLowerCase() === "c") {
+      e.preventDefault();
+      void copy();
+    } else if (mod && e.key.toLowerCase() === "x") {
+      e.preventDefault();
+      void copy(true);
+    } else if (mod && e.key.toLowerCase() === "v") {
+      e.preventDefault();
+      void paste();
+    } else if (mod && e.key.toLowerCase() === "d") {
+      e.preventDefault();
+      void duplicate();
+    } else if (!mod && e.key.toLowerCase() === "q" && selected.size) {
+      e.preventDefault();
+      straighten();
+    } else if (e.key === "F2" && selected.size === 1) {
+      e.preventDefault();
+      const n = nodes.find((x) => selected.has(x.id));
+      if (n) void askText(L("הערה לנוד:", "The node's comment:"), n.comment ?? "").then((text) => { if (text !== null) void apply([{ op: "comment", node: n.id, text }]); });
+    } else if (e.key.startsWith("Arrow") && selected.size && !onOps) {
+      e.preventDefault();
+      const step = e.shiftKey ? 64 : 16;
+      nudge(e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0, e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0);
     } else if ((e.key === "Delete" || e.key === "Backspace") && selected.size) {
       e.preventDefault();
       void apply([...selected].map((id) => ({ op: "delete", node: id })));
@@ -552,7 +710,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   }, [current?.n.id]);
 
   if (!layout) return <p className="muted ue-empty">{L("הגרף ריק.", "This graph is empty.")}</p>;
-  const links: Array<{ d: string; color: string }> = [];
+  const links: Array<{ d: string; color: string; from: string; to: string; mx: number; my: number }> = [];
   for (const b of boxes) {
     for (const p of b.outs) {
       const a = pinAt.get(`${b.n.id}:${p.name}`)!;
@@ -560,7 +718,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         const z = pinAt.get(l);
         if (!z) continue;
         const dx = Math.max(40, Math.abs(z.x - a.x) / 2);
-        links.push({ d: `M${a.x},${a.y} C${a.x + dx},${a.y} ${z.x - dx},${z.y} ${z.x},${z.y}`, color: pinColor(p.type) });
+        links.push({ d: `M${a.x},${a.y} C${a.x + dx},${a.y} ${z.x - dx},${z.y} ${z.x},${z.y}`, color: pinColor(p.type), from: `${b.n.id}:${p.name}`, to: l, mx: (a.x + z.x) / 2, my: (a.y + z.y) / 2 });
       }
     }
   }
@@ -594,6 +752,22 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={keys}
       onDoubleClick={(e) => {
+        // Double-click a wire: a reroute node on it (Unreal).
+        const wireEl = (e.target as Element).closest("[data-wire]") as SVGElement | null;
+        if (wireEl && editable && !unity && !onOps) {
+          const l = links[Number(wireEl.dataset.wire)];
+          if (l) {
+            const w = world(local(e));
+            const [fn, fp] = [l.from.slice(0, l.from.indexOf(":")), l.from.slice(l.from.indexOf(":") + 1)];
+            const [tn, tp] = [l.to.slice(0, l.to.indexOf(":")), l.to.slice(l.to.indexOf(":") + 1)];
+            void apply([
+              { op: "add", type: "reroute", ref: "$k", x: Math.round(w.x / SCALE) - 8, y: Math.round(w.y / SCALE) - 8 },
+              { op: "connect", from: { node: fn, pin: fp }, to: { node: "$k", pin: "InputPin" } },
+              { op: "connect", from: { node: "$k", pin: "OutputPin" }, to: { node: tn, pin: tp } },
+            ]);
+          }
+          return;
+        }
         // Double-click a comment box's title: rename it.
         const c = (e.target as Element).closest("[data-comment]") as SVGElement | null;
         if (c && editable) {
@@ -619,7 +793,16 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               </g>
             );
           })}
-          {links.map((l, i) => <path key={i} d={l.d} stroke={l.color} strokeWidth={2} fill="none" opacity={0.85} />)}
+          {links.map((l, i) => {
+            const lit = !!hot && (l.from.startsWith(`${hot}:`) || l.to.startsWith(`${hot}:`));
+            return (
+              <g key={i}>
+                <path d={l.d} stroke={l.color} strokeWidth={lit ? 3.5 : 2} fill="none" opacity={hot && !lit ? 0.45 : 0.9} />
+                {/* A wider, invisible line to double-click (a reroute node, as in Unreal). */}
+                <path d={l.d} stroke="transparent" strokeWidth={12} fill="none" data-wire={i} />
+              </g>
+            );
+          })}
           {wire && <path d={`M${wire.ax},${wire.ay} C${wire.ax + (wire.dir === "out" ? 60 : -60)},${wire.ay} ${wire.ex + (wire.dir === "out" ? -60 : 60)},${wire.ey} ${wire.ex},${wire.ey}`} stroke={pinColor(wire.type)} strokeWidth={2} fill="none" strokeDasharray="5 4" />}
           {boxes.map((b) => {
             const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
@@ -684,6 +867,22 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         </div>
       )}
       {menu && <ActionMenu engine={engine} path={path} menu={menu} local={localActions} onPick={(a) => void add(a)} onClose={() => setMenu(null)} />}
+      {nodeMenu && (
+        <div className="bp-menu bp-pin-menu" style={{ left: nodeMenu.left, top: nodeMenu.top }} role="menu" aria-label={L("פעולות על הנוד", "Node actions")} onPointerDown={(e) => e.stopPropagation()}>
+          <ul>
+            {([
+              [L("מחק (Delete)", "Delete"), () => { void apply([...selected].map((id) => ({ op: "delete", node: id }))); setSelected(new Set()); }],
+              [L("גזור (Ctrl+X)", "Cut (Ctrl+X)"), () => void copy(true)],
+              [L("העתק (Ctrl+C)", "Copy (Ctrl+C)"), () => void copy()],
+              [L("שכפל (Ctrl+D)", "Duplicate (Ctrl+D)"), () => void duplicate()],
+              ...(onOps ? [] : [[L("נתק את כל החיבורים", "Break Node Link(s)"), breakNodeLinks] as const, [L("יישר חיבורים (Q)", "Straighten Connections (Q)"), straighten] as const]),
+              ...(selected.size > 1 && !onOps ? [[L("יישור למעלה", "Align Top"), () => align("top")] as const, [L("יישור לשמאל", "Align Left"), () => align("left")] as const] : []),
+            ] as Array<readonly [string, () => void]>).map(([label, act]) => (
+              <li key={label}><button type="button" role="menuitem" onClick={() => { setNodeMenu(null); act(); }}>{label}</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
       {pinMenu && (
         <div className="bp-menu bp-pin-menu" style={{ left: pinMenu.left, top: pinMenu.top }} role="menu" aria-label={L("פעולות על הפין", "Pin actions")} onPointerDown={(e) => e.stopPropagation()}>
           <strong className="small" dir="ltr">{nodes.find((x) => x.id === pinMenu.node)?.pins.find((x) => x.name === pinMenu.pin)?.label ?? pinMenu.pin}</strong>

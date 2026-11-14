@@ -759,3 +759,28 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - Videos are compressed to H.265 at CRF 28 in a new `.compressed.mp4`; the original stays until the person moves it to the bin.
 - Sources: Android Central, "Files by Google" guide; Pureinfotech, "What's taking up space on Windows 11"; Microsoft Support, "Storage settings in Windows".
 - Stopped at: shipped in 0.6.158. Next ideas: blurry-photo and meme detection (Files by Google does these), and moving files to another drive or the cloud.
+
+## Unreal Blueprint editor, control by control (2026-11-14)
+
+- Sources: Epic's Blueprint Editor Cheat Sheet; Graph Editor docs; "Blueprint Editor Tips & Tricks" blog; uhiyama-lab's notes on organizing graphs (reroute by double-click, Straighten Connections, alignment).
+- Already in KesherAI before this pass:
+  - Right-drag pans, wheel zooms, Home fits.
+  - Box-select by dragging; click, Shift+click and Ctrl+click select.
+  - Drag nodes; Delete; C makes a comment; Ctrl+Z/Y; Ctrl+F.
+  - Drag pin to pin connects; drag a pin to empty space opens the filtered menu; Alt+click breaks a pin's links.
+  - Hold B/S/D/P/R and click to place a node.
+- Added in this pass:
+  - Space and right-click on empty space open "All Actions", in the C# script graph too (it used to say "use the side panel").
+  - Pin menu: Break Pin Link(s), Promote to Variable.
+  - Node menu: Delete, Cut, Copy, Duplicate, Break Node Links, Straighten Connections, Align Top/Left.
+  - Ctrl+C/X/V/D use Unreal's own clipboard text (plugin 0.1.14: copy/paste ops via FEdGraphUtilities), so copied nodes paste into the real editor and back.
+  - Ctrl+drag a pin moves its wires; double-click a wire adds a reroute; Q straightens; arrow keys nudge; F2 edits the comment.
+  - Shift+box adds to the selection, Ctrl+box removes; the hovered node's wires are highlighted.
+  - Hold G/F/M/N/O and click for Gate, ForEachLoop, MultiGate, DoN, DoOnce (standard macros).
+- Not done yet:
+  - LMB+RMB zoom, PageUp/PageDown between graphs, F9 breakpoints, F7 compile shortcut.
+  - The "Context Sensitive" checkbox in the menu, which needs server-side filtering by pin type.
+  - Dragging a variable from the variables panel onto a pin (Ctrl drops a Get, Alt drops a Set).
+  - Collapse to Function.
+  - Copy/paste in Unity graphs (the package has no copy op yet).
+- Stopped at: the first list above is shipped (0.6.163). Next is the "Not done yet" list, with the variable drag first.

@@ -211,9 +211,9 @@ export function ScriptNodes() {
     if (/^(bool|int|float|string|Vector2|Vector3|Color)$/.test(pinType)) return pinType;
     return "float";
   };
-  const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string; node?: string }> => {
+  const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }> => {
     if (!m) return ops.map(() => ({ ok: false, error: L("אין מתודה פתוחה.", "No method is open.") }));
-    const results = ops.map((op): { ok: boolean; error?: string; node?: string } => {
+    const results = ops.map((op): { ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] } => {
       if (op.op === "move") return { ok: true };
       if (op.op === "add") {
         // A node chosen in the menu: a new step, after the pin it was dragged from (as in Unreal).
@@ -229,6 +229,35 @@ export function ScriptNodes() {
         if (list[at + 1]) list[at + 1]!.dirty = true;
         setSel(stmt.id);
         return { ok: true, node: stmt.id };
+      }
+      if (op.op === "copy") {
+        // Ctrl+C: the chosen steps as text (pasted into this or another script).
+        const steps = (op.nodes as string[]).map((id) => findStmt(m.body, id)?.stmt).filter((x): x is CsStmt => !!x);
+        if (!steps.length) return { ok: false, error: L("אין צעדים להעתקה.", "No steps to copy.") };
+        return { ok: true, text: JSON.stringify(steps) };
+      }
+      if (op.op === "paste") {
+        // Ctrl+V: copied steps, with new ids, after the chosen step (or last).
+        let steps: CsStmt[];
+        try {
+          steps = JSON.parse(String(op.text)) as CsStmt[];
+        } catch {
+          return { ok: false, error: L("אין צעדים להדבקה.", "Nothing to paste.") };
+        }
+        const renew = (s: CsStmt): CsStmt => {
+          const c = { ...s, id: newId(), dirty: true } as CsStmt;
+          if (c.kind === "if") {
+            c.then = c.then.map(renew);
+            if (c.else) c.else = c.else.map(renew);
+          } else if (c.kind === "loop") c.body = c.body.map(renew);
+          return c;
+        };
+        const fresh2 = steps.filter((s) => s && typeof s === "object" && "kind" in s).map(renew);
+        const { list, at } = placeFor();
+        list.splice(at, 0, ...fresh2);
+        (m as typeof m & { dirty?: boolean }).dirty = true;
+        if (list[at + fresh2.length]) list[at + fresh2.length]!.dirty = true;
+        return { ok: true, nodes: fresh2.map((s) => s.id) };
       }
       if (op.op === "promote") {
         // Promote to Variable: a new field (shown in the Inspector) holding the input's value; the input now uses it.

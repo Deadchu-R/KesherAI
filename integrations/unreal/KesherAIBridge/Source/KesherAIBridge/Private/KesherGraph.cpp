@@ -16,6 +16,8 @@
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_Knot.h"
+#include "K2Node_MacroInstance.h"
+#include "EdGraphUtilities.h"
 #include "EdGraphNode_Comment.h"
 #include "K2Node_Variable.h"
 #include "K2Node_VariableGet.h"
@@ -387,6 +389,8 @@ namespace KesherGraph
 			const FString Kind = JsonStr(Op, TEXT("op"));
 			FString Problem;
 			UEdGraphNode* Made = nullptr;
+			FString CopiedText;
+			TArray<TSharedPtr<FJsonValue>> PastedIds;
 
 			if (Kind == TEXT("add"))
 			{
@@ -474,6 +478,32 @@ namespace KesherGraph
 					const FString Color = JsonStr(Op, TEXT("color"));
 					if (!Color.IsEmpty()) N->CommentColor = FLinearColor(FColor::FromHex(Color));
 					Made = N;
+				}
+				else if (Type == TEXT("macro"))
+				{
+					// Unreal's standard macros (hold-a-key nodes): ForEachLoop, Gate, DoOnce, DoN, MultiGate, ForLoop, WhileLoop…
+					static const TCHAR* MacrosPath = TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros");
+					UBlueprint* Macros = LoadObject<UBlueprint>(nullptr, MacrosPath);
+					const FString Name = JsonStr(Op, TEXT("macro"));
+					UEdGraph* MacroGraph = nullptr;
+					if (Macros)
+					{
+						for (UEdGraph* G : Macros->MacroGraphs)
+						{
+							if (G && G->GetName() == Name) MacroGraph = G;
+						}
+					}
+					if (!MacroGraph) Problem = TEXT("No standard macro ") + Name;
+					else
+					{
+						FGraphNodeCreator<UK2Node_MacroInstance> Creator(*Graph);
+						UK2Node_MacroInstance* N = Creator.CreateNode();
+						N->SetMacroGraph(MacroGraph);
+						N->NodePosX = X;
+						N->NodePosY = Y;
+						Creator.Finalize();
+						Made = N;
+					}
 				}
 				else if (Type == TEXT("sequence"))
 				{
@@ -597,6 +627,52 @@ namespace KesherGraph
 				}
 				else Problem = TEXT("Comment box not found");
 			}
+			else if (Kind == TEXT("copy"))
+			{
+				// Unreal's own clipboard text for the chosen nodes (Ctrl+C in the editor makes the same text).
+				TSet<UObject*> Chosen;
+				const TArray<TSharedPtr<FJsonValue>>* Ids = nullptr;
+				if (Op->TryGetArrayField(TEXT("nodes"), Ids))
+				{
+					for (const TSharedPtr<FJsonValue>& IdV : *Ids)
+					{
+						if (UEdGraphNode* N = NodeOf(IdV->AsString()); N && N->CanDuplicateNode())
+						{
+							N->PrepareForCopying();
+							Chosen.Add(N);
+						}
+					}
+				}
+				if (Chosen.Num() == 0) Problem = TEXT("Nothing that can be copied");
+				else FEdGraphUtilities::ExportNodesToText(Chosen, CopiedText);
+			}
+			else if (Kind == TEXT("paste"))
+			{
+				// Ctrl+V: nodes from the clipboard text, their top-left at (x, y), with new ids and their links kept.
+				const FString Text = JsonStr(Op, TEXT("text"));
+				TSet<UEdGraphNode*> Pasted;
+				if (Text.IsEmpty() || !FEdGraphUtilities::CanImportNodesFromText(Graph, Text)) Problem = TEXT("Nothing to paste here");
+				else
+				{
+					FEdGraphUtilities::ImportNodesFromText(Graph, Text, Pasted);
+					int32 MinX = TNumericLimits<int32>::Max(), MinY = TNumericLimits<int32>::Max();
+					for (UEdGraphNode* N : Pasted)
+					{
+						MinX = FMath::Min(MinX, N->NodePosX);
+						MinY = FMath::Min(MinY, N->NodePosY);
+					}
+					const int32 X = JsonInt(Op, TEXT("x"), MinX), Y = JsonInt(Op, TEXT("y"), MinY);
+					for (UEdGraphNode* N : Pasted)
+					{
+						N->CreateNewGuid();
+						N->NodePosX += X - MinX;
+						N->NodePosY += Y - MinY;
+						N->PostPasteNode();
+						PastedIds.Add(MakeShared<FJsonValueString>(N->NodeGuid.ToString()));
+					}
+					if (Pasted.Num() == 0) Problem = TEXT("Nothing was pasted");
+				}
+			}
 			else Problem = TEXT("Unknown operation ") + Kind;
 
 			TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
@@ -608,6 +684,8 @@ namespace KesherGraph
 				Failed++;
 			}
 			if (Made) R->SetStringField(TEXT("node"), Made->NodeGuid.ToString());
+			if (!CopiedText.IsEmpty()) R->SetStringField(TEXT("text"), CopiedText);
+			if (PastedIds.Num()) R->SetArrayField(TEXT("nodes"), PastedIds);
 			Results.Add(MakeShared<FJsonValueObject>(R));
 		}
 
