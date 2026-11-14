@@ -105,6 +105,15 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { ok: true };
   });
 
+  /**
+   * Turns the screens off (the computer keeps working: chats, self-work, downloads), from here or the phone; any key
+   * or mouse move turns them on again. Roee: "turn off the screens so it uses less power" during a night run.
+   */
+  app.post("/api/system/screens-off", async (_req, reply) => {
+    const ok = await screensOff();
+    return ok ? { ok: true } : reply.code(501).send({ error: "Turning the screens off is not supported here." });
+  });
+
   app.get("/api/categories", async () => [...BUILT_IN_CATEGORIES, ...s.plugins.categories]);
 
   app.get("/api/hardware", async () => detectHardware());
@@ -264,4 +273,20 @@ export function broadcastOf(address: string, netmask: string): string {
   const a = address.split(".").map(Number);
   const m = netmask.split(".").map(Number);
   return a.map((octet, i) => (octet | (~(m[i] ?? 0) & 255)) & 255).join(".");
+}
+
+/** Turns the screens off (Windows: the monitor power message; macOS: display sleep; Linux X11: DPMS). */
+async function screensOff(): Promise<boolean> {
+  const { execFile } = await import("node:child_process");
+  const run = (cmd: string, args: string[]) =>
+    new Promise<boolean>((done) => {
+      execFile(cmd, args, { windowsHide: true, timeout: 10_000 }, (err) => done(!err));
+    });
+  if (process.platform === "win32") {
+    // SC_MONITORPOWER (2 = off) to every window, as Windows' own power button setting does.
+    const script = `Add-Type -Namespace K -Name M -MemberDefinition '[DllImport("user32.dll")] public static extern int PostMessage(int h, int m, int w, int l);'; [K.M]::PostMessage(0xFFFF, 0x0112, 0xF170, 2) | Out-Null`;
+    return run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
+  }
+  if (process.platform === "darwin") return run("pmset", ["displaysleepnow"]);
+  return run("xset", ["dpms", "force", "off"]);
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createConversation, toast, useLibrary } from "./library";
+import { api } from "./api";
 import { getLocale, t } from "./i18n";
 import { NAV_GROUPS, NAV_ICONS, useNavItems } from "./Sidebar";
 import { useParts } from "./parts";
@@ -103,6 +104,14 @@ export function CommandPalette() {
           },
         };
       })(),
+      {
+        id: "screens-off",
+        icon: "🌙",
+        title: L("כיבוי המסכים (המחשב ממשיך לעבוד)", "Turn off the screens (the computer keeps working)"),
+        also: "screens off monitor sleep display מסכים כיבוי",
+        group: "action" as const,
+        run: () => void api("/api/system/screens-off", { method: "POST" }).catch((e: Error) => toast(e.message)),
+      },
       {
         // What the app sees of controllers (a ROG Ally in Desktop mode sends keys, not a controller).
         id: "pad-check",

@@ -17,24 +17,42 @@ const DEAD = 0.5;
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"], summary';
 
-/** Elements a controller can reach: shown, not inert, inside the top dialog when one is open. */
-function reachable(): HTMLElement[] {
-  const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"], dialog[open], .palette-back, .modal-back')].filter(visible);
-  const root: ParentNode = dialogs.at(-1) ?? document;
-  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => visible(el) && !el.closest("[inert], [aria-hidden='true']"));
+/**
+ * The areas focus stays inside (as Norigin's focus boundaries and YouTube TV's rows): the side menu, the top bar, the
+ * page, a dialog. Arrows move within the area first and cross to the next one only at its edge (found on Roee's ROG
+ * Ally: one press jumped to "unrelated things" in another part of the screen).
+ */
+const AREAS = '[role="dialog"], .palette, .sidebar, .appbar, .phone-tabs, .script-side, .game-head, .game-asks, .game-chat, main, .main';
+
+/** The last control chosen in each area (coming back to an area returns there, as Steam and the Xbox app do). */
+const lastIn = new WeakMap<Element, HTMLElement>();
+const areaOf = (el: Element): Element => el.closest(AREAS) ?? document.body;
+
+/** Shown at all (not display:none, hidden, faded out or zero-sized); off-screen is fine: the view follows. */
+function rendered(el: HTMLElement): boolean {
+  if (!el.getClientRects().length) return false;
+  const r = el.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return false;
+  const st = getComputedStyle(el);
+  return st.visibility !== "hidden" && Number(st.opacity) > 0.05;
 }
 
-function visible(el: Element): boolean {
-  const r = el.getBoundingClientRect();
-  if (r.width < 2 || r.height < 2) return false;
-  if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) return false;
-  const st = getComputedStyle(el);
-  return st.visibility !== "hidden" && st.display !== "none" && Number(st.opacity) > 0.05;
+/** Elements a controller can reach: rendered, not inert, inside the top dialog when one is open. */
+function reachable(): HTMLElement[] {
+  const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"], dialog[open], .palette-back, .modal-back')].filter(rendered);
+  const root: ParentNode = dialogs.at(-1) ?? document;
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => {
+    if (!rendered(el) || el.closest("[inert], [aria-hidden='true']")) return false;
+    // A whole region that takes focus (a message list, a canvas) is not a button to land on.
+    const r = el.getBoundingClientRect();
+    return !(r.height > innerHeight * 0.7 && r.width > innerWidth * 0.5) || el.matches("textarea, input");
+  });
 }
 
 /**
- * The nearest element in a direction from a box (as spatial navigation on TVs and consoles): candidates ahead of the
- * box, scored by distance along the direction plus a penalty for being off to the side.
+ * The nearest element in a direction from a box (as spatial navigation on TVs and consoles): only candidates ahead of
+ * the box's edge; scored by the gap along the direction plus twice the offset to the side, and those in the same
+ * row or column (overlapping on the other axis) win over diagonal ones.
  *
  * @param from - The current box.
  * @param boxes - The candidates' boxes.
@@ -42,33 +60,20 @@ function visible(el: Element): boolean {
  * @returns The index of the chosen box, or -1.
  */
 export function nearest(from: { x: number; y: number; w: number; h: number }, boxes: Array<{ x: number; y: number; w: number; h: number }>, dir: "up" | "down" | "left" | "right"): number {
-  const cx = from.x + from.w / 2;
-  const cy = from.y + from.h / 2;
+  const vertical = dir === "up" || dir === "down";
   let best = -1;
   let score = Infinity;
   boxes.forEach((b, i) => {
-    const bx = b.x + b.w / 2;
-    const by = b.y + b.h / 2;
-    let along: number;
-    let side: number;
-    if (dir === "down") {
-      along = b.y - (from.y + from.h) + b.h / 2;
-      side = Math.max(0, Math.abs(bx - cx) - (from.w + b.w) / 2);
-      if (by <= cy + 1) return;
-    } else if (dir === "up") {
-      along = from.y - (b.y + b.h) + b.h / 2;
-      side = Math.max(0, Math.abs(bx - cx) - (from.w + b.w) / 2);
-      if (by >= cy - 1) return;
-    } else if (dir === "right") {
-      along = b.x - (from.x + from.w) + b.w / 2;
-      side = Math.max(0, Math.abs(by - cy) - (from.h + b.h) / 2);
-      if (bx <= cx + 1) return;
-    } else {
-      along = from.x - (b.x + b.w) + b.w / 2;
-      side = Math.max(0, Math.abs(by - cy) - (from.h + b.h) / 2);
-      if (bx >= cx - 1) return;
-    }
-    const s = Math.max(0, along) + side * 3;
+    // The gap along the direction, from edge to edge (a little overlap allowed: rows of uneven height).
+    const gap = dir === "down" ? b.y - (from.y + from.h) : dir === "up" ? from.y - (b.y + b.h) : dir === "right" ? b.x - (from.x + from.w) : from.x - (b.x + b.w);
+    const size = vertical ? Math.min(from.h, b.h) : Math.min(from.w, b.w);
+    if (gap < -size * 0.5) return;
+    // The centre must also be ahead (not a box beside this one that reaches past it).
+    const ahead = dir === "down" ? b.y + b.h / 2 > from.y + from.h / 2 : dir === "up" ? b.y + b.h / 2 < from.y + from.h / 2 : dir === "right" ? b.x + b.w / 2 > from.x + from.w / 2 : b.x + b.w / 2 < from.x + from.w / 2;
+    if (!ahead) return;
+    const overlap = vertical ? Math.min(from.x + from.w, b.x + b.w) - Math.max(from.x, b.x) : Math.min(from.y + from.h, b.y + b.h) - Math.max(from.y, b.y);
+    const side = overlap > 0 ? 0 : -overlap;
+    const s = Math.max(0, gap) + side * 2 + (overlap > 0 ? 0 : 40);
     if (s < score) {
       score = s;
       best = i;
@@ -84,40 +89,105 @@ const boxOf = (el: Element) => {
 
 function focus(el: HTMLElement): void {
   (el.focus as (o?: FocusOptions & { focusVisible?: boolean }) => void)({ preventScroll: true, focusVisible: true });
-  el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // The view follows: an element out of sight comes to the middle, one in sight only as far as needed.
+  const r = el.getBoundingClientRect();
+  const view = scroller(el).getBoundingClientRect();
+  const out = r.bottom < Math.max(0, view.top) || r.top > Math.min(innerHeight, view.bottom);
+  el.scrollIntoView({ block: out ? "center" : "nearest", inline: "nearest", behavior: "smooth" });
 }
 
 /** Whether typing goes into the focused element (arrows move the text cursor there, not the focus). */
 const typing = (el: Element | null) => !!el && (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !["button", "checkbox", "radio", "range", "submit", "reset", "color", "file"].includes(el.type)) || (el as HTMLElement).isContentEditable);
 
+/** In a text box, whether the caret is on its first (or last) line, where up (or down) leaves the box. */
+function atEdge(el: HTMLElement, dir: "up" | "down"): boolean {
+  if (!(el instanceof HTMLTextAreaElement)) return true;
+  const at = el.selectionStart ?? 0;
+  return dir === "up" ? !el.value.slice(0, at).includes("\n") : !el.value.slice(at).includes("\n");
+}
+
 function move(dir: "up" | "down" | "left" | "right"): void {
   const now = document.activeElement as HTMLElement | null;
   const all = reachable();
   if (!now || now === document.body || !all.includes(now)) {
-    // Nothing chosen yet: the main area's first control (or the first anywhere).
-    const first = all.find((el) => el.closest("main")) ?? all[0];
+    // Nothing chosen yet: the last place in the page, else the page's first control in sight (else the first).
+    const main = document.querySelector("main, .main");
+    const back = main ? lastIn.get(main) : undefined;
+    const first = (back && all.includes(back) ? back : undefined) ?? all.find((el) => main?.contains(el) && el.getBoundingClientRect().top >= 0 && el.getBoundingClientRect().top < innerHeight) ?? all[0];
     if (first) focus(first);
     return;
   }
-  // In a text field the sides move the text cursor.
-  if (typing(now) && (dir === "left" || dir === "right")) return;
-  const others = all.filter((el) => el !== now && !now.contains(el));
-  const i = nearest(boxOf(now), others.map(boxOf), dir);
-  if (i >= 0) focus(others[i]!);
-  else if (dir === "up" || dir === "down") scrollNear(now, dir === "down" ? 240 : -240);
+  // In a text field the sides move the text cursor, and up/down leave it only from its first/last line.
+  if (typing(now) && (dir === "left" || dir === "right" || !atEdge(now, dir))) return;
+  const vertical = dir === "up" || dir === "down";
+  const from = boxOf(now);
+  const others = all.filter((el) => el !== now && !now.contains(el) && !el.contains(now));
+  const area = areaOf(now);
+  // 1. Within this area.
+  const here = others.filter((el) => areaOf(el) === area);
+  const i = nearest(from, here.map(boxOf), dir);
+  if (i >= 0) {
+    const target = here[i]!;
+    // Long text with no buttons in it (an answer): read it a page at a time, not jump past it.
+    const sc = scroller(now);
+    const viewH = Math.min(innerHeight, sc.getBoundingClientRect().height || innerHeight);
+    const gap = dir === "down" ? boxOf(target).y - (from.y + from.h) : dir === "up" ? from.y - (boxOf(target).y + boxOf(target).h) : 0;
+    if (vertical && gap > viewH * 0.75 && canScroll(sc, dir)) {
+      sc.scrollBy({ top: (dir === "down" ? 1 : -1) * viewH * 0.6, behavior: "smooth" });
+      return;
+    }
+    focus(target);
+    return;
+  }
+  // 2. At the area's edge: more of it to scroll first, then the next area (back to where it was left).
+  const sc = scroller(now);
+  if (vertical && canScroll(sc, dir) && sc !== document.scrollingElement) {
+    sc.scrollBy({ top: (dir === "down" ? 1 : -1) * Math.min(innerHeight, sc.clientHeight) * 0.6, behavior: "smooth" });
+    return;
+  }
+  const away = others.filter((el) => areaOf(el) !== area);
+  const j = nearest(from, away.map(boxOf), dir);
+  if (j < 0) return;
+  const next = away[j]!;
+  const remembered = lastIn.get(areaOf(next));
+  focus(remembered && all.includes(remembered) ? remembered : next);
 }
 
-/** The element that scrolls around `el` (or the page). */
+/** Whether a scrolling element has more to show in a direction. */
+function canScroll(el: Element, dir: "up" | "down" | "left" | "right"): boolean {
+  if (dir === "up") return el.scrollTop > 1;
+  if (dir === "down") return el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+  return false;
+}
+
+const scrolls = (e: Element) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 2;
+
+/** The element that scrolls around `el`, or the page's biggest scrolling area (a chat's messages). */
 function scroller(el: Element | null): Element {
-  for (let e = el; e && e !== document.body; e = e.parentElement) {
-    const st = getComputedStyle(e);
-    if (/(auto|scroll)/.test(st.overflowY) && e.scrollHeight > e.clientHeight + 2) return e;
+  for (let e = el; e && e !== document.body; e = e.parentElement) if (scrolls(e)) return e;
+  return mainScroller();
+}
+
+/** The biggest scrolling area in sight (the page's content), for scrolling without a chosen control. */
+function mainScroller(): Element {
+  let best: Element | undefined;
+  let area = 0;
+  for (const e of document.querySelectorAll("main *, .main *, .game-chat *, main, .main")) {
+    if (!scrolls(e)) continue;
+    const r = e.getBoundingClientRect();
+    const a = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)) * r.width;
+    if (a > area) {
+      area = a;
+      best = e;
+    }
   }
-  return document.querySelector(".main") ?? document.scrollingElement ?? document.documentElement;
+  return best ?? document.scrollingElement ?? document.documentElement;
 }
 
 function scrollNear(el: Element | null, by: number): void {
-  scroller(el).scrollBy({ top: by });
+  // The right stick and LT/RT scroll what the chosen control is in, or the page's content.
+  const sc = el && el !== document.body ? scroller(el) : mainScroller();
+  sc.scrollBy({ top: by });
 }
 
 function key(k: string): boolean {
@@ -177,6 +247,8 @@ function pageTakes(button: string): boolean {
 
 let running = false;
 
+
+
 /** Places where the arrow keys already mean something (lists, menus, editors, graphs, sliders). */
 const OWN_ARROWS = '[role="listbox"], [role="menu"], [role="tablist"], [role="slider"], [role="grid"], [role="tree"], select, .monaco-editor, .script-canvas, .ue-frame, .xterm, input[type="range"]';
 
@@ -194,7 +266,7 @@ function keyboardNav(): void {
     const dirs: Record<string, "up" | "down" | "left" | "right"> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
     const dir = dirs[e.key];
     if (dir) {
-      if (target && (target.closest(OWN_ARROWS) || (typing(target) && (dir === "left" || dir === "right" || target instanceof HTMLTextAreaElement)))) return;
+      if (target && (target.closest(OWN_ARROWS) || (typing(target) && (dir === "left" || dir === "right" || !atEdge(target, dir))))) return;
       e.preventDefault();
       move(dir);
       return;
@@ -210,12 +282,21 @@ function keyboardNav(): void {
 export function startGamepad(): void {
   if (running) return;
   running = true;
+  // The last control chosen in each area, kept as focus moves (by controller, mouse or touch).
+  window.addEventListener("focusin", (e) => {
+    const el = e.target as HTMLElement | null;
+    if (el && el !== document.body) lastIn.set(areaOf(el), el);
+  });
   keyboardNav();
   if (typeof navigator.getGamepads !== "function") return;
   const held = new Map<number, { since: number; last: number }>();
   let frame = 0;
   const off = () => setActive(false);
   window.addEventListener("pointerdown", off, true);
+  // The mouse moved on purpose (not a nudge): pointer mode, as TV apps switch between remote and pointer.
+  window.addEventListener("mousemove", (e) => {
+    if (Math.abs(e.movementX) + Math.abs(e.movementY) > 6) off();
+  }, { passive: true });
   window.addEventListener("wheel", off, { passive: true, capture: true });
 
   const loop = (t: number) => {

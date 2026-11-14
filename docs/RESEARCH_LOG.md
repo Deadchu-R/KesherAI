@@ -930,3 +930,13 @@ controller combo read while the game has focus (XInput outside the browser), and
 Stopped at: syntax colours on the phone need tags from @lezer/highlight (already in the tree under CodeMirror, but
 not a declared dependency: asked Roee); Node's file sandbox for plugins is not available in Electron's Node
 (plugins: process isolation and the network/program guards only).
+
+## 2026-11-14: Controller navigation done right (Roee on the ROG Ally: "can't scroll, it chooses unrelated things")
+- Norigin Spatial Navigation (concepts: focusable containers, saveLastFocusedChild, scoring along the direction plus
+  the side offset, overlap preferred), "From TV to Touch" (input modes: 5-way vs pointer vs touch; the list scrolls to
+  follow focus; restore focus to the opener and to the last place in a section).
+- Built (0.6.190): areas (side menu, top bar, page, dialog) as boundaries with memory; edge-to-edge scoring with
+  same-row/column preference; off-screen controls reachable and the view follows (smooth, centred when out of sight);
+  long text without controls scrolls a page at a time; text boxes let the D-pad leave from their first/last line;
+  regions that take focus (a whole list) are skipped; a real mouse move switches to pointer mode.
+Stopped at: Roee checks it on the Ally another day.
