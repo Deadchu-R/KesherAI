@@ -746,7 +746,7 @@ app.whenReady().then(async () => {
     });
     // The Game Helper (as Xbox's Gaming Copilot, on the user's own models): the key takes a picture of the game in
     // front, then opens a small window over it. On a handheld, map a back button to this key (Armoury Crate, Steam).
-    // Ctrl+Alt+G: Ctrl+Alt+G is VS Code's Source Control, and a global key takes it from every app (scan 61).
+    // Ctrl+Alt+G, not Ctrl+Shift+G: that one is VS Code's Source Control, and a global key takes it from every app (scan 61).
     const gameKey = process.platform === "darwin" ? "Command+Option+G" : "Control+Alt+G";
     globalShortcut.register(gameKey, () => void toggleGameHelper(coreUrl));
   } catch (err) {
