@@ -2245,7 +2245,6 @@ html.pad, html.pad * { cursor: none; }
 .pad-btn.lr, .pad-btn.m { background: #4b4f58; }
 html.pad .main { padding-bottom: 44px; }
 /* The handheld look: a 7–8" screen held at arm's length, used by thumb (bigger targets and text, as Steam's). */
-html.handheld { font-size: 17px; }
 html.handheld button, html.handheld .button, html.handheld select, html.handheld input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 44px; }
 html.handheld .sidebar a { min-height: 44px; display: flex; align-items: center; }
 html.handheld input[type="checkbox"], html.handheld input[type="radio"] { width: 22px; height: 22px; }
@@ -2259,11 +2258,11 @@ html.pad [data-pad="Y"]::after { background: #c9a227; color: #1b1b1b; }
 html.pad [data-pad="B"]::after { background: #c8402f; }
 .pad-focus-badge { position: fixed; z-index: 70; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 2px; border-radius: 16px; background: var(--bg); border: 1px solid var(--border-strong, var(--border)); font-size: 13px; font-weight: 600; pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); }
 .pad-focus-badge .pad-btn { min-width: 24px; height: 24px; font-size: 13px; }
-html.handheld { font-size: 18px; }
-html.handheld button, html.handheld .button, html.handheld select, html.handheld input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 52px; padding-inline: 16px; }
-html.handheld .bar-btn { min-width: 52px; }
-html.handheld .sidebar a { min-height: 52px; font-size: 17px; }
-html.handheld .palette-list button { min-height: 52px; font-size: 17px; }
+/* Most sizes are in px: the desktop app enlarges the whole page (its zoom, PadHints.tsx), and the targets grow. */
+html.handheld button, html.handheld .button, html.handheld select, html.handheld input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 44px; padding-inline: 14px; }
+html.handheld .bar-btn { min-width: 44px; }
+html.handheld .sidebar a { min-height: 44px; }
+html.handheld .palette-list button { min-height: 44px; }
 /* The Game Helper's window over a game (pages/GameHelper.tsx). */
 .game-helper { display: flex; flex-direction: column; height: 100vh; gap: 10px; padding: 12px; background: var(--bg); }
 .game-head { align-items: center; gap: 8px; }

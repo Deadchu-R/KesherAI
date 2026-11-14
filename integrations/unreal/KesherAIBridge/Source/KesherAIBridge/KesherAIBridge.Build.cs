@@ -16,6 +16,7 @@ public class KesherAIBridge : ModuleRules
 			"UnrealEd",
 			"BlueprintGraph",
 			"Kismet",
+			"GraphEditor",
 			"KismetCompiler",
 			"AssetRegistry",
 			"WebSockets",

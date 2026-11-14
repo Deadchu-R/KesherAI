@@ -3,6 +3,7 @@
 #include "KesherGraph.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "BlueprintEditor.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
@@ -33,6 +34,29 @@
 #include "Subsystems/AssetEditorSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "KesherAIBridge"
+
+namespace
+{
+	/**
+	 * Collapse to Function, as the Blueprint editor's own right-click item: Unreal makes the function, its inputs and
+	 * outputs from the wires that cross the chosen nodes, and puts a call in their place. The two functions are
+	 * protected members of FBlueprintEditor (5.8's BlueprintEditor.h); a member pointer named through this class is
+	 * the standard, legal way to call them.
+	 */
+	struct FKesherCollapse : public FBlueprintEditor
+	{
+		static bool Can(FBlueprintEditor& Editor, TSet<UEdGraphNode*>& Nodes)
+		{
+			bool (FBlueprintEditor::*Fn)(TSet<UEdGraphNode*>&) const = &FKesherCollapse::CanCollapseSelectionToFunction;
+			return (Editor.*Fn)(Nodes);
+		}
+		static UEdGraph* Run(FBlueprintEditor& Editor, TSharedPtr<SGraphEditor> GraphEd, TSet<UEdGraphNode*>& Nodes, UEdGraphNode*& Call)
+		{
+			UEdGraph* (FBlueprintEditor::*Fn)(TSharedPtr<SGraphEditor>, TSet<UEdGraphNode*>&, UEdGraphNode*&) = &FKesherCollapse::CollapseSelectionToFunction;
+			return (Editor.*Fn)(GraphEd, Nodes, Call);
+		}
+	};
+}
 
 namespace
 {
@@ -685,6 +709,50 @@ namespace KesherGraph
 						PastedIds.Add(MakeShared<FJsonValueString>(N->NodeGuid.ToString()));
 					}
 					if (Pasted.Num() == 0) Problem = TEXT("Nothing was pasted");
+				}
+			}
+			else if (Kind == TEXT("collapse"))
+			{
+				// Collapse to Function (0.1.17): the chosen nodes become a new function of this Blueprint, called here.
+				TSet<UEdGraphNode*> Chosen;
+				const TArray<TSharedPtr<FJsonValue>>* Ids = nullptr;
+				if (Op->TryGetArrayField(TEXT("nodes"), Ids))
+				{
+					for (const TSharedPtr<FJsonValue>& IdV : *Ids)
+					{
+						if (UEdGraphNode* N = NodeOf(IdV->AsString())) Chosen.Add(N);
+					}
+				}
+				const FString FnName = JsonStr(Op, TEXT("name")).TrimStartAndEnd();
+				bool bTaken = false;
+				for (UEdGraph* G : BP->FunctionGraphs)
+				{
+					if (G && G->GetName().Equals(FnName, ESearchCase::IgnoreCase)) bTaken = true;
+				}
+				UAssetEditorSubsystem* Editors = GEditor ? GEditor->GetEditorSubsystem<UAssetEditorSubsystem>() : nullptr;
+				if (Chosen.Num() == 0) Problem = TEXT("Choose the nodes to collapse");
+				else if (bTaken) Problem = TEXT("The Blueprint already has a function named ") + FnName;
+				else if (!Editors || IsRunningCommandlet()) Problem = TEXT("Collapse to Function needs the Unreal editor open (not the headless one)");
+				else
+				{
+					// The collapse is the Blueprint editor's: open the Blueprint there (it stays open, as after a right-click).
+					Editors->OpenEditorForAsset(BP);
+					IAssetEditorInstance* Instance = Editors->FindEditorForAsset(BP, false);
+					FBlueprintEditor* Editor = Instance && Instance->GetEditorName() == FName(TEXT("BlueprintEditor")) ? static_cast<FBlueprintEditor*>(Instance) : nullptr;
+					TSharedPtr<SGraphEditor> GraphEd = Editor ? Editor->OpenGraphAndBringToFront(Graph, false) : nullptr;
+					if (!Editor || !GraphEd.IsValid()) Problem = TEXT("Could not open the graph in the Blueprint editor");
+					else if (!FKesherCollapse::Can(*Editor, Chosen)) Problem = TEXT("These nodes cannot go into a function (an event, the function's entry, or a latent node like Delay is among them)");
+					else
+					{
+						UEdGraphNode* Call = nullptr;
+						UEdGraph* NewGraph = FKesherCollapse::Run(*Editor, GraphEd, Chosen, Call);
+						if (!NewGraph) Problem = TEXT("Unreal could not collapse these nodes");
+						else
+						{
+							if (!FnName.IsEmpty()) FBlueprintEditorUtils::RenameGraph(NewGraph, FnName);
+							Made = Call;
+						}
+					}
 				}
 			}
 			else Problem = TEXT("Unknown operation ") + Kind;

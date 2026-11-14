@@ -6,9 +6,11 @@
  * Written as CommonJS (.cts) because sandboxed preload scripts cannot be
  * ES modules.
  */
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("kesherDesktop", {
+  /** The page's zoom (the handheld look enlarges everything, as Ctrl+= would); 0.5 to 2. */
+  setZoom: (factor: number): void => webFrame.setZoomFactor(Math.min(2, Math.max(0.5, Number(factor) || 1))),
   /** Saves a chat as a PDF (asks where). Resolves with the file, or null if cancelled. */
   saveChatPdf: (id: string): Promise<string | null> => ipcRenderer.invoke("kesher:chat-pdf", id),
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */

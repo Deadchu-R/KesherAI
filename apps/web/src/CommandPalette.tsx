@@ -103,6 +103,22 @@ export function CommandPalette() {
           },
         };
       })(),
+      {
+        // What the app sees of controllers (a ROG Ally in Desktop mode sends keys, not a controller).
+        id: "pad-check",
+        icon: "🎮",
+        title: L("בדיקת שלט", "Controller check"),
+        also: "controller gamepad xinput ally שלט בדיקה",
+        group: "action" as const,
+        run: () => {
+          const pads = typeof navigator.getGamepads === "function" ? [...navigator.getGamepads()].filter((p): p is Gamepad => !!p) : [];
+          toast(
+            pads.length
+              ? L(`נמצא שלט: ${pads.map((p) => p.id).join(", ")}`, `Controller found: ${pads.map((p) => p.id).join(", ")}`)
+              : L("לא נמצא שלט. לחצו על כפתור בשלט ונסו שוב. ב-ROG Ally: Command Center ← Control mode ← Gamepad (במצב Desktop השלט שולח מקשים: החיצים, Enter ו-Esc עובדים).", "No controller found. Press a button on it and try again. On a ROG Ally: Command Center → Control mode → Gamepad (in Desktop mode it sends keys: the arrows, Enter and Esc work)."),
+          );
+        },
+      },
     ];
     // The menu's own pages (without parts that are off, or what simple mode leaves out), plus All tools.
     const groupOf = (id: string) => NAV_GROUPS.find((g) => g.id === id);

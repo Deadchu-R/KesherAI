@@ -23,7 +23,10 @@ export function setHandheld(v: "auto" | "on" | "off", detected = !!document.docu
   } catch {
     /* for this visit only */
   }
-  document.documentElement.classList.toggle("handheld", v === "on" || (v === "auto" && detected));
+  const on = v === "on" || (v === "auto" && detected);
+  document.documentElement.classList.toggle("handheld", on);
+  // The whole interface larger (most sizes are pixels), in the desktop app.
+  (window as unknown as { kesherDesktop?: { setZoom?: (f: number) => void } }).kesherDesktop?.setZoom?.(on ? 1.25 : 1);
 }
 
 /**

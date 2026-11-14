@@ -177,10 +177,41 @@ function pageTakes(button: string): boolean {
 
 let running = false;
 
+/** Places where the arrow keys already mean something (lists, menus, editors, graphs, sliders). */
+const OWN_ARROWS = '[role="listbox"], [role="menu"], [role="tablist"], [role="slider"], [role="grid"], [role="tree"], select, .monaco-editor, .script-canvas, .ue-frame, .xterm, input[type="range"]';
+
+/**
+ * The same navigation from the keyboard's arrows, on a handheld (or once a controller was used): a ROG Ally in
+ * Armoury Crate's Desktop mode sends its D-pad as arrow keys and A as Enter, not as a controller (found on Roee's
+ * ROG Xbox Ally X: "the controller does not work"). Enter presses a button by itself; Esc goes back.
+ */
+function keyboardNav(): void {
+  window.addEventListener("keydown", (e) => {
+    const html = document.documentElement;
+    if (!html.classList.contains("handheld") && !html.classList.contains("pad")) return;
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const target = e.target as HTMLElement | null;
+    const dirs: Record<string, "up" | "down" | "left" | "right"> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
+    const dir = dirs[e.key];
+    if (dir) {
+      if (target && (target.closest(OWN_ARROWS) || (typing(target) && (dir === "left" || dir === "right" || target instanceof HTMLTextAreaElement)))) return;
+      e.preventDefault();
+      move(dir);
+      return;
+    }
+    if (e.key === "Escape" && !document.querySelector('[role="dialog"], .palette-back') && !typing(target)) {
+      // Nothing closed on Esc: the previous page (as B).
+      if (!pageTakes("B")) history.back();
+    }
+  });
+}
+
 /** Starts reading controllers (once); safe to call more than once. */
 export function startGamepad(): void {
-  if (running || typeof navigator.getGamepads !== "function") return;
+  if (running) return;
   running = true;
+  keyboardNav();
+  if (typeof navigator.getGamepads !== "function") return;
   const held = new Map<number, { since: number; last: number }>();
   let frame = 0;
   const off = () => setActive(false);
