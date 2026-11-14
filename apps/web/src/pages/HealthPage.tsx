@@ -3,6 +3,7 @@ import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
+import { ReportDialog } from "../ReportDialog";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const GB = 1024 ** 3;
@@ -44,6 +45,7 @@ export function HealthPage() {
   const [busy, setBusy] = useState(false);
   const [advice, setAdvice] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [faults, setFaults] = useState<Array<{ at: string; kind: string; where: string; message: string }>>([]);
   const load = (fresh = false) => {
     setBusy(true);
@@ -64,6 +66,7 @@ export function HealthPage() {
   const r = data?.reading;
   return (
     <div className="page health-page">
+      {reporting && <ReportDialog onClose={() => setReporting(false)} />}
       <div className="row">
         <h1 className="grow">{L("בריאות המחשב", "PC Health")}</h1>
         <button type="button" disabled={busy} onClick={() => load(true)}>{busy ? L("בודק…", "Checking…") : L("בדוק שוב", "Check again")}</button>
@@ -112,6 +115,7 @@ export function HealthPage() {
             <details className="card">
               <summary>{L(`תקלות אחרונות של KesherAI (${faults.length})`, `KesherAI's recent faults (${faults.length})`)}</summary>
               <ul className="health-folders">{faults.map((f, i) => <li key={i} className="small" dir="auto"><span className="muted">{new Date(f.at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} · {f.where}</span><br />{f.message}</li>)}</ul>
+              <button type="button" style={{ alignSelf: "start" }} onClick={() => setReporting(true)}>{L("📮 דווח למפתחים", "📮 Report to the developers")}</button>
               <p className="muted small">{L("בצ'אט שנכשל יש כפתור \"🔎 חקור\", והמודל יכול לבדוק את התקלות האלה בעצמו.", "A chat that failed has a \"🔎 Investigate\" button; the model can look into these faults itself.")}</p>
             </details>
           )}

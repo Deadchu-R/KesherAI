@@ -4,6 +4,7 @@ import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PermissionsSection } from "../settings/PermissionsSection";
+import { ReportDialog } from "../ReportDialog";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useActivity, useLibrary } from "../library";
@@ -62,6 +63,8 @@ export function ConversationPage({ id }: { id: string }) {
   const [editingTitle, setEditingTitle] = useState(false);
   // The chat's approvals (what runs without asking, and for how long).
   const [approvalsOpen, setApprovalsOpen] = useState(false);
+  // "Report a problem" for this chat's faults.
+  const [reportOpen, setReportOpen] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
   const [openedAt] = useState(() => Date.now());
   const [coachOpen, setCoachOpen] = useState(false);
@@ -548,6 +551,7 @@ export function ConversationPage({ id }: { id: string }) {
           onClose={() => setVoice(false)}
         />
       )}
+      {reportOpen && <ReportDialog chat={id} onClose={() => setReportOpen(false)} />}
       {approvalsOpen &&
         createPortal(
           <div className="dialog-backdrop" role="presentation" onClick={() => setApprovalsOpen(false)}>
@@ -832,6 +836,7 @@ export function ConversationPage({ id }: { id: string }) {
                     <span className="grow">{e.message}</span>
                     {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={retry}>{L("↻ נסה שוב", "↻ Try again")}</button>}
                     {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => void investigate()}>{L("🔎 חקור", "🔎 Investigate")}</button>}
+                    {e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => setReportOpen(true)}>{L("📮 דווח", "📮 Report")}</button>}
                   </p>
                 );
               default:

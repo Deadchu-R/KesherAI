@@ -16,6 +16,8 @@ export interface Branding {
   accentColor: string;
   /** Where "Report a bug" and "Source code" link to. */
   repositoryUrl: string;
+  /** Where "Report a problem" sends (the project's Google Apps Script web app; empty: GitHub only). */
+  reportUrl: string;
   /** Where the documentation site lives. */
   docsUrl: string;
   /** Default port of the local core server. */
@@ -42,6 +44,7 @@ export const branding: Branding = {
   appId: "kesher",
   accentColor: "#5EEAD4",
   repositoryUrl: "https://github.com/Deadchu-R/KesherAI",
+  reportUrl: "",
   docsUrl: "https://deadchu-r.github.io/KesherAI",
   defaultPort: 7420,
   google: { clientId: "", clientSecret: "" },
