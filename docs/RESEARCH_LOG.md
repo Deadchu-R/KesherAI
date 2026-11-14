@@ -920,3 +920,13 @@ Game Bar's keyboard or Steam's), haptics on press (vibrationActuator), and per-p
   so it remembers), questions on X / Y / RB, B closes; docs/GAME_HELPER.md (map an Ally back button to the key).
 Stopped at: voice-only (push-to-talk) questions, the game's FPS/temperatures and recommended settings (G-Assist), a
 controller combo read while the game has focus (XInput outside the browser), and achievements (Steam/Xbox APIs).
+
+## 2026-11-14: IDE look, Antigravity and the phone editor (VISION list item 6)
+- Antigravity (a VS Code fork) keeps its built-in extensions inside resources/app.asar (found on the PC: only
+  app.asar.unpacked/node_modules is on disk), so the "Default Dark Modern" theme file was never found and the look had
+  only a background. KesherAI runs in Electron, whose fs reads inside asar: that folder is searched too (0.6.189).
+- The phone editor (CodeMirror) now wears the chosen IDE's colours (background, text, selection, cursor, line, gutter,
+  font) from the same /api/ides/look, put on the open editor with a Compartment (undo history kept).
+Stopped at: syntax colours on the phone need tags from @lezer/highlight (already in the tree under CodeMirror, but
+not a declared dependency: asked Roee); Node's file sandbox for plugins is not available in Electron's Node
+(plugins: process isolation and the network/program guards only).

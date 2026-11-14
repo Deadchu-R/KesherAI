@@ -170,7 +170,9 @@ export async function vscodeThemeToMonaco(file: string, depth = 0, root = dirnam
  */
 async function builtInExtensions(exe: string): Promise<string[]> {
   const base = dirname(exe);
-  const out = [join(base, "resources", "app", "extensions")];
+  // Antigravity keeps them inside its archive (resources/app.asar/extensions); KesherAI runs in Electron, whose file
+  // functions read inside an asar archive (found on the PC: the look had only a background colour).
+  const out = [join(base, "resources", "app", "extensions"), join(base, "resources", "app.asar", "extensions")];
   // On Linux and macOS the program is often a script in bin/: the app is one folder up.
   out.push(join(base, "..", "resources", "app", "extensions"), join(base, "..", "app", "extensions"));
   for (const d of await readdir(base).catch(() => [] as string[])) out.push(join(base, d, "resources", "app", "extensions"));

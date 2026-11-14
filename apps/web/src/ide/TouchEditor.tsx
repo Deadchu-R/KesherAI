@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { autocompletion, snippet, startCompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
@@ -16,6 +16,7 @@ import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { markdown } from "@codemirror/lang-markdown";
 import { languageOf } from "./languages";
+import { ideLook, onIdeLook, type IdeLook } from "./ide-look";
 import { setProjectTypes, suggestAt, bracketProblems, missingUsings } from "./csharp-suggest";
 import type { EditorHandle, EditorProps } from "./editor-types";
 import { LspLite, type LspDiag } from "./lsp-lite";
@@ -49,6 +50,30 @@ function langExt(id: string): Extension {
     default:
       return [];
   }
+}
+
+/**
+ * The chosen IDE's look on the phone editor (as the desktop editor wears it): its background, text, selection, cursor,
+ * current line, gutter and font, from the same theme file (/api/ides/look).
+ */
+function lookTheme(l: IdeLook | undefined): Extension {
+  const c = l?.theme?.colors ?? {};
+  if (!l || !Object.keys(c).length) return [];
+  const bg = c["editor.background"];
+  const fg = c["editor.foreground"];
+  return EditorView.theme(
+    {
+      "&": { ...(bg ? { backgroundColor: bg } : {}), ...(fg ? { color: fg } : {}), ...(l.fontSize ? { fontSize: `${l.fontSize}px` } : {}) },
+      ".cm-content": { ...(l.fontFamily ? { fontFamily: l.fontFamily } : {}), ...(c["editorCursor.foreground"] ? { caretColor: c["editorCursor.foreground"] } : {}) },
+      ".cm-scroller": { ...(l.fontFamily ? { fontFamily: l.fontFamily } : {}) },
+      ".cm-cursor, .cm-dropCursor": { ...(c["editorCursor.foreground"] ? { borderLeftColor: c["editorCursor.foreground"] } : {}) },
+      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { ...(c["editor.selectionBackground"] ? { backgroundColor: c["editor.selectionBackground"] } : {}) },
+      ".cm-activeLine": { ...(c["editor.lineHighlightBackground"] ? { backgroundColor: c["editor.lineHighlightBackground"] } : {}) },
+      ".cm-gutters": { ...(c["editorGutter.background"] || bg ? { backgroundColor: c["editorGutter.background"] ?? bg } : {}), ...(c["editorLineNumber.foreground"] ? { color: c["editorLineNumber.foreground"] } : {}), border: "none" },
+      ".cm-activeLineGutter": { ...(c["editorLineNumber.activeForeground"] ? { color: c["editorLineNumber.activeForeground"] } : {}), backgroundColor: "transparent" },
+    },
+    { dark: l.theme?.base !== "vs" && l.theme?.base !== "hc-light" },
+  );
 }
 
 /** A snippet with $1-style places as CodeMirror's ${} ones. */
@@ -99,6 +124,18 @@ const TouchEditor = forwardRef<EditorHandle, EditorProps>(function TouchEditor(p
   const lsp = useRef<LspLite | undefined>(undefined);
   const lspDiags = useRef<LspDiag[]>([]);
   const [, redraw] = useState(0);
+  // The chosen IDE's look (VS Code, Antigravity, Rider…), as on the desktop editor.
+  const [look, setLook] = useState<IdeLook | undefined>(undefined);
+  const lookPart = useRef(new Compartment());
+  const lookExt = (l: IdeLook | undefined): Extension => [...(document.documentElement.dataset.light === "1" && l?.theme?.base !== "vs-dark" ? [] : [oneDark]), lookTheme(l)];
+  useEffect(() => {
+    void ideLook().then(setLook);
+    return onIdeLook(setLook);
+  }, []);
+  // A new look is put on the open editor (its text and undo history stay).
+  useEffect(() => {
+    view.current?.dispatch({ effects: lookPart.current.reconfigure(lookExt(look)) });
+  }, [look]);
 
   useEffect(() => {
     if (!box.current) return;
@@ -109,7 +146,7 @@ const TouchEditor = forwardRef<EditorHandle, EditorProps>(function TouchEditor(p
         extensions: [
           basicSetup,
           keymap.of([indentWithTab, { key: "Mod-s", preventDefault: true, run: () => (save.current?.(), true) }]),
-          ...(document.documentElement.dataset.light === "1" ? [] : [oneDark]),
+          lookPart.current.of(lookExt(look)),
           langExt(language),
           ...(language === "csharp" ? [autocompletion({ override: [p.lsp ? lspCompletions : csharpCompletions], activateOnTyping: true })] : []),
           EditorState.readOnly.of(!!p.readOnly),
