@@ -124,6 +124,7 @@ import { computerRoutes } from "./routes/computer.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { journalRoutes } from "./routes/journal.js";
 import { gameRoutes } from "./routes/game.js";
+import { textHelperRoutes } from "./routes/text-helper.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
 import { Runtimes } from "./runtimes.js";
@@ -1175,6 +1176,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await mcpRoutes(app, services);
   await journalRoutes(app, services);
   await gameRoutes(app, services);
+  await textHelperRoutes(app, services);
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);

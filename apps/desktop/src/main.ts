@@ -20,6 +20,7 @@ import { branding } from "@kesher/shared";
 import { BrowserPane } from "./browser-pane.js";
 import { connectComputer, forgetComputer, listComputers, openComputer } from "./computers.js";
 import { WORKER_PORT, workerHost } from "./worker.js";
+import { pasteText, readSelection } from "./text-keys.js";
 
 /**
  * The project's Google and GitHub sign-in clients. Release builds get it from the
@@ -476,6 +477,68 @@ async function toggleGameHelper(coreUrl: string): Promise<void> {
   gameWin.focus();
 }
 
+let textWin: BrowserWindow | undefined;
+
+/**
+ * The Text Helper (as AnythingLLM's Magic Beacon and PopClip, on the user's own models): the key reads the text
+ * selected in any app (a Copy, the clipboard put back after), then opens a small window by the mouse with quick
+ * actions (summarize, translate, fix, explain, ask) and the answer, which can go back in place of the selection.
+ * Pressed again while it is in front, it hides.
+ *
+ * @param coreUrl - KesherAI's local address.
+ */
+async function toggleTextHelper(coreUrl: string): Promise<void> {
+  if (textWin && !textWin.isDestroyed() && textWin.isVisible() && textWin.isFocused()) {
+    textWin.hide();
+    return;
+  }
+  const base = coreUrl.replace(/\/$/, "");
+  const text = await readSelection().catch(() => "");
+  const r = (await fetch(`${base}/api/text-helper/open`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }), signal: AbortSignal.timeout(15_000) })
+    .then((x) => x.json())
+    .catch(() => ({}))) as { chatId?: string; id?: string };
+  if (!r.chatId || !r.id) return;
+  const at = displays.getCursorScreenPoint();
+  const area = displays.getDisplayNearestPoint(at).workArea;
+  const width = Math.min(460, area.width - 20);
+  const height = Math.min(600, area.height - 20);
+  const bounds = { x: Math.max(area.x + 10, Math.min(at.x + 12, area.x + area.width - width - 10)), y: Math.max(area.y + 10, Math.min(at.y + 12, area.y + area.height - height - 10)), width, height };
+  if (!textWin || textWin.isDestroyed()) {
+    textWin = new BrowserWindow({
+      ...bounds,
+      frame: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      backgroundColor: "#121213",
+      show: false,
+      icon: appIcon(),
+      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(import.meta.dirname, "preload.cjs") },
+    });
+    textWin.webContents.setWindowOpenHandler(({ url: target }) => {
+      if (/^https?:\/\//.test(target)) void shell.openExternal(target);
+      return { action: "deny" };
+    });
+    textWin.webContents.on("will-navigate", (event, target) => {
+      if (!target.startsWith(`${base}/`)) event.preventDefault();
+    });
+    // Clicking back into the other app puts the helper away, as a popup should.
+    textWin.on("blur", () => textWin?.hide());
+  } else textWin.setBounds(bounds);
+  await textWin.loadURL(`${base}/#/text/${encodeURIComponent(r.chatId)}/${encodeURIComponent(r.id)}`);
+  textWin.show();
+  textWin.focus();
+}
+
+// The Text Helper's "Replace": only its own window may paste into the app behind it.
+ipcMain.handle("kesher:text-paste", async (event, text: unknown) => {
+  if (!fromApp(event) || !textWin || textWin.isDestroyed() || event.sender !== textWin.webContents || typeof text !== "string" || !text || text.length > 50_000) return { error: "Not allowed." };
+  textWin.hide();
+  // Give Windows a moment to bring back the app that had the selection.
+  await new Promise((r) => setTimeout(r, 150));
+  const pasted = await pasteText(text).catch(() => false);
+  return { pasted };
+});
+
 ipcMain.handle("kesher:browser", async (event, cmd: unknown, arg: unknown) => {
   if (!fromApp(event) || !pane) return { error: "Not allowed." };
   try {
@@ -749,6 +812,10 @@ app.whenReady().then(async () => {
     // Ctrl+Alt+G, not Ctrl+Shift+G: that one is VS Code's Source Control, and a global key takes it from every app (scan 61).
     const gameKey = process.platform === "darwin" ? "Command+Option+G" : "Control+Alt+G";
     globalShortcut.register(gameKey, () => void toggleGameHelper(coreUrl));
+    // The Text Helper: select text in any app, then this key. Ctrl+Alt+K ("Kesher"); Cmd+Option+K is a browser's
+    // developer console on a Mac, so Control+Option+K there.
+    const textKey = process.platform === "darwin" ? "Control+Option+K" : "Control+Alt+K";
+    globalShortcut.register(textKey, () => void toggleTextHelper(coreUrl));
   } catch (err) {
     await rescue(err);
   }

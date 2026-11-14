@@ -61,6 +61,8 @@ interface DesktopBridge {
   browser?: { call(cmd: string, arg?: unknown): Promise<unknown>; onState(fn: (s: unknown) => void): () => void };
   /** Opens one of "My devices" (same Google account). Missing before 0.5.22. */
   openDevice?(id: string): Promise<{ name?: string; error?: string }>;
+  /** The Text Helper's "Replace" (only in its own window). Missing before 0.6.199. */
+  textPaste?(text: string): Promise<{ pasted?: boolean; error?: string }>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

@@ -1008,3 +1008,17 @@ Stopped at: Claude desktop, Cursor, Jan and LobeHub not re-read this round (revi
 - Fallback started (approved): unsloth/Qwen3.8-Flash-Next-GGUF UD-IQ3_XXS (125B MoE, 4 files, 83.6 GB).
 Stopped at: the fallback's memory check, after its download. DeepSeek can be tried again with Unreal and other
 heavy programs closed (it needs ~104 of the ~110 GB left after Windows).
+
+## 2026-11-15 (night): Text Helper, select text in any app (COMPETITORS fourth review, item 2)
+- AnythingLLM Magic Beacon (docs.anythingllm.com/pro/magic-beacon): a dot appears by any selection (macOS needs
+  Accessibility and Input Monitoring); the panel has Edit actions in editable fields (fix grammar, simplify) and Static
+  actions elsewhere (summarize, explain, translate, research), a custom prompt, Insert (replaces the selection) or Copy,
+  Chat or Agent mode, a history of sessions, custom actions, and an "ignore this app" list. PopClip and Raycast: the
+  same idea, a key or a selection gesture, actions, the result pasted back.
+- Chosen for KesherAI: a key, not an always-on selection watcher (nothing is read until the user asks; no
+  Input Monitoring). Ctrl+Alt+K (Control+Option+K on a Mac). Reading the selection = a Copy pressed after the user lets
+  go of Ctrl/Alt, the clipboard put back (text, HTML, RTF, picture); Linux reads the PRIMARY selection with no key.
+  The window opens by the mouse; actions: Summarize, Translate (Hebrew ↔ English), Fix mistakes, Simpler, Explain,
+  Reply, and a free question; Copy, and Replace (pastes the answer in place, then the clipboard back). All questions
+  go to one "✍ Text helper" chat. On the phone: "KesherAI" in Android's selection menu (PROCESS_TEXT) opens the same page.
+Stopped at: custom actions, "ignore this app", and an Agent mode with tools (later items).

@@ -30,6 +30,12 @@ public class ShareActivity extends Activity {
             Intent in = getIntent();
             JSONObject shared = new JSONObject();
             String text = in.getStringExtra(Intent.EXTRA_TEXT);
+            // Text chosen in another app's selection menu goes to the Text Helper.
+            if (Intent.ACTION_PROCESS_TEXT.equals(in.getAction())) {
+                CharSequence chosen = in.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
+                if (chosen != null) text = chosen.toString();
+                shared.put("action", "text");
+            }
             String subject = in.getStringExtra(Intent.EXTRA_SUBJECT);
             if (text != null) shared.put("text", text);
             if (subject != null) shared.put("subject", subject);

@@ -1,4 +1,4 @@
-import { withToken } from "./api";
+import { api, withToken } from "./api";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
 
@@ -8,7 +8,7 @@ interface Shared {
   text?: string;
   subject?: string;
   files?: Array<{ path: string; name: string; mime: string; size: number }>;
-  action?: "new" | "talk" | "photo";
+  action?: "new" | "talk" | "photo" | "text";
 }
 interface SharePlugin {
   take(): Promise<Shared>;
@@ -89,6 +89,12 @@ export function startPhoneShare(): void {
     try {
       const s = await plugin.take();
       if (!s || (!s.text && !s.subject && !s.files?.length && !s.action)) return;
+      // "KesherAI" in another app's selection menu: the Text Helper, not a new chat.
+      if (s.action === "text") {
+        const r = await api<{ chatId: string; id: string }>("/api/text-helper/open", { method: "POST", body: { text: s.text ?? "" } });
+        location.hash = `#/text/${encodeURIComponent(r.chatId)}/${encodeURIComponent(r.id)}`;
+        return;
+      }
       const id = await createConversation({ kind: "chat" });
       if (!id) return;
       if (s.action === "talk") return setOpening(id, { voice: true });

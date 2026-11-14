@@ -2289,4 +2289,16 @@ html.handheld .palette-list button { min-height: 44px; }
 .phone-numbers { margin: 0; display: grid; gap: 2px; }
 .phone-numbers > div { gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .phone-numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* The Text Helper (Ctrl+Alt+K over any app; Android's selection menu): the selection, quick actions, the answer. */
+.text-helper { display: flex; flex-direction: column; height: 100vh; gap: 10px; padding: 12px; background: var(--bg); }
+.text-head { gap: 8px; color: var(--text-2); }
+.text-title { font-weight: 600; color: var(--text); }
+.text-sel { margin: 0; max-height: 7.5em; overflow: auto; padding: 8px 12px; border-inline-start: 2px solid var(--accent); background: var(--panel); border-radius: var(--radius-sm); color: var(--text-2); font-size: 13.5px; white-space: pre-wrap; }
+.text-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.text-actions button, .text-use button, .text-use .btn { height: 32px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.text-actions button > .glyph, .text-use button > .glyph { margin: 0; }
+.text-ask input { min-width: 0; }
+.text-use { gap: 6px; }
+.text-chat { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
+@media (pointer: coarse) { .text-actions button, .text-use button, .text-use .btn { height: 40px; } }
 .game-load { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted, inherit); font-variant-numeric: tabular-nums; }
