@@ -93,6 +93,7 @@ import { Kokoro } from "./kokoro.js";
 import { memoryTools } from "./memory-tools.js";
 import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
+import { healthRoutes } from "./routes/health.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
@@ -1076,6 +1077,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await terminalRoutes(app, services);
   await coachRoutes(app, services);
   await memoryRoutes(app, services);
+  await healthRoutes(app, services);
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
   await speechRoutes(app, services);

@@ -2117,3 +2117,17 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .md-table th { background: var(--panel, rgba(255,255,255,.05)); font-weight: 600; }
 .md-table tbody tr:nth-child(even) td { background: rgba(255,255,255,.02); }
 .side-edit-backdrop { z-index: 60; }
+
+/* PC Health */
+.health-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.health-item { display: flex; gap: 10px; align-items: flex-start; }
+.health-dot { flex: none; width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: var(--ok, #3fb37f); }
+.health-item.warn .health-dot { background: #e0a43a; }
+.health-item.bad .health-dot { background: var(--danger, #e5534b); }
+.health-meter { display: grid; gap: 5px; }
+.health-bar { height: 8px; border-radius: calc(4px * var(--r-scale, 1)); background: var(--raised); overflow: hidden; }
+.health-bar > span { display: block; height: 100%; background: var(--accent); }
+.health-bar.warn > span { background: #e0a43a; }
+.health-bar.bad > span { background: var(--danger, #e5534b); }
+.health-folders { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.health-advice { border-inline-start: 3px solid var(--accent); padding-inline-start: 12px; }

@@ -661,3 +661,15 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Plan: (1) named read-only agents: a persona with "when to use it" becomes an agent; project files in
   `.kesher/agents/` and `.claude/agents/` (the Claude Code format, so existing ones work); `delegate` takes `agent`.
   (2) later: worker agents that change files in their own worktree, the user approving in the chat.
+
+## 2026-11-14 — PC Health and Phone Health, with AI (VISION, board t23)
+- **Copilot PC Insights** (arynews.tv report): answers questions about CPU/RAM/GPU use, free storage and folder sizes,
+  connected devices, Wi-Fi/Bluetooth, battery health; asks permission per check (or "always allow"); identifies
+  problems but does not fix them or open files.
+- **Microsoft PC Manager** (majorgeeks, betanews): one-click "boost" (temp files, memory), storage cleanup, startup
+  apps, health check list with buttons per item.
+- **Pixel AI battery summaries** (techrepublic, androidauthority teardown): the system writes in plain words what drains
+  the battery; the article page itself could not be fetched.
+- Plan: one Health page (computer and, in the phone app, the phone): numbers first, then the model's short list of
+  what to do; fixes only on KesherAI's own files with a confirmation, everything else as steps; reads only.
+- Stopped at: research enough to start; build t23 first, the phone part after (native plugin method).

@@ -53,6 +53,7 @@ const ConversationPage = lazy(() => import("./pages/Conversation").then((m) => (
 const ImagesPage = lazy(() => import("./pages/Images").then((m) => ({ default: m.ImagesPage })));
 const BatchImagesPage = lazy(() => import("./pages/BatchImages").then((m) => ({ default: m.BatchImagesPage })));
 const MemoryPage = lazy(() => import("./pages/MemoryPage").then((m) => ({ default: m.MemoryPage })));
+const HealthPage = lazy(() => import("./pages/HealthPage").then((m) => ({ default: m.HealthPage })));
 const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
@@ -248,6 +249,7 @@ export function App() {
   else if (hash === "#/images") page = <ImagesPage />;
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
+  else if (hash === "#/health") page = <HealthPage />;
   else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
   else if (hash === "#/code") page = <CodeHome />;
