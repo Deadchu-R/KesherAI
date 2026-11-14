@@ -71,6 +71,8 @@ export interface ConversationDeps {
   userNotes?(): Promise<string[]>;
   /** The remember / forget tools for the user's memory (none when memory is off). */
   memoryTools?(convId?: string): AgentTool[];
+  /** set_timer and notify_user for a chat (chat-timers.ts). */
+  timerTools?(convId: string): AgentTool[];
   /** The user's memory by topic: read into prompts, filled after turns. */
   memory?: MemoryStore;
   /** Saved personas. */

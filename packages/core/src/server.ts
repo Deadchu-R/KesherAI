@@ -94,6 +94,7 @@ import { BrowserBridge, browserTools } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
 import { memoryTools } from "./memory-tools.js";
+import { ChatTimers, timerTools } from "./chat-timers.js";
 import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { healthRoutes } from "./routes/health.js";
@@ -580,6 +581,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   void semantic.resume().catch(() => undefined);
   // Routines: pipelines and prompts on a schedule.
+  // The model's timers ("check the build in an hour") and its notifications (chat-timers.ts).
+  const chatTimers = new ChatTimers(join(paths.root, "timers.json"), {
+    send: (convId, text) => services.conversations.send(convId, text),
+    exists: async (convId) => !!library.summary(convId),
+  });
+  void chatTimers.start();
   const routines = new Routines(join(paths.root, "routines.json"), {
     runPipeline: async (id, inputs) => {
       const run = await pipelines.start(id, inputs);
@@ -813,6 +820,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       },
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
       memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
+      timerTools: (convId) => timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined)),
       memory,
     }),
     coach,
@@ -1177,6 +1185,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await journalRoutes(app, services);
   await gameRoutes(app, services);
   await textHelperRoutes(app, services);
+  // The model's waiting timers: listed in the chat (and the Routines page), cancelled by the user.
+  app.get<{ Querystring: { conv?: string } }>("/api/timers", async (req) => ({ timers: chatTimers.list(req.query.conv || undefined) }));
+  app.delete<{ Params: { id: string } }>("/api/timers/:id", async (req, reply) => ((await chatTimers.cancel(req.params.id)) ? { ok: true } : reply.code(404).send({ error: "This timer is no longer waiting." })));
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);

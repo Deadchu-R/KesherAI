@@ -37,7 +37,7 @@ import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../Blueprin
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
-import { GroupButton, TeamButton, exportChat } from "../chat/ChatHeaderTools";
+import { GroupButton, TeamButton, TimersButton, exportChat } from "../chat/ChatHeaderTools";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -604,6 +604,7 @@ export function ConversationPage({ id }: { id: string }) {
         <ChatBarButton kind={conv.kind} bar={conv.bar} onChange={(bar) => void patch({ bar: bar ?? {} })} />
         {show("team", (conv.team ?? []).length > 0) && <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />}
         {conv.kind === "chat" && show("group", (conv.group ?? []).length > 0) && <GroupButton group={conv.group ?? []} onChange={(group) => void patch({ group })} />}
+        <TimersButton convId={conv.id} />
         {pluginUi.panels.map((x) => {
           const key = `${x.pluginId}/${x.id}`;
           if (!show("plugins", openPanel === key)) return null;

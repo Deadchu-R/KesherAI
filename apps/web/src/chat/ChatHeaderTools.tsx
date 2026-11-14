@@ -1,11 +1,13 @@
 /** The chat's header tools: an agent group, a planner/reviewer team, and saving the chat as a file. */
 import { useEffect, useRef, useState } from "react";
 import type { ModelInfo, Teammate } from "@kesher/shared";
-import { withToken } from "../api";
+import { api, withToken } from "../api";
 import { getLocale, t } from "../i18n";
 import { desktop, toast } from "../library";
 import { ModelMenu } from "../ModelMenu";
 import { usePersonas } from "../Personas";
+import { Menu, MenuItem, MenuLabel } from "../ui/Menu";
+import { LineIcon } from "../ui/Glyph";
 
 /**
  * Agent group: personas this chat's model leads. It splits a request between
@@ -113,4 +115,53 @@ export function exportChat(id: string, kind: "md" | "pdf"): void {
   document.body.append(a);
   a.click();
   a.remove();
+}
+
+/** A timer the model set in this chat (chat-timers.ts). */
+interface WaitingTimer { id: string; prompt: string; due: number }
+
+/**
+ * The model's waiting timers in this chat ("check the build in an hour"), shown only when there are some: a clock
+ * with the count, and a list where each can be cancelled (Open WebUI keeps them hidden; here they are visible).
+ *
+ * @param props.convId - The chat.
+ */
+export function TimersButton({ convId }: { convId: string }) {
+  const [timers, setTimers] = useState<WaitingTimer[]>([]);
+  const he = getLocale() === "he";
+  useEffect(() => {
+    const load = () => !document.hidden && void api<{ timers: WaitingTimer[] }>(`/api/timers?conv=${encodeURIComponent(convId)}`).then((r) => setTimers(r.timers), () => undefined);
+    load();
+    const t = window.setInterval(load, 30_000);
+    addEventListener("focus", load);
+    return () => (window.clearInterval(t), removeEventListener("focus", load));
+  }, [convId]);
+  if (!timers.length) return null;
+  const when = (due: number) => {
+    const min = Math.round((due - Date.now()) / 60_000);
+    if (min < 1) return he ? "עכשיו" : "now";
+    if (min < 120) return he ? `בעוד ${min} דק'` : `in ${min} min`;
+    return new Date(due).toLocaleString(he ? "he-IL" : undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  };
+  const cancel = (id: string) =>
+    void api(`/api/timers/${encodeURIComponent(id)}`, { method: "DELETE" }).then(
+      () => setTimers((x) => x.filter((y) => y.id !== id)),
+      (e: Error) => toast(e.message),
+    );
+  return (
+    <Menu
+      trigger={<><LineIcon name="bell" size={16} /> {timers.length}</>}
+      triggerClassName="pane-btn"
+      title={he ? "תזכורות שהמודל קבע בצ'אט הזה" : "Timers the model set in this chat"}
+      aria-label={he ? "תזכורות" : "Timers"}
+      popClassName="bar-pop"
+    >
+      <MenuLabel>{he ? "הצ'אט יחזור לעבוד בזמנים האלה" : "This chat comes back at these times"}</MenuLabel>
+      {timers.map((x) => (
+        <MenuItem key={x.id} keepOpen icon={<LineIcon name="close" size={14} />} title={he ? "ביטול התזכורת" : "Cancel this timer"} end={when(x.due)} onSelect={() => cancel(x.id)} dir="auto">
+          {x.prompt.length > 70 ? `${x.prompt.slice(0, 70)}…` : x.prompt}
+        </MenuItem>
+      ))}
+    </Menu>
+  );
 }

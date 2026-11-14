@@ -1039,4 +1039,4 @@ Stopped at: custom actions, "ignore this app", and an Agent mode with tools (lat
      timers.json; checked with Routines' 30 s clock; when due and the chat is idle, the prompt goes in as a
      "⏰ Timer" message and the chat answers; at most 10 waiting per chat, 30 days ahead.
   3. A visible list: waiting timers in the chat header with Cancel (Open WebUI has none), and on the Routines page.
-Stopped at: building it (next, after the 0.6.202 memory check).
+Built (0.6.203): chat-timers.ts (set_timer, notify_user, timers.json, a 15 s clock), the clock button in the chat header with Cancel. Not yet: the Routines page list.
