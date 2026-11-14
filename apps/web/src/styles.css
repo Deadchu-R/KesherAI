@@ -1648,7 +1648,16 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .fs-toggle { align-self: flex-end; padding: 4px 10px; font-size: 13px; }
 .fs-box.fs-on { position: fixed; inset: 0; z-index: 900; background: var(--bg, #111); padding: max(8px, env(safe-area-inset-top)) 10px 10px; overflow: auto; }
 .fs-box.fs-on > :not(.fs-toggle) { flex: 1; min-height: 0; }
-.fs-box.fs-on .script-canvas { min-height: calc(100dvh - 70px); }
+.fs-box.fs-on .script-canvas { min-height: calc(100dvh - 70px); height: calc(100dvh - 70px); }
+/* The graph keeps its own height: the side panel filling after a click on a node must not stretch it (Roee: the view jumped). */
+.script-graph { align-items: start; }
+.script-canvas { height: clamp(420px, 72vh, 900px); }
+.script-side { max-height: clamp(420px, 72vh, 900px); overflow: auto; }
+.fs-box.fs-on .script-side { max-height: calc(100dvh - 70px); }
+@media (max-width: 760px) {
+  .script-canvas { height: 360px; }
+  .script-side { max-height: none; overflow: visible; }
+}
 .fs-box.fs-on .ue-canvas { height: calc(100dvh - 60px); }
 
 /* Variables panel (like Unreal's My Blueprint). */
