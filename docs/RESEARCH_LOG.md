@@ -890,3 +890,13 @@ the in-engine agents (Unreal/Unity, VISION) build on this sandbox.
   connect/disconnect/delete/drop-a-variable on pure nodes rewrite the step's value.
 Stopped at: typed pins (a type per member from the C# language server), splitting a pure node's output into
 several uses (Unreal keeps one node per use too), and Unreal's own pure nodes in Collapse to Function.
+
+## 2026-11-14: Resizing the Noctalia panel with the mouse (Roee's brother)
+- Noctalia v4 (Quickshell, legacy-v4 branch): SmartPanel.qml recomputes the panel on onContentPreferredWidthChanged /
+  HeightChanged, so a plugin panel can change its own size live. Built: corner grips (MouseArea, global pointer
+  deltas), saved in pluginSettings, double-click for the default (plugin 0.1.1).
+- Noctalia v5 (Luau, noctalia-docs declarative-ui.mdx): "Panel size is host-owned ... There is no setSize at runtime."
+  Pointer down/move/up exist only on ui.pixelStream (needs a companion socket). A [[layer]] entry (plugin_api 36) can
+  change width at runtime (noctalia.layer.configure), driven by a slider or buttons, not a drag.
+Stopped at: which Noctalia the brother runs; for v5 the options are a layer with a width slider, or asking Noctalia
+for resizable plugin panels.

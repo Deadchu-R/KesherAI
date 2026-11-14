@@ -8,3 +8,6 @@ and add the widget to the bar. It needs `curl` and KesherAI running on this comp
 address and its remote-access token in the widget's settings).
 
 Toggle the panel from a key binding: `qs ipc call plugin:kesherai toggle`.
+
+Resize the panel by dragging one of its bottom corners (the top corners when the bar is at the bottom); the size is
+kept. Double-click a corner for the default size.
