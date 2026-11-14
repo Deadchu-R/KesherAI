@@ -31,6 +31,8 @@ interface Status {
   active?: string;
   latestBridge: string;
   download: string;
+  /** Unreal: when a Blueprint last compiled in the editor. */
+  changedAt?: number;
 }
 interface BpItem { path: string; name: string; parent?: string; saved?: boolean }
 interface Blueprint { path: string; name: string; parent?: string; variables: BpVar[]; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
@@ -165,6 +167,15 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     if (path) loadBp(path);
     setChat([]);
   }, [path]);
+  // When the graph was last read (shown under the canvas), and an immediate read when the editor compiles.
+  const [readAt, setReadAt] = useState(0);
+  useEffect(() => {
+    if (bp) setReadAt(Date.now());
+  }, [bp]);
+  const changedAt = st?.changedAt ?? 0;
+  useEffect(() => {
+    if (changedAt && path && Date.now() - touched.current > 3000) loadBp(path);
+  }, [changedAt]);
   // Live sync: a change made in the editor itself (a node added in Unreal or Unity) shows here too.
   // Quiet reads every 10 seconds while connected; skipped right after a click or drag here, so nothing jumps under the mouse.
   const touched = useRef(0);
@@ -176,7 +187,10 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     const tm = setInterval(() => {
       if (document.hidden || Date.now() - touched.current < 8000) return;
       void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(path)}`).then(
-        (r) => setBp((was) => (was && was.graph.path === r.graph.path && JSON.stringify(was) !== JSON.stringify(r) ? r : was)),
+        (r) => {
+          setReadAt(Date.now());
+          setBp((was) => (was && was.graph.path === r.graph.path && JSON.stringify(was) !== JSON.stringify(r) ? r : was));
+        },
         () => undefined,
       );
     }, 10_000);
@@ -407,6 +421,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <div className="ue-graph-row">
                 <div className="ue-stage">
                   <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={st.connected && !bp.offline} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
+                  {st.connected && readAt > 0 && (
+                    <p className="muted small ue-read-at" title={unity ? L("נקרא שוב כל 10 שניות", "Read again every 10 seconds") : L("נקרא שוב כל 10 שניות, ומיד כש-Unreal מקמפל", "Read again every 10 seconds, and at once when Unreal compiles")}>
+                      {L("נקרא מהעורך ב-", "Read from the editor at ")}
+                      <bdi dir="ltr">{new Date(readAt).toLocaleTimeString()}</bdi>
+                    </p>
+                  )}
                   {!bubble && (
                     <button type="button" className="ue-ai-fab primary" onClick={() => setBubble(true)} aria-label={L("עריכה עם AI", "Edit with AI")} title={L("עריכה עם AI", "Edit with AI")}>✨</button>
                   )}

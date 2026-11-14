@@ -64,6 +64,10 @@ test("the editor connects, its Blueprints are kept, and work with Unreal closed 
     assert.equal((st.editor as { project: string }).project, "DoorGame");
     assert.equal((st.editor as { projectFile?: string }).projectFile, uproject);
     assert.match(String(st.download), /KesherAIBridge\.zip$/);
+    // A Blueprint compiled in the editor: the status says when, so the page reads the graph again at once.
+    assert.equal(st.changedAt, undefined);
+    ws.send(JSON.stringify({ event: "changed" }));
+    await until(async () => typeof (await get("/api/unreal")).changedAt === "number");
 
     const list = await get("/api/unreal/blueprints");
     assert.equal((list.blueprints as unknown[]).length, 1);

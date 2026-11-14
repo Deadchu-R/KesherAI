@@ -53,6 +53,8 @@ export interface BridgeStatus {
   /** Projects with Blueprints saved here (for working with Unreal closed). */
   projects: string[];
   queued: number;
+  /** When a Blueprint last compiled in the editor (ms since 1970). */
+  changedAt?: number;
 }
 
 const slug = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 80) || "project";
@@ -183,7 +185,11 @@ export class UnrealBridge {
       void this.afterConnect().catch(() => undefined);
       return;
     }
-    if (msg.event === "changed") return this.emit("changed");
+    if (msg.event === "changed") {
+      // A Blueprint compiled in the editor: the page reads its graph again at once (it sees the time in status).
+      this.changedAt = Date.now();
+      return this.emit("changed");
+    }
     const w = msg.id ? this.waiting.get(msg.id) : undefined;
     if (!w || !msg.id) return;
     this.waiting.delete(msg.id);
@@ -374,11 +380,14 @@ export class UnrealBridge {
     return { path, queued: true };
   }
 
+  /** When a Blueprint last compiled in the editor (ms), for the page to read the graph again. */
+  private changedAt = 0;
+
   /** @returns What the page shows. */
   async status(): Promise<BridgeStatus> {
     const { readdir } = await import("node:fs/promises");
     const projects = (await readdir(this.dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && !e.name.startsWith("_")).map((e) => e.name);
-    return { connected: this.connected, ...(this.info ? { editor: this.info } : {}), projects, queued: (await this.queue()).length };
+    return { connected: this.connected, ...(this.info ? { editor: this.info } : {}), projects, queued: (await this.queue()).length, ...(this.changedAt ? { changedAt: this.changedAt } : {}) };
   }
 }
 
