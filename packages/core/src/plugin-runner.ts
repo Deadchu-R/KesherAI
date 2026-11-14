@@ -72,6 +72,18 @@ if (!allowed.has("network")) {
 if (!allowed.has("shell")) {
   refuse({ child_process: ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"], worker_threads: ["Worker"], cluster: ["fork"] }, "shell");
 }
+// Node's raw bindings (tcp_wrap, spawn_sync, ...) reach the network and child processes without the modules above.
+if (!allowed.has("network") || !allowed.has("shell")) {
+  for (const k of ["binding", "_linkedBinding"]) {
+    Object.defineProperty(process, k, {
+      value: () => {
+        throw new Error(`The plugin ${env.id} cannot use Node's internal bindings.`);
+      },
+      writable: false,
+      configurable: false,
+    });
+  }
+}
 syncBuiltinESMExports();
 
 // Calls from KesherAI: each has an id; a cancel aborts it.

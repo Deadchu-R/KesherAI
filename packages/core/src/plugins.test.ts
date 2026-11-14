@@ -53,6 +53,7 @@ export default {
     ctx.registerTool({ name: "boxed_fetch", description: "fetch", inputSchema: { type: "object" }, run: async () => fetch("https://example.com") });
     ctx.registerTool({ name: "boxed_net", description: "net", inputSchema: { type: "object" }, run: async () => net.connect(80, "example.com") });
     ctx.registerTool({ name: "boxed_shell", description: "shell", inputSchema: { type: "object" }, run: async () => (await import("node:child_process")).execSync("echo hi") });
+    ctx.registerTool({ name: "boxed_binding", description: "binding", inputSchema: { type: "object" }, run: async () => process.binding("tcp_wrap") });
     ctx.registerProviderFactory({ type: "boxed-echo", displayName: "Echo", categories: ["chat"], create: (config) => ({
       id: config.id, name: config.name, location: "local", capabilities: {},
       checkHealth: async () => true,
@@ -75,6 +76,7 @@ export default {
   await assert.rejects(host.tools.get("boxed_fetch")!.run({}, signal), /did not ask for the "network" permission/);
   await assert.rejects(host.tools.get("boxed_net")!.run({}, signal), /did not ask for the "network" permission/);
   await assert.rejects(host.tools.get("boxed_shell")!.run({}, signal), /did not ask for the "shell" permission/);
+  await assert.rejects(host.tools.get("boxed_binding")!.run({}, signal), /internal bindings/);
   // A provider whose stream crosses the processes.
   const factory = (registry as unknown as { factories: Map<string, { create(c: unknown): { chat(r: unknown): AsyncIterable<{ text: string }>; listModels(): Promise<unknown[]> } }> }).factories.get("boxed-echo")!;
   const provider = factory.create({ id: "e", type: "boxed-echo", name: "E" });

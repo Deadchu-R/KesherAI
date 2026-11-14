@@ -315,3 +315,13 @@ This review went through the code part by part. Each finding is listed with what
 - **Chat accessibility:** the history is `role="log"` with `aria-live="off"` and a separate polite status line; no user text goes into the status line (fixed phrases only).
 - **Performance:** the live region on the whole history made assistive technology re-process the answer on every token; that is gone. Nothing else changed at run time.
 - **Noted for later (docs/DESIGN_RESEARCH.md §7):** plugins still run inside the server's process with full access; permissions are declared, not enforced. It is the top item on the list (t39).
+
+## Scan 60 (2026-11-14, after 0.6.181–0.6.183 and the pure nodes)
+- Plugins in their own process (t39): a plugin without "network"/"shell" could reach Node's raw bindings
+  (process.binding("tcp_wrap"), "spawn_sync") around the refused modules. Fixed: process.binding and
+  _linkedBinding refuse; tested.
+- The file sandbox kept the installed app's plugins from starting (the runner is inside app.asar, read as one file):
+  the archive is now readable, and the fallback (own process without Node's file sandbox) looks at the whole error.
+- Pure nodes: values are read from the user's own script and written back into it; no new input from outside.
+  Parsing is linear in the value's length.
+- GPU cleanup (0.6.181/182): only orphaned engines of KesherAI's own (llama/sd/whisper-server, parent gone) are closed.

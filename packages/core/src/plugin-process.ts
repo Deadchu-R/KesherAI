@@ -70,6 +70,8 @@ export class PluginProcess {
   private handles = 0;
   /** Whether files outside its folders are closed to it (Node's permission model was on). */
   sandboxedFiles = false;
+  /** What the process wrote to its error output while starting (the end of it). */
+  private errText = "";
 
   /** @param o - The plugin: its folders, main file, settings, declared permissions, and where its output goes. */
   constructor(
@@ -87,7 +89,7 @@ export class PluginProcess {
     } catch (err) {
       // The permission model refused something the runner itself needs (seen with files inside the app's archive):
       // start again in its own process, with the runner's own guards only, and say so.
-      if (!this.sandboxedFiles || !/ERR_ACCESS_DENIED|Access to this API has been restricted|permission/i.test((err as Error).message)) throw err;
+      if (!this.sandboxedFiles || !/ERR_ACCESS_DENIED|Access to this API has been restricted|permission/i.test(`${(err as Error).message} ${this.errText}`)) throw err;
       this.o.log("warn", `Node's file sandbox could not start this plugin (${(err as Error).message.slice(0, 200)}); it runs in its own process without it.`);
       this.sandboxedFiles = false;
       return this.startOnce(timeoutMs, false);
@@ -99,8 +101,11 @@ export class PluginProcess {
     const flags: string[] = [];
     if (sandbox && !r.ts && (await permissionModelWorks())) {
       const all = this.o.permissions.includes("filesystem");
-      // The runner's own folder (inside the app) must be readable to start.
-      flags.push("--experimental-permission", `--allow-fs-read=${all ? "*" : [resolve(this.o.dir), resolve(this.o.dataDir), resolve(here, "..", "..")].join(",")}`, `--allow-fs-write=${all ? "*" : resolve(this.o.dataDir)}`);
+      // The runner's own folder (inside the app) must be readable to start; inside the installed app that folder is
+      // in an archive (app.asar), which Node reads as one file (found on the PC: the plugin could not start).
+      const own = resolve(here, "..", "..");
+      const archive = /^(.*?\.asar)(?=[\\/]|$)/.exec(own)?.[1];
+      flags.push("--experimental-permission", `--allow-fs-read=${all ? "*" : [resolve(this.o.dir), resolve(this.o.dataDir), own, ...(archive ? [archive] : [])].join(",")}`, `--allow-fs-write=${all ? "*" : resolve(this.o.dataDir)}`);
       if (this.o.permissions.includes("shell")) flags.push("--allow-child-process", "--allow-worker");
       this.sandboxedFiles = !all;
     }
@@ -110,8 +115,10 @@ export class PluginProcess {
     this.proc = proc;
     proc.stdout?.on("data", (d: Buffer) => this.o.log("info", d.toString().trimEnd()));
     let errText = "";
+    this.errText = "";
     proc.stderr?.on("data", (d: Buffer) => {
-      errText = (errText + d.toString()).slice(-2000);
+      errText = (errText + d.toString()).slice(-4000);
+      this.errText = errText;
       this.o.log("warn", d.toString().trimEnd());
     });
 
@@ -125,7 +132,10 @@ export class PluginProcess {
         clearTimeout(timer);
         for (const c of this.calls.values()) c.fail(new Error(`The plugin's process ended (${code ?? "killed"}).`));
         this.calls.clear();
-        fail(new Error(`The plugin's process ended while starting (${code ?? "killed"}). ${errText.split("\n").filter(Boolean).slice(-3).join(" ")}`.trim()));
+        // The lines that say what went wrong (Node ends with its stack and version, which say nothing).
+        const lines = errText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const why = lines.filter((l) => /Error|code:|denied|resource:|Cannot/i.test(l) && !/^at /.test(l)).slice(0, 3);
+        fail(new Error(`The plugin's process ended while starting (${code ?? "killed"}). ${(why.length ? why : lines.slice(-3)).join(" ")}`.trim()));
       });
       proc.on("error", (e) => {
         clearTimeout(timer);
