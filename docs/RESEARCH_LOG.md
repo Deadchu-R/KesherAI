@@ -1063,3 +1063,14 @@ Stopped at: Smart cleanup with the chat model, vocabulary and voice-command snip
   Qwen3.8-Flash-Next UD-IQ3_XXS 63.8 GB vs 38.7–39.1 GB; DeepSeek V4 Flash UD-IQ3_XXS 83.3 GB vs 38.7 GB (of 93.5).
   Flash-Next is realistic with Qwen unloaded and Unreal closed; DeepSeek only with almost everything closed.
   Not loaded tonight (it would page from the disk with Roee away). Next: Flash-Next's load and speed with Unreal closed.
+
+## 2026-11-15 (night): Office files in the chat (COMPETITORS fourth review, item 3)
+- LM Studio Bionic 1.1.8–1.1.9: previews of Word, spreadsheet, presentation, HTML, CSV and TSV files in the chat (and a
+  draggable Canvas). Claude and ChatGPT: an attached file is a chip; the model reads xlsx/pptx/docx.
+- Found in KesherAI: attachments (attachments.ts) read PDF, Word and text files for the model, but not Excel or
+  PowerPoint (only the path reached the model); the user's bubble shows the raw "[Attached: …]" line.
+- Plan, no new dependencies: (1) a small zip reader on Node's zlib (size limits against zip bombs) and readers for
+  .xlsx (shared strings, sheets as tab-separated rows, capped) and .pptx (each slide's text), used by attachments and
+  read_document; (2) attachment chips in the bubble that open a preview: table (xlsx/csv/tsv), slides (pptx), Word as a
+  page (mammoth's HTML in a sandboxed frame), HTML in a sandboxed frame without scripts, pictures, PDF.
+Stopped at: building step 1.

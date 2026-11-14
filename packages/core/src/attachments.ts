@@ -13,7 +13,7 @@ import { documentText, formatPages } from "@kesher/agent";
 
 const LINE = /\[(?:Attached|קובץ מצורף|מצורף)\s*:\s*([^\]\n]+)\]/gi;
 const PICTURES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
-const DOCUMENTS = new Set([".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".log", ".xml", ".html", ".htm", ".yaml", ".yml", ".ini", ".cfg", ".toml"]);
+const DOCUMENTS = new Set([".pdf", ".docx", ".xlsx", ".pptx", ".tsv", ".txt", ".md", ".csv", ".json", ".log", ".xml", ".html", ".htm", ".yaml", ".yml", ".ini", ".cfg", ".toml"]);
 const MAX_PICTURES = 4;
 const MAX_PICTURE_BYTES = 8 * 1024 * 1024;
 const DOC_BUDGET = 24_000;

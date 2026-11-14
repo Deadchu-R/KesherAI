@@ -12,7 +12,7 @@ import { resolveForTool } from "./workspace.js";
 export interface DocumentText {
   name: string;
   pages: string[];
-  kind: "pdf" | "docx" | "text";
+  kind: "pdf" | "docx" | "xlsx" | "pptx" | "text";
 }
 
 /**
@@ -34,6 +34,15 @@ export async function documentText(data: Uint8Array, name: string): Promise<Docu
     const mammoth = await import("mammoth");
     const { value } = await mammoth.extractRawText({ buffer: Buffer.from(data) });
     return { name, kind: "docx", pages: chunk(value.replace(/\n{3,}/g, "\n\n").trim(), 3000) };
+  }
+  if (ext === ".xlsx") {
+    // One part per sheet (cut into parts when long).
+    const { xlsxSheets, sheetText } = await import("./office.js");
+    return { name, kind: "xlsx", pages: xlsxSheets(data).flatMap((sh) => chunk(sheetText(sh), 6000)) };
+  }
+  if (ext === ".pptx") {
+    const { pptxSlides } = await import("./office.js");
+    return { name, kind: "pptx", pages: pptxSlides(data).map((t, i) => `Slide ${i + 1}\n${t}`) };
   }
   return { name, kind: "text", pages: chunk(Buffer.from(data).toString("utf8"), 3000) };
 }
@@ -64,7 +73,7 @@ function chunk(text: string, size: number): string[] {
  * @returns The text, and the last page included.
  */
 export function formatPages(doc: DocumentText, from = 1, to = doc.pages.length, budget = 40_000): { text: string; last: number } {
-  const label = doc.kind === "pdf" ? "page" : "part";
+  const label = doc.kind === "pdf" ? "page" : doc.kind === "pptx" ? "slide" : "part";
   const parts: string[] = [];
   let used = 0;
   let last = from - 1;
@@ -85,7 +94,7 @@ export const readDocumentTool: AgentTool = {
   spec: {
     name: "read_document",
     description:
-      "Read a PDF or Word (.docx) document by page. Answer from it and cite where each fact came from, like (report.pdf, p. 4). Long documents come in parts: pass `from_page` to read on, or `query` to get only the pages that mention some words.",
+      "Read a PDF, Word (.docx), Excel (.xlsx) or PowerPoint (.pptx) document by page (sheets and slides are parts). Answer from it and cite where each fact came from, like (report.pdf, p. 4). Long documents come in parts: pass `from_page` to read on, or `query` to get only the pages that mention some words.",
     inputSchema: {
       type: "object",
       properties: {
