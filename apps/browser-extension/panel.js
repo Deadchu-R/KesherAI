@@ -14,6 +14,12 @@ if (he) {
 }
 document.getElementById("home").onclick = () => (frame.src = `${origin}/#/`);
 document.getElementById("ask").onclick = async () => {
+  // Firefox: the page's site must be allowed (asked from this click).
+  try {
+    if (chrome.permissions?.request) await chrome.permissions.request({ origins: ["<all_urls>"] });
+  } catch {
+    // already allowed
+  }
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id || !/^https?:/.test(tab.url || "")) return;
   const [res] = await chrome.scripting.executeScript({

@@ -124,13 +124,22 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
   });
 
   /** Image models that run in the built-in engine, with whether each is downloaded. */
+  // Never empty because one check failed (found on Linux with an AMD card: the list did not show at all): each
+  // part falls back, and what failed goes to the fault log.
   app.get("/api/models/recommended-images", async () => {
-    const hw = await detectHardwareCached();
+    const hw = await detectHardwareCached().catch((err: Error) => {
+      s.faults.add({ kind: "other", where: "recommended image models: hardware", message: err.message });
+      return { gpus: [] as Array<{ vramTotal: number }> };
+    });
+    const vramGb = Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3));
     return Promise.all(
       RECOMMENDED_IMAGE_MODELS.map(async (m) => {
         const dest = join(s.paths.models, "image", m.repo, m.file);
-        const req = await s.sd.requirements(m.file);
-        return { ...m, downloaded: existsSync(dest), extras: req.extras, engineInstalled: req.engineInstalled, vramGb: Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3)) };
+        const req = await s.sd.requirements(m.file).catch((err: Error) => {
+          s.faults.add({ kind: "other", where: "recommended image models: engine", message: err.message });
+          return { extras: [] as Array<{ name: string; repo: string; sizeGb: number; have: boolean }>, engineInstalled: false };
+        });
+        return { ...m, downloaded: existsSync(dest), extras: req.extras, engineInstalled: req.engineInstalled, vramGb };
       }),
     );
   });

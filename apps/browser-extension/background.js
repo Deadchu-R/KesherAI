@@ -25,7 +25,7 @@ async function connect() {
   if (!enabled || !key) return setState("off");
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   setState("connecting");
-  const browser = /Edg\//.test(navigator.userAgent) ? "Edge" : /Brave/.test(navigator.userAgent) ? "Brave" : "Chrome";
+  const browser = /Firefox\//.test(navigator.userAgent) ? "Firefox" : /Edg\//.test(navigator.userAgent) ? "Edge" : /Brave/.test(navigator.userAgent) ? "Brave" : "Chrome";
   const sock = new WebSocket(`ws://127.0.0.1:${port}/api/browser/connect?key=${encodeURIComponent(key)}&browser=${browser}&version=${chrome.runtime.getManifest().version}`);
   ws = sock;
   sock.onmessage = async (e) => {
@@ -81,7 +81,11 @@ function waitLoaded(tabId, ms = 20000) {
 }
 
 async function inPage(tabId, func, args = []) {
-  const [r] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
+  // Firefox gives an extension its sites only when the person allows them (not at install): say so plainly.
+  const [r] = await chrome.scripting.executeScript({ target: { tabId }, func, args }).catch((err) => {
+    if (/permission|host/i.test(String(err?.message))) throw new Error("The browser has not allowed KesherAI on this site. In Firefox: click KesherAI's button and press Connect (it asks to allow all sites), or Extensions → KesherAI → Permissions → allow all sites.");
+    throw err;
+  });
   // Errors inside the page come back as { error } (the browser does not pass thrown errors on).
   const out = r?.result;
   if (out && typeof out === "object" && "error" in out && Object.keys(out).length === 1) throw new Error(String(out.error));

@@ -14,6 +14,12 @@ function show(state) {
 chrome.storage.local.get({ key: "", port: 7420 }).then((s) => { $("key").value = s.key; $("port").value = s.port; });
 chrome.runtime.sendMessage("state").then((r) => show(r?.state));
 $("save").onclick = async () => {
+  // Firefox gives an extension its sites only when asked (from this click); Chrome already has them.
+  try {
+    if (chrome.permissions?.request) await chrome.permissions.request({ origins: ["<all_urls>"] });
+  } catch {
+    // already allowed, or the browser has no such question
+  }
   await chrome.storage.local.set({ key: $("key").value.trim(), port: Number($("port").value) || 7420, enabled: true });
   show("connecting");
   setTimeout(() => chrome.runtime.sendMessage("state").then((r) => show(r?.state)), 1500);
@@ -23,5 +29,7 @@ $("save").onclick = async () => {
 $("panel").onclick = async () => {
   const w = await chrome.windows.getCurrent();
   if (chrome.sidePanel?.open) await chrome.sidePanel.open({ windowId: w.id });
+  // Firefox: its sidebar.
+  else if (globalThis.browser?.sidebarAction?.open) await globalThis.browser.sidebarAction.open();
   window.close();
 };

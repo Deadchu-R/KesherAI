@@ -460,7 +460,7 @@ function ImageStartHere() {
   const downloads = useDownloads();
   const done = downloads.filter((j) => j.status === "done").length;
   useEffect(() => {
-    void api<RecImage[]>("/api/models/recommended-images").then(setList).catch(() => undefined);
+    void api<RecImage[]>("/api/models/recommended-images").then(setList).catch((e: Error) => toast(e.message));
     void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setActive(s.activeModels.image ?? "")).catch(() => undefined);
   }, [done]);
   const idOf = (m: RecImage) => `sdcpp/${m.repo}/${m.file}`;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KesherAI",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "KesherAI in your browser: a side panel to chat with your local AI and ask about the page you are on, and the browser for tasks you ask KesherAI to do, where you are already signed in.",
   "permissions": [
     "tabs",
@@ -15,7 +15,11 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": [
+      "page.js",
+      "background.js"
+    ]
   },
   "action": {
     "default_popup": "popup.html",
@@ -32,6 +36,17 @@
       "suggested_key": {
         "default": "Alt+K"
       }
+    }
+  },
+  "sidebar_action": {
+    "default_panel": "panel.html",
+    "default_title": "KesherAI",
+    "default_icon": "icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "kesherai@kesherai.app",
+      "strict_min_version": "128.0"
     }
   }
 }
