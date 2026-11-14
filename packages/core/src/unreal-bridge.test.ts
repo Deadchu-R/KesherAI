@@ -68,6 +68,7 @@ test("the editor connects, its Blueprints are kept, and work with Unreal closed 
     assert.equal(st.changedAt, undefined);
     ws.send(JSON.stringify({ event: "changed" }));
     await until(async () => typeof (await get("/api/unreal")).changedAt === "number");
+    assert.ok(Number((await get("/api/unreal/changed")).changedAt) > 0, "the page's cheap check sees the compile");
 
     const list = await get("/api/unreal/blueprints");
     assert.equal((list.blueprints as unknown[]).length, 1);

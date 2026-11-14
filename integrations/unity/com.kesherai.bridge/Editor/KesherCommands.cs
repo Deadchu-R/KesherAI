@@ -14,12 +14,15 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.4";
+        const string Version = "0.2.5";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 
         [CliCommand("kesher_hello", "KesherAI Bridge: its version")]
         static string Hello() => Out(new Dictionary<string, object> { ["bridge"] = Version, ["project"] = UnityEngine.Application.productName, ["engine"] = UnityEngine.Application.unityVersion });
+
+        [CliCommand("kesher_changed", "KesherAI Bridge: when something last changed in the editor (ms since 1970)")]
+        static string Changed() => Out(new Dictionary<string, object> { ["changedAt"] = KesherChanges.ChangedAt });
 
         [CliCommand("kesher_list", "KesherAI Bridge: every Visual Scripting graph (assets, prefabs, open scenes)")]
         static string List() => Out(KesherGraph.List());

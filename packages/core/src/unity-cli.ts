@@ -337,6 +337,22 @@ export class UnityCli {
     return value;
   }
 
+  /**
+   * When something last changed in the open editor (package 0.2.5), for the page's live view. Never starts a
+   * batch Unity: with the editor closed, or an older package, 0.
+   */
+  async changedAt(): Promise<number> {
+    const path = this.path;
+    if (!path || !(await this.editorReady())) return 0;
+    const run = await this.run(["command", "kesher_changed", "--project-path", path, "--result-only", "--timeout", "8"], 12_000);
+    if (run.code !== 0) return 0;
+    try {
+      return Number((readResult(run.stdout) as { changedAt?: number }).changedAt) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
   /** @returns The project's graphs. */
   async list(): Promise<{ blueprints: Array<{ path: string; name: string; parent?: string }>; offline: boolean; project?: string }> {
     const project = await this.project();

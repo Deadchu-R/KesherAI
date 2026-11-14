@@ -74,7 +74,10 @@ supports nothing. I want both to support everything the engines can do, synced w
 - ✅ 0.6.134: the page reads the open graph again every 10 s while the editor is connected (changes made in the
   editor show up), skipped right after a click or key on the page.
 - ✅ 0.6.143: the bridge's "changed" event (on compile) makes the page read the graph at once; the page says when it last
-  read the graph from the editor. Unity still relies on the 10 s reads (its package has no change event yet).
+  read the graph from the editor.
+- ✅ 0.6.144 (Unity package 0.2.5): kesher_changed (any edit, undo/redo or saved asset); the page asks every 5 s and reads
+  the graph only when it changed (Unreal: its compile time). Never starts a batch Unity for it. State Graphs were already
+  read and edited by the package (states, transitions).
 - **Unreal:** the bridge connects by itself when the editor starts. Add: the page refreshes its Blueprint list and
   the open graph the moment the editor connects (today only on reload); queued changes made while the editor
   was closed are applied and shown one by one; the canvas reloads when the Blueprint changes in the editor

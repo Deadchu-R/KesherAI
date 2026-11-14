@@ -172,20 +172,19 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   useEffect(() => {
     if (bp) setReadAt(Date.now());
   }, [bp]);
-  const changedAt = st?.changedAt ?? 0;
-  useEffect(() => {
-    if (changedAt && path && Date.now() - touched.current > 3000) loadBp(path);
-  }, [changedAt]);
   // Live sync: a change made in the editor itself (a node added in Unreal or Unity) shows here too.
-  // Quiet reads every 10 seconds while connected; skipped right after a click or drag here, so nothing jumps under the mouse.
+  // Every 5 seconds the page asks when the editor last changed (Unity package 0.2.5: any edit or save; Unreal:
+  // a compile) and reads the graph only then; with an older Unity package, the whole graph every 10 seconds.
+  // Skipped right after a click or key here, so nothing jumps under the mouse.
   const touched = useRef(0);
   useEffect(() => {
     if (!connected || !path) return;
     const mark = () => { touched.current = Date.now(); };
     addEventListener("pointerdown", mark, true);
     addEventListener("keydown", mark, true);
-    const tm = setInterval(() => {
-      if (document.hidden || Date.now() - touched.current < 8000) return;
+    let last = 0;
+    let tick = 0;
+    const read = () =>
       void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(path)}`).then(
         (r) => {
           setReadAt(Date.now());
@@ -193,7 +192,20 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         },
         () => undefined,
       );
-    }, 10_000);
+    const tm = setInterval(() => {
+      tick++;
+      if (document.hidden || Date.now() - touched.current < 6000) return;
+      void api<{ changedAt: number }>(`${base}/changed`).then(
+        ({ changedAt }) => {
+          if (changedAt) {
+            if (last && changedAt !== last) read();
+            else setReadAt(Date.now());
+            last = changedAt;
+          } else if (tick % 2 === 0) read();
+        },
+        () => undefined,
+      );
+    }, 5000);
     return () => {
       clearInterval(tm);
       removeEventListener("pointerdown", mark, true);
@@ -422,7 +434,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <div className="ue-stage">
                   <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={st.connected && !bp.offline} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
                   {st.connected && readAt > 0 && (
-                    <p className="muted small ue-read-at" title={unity ? L("נקרא שוב כל 10 שניות", "Read again every 10 seconds") : L("נקרא שוב כל 10 שניות, ומיד כש-Unreal מקמפל", "Read again every 10 seconds, and at once when Unreal compiles")}>
+                    <p className="muted small ue-read-at" title={unity ? L("נבדק כל 5 שניות, ונקרא שוב כשמשהו משתנה ביוניטי", "Checked every 5 seconds, and read again when something changes in Unity") : L("נבדק כל 5 שניות, ונקרא שוב כש-Unreal מקמפל", "Checked every 5 seconds, and read again when Unreal compiles")}>
                       {L("נקרא מהעורך ב-", "Read from the editor at ")}
                       <bdi dir="ltr">{new Date(readAt).toLocaleTimeString()}</bdi>
                     </p>

@@ -31,8 +31,13 @@ test("Unity through its CLI: warm in the open editor, a batch run when it is clo
   assert.equal(list.blueprints[0]!.name, "Door");
   assert.ok(calls.some((c) => c[0] === "command" && c[1] === "kesher_list" && c.includes("--result-only")));
   assert.equal((await u.status()).connected, true);
+  // The live view's cheap check: only the open editor, and 0 from an older package (it answers no number).
+  assert.equal(await u.changedAt(), 0);
   ready = false;
   await new Promise((r) => setTimeout(r, 4100));
+  const runs = calls.filter((c) => c[0] === "run").length;
+  assert.equal(await u.changedAt(), 0, "a closed editor: 0");
+  assert.equal(calls.filter((c) => c[0] === "run").length, runs, "and no batch Unity started for it");
   const g = await u.graph(G.path);
   assert.equal(g.graph.name, "Door");
   assert.ok(calls.some((c) => c[0] === "run" && c[2] === "--command" && c[3] === "kesher_graph" && c.includes("--path")));

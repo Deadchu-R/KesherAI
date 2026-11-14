@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
+import type { UnityCli } from "../unity-cli.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
 import { modelTurnFor } from "../conversations.js";
@@ -40,7 +41,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.4";
+export const UNITY_PACKAGE_VERSION = "0.2.5";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -205,6 +206,17 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       }
     });
   }
+
+  /**
+   * When something last changed in the editor (ms), for the page to read the open graph only then.
+   * Unity: the package's kesher_changed (any edit, undo or saved asset; package 0.2.5). Unreal: the last compile.
+   * Older Unity packages answer 0 (the page then reads the graph every 10 seconds as before).
+   */
+  app.get(`${base}/changed`, async () => {
+    if (kind === "unreal") return { changedAt: ((await b.status()) as { changedAt?: number }).changedAt ?? 0 };
+    // Only the open editor is asked (a closed Unity is never started for this).
+    return { changedAt: await (b as UnityCli).changedAt() };
+  });
 
   /** Applies operations as given (for "Apply again" and plugins). */
   app.post<{ Body: { path?: string; graph?: string; ops?: unknown[] } }>(`${base}/apply`, async (req, reply) => {
