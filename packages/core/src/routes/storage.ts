@@ -50,12 +50,14 @@ export async function storageRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (!input) return next();
     const name = basename(input);
     compress.running = { id, name, percent: 0 };
-    const output = join(dirname(input), `${basename(input, extname(input))}.compressed.mp4`);
+    // A new name when that one is taken: a file of the person's is never written over.
+    let output = join(dirname(input), `${basename(input, extname(input))}.compressed.mp4`);
+    for (let i = 2; await stat(output).then(() => true, () => false); i++) output = join(dirname(input), `${basename(input, extname(input))}.compressed-${i}.mp4`);
     try {
       const ffmpeg = await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads });
       const before = (await stat(input)).size;
       await new Promise<void>((done, fail) => {
-        const p = spawn(ffmpeg, ["-hide_banner", "-y", "-i", input, "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx265", "-crf", "28", "-preset", "fast", "-tag:v", "hvc1", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output], { windowsHide: true });
+        const p = spawn(ffmpeg, ["-hide_banner", "-n", "-i", input, "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx265", "-crf", "28", "-preset", "fast", "-tag:v", "hvc1", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output], { windowsHide: true });
         let total = 0;
         let tail = "";
         p.stderr.on("data", (d: Buffer) => {

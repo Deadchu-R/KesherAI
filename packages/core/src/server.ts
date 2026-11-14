@@ -625,12 +625,23 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Look for the CLI now, so the first chat already has the Unity tools.
   unityCli.cliKnown();
   const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));
+  const editorOpenOn = async (uproject: string): Promise<boolean> => {
+    const name = uproject.split(/[\\/]/).pop()!.toLowerCase();
+    const r =
+      process.platform === "win32"
+        ? await runProgram("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='UnrealEditor.exe'\" | ForEach-Object { $_.CommandLine }"], { timeoutMs: 15_000 }).catch(() => ({ code: 1, out: "" }))
+        : await runProgram("ps", ["-eo", "args"], { timeoutMs: 10_000 }).catch(() => ({ code: 1, out: "" }));
+    return r.out.split(/\r?\n/).some((l) => /UnrealEditor(?!-Cmd)/i.test(l) && l.toLowerCase().includes(name));
+  };
   // With Unreal closed, graph commands run in a headless editor (the plugin's KesherBridge commandlet).
   unrealBridge.setHeadless(async (projectFile, commands) => {
     const p = await readProject(projectFile);
     const e = engineFor(await findEngines(), p.engine);
     if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
     const win = process.platform === "win32";
+    // Unreal open on this project without the plugin connected: a second editor saving the same assets could lose
+    // work, so the change waits for the plugin instead.
+    if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
     const cmd = join(e.path, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux", win ? "UnrealEditor-Cmd.exe" : "UnrealEditor-Cmd");
     const dir = join(p.dir, "Saved", "KesherAI");
     await mkdir(dir, { recursive: true });
