@@ -480,10 +480,16 @@ function setupTray(coreUrl: string): void {
   tray.setToolTip(branding.productName);
   const base = coreUrl.replace(/\/$/, "");
   let status = "";
+  // Always visible on this computer (whoever uses it should know): "My day" recording, and the phone in control.
+  let recording = false;
+  let phoneInControl = false;
+  const post = (path: string, body?: unknown) => void fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) }).catch(() => undefined);
   const menu = () =>
     Menu.buildFromTemplate([
       { label: `Open ${branding.productName}`, click: showWindow },
       ...(status ? [{ label: status, enabled: false }] : []),
+      ...(recording ? [{ label: "● My day is recording the screen", enabled: false }, { label: "Pause My day for an hour", click: () => post("/api/journal/pause", { minutes: 60 }) }] : []),
+      ...(phoneInControl ? [{ label: "📱 Your phone is controlling this computer", enabled: false }, { label: "Disconnect the phone", click: () => post("/api/remote-desktop/end") }] : []),
       ...(readyInstaller ? [{ label: `Restart and update${readyInstaller.version ? ` to v${readyInstaller.version}` : ""}`, click: () => void runInstaller(readyInstaller!.file) }] : []),
       { type: "separator" },
       { label: "Quit (stops chats and downloads)", click: () => { quitting = true; app.quit(); } },
@@ -523,9 +529,17 @@ function setupTray(coreUrl: string): void {
       }
       running = activity;
       downloading = active;
+      const [day, rd] = await Promise.all([
+        fetch(`${base}/api/journal`).then((r) => (r.ok ? (r.json() as Promise<{ settings: { enabled: boolean; pausedUntil?: number } }>) : null)).catch(() => null),
+        fetch(`${base}/api/remote-desktop`).then((r) => (r.ok ? (r.json() as Promise<{ active: boolean }>) : null)).catch(() => null),
+      ]);
+      recording = !!day?.settings.enabled && !(day.settings.pausedUntil && day.settings.pausedUntil > Date.now());
+      const nowControl = !!rd?.active;
+      if (nowControl && !phoneInControl && Notification.isSupported()) new Notification({ title: branding.productName, body: "Your phone is now controlling this computer. Disconnect from the tray icon." }).show();
+      phoneInControl = nowControl;
       const n = Object.keys(activity).length;
       status = [n ? `${n} chat${n > 1 ? "s" : ""} working` : "", active.size ? `${active.size} download${active.size > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
-      tray?.setToolTip(status ? `${branding.productName}: ${status}` : branding.productName);
+      tray?.setToolTip([branding.productName, status, recording ? "● recording My day" : "", phoneInControl ? "📱 phone in control" : ""].filter(Boolean).join(" · "));
       tray?.setContextMenu(menu());
     } catch {
       // the core is restarting; try again next time
