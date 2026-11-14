@@ -2249,3 +2249,28 @@ html.handheld { font-size: 17px; }
 html.handheld button, html.handheld .button, html.handheld select, html.handheld input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 44px; }
 html.handheld .sidebar a { min-height: 44px; display: flex; align-items: center; }
 html.handheld input[type="checkbox"], html.handheld input[type="radio"] { width: 22px; height: 22px; }
+/* Console look (Roee: bigger buttons, and clear which controller button does what). */
+html.pad .pad-hints { font-size: 16px; padding-block: 10px; gap: 6px 26px; }
+html.pad .pad-btn { min-width: 30px; height: 30px; border-radius: 15px; font-size: 15px; }
+html.pad .main { padding-bottom: 60px; }
+html.pad [data-pad] { position: relative; }
+html.pad [data-pad]::after { content: attr(data-pad); position: absolute; top: -6px; inset-inline-end: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; font: 700 11px/18px system-ui, sans-serif; text-align: center; color: #fff; background: #4b4f58; pointer-events: none; }
+html.pad [data-pad="Y"]::after { background: #c9a227; color: #1b1b1b; }
+html.pad [data-pad="B"]::after { background: #c8402f; }
+.pad-focus-badge { position: fixed; z-index: 70; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 2px; border-radius: 16px; background: var(--bg); border: 1px solid var(--border-strong, var(--border)); font-size: 13px; font-weight: 600; pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); }
+.pad-focus-badge .pad-btn { min-width: 24px; height: 24px; font-size: 13px; }
+html.handheld { font-size: 18px; }
+html.handheld button, html.handheld .button, html.handheld select, html.handheld input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 52px; padding-inline: 16px; }
+html.handheld .bar-btn { min-width: 52px; }
+html.handheld .sidebar a { min-height: 52px; font-size: 17px; }
+html.handheld .palette-list button { min-height: 52px; font-size: 17px; }
+/* The Game Helper's window over a game (pages/GameHelper.tsx). */
+.game-helper { display: flex; flex-direction: column; height: 100vh; gap: 10px; padding: 12px; background: var(--bg); }
+.game-head { align-items: center; gap: 8px; }
+.game-title { font-size: 18px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-close { min-width: 44px; min-height: 44px; font-size: 18px; }
+.game-shot { width: 100%; max-height: 22vh; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.game-asks { display: grid; gap: 8px; }
+.game-ask { display: flex; align-items: center; gap: 10px; min-height: 52px; font-size: 16px; text-align: start; }
+.game-ask .pad-btn { min-width: 30px; height: 30px; border-radius: 15px; font-size: 14px; }
+.game-chat { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }

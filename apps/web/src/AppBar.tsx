@@ -112,10 +112,10 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {(appHome() || isRemote()) && <MenuItem icon="⏏" danger onSelect={() => { if (confirm(t("disconnectSure"))) disconnectComputer(); }}>{t("disconnectComputer")}</MenuItem>}
         </Menu>
         <PhoneSettings onLocale={onLocale} />
-        <button type="button" data-slide-menu className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={() => { setMenu(false); onSidebar(); }}>
+        <button type="button" data-slide-menu data-pad="≡" className="bar-btn" aria-label={t("toggleSidebar")} aria-pressed={sidebarOpen} title={t("toggleSidebar")} onClick={() => { setMenu(false); onSidebar(); }}>
           {Icon.sidebar}
         </button>
-        <button type="button" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
+        <button type="button" data-pad="B" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
         <button type="button" className="bar-btn hist" aria-label={t("forward")} title={t("forward")} onClick={() => history.forward()}>{Icon.forward}</button>
         <div className="bar-seg" role="group" aria-label={t("chatOrCode")}>
           <a href="#/" className={!inCode ? "on" : ""} aria-label={t("newChat")} title={t("newChat")}>{Icon.chat}</a>
@@ -129,7 +129,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {/* Pages render their own title here with a portal; React leaves this element's children to them. */}
           <div id="appbar-title" className="appbar-slot" />
         </div>
-        <button type="button" className="bar-btn palette-btn" aria-label={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} title={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} onClick={openPalette}>
+        <button type="button" data-pad="Y" className="bar-btn palette-btn" aria-label={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} title={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} onClick={openPalette}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.8" stroke="currentColor" strokeWidth="1.6" fill="none" /><path d="M11.2 11.2 15 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
         </button>
         <UpdateButton />

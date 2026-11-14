@@ -38,7 +38,7 @@ import type { GitHubAuth } from "./github.js";
 import type { Runtimes } from "./runtimes.js";
 import type { Devices } from "./devices.js";
 import type { Speeds } from "./speeds.js";
-import type { Journal } from "./journal.js";
+import type { Journal, ScreenSource } from "./journal.js";
 import type { Libraries } from "./libraries.js";
 import type { Knowledge } from "./knowledge.js";
 import type { Personas } from "./personas.js";
@@ -127,6 +127,8 @@ export interface KesherServices {
   github: GitHubAuth;
   /** "My day": the opt-in journal of the screen. */
   journal: Journal;
+  /** The screen, from the desktop app (the Game Helper's picture); absent without it. */
+  screen?: ScreenSource;
   /** Knowledge bases: folders and web pages the models search, with sources. */
   knowledge: Knowledge;
   /** The library store: documentation downloaded once for offline work (each one a knowledge base). */

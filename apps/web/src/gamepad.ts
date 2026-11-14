@@ -168,6 +168,13 @@ function setActive(on: boolean): void {
   window.dispatchEvent(new CustomEvent("kesher:pad", { detail: on }));
 }
 
+/** Lets the page take a button first (the Game Helper's questions); true when it did. */
+function pageTakes(button: string): boolean {
+  const e = new CustomEvent("kesher:pad-button", { detail: button, cancelable: true });
+  window.dispatchEvent(e);
+  return e.defaultPrevented;
+}
+
 let running = false;
 
 /** Starts reading controllers (once); safe to call more than once. */
@@ -217,11 +224,11 @@ export function startGamepad(): void {
     act(LEFT, true, () => move("left"));
     act(RIGHT, true, () => move("right"));
     act(A, false, press);
-    act(B, false, back);
-    act(X, false, context);
-    act(Y, false, () => window.dispatchEvent(new Event("kesher:palette")));
-    act(LB, false, () => page(-1));
-    act(RB, false, () => page(1));
+    act(B, false, () => pageTakes("B") || back());
+    act(X, false, () => pageTakes("X") || context());
+    act(Y, false, () => pageTakes("Y") || window.dispatchEvent(new Event("kesher:palette")));
+    act(LB, false, () => pageTakes("LB") || page(-1));
+    act(RB, false, () => pageTakes("RB") || page(1));
     act(MENU, false, () => window.dispatchEvent(new Event("kesher:sidebar")));
     act(VIEW, false, () => {
       const box = document.querySelector<HTMLElement>("main textarea, main input[type='text']");

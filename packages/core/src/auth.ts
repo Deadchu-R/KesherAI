@@ -42,6 +42,9 @@ export function localHost(host: string | undefined): boolean {
   return name === "localhost" || name.endsWith(".localhost") || name === "127.0.0.1" || name === "::1" || name === hostname().toLowerCase() || name === `${hostname().toLowerCase()}.local`;
 }
 
+/** Where sign-ins come back to (each checks its own one-time state). */
+const OAUTH_CALLBACK = /^\/api\/(google|copilot|onedrive|mcp)\/callback$/;
+
 /**
  * Whether a browser page from `origin` may call KesherAI's own API (`/api`).
  * The interface itself (same address), the Android app (http://localhost,
@@ -180,7 +183,11 @@ export function registerRemoteAuth(
     if ((path.startsWith("/api") && !path.startsWith("/api/plugin-files/")) || path.startsWith("/comfy-ui") || path === "/mcp") {
       const origin = request.headers.origin;
       const site = request.headers["sec-fetch-site"];
-      if ((typeof origin === "string" && origin !== "null" && !allowedOrigin(origin, request.headers.host, path)) || origin === "null" || (site === "cross-site" && !(typeof origin === "string" && allowedOrigin(origin, request.headers.host, path)))) {
+      // A sign-in's return (Google, Microsoft, an MCP server): the provider's page sends the browser back here, a
+      // top-level GET that is always "cross-site". The one-time state (and PKCE) in the callback is its check.
+      // Found on a fresh install (ROG Ally): "Sign in with Google" ended on this refusal.
+      const signInReturn = request.method === "GET" && request.headers["sec-fetch-mode"] === "navigate" && OAUTH_CALLBACK.test(path);
+      if (!signInReturn && ((typeof origin === "string" && origin !== "null" && !allowedOrigin(origin, request.headers.host, path)) || origin === "null" || (site === "cross-site" && !(typeof origin === "string" && allowedOrigin(origin, request.headers.host, path))))) {
         await reply.code(403).send({ error: "Requests from other websites are not allowed." });
         return;
       }

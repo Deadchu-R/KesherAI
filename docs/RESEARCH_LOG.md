@@ -910,3 +910,13 @@ for resizable plugin panels.
 - Built (0.6.185): gamepad.ts, PadHints.tsx, /api/system/device, the handheld look (bigger targets), 🎮 in the palette.
 Stopped at: an on-screen keyboard for fields (Windows' touch keyboard opens on tap; with the controller only, Xbox
 Game Bar's keyboard or Steam's), haptics on press (vibrationActuator), and per-page shortcuts (e.g. the graph editor).
+
+## 2026-11-14: Game Helper (Roee: "a gaming AI helper; competitors surely did it")
+- Xbox Gaming Copilot (Game Bar, Win+G; on ROG Xbox Ally): knows the game in front, voice mode, uses screenshots of
+  the game so the player need not describe it, pinned widget, history and achievements, capture settings for privacy.
+- NVIDIA Project G-Assist (Alt+G overlay, Llama-based 8B, RTX 12 GB+): system telemetry, FPS analysis, applies game
+  settings, overclocks, plugins.
+- Built (0.6.186): Ctrl+Shift+G takes one picture of the game in front and opens a window over it (one chat per game,
+  so it remembers), questions on X / Y / RB, B closes; docs/GAME_HELPER.md (map an Ally back button to the key).
+Stopped at: voice-only (push-to-talk) questions, the game's FPS/temperatures and recommended settings (G-Assist), a
+controller combo read while the game has focus (XInput outside the browser), and achievements (Steam/Xbox APIs).

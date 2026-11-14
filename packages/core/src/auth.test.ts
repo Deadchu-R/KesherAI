@@ -9,6 +9,7 @@ async function app() {
   a.get("/api/settings", async () => ({ ok: true }));
   a.post("/api/settings", async () => ({ ok: true }));
   a.get("/api/plugin-files/:t/x.js", async () => "js");
+  a.get("/api/google/callback", async () => "signed in");
   await a.ready();
   return a;
 }
@@ -21,6 +22,11 @@ test("other websites cannot use KesherAI's API, even from this computer", async 
   assert.equal((await a.inject({ method: "POST", url: "/api/settings", headers: { host: "localhost:7420", origin: "https://evil.example", "content-type": "text/plain" }, payload: "x" })).statusCode, 403);
   // A no-cors GET from another site (no Origin, but the browser says cross-site): refused.
   assert.equal((await a.inject({ url: "/api/settings", headers: { host: "localhost:7420", "sec-fetch-site": "cross-site" } })).statusCode, 403);
+  // A sign-in's return from Google (a top-level navigation, always cross-site): allowed; its state is the check.
+  assert.equal((await a.inject({ url: "/api/google/callback?code=c&state=s", headers: { host: "127.0.0.1:7420", "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate" } })).statusCode, 200);
+  // Not a navigation (a script from another site fetching it), or another path: still refused.
+  assert.equal((await a.inject({ url: "/api/google/callback?code=c&state=s", headers: { host: "127.0.0.1:7420", "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors" } })).statusCode, 403);
+  assert.equal((await a.inject({ url: "/api/settings", headers: { host: "localhost:7420", "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate" } })).statusCode, 403);
   // A sandboxed page (Origin: null): refused, except its own plugin files.
   assert.equal((await a.inject({ url: "/api/settings", headers: { host: "localhost:7420", origin: "null" } })).statusCode, 403);
   assert.equal((await a.inject({ url: "/api/plugin-files/secret-token-123/x.js", headers: { host: "localhost:7420", origin: "null" } })).statusCode, 200);

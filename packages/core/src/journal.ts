@@ -301,7 +301,7 @@ export interface ScreenSource {
 }
 
 /** The app and window in front, with a short, plain PowerShell call on Windows (no screen access). */
-async function foregroundWindow(): Promise<{ app: string; title: string }> {
+export async function foregroundWindow(): Promise<{ app: string; title: string }> {
   if (process.platform !== "win32") return screenBackend().foreground();
   const script = `Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Text;

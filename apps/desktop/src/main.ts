@@ -430,6 +430,52 @@ function setupBrowserPane(win: BrowserWindow): void {
   });
 }
 
+let gameWin: BrowserWindow | undefined;
+
+/**
+ * Opens the Game Helper over the game (the picture first, so the window is not in it), or hides it when it is in
+ * front. It stays on top of borderless and windowed games; exclusive full-screen games hide it until Alt+Tab.
+ *
+ * @param coreUrl - KesherAI's local address.
+ */
+async function toggleGameHelper(coreUrl: string): Promise<void> {
+  if (gameWin && !gameWin.isDestroyed() && gameWin.isVisible() && gameWin.isFocused()) {
+    gameWin.hide();
+    return;
+  }
+  const base = coreUrl.replace(/\/$/, "");
+  const r = (await fetch(`${base}/api/game-helper/capture`, { method: "POST", signal: AbortSignal.timeout(30_000) })
+    .then((x) => x.json())
+    .catch(() => ({}))) as { chatId?: string; file?: string };
+  if (!r.chatId) return;
+  const area = displays.getDisplayNearestPoint(displays.getCursorScreenPoint()).workArea;
+  const width = Math.min(500, Math.round(area.width * 0.42));
+  const bounds = { x: area.x + area.width - width - 10, y: area.y + 10, width, height: area.height - 20 };
+  if (!gameWin || gameWin.isDestroyed()) {
+    gameWin = new BrowserWindow({
+      ...bounds,
+      frame: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      backgroundColor: "#121213",
+      show: false,
+      icon: appIcon(),
+      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(import.meta.dirname, "preload.cjs") },
+    });
+    gameWin.setAlwaysOnTop(true, "screen-saver");
+    gameWin.webContents.setWindowOpenHandler(({ url: target }) => {
+      if (/^https?:\/\//.test(target)) void shell.openExternal(target);
+      return { action: "deny" };
+    });
+    gameWin.webContents.on("will-navigate", (event, target) => {
+      if (!target.startsWith(`${base}/`)) event.preventDefault();
+    });
+  } else gameWin.setBounds(bounds);
+  await gameWin.loadURL(`${base}/#/game/${encodeURIComponent(r.chatId)}${r.file ? `/${encodeURIComponent(r.file)}` : ""}`);
+  gameWin.show();
+  gameWin.focus();
+}
+
 ipcMain.handle("kesher:browser", async (event, cmd: unknown, arg: unknown) => {
   if (!fromApp(event) || !pane) return { error: "Not allowed." };
   try {
@@ -698,6 +744,10 @@ app.whenReady().then(async () => {
       void fetch(`${coreUrl.replace(/\/$/, "")}/api/computer/stop`, { method: "POST" }).catch(() => undefined);
       BrowserWindow.getAllWindows()[0]?.show();
     });
+    // The Game Helper (as Xbox's Gaming Copilot, on the user's own models): the key takes a picture of the game in
+    // front, then opens a small window over it. On a handheld, map a back button to this key (Armoury Crate, Steam).
+    const gameKey = process.platform === "darwin" ? "Command+Shift+G" : "Control+Shift+G";
+    globalShortcut.register(gameKey, () => void toggleGameHelper(coreUrl));
   } catch (err) {
     await rescue(err);
   }

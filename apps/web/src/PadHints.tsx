@@ -33,6 +33,27 @@ export function setHandheld(v: "auto" | "on" | "off", detected = !!document.docu
  */
 export function PadHints() {
   const [on, setOn] = useState(false);
+  // Where the chosen control is, for the Ⓐ beside it (what A will press).
+  const [at, setAt] = useState<{ x: number; y: number; label: string } | null>(null);
+  useEffect(() => {
+    if (!on) return setAt(null);
+    const place = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return setAt(null);
+      const r = el.getBoundingClientRect();
+      const field = el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !["button", "checkbox", "radio", "submit"].includes(el.type));
+      setAt({ x: Math.min(innerWidth - 90, r.right - 4), y: Math.max(4, r.top - 14), label: field ? L("שליחה", "Send") : L("בחירה", "Choose") });
+    };
+    place();
+    window.addEventListener("focusin", place);
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("focusin", place);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [on]);
   useEffect(() => {
     startGamepad();
     const pad = (e: Event) => setOn(!!(e as CustomEvent<boolean>).detail);
@@ -61,6 +82,13 @@ export function PadHints() {
     </span>
   );
   return (
+    <>
+    {at && (
+      <span className="pad-focus-badge" style={{ left: at.x, top: at.y }} aria-hidden="true">
+        <span className="pad-btn a">A</span>
+        {at.label}
+      </span>
+    )}
     <div className="pad-hints" role="note" aria-label={L("כפתורי השלט", "Controller buttons")}>
       {hint("A", "a", L("בחירה", "Choose"))}
       {hint("B", "b", L("חזרה", "Back"))}
@@ -70,5 +98,6 @@ export function PadHints() {
       {hint("≡", "m", L("תפריט", "Menu"))}
       {hint("⧉", "m", L("לתיבת הצ'אט", "Chat box"))}
     </div>
+    </>
   );
 }

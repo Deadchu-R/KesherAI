@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { takeGameShot } from "./game.js";
 import { cloudFolders } from "../cloud-folders.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -404,8 +405,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   );
 
   app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
-    const text = req.body?.text?.trim();
-    if (!text) return reply.code(400).send({ error: "Empty message" });
+    const typed = req.body?.text?.trim();
+    if (!typed) return reply.code(400).send({ error: "Empty message" });
+    // A Game Helper chat: the picture taken when its key was pressed goes with the question.
+    const text = `${takeGameShot(req.params.id)}${typed}`;
     try {
       const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true });
       // Written on the phone: its answer notifies the phone even when it is short.
