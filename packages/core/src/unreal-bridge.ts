@@ -179,6 +179,17 @@ export class UnrealBridge {
     if (this.lastProject) return this.lastProject;
     const meta = await this.readJson<{ last?: string; projectFile?: string }>(join(this.dir, "last.json"));
     if (meta?.projectFile && /\.uproject$/i.test(meta.projectFile)) this.lastProjectFile = meta.projectFile;
+    else if (meta?.last && /unreal/i.test(this.editor)) {
+      // Saved by an older plugin (the name only): find its .uproject among the projects on this computer, so the
+      // headless editor can run with Unreal closed (found on the PC: "Unreal not connected" with Unreal closed).
+      const { findGameProjects } = await import("./game-projects.js");
+      const found = (await findGameProjects().catch(() => [])).find((g) => g.kind === "unreal" && g.name.toLowerCase() === meta.last!.toLowerCase());
+      const file = found ? await uprojectIn(found.path) : undefined;
+      if (file) {
+        this.lastProjectFile = file;
+        await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: meta.last, projectFile: file })).catch(() => undefined);
+      }
+    }
     return (this.lastProject = meta?.last);
   }
 
@@ -651,4 +662,11 @@ export function unityPrompt(g: BlueprintJson, request: string): Array<{ role: "s
     { role: "system", content: system },
     { role: "user", content: user },
   ];
+}
+
+/** The .uproject file in a project folder. */
+async function uprojectIn(dir: string): Promise<string | undefined> {
+  const { readdir } = await import("node:fs/promises");
+  const f = (await readdir(dir).catch(() => [] as string[])).find((n) => /\.uproject$/i.test(n));
+  return f ? join(dir, f) : undefined;
 }
