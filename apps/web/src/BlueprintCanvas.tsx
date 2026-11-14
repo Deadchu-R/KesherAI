@@ -735,6 +735,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
 
   if (!layout) return <p className="muted ue-empty">{L("הגרף ריק.", "This graph is empty.")}</p>;
   const links: Array<{ d: string; color: string; from: string; to: string; mx: number; my: number }> = [];
+  /** A reroute node's body and its pins' reach, in graph units (so they stay easy to hit at any zoom). */
+  const knotBody = Math.max(KNOT / 2, 7 / view.k);
+  const knotPin = Math.max(6, 6 / view.k);
   /** Deletes the chosen nodes, and breaks the chosen wires (each at its end: an input takes one wire). */
   const removeChosen = () => {
     const ops: Op[] = [];
@@ -792,8 +795,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={keys}
       onDoubleClick={(e) => {
+        // What is under the mouse: the event's own target is the frame, which holds the pointer since the press (found
+        // on the PC: a double-click on a wire did nothing).
+        const under = (document.elementFromPoint(e.clientX, e.clientY) ?? e.target) as Element;
         // Double-click a wire: a reroute node on it (Unreal).
-        const wireEl = (e.target as Element).closest("[data-wire]") as SVGElement | null;
+        const wireEl = under.closest("[data-wire]") as SVGElement | null;
         if (wireEl && editable && onOps) {
           // A C# script: the dot is kept on the graph (the code stays the same).
           const l = links[Number(wireEl.dataset.wire)];
@@ -820,7 +826,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           return;
         }
         // Double-click a comment box's title: rename it.
-        const c = (e.target as Element).closest("[data-comment]") as SVGElement | null;
+        const c = under.closest("[data-comment]") as SVGElement | null;
         if (c && editable) {
           const n = nodes.find((x) => x.id === c.dataset.node);
           if (n) void askText(L("הכותרת של ההערה:", "The comment's title:"), n.comment ?? "").then((text) => { if (text !== null) void apply([{ op: "comment", node: n.id, text }]); });
@@ -852,8 +858,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               <g key={i}>
                 {chosen && <path d={l.d} stroke="#ffd166" strokeWidth={7} fill="none" opacity={0.55} />}
                 <path d={l.d} stroke={l.color} strokeWidth={lit || chosen ? 3.5 : 2} fill="none" opacity={hot && !lit && !chosen ? 0.45 : 0.9} />
-                {/* A wider, invisible line to double-click (a reroute node, as in Unreal). */}
-                <path d={l.d} stroke="transparent" strokeWidth={12} fill="none" data-wire={i} />
+                {/* A wider, invisible line to click (choose) or double-click (a reroute node): 14 screen pixels at any zoom. */}
+                <path d={l.d} stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" fill="none" data-wire={i} style={{ cursor: editable ? "pointer" : undefined }} />
               </g>
             );
           })}
@@ -868,8 +874,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               return (
                 <g key={b.n.id} data-node={b.n.id} className="bp-node bp-knot">
                   <circle cx={b.x + KNOT / 2} cy={cy} r={KNOT / 2} fill="#1b1c20" stroke={on ? "#f0a830" : pinColor(t)} strokeWidth={on ? 2.5 : 2} />
-                  {b.ins[0] && <circle cx={b.x} cy={cy} r={Math.max(7, 9 / view.k)} fill="transparent" data-pin={b.ins[0].name} data-node={b.n.id} data-dir="in" data-type={t} className={editable ? "bp-pin" : undefined} />}
-                  {b.outs[0] && <circle cx={b.x + KNOT} cy={cy} r={Math.max(7, 9 / view.k)} fill="transparent" data-pin={b.outs[0].name} data-node={b.n.id} data-dir="out" data-type={t} className={editable ? "bp-pin" : undefined} />}
+                  {/* As in Unreal: the dot's body chooses and moves it (at least 6 screen pixels round); a wire starts
+                      from just beside it, left (in) or right (out). Found on the PC: the pins covered the dot. */}
+                  {b.ins[0] && <circle cx={b.x + KNOT / 2 - knotBody - knotPin * 0.8} cy={cy} r={knotPin} fill="transparent" data-pin={b.ins[0].name} data-node={b.n.id} data-dir="in" data-type={t} className={editable ? "bp-pin" : undefined} />}
+                  {b.outs[0] && <circle cx={b.x + KNOT / 2 + knotBody + knotPin * 0.8} cy={cy} r={knotPin} fill="transparent" data-pin={b.outs[0].name} data-node={b.n.id} data-dir="out" data-type={t} className={editable ? "bp-pin" : undefined} />}
+                  <circle cx={b.x + KNOT / 2} cy={cy} r={knotBody} fill="transparent" style={{ cursor: editable ? "move" : undefined }} />
                 </g>
               );
             }
