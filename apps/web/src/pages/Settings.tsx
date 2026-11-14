@@ -27,6 +27,7 @@ import { PhoneTargetsSection } from "../PhoneTargetsSection";
 import { BrowserSection, BrowserSitesSection } from "../BrowserSection";
 import { ApiKeysSection } from "../ApiKeysSection";
 import { PermissionsSection } from "../settings/PermissionsSection";
+import { WebFilterSection } from "../settings/WebFilterSection";
 import { PhoneSection } from "../settings/PhoneSection";
 import { useEffect, useState } from "react";
 import { isRemote } from "../api";
@@ -45,7 +46,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; w
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", words: "parallel chats at once slots context במקביל צאטים שיחות הקשר gpu graphics card vram temperature unload idle minutes ram cpu limit guard performance כרטיס מסך טמפרטורה פריקה לפרוק דקות זיכרון מעבד הגבלה ביצועים עומס", render: () => <><GpuSection /><ChatsAtOnce card /><GuardSection /></> },
-  { id: "privacy", icon: "🛡", en: "Privacy and permissions", he: "פרטיות והרשאות", words: "permissions always allow approve rules computer control screen mouse access log privacy הרשאות תמיד לאשר כללים שליטה במחשב מסך עכבר יומן גישה פרטיות", render: () => <><PermissionsSection /><ComputerSection /></> },
+  { id: "privacy", icon: "🛡", en: "Privacy and permissions", he: "פרטיות והרשאות", words: "permissions always allow approve rules computer control screen mouse access log privacy web search safe search censorship blocked sites onion dark web tor חיפוש סינון צנזורה אתרים חסומים דארק ווב הרשאות תמיד לאשר כללים שליטה במחשב מסך עכבר יומן גישה פרטיות", render: () => <><PermissionsSection /><WebFilterSection /><ComputerSection /></> },
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", words: "phone remote anywhere tunnel qr pair device keys tailscale telegram computers start with computer access log טלפון מרחוק מכל מקום מנהרה קוד סריקה מכשירים מפתחות טלגרם מחשבים הפעלה עם המחשב יומן גישה", render: () => <><PhoneSection /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },
   { id: "accounts", icon: "☁", en: "Accounts, backup and data", he: "חשבונות, גיבוי ונתונים", words: "google drive onedrive sync backup import chats chatgpt claude whatsapp instagram ווטסאפ וואטסאפ אינסטגרם reset delete data גוגל דרייב סנכרון גיבוי ייבוא שיחות איפוס מחיקה נתונים", render: () => <><GoogleDriveSection /><OneDriveSection /><Sync /><ImportChats /><ImportPeopleChats /><ResetSection /></> },
   { id: "business", icon: "🏢", en: "Organisation", he: "ארגון", words: "business organisation copilot team policy ארגון עסקי צוות מדיניות", render: () => <><CopilotSection /><BusinessSection /></> },

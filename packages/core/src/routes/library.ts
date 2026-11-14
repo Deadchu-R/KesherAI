@@ -673,6 +673,19 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.config.permissions;
   });
 
+  // Settings → Web: the user's filter for every chat (safe search, .onion through Tor, blocked sites). Changed only
+  // on this computer, since it can loosen what the model may read.
+  app.get("/api/web-filter", async () => s.config.webFilter);
+  app.put<{ Body: { safeSearch?: string; onion?: boolean; blocked?: unknown } }>("/api/web-filter", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Web filtering is changed on the computer that runs KesherAI." });
+    const b = req.body ?? {};
+    const safeSearch = b.safeSearch === "strict" || b.safeSearch === "off" ? b.safeSearch : "moderate";
+    const blocked = cleanWebPrefs({ never: b.blocked })?.never ?? [];
+    s.config.webFilter = { safeSearch, onion: b.onion === true, blocked };
+    await s.saveConfig();
+    return s.config.webFilter;
+  });
+
   // ---------- Settings ----------
   app.get("/api/settings", async () => ({
     activeModels: s.config.activeModels,

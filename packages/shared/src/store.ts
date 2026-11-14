@@ -28,6 +28,20 @@ export interface WebPrefs {
   depth?: "quick" | "normal" | "deep";
   /** false: never open a blocked page through Tor in this chat (by default it tries, when Tor is installed). */
   tor?: boolean;
+  /** From Settings → Web (not kept per chat): the search engine's safe search level. */
+  safeSearch?: "strict" | "moderate" | "off";
+  /** From Settings → Web: .onion sites may be opened (through Tor). */
+  onion?: boolean;
+}
+
+/** Settings → Web: the user's own filter for every chat's web search and pages. */
+export interface WebFilter {
+  /** The search engine's safe search (default moderate). */
+  safeSearch: "strict" | "moderate" | "off";
+  /** Open .onion (dark web) sites through Tor (off by default). */
+  onion: boolean;
+  /** Sites never searched or opened, in any chat. */
+  blocked: string[];
 }
 
 /** A project's environment for its code sessions. */

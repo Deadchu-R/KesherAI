@@ -36,3 +36,11 @@ test("web_fetch: a page that does not open directly is tried once through Tor, a
   assert.match(r.output, /Opened through Tor[\s\S]*the article/);
   await assert.rejects(webFetchTool.run({ url: "https://blocked.invalid/x" }, { signal: new AbortController().signal, recordChange: () => undefined }), /did not open/);
 });
+
+test("web_fetch: .onion only when allowed in Settings, and only through Tor", async () => {
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+  await assert.rejects(webFetchTool.run({ url: "http://abcdefghijklmnop.onion/" }, ctx), /Settings → Web/);
+  await assert.rejects(webFetchTool.run({ url: "http://abcdefghijklmnop.onion/" }, { ...ctx, web: { onion: true } }), /install Tor/);
+  const r = await webFetchTool.run({ url: "http://abcdefghijklmnop.onion/" }, { ...ctx, web: { onion: true }, viaTor: async (url) => ({ url, status: 200, type: "text/html", body: "<p>hidden</p>" }) });
+  assert.match(r.output, /\.onion site, opened through Tor[\s\S]*hidden/);
+});

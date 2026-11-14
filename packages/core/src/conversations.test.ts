@@ -612,3 +612,10 @@ test("named environments: picked at the start of a code session; 'none' runs no 
     await server.close();
   }
 });
+
+test("web filter: blocked sites join the chat's own, safe search, .onion only with Tor", async () => {
+  const { withFilter } = await import("./conversations.js");
+  assert.equal(withFilter(undefined, { safeSearch: "moderate", onion: false, blocked: [] }, false), undefined);
+  assert.deepEqual(withFilter({ never: ["a.com"], depth: "deep" }, { safeSearch: "off", onion: true, blocked: ["b.com", "a.com"] }, true), { never: ["a.com", "b.com"], depth: "deep", safeSearch: "off", onion: true });
+  assert.equal(withFilter(undefined, { safeSearch: "moderate", onion: true, blocked: [] }, false)?.onion, undefined, "no Tor, no .onion");
+});

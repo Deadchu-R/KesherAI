@@ -142,6 +142,15 @@ export const webFetchTool: AgentTool = {
   },
   async run(input, ctx) {
     const url = checkUrl(String(input.url ?? ""));
+    // A dark web (.onion) site: only when the user switched it on in Settings, and only through Tor.
+    if (/\.onion$/i.test(url.hostname)) {
+      if (!ctx.web?.onion) throw new Error("Dark web (.onion) sites are off. The user can switch them on in Settings → Web.");
+      if (!ctx.viaTor) throw new Error("A .onion site opens only through Tor: install Tor (the chat's web settings, ⚙ beside the globe).");
+      const p = await ctx.viaTor(url.href, ctx.signal);
+      if (p.status < 200 || p.status >= 300) throw new Error(`The .onion site answered ${p.status}.`);
+      const text = /html/i.test(p.type) ? htmlToText(p.body) : p.body;
+      return { output: `${p.url}\n(A .onion site, opened through Tor.)\n\n${text.slice(0, MAX_OUTPUT)}` };
+    }
     // The chat's own limits on sites (set by the user for this chat).
     const only = (ctx.web?.only ?? []).map(siteName).filter(Boolean);
     const never = (ctx.web?.never ?? []).map(siteName).filter(Boolean);
@@ -230,8 +239,10 @@ export async function searchWeb(query: string, prefs: import("@kesher/shared").W
   const never = (prefs?.never ?? []).map(siteName).filter(Boolean).slice(0, 30);
   const depth = DEPTH[prefs?.depth ?? "normal"];
   const q = only.length ? `${query} ${only.map((d) => `site:${d}`).join(" OR ")}` : query;
+  // DuckDuckGo's safe search: kp=1 strict, -1 moderate, -2 off (the user's own setting).
+  const kp = prefs?.safeSearch === "strict" ? "1" : prefs?.safeSearch === "off" ? "-2" : "-1";
   const get = async (extra: string) => {
-    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}${extra}`, {
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}&kp=${kp}${extra}`, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
       headers: { "user-agent": "Mozilla/5.0 (KesherAI)" },
     });
@@ -264,6 +275,7 @@ export const webSearchTool: AgentTool = {
       ctx.web?.only?.length ? `This chat searches only: ${ctx.web.only.join(", ")}.` : "",
       ctx.web?.never?.length ? `Never use: ${ctx.web.never.join(", ")}.` : "",
       DEPTH[ctx.web?.depth ?? "normal"].read,
+      ctx.web?.onion ? "Dark web (.onion) sites may be opened with web_fetch (through Tor); to search them, open https://ahmia.fi/search/?q=… with web_fetch." : "",
     ].filter(Boolean).join(" ");
     return { output: `${results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n")}\n\n(${limits})` };
   },

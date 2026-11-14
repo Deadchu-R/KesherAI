@@ -647,7 +647,8 @@ export class ConversationManager {
           ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
           : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
       env: () => this.envFor(id),
-      web: () => this.deps.library.summary(id)?.web,
+      // The chat's own web settings with the user's filter from Settings → Web (blocked sites, safe search, .onion).
+      web: () => withFilter(this.deps.library.summary(id)?.web, this.deps.config.webFilter, this.deps.tor?.installed() === true),
       // A blocked page once more through Tor, when it is installed and the chat did not switch it off.
       viaTor: () => {
         const tor = this.deps.tor;
@@ -1412,4 +1413,15 @@ export async function assertFolder(folder: string): Promise<void> {
 /** The first addresses in web_search's output. */
 function parseFirstUrls(out: string, n: number): string[] {
   return [...out.matchAll(/^\s{3}(https?:\/\/\S+)$/gm)].map((m) => m[1]!).slice(0, n);
+}
+
+/**
+ * A chat's web settings with the user's filter (Settings → Web): its blocked sites join the chat's "never", the
+ * safe search level, and .onion sites only while Tor is installed.
+ */
+export function withFilter(web: import("@kesher/shared").WebPrefs | undefined, f: { safeSearch: "strict" | "moderate" | "off"; onion: boolean; blocked: string[] } | undefined, tor: boolean): import("@kesher/shared").WebPrefs | undefined {
+  if (!f) return web;
+  const never = [...new Set([...(web?.never ?? []), ...f.blocked])];
+  const out = { ...(web ?? {}), ...(never.length ? { never } : {}), ...(f.safeSearch !== "moderate" ? { safeSearch: f.safeSearch } : {}), ...(f.onion && tor ? { onion: true } : {}) };
+  return Object.keys(out).length ? out : undefined;
 }
