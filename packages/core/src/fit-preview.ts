@@ -34,6 +34,20 @@ export interface FitPlan {
   ms: number;
   /** Why there is no plan, from llama.cpp's own words (e.g. a model this build does not know). */
   error?: string;
+  /** System memory the plan needs (model parts, context and compute kept there), in MiB. */
+  hostMiB?: number;
+}
+
+/**
+ * Reads `llama-fit-params --fit-print on`: one line per card and one "Host" line, each "name model context compute"
+ * in MiB.
+ *
+ * @param stdout - What it printed.
+ * @returns The system memory needed (MiB), when it says.
+ */
+export function parseFitPrint(stdout: string): { hostMiB?: number } {
+  const m = /^Host\s+(\d+)\s+(\d+)\s+(\d+)/m.exec(stdout);
+  return m ? { hostMiB: Number(m[1]) + Number(m[2]) + Number(m[3]) } : {};
 }
 
 /**
@@ -48,7 +62,8 @@ export function parseFit(log: string, stdout: string, ms: number): FitPlan {
   const devices: FitDevice[] = [];
   // "  - CUDA0 (NVIDIA GeForce RTX 3090): 60 layers,  16727 MiB used,   1237 MiB free"
   const flat = log.replace(/\r/g, "");
-  for (const m of flat.matchAll(/-\s+([A-Za-z]+\d+)\s+\(([^)]+)\):\s+(\d+)\s+layers,\s+(\d+)\s+MiB used,\s+(-?\d+)\s+MiB free/g)) {
+  // b12110+ adds "(N overflowing)" for a MoE model's layers that are partly in system memory.
+  for (const m of flat.matchAll(/-\s+([A-Za-z]+\d+)\s+\(([^)]+)\):\s+(\d+)\s+layers(?:\s+\(\s*\d+\s+overflowing\))?,\s+(\d+)\s+MiB used,\s+(-?\d+)\s+MiB free/g)) {
     devices.push({ name: `${m[2]!.trim()} (${m[1]})`, layers: Number(m[3]), usedMiB: Number(m[4]), freeMiB: Number(m[5]) });
   }
   const args = stdout.trim().split(/\s+/).filter(Boolean);
@@ -60,7 +75,9 @@ export function parseFit(log: string, stdout: string, ms: number): FitPlan {
   const ngl = Number(arg("-ngl", "--n-gpu-layers", "--gpu-layers") ?? NaN);
   const gpuLayers = devices.length ? devices.reduce((n, d) => n + d.layers, 0) : Number.isFinite(ngl) ? ngl : 0;
   const ctx = Number(arg("-c", "--ctx-size") ?? NaN);
-  const ok = /successfully fit params/i.test(flat) && !/failed to fit/i.test(flat);
+  // llama-fit-params prints the arguments only when it fits (it exits with "failed to fit" otherwise); b12110 logs
+  // "successfully fit params" only at trace level, so the printed arguments are the sign.
+  const ok = (/successfully fit params/i.test(flat) || args.length > 0) && !/failed to fit/i.test(flat);
   // No plan at all: say why (the first error line, without llama.cpp's timestamp and level).
   const errLine = !ok && !args.length ? flat.split("\n").find((l) => /unknown model architecture|failed to load|error/i.test(l)) : undefined;
   const error = errLine?.replace(/^[\d.]+\s+[IWE]\s+/, "").trim().slice(0, 300);

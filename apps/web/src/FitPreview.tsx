@@ -21,6 +21,10 @@ interface FitPlan {
   ms: number;
   /** Why there is no plan (llama.cpp's words), e.g. a model this engine does not know yet. */
   error?: string;
+  /** System memory the plan needs, and free and total now (MiB). */
+  hostMiB?: number;
+  ramFreeMiB?: number;
+  ramTotalMiB?: number;
   loadedNow: string | null;
   marginMiB: number;
 }
@@ -44,6 +48,8 @@ export function FitButton({ path, name }: { path: string; name: string }) {
     );
   };
   const all = plan && plan.totalLayers !== undefined && plan.gpuLayers >= plan.totalLayers && !plan.inSystemMemory;
+  // The card is fine but the rest does not fit in free system memory: it would be read from the disk all the time.
+  const ramShort = !!plan?.ok && plan.hostMiB !== undefined && plan.ramFreeMiB !== undefined && plan.hostMiB > plan.ramFreeMiB;
   return (
     <>
       <button type="button" disabled={busy} onClick={run} title={L("מה llama.cpp יעשה עם המודל הזה במחשב הזה, לפני שטוענים אותו", "What llama.cpp will do with this model on this computer, before loading it")}>
@@ -51,8 +57,10 @@ export function FitButton({ path, name }: { path: string; name: string }) {
       </button>
       {plan && (
         <div className="fit-plan small" role="status">
-          <strong className={plan.ok && all ? "fit-good" : plan.ok ? "fit-mid" : "fit-bad"}>
-            {plan.error
+          <strong className={plan.ok && all ? "fit-good" : plan.ok && !ramShort ? "fit-mid" : "fit-bad"}>
+            {ramShort
+              ? L("הכרטיס מספיק, אבל זיכרון המחשב הפנוי לא: המודל ייקרא מהדיסק כל הזמן, לאט מאוד. סגרו תוכנות כבדות ובדקו שוב.", "The card is enough, but free system memory is not: the model would be read from the disk all the time, very slowly. Close heavy programs and check again.")
+              : plan.error
               ? /unknown model architecture/i.test(plan.error)
                 ? L("גרסת llama.cpp הזו עוד לא מכירה את המודל הזה. עדכנו את המנוע (מודלים ← llama.cpp).", "This llama.cpp build does not know this model yet. Update the engine (Models → llama.cpp).")
                 : L("llama.cpp לא הצליח לקרוא את המודל.", "llama.cpp could not read this model.")
@@ -70,6 +78,11 @@ export function FitButton({ path, name }: { path: string; name: string }) {
               {d.name}: {L(`${d.layers} שכבות, ${gb(d.usedMiB)} GB בשימוש, ${gb(d.freeMiB)} GB נשאר פנוי`, `${d.layers} layers, ${gb(d.usedMiB)} GB used, ${gb(d.freeMiB)} GB left free`)}
             </span>
           ))}
+          {plan.hostMiB !== undefined && plan.ramFreeMiB !== undefined && (
+            <span className={ramShort ? "fit-bad" : "muted"}>
+              {L(`זיכרון המחשב: צריך ${gb(plan.hostMiB)} GB, פנוי עכשיו ${gb(plan.ramFreeMiB)} מתוך ${gb(plan.ramTotalMiB ?? 0)} GB`, `System memory: needs ${gb(plan.hostMiB)} GB, ${gb(plan.ramFreeMiB)} of ${gb(plan.ramTotalMiB ?? 0)} GB free now`)}
+            </span>
+          )}
           {plan.context && <span className="muted">{L(`הקשר: ${Math.round(plan.context / 1000)}K טוקנים`, `Context: ${Math.round(plan.context / 1000)}K tokens`)}</span>}
           {plan.loadedNow && (
             <span className="muted">

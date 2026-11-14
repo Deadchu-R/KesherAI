@@ -1,3 +1,4 @@
+import { freemem, totalmem } from "node:os";
 import { readFile, readdir } from "node:fs/promises";
 import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js";
 import type { FastifyInstance } from "fastify";
@@ -326,7 +327,8 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     const hit = fitCache.get(path);
     if (hit && Date.now() - hit.at < 60_000) return hit.plan;
     try {
-      const plan = { ...(await s.engine.fitPreview(path)), loadedNow: s.engine.status().running ? basename(s.engine.status().modelPath ?? "") : null, marginMiB: s.config.engines.fitTargetMiB ?? 2048 };
+      // Free system memory now (Windows counts standby cache as available), for the plan's "Host" part.
+      const plan = { ...(await s.engine.fitPreview(path)), ramFreeMiB: Math.round(freemem() / 1024 ** 2), ramTotalMiB: Math.round(totalmem() / 1024 ** 2), loadedNow: s.engine.status().running ? basename(s.engine.status().modelPath ?? "") : null, marginMiB: s.config.engines.fitTargetMiB ?? 2048 };
       fitCache.set(path, { at: Date.now(), plan });
       return plan;
     } catch (err) {

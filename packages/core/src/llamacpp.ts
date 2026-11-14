@@ -3,7 +3,7 @@ import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { parseFit, type FitPlan } from "./fit-preview.js";
+import { parseFit, parseFitPrint, type FitPlan } from "./fit-preview.js";
 import { mtpLayers } from "./gguf.js";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
 import { userChoseGpus, type GpuPlan } from "./gpus.js";
@@ -619,27 +619,20 @@ export class LlamaEngine {
     if (!existsSync(tool)) throw new Error("This llama.cpp build has no llama-fit-params.");
     // Not hybridArgs: llama-fit-params refuses --checkpoint-min-step (a server-only setting), which made the check
     // fail at once for every Qwen 3.5+ model (found on the PC with Qwen3.8-Flash-Next).
-    const args = ["-m", modelPath, ...LlamaEngine.fitArgs(LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType))];
+    // Debug level: b12110 writes each card's layers and memory only there (the lines are filtered below).
+    const base = ["-m", modelPath, ...LlamaEngine.fitArgs(LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType))];
     const t0 = Date.now();
-    return await new Promise<FitPlan>((resolve, reject) => {
-      const p = spawn(tool, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-      let out = "";
-      let log = "";
-      p.stdout.on("data", (d: Buffer) => (out += d.toString()).length > 100_000 && p.kill());
-      // Only the lines the plan needs (the full log is long).
-      let rest = "";
-      p.stderr.on("data", (d: Buffer) => {
-        const lines = (rest + d.toString()).split("\n");
-        rest = lines.pop() ?? "";
-        for (const l of lines) if (/n_layer|MiB used|fit params|failed to fit|error|unknown model architecture|failed to load/i.test(l)) log += `${l}\n`;
-      });
-      const timer = setTimeout(() => p.kill(), 120_000);
-      p.once("error", (e) => (clearTimeout(timer), reject(e)));
-      p.once("close", () => {
-        clearTimeout(timer);
-        resolve(parseFit(log + rest, out, Date.now() - t0));
-      });
-    });
+    const keep = (l: string) => /n_layer|MiB used|fit params|failed to fit|error|unknown model architecture|failed to load/i.test(l);
+    const first = await runQuiet(tool, ["-lv", "5", ...base], keep);
+    const plan = parseFit(first.log, first.out, Date.now() - t0);
+    // With the plan's own arguments, how much system memory it needs (the "Host" line of --fit-print): a MoE model's
+    // experts there can need more than the computer has free, though the card is fine (DeepSeek on the PC, 2026-11-15).
+    if (plan.ok && plan.args.length) {
+      const printed = await runQuiet(tool, [...base, ...plan.args.map((a) => a.replace(/^"|"$/g, "")), "--fit-print", "on"], () => false).catch(() => undefined);
+      const host = printed ? parseFitPrint(printed.out).hostMiB : undefined;
+      if (host !== undefined) plan.hostMiB = host;
+    }
+    return plan;
   }
 
   /**
@@ -899,4 +892,33 @@ export async function findMmproj(modelPath: string): Promise<string | undefined>
   const score = (f: string) => (stem && f.toLowerCase().includes(stem) ? 4 : 0) + (/bf16/i.test(f) ? 2 : /f16/i.test(f) ? 3 : 0);
   const best = [...all].sort((a, b) => score(b) - score(a) || a.length - b.length)[0]!;
   return join(dir, best);
+}
+
+/**
+ * Runs a llama.cpp tool and keeps its printed output and the log lines asked for (its full log is long).
+ *
+ * @param tool - The program.
+ * @param args - Its arguments.
+ * @param keep - Which log lines to keep.
+ * @returns stdout and the kept log; rejects when it cannot start.
+ */
+function runQuiet(tool: string, args: string[], keep: (line: string) => boolean): Promise<{ out: string; log: string }> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(tool, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let log = "";
+    let rest = "";
+    p.stdout.on("data", (d: Buffer) => (out += d.toString()).length > 100_000 && p.kill());
+    p.stderr.on("data", (d: Buffer) => {
+      const lines = (rest + d.toString()).split("\n");
+      rest = lines.pop() ?? "";
+      for (const l of lines) if (keep(l)) log += `${l}\n`;
+    });
+    const timer = setTimeout(() => p.kill(), 120_000);
+    p.once("error", (e) => (clearTimeout(timer), reject(e)));
+    p.once("close", () => {
+      clearTimeout(timer);
+      resolve({ out, log: keep(rest) ? log + rest : log });
+    });
+  });
 }

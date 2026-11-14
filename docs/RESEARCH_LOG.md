@@ -1052,3 +1052,10 @@ Built (0.6.203): chat-timers.ts (set_timer, notify_user, timers.json, a 15 s clo
   /api/speech/transcribe, language from Settings → Speech); pasted through the Text Helper's Paste, the clipboard put
   back. On the phone the keyboard's own voice typing already does this (not duplicated).
 Stopped at: Smart cleanup with the chat model, vocabulary and voice-command snippets (later).
+- Correction 2 (llama.cpp b12110's common/fit.cpp, read 2026-11-15): "successfully fit params" and each card's
+  "N layers (M overflowing), X MiB used" line are trace-level now, so KesherAI read every plan as "does not fit".
+  llama-fit-params prints the arguments only when it fits (otherwise "failed to fit CLI arguments … exiting").
+  So DeepSeek V4 Flash and Qwen3.8-Flash-Next both DO fit the card (DeepSeek: 44 layers; Flash-Next: 49, experts
+  in system memory). The real limit is system memory: ~104 GB and ~84 GB of files against ~55 GB of free RAM with
+  Unreal and other programs open. Fixed in 0.6.206: the parser follows b12110, and "What fits?" adds the system
+  memory the plan needs (`--fit-print on`, its Host line) next to the free RAM.

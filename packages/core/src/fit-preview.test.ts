@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseFit } from "./fit-preview.js";
+import { parseFit, parseFitPrint } from "./fit-preview.js";
 
 // What llama-fit-params (b12110) wrote on the RTX 3090 with another model already loaded.
 const LOG = `0.00.512.000 I print_info: n_layer               = 64
@@ -28,4 +28,19 @@ test("a model the build does not know: no plan, and llama.cpp's reason", () => {
   assert.equal(p.gpuLayers, 0);
   assert.match(p.error ?? "", /unknown model architecture: 'qwen4next'/);
   assert.ok(!/^0\.00/.test(p.error ?? ""), "no timestamp");
+});
+
+test("b12110: a MoE plan with overflowing layers, and no 'successfully' line (it is trace-only now)", () => {
+  const log = "0.01.2 T common_params_fit_impl:   - CUDA0 (NVIDIA GeForce RTX 3090): 49 layers (32 overflowing),  21980 MiB used,   2048 MiB free\n";
+  const p = parseFit(log, '-c 32768 -ngl 49 -ot "blk\\.7\\.ffn_up_exps=CPU"\n', 3400);
+  assert.equal(p.ok, true);
+  assert.deepEqual(p.devices, [{ name: "NVIDIA GeForce RTX 3090 (CUDA0)", layers: 49, usedMiB: 21980, freeMiB: 2048 }]);
+  assert.equal(p.inSystemMemory, true);
+  const no = parseFit("0.01 E llama_fit_params: failed to fit CLI arguments to free memory, exiting...\n", "", 900);
+  assert.equal(no.ok, false);
+});
+
+test("--fit-print: the system memory the plan needs, from its Host line", () => {
+  assert.deepEqual(parseFitPrint("CUDA0 20480 1024 512\nHost 61000 0 900\n"), { hostMiB: 61900 });
+  assert.deepEqual(parseFitPrint("nothing here"), {});
 });
