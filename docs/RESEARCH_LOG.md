@@ -990,3 +990,10 @@ Stopped at: building step 1 (needs compiling in Unreal and Unity on the PC, with
   icon buttons borderless as Claude's.
 Stopped at: icons inside page bodies that are typed in place (status rows, cards with an emoji in their text).
 Sources: webdesignhot.com design-md for claude.ai; Claude's own interface.
+
+## 2026-11-15 (night): Fourth competitor review (Roee: "deep research on what the competitors have, add to the list")
+- Read: LM Studio Bionic changelog (1.1.2–1.2.0), Open WebUI 0.11, Msty Studio 2.9, AnythingLLM 1.15, the new ChatGPT
+  desktop app (GPT-5.6). Details and the 11 new items: docs/COMPETITORS.md "Fourth review".
+- Strongest gaps: OS-wide helpers (dictation into any app, select text anywhere → action), file previews in chat,
+  agent-sent notifications and timers.
+Stopped at: Claude desktop, Cursor, Jan and LobeHub not re-read this round (reviewed in the third review).

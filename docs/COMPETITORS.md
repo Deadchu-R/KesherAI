@@ -225,3 +225,46 @@ The app stays free: nothing on this list needs a paid service. One list, in orde
 41. Remote desktop (future, a separate plugin from the store): see and control this computer from the phone or another computer, like Google Remote Desktop, each monitor in its own window; WebRTC (encrypted), only through KesherAI's pairing, approved on the computer each time, a clear "someone is in control" bar with Stop ⬜
 42. The code editor built on an existing IDE (future): the code session's editor from VS Code's own parts — Monaco (MIT) for editing, or the whole VS Code in the browser (OpenVSCode Server / Code - OSS, MIT) shown like the ComfyUI page, with extensions from Open VSX; plus "open in Visual Studio / VS Code" for the project (Visual Studio itself is not open source, so it is opened, not built in) ⬜
 
+
+## Fourth review, November 2026 (LM Studio Bionic 1.2, Open WebUI 0.11, Msty Studio 2.9, AnythingLLM 1.15–1.16, the new ChatGPT desktop app)
+
+What they added since the third review, and what KesherAI already has:
+
+- **LM Studio Bionic 1.1.6–1.2** (Sep–Nov 2026): Canvas, a board both the user and the agent edit, exported to PNG,
+  SVG and Excalidraw; previews of Word, spreadsheet, slide, CSV and HTML files in the chat; an in-app terminal;
+  read-aloud on the computer; the agent reading back its own older history ("Introspection"); tool-call arguments
+  streamed as they are written. KesherAI has: read-aloud (Kokoro), document reading, the Code terminal.
+- **Open WebUI 0.11** (the interface reorganized): a lighter look with ~35 new line icons and titles without emoji;
+  the model picker inside the message box with a Compare toggle; a read-only preview of a chat on hover in the
+  sidebar; remappable keyboard shortcuts with conflict warnings; `/compact`, `/fork`, `/status`; a form that asks for
+  a prompt's variables before sending; a `notify` tool (the model decides to notify you) and per-event notification
+  targets; chat timers (the assistant brings a prompt back later); sub-agents; a Usage page with a heatmap.
+  KesherAI has: compare, `/` prompts with `{{input}}`, notifications (ntfy), delegation to other agents, Usage.
+- **Msty Studio 2.9**: Context Studio, a library of files, sites and YouTube with folders, automatic short/long
+  descriptions and tags (visual analysis for pictures and video), and a "Dynamic Mode" that reads the descriptions
+  first and the whole file only when needed. KesherAI has: Knowledge (folders and pages, kept up to date).
+- **AnythingLLM 1.15–1.16** ("an agent across your OS", on the computer, free): Magic Echo (dictation that types into
+  any app, with a dictionary and voice commands), Magic Beacon (select text in any app → summarize, translate,
+  rewrite, research, or a custom action with the agents and tools), Magic Tab (as-you-type suggestions in any app);
+  tool reranking on by default. KesherAI has: dictation inside its own message box, the Game Helper's global key.
+- **ChatGPT desktop (GPT-5.6)**: Chat / Work / Codex modes; background computer use; scheduled tasks that also run on
+  an event or watch for a change; "Sites" (turn work into a web page shared by link); plan mode; approval gates; a
+  built-in browser with tabs; following progress from the phone. KesherAI has: plan mode, approvals, computer use,
+  Routines, the browser extension, the phone app.
+
+**Added to the list, in order** (none needs a paid service):
+
+1. Dictation into any app: a global key, the local Whisper, the text typed where the cursor is (AnythingLLM Magic Echo) ⬜
+2. Select text in any app → a small window with Summarize / Translate / Rewrite / Ask, on the local model (Magic Beacon; the Game Helper's window and key already exist) ⬜
+3. Previews of Word, Excel, PowerPoint, CSV and HTML attachments in the chat (Bionic) ⬜
+4. A `notify` tool and chat timers: the agent can send a notification, or bring a chat back at a time ("check the build in an hour") (Open WebUI) ⬜
+5. A chat's preview on hover in the sidebar (Open WebUI) ⬜
+6. Remappable keyboard shortcuts with conflict warnings (Open WebUI) ⬜
+7. Automatic descriptions and tags for attachments and Knowledge files, read before the whole file (Msty Dynamic Mode) ⬜
+8. Routines on an event: a file changed, a page changed, a download finished (ChatGPT scheduled tasks) ⬜
+9. A shared Canvas the agent draws on (boxes, arrows, notes), exported to PNG/SVG/Excalidraw (Bionic) ⬜
+10. Share a page or a result as a web page over the user's own link (Tailscale), read-only (ChatGPT Sites) ⬜
+11. As-you-type suggestions in any app (Magic Tab), later: heavy, needs a small fast model always loaded ⬜
+
+Sources: lmstudio.ai/changelog; openwebui.com/blog/v0-11-0-the-interface-reorganized; msty.ai/blog/msty-studio-2.9.0;
+newreleases.io AnythingLLM v1.15.0; theneuron.ai GPT-5.6 desktop guide.
