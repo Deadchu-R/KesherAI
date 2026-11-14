@@ -1,0 +1,19 @@
+{
+  "name": "KesherAI.Bridge.Ux",
+  "rootNamespace": "KesherAI.Bridge",
+  "references": [
+    "Unity.VisualScripting.Core",
+    "Unity.VisualScripting.Flow",
+    "Unity.VisualScripting.Core.Editor",
+    "Unity.VisualScripting.Flow.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "noEngineReferences": false
+}

@@ -1,6 +1,6 @@
 {
   "name": "com.kesherai.bridge",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "displayName": "KesherAI Bridge",
   "description": "Lets KesherAI read and change your Visual Scripting graphs (Script Graphs, State Graphs, and graphs inside scenes and prefabs) through Unity's CLI. Every change is one undo step.",
   "unity": "6000.0",

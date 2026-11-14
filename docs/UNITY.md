@@ -15,6 +15,19 @@ It works through **Unity's own CLI** (`unity`, from unity.com) and the project's
 - Graphs kept **inside a Script Machine or State Machine** on a GameObject — in prefabs, and in scenes (open ones are listed; KesherAI opens a scene beside yours when it needs one).
 - A State Graph shows as tabs: **States** (states and transitions; add Flow / Super / Any states, connect them, pick the start state, rename), then the flow graph inside each state and each transition, and the states inside each Super State.
 
+## Unreal-style graphs (in Unity's own graph window)
+
+With the bridge package (0.2.6+), Visual Scripting's graph window handles like Unreal Blueprints:
+
+- **Right-click empty space**: the node search opens at once (Shift+right-click for the old menu).
+- **Space**: the node search at the mouse.
+- **Right-click a pin**: *Break Pin Link(s)* and *Promote to Variable* (a new graph variable of the pin's type, with a Get node feeding an input pin or a Set node taking an output pin; one undo step).
+- **Alt+click a pin**: break its links.
+- **C**: a comment box (group) around the selected nodes.
+- **Mouse wheel**: zoom (Visual Scripting's *Alternate* control scheme, once called "Unreal").
+
+Tools → KesherAI → Unreal-style graphs turns it off and on. The keys can be changed in Edit → Shortcuts (KesherAI/Visual Scripting).
+
 ## Use
 
 - Pick a graph and a tab. It is drawn with its units, ports and connections.

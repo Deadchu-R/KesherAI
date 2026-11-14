@@ -95,14 +95,16 @@ function run(file: string, args: string[], timeoutMs = 20_000): Promise<{ code: 
 export async function userFolders(home = homedir()): Promise<Array<{ name: string; path: string }>> {
   const names = ["Desktop", "Documents", "Downloads", "Pictures", "Videos", "Music"];
   const out = new Map<string, string>(names.map((n) => [n, join(home, n)]));
-  if (platform() === "linux") {
+  // The system's own records of moved folders apply to the real home only (a test gives its own).
+  const real = resolve(home) === resolve(homedir());
+  if (real && platform() === "linux") {
     const dirs = await readFile(join(process.env.XDG_CONFIG_HOME || join(home, ".config"), "user-dirs.dirs"), "utf8").catch(() => "");
     const map: Record<string, string> = { DESKTOP: "Desktop", DOCUMENTS: "Documents", DOWNLOAD: "Downloads", PICTURES: "Pictures", VIDEOS: "Videos", MUSIC: "Music" };
     for (const m of dirs.matchAll(/^XDG_(\w+)_DIR="(.+)"$/gm)) {
       const n = map[m[1]!];
       if (n) out.set(n, m[2]!.replace(/^\$HOME/, home));
     }
-  } else if (platform() === "win32") {
+  } else if (real && platform() === "win32") {
     // Known folders may be moved (to OneDrive or another drive).
     const ps = "[Environment]::GetFolderPath('Desktop');[Environment]::GetFolderPath('MyDocuments');[Environment]::GetFolderPath('MyPictures');[Environment]::GetFolderPath('MyVideos');[Environment]::GetFolderPath('MyMusic');(New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path";
     const r = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps]);
