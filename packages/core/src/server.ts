@@ -886,6 +886,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       return { status: opened?.session.info().status ?? "error", last: last && last.type === "assistant" ? last.text : "", events: opened?.session.events.length ?? 0 };
     },
     stopTurn: (id) => services.conversations.stop(id),
+    // The chat's tokens so far (its usage events), for each self-work item's cost.
+    tokens: async (id) => {
+      const opened = await services.conversations.open(id);
+      return (opened?.session.events ?? []).reduce((n, e) => (e.type === "usage" ? n + (e.input ?? 0) + (e.output ?? 0) : n), 0);
+    },
     git: (repo, args) => runIn(repo, "git", args, false),
     check: (repo, command) => runIn(repo, command, [], true),
     // The worker tells the main app, which has the phone notifications set up.

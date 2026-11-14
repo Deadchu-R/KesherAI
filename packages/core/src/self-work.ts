@@ -43,7 +43,9 @@ export interface SelfWorkState {
   until: number;
   steps: number;
   /** Items finished and committed. */
-  items: Array<{ at: number; text: string; commit?: string }>;
+  items: Array<{ at: number; text: string; commit?: string; /** How long it took and the tokens it used (VISION: cost per finished item). */ ms?: number; tokens?: number }>;
+  /** The chat's token total when the last item ended (for the next item's cost). */
+  tokensAt?: number;
   /** Why it ended, or what it waits for. */
   note?: string;
   failures: number;
@@ -79,6 +81,8 @@ export interface SelfWorkDeps {
   shared?: string;
   /** Runs after each committed item (a worker may move to a newer version here; the run is saved first). */
   between?: () => Promise<void>;
+  /** The chat's tokens so far, read and written together (for each item's cost). */
+  tokens?: (convId: string) => Promise<number>;
 }
 
 const MAX_STEPS = 80;
@@ -495,7 +499,13 @@ export class SelfWork {
         const label = named || "Plan";
         const sha = await commitItem(this.d.git, r.worktree ?? r.repo, { subject: `self-work: ${label.slice(0, 150)}`, body: `Goal: ${r.goal.slice(0, 500)}` });
         if (out.kind === "item" || sha) {
-          r.items.push({ at: Date.now(), text: label, ...(sha ? { commit: sha } : {}) });
+          // What this item cost: the time since the last one (or the start) and the chat's tokens since then.
+          const now = Date.now();
+          const since = r.items.at(-1)?.at ?? r.startedAt;
+          const total = this.d.tokens ? await this.d.tokens(r.convId).catch(() => undefined) : undefined;
+          const tokens = total !== undefined ? total - (r.tokensAt ?? 0) : undefined;
+          if (total !== undefined) r.tokensAt = total;
+          r.items.push({ at: now, text: label, ...(sha ? { commit: sha } : {}), ms: now - since, ...(tokens !== undefined && tokens >= 0 ? { tokens } : {}) });
           await this.save();
           await this.d.notify(`🤖 ${label.slice(0, 80)}`, `Self-work: item ${r.items.length}${sha ? ` (${sha})` : ""}. ${r.goal.slice(0, 80)}`, "#/self-work");
         }

@@ -17,7 +17,7 @@ interface Run {
   status: "running" | "waiting" | "done" | "blocked" | "stopped" | "failed";
   until: number;
   steps: number;
-  items: Array<{ at: number; text: string; commit?: string }>;
+  items: Array<{ at: number; text: string; commit?: string; ms?: number; tokens?: number }>;
   skipped?: Array<{ at: number; why: string }>;
   note?: string;
 }
@@ -131,7 +131,21 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
               <p className="muted small" dir="ltr">{run.branch} · {L("עד", "until")} {new Date(run.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{run.modelId ? ` · ${run.modelId.replace(/^main\//, "").split("/").pop()}` : ""}</p>
               {run.note && <p className="small">{run.note}</p>}
               <ul className="self-work-items">
-                {run.items.map((i) => <li key={i.at}>✓ <span dir="auto">{i.text}</span>{i.commit && <code className="muted small"> {i.commit}</code>}</li>)}
+                {run.items.map((i) => (
+                  <li key={i.at}>
+                    ✓ <span dir="auto">{i.text}</span>
+                    {i.commit && <code className="muted small"> {i.commit}</code>}
+                    {/* What the item cost: time and tokens (to compare models and find items that cost too much). */}
+                    {(i.ms !== undefined || i.tokens !== undefined) && (
+                      <span className="muted small" dir="ltr">
+                        {" · "}
+                        {i.ms !== undefined ? `${Math.max(1, Math.round(i.ms / 60_000))} min` : ""}
+                        {i.ms !== undefined && i.tokens !== undefined ? " · " : ""}
+                        {i.tokens !== undefined ? `${i.tokens >= 1000 ? `${Math.round(i.tokens / 1000)}k` : i.tokens} tokens` : ""}
+                      </span>
+                    )}
+                  </li>
+                ))}
                 {(run.skipped ?? []).map((i) => <li key={`s${i.at}`} className="muted">↷ {L("דילג", "Skipped")}: <span dir="auto">{i.why}</span></li>)}
               </ul>
               {(log.steps?.length ?? 0) > 0 && (
