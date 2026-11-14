@@ -1,11 +1,37 @@
 {
   "manifest_version": 3,
   "name": "KesherAI",
-  "version": "0.1.0",
-  "description": "Lets the KesherAI app on this computer use your browser for tasks you ask it to do, where you are already signed in.",
-  "permissions": ["tabs", "scripting", "storage", "alarms"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "KesherAI" },
-  "icons": { "128": "icon128.png" }
+  "version": "0.2.0",
+  "description": "KesherAI in your browser: a side panel to chat with your local AI and ask about the page you are on, and the browser for tasks you ask KesherAI to do, where you are already signed in.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms",
+    "sidePanel",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "KesherAI"
+  },
+  "icons": {
+    "128": "icon128.png"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+K"
+      }
+    }
+  }
 }

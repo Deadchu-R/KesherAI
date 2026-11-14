@@ -218,6 +218,8 @@ export const WEB_CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  // Only KesherAI itself and a browser extension (its side panel) may show the app in a frame, never a web site.
+  "frame-ancestors 'self' chrome-extension: moz-extension:",
 ].join("; ");
 
 /**

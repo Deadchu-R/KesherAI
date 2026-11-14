@@ -18,3 +18,10 @@ $("save").onclick = async () => {
   show("connecting");
   setTimeout(() => chrome.runtime.sendMessage("state").then((r) => show(r?.state)), 1500);
 };
+
+// The side panel: KesherAI's chat beside any page (Chrome's side panel; opened from this click).
+$("panel").onclick = async () => {
+  const w = await chrome.windows.getCurrent();
+  if (chrome.sidePanel?.open) await chrome.sidePanel.open({ windowId: w.id });
+  window.close();
+};

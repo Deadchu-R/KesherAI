@@ -14,3 +14,10 @@ otherwise, and the extension never types into password or card fields.
 
 Only an extension on this computer with the right key can connect; web pages
 cannot. The key can be changed in Settings → Browser.
+
+## Side panel (0.2.0)
+
+Click the KesherAI button (or Alt+K) → "Open the side panel": KesherAI's chat beside any page, from this
+computer. "Ask about this page" hands the page's text to a new chat (marked as the page's content, never
+instructions). KesherAI lets only itself and browser extensions show it in a frame, never a web site.
+
