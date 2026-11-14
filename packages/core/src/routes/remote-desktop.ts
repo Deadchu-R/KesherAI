@@ -9,7 +9,9 @@ import { RemoteDesktop, hashPin, type RemoteInput } from "../remote-desktop.js";
  */
 export async function remoteDesktopRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const rd = new RemoteDesktop(() => s.config.remoteDesktop);
-  app.get("/api/remote-desktop", async () => ({ ...rd.status(), waiting: rd.waiting(), trusted: (s.config.remoteDesktop.trusted ?? []).map((t) => ({ name: t.name, at: t.at, id: t.id })) }));
+  // The waiting requests' codes and the trusted phones only on the computer itself (scan 55: a phone that could
+  // read a waiting code could approve its own request).
+  app.get("/api/remote-desktop", async (req) => ({ ...rd.status(), ...(isLocalRequest(req) ? { waiting: rd.waiting(), trusted: (s.config.remoteDesktop.trusted ?? []).map((t) => ({ name: t.name, at: t.at, id: t.id })) } : {}) }));
   // A phone asks for control without the PIN: the owner answers on the computer or with the buttons on their phone.
   app.post<{ Body: { device?: string; deviceId?: string } }>("/api/remote-desktop/request", async (req, reply) => {
     try {
