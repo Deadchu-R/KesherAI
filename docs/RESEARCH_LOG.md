@@ -997,3 +997,14 @@ Sources: webdesignhot.com design-md for claude.ai; Claude's own interface.
 - Strongest gaps: OS-wide helpers (dictation into any app, select text anywhere → action), file previews in chat,
   agent-sent notifications and timers.
 Stopped at: Claude desktop, Cursor, Jan and LobeHub not re-read this round (reviewed in the third review).
+
+## 2026-11-15 (night): DeepSeek V4 Flash on Roee's PC (board t59)
+- Downloaded unsloth/DeepSeek-V4-Flash-0731-GGUF UD-IQ3_XXS (4 files, ~104 GB) to the models folder on E:.
+- Step 1, the memory check (llama-fit-params via /api/models/fit): does not fit, twice (with Qwen3.8-27B loaded, and
+  with nothing loaded). The PC has an RTX 3090 (24 GB) and 93.5 GB of RAM; with nothing loaded 21 GB of the card and
+  ~55 GB of RAM were free (Unreal and other programs held ~35 GB), ~76 GB against ~104 GB. The plan puts 44 layers on the
+  card and the experts of layers 6–43 in system memory, so most of the file would be read from disk on every token.
+- Stopped there (loading it would page the disk and could freeze the PC overnight); Qwen3.8-27B loaded back.
+- Fallback started (approved): unsloth/Qwen3.8-Flash-Next-GGUF UD-IQ3_XXS (125B MoE, 4 files, 83.6 GB).
+Stopped at: the fallback's memory check, after its download. DeepSeek can be tried again with Unreal and other
+heavy programs closed (it needs ~104 of the ~110 GB left after Windows).
