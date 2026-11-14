@@ -1059,3 +1059,7 @@ Stopped at: Smart cleanup with the chat model, vocabulary and voice-command snip
   in system memory). The real limit is system memory: ~104 GB and ~84 GB of files against ~55 GB of free RAM with
   Unreal and other programs open. Fixed in 0.6.206: the parser follows b12110, and "What fits?" adds the system
   memory the plan needs (`--fit-print on`, its Host line) next to the free RAM.
+- Measured with 0.6.206 on the PC (Qwen3.8-27B loaded, Unreal open), system memory the plan needs vs free now:
+  Qwen3.8-Flash-Next UD-IQ3_XXS 63.8 GB vs 38.7–39.1 GB; DeepSeek V4 Flash UD-IQ3_XXS 83.3 GB vs 38.7 GB (of 93.5).
+  Flash-Next is realistic with Qwen unloaded and Unreal closed; DeepSeek only with almost everything closed.
+  Not loaded tonight (it would page from the disk with Roee away). Next: Flash-Next's load and speed with Unreal closed.
