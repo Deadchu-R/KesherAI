@@ -94,6 +94,8 @@ import { memoryTools } from "./memory-tools.js";
 import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { healthRoutes } from "./routes/health.js";
+import { Tor } from "./tor.js";
+import { torRoutes } from "./routes/tor.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
@@ -387,6 +389,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   })();
   const google = new GoogleDrive(config.google, persist, options.googleEndpoints ?? GOOGLE_ENDPOINTS, options.googleClient ?? fileClient ?? branding.google);
   const driveSync = new DriveSync(google, library, config.google, persist);
+  // Tor for blocked pages: downloaded only when the user presses Install, started only when a page does not open.
+  const tor = new Tor(join(paths.engines, "tor"));
   const guard = new GpuGuard(
     () => config.guard,
     undefined,
@@ -641,6 +645,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       engineSlotTokens: () => (worker ? mainSlot : engine.slotContext()),
       saveConfig: () => persist(),
       browserPane: () => browser.status().pane,
+      tor,
       onEvent: (convId, e, title, lastAnswer) => {
         notifier.onConversationEvent(convId, title, e, lastAnswer);
         telegram.onConversationEvent(convId, e);
@@ -769,6 +774,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     onedrive,
     onedriveSync,
     guard,
+    tor,
     copilot,
     business,
     businessManaged: () => !!managedPolicy(paths.root),
@@ -1078,6 +1084,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await coachRoutes(app, services);
   await memoryRoutes(app, services);
   await healthRoutes(app, services);
+  await torRoutes(app, services);
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
   await speechRoutes(app, services);

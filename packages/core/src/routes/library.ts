@@ -791,6 +791,6 @@ export function cleanWebPrefs(x: unknown): import("@kesher/shared").WebPrefs | u
   const only = sites(w.only);
   const never = sites(w.never);
   const depth: "quick" | "deep" | undefined = w.depth === "quick" || w.depth === "deep" ? w.depth : undefined;
-  const out = { ...(only.length ? { only } : {}), ...(never.length ? { never } : {}), ...(depth ? { depth } : {}) };
+  const out = { ...(only.length ? { only } : {}), ...(never.length ? { never } : {}), ...(depth ? { depth } : {}), ...(w.tor === false ? { tor: false as const } : {}) };
   return Object.keys(out).length ? out : undefined;
 }

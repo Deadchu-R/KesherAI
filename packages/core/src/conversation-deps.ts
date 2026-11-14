@@ -83,6 +83,8 @@ export interface ConversationDeps {
   onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
   /** Whether KesherAI's own browser pane (the desktop app) is there. */
   browserPane?(): boolean;
+  /** Tor, for pages that do not open directly (when installed). */
+  tor?: import("./tor.js").Tor;
   /** Saves the settings (after "Always allow on this site" adds a site). */
   saveConfig?(): Promise<void> | void;
 }

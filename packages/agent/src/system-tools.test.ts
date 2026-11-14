@@ -21,3 +21,18 @@ test("web_fetch refuses this computer and the home network", async () => {
     await assert.rejects(webFetchTool.run({ url }, ctx), /public web pages|http and https/, url);
   }
 });
+
+test("web_fetch: a page that does not open directly is tried once through Tor, and says so", async () => {
+  let asked = "";
+  const r = await webFetchTool.run({ url: "https://blocked.invalid/news" }, {
+    signal: new AbortController().signal,
+    recordChange: () => undefined,
+    viaTor: async (url) => {
+      asked = url;
+      return { url, status: 200, type: "text/html", body: "<p>the article</p>" };
+    },
+  });
+  assert.equal(asked, "https://blocked.invalid/news");
+  assert.match(r.output, /Opened through Tor[\s\S]*the article/);
+  await assert.rejects(webFetchTool.run({ url: "https://blocked.invalid/x" }, { signal: new AbortController().signal, recordChange: () => undefined }), /did not open/);
+});

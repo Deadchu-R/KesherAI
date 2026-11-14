@@ -98,6 +98,8 @@ export interface AgentSessionOptions {
   env?(): Record<string, string>;
   /** The chat's web search settings (read on each tool call). */
   web?(): import("@kesher/shared").WebPrefs | undefined;
+  /** Opens a page through Tor (read on each tool call; absent when Tor is off for this chat). */
+  viaTor?(): ((url: string, signal: AbortSignal) => Promise<{ url: string; status: number; type: string; body: string }>) | undefined;
   /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
   contextTokens?: number;
   /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
@@ -168,6 +170,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly onAlwaysScope?: (scope: string) => void;
   private readonly envOf?: () => Record<string, string>;
   private readonly webOf?: () => import("@kesher/shared").WebPrefs | undefined;
+  private readonly torOf?: AgentSessionOptions["viaTor"];
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
@@ -209,6 +212,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.onAlwaysScope = opts.onAlwaysScope;
     this.envOf = opts.env;
     this.webOf = opts.web;
+    this.torOf = opts.viaTor;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
     this.toolSearch = opts.toolSearch;
@@ -931,6 +935,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       progress: this.liveOutput(call.id),
       ...(this.envOf ? { env: this.envOf() } : {}),
       ...(this.webOf?.() ? { web: this.webOf()! } : {}),
+      ...(this.torOf?.() ? { viaTor: this.torOf()! } : {}),
     };
     // A scoped tool (the browser) is "always allowed" per site, not as a whole.
     let scope: string | undefined;

@@ -82,6 +82,8 @@ export interface KesherServices {
   onedriveSync: DriveSync;
   /** Protects the graphics card: temperature limit, pause, unloading idle models. */
   guard: GpuGuard;
+  /** Tor for blocked pages. */
+  tor: import("./tor.js").Tor;
   /** The Unreal Editor's connection (KesherAI Bridge plugin) and saved Blueprints. */
   unreal: UnrealBridge;
   /** Unity projects through Unity's CLI (KesherAI Bridge package). */

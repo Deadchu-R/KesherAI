@@ -645,6 +645,12 @@ export class ConversationManager {
           : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
       env: () => this.envFor(id),
       web: () => this.deps.library.summary(id)?.web,
+      // A blocked page once more through Tor, when it is installed and the chat did not switch it off.
+      viaTor: () => {
+        const tor = this.deps.tor;
+        if (!tor?.installed() || this.deps.library.summary(id)?.web?.tor === false) return undefined;
+        return (url: string, signal: AbortSignal) => tor.fetch(url, signal);
+      },
       onAlwaysScope: (scope) => {
         if (!scope.startsWith("site:")) return;
         const site = scope.slice(5);

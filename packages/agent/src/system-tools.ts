@@ -147,12 +147,32 @@ export const webFetchTool: AgentTool = {
     const never = (ctx.web?.never ?? []).map(siteName).filter(Boolean);
     if (only.length && !only.some((d) => onSite(url.href, d))) throw new Error(`This chat reads only from: ${only.join(", ")} (the user set it). Pick a page there.`);
     if (never.some((d) => onSite(url.href, d))) throw new Error(`This chat never reads from that site (the user set it).`);
-    const res = await fetch(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)]), headers: { "user-agent": "KesherAI (+https://github.com/Deadchu-R/KesherAI)" } });
-    if (!res.ok) throw new Error(`The page answered ${res.status} ${res.statusText}.`);
-    const type = res.headers.get("content-type") ?? "";
-    const body = await res.text();
-    const text = /html/i.test(type) ? htmlToText(body) : body;
-    return { output: `${res.url}\n\n${text.slice(0, MAX_OUTPUT)}` };
+    let res: Response | undefined;
+    let why = "";
+    try {
+      res = await fetch(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)]), headers: { "user-agent": "KesherAI (+https://github.com/Deadchu-R/KesherAI)" } });
+      if (!res.ok) why = `The page answered ${res.status} ${res.statusText}.`;
+    } catch (err) {
+      if (ctx.signal.aborted) throw err;
+      why = `The page did not open (${(err as { cause?: { code?: string } }).cause?.code ?? (err as Error).message}).`;
+    }
+    if (res?.ok) {
+      const type = res.headers.get("content-type") ?? "";
+      const body = await res.text();
+      const text = /html/i.test(type) ? htmlToText(body) : body;
+      return { output: `${res.url}\n\n${text.slice(0, MAX_OUTPUT)}` };
+    }
+    // Blocked here (a DNS or network block, "unavailable for legal reasons", forbidden): once more through Tor.
+    if (ctx.viaTor && (!res || [403, 451].includes(res.status))) {
+      ctx.progress?.("The page did not open directly; trying through Tor…\n");
+      const p = await ctx.viaTor(url.href, ctx.signal).catch((err: Error) => {
+        throw new Error(`${why} Through Tor it did not open either: ${err.message}`);
+      });
+      if (p.status < 200 || p.status >= 300) throw new Error(`${why} Through Tor the page answered ${p.status}.`);
+      const text = /html/i.test(p.type) ? htmlToText(p.body) : p.body;
+      return { output: `${p.url}\n(Opened through Tor: it did not open directly from this computer. Tell the user you used Tor for this page.)\n\n${text.slice(0, MAX_OUTPUT)}` };
+    }
+    throw new Error(why);
   },
 };
 

@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import type { WebPrefs } from "@kesher/shared";
 import { BarPopover } from "./ui/BarPopover";
 import { getLocale } from "./i18n";
+import { api, isRemote } from "./api";
+import { toast } from "./library";
+
+interface TorState { installed: boolean; available: boolean; version?: string; running: boolean; job?: { state: string; message: string } }
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -21,7 +25,17 @@ export function WebPrefsChip({
   );
   const [only, setOnly] = useState((value?.only ?? []).join(", "));
   const [never, setNever] = useState((value?.never ?? []).join(", "));
+  // Tor for blocked pages: on by default once installed; a chat can switch it off.
+  const [tor, setTor] = useState(value?.tor !== false);
+  const [torState, setTorState] = useState<TorState | null>(null);
+  const readTor = () => void api<TorState>("/api/tor").then(setTorState, () => undefined);
   useEffect(() => {
+    if (!torState?.job || torState.job.state === "error") return;
+    const tm = setTimeout(readTor, 2000);
+    return () => clearTimeout(tm);
+  }, [torState]);
+  useEffect(() => {
+    setTor(value?.tor !== false);
     setDepth(value?.depth ?? "normal");
     setOnly((value?.only ?? []).join(", "));
     setNever((value?.never ?? []).join(", "));
@@ -29,7 +43,8 @@ export function WebPrefsChip({
   const set = !!(
     value?.only?.length ||
     value?.never?.length ||
-    (value?.depth && value.depth !== "normal")
+    (value?.depth && value.depth !== "normal") ||
+    value?.tor === false
   );
   const list = (t: string) =>
     t
@@ -54,6 +69,7 @@ export function WebPrefsChip({
             ...(depth !== "normal" ? { depth } : {}),
             ...(list(only).length ? { only: list(only) } : {}),
             ...(list(never).length ? { never: list(never) } : {}),
+            ...(!tor ? { tor: false as const } : {}),
           };
           onChange(Object.keys(w).length ? w : null);
           close();
@@ -134,6 +150,26 @@ export function WebPrefsChip({
                 placeholder="pinterest.com"
               />
             </label>
+            <div className="stack small web-tor" ref={(el) => { if (el && !torState) readTor(); }}>
+              {torState?.installed ? (
+                <label className="check">
+                  <input type="checkbox" checked={tor} onChange={(e) => setTor(e.target.checked)} />
+                  {L("אתר חסום? לנסות שוב דרך Tor (התשובה תגיד מתי)", "A blocked site? Try again through Tor (the answer says when)")}
+                </label>
+              ) : torState?.available ? (
+                <div className="stack small">
+                  <span className="muted">{L("Tor פותח אתרים שחסומים מהמחשב הזה. לא מותקן.", "Tor opens sites that are blocked from this computer. Not installed.")}</span>
+                  {torState.job ? (
+                    <span className={torState.job.state === "error" ? "error" : "muted"}>{torState.job.message}</span>
+                  ) : null}
+                  {!isRemote() && torState.job?.state !== "downloading" && torState.job?.state !== "installing" && (
+                    <button type="button" style={{ alignSelf: "start" }} onClick={() => void api<TorState>("/api/tor/install", { method: "POST" }).then(setTorState, (e: Error) => toast(e.message))}>
+                      {L("התקן Tor (הורדה מ-torproject.org, ~20MB)", "Install Tor (from torproject.org, ~20 MB)")}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
             <div className="row">
               <button type="button" className="primary" onClick={save}>
                 {L("שמור", "Save")}

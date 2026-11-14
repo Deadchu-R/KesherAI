@@ -26,6 +26,8 @@ export interface WebPrefs {
   never?: string[];
   /** quick: a few results, answer from them; normal; deep: more results and several pages read. */
   depth?: "quick" | "normal" | "deep";
+  /** false: never open a blocked page through Tor in this chat (by default it tries, when Tor is installed). */
+  tor?: boolean;
 }
 
 /** A project's environment for its code sessions. */

@@ -47,6 +47,8 @@ export interface ToolContext {
   env?: Record<string, string>;
   /** The chat's web search settings (sites, depth). */
   web?: import("@kesher/shared").WebPrefs;
+  /** Opens a page through Tor, for a page that does not open directly (when Tor is installed and the chat allows it). */
+  viaTor?(url: string, signal: AbortSignal): Promise<{ url: string; status: number; type: string; body: string }>;
 }
 
 /**
