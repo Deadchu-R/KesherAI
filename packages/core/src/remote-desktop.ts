@@ -8,7 +8,7 @@
  * window shows a banner while a session is on. This is the person themselves, so no app is off limits here (unlike
  * the model's computer control).
  */
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { screenControl, type Backend } from "./computer.js";
 
 /** What is kept in the config. */
@@ -16,6 +16,13 @@ export interface RemoteDesktopSettings {
   enabled: boolean;
   /** "salt:hash" (scrypt), never the PIN. */
   pinHash?: string;
+  /** Phones allowed for good by the owner ("Always"): a hash of each phone's own id, its name, when. */
+  trusted?: Array<{ id: string; name: string; at: string }>;
+}
+
+/** A phone's own id as kept (never the id itself). */
+export function deviceHash(id: string): string {
+  return createHash("sha256").update(`kesher-remote:${id}`).digest("hex").slice(0, 32);
 }
 
 /** Makes the kept form of a PIN. */
@@ -49,6 +56,8 @@ export class RemoteDesktop {
   private session: { token: string; at: number; started: number; device: string } | undefined;
   private wrong = 0;
   private lockedUntil = 0;
+  /** Phones asking for control without the PIN, until the owner answers (5 minutes). */
+  private requests = new Map<string, { code: string; device: string; deviceId: string; at: number; state: "waiting" | "approved" | "denied"; token?: string }>();
   /** How the last picture maps to the desktop. */
   private map = { scale: 1, left: 0, top: 0 };
 
@@ -86,9 +95,63 @@ export class RemoteDesktop {
       throw new Error("Wrong PIN.");
     }
     this.wrong = 0;
+    return this.open(device);
+  }
+
+  private open(device: string): string {
     const token = randomBytes(24).toString("hex");
     this.session = { token, at: Date.now(), started: Date.now(), device: device.slice(0, 60) || "phone" };
     return token;
+  }
+
+  /**
+   * A phone asks for control without the PIN: a phone the owner allowed for good starts at once; any other waits for
+   * the owner's answer (on the computer, or the Approve buttons on the owner's phone).
+   *
+   * @param deviceId - The phone's own random id (kept only as a hash).
+   * @returns The request's id and, for the owner's buttons, its one-time code; or a token right away.
+   */
+  request(device: string, deviceId: string): { id: string; code?: string; token?: string } {
+    const s = this.settings();
+    if (!s.enabled) throw new Error("Remote control is off on that computer.");
+    if (!/^[\w-]{16,80}$/.test(deviceId)) throw new Error("Unknown phone.");
+    const id = randomBytes(12).toString("hex");
+    if ((s.trusted ?? []).some((t) => t.id === deviceHash(deviceId))) return { id, token: this.open(device) };
+    for (const [k, v] of this.requests) if (Date.now() - v.at > 5 * 60_000) this.requests.delete(k);
+    if (this.requests.size >= 5) throw new Error("Too many requests waiting.");
+    const code = randomBytes(16).toString("hex");
+    this.requests.set(id, { code, device: device.slice(0, 60) || "phone", deviceId, at: Date.now(), state: "waiting" });
+    return { id, code };
+  }
+
+  /** The requests waiting for the owner (for the computer's screen). */
+  waiting(): Array<{ code: string; device: string; at: string }> {
+    return [...this.requests.values()].filter((r) => r.state === "waiting" && Date.now() - r.at < 5 * 60_000).map((r) => ({ code: r.code, device: r.device, at: new Date(r.at).toISOString() }));
+  }
+
+  /**
+   * The owner's answer. "always" keeps the phone (as a hash) so it needs no approval next time.
+   *
+   * @returns The phone to keep for good, when "always"; false when the code is unknown or too old.
+   */
+  decide(code: string, d: "once" | "always" | "deny"): false | { keep?: { id: string; name: string; at: string } } {
+    const r = [...this.requests.values()].find((x) => x.code === code && x.state === "waiting" && Date.now() - x.at < 5 * 60_000);
+    if (!r) return false;
+    if (d === "deny") {
+      r.state = "denied";
+      return {};
+    }
+    r.state = "approved";
+    r.token = this.open(r.device);
+    return d === "always" ? { keep: { id: deviceHash(r.deviceId), name: r.device, at: new Date().toISOString() } } : {};
+  }
+
+  /** The phone asks how its request went (its own id must match). */
+  poll(id: string, deviceId: string): { state: "waiting" | "approved" | "denied" | "gone"; token?: string } {
+    const r = this.requests.get(id);
+    if (!r || r.deviceId !== deviceId || Date.now() - r.at > 5 * 60_000) return { state: "gone" };
+    if (r.state !== "waiting") this.requests.delete(id);
+    return { state: r.state, ...(r.token ? { token: r.token } : {}) };
   }
 
   /** Ends the session (from the computer's banner, the phone, or Settings). */

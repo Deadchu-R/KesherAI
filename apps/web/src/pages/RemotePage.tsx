@@ -5,7 +5,26 @@ import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Status { enabled: boolean; hasPin: boolean; active: boolean; since?: string; device?: string; locked: boolean }
+interface Status { enabled: boolean; hasPin: boolean; active: boolean; since?: string; device?: string; locked: boolean; waiting?: Array<{ code: string; device: string; at: string }>; trusted?: Array<{ id: string; name: string; at: string }> }
+
+/** This phone's own random id (asked for "Always"; kept on the phone). */
+function deviceId(): string {
+  try {
+    let id = localStorage.getItem("kesher.remoteDeviceId");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("kesher.remoteDeviceId", id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+/** The owner's answer to a phone asking for control. */
+export function decideRemote(code: string, d: "once" | "always" | "deny"): Promise<unknown> {
+  return api(`/api/remote-desktop/decide/${code}?d=${d}`, { method: "POST" });
+}
 type Input = { kind: "click" | "double" | "right"; x: number; y: number } | { kind: "scroll"; x: number; y: number; amount: number } | { kind: "type"; text: string } | { kind: "key"; combo: string };
 
 /**
@@ -37,7 +56,7 @@ function RemoteSetup() {
         </label>
         <button type="button" style={{ alignSelf: "start" }} disabled={pin.length < 6} onClick={() => save({ pin })}>{L("שמור קוד", "Save the PIN")}</button>
         <label className="check">
-          <input type="checkbox" checked={st.enabled} disabled={!st.hasPin} onChange={(e) => save({ enabled: e.target.checked })} />
+          <input type="checkbox" checked={st.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
           {L("לאפשר שליטה מהטלפון", "Allow control from the phone")}
         </label>
         {st.active && (
@@ -46,7 +65,26 @@ function RemoteSetup() {
             <button type="button" className="danger" onClick={() => void api<Status>("/api/remote-desktop/end", { method: "POST" }).then(setSt)}>{L("נתק", "Disconnect")}</button>
           </p>
         )}
-        <p className="muted small">{L("חמש טעויות בקוד נועלות ל-10 דקות. סשן נגמר אחרי 15 דקות בלי פעולה. כשהטלפון שולט, מופיע פס למעלה בחלון של KesherAI עם “נתק”.", "Five wrong PINs lock it for 10 minutes. A session ends after 15 idle minutes. While the phone is in control, a bar at the top of KesherAI's window has “Disconnect”.")}</p>
+        {(st.waiting ?? []).map((w) => (
+          <div key={w.code} className="card row wrap">
+            <span className="grow">{L(`📱 ${w.device} מבקש לשלוט במחשב`, `📱 ${w.device} asks to control the computer`)}</span>
+            <button type="button" className="primary" onClick={() => void decideRemote(w.code, "once").then(load)}>{L("אשר פעם אחת", "Allow once")}</button>
+            <button type="button" onClick={() => void decideRemote(w.code, "always").then(load)}>{L("תמיד", "Always")}</button>
+            <button type="button" className="danger" onClick={() => void decideRemote(w.code, "deny").then(load)}>{L("דחה", "Deny")}</button>
+          </div>
+        ))}
+        {(st.trusted ?? []).length > 0 && (
+          <div className="stack small">
+            <span>{L("טלפונים שאושרו תמיד (נכנסים בלי קוד ובלי לשאול):", "Phones allowed for good (no PIN, no asking):")}</span>
+            {st.trusted!.map((t) => (
+              <div key={t.id} className="row">
+                <span className="grow">{t.name} · {new Date(t.at).toLocaleDateString()}</span>
+                <button type="button" onClick={() => void api(`/api/remote-desktop/trusted/${t.id}`, { method: "DELETE" }).then(load)}>{L("הסר", "Remove")}</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="muted small">{L("בלי קוד: הטלפון מבקש, ומאשרים כאן או בהתראה בטלפון שלכם (פעם אחת / תמיד / דחה). ", "Without a PIN: the phone asks, and you answer here or in the notification on your phone (once / always / deny). ")}{L("חמש טעויות בקוד נועלות ל-10 דקות. סשן נגמר אחרי 15 דקות בלי פעולה. כשהטלפון שולט, מופיע פס למעלה בחלון של KesherAI עם “נתק”.", "Five wrong PINs lock it for 10 minutes. A session ends after 15 idle minutes. While the phone is in control, a bar at the top of KesherAI's window has “Disconnect”.")}</p>
       </section>
     </div>
   );
@@ -62,6 +100,34 @@ function RemoteControl() {
     }
   });
   const [pin, setPin] = useState("");
+  const [asking, setAsking] = useState(false);
+  const begin = (t: string) => {
+    setToken(t);
+    try {
+      sessionStorage.setItem("kesher.remoteDesktop", t);
+    } catch {
+      // only this page
+    }
+  };
+  // Without the PIN: ask, then wait for the owner's answer (or start at once on a phone allowed for good).
+  const ask = async () => {
+    setAsking(true);
+    try {
+      const me = deviceId();
+      const r = await api<{ id: string; token?: string }>("/api/remote-desktop/request", { method: "POST", body: { device: navigator.userAgent.includes("Android") ? "Android phone" : "Phone", deviceId: me } });
+      if (r.token) return begin(r.token);
+      for (let i = 0; i < 150; i++) {
+        await new Promise((res) => setTimeout(res, 2000));
+        const p = await api<{ state: string; token?: string }>(`/api/remote-desktop/request/${r.id}?deviceId=${encodeURIComponent(me)}`);
+        if (p.state === "approved" && p.token) return begin(p.token);
+        if (p.state !== "waiting") return toast(p.state === "denied" ? L("בעל המחשב דחה.", "The owner said no.") : L("הבקשה פגה.", "The request ran out."));
+      }
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setAsking(false);
+    }
+  };
   const [src, setSrc] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [text, setText] = useState("");
@@ -125,6 +191,7 @@ function RemoteControl() {
             <input type="password" inputMode="numeric" autoComplete="off" dir="ltr" autoFocus value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 12))} />
           </label>
           <button type="submit" className="primary" disabled={pin.length < 6}>{L("התחבר", "Connect")}</button>
+          <button type="button" disabled={asking} onClick={() => void ask()}>{asking ? L("מחכה לאישור של בעל המחשב…", "Waiting for the computer's owner…") : L("בלי קוד: לבקש אישור מבעל המחשב", "No PIN: ask the computer's owner")}</button>
           <p className="muted small">{L("צריך להדליק את זה במחשב עצמו: בתפריט ← שליטה מרחוק (קוד ו״לאפשר שליטה מהטלפון״).", "Switch it on at the computer first: the menu → Remote control (a PIN and “Allow control from the phone”).")}</p>
         </form>
       </div>

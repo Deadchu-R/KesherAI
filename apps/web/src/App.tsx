@@ -329,14 +329,26 @@ export function App() {
  */
 function RemoteBanner() {
   const [on, setOn] = useState(false);
+  const [asks, setAsks] = useState<Array<{ code: string; device: string }>>([]);
   useEffect(() => {
     if (isRemote()) return;
-    const read = () => void api<{ active: boolean }>("/api/remote-desktop").then((s) => setOn(s.active), () => undefined);
+    const read = () => void api<{ active: boolean; waiting?: Array<{ code: string; device: string }> }>("/api/remote-desktop").then((s) => { setOn(s.active); setAsks(s.waiting ?? []); }, () => undefined);
     read();
     const id = setInterval(read, 5000);
     return () => clearInterval(id);
   }, []);
-  if (!on) return null;
+  const he = getLocale() === "he";
+  const decide = (code: string, d: "once" | "always" | "deny") => void api(`/api/remote-desktop/decide/${code}?d=${d}`, { method: "POST" }).then(() => setAsks((a) => a.filter((x) => x.code !== code)));
+  if (!on && !asks.length) return null;
+  if (!on)
+    return (
+      <div className="remote-banner" role="alert">
+        <span className="grow">{he ? `📱 ${asks[0]!.device} מבקש לשלוט במחשב הזה` : `📱 ${asks[0]!.device} asks to control this computer`}</span>
+        <button type="button" onClick={() => decide(asks[0]!.code, "once")}>{he ? "אשר פעם אחת" : "Allow once"}</button>
+        <button type="button" onClick={() => decide(asks[0]!.code, "always")}>{he ? "תמיד" : "Always"}</button>
+        <button type="button" onClick={() => decide(asks[0]!.code, "deny")}>{he ? "דחה" : "Deny"}</button>
+      </div>
+    );
   return (
     <div className="remote-banner" role="status">
       <span className="grow">{getLocale() === "he" ? "📱 הטלפון שולט במחשב הזה עכשיו" : "📱 Your phone is controlling this computer now"}</span>

@@ -704,3 +704,8 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   the computer; the computer is told when it starts; the phone gets pictures of the screen and sends taps, keys and
   scrolls through KesherAI's existing screen and input code. Pictures, not video, at first (no new library).
 - Stopped at: plan written; building now.
+- Added (same day): CRD's two ways (pureinfotech, TechRepublic): Remote Access (your own computers, a PIN) and
+  Remote Support (a code; the host approves each time). KesherAI: the PIN, or "ask the owner": the owner answers on
+  the computer's bar or with the buttons on their phone (once / always / deny); "always" keeps that phone (a hash of
+  its own id) until removed. Signing in with a Google account on the phone is left for later (needs a Google client
+  set up for the app).

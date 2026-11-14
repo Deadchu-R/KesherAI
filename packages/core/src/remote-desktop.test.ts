@@ -39,3 +39,27 @@ test("a session maps taps from the picture to the desktop, and ends", async () =
   rd.end();
   await assert.rejects(rd.input(s, { kind: "type", text: "x" }), /ended/);
 });
+
+test("without the PIN: the owner allows once or always; an allowed phone starts at once", async () => {
+  const { deviceHash } = await import("./remote-desktop.js");
+  const settings = { enabled: true, trusted: [] as Array<{ id: string; name: string; at: string }> };
+  const rd = new RemoteDesktop(() => settings);
+  const phone = "a1b2c3d4e5f6a7b8c9d0";
+  const r = rd.request("Android", phone);
+  assert.ok(r.code && !r.token);
+  assert.equal(rd.poll(r.id, phone).state, "waiting");
+  assert.equal(rd.poll(r.id, "someone-else-0000000").state, "gone", "only the asking phone sees the answer");
+  const d = rd.decide(r.code!, "always");
+  assert.ok(d && d.keep && d.keep.id === deviceHash(phone) && !d.keep.id.includes(phone));
+  const p = rd.poll(r.id, phone);
+  assert.equal(p.state, "approved");
+  assert.ok(p.token);
+  assert.equal(rd.decide(r.code!, "once"), false, "a code works once");
+  settings.trusted.push(d.keep!);
+  assert.ok(rd.request("Android", phone).token, "allowed for good: no asking");
+  const other = rd.request("Other", "zzzzzzzzzzzzzzzzzzzz");
+  rd.decide(other.code!, "deny");
+  assert.equal(rd.poll(other.id, "zzzzzzzzzzzzzzzzzzzz").state, "denied");
+  settings.enabled = false;
+  assert.throws(() => rd.request("Android", phone), /off/);
+});

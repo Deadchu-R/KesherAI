@@ -195,6 +195,8 @@ export function registerRemoteAuth(
     if (path === "/api/hello") return;
     // The Approve / Deny buttons on a phone or watch notification: a one-time code for one request.
     if (request.method === "POST" && /^\/api\/quick-approve\/[\w-]{32}$/.test(path)) return;
+    // The owner's Allow / Deny buttons for a phone asking to control this computer (the one-time code is the key).
+    if (request.method === "POST" && /^\/api\/remote-desktop\/decide\/[0-9a-f]{32}$/.test(path)) return;
     if (path === "/api/pair" || /^\/api\/pair\/[0-9a-f-]{36}$/.test(path)) {
       if (request.method === "POST" && path === "/api/pair") return;
       if (request.method === "GET" && path !== "/api/pair") return;
