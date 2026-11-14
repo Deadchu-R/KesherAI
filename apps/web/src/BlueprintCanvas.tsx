@@ -943,7 +943,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           })}
           {wire && <path d={`M${wire.ax},${wire.ay} C${wire.ax + (wire.dir === "out" ? 60 : -60)},${wire.ay} ${wire.ex + (wire.dir === "out" ? -60 : 60)},${wire.ey} ${wire.ex},${wire.ey}`} stroke={pinColor(wire.type)} strokeWidth={2} fill="none" strokeDasharray="5 4" />}
           {boxes.map((b) => {
-            const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
+            const head = /Event/.test(b.n.class) ? "#7a1f1f" : /_Pure|Operator|MakeStruct|ArrayItem/.test(b.n.class) ? "#3d6b2e" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
             const on = selected.has(b.n.id);
             const found = current?.n.id === b.n.id ? "#f2c94c" : matches.some((m) => m.n.id === b.n.id) ? "#8a7a3a" : undefined;
             if (isKnot(b.n)) {

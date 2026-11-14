@@ -1605,6 +1605,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .script-nodes .ue-list li button { width: 100%; text-align: start; background: transparent; border: 0; padding: 6px 8px; border-radius: 6px; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .script-nodes .ue-list li button.on { background: var(--hover, rgba(127,127,127,.15)); }
 .script-methods button.on { background: var(--accent); color: var(--on-accent, #fff); }
+.script-pure { margin-inline-start: auto; gap: 6px; align-items: center; white-space: nowrap; }
 .script-graph { display: grid; grid-template-columns: 1fr 280px; gap: 12px; min-height: 420px; }
 .script-canvas { position: relative; min-height: 420px; border-radius: 10px; overflow: hidden; }
 .script-edit { display: flex; flex-direction: column; gap: 10px; }

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { addField, addKnot, breakExec, collapseToFunction, csValue, deleteStep, fieldUses, insertStep, isKnotId, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, realPin, removeField, removeKnot, updateField, wireExec, withKnots, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
+import { addField, addKnot, exprAt, parseExpr, parsePureId, purePath, replaceValueAt, setStepValue, stepValue, withPureNodes, writeExpr, breakExec, collapseToFunction, csValue, deleteStep, fieldUses, insertStep, isKnotId, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, realPin, removeField, removeKnot, updateField, wireExec, withKnots, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas, type Action } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
@@ -75,6 +75,14 @@ export function ScriptNodes() {
   const [ci, setCi] = useState(0);
   const [method, setMethod] = useState("");
   const [sel, setSel] = useState("");
+  // Values drawn as pure nodes (as Unreal draws them), or as text on the inputs; remembered on this device.
+  const [pure, setPure] = useState(() => {
+    try {
+      return localStorage.getItem("kesher.script.pure") !== "0";
+    } catch {
+      return true;
+    }
+  });
   const [show, setShow] = useState<"nodes" | "code">("nodes");
   const [tick, setTick] = useState(0);
   /** Where each node was put, and the steps placed on the graph but not wired in (kept by KesherAI, not in the code). */
@@ -151,7 +159,8 @@ export function ScriptNodes() {
   const keyOf = useRef(new Map<string, string>());
   const nodes = useMemo(() => {
     if (!m) return [];
-    const list = methodToNodes(m, layoutRef.current);
+    const steps = methodToNodes(m, layoutRef.current);
+    const list = pure ? withPureNodes(steps, layoutRef.current.positions) : steps;
     // A node whose key changed (its target or name was edited) keeps the place it was given.
     const pos = (layoutRef.current.positions ??= {});
     for (const n of list) {
@@ -164,7 +173,7 @@ export function ScriptNodes() {
       if (n.key) keyOf.current.set(n.id, n.key);
     }
     return list;
-  }, [m, tick]);
+  }, [m, tick, pure]);
   // The graph as drawn: with its reroute nodes; one whose wire is gone is dropped from the layout.
   const drawn = useMemo(() => {
     if (!m) return [];
@@ -178,7 +187,8 @@ export function ScriptNodes() {
   }, [nodes]);
   const out = useMemo(() => (file ? writeCSharp(text, classes) : ""), [file, text, classes, tick]);
   const changed = !!file && out !== file.text;
-  const found = m && sel ? locate(m, layoutRef.current, sel) : undefined;
+  // A pure node belongs to its step: choosing it shows the step (and the whole value) on the side.
+  const found = m && sel ? locate(m, layoutRef.current, parsePureId(sel)?.step ?? sel) : undefined;
   const st = found?.stmt;
   const edit = (f: (s: CsStmt) => void) => {
     if (!st) return;
@@ -276,7 +286,61 @@ export function ScriptNodes() {
         const f = op.from as { node: string; pin: string; dir: string; type: string };
         op = { ...op, from: { ...f, ...real(f.node, f.pin) } };
       }
-      if (op.op === "copy") op = { ...op, nodes: (op.nodes as string[]).filter((id) => !isKnotId(id)) };
+      if (op.op === "copy" || op.op === "collapse") op = { ...op, nodes: (op.nodes as string[]).filter((id) => !isKnotId(id) && !parsePureId(id)) };
+      // Pure nodes are parts of a step's value: a change on one writes that value again.
+      const pureOf = (node: string, pin?: string) => {
+        const p = parsePureId(node);
+        const f = p ? locate(m, layoutRef.current, p.step) : undefined;
+        const v = f ? stepValue(f.stmt, p!.pin) : undefined;
+        const at = v !== undefined ? purePath(node, v, pin) : undefined;
+        return f && v !== undefined && at ? { stmt: f.stmt, value: v, ...at } : undefined;
+      };
+      const writePart = (node: string, pin: string | undefined, text: string): { ok: boolean; error?: string } => {
+        const q = pureOf(node, pin);
+        if (!q) return { ok: false, error: L("לכניסה הזאת אי אפשר לתת ערך.", "This input cannot take a value.") };
+        setStepValue(q.stmt, q.stepPin, q.path ? replaceValueAt(q.value, q.path, text) : text);
+        return { ok: true };
+      };
+      /** The C# an output stands for: a pure node's part, a parameter, or another step's output by name. */
+      const textOf = (node: string, pin: string): string => {
+        const q = parsePureId(node) ? pureOf(node) : undefined;
+        if (q) return writeExpr(exprAt(parseExpr(q.value), q.path) ?? parseExpr(q.value));
+        if (node === m.id) return pin;
+        const n = nodes.find((x) => x.id === node);
+        return n ? `${n.title}.${pin}` : pin;
+      };
+      /** A value that stands in for a removed part (by its input's type). */
+      const blank = (type: string) => (type === "bool" ? "false" : type === "string" ? '""' : type === "object" ? "" : "0");
+      if (op.op === "disconnect" && parsePureId(String(op.node))) {
+        const pin = String(op.pin);
+        if (pin === "ReturnValue") {
+          op = { op: "delete", node: op.node };
+        } else {
+          const q = pureOf(String(op.node), pin);
+          const v = blank(q?.type ?? "");
+          if (!v) return { ok: false, error: L("ל-Target חייב להיות ערך: חברו אליו משהו אחר במקום.", "Target needs a value: wire something else into it instead.") };
+          return writePart(String(op.node), pin, v);
+        }
+      }
+      if (op.op === "delete" && parsePureId(String(op.node))) {
+        const q = pureOf(String(op.node));
+        const parentPin = nodes.flatMap((n) => n.pins).find((p) => p.dir === "in" && p.links?.includes(`${String(op.node)}:ReturnValue`));
+        const v = blank(parentPin?.type ?? "");
+        if (!q || !v) return { ok: false, error: L("ל-Target חייב להיות ערך: חברו אליו משהו אחר במקום.", "Target needs a value: wire something else into it instead.") };
+        return writePart(String(op.node), undefined, v);
+      }
+      if (op.op === "usevar" && parsePureId(String(op.node))) return writePart(String(op.node), String(op.pin), String(op.name));
+      if (op.op === "promote" && parsePureId(String(op.node))) return { ok: false, error: L("כאן אפשר לגרור משתנה מהפאנל על הכניסה, או לחבר אליה חוט.", "Here, drag a variable from the panel onto the input, or wire one into it.") };
+      if (op.op === "connect") {
+        const f2 = op.from as { node: string; pin: string };
+        const t2 = op.to as { node: string; pin: string };
+        if (parsePureId(t2.node)) return writePart(t2.node, t2.pin, textOf(f2.node, f2.pin));
+        if (parsePureId(f2.node)) {
+          const target2 = locate(m, layoutRef.current, t2.node);
+          if (!target2 || !setStepValue(target2.stmt, t2.pin, textOf(f2.node, f2.pin))) return { ok: false, error: L("לקלט הזה אי אפשר לחבר ערך.", "A value cannot go into this input.") };
+          return { ok: true };
+        }
+      }
       if (op.op === "move") {
         // Nodes stay where they are put, as in Unreal (saved with the script's graph, not in the code).
         const n = nodes.find((x) => x.id === op.node);
@@ -337,7 +401,7 @@ export function ScriptNodes() {
       }
       if (op.op === "collapse") {
         // Collapse to Function: the steps move into a new method of the class; a call takes their place.
-        const r = collapseToFunction(text, classes, ci, m.name, (op.nodes as string[]).filter((x) => !isKnotId(x)), String(op.name));
+        const r = collapseToFunction(text, classes, ci, m.name, op.nodes as string[], String(op.name));
         if ("error" in r) return { ok: false, error: r.error };
         setTimeout(() => {
           setText(r.text);
@@ -600,6 +664,23 @@ export function ScriptNodes() {
               {(cls?.methods ?? []).map((x) => (
                 <button key={x.id} type="button" role="tab" aria-selected={x.id === method} className={x.id === method ? "on" : ""} onClick={() => { setMethod(x.id); setSel(""); }} dir="ltr">{x.name}</button>
               ))}
+              {show !== "code" && (
+                <label className="row small script-pure" title={L("כל ערך שצעד מקבל (חשבון, משתנה, קריאה לפונקציה) מוצג כנודים בלי חיבורי זרימה, כמו ב-Unreal. כבוי: הערך מוצג כטקסט על הכניסה.", "Each value a step takes (math, a variable, a function call) is drawn as nodes without flow pins, as in Unreal. Off: the value is text on the input.")}>
+                  <input
+                    type="checkbox"
+                    checked={pure}
+                    onChange={(e) => {
+                      setPure(e.target.checked);
+                      try {
+                        localStorage.setItem("kesher.script.pure", e.target.checked ? "1" : "0");
+                      } catch {
+                        /* remembered for this visit only */
+                      }
+                    }}
+                  />
+                  {L("ערכים כנודים", "Values as nodes")}
+                </label>
+              )}
             </div>
             {show === "code" ? (
               <Fullscreen className="script-fs" label={L("הקוד במסך מלא", "The code, full screen")}>

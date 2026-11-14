@@ -880,3 +880,13 @@ Stopped at: offering 👁 at the moment a picture is attached to a model without
   from a sample instance; chat as a stream of events; chatWithTools' text as events; AbortSignal as a cancel).
 Stopped at: steps 3–6 (declarative contributions loaded on first use, a scan on install, a public list, API promises);
 the in-engine agents (Unreal/Unity, VISION) build on this sandbox.
+
+## 2026-11-14: Pure nodes in the C# graph (VISION list item 4)
+- Unreal: pure functions and getters have no exec pins and run when a value is pulled; a pure call's header is green.
+  The Math Expression node (K2Node_MathExpression) turns typed text (`a + b * 2`) into a collapsed graph of pure
+  nodes and keeps the text editable: the model taken here (the C# text stays the truth; the nodes are read from it).
+- Unity Visual Scripting: every value is a data node; plain values sit inline on the ports (as defaults here).
+- Built (0.6.184): csharp-expr.ts (parse/write, paths, Get/operator/call/Make nodes), "Values as nodes" toggle,
+  connect/disconnect/delete/drop-a-variable on pure nodes rewrite the step's value.
+Stopped at: typed pins (a type per member from the C# language server), splitting a pure node's output into
+several uses (Unreal keeps one node per use too), and Unreal's own pure nodes in Collapse to Function.
