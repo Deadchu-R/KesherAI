@@ -84,6 +84,12 @@ export function PersonasPage() {
               </Select>
             </label>
           )}
+          {/* As an agent (like Claude Code's subagents): a chat's model hands it a part of a job when this fits. */}
+          <label>
+            {L("גם כסוכן: מתי לתת לו עבודה (לא חובה)", "Also as an agent: when to hand it work (optional)")}
+            <input dir="auto" value={draft.agentWhen ?? ""} placeholder={L("למשל: לבדוק קוד Unity לבעיות ביצועים", "e.g. checking Unity code for performance problems")} onChange={(e) => setDraft({ ...draft, agentWhen: e.target.value })} />
+            <span className="muted small">{L("המודל בצ'אט יעביר לו חלק מהעבודה כשזה מתאים, או כשכותבים @השם. הסוכן רק קורא ומחפש, ומחזיר דוח.", "The chat's model hands it part of a job when this fits, or when you write @its name. The agent only reads and searches, and reports back.")}</span>
+          </label>
           <details className="persona-more">
             <summary>{L("עוד: איך המודל כותב, והצעות פתיחה", "More: how the model writes, and opening suggestions")}</summary>
             <label>
@@ -120,6 +126,7 @@ export function PersonasPage() {
           <div className="row">
             <span className="persona-mark" aria-hidden>{p.icon || p.name.slice(0, 1)}</span>
             <strong>{p.name}</strong>
+            {p.agentWhen && <span className="pill small" title={p.agentWhen}>{L("סוכן", "Agent")}</span>}
             <span className="muted small">{[p.modelId?.split("/").slice(-1)[0], p.knowledge && `${L("ידע", "Knowledge")}: ${p.knowledge}`].filter(Boolean).join(" · ")}</span>
             <span className="grow" />
             <button type="button" className="primary" onClick={() => void chat(p)}>{L("שיחה חדשה", "New chat")}</button>

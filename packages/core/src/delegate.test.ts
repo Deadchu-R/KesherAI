@@ -81,3 +81,23 @@ test("delegate runs the parts at the same time, each with its model, and reports
     "no changing tools",
   );
 });
+
+test("a named agent brings its instructions, model and tools", async () => {
+  const seen: Array<{ system: string; tools: string[] }> = [];
+  const turn: ModelTurn = async (req) => {
+    if (req.messages.at(-1)?.role === "user") seen.push({ system: String(req.messages[0]?.content ?? ""), tools: req.tools.map((t) => t.name) });
+    return { text: "done", toolCalls: [] };
+  };
+  const d = delegateTool({
+    tools: () => [tool("read_file", "read"), tool("search", "read")],
+    currentModel: () => "big",
+    turnFor: () => turn,
+    models: () => ["big", "small"],
+    agents: () => [{ name: "Perf", description: "Unity performance reviews", instructions: "Look for per-frame allocations.", model: "small", tools: ["search"], source: "persona" }],
+  });
+  assert.match(d.spec.description, /- Perf: Unity performance reviews/);
+  const r = await d.run({ parts: [{ task: "check Player.cs", agent: "perf" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.match(r.output, /Part 1 — agent Perf — small/);
+  assert.match(seen[0]!.system, /agent "Perf"[\s\S]*per-frame allocations/);
+  assert.deepEqual(seen[0]!.tools.filter((t) => t !== "ask_user" && t !== "request_access"), ["search"]);
+});

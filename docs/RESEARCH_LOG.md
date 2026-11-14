@@ -642,3 +642,22 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - **ChatGPT** memory FAQ could not be fetched (client error); not used.
 - Built for KesherAI as above. Stopped at: no import of memory from other assistants yet; incognito chats are kept in
   the chat list (only memory and search skip them).
+
+## 2026-11-14 — Agents (CLAUDE_PARITY_PLAN stage 7)
+- **Claude Code** (code.claude.com/docs/en/sub-agents): Markdown files with YAML frontmatter in `.claude/agents/`
+  (project) and `~/.claude/agents/` (user); `name` and `description` required; `tools`/`disallowedTools`, `model`
+  (or `inherit`), `isolation: worktree`, `background` and more optional; the body is the system prompt. The main
+  agent picks one by its description, or the user names/@-mentions it. Own context; only a summary comes back;
+  permissions are the parent's; background agents send their approval prompts to the main session. Built-ins:
+  Explore (read-only search), Plan, general-purpose.
+- **Codex** (codex.danielvaughan.com summary of the official docs): TOML files in `.codex/agents/` and
+  `~/.codex/agents/` (`name`, `description`, `developer_instructions`; optional `model`, `sandbox_mode`…); spawned
+  only when asked; max 6 at once, depth 1; inherit the parent's sandbox and approvals (approvals show which agent
+  asks). Built-in roles: default, worker, explorer.
+- **Cursor 2.4** (notes.dsebastien.net): subagents with own context, prompt, tools and model, in parallel, can nest.
+  Forum reports show custom agents in `.cursor/agents/`; its docs pages were not reachable.
+- KesherAI already had: `delegate` (read-only helpers, up to 4 at once, any model) and agent groups (personas via
+  `ask_member`). Missing: named agents the model picks by description, project agent files, agents that change files.
+- Plan: (1) named read-only agents: a persona with "when to use it" becomes an agent; project files in
+  `.kesher/agents/` and `.claude/agents/` (the Claude Code format, so existing ones work); `delegate` takes `agent`.
+  (2) later: worker agents that change files in their own worktree, the user approving in the chat.

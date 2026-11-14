@@ -52,6 +52,8 @@ export interface Persona {
   params?: PersonaParams;
   /** Opening messages offered when a chat starts with it (Open WebUI's prompt suggestions, Modelfile examples). */
   starters?: string[];
+  /** When set, the persona is also an agent: a chat's model hands it work when this fits (like a subagent's description). */
+  agentWhen?: string;
   updatedAt: string;
 }
 
@@ -93,6 +95,11 @@ export class Personas {
     return [...this.list_].sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** @returns The personas loaded now (without waiting for the file). */
+  now(): Persona[] {
+    return this.list_;
+  }
+
   /** @returns One persona, from what is loaded now. */
   get(id: string | undefined): Persona | undefined {
     return id ? this.list_.find((p) => p.id === id) : undefined;
@@ -122,6 +129,7 @@ export class Personas {
         const starters = (Array.isArray(input.starters) ? input.starters : []).filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim().slice(0, 300)).slice(0, 6);
         return starters.length ? { starters } : {};
       })(),
+      ...(input.agentWhen?.trim() ? { agentWhen: input.agentWhen.trim().slice(0, 500) } : {}),
       updatedAt: new Date().toISOString(),
     };
     if (!p.name || !p.instructions) throw new Error("A persona needs a name and instructions.");

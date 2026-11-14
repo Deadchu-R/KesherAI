@@ -125,6 +125,10 @@ Agent support: sub-agents a session can hand a task to (its own context, tools a
 defines and calls by name, like Claude Code's subagents and Codex's agents. Research the competitors first
 (how each defines an agent, what it may use, how its result returns to the session), then plan here.
 
+- Done (step 1): named read-only agents. A persona with "when to use it" is an agent; a project's
+  `.kesher/agents/*.md` and `.claude/agents/*.md` (Claude Code's format) are too. `delegate` takes `agent`.
+- Next (step 2): worker agents that change files, each in its own worktree, approvals shown in the chat.
+
 ## Risks
 - **The browser pane is a security surface.** Its own profile, no access to the app's session, per-site approval,
   page text treated as data. It gets its own security review before release.

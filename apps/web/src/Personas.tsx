@@ -6,7 +6,7 @@ import { getLocale } from "./i18n";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 /** A saved persona, as the server returns it. */
-export interface Persona { id: string; name: string; icon?: string; instructions: string; modelId?: string; knowledge?: string; params?: { temperature?: number; topP?: number; stop?: string[] }; starters?: string[] }
+export interface Persona { id: string; name: string; icon?: string; instructions: string; modelId?: string; knowledge?: string; params?: { temperature?: number; topP?: number; stop?: string[] }; starters?: string[]; agentWhen?: string }
 
 let cache: Persona[] | null = null;
 const listeners = new Set<(p: Persona[]) => void>();

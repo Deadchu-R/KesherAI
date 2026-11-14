@@ -14,6 +14,7 @@ import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
 import { delegateTool } from "./delegate.js";
+import { projectAgents, type AgentDef } from "./agents.js";
 import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
 import { chosenPhones, phoneNote, type Phone } from "./phones.js";
 import { findEngines, readProject } from "./unreal-install.js";
@@ -274,6 +275,10 @@ export class ConversationManager {
       models: () => this.chatModelIds,
       workspace: () => this.sessions.get(id)?.workspace,
       contextTokens: (m) => this.contextFor(m),
+      agents: () => [
+        ...(this.deps.personas?.now() ?? []).filter((p) => p.agentWhen).map((p): AgentDef => ({ name: p.name, description: p.agentWhen!, instructions: p.instructions, ...(p.modelId ? { model: p.modelId } : {}), source: "persona" })),
+        ...projectAgents(this.sessions.get(id)?.workspace),
+      ],
     });
   }
 

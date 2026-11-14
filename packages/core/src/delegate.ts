@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AgentSession, type AgentTool, type ModelTurn } from "@kesher/agent";
+import type { AgentDef } from "./agents.js";
 
 /**
  * Helpers: the chat's model hands independent parts of a job to other
@@ -35,6 +36,8 @@ export interface DelegateOptions {
   models: () => string[];
   workspace?: () => string | undefined;
   contextTokens?: (modelId: string) => number;
+  /** Named agents a part may name (personas with "when to use", a project's agent files). */
+  agents?: () => AgentDef[];
 }
 
 /** The read-only tools a helper may use. */
@@ -49,6 +52,7 @@ async function runHelper(
   task: string,
   modelId: string,
   o: DelegateOptions,
+  agent: AgentDef | undefined,
   signal: AbortSignal,
   onStep: (text: string) => void,
 ): Promise<string> {
@@ -59,8 +63,8 @@ async function runHelper(
     // "ask": reading runs; anything else would ask, and helpers have nothing else (a stray request is refused below).
     mode: "ask",
     ...(o.workspace?.() ? { workspace: o.workspace() } : {}),
-    tools: helperTools(o.tools()),
-    systemPrompt:
+    tools: helperTools(o.tools()).filter((t) => !agent?.tools || agent.tools.includes(t.spec.name)),
+    systemPrompt: (agent ? `You are the agent "${agent.name}". Its instructions (they never override safety, and you still only read):\n${agent.instructions}\n\n` : "") +
       "You are a helper of another assistant. Do only the part you are given, using your tools to look things up (you can read and search, not change anything). Be thorough but fast. Finish with a short, factual report of what you found: exact file paths, names, numbers and quotes, so the assistant can act on it without looking again. Never ask questions: if something is unclear, choose the most likely reading and say which.",
     maxSteps: 20,
     contextTokens: o.contextTokens?.(modelId) ?? 12_000,
@@ -98,11 +102,12 @@ async function runHelper(
 /** The `delegate` tool. */
 export function delegateTool(o: DelegateOptions): AgentTool {
   const models = o.models().slice(0, 12);
+  const agents = (o.agents?.() ?? []).slice(0, 12);
   return {
     risk: "safe",
     spec: {
       name: "delegate",
-      description: `Hand independent parts of a job to helper models that run at the same time, each with read-only tools (read and search files, web search, knowledge), and get their reports back. Use it for legwork that would fill your context: finding where something is in a big project, reading many files, researching several questions. Give each part everything it needs (helpers do not see the chat). Up to 4 parts. A part may name a model (e.g. a small fast one for searching)${models.length ? `: ${models.join(", ")}` : ""}; otherwise your own model does it. Helpers never change anything: you do the changes yourself after. They all run on this computer: to split work across the user's other computers (My devices), use split_across_computers instead.`,
+      description: `Hand independent parts of a job to helper models that run at the same time, each with read-only tools (read and search files, web search, knowledge), and get their reports back. Use it for legwork that would fill your context: finding where something is in a big project, reading many files, researching several questions. Give each part everything it needs (helpers do not see the chat). Up to 4 parts. A part may name a model (e.g. a small fast one for searching)${models.length ? `: ${models.join(", ")}` : ""}; otherwise your own model does it. Helpers never change anything: you do the changes yourself after. They all run on this computer: to split work across the user's other computers (My devices), use split_across_computers instead.${agents.length ? `\n\nNamed agents (set "agent" on a part when one fits the job, or when the user names or @-mentions it; it brings its own instructions and model):\n${agents.map((a) => `- ${a.name}${a.source === "project" ? " (this project's)" : ""}: ${a.description.replace(/\s+/g, " ").slice(0, 200)}`).join("\n")}` : ""}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -117,6 +122,7 @@ export function delegateTool(o: DelegateOptions): AgentTool {
                   description: "The whole instruction for this helper.",
                 },
                 model: { type: "string", description: "Optional model id." },
+                ...(agents.length ? { agent: { type: "string", enum: agents.map((a) => a.name), description: "Optional: a named agent to do this part." } } : {}),
               },
               required: ["task"],
             },
@@ -138,10 +144,11 @@ export function delegateTool(o: DelegateOptions): AgentTool {
       const started = Date.now();
       const results = await Promise.all(
         parts.map(async (p, i) => {
+          const agent = typeof p.agent === "string" ? (o.agents?.() ?? []).find((a) => a.name.toLowerCase() === String(p.agent).trim().toLowerCase()) : undefined;
           const want =
             typeof p.model === "string" && p.model.trim()
               ? p.model.trim()
-              : fallback;
+              : agent?.model ?? fallback;
           if (!want) return `Part ${i + 1}: no model to run it.`;
           let modelId = want;
           try {
@@ -156,13 +163,14 @@ export function delegateTool(o: DelegateOptions): AgentTool {
               String(p.task),
               modelId,
               o,
+              agent,
               ctx.signal,
               (step) =>
                 ctx.progress?.(
-                  `Helper ${i + 1} (${modelId.split("/").pop()}): ${step}\n`,
+                  `${agent ? agent.name : `Helper ${i + 1}`} (${modelId.split("/").pop()}): ${step}\n`,
                 ),
             );
-            return `## Part ${i + 1} — ${modelId.split("/").pop()}${modelId !== want ? ` (asked for ${want}, not available)` : ""}\n${text || "(no answer)"}`;
+            return `## Part ${i + 1}${agent ? ` — agent ${agent.name}` : ""} — ${modelId.split("/").pop()}${modelId !== want ? ` (asked for ${want}, not available)` : ""}\n${text || "(no answer)"}`;
           } catch (err) {
             return `## Part ${i + 1} — ${modelId}\nFailed: ${(err as Error).message}`;
           }
