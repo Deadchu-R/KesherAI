@@ -354,3 +354,17 @@ This review went through the code part by part. Each finding is listed with what
 - Phone readings for charging habits stay in the phone's own localStorage (the last 240), never sent.
 - LM Studio's MCP servers import like the others: off until the user turns each on after seeing its command.
 - @lezer/highlight: CodeMirror's own highlighting tags, already in the tree; no network or code from outside.
+
+## Scan 64 (2026-11-15, after the loop guard, self-work item cost, 0.6.198 icons and 0.6.199 Text Helper)
+- Text Helper keystrokes (0.6.199): Copy and Paste are pressed only after the user's own global key (Ctrl+Alt+K), by a
+  PowerShell helper that reads two fixed words from its stdin ("copy", "paste"), never text from a page; macOS sends a
+  fixed osascript line. The Paste IPC is accepted only from the helper's own window (sender check plus the app's
+  origin), up to 50,000 characters. `-ExecutionPolicy Bypass` applies to that one process, not to Windows.
+- The clipboard is put back after each Copy and Paste (text, HTML, RTF, a picture; copied files are not kept).
+- Fixed: selected text can come from any web page or email and carry instructions for the model, so the Text helper
+  chat is made in "ask" mode (every tool that writes or runs asks).
+- Fixed (performance): the helper waited for its answer by reading the whole chat every 0.7 s; it now waits on the
+  small activity list and reads the chat once.
+- Selections wait in memory only (30 at most, 20,000 characters each, 10 minutes), behind the access token.
+- Line icons (0.6.198): static paths drawn in React (no HTML from data); the user's own icons keep winning.
+- Loop guard and item cost: counters in memory; no new input.

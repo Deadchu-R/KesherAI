@@ -61,7 +61,9 @@ export async function textHelperRoutes(app: FastifyInstance, s: KesherServices):
     const saved = JSON.parse(await readFile(mapFile, "utf8").catch(() => "{}")) as { chatId?: string };
     let chat = saved.chatId ? await s.library.getConversation(saved.chatId) : undefined;
     if (!chat) {
-      chat = await s.conversations.create({ kind: "chat", title: "✍ Text helper" });
+      // Selected text can come from any web page or email, so it may carry instructions for the model: this chat
+      // asks before any tool that writes or runs (scan 64), whatever the default mode is.
+      chat = await s.conversations.create({ kind: "chat", title: "✍ Text helper", mode: "ask" });
       await writeFile(mapFile, JSON.stringify({ chatId: chat.id }));
     }
     return { chatId: chat.id, id: keepSelection(text), chars: Math.min(text.length, TEXT_HELPER_MAX), cut: text.length > TEXT_HELPER_MAX };

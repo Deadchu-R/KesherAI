@@ -46,17 +46,20 @@ export function TextHelper({ hash }: { hash: string }) {
     setAnswer("");
     try {
       await api(`/api/conversations/${encodeURIComponent(chatId)}/messages`, { method: "POST", body: { text: prompt } });
-      // The answer comes in the chat below; when the chat is done, its last reply is the answer.
+      // The answer comes in the chat below. Wait on the small activity list (not the whole chat, which grows with
+      // every question; scan 64), then read the chat once: its last reply is the answer.
+      let seen = false;
       for (let i = 0; i < 600; i++) {
-        const c = await api<{ session?: { status?: string }; events?: Array<{ type: string; turn?: number; text?: string }> }>(`/api/conversations/${encodeURIComponent(chatId)}`);
-        if (c.session?.status !== "running") {
-          const replies = (c.events ?? []).filter((e) => e.type === "assistant" && e.text);
-          const last = replies.at(-1)?.turn;
-          setAnswer(replies.filter((e) => e.turn === last).map((e) => e.text).join("").trim());
-          break;
-        }
         await new Promise((r) => setTimeout(r, 700));
+        const act = await api<Record<string, string>>("/api/conversations/activity");
+        if (act[chatId] === "running") seen = true;
+        // Done once it was seen running (or it never showed as running within ~3 s: a very quick answer).
+        else if (seen || i >= 3) break;
       }
+      const c = await api<{ events?: Array<{ type: string; turn?: number; text?: string }> }>(`/api/conversations/${encodeURIComponent(chatId)}`);
+      const replies = (c.events ?? []).filter((e) => e.type === "assistant" && e.text);
+      const last = replies.at(-1)?.turn;
+      setAnswer(replies.filter((e) => e.turn === last).map((e) => e.text).join("").trim());
     } catch (e) {
       toast((e as Error).message);
     } finally {
