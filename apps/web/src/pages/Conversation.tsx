@@ -3,7 +3,7 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate } from "@kesher/shared";
+import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useActivity, useLibrary } from "../library";
 import { useModels } from "../useModels";
@@ -21,6 +21,7 @@ import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 import { BrowserPanel } from "../BrowserPanel";
 import { SourcesPanel } from "../SourcesPanel";
+import { WebPrefsChip } from "../WebPrefsChip";
 import { answerSources } from "../answerSources";
 import { SessionEnvBar } from "../CodeEnvironment";
 import { StepsPanel, currentSteps } from "../StepsPanel";
@@ -468,13 +469,17 @@ export function ConversationPage({ id }: { id: string }) {
       setInput(text);
     }
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
-    const { personaId, ...rest } = body;
+    const { personaId, web: webPrefs, ...rest } = body;
     const next = { ...conv, ...rest };
     if (personaId !== undefined) {
       delete next.personaId;
       if (personaId) next.personaId = personaId;
+    }
+    if (webPrefs !== undefined) {
+      delete next.web;
+      if (webPrefs) next.web = webPrefs;
     }
     setConv(next);
     await refreshLibrary().catch(() => undefined);
@@ -897,6 +902,7 @@ export function ConversationPage({ id }: { id: string }) {
               mode={{ value: info?.mode ?? conv.mode, onChange: (m) => void patch({ mode: m }) }}
               extra={
                 <>
+                  <WebPrefsChip value={conv.web} onChange={(w) => void patch({ web: w })} />
                   <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
                   {voicePart && (
                     <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>

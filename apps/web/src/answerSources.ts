@@ -33,7 +33,8 @@ export function parseSearchOutput(out: string): Array<{ title: string; url: stri
     const lines = block.split("\n").map((l) => l.trim());
     const title = lines[0]?.replace(/^\d+\.\s*/, "") ?? "";
     const url = lines[1] ?? "";
-    if (/^https?:\/\//.test(url)) items.push({ title, url, snippet: lines.slice(2).join(" ") });
+    // Only the snippet line: the chat's limits may follow the last result.
+    if (/^https?:\/\//.test(url)) items.push({ title, url, snippet: lines[2] ?? "" });
   }
   return items;
 }

@@ -142,6 +142,11 @@ export const webFetchTool: AgentTool = {
   },
   async run(input, ctx) {
     const url = checkUrl(String(input.url ?? ""));
+    // The chat's own limits on sites (set by the user for this chat).
+    const only = (ctx.web?.only ?? []).map(siteName).filter(Boolean);
+    const never = (ctx.web?.never ?? []).map(siteName).filter(Boolean);
+    if (only.length && !only.some((d) => onSite(url.href, d))) throw new Error(`This chat reads only from: ${only.join(", ")} (the user set it). Pick a page there.`);
+    if (never.some((d) => onSite(url.href, d))) throw new Error(`This chat never reads from that site (the user set it).`);
     const res = await fetch(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)]), headers: { "user-agent": "KesherAI (+https://github.com/Deadchu-R/KesherAI)" } });
     if (!res.ok) throw new Error(`The page answered ${res.status} ${res.statusText}.`);
     const type = res.headers.get("content-type") ?? "";
@@ -173,24 +178,74 @@ export function parseSearchResults(html: string): Array<{ title: string; url: st
   return out;
 }
 
+/** A site name as written by the user ("https://www.x.com/a" → "x.com"). */
+export function siteName(text: string): string {
+  return text.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+}
+
+/** Whether an address is on a site (or under it: docs.x.com is on x.com). */
+export function onSite(url: string, site: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return host === site || host.endsWith(`.${site}`);
+  } catch {
+    return false;
+  }
+}
+
+/** How many results, and what the model is told to read, for each depth. */
+export const DEPTH = {
+  quick: { results: 5, read: "Answer from these results; open at most one page if you must." },
+  normal: { results: 10, read: "Open the 2-3 most useful pages with web_fetch before answering." },
+  deep: { results: 20, read: "Research deeply: open at least 5 different pages with web_fetch (different sites where you can), compare them, then answer." },
+} as const;
+
+/**
+ * Searches DuckDuckGo with a chat's settings: only / never these sites, and how many results by depth.
+ *
+ * @returns The results, already filtered.
+ */
+export async function searchWeb(query: string, prefs: import("@kesher/shared").WebPrefs | undefined, signal: AbortSignal): Promise<Array<{ title: string; url: string; snippet: string }>> {
+  const only = (prefs?.only ?? []).map(siteName).filter(Boolean).slice(0, 10);
+  const never = (prefs?.never ?? []).map(siteName).filter(Boolean).slice(0, 30);
+  const depth = DEPTH[prefs?.depth ?? "normal"];
+  const q = only.length ? `${query} ${only.map((d) => `site:${d}`).join(" OR ")}` : query;
+  const get = async (extra: string) => {
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}${extra}`, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+      headers: { "user-agent": "Mozilla/5.0 (KesherAI)" },
+    });
+    if (!res.ok) throw new Error(`Search answered ${res.status}.`);
+    return parseSearchResults(await res.text());
+  };
+  let results = await get("");
+  // Deep: the next page of results too.
+  if (depth.results > 10 && results.length >= 8) results = [...results, ...(await get("&s=30&dc=31").catch(() => []))];
+  const seen = new Set<string>();
+  return results
+    .filter((r) => (only.length ? only.some((d) => onSite(r.url, d)) : true) && !never.some((d) => onSite(r.url, d)))
+    .filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)))
+    .slice(0, depth.results);
+}
+
 export const webSearchTool: AgentTool = {
   risk: "read",
   spec: {
     name: "web_search",
-    description: "Search the web (DuckDuckGo) for documentation, error messages, libraries or current information. Returns titles, links and snippets; open a result with web_fetch.",
+    description: "Search the web (DuckDuckGo) for documentation, error messages, libraries or current information. Returns titles, links and snippets; open a result with web_fetch. The chat's own settings (which sites, how deep) apply.",
     inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
   },
   async run(input, ctx) {
     const q = String(input.query ?? "").trim();
     if (!q) throw new Error("Give a search query.");
-    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
-      signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(20_000)]),
-      headers: { "user-agent": "Mozilla/5.0 (KesherAI)" },
-    });
-    if (!res.ok) throw new Error(`Search answered ${res.status}.`);
-    const results = parseSearchResults(await res.text());
-    if (!results.length) return { output: "No results." };
-    return { output: results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n") };
+    const results = await searchWeb(q, ctx.web, ctx.signal);
+    if (!results.length) return { output: ctx.web?.only?.length ? `No results on ${ctx.web.only.join(", ")} (this chat searches only there).` : "No results." };
+    const limits = [
+      ctx.web?.only?.length ? `This chat searches only: ${ctx.web.only.join(", ")}.` : "",
+      ctx.web?.never?.length ? `Never use: ${ctx.web.never.join(", ")}.` : "",
+      DEPTH[ctx.web?.depth ?? "normal"].read,
+    ].filter(Boolean).join(" ");
+    return { output: `${results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n")}\n\n(${limits})` };
   },
 };
 

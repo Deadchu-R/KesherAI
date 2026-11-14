@@ -552,3 +552,29 @@ test("memory is filed after a turn (not in an incognito chat), and read into the
     await server.close();
   }
 });
+
+test("a chat's web settings are checked when saved, and the globe's search shows as a step (with Sources)", async () => {
+  const { server } = await setup();
+  const real = globalThis.fetch;
+  try {
+    const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "fake/m" } })).json() as { id: string };
+    const p = (await server.app.inject({ method: "PATCH", url: `/api/conversations/${c.id}`, payload: { web: { only: "https://www.Docs.Unity3d.com/x, not a site", never: ["pinterest.com"], depth: "huge" } } })).json() as { web?: unknown };
+    assert.deepEqual(p.web, { only: ["docs.unity3d.com"], never: ["pinterest.com"] });
+    globalThis.fetch = (async (url: string) =>
+      String(url).includes("duckduckgo")
+        ? new Response('<a class="result__a" href="https://docs.unity3d.com/a">Unity docs</a><a class="result__snippet">s</a><a class="result__a" href="https://pinterest.com/b">Pin</a>', { status: 200 })
+        : real(url)) as typeof fetch;
+    await server.app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "how do prefabs work", web: true } });
+    const ev = await until(async () => {
+      const r = (await server.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { events: Array<{ type: string; name?: string; output?: string }> };
+      return r.events.find((e) => e.type === "tool_result" && e.name === "web_search");
+    });
+    assert.match(ev.output ?? "", /docs\.unity3d\.com/);
+    assert.doesNotMatch(ev.output ?? "", /pinterest\.com\/b/, "the chat's 'never' applies to the globe's search");
+    const cleared = (await server.app.inject({ method: "PATCH", url: `/api/conversations/${c.id}`, payload: { web: {} } })).json() as { web?: unknown };
+    assert.equal(cleared.web, undefined);
+  } finally {
+    globalThis.fetch = real;
+    await server.close();
+  }
+});

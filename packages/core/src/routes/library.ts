@@ -301,7 +301,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -310,7 +310,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
         return reply.code(400).send({ error: "A teammate needs a modelId and the role planner or reviewer." });
       }
       if (b.group && (!Array.isArray(b.group) || b.group.some((x) => typeof x !== "string") || b.group.length > 8)) return reply.code(400).send({ error: "A group is a list of up to 8 persona ids." });
-      const c = await s.conversations.update(req.params.id, b);
+      // The chat's web settings (sites, depth) are checked; empty ones are taken off.
+      const { web, ...rest } = b;
+      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}) });
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;
       return summary;
@@ -728,5 +730,23 @@ export function cleanEnvironment(x: unknown): Project["environment"] | undefined
     ...(actions.length ? { actions } : {}),
     ...(Object.keys(env).length ? { env } : {}),
   };
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A chat's web settings as sent, checked: site names only, short lists, a known depth. */
+export function cleanWebPrefs(x: unknown): import("@kesher/shared").WebPrefs | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const w = x as Record<string, unknown>;
+  const sites = (v: unknown) => [
+    ...new Set(
+      (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[\s,]+/) : [])
+        .map((d) => String(d).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""))
+        .filter((d) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)),
+    ),
+  ].slice(0, 30);
+  const only = sites(w.only);
+  const never = sites(w.never);
+  const depth: "quick" | "deep" | undefined = w.depth === "quick" || w.depth === "deep" ? w.depth : undefined;
+  const out = { ...(only.length ? { only } : {}), ...(never.length ? { never } : {}), ...(depth ? { depth } : {}) };
   return Object.keys(out).length ? out : undefined;
 }

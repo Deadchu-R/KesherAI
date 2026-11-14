@@ -18,6 +18,16 @@ export interface Project {
   updatedAt: string;
 }
 
+/** A chat's web search settings. */
+export interface WebPrefs {
+  /** Search only these sites (domains). */
+  only?: string[];
+  /** Never these sites. */
+  never?: string[];
+  /** quick: a few results, answer from them; normal; deep: more results and several pages read. */
+  depth?: "quick" | "normal" | "deep";
+}
+
 /** A project's environment for its code sessions. */
 export interface ProjectEnvironment {
   /** Runs once in a new session worktree before the first message (e.g. `npm install`). */
@@ -46,6 +56,8 @@ export interface Conversation {
   workspace?: string;
   /** A code session in its own git worktree: the user's checkout, the worktree folder (= workspace), its branch. */
   worktree?: { repo: string; path: string; branch: string; base: string };
+  /** How this chat searches the web: only / never these sites, and how deep (how many pages it reads). */
+  web?: WebPrefs;
   /** Incognito: memory is neither read nor filled, and the chat is left out of search (like Claude's incognito chats). */
   incognito?: boolean;
   /** Watching the session's pull request: fix failing checks and/or merge when all checks pass (like Claude Code). */

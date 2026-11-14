@@ -45,6 +45,8 @@ export interface ToolContext {
   progress?(text: string): void;
   /** Environment variables for commands (the project's environment). */
   env?: Record<string, string>;
+  /** The chat's web search settings (sites, depth). */
+  web?: import("@kesher/shared").WebPrefs;
 }
 
 /**

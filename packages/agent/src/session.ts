@@ -96,6 +96,8 @@ export interface AgentSessionOptions {
   onAlwaysScope?(scope: string): void;
   /** Environment variables for the session's commands (read on each command). */
   env?(): Record<string, string>;
+  /** The chat's web search settings (read on each tool call). */
+  web?(): import("@kesher/shared").WebPrefs | undefined;
   /** How many tokens the model can read (default 12 000, which fits a 16k-context local model). */
   contextTokens?: number;
   /** Models that plan before and review after the main one (multi-model chat). Read on every request. */
@@ -165,6 +167,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
   private readonly onAlwaysScope?: (scope: string) => void;
   private readonly envOf?: () => Record<string, string>;
+  private readonly webOf?: () => import("@kesher/shared").WebPrefs | undefined;
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
   contextTokens: number;
   private readonly changes: Array<{ path: string; before: string | null }> = [];
@@ -205,6 +208,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.onAlwaysScope = opts.onAlwaysScope;
     this.envOf = opts.env;
+    this.webOf = opts.web;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
     this.toolSearch = opts.toolSearch;
@@ -294,12 +298,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * @param note - A line for the user about it, e.g. "Searched the web".
    * @throws Error if the agent is still busy with the previous message.
    */
-  send(text: string, context?: string, note?: string): void {
+  send(text: string, context?: string, note?: string, steps: NewEvent[] = []): void {
     if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
     // `context` (e.g. web search results) goes to the model with the message, not into the user's bubble.
     this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text });
     this.repeats.clear();
     this.push({ type: "user", text });
+    // Steps done for the message before the model starts (the search the globe button asked for), shown like its own.
+    for (const st of steps) this.push(st);
     if (note) this.push({ type: "note", text: note });
     void this.run();
   }
@@ -924,6 +930,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       recordChange: (path, before) => this.changes.push({ path, before }),
       progress: this.liveOutput(call.id),
       ...(this.envOf ? { env: this.envOf() } : {}),
+      ...(this.webOf?.() ? { web: this.webOf()! } : {}),
     };
     // A scoped tool (the browser) is "always allowed" per site, not as a whole.
     let scope: string | undefined;

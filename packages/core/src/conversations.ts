@@ -8,7 +8,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, type AgentTool, type TeamMember } from "@kesher/agent";
+import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
 import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
@@ -626,6 +626,7 @@ export class ConversationManager {
           ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
           : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
       env: () => this.envFor(id),
+      web: () => this.deps.library.summary(id)?.web,
       onAlwaysScope: (scope) => {
         if (!scope.startsWith("site:")) return;
         const site = scope.slice(5);
@@ -910,15 +911,33 @@ export class ConversationManager {
     // A message about a project the user attached ("[Unity project: …]"): no search first — it fills a local
     // model's context with unrelated pages; the model can still search with its web_search tool when it needs to.
     const aboutProject = /^\s*\[[^\]\n]{0,40}project:/i.test(text);
+    const steps: Array<Extract<AgentEvent, { type: "tool_call" | "tool_result" }> extends infer E ? (E extends unknown ? Omit<E, "seq" | "at"> : never) : never> = [];
     if (opts.web && !aboutProject) {
       // The words the user typed, without the "[Unity project: …]" header a project adds.
       const query = text.replace(/^\s*\[[^\]\n]{1,300}\]\s*/, "").replace(/\s+/g, " ").trim().slice(0, 200);
+      const prefs = conversation.web;
+      const ctx = { signal: AbortSignal.timeout(60_000), recordChange: () => undefined, ...(prefs ? { web: prefs } : {}) };
       try {
-        const r = await webSearchTool.run({ query }, { signal: AbortSignal.timeout(20_000), recordChange: () => undefined });
-        context = `Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}`;
-        note = `Searched the web: ${r.output === "No results." ? "no results" : `${r.output.split("\n").filter((l) => /^\d+\. /.test(l)).length} results`}.`;
+        // The search shows as a step (and its pages under the answer's Sources), like the model's own searches.
+        const callId = `web-${Date.now().toString(36)}`;
+        const r = await webSearchTool.run({ query }, ctx);
+        steps.push({ type: "tool_call", callId, name: "web_search", input: { query } }, { type: "tool_result", callId, name: "web_search", ok: true, output: r.output });
+        // Deep: KesherAI reads the first pages itself, so even a model without tools answers from them.
+        const pages: string[] = [];
+        if (prefs?.depth === "deep") {
+          const urls = parseFirstUrls(r.output, 3);
+          for (const [i, url] of urls.entries()) {
+            const id2 = `${callId}-${i}`;
+            const page = await webFetchTool.run({ url }, ctx).catch((err: Error) => ({ output: `(${err.message})`, failed: true }));
+            const ok = !("failed" in page);
+            steps.push({ type: "tool_call", callId: id2, name: "web_fetch", input: { url } }, { type: "tool_result", callId: id2, name: "web_fetch", ok, output: ok ? page.output.slice(0, 2000) : page.output });
+            if (ok) pages.push(page.output.slice(0, 6000));
+          }
+        }
+        context = `Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}${pages.length ? `\n\nThe first pages, read just now:\n\n${pages.join("\n\n---\n\n")}` : ""}`;
       } catch (err) {
         context = `(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;
+        note = `The web search failed: ${(err as Error).message}`;
       }
     }
     // Save the folders first (a coding session's folder, and a chat's Unity/Unreal projects), so this point can be restored with one click.
@@ -931,7 +950,7 @@ export class ConversationManager {
       }
       if (first) session.checkpoint(first.id, first.files);
     }
-    session.send(text, context, note);
+    session.send(text, context, note, steps);
   }
 
   /**
@@ -941,7 +960,7 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch">> & { personaId?: string | null }): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web">> & { personaId?: string | null }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
@@ -1357,4 +1376,9 @@ export async function assertFolder(folder: string): Promise<void> {
   if (!isAbsolute(folder)) throw new Error("Use the full path of the folder, e.g. C:\\Users\\you\\Projects\\game.");
   const info = await stat(folder).catch(() => undefined);
   if (!info?.isDirectory()) throw new Error(`${folder} is not a folder on this computer.`);
+}
+
+/** The first addresses in web_search's output. */
+function parseFirstUrls(out: string, n: number): string[] {
+  return [...out.matchAll(/^\s{3}(https?:\/\/\S+)$/gm)].map((m) => m[1]!).slice(0, n);
 }

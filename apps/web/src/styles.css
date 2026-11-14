@@ -2105,3 +2105,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .source-site { font-size: .78em; color: var(--muted); }
 .source-title { font-weight: 600; overflow-wrap: anywhere; }
 .source-card p { margin: 4px 0 0; }
+/* This chat's web search settings (beside the globe). */
+.web-prefs.on .bar-pop-btn, .web-prefs.on > button { color: var(--accent, #9aa4ff); }
+.web-prefs-form { min-width: min(320px, 86vw); gap: 8px; }
+.web-prefs-form fieldset { border: 0; padding: 0; margin: 0; gap: 4px; }
+.web-prefs-form input[type="text"], .web-prefs-form input:not([type]) { width: 100%; box-sizing: border-box; }
