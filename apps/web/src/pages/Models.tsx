@@ -281,6 +281,19 @@ export function ModelsPage() {
 
   const refreshLocal = () => void api<LocalFile[]>("/api/models/local").then(setLocal).catch(() => undefined);
   const [disk, setDisk] = useState<{ freeGb?: number; totalGb?: number } | null>(null);
+  /** Vision for a model: its repository's mmproj, downloaded beside it after a yes (the engine loads it with the model). */
+  const addVision = async (f: { path: string; name: string }) => {
+    try {
+      const v = await api<{ has: boolean; offer?: { name: string; size: number } }>(`/api/models/vision?path=${encodeURIComponent(f.path)}`);
+      if (v.has) return toast(L("למודל הזה כבר יש ראייה: הוא רואה תמונות כשהוא טעון.", "This model already has vision: it sees pictures when loaded."));
+      if (!v.offer) return toast(L("למאגר של המודל הזה אין קובץ ראייה (mmproj): הוא לא יכול לראות תמונות.", "This model's repository has no vision file (mmproj): it cannot see pictures."));
+      if (!confirm(L(`להוריד ${v.offer.name} (${gb(v.offer.size)}) כדי שהמודל יראה תמונות? אחרי ההורדה טענו את המודל מחדש.`, `Download ${v.offer.name} (${gb(v.offer.size)}) so the model sees pictures? Load the model again after the download.`))) return;
+      await api("/api/models/vision", { method: "POST", body: { path: f.path } });
+      toast(L("ההורדה התחילה (בעיגול ההורדות).", "The download started (in the downloads circle)."));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
   const refreshDisk = () => void api<{ freeGb?: number; totalGb?: number }>("/api/disk").then(setDisk, () => setDisk(null));
   const removeModel = async (f: LocalFile) => {
     if (!confirm(L(`למחוק את ${f.name} (${gb(f.size)})? הקובץ יימחק מהדיסק לצמיתות.`, `Delete ${f.name} (${gb(f.size)})? The file is removed from the disk for good.`))) return;
@@ -428,6 +441,9 @@ export function ModelsPage() {
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                 {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
                 {f.gguf && loadButton(f)}
+                {f.gguf && (!f.source || f.source === "KesherAI") && /[\\/]chat[\\/]/.test(f.path) && (
+                  <button type="button" className="icon-btn" title={L("ראייה: שהמודל יראה תמונות (מוריד את קובץ ה-mmproj של המודל)", "Vision: let the model see pictures (downloads its mmproj file)")} aria-label={L(`ראייה ל-${f.name}`, `Vision for ${f.name}`)} onClick={() => void addVision(f)}>👁</button>
+                )}
                 {(!f.source || f.source === "KesherAI") && (
                   <button type="button" className="icon-btn" title={L("מחיקת הקובץ מהדיסק", "Delete the file from the disk")} aria-label={L(`מחיקת ${f.name}`, `Delete ${f.name}`)} onClick={() => void removeModel(f)}>🗑</button>
                 )}

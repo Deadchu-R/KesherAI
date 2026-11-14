@@ -4,10 +4,11 @@ import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
-import { detectHardwareCached, estimatePerformance } from "@kesher/downloads";
+import { detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { scanComputer, scanFolder } from "../model-scan.js";
 import { forgetFoundModels } from "./engine.js";
+import { findMmproj } from "../llamacpp.js";
 import { isLocalRequest } from "../auth.js";
 import { assertWritableFolder } from "../library.js";
 import { engineRoutes } from "./engine.js";
@@ -150,6 +151,35 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
    * Only files inside KesherAI's own models folder: other apps' models (LM Studio, Ollama…) are only read, never
    * deleted. Never the model the engine has loaded. Empty folders left behind go too.
    */
+  // Vision for a downloaded model: its repository's mmproj (the picture encoder llama.cpp loads beside it). The
+  // engine then loads it with the model, and the model sees attached pictures (found on the PC: Qwen3.8 had none).
+  const visionFor = async (given: string) => {
+    const path = resolve(given);
+    const root = resolve(s.paths.models);
+    if (!path.startsWith(root + sep) || !/\.gguf$/i.test(path)) return { error: "Only GGUF models KesherAI downloaded." } as const;
+    if (await findMmproj(path)) return { path, has: true } as const;
+    // models/<category>/<owner>/<repo>/…: the repository it came from.
+    const parts = relative(root, path).split(sep);
+    if (parts.length < 4) return { path, has: false } as const;
+    const repo = `${parts[1]}/${parts[2]}`;
+    const files = await listHubFiles(repo, { signal: AbortSignal.timeout(15_000) }).catch(() => []);
+    const mm = files.filter((f) => /mmproj.*\.gguf$/i.test(f.path)).sort((a, b) => (/f16/i.test(b.path) && !/bf16/i.test(b.path) ? 1 : 0) - (/f16/i.test(a.path) && !/bf16/i.test(a.path) ? 1 : 0) || a.size - b.size)[0];
+    return { path, has: false, repo, ...(mm ? { offer: mm } : {}) } as const;
+  };
+  app.get<{ Querystring: { path?: string } }>("/api/models/vision", async (req, reply) => {
+    const v = await visionFor(String(req.query.path ?? ""));
+    if ("error" in v) return reply.code(400).send(v);
+    return { has: v.has, ...("offer" in v && v.offer ? { offer: { name: basename(v.offer.path), size: v.offer.size } } : {}) };
+  });
+  app.post<{ Body: { path?: string } }>("/api/models/vision", async (req, reply) => {
+    const v = await visionFor(String(req.body?.path ?? ""));
+    if ("error" in v) return reply.code(400).send(v);
+    if (v.has) return { ok: true, has: true };
+    if (!("offer" in v) || !v.offer) return reply.code(404).send({ error: "This model's repository has no vision file (mmproj)." });
+    const job = s.downloads.enqueue({ url: v.offer.url, dest: join(dirname(v.path), basename(v.offer.path)), size: v.offer.size, ...(v.offer.sha256 ? { sha256: v.offer.sha256 } : {}), label: `👁 ${basename(v.offer.path)} (${basename(v.path)})` });
+    return { ok: true, id: job.id };
+  });
+
   app.post<{ Body: { path?: string } }>("/api/models/delete", async (req, reply) => {
     const path = resolve(String(req.body?.path ?? ""));
     const root = resolve(s.paths.models);

@@ -142,7 +142,7 @@ export class OpenAICompatibleProvider implements Provider {
       // tool took): send it again with the pictures left out, so the work goes on.
       const hasImages = request.messages.some((m) => m.images?.length);
       if (!hasImages || !/image|vision|multimodal/i.test((err as Error).message) || signal?.aborted) throw err;
-      const messages = request.messages.map((m) => (m.images?.length ? { ...m, images: undefined, content: `${m.content}\n(A picture was attached here, but this model cannot see pictures.)` } : m));
+      const messages = request.messages.map((m) => (m.images?.length ? { ...m, images: undefined, content: `${m.content}\n(A picture was attached here, but this model cannot see pictures. Say so, and that on the Models page the 👁 button beside a downloaded model adds vision when its repository has it, or that a model with vision can be chosen.)` } : m));
       return this.toolTurn({ ...request, messages }, signal, onText);
     }
   }

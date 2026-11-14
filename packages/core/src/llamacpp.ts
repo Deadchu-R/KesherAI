@@ -747,6 +747,14 @@ export class LlamaEngine {
       this.log.push(`KesherAI: port ${before} is used by another app, so the engine uses port ${this.opts.port}.`);
     }
     const alias = basename(modelPath).replace(/\.gguf$/i, "");
+    // A vision file beside the model (mmproj-*.gguf, as the model's repository ships it): the model sees pictures.
+    if (!args.includes("--mmproj") && !args.includes("--no-mmproj")) {
+      const mmproj = await findMmproj(modelPath);
+      if (mmproj) {
+        args = [...args, "--mmproj", mmproj];
+        this.log.push(`KesherAI: ${basename(mmproj)} lets this model see pictures.`);
+      }
+    }
     const proc = spawn(binary, ["-m", modelPath, "--host", "127.0.0.1", "--port", String(this.opts.port), "--alias", alias, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -853,4 +861,21 @@ export function freePort(): Promise<number> {
       srv.close(() => done(port));
     });
   });
+}
+
+/**
+ * The vision file for a model, when its folder has one (mmproj-*.gguf, next to the model as Hugging Face repositories
+ * ship it). Several: the one named like the model first, then F16/BF16, then the smallest name.
+ *
+ * @param modelPath - The model's .gguf.
+ * @returns The mmproj's path, or undefined.
+ */
+export async function findMmproj(modelPath: string): Promise<string | undefined> {
+  const dir = dirname(modelPath);
+  const all = (await readdir(dir).catch(() => [] as string[])).filter((f) => /mmproj.*\.gguf$/i.test(f));
+  if (!all.length) return undefined;
+  const stem = basename(modelPath).replace(/\.gguf$/i, "").replace(/[-_.](?:UD[-_])?(?:I?Q\d[\w]*|F16|BF16|F32)$/i, "").toLowerCase();
+  const score = (f: string) => (stem && f.toLowerCase().includes(stem) ? 4 : 0) + (/bf16/i.test(f) ? 2 : /f16/i.test(f) ? 3 : 0);
+  const best = [...all].sort((a, b) => score(b) - score(a) || a.length - b.length)[0]!;
+  return join(dir, best);
 }

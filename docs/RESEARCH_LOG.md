@@ -861,3 +861,11 @@ Stopped at: OneDrive's offline size; the note in the user's language (board t57)
   Ctrl+PageUp/PageDown switch the method's graph.
 Stopped at: Collapse to Function for Unreal Blueprints (the editor's own command needs the open editor), and
 Collapse Nodes (a collapsed graph, not a function).
+
+## 2026-11-14: Vision for local models (mmproj)
+- Found on the PC: the chat model (Qwen3.8-27B, unsloth GGUF) got the attached picture, but llama-server was never
+  started with --mmproj, so no local model could see; the model tried to read pixels with Python for 16 steps.
+- llama.cpp: a multimodal GGUF needs its projector (mmproj-*.gguf, in the same Hugging Face repository; LM Studio and
+  Ollama load it automatically). Built (0.6.179): the engine passes an mmproj found beside the model; Models → 👁 checks
+  the model's repository and downloads its mmproj (after a yes); a model without vision says so and points there.
+Stopped at: offering 👁 at the moment a picture is attached to a model without vision.
