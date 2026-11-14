@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getLocale } from "../i18n";
-import { setParts, useParts } from "../parts";
+import { setParts, useParts, setSimple } from "../parts";
 import { refreshPluginUi } from "../plugins";
 import { toast } from "../library";
 
@@ -12,7 +12,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
  * on downloads what it needs.
  */
 export function PartsPage() {
-  const { parts } = useParts();
+  const { parts, simple } = useParts();
   const [busy, setBusy] = useState("");
   const he = getLocale() === "he";
   const change = async (body: Parameters<typeof setParts>[0], key: string) => {
@@ -34,6 +34,25 @@ export function PartsPage() {
     <div className="page">
       <h1>{L("חלקי KesherAI", "Parts of KesherAI")}</h1>
       <p className="muted">{L("הצ'אט תמיד כאן. כל השאר הוא חלק שאפשר להדליק ולכבות: חלק כבוי יוצא מהתפריט, הכלים שלו לא מוצעים למודלים, ומה שהוא מריץ ברקע נעצר, כך שהוא לא תופס זיכרון. כשמדליקים חלק הוא מוריד את מה שהוא צריך ומתעדכן לבד.", "The chat is always here. Everything else is a part you can turn on and off: a part that is off leaves the menu, its tools are not offered to the models, and what it runs in the background stops, so it takes no memory. A part you turn on downloads what it needs and updates by itself.")}</p>
+      {/* Simple mode (LM Studio's "User" mode): the menu shows chat, pictures, models and settings only. */}
+      <label className="card part-simple row">
+        <span className="grow">
+          <strong>{L("מצב פשוט", "Simple mode")}</strong>
+          <span className="muted small"> {simple ? L("בתפריט רק צ'אט, תמונות, מודלים והגדרות. כל השאר ב\"כל הכלים\".", "The menu shows chat, pictures, models and settings only. Everything else is in All tools.") : L("התפריט מראה הכל.", "The menu shows everything.")}</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={simple}
+          disabled={busy === "simple"}
+          onChange={(e) => {
+            setBusy("simple");
+            void setSimple(e.target.checked).catch((err: Error) => toast(err.message)).finally(() => setBusy(""));
+          }}
+          aria-label={L("מצב פשוט", "Simple mode")}
+        />
+      </label>
+      {simple && <button type="button" className="primary" disabled={!!busy} onClick={() => { setBusy("simple"); void setSimple(false).catch((err: Error) => toast(err.message)).finally(() => setBusy("")); }}>{L("הצג הכל", "Show everything")}</button>}
       <div className="row">
         <button type="button" disabled={!!busy} onClick={() => void change({ preset: "chat" }, "chat")}>{L("צ'אט בלבד (לכבות הכל)", "Only the chat (turn everything off)")}</button>
         <button

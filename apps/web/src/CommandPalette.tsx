@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createConversation, toast, useLibrary } from "./library";
 import { getLocale, t } from "./i18n";
-import { NAV_GROUPS, NAV_ICONS } from "./Sidebar";
+import { NAV_GROUPS, NAV_ICONS, useNavItems } from "./Sidebar";
+import { useParts } from "./parts";
 import { fit } from "./palette-fit";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -35,6 +36,8 @@ export function CommandPalette() {
   const list = useRef<HTMLUListElement>(null);
   const back = useRef<Element | null>(null);
   const { conversations } = useLibrary();
+  const nav = useNavItems();
+  const { simple } = useParts();
 
   useEffect(() => {
     const show = () => {
@@ -80,18 +83,21 @@ export function CommandPalette() {
   const entries = useMemo((): Entry[] => {
     const actions: Entry[] = [
       { id: "new-chat", icon: "💬", title: L("צ'אט חדש", "New chat"), also: "new chat צאט חדש", group: "action", run: () => void createConversation({ kind: "chat" }).catch((e: Error) => toast(e.message)) },
-      { id: "new-code", icon: "</>", title: L("סשן קוד חדש", "New code session"), also: "new code קוד חדש", group: "action", run: go("#/code") },
+      ...(simple ? [] : [{ id: "new-code", icon: "</>", title: L("סשן קוד חדש", "New code session"), also: "new code קוד חדש", group: "action" as const, run: go("#/code") }]),
       { id: "updates", icon: "⟳", title: L("בדיקת עדכונים", "Check for updates"), also: "updates עדכונים", group: "action", run: go("#/updates") },
       { id: "settings", icon: "⚙", title: L("הגדרות", "Settings"), also: "settings הגדרות", group: "action", run: go("#/settings") },
     ];
-    const pages: Entry[] = NAV_GROUPS.flatMap((g) =>
-      g.items.map(([hash, label]) => ({ id: `page:${hash}`, icon: NAV_ICONS[hash] ?? "•", title: t(label), also: `${hash.slice(2)} ${t(g.label)}`, group: "page" as const, run: go(hash) })),
-    );
+    // The menu's own pages (without parts that are off, or what simple mode leaves out), plus All tools.
+    const groupOf = (id: string) => NAV_GROUPS.find((g) => g.id === id);
+    const pages: Entry[] = [
+      ...nav.map((n) => ({ id: `page:${n.href}`, icon: NAV_ICONS[n.href] ?? "•", title: n.label, also: `${n.href.slice(2)} ${groupOf(n.group) ? t(groupOf(n.group)!.label) : ""}`, group: "page" as const, run: go(n.href) })),
+      { id: "page:#/apps", icon: "▦", title: t("allTools"), also: "apps tools כלים", group: "page" as const, run: go("#/apps") },
+    ];
     const chats: Entry[] = [...conversations]
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
       .map((c) => ({ id: `chat:${c.id}`, icon: c.kind === "code" ? "</>" : "💬", title: c.title || L("צ'אט בלי שם", "Untitled chat"), group: "chat" as const, run: go(`#/c/${c.id}`) }));
     return [...actions, ...pages, ...chats];
-  }, [conversations, open]);
+  }, [conversations, open, nav, simple]);
 
   const shown = useMemo(() => {
     const query = q.trim();

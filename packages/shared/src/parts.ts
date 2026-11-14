@@ -44,6 +44,18 @@ export function partOn(parts: Record<string, boolean> | undefined, id: string): 
   return parts?.[id] !== false;
 }
 
+/**
+ * Simple mode (LM Studio's "User" mode; docs/DESIGN_RESEARCH.md §1): the menu shows chat, pictures, models and
+ * settings only. The default for a new install; "Show everything" in Settings turns it off. Every page still opens
+ * from All tools.
+ */
+export const SIMPLE_PAGES = ["#/images", "#/models", "#/settings"];
+
+/** @returns Whether simple mode leaves a menu page out. */
+export function simpleHidden(simple: boolean | undefined, hash: string): boolean {
+  return !!simple && !SIMPLE_PAGES.some((x) => hash === x || hash.startsWith(`${x}/`));
+}
+
 /** @returns Whether a menu page belongs to a part that is off. */
 export function pageHidden(parts: Record<string, boolean> | undefined, hash: string): boolean {
   return PARTS.some((p) => !partOn(parts, p.id) && p.pages.some((x) => hash === x || hash.startsWith(`${x}/`)));

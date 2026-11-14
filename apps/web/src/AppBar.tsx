@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { openPalette } from "./CommandPalette";
+import { useParts } from "./parts";
 import { useEffect, useRef, useState } from "react";
 import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 import { useAppMenu } from "./AppMenu";
@@ -60,6 +61,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   // The menu's ✏ (the phone has no sidebar on screen, so the edit list opens as a dialog).
   const [editMenu, setEditMenu] = useState(false);
   const app = useAppMenu();
+  const { simple } = useParts();
   const [host, setHost] = useState("");
 
   useEffect(() => {
@@ -118,7 +120,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         <div className="bar-seg" role="group" aria-label={t("chatOrCode")}>
           <a href="#/" className={!inCode ? "on" : ""} aria-label={t("newChat")} title={t("newChat")}>{Icon.chat}</a>
           {/* Code, like the Claude app's Code side: its own start screen, the folder chosen in the message box (no dialog). */}
-          <a href="#/code" className={inCode ? "on" : ""} aria-label={t("newCode")} title={t("newCode")}>{Icon.code}</a>
+          {!simple && <a href="#/code" className={inCode ? "on" : ""} aria-label={t("newCode")} title={t("newCode")}>{Icon.code}</a>}
         </div>
       </div>
       <div className="appbar-main">

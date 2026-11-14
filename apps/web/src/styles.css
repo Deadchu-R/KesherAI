@@ -2230,3 +2230,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .receipt-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .receipt-files li { gap: 8px; align-items: center; min-width: 0; }
 .receipt-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 12.5px; }
+.part-simple { gap: 12px; align-items: center; margin-bottom: 10px; }
+.part-simple input { width: auto; min-height: 0; }

@@ -8,6 +8,7 @@ import { NEW_CODE_EVENT } from "./AppBar";
 import { t } from "./i18n";
 import { NAV_ICONS, useNavItems, usePins } from "./Sidebar";
 import { useShortcuts } from "./SidebarShortcuts";
+import { useParts } from "./parts";
 
 /** One entry of the menu. `href` opens a page (or, for http/https, a site outside); `run` does an action. */
 export interface MenuEntry { key: string; label: string; icon: string; href?: string; run?: () => void; external?: boolean; tool?: boolean }
@@ -18,12 +19,13 @@ export interface AppMenu { main: MenuEntry[]; pinned: MenuEntry[]; shortcuts: Me
 /** The app's menu entries (the same for every menu and every device). */
 export function useAppMenu(): AppMenu {
   const nav = useNavItems();
+  const { simple } = useParts();
   const [pins] = usePins();
   const shortcuts = useShortcuts();
   return {
     main: [
       { key: "new-chat", label: t("newChat"), icon: "+", href: "#/" },
-      { key: "new-code", label: t("newCode"), icon: "</>", run: () => dispatchEvent(new Event(NEW_CODE_EVENT)) },
+      ...(simple ? [] : [{ key: "new-code", label: t("newCode"), icon: "</>", run: () => dispatchEvent(new Event(NEW_CODE_EVENT)) }]),
       { key: "all-tools", label: t("allTools"), icon: "▦", href: "#/apps" },
     ],
     pinned: pins.flatMap((href) => {

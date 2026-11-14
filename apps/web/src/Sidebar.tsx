@@ -10,7 +10,7 @@ import { createConversation, desktop, refreshLibrary, toast, useActivity, useLib
 import { getLocale, setLocale, t } from "./i18n";
 import { NEW_CODE_EVENT } from "./AppBar";
 import { usePluginUi } from "./plugins";
-import { pageHidden } from "@kesher/shared";
+import { pageHidden, simpleHidden } from "@kesher/shared";
 import { useParts } from "./parts";
 import { QuickMenu } from "./QuickMenu";
 import { AccountButton } from "./AccountButton";
@@ -338,12 +338,12 @@ export const NAV: Array<[string, Parameters<typeof t>[0]]> = NAV_GROUPS.flatMap(
  *   `[href, label, group]`.
  */
 export function useNavItems(): Array<{ href: string; label: string; group: string }> {
-  const { parts } = useParts();
+  const { parts, simple } = useParts();
   const { pages } = usePluginUi();
   const off = Object.fromEntries(parts.filter((p) => !p.on).map((p) => [p.id, false]));
   return NAV_GROUPS.flatMap((g) => [
-    ...g.items.filter(([h]) => !pageHidden(off, h)).map(([href, key]) => ({ href, label: t(key), group: g.id })),
-    ...(g.id === "create" ? pages.map((p) => ({ href: `#/p/${p.pluginId}/${p.id}`, label: `${p.icon ? `${p.icon} ` : ""}${p.title}`, group: g.id })) : []),
+    ...g.items.filter(([h]) => !pageHidden(off, h) && !simpleHidden(simple, h)).map(([href, key]) => ({ href, label: t(key), group: g.id })),
+    ...(g.id === "create" && !simple ? pages.map((p) => ({ href: `#/p/${p.pluginId}/${p.id}`, label: `${p.icon ? `${p.icon} ` : ""}${p.title}`, group: g.id })) : []),
   ]);
 }
 

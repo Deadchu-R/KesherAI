@@ -16,7 +16,7 @@ import { isLocalRequest } from "../auth.js";
  * @param s - Services.
  */
 export async function partsRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
-  const view = () => ({ parts: PARTS.map((p) => ({ ...p, on: partOn(s.config.parts, p.id) })) });
+  const view = () => ({ parts: PARTS.map((p) => ({ ...p, on: partOn(s.config.parts, p.id) })), simple: s.config.onboarding.simple === true });
 
   app.get("/api/parts", async () => view());
 
@@ -32,9 +32,10 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
   }));
 
   /** Body: `{ done?, role? }`. */
-  app.put<{ Body: { done?: boolean; role?: string } }>("/api/onboarding", async (req, reply) => {
+  app.put<{ Body: { done?: boolean; role?: string; simple?: boolean } }>("/api/onboarding", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "The welcome runs on the computer that runs KesherAI." });
     if (typeof req.body?.done === "boolean") s.config.onboarding.done = req.body.done;
+    if (typeof req.body?.simple === "boolean") s.config.onboarding.simple = req.body.simple;
     if (typeof req.body?.role === "string") s.config.onboarding.role = req.body.role.slice(0, 200);
     await s.saveConfig();
     return s.config.onboarding;
@@ -151,6 +152,14 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (!data.length) return reply.code(400).send({ error: "The picture is empty." });
     const asset = await s.assets.save(data, mime, { meta: { use: "background" } });
     return { assetId: asset.id };
+  });
+
+  /** Simple mode on or off (only what the menu shows; from the phone too). Body: `{ simple: boolean }`. */
+  app.put<{ Body: { simple?: unknown } }>("/api/parts/simple", async (req, reply) => {
+    if (typeof req.body?.simple !== "boolean") return reply.code(400).send({ error: "simple: true or false." });
+    s.config.onboarding.simple = req.body.simple;
+    await s.saveConfig();
+    return view();
   });
 
   /** Body: `{ parts: { <id>: true | false } }`, or `{ preset: "chat" | "all" }`. */

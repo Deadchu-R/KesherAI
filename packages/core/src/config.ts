@@ -159,6 +159,8 @@ export const KesherConfigSchema = z.object({
     .object({
       done: z.boolean().default(false),
       role: z.string().max(200).optional(),
+      /** Simple mode: the menu shows chat, pictures, models and settings only (set for a new install). */
+      simple: z.boolean().optional(),
     })
     .prefault({}),
   /** Protecting the graphics card: temperature limit, unloading idle models, low priority (see gpu-guard.ts). */

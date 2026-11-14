@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ROLES, partsForRole, type RoleDefinition } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, setLocale } from "./i18n";
-import { setParts, useParts } from "./parts";
+import { refreshParts, setParts, useParts } from "./parts";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
@@ -87,7 +87,9 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
     setSaving(true);
     try {
       if (!skip && Object.keys(choice).length) await setParts({ parts: choice });
-      await api("/api/onboarding", { method: "PUT", body: { done: true, ...(roles.length ? { role: roles.join(",") } : {}) } });
+      // A new install starts in simple mode (chat, pictures, models, settings); Settings → Parts → Show everything.
+      await api("/api/onboarding", { method: "PUT", body: { done: true, simple: true, ...(roles.length ? { role: roles.join(",") } : {}) } });
+      await refreshParts();
     } catch {
       // the welcome closes anyway; Settings has everything
     } finally {
