@@ -28,7 +28,7 @@ export interface IdeStyle {
   /** The theme's name as the editor calls it. */
   themeName?: string;
   /** A Monaco theme: base, token rules, editor colors. */
-  theme?: { base: "vs" | "vs-dark"; inherit: boolean; rules: Array<{ token: string; foreground?: string; fontStyle?: string }>; colors: Record<string, string> };
+  theme?: { base: "vs" | "vs-dark" | "hc-black" | "hc-light"; inherit: boolean; rules: Array<{ token: string; foreground?: string; fontStyle?: string }>; colors: Record<string, string> };
   fontFamily?: string;
   fontSize?: number;
   ligatures?: boolean;
@@ -155,21 +155,35 @@ export async function vscodeThemeToMonaco(file: string, depth = 0): Promise<NonN
     const v = j.colors?.[k];
     if (typeof v === "string" && /^#[0-9a-f]{3,8}$/i.test(v)) colors[k] = v;
   }
-  const dark = j.type ? j.type !== "light" : (parent?.base ?? "vs-dark") === "vs-dark";
-  return { base: dark ? "vs-dark" : "vs", inherit: true, rules, colors };
+  const kind = j.type ?? (parent?.base === "vs" ? "light" : parent?.base === "hc-black" ? "hc" : parent?.base === "hc-light" ? "hcLight" : "dark");
+  const base = kind === "light" ? "vs" : kind === "hc" ? "hc-black" : kind === "hcLight" ? "hc-light" : "vs-dark";
+  return { base, inherit: true, rules, colors };
+}
+
+/**
+ * The folders of an editor's own (built-in) extensions: next to the program, or, in newer VS Code builds, inside a
+ * version folder next to it ("Microsoft VS Code\\<version>\\resources\\app\\extensions").
+ */
+async function builtInExtensions(exe: string): Promise<string[]> {
+  const base = dirname(exe);
+  const out = [join(base, "resources", "app", "extensions")];
+  // On Linux and macOS the program is often a script in bin/: the app is one folder up.
+  out.push(join(base, "..", "resources", "app", "extensions"), join(base, "..", "app", "extensions"));
+  for (const d of await readdir(base).catch(() => [] as string[])) out.push(join(base, d, "resources", "app", "extensions"));
+  return out.filter((d) => existsSync(d));
 }
 
 /** Finds a VS Code theme by its label among the extensions folder and the editor's built-in themes. */
-async function findThemeFile(name: string, folders: string[]): Promise<string | undefined> {
+async function findThemeFile(name: string, folders: string[]): Promise<{ file: string; ui?: string } | undefined> {
   for (const folder of folders) {
     for (const ext of await readdir(folder).catch(() => [] as string[])) {
       const pkg = await readFile(join(folder, ext, "package.json"), "utf8").catch(() => "");
       if (!pkg.includes('"themes"')) continue;
       try {
-        const themes = (JSON.parse(pkg) as { contributes?: { themes?: Array<{ label?: string; id?: string; path?: string }> } }).contributes?.themes ?? [];
+        const themes = (JSON.parse(pkg) as { contributes?: { themes?: Array<{ label?: string; id?: string; path?: string; uiTheme?: string }> } }).contributes?.themes ?? [];
         // Built-in theme labels are "%…%" placeholders: the id (or the file name) matches the setting's name then.
         const t = themes.find((x) => x.label === name || x.id === name || (x.path && x.path.toLowerCase().includes(name.toLowerCase().replace(/\s+/g, "_").replace(/[()]/g, ""))));
-        if (t?.path) return join(folder, ext, t.path);
+        if (t?.path) return { file: join(folder, ext, t.path), ...(t.uiTheme ? { ui: t.uiTheme } : {}) };
       } catch {
         /* a broken package.json */
       }
@@ -225,10 +239,21 @@ export async function ideStyle(ide: Ide): Promise<IdeStyle> {
   if (typeof settings["editor.lineHeight"] === "number") style.lineHeight = settings["editor.lineHeight"] as number;
   if (typeof settings["editor.tabSize"] === "number") style.tabSize = settings["editor.tabSize"] as number;
   if (typeof settings["editor.minimap.enabled"] === "boolean") style.minimap = settings["editor.minimap.enabled"] as boolean;
+  // The editor's defaults when the person set none (what they see in it).
+  style.fontFamily ??= platform() === "win32" ? "Consolas, 'Courier New', monospace" : platform() === "darwin" ? "Menlo, Monaco, 'Courier New', monospace" : "'Droid Sans Mono', 'monospace', monospace";
+  style.fontSize ??= platform() === "darwin" ? 12 : 14;
   const v = vscodeLike().find((x) => x.id === ide.id)!;
-  const builtIn = join(dirname(ide.exe), "resources", "app", "extensions");
-  const file = await findThemeFile(theme, [v.extensions, builtIn]);
-  if (file) style.theme = await vscodeThemeToMonaco(file).catch(() => undefined);
+  const file = await findThemeFile(theme, [v.extensions, ...(await builtInExtensions(ide.exe))]);
+  const read = file ? await vscodeThemeToMonaco(file.file).catch(() => undefined) : undefined;
+  // The extension says dark, light or high contrast ("uiTheme"); the theme file often does not.
+  if (read && file?.ui && ["vs", "vs-dark", "hc-black", "hc-light"].includes(file.ui)) read.base = file.ui as NonNullable<IdeStyle["theme"]>["base"];
+  if (read) style.theme = read;
+  else {
+    // A built-in theme not found on disk: its base, so the panel is at least dark, light or high-contrast like the editor.
+    const hc = /high contrast/i.test(theme);
+    const light = /light/i.test(theme);
+    style.theme = { base: hc ? (light ? "hc-light" : "hc-black") : light ? "vs" : "vs-dark", inherit: true, rules: [], colors: hc || light ? {} : { "editor.background": "#1F1F1F" } };
+  }
   return style;
 }
 

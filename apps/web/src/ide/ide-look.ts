@@ -7,7 +7,7 @@ export interface IdeInfo { id: string; name: string }
 export interface IdeLook {
   ide: string;
   themeName?: string;
-  theme?: { base: "vs" | "vs-dark"; inherit: boolean; rules: Array<{ token: string; foreground?: string; fontStyle?: string }>; colors: Record<string, string> };
+  theme?: { base: "vs" | "vs-dark" | "hc-black" | "hc-light"; inherit: boolean; rules: Array<{ token: string; foreground?: string; fontStyle?: string }>; colors: Record<string, string> };
   fontFamily?: string;
   fontSize?: number;
   ligatures?: boolean;
