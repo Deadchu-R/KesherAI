@@ -801,3 +801,10 @@ Built (0.6.167): /api/ides, /api/ides/look, /api/ides/open; the code editor's to
 at the cursor's line. Reads the editors' settings only; never changes them.
 Stopped at: the touch editor (phone) keeps its own look; Visual Studio's real theme colors; extensions' semantic
 token colors (semanticTokenColors) are not mapped.
+
+### 2026-11-14 (later): checked on the PC (0.6.169)
+- VS Code: its built-in "Default High Contrast" read whole (66 rules, hc-black) from the version folder.
+- Antigravity: found, but its theme was not (no workbench.colorTheme set; its default may not be VS Code's "Default
+  Dark Modern"): it gets a dark base. Stopped at: read Antigravity's own default theme name and folder.
+- Wires: a click chooses them; a double-click reached the frame (pointer capture) and the reroute node's pins covered
+  it: both fixed in 0.6.170.
