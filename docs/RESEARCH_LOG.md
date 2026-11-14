@@ -833,3 +833,12 @@ Stopped at: recent items first, plugin pages and settings sections as entries, a
   their parameters and return value, Get/Set by the variable's type, Branch from exec or a bool output). The box is
   remembered. C# scripts: every step is a flow step, so their menu has no box.
 Stopped at: a "wrong type" tip while dragging a wire onto a pin (Unreal's red "incompatible" note).
+
+## 2026-11-14: A receipt with "Undo all" after each agent run (board t42)
+- Cursor: "Review changes" after an agent turn, accept/reject per file and Undo all; Copilot Edits: Keep / Undo per
+  edit session; Windsurf: Revert to before a step; Claude Code: checkpoints (/rewind). Shared: the files and +/− lines
+  right after the turn, one click back to before it, a warning when a file changed since.
+- Built (0.6.174): a receipt event at the end of each run that changed files; "Undo all" puts them back as they were
+  before the run, asking first about any file changed since; the earlier files are kept on disk (undo/<chat>/<run>)
+  so it works after a restart (newest 30 runs, up to 20 MB each).
+Stopped at: a diff view per file from the receipt, and undoing one file of a run.

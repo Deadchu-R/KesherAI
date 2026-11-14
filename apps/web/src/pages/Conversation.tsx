@@ -1,4 +1,5 @@
 import { usePersonas } from "../Personas";
+import { RunReceipt } from "../RunReceipt";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
@@ -264,6 +265,8 @@ export function ConversationPage({ id }: { id: string }) {
 
   // How long each answer took and how fast it was written (tokens per second, from the model's own counts): shown
   // small under the answer, as LM Studio and Open WebUI do.
+  /** Runs whose receipt was undone ("Undo all"). */
+  const undoneRuns = useMemo(() => new Set(events.flatMap((e) => (e.type === "undo_run" ? [e.run] : []))), [events]);
   const answerStats = useMemo(() => {
     const out = new Map<number, { seconds: number; tps?: number; tokens: number }>();
     let from = 0;
@@ -839,6 +842,10 @@ export function ConversationPage({ id }: { id: string }) {
                 return <p key={e.seq} className="muted note" dir="auto">{t("accessGiven")} <span className="mono" dir="ltr">{e.path}</span></p>;
               case "undo":
                 return <p key={e.seq} className="muted note">{t("undone", { path: e.path })}</p>;
+              case "receipt":
+                return <RunReceipt key={e.seq} convId={id} ev={e} busy={busy} undone={undoneRuns.has(e.run)} />;
+              case "undo_run":
+                return <p key={e.seq} className="muted note">{L(`בוטלו השינויים של ריצה: ${e.files.length} קבצים הוחזרו.`, `A run's changes were undone: ${e.files.length} files put back.`)}</p>;
               case "status":
                 if (e.status !== "error") return null;
                 return (

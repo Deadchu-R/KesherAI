@@ -2219,3 +2219,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .bp-wire-tip { position: absolute; z-index: 6; pointer-events: none; padding: 3px 8px; border-radius: 6px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border-strong); white-space: nowrap; }
 .bp-wire-tip.ok { color: #7bd88f; }
 .bp-wire-tip.bad { color: #ff7b7b; border-color: rgb(255 123 123 / 0.5); }
+
+/* The receipt after an agent run (t42): files changed, +/− lines, "Undo all". */
+.receipt { padding: 8px 12px; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.receipt.undone { opacity: 0.6; }
+.receipt-head { gap: 8px; align-items: center; }
+.receipt-sum { display: flex; gap: 8px; align-items: center; text-align: start; color: var(--text); text-decoration: none; }
+.receipt-plus { color: #7bd88f; }
+.receipt-minus { color: #ff7b7b; }
+.receipt-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.receipt-files li { gap: 8px; align-items: center; min-width: 0; }
+.receipt-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 12.5px; }

@@ -648,6 +648,18 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
+  // "Undo all" on a run's receipt: every file the run changed, as before it. A file changed since is named first
+  // (conflicts) and changed only when the user says so (force).
+  app.post<{ Params: { id: string; run: string }; Body: { force?: boolean } }>("/api/conversations/:id/runs/:run/undo", async (req, reply) => {
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    try {
+      return await opened.session.undoRun(req.params.run, req.body?.force === true);
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
   // ---------- Permanent approvals ----------
   app.get("/api/permissions", async () => s.config.permissions);
   app.delete<{ Params: { index: string } }>("/api/permissions/:index", async (req, reply) => {

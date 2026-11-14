@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
-import { randomUUID } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import type {
   AgentEvent,
   AgentMessage,
@@ -110,6 +110,45 @@ export interface AgentSessionOptions {
    * them when the model needs them. Read on every request; empty = off.
    */
   toolSearch?: () => readonly string[] | undefined;
+  /**
+   * Keeps each run's files from before it (for "Undo all" on its receipt, after a restart too). Without it they are
+   * kept in memory only.
+   */
+  undoStore?: UndoStore;
+}
+
+/** A run's files as they were before it, and a fingerprint of each as the run left it. */
+export interface RunFiles {
+  files: Array<{ path: string; before: string | null; after: string }>;
+}
+
+/** Where the files a run changed are kept (by run id). */
+export interface UndoStore {
+  save(run: string, files: RunFiles): Promise<void>;
+  load(run: string): Promise<RunFiles | undefined>;
+  remove(run: string): Promise<void>;
+}
+
+/** A content fingerprint ("none" for no file). */
+const print = (text: string | null): string => (text === null ? "none" : createHash("sha1").update(text).digest("hex"));
+
+/** Lines added and removed between two texts (each line counted as many times as it appears). */
+export function lineDelta(before: string, after: string): { added: number; removed: number } {
+  const count = new Map<string, number>();
+  // A last line break ends the last line; it does not start one more.
+  const lines = (t: string) => (t ? t.replace(/\r?\n$/, "").split(/\r?\n/) : []);
+  const a = lines(before);
+  const b = lines(after);
+  for (const l of a) count.set(l, (count.get(l) ?? 0) + 1);
+  let added = 0;
+  for (const l of b) {
+    const n = count.get(l) ?? 0;
+    if (n > 0) count.set(l, n - 1);
+    else added++;
+  }
+  let removed = 0;
+  for (const n of count.values()) removed += n;
+  return { added, removed };
 }
 
 /** The tool that loads the others when tool search is on. */
@@ -173,7 +212,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly torOf?: AgentSessionOptions["viaTor"];
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
   contextTokens: number;
-  private readonly changes: Array<{ path: string; before: string | null }> = [];
+  private changes: Array<{ path: string; before: string | null }> = [];
+  private readonly undoStore?: UndoStore;
+  /** The runs' receipts this session made (kept in memory too, for a store that fails). */
+  private readonly runs = new Map<string, RunFiles>();
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
   private readonly toolSearch?: () => readonly string[] | undefined;
@@ -215,6 +257,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.torOf = opts.viaTor;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
+    if (opts.undoStore) this.undoStore = opts.undoStore;
     this.toolSearch = opts.toolSearch;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
@@ -740,6 +783,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private async run(): Promise<void> {
     if (this.external) return this.runExternal(this.external);
+    const changedFrom = this.changes.length;
     const abort = new AbortController();
     this.abort = abort;
     this.setStatus("running");
@@ -847,8 +891,63 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       }
     } finally {
       if (this.abort === abort) this.abort = undefined;
+      await this.receipt(changedFrom).catch(() => undefined);
       this.onChange?.(this);
     }
+  }
+
+  /**
+   * After a run that changed files, a receipt (as Cursor's "Review changes"): each file with the lines added and removed,
+   * and "Undo all" for the run. The files as they were before are kept in the undo store.
+   */
+  private async receipt(from: number): Promise<void> {
+    const made = this.changes.slice(from);
+    if (!made.length) return;
+    const first = new Map<string, string | null>();
+    for (const c of made) if (!first.has(c.path)) first.set(c.path, c.before);
+    const shown: Array<{ path: string; kind: "new" | "changed" | "deleted"; added: number; removed: number }> = [];
+    const kept: RunFiles = { files: [] };
+    for (const [path, before] of first) {
+      const now = await readFile(path, "utf8").catch(() => null);
+      if (now === before) continue;
+      const { added, removed } = lineDelta(before ?? "", now ?? "");
+      shown.push({ path: this.workspace ? displayPath(this.workspace, path) : path, kind: before === null ? "new" : now === null ? "deleted" : "changed", added, removed });
+      kept.files.push({ path, before, after: print(now) });
+    }
+    if (!shown.length) return;
+    const run = randomUUID().slice(0, 8);
+    this.runs.set(run, kept);
+    await this.undoStore?.save(run, kept).catch(() => undefined);
+    this.push({ type: "receipt", run, files: shown });
+  }
+
+  /**
+   * Puts back every file a run changed, as it was before the run. A file changed since (by the user or a later run)
+   * is not touched unless `force`: its name comes back in `conflicts`.
+   *
+   * @param run - The id on the run's receipt.
+   * @throws Error while the agent is busy, or when the run's files are no longer kept.
+   */
+  async undoRun(run: string, force = false): Promise<{ files: string[]; conflicts: string[] }> {
+    if (this.busy) throw new Error("Stop the agent before undoing.");
+    const kept = this.runs.get(run) ?? (await this.undoStore?.load(run).catch(() => undefined));
+    if (!kept) throw new Error("This run's earlier files are no longer kept.");
+    const show = (p: string) => (this.workspace ? displayPath(this.workspace, p) : p);
+    const conflicts: string[] = [];
+    for (const f of kept.files) if (print(await readFile(f.path, "utf8").catch(() => null)) !== f.after) conflicts.push(show(f.path));
+    if (conflicts.length && !force) return { files: [], conflicts };
+    for (const f of kept.files) {
+      if (f.before === null) await rm(f.path, { force: true });
+      else await writeFile(f.path, f.before, "utf8");
+    }
+    const paths = new Set(kept.files.map((f) => f.path));
+    this.changes = this.changes.filter((c) => !paths.has(c.path));
+    this.runs.delete(run);
+    await this.undoStore?.remove(run).catch(() => undefined);
+    const files = kept.files.map((f) => show(f.path));
+    this.push({ type: "undo_run", run, files });
+    this.messages.push({ role: "user", content: `(The user undid all your changes from one run: ${files.join(", ")}. Those files are as they were before it.)` });
+    return { files, conflicts };
   }
 
   /** Runs one tool call, asking for approval when needed. Returns what the model sees. */

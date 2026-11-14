@@ -683,6 +683,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       config,
       outputsDir: join(paths.root, "outputs"),
       checkpoints: new Checkpoints(join(paths.root, "checkpoints")),
+      undoDir: join(paths.root, "undo"),
       personas,
       skills,
       projectFacts,

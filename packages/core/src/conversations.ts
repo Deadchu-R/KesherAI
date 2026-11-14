@@ -1,4 +1,5 @@
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
+import { fileUndoStore } from "./undo-store.js";
 import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
 import type { AcpOption } from "./acp.js";
 import { personaPrompt } from "./personas.js";
@@ -642,6 +643,8 @@ export class ConversationManager {
       messages: conversation.messages,
       events: conversation.events,
       onChange: () => this.scheduleSave(id),
+      // Each run's earlier files, for "Undo all" on its receipt (after a restart too).
+      ...(this.deps.undoDir ? { undoStore: fileUndoStore(this.deps.undoDir, id) } : {}),
       // Cloud models read far more than a 16k-context local model.
       contextTokens: this.contextFor(conversation.modelId),
       // Read on every request, so adding or removing a teammate applies to the next message.

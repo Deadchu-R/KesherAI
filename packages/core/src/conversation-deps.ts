@@ -29,6 +29,8 @@ export interface ConversationDeps {
   outputsDir: string;
   /** Saves the project folder before each message in coding sessions. */
   checkpoints?: Checkpoints;
+  /** Where each agent run's earlier files are kept, for "Undo all" on its receipt. */
+  undoDir?: string;
   /**
    * Finds an image model that runs on this computer when none usable is
    * active: uses a downloaded one, or starts downloading the best fit.

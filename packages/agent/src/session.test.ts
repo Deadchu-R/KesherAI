@@ -563,3 +563,28 @@ test("a safe tool's askFirst call waits for the person even in auto mode", async
   await new Promise<void>((resolve) => session.on("event", (e) => e.type === "status" && e.status === "idle" && resolve()));
   assert.deepEqual(ran, []);
 });
+
+test("a run that changes files ends with a receipt; Undo all puts them back, asking first about a file changed since", async () => {
+  const { session, workspace } = await makeSession(
+    [
+      { calls: [{ name: "edit_file", arguments: { path: "a.txt", old_text: "one", new_text: "two\nthree" } }] },
+      { calls: [{ name: "write_file", arguments: { path: "b.txt", content: "new file\n" } }] },
+      { text: "done" },
+    ],
+    "auto-edit",
+  );
+  await writeFile(join(workspace, "a.txt"), "one\n");
+  session.send("edit");
+  const r = (await waitFor(session, (e) => e.type === "receipt")) as Extract<AgentEvent, { type: "receipt" }>;
+  assert.deepEqual(r.files.map((f) => [f.path, f.kind, f.added, f.removed]), [["a.txt", "changed", 2, 1], ["b.txt", "new", 1, 0]]);
+  // Changed after the run: named, not touched.
+  await writeFile(join(workspace, "a.txt"), "mine\n");
+  assert.deepEqual(await session.undoRun(r.run), { files: [], conflicts: ["a.txt"] });
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "mine\n");
+  const done = await session.undoRun(r.run, true);
+  assert.deepEqual(done.files, ["a.txt", "b.txt"]);
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "one\n");
+  assert.equal(await readFile(join(workspace, "b.txt"), "utf8").catch(() => "gone"), "gone");
+  assert.ok(session.events.some((e) => e.type === "undo_run"));
+  await assert.rejects(session.undoRun(r.run), /no longer kept/);
+});

@@ -146,6 +146,10 @@ export type AgentEvent = EventBase &
         files?: string[];
       }
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
+    /** After a run that changed files: what changed (paths as shown), with "Undo all" for the run. */
+    | { type: "receipt"; run: string; files: Array<{ path: string; kind: "new" | "changed" | "deleted"; added: number; removed: number }> }
+    /** A run's changes were undone. */
+    | { type: "undo_run"; run: string; files: string[] }
     | { type: "status"; status: AgentStatus; message?: string }
     | { type: "note"; text: string }
     /** A saved state of the project folder, taken before the next message (coding sessions). */
