@@ -225,6 +225,28 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** Which conversations are working right now (`running`) or waiting for an answer (`waiting`). */
   app.get("/api/conversations/activity", async () => s.conversations.activity());
 
+  /** Named code environments (any folder), picked when a code session starts. */
+  app.get("/api/code-environments", async () => s.config.namedEnvironments ?? []);
+  /** Saves one (id "new" makes one); a name is needed. */
+  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/code-environments/:id", async (req, reply) => {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 40) : "";
+    if (!name) return reply.code(400).send({ error: "Give the environment a name." });
+    const env = cleanEnvironment(req.body) ?? {};
+    const list = [...((s.config.namedEnvironments as Array<{ id: string }> | undefined) ?? [])];
+    const id = req.params.id === "new" ? `env-${Date.now().toString(36)}` : req.params.id;
+    if (req.params.id !== "new" && !list.some((e) => e.id === id)) return reply.code(404).send({ error: "No such environment." });
+    if (req.params.id === "new" && list.length >= 20) return reply.code(400).send({ error: "Up to 20 environments." });
+    const item = { id, name, ...env };
+    s.config.namedEnvironments = req.params.id === "new" ? [...list, item] : list.map((e) => (e.id === id ? item : e));
+    await s.saveConfig();
+    return item;
+  });
+  app.delete<{ Params: { id: string } }>("/api/code-environments/:id", async (req) => {
+    s.config.namedEnvironments = ((s.config.namedEnvironments as Array<{ id: string }> | undefined) ?? []).filter((e) => e.id !== req.params.id);
+    await s.saveConfig();
+    return { ok: true };
+  });
+
   /** A folder's code environment (setup command, actions, variables), for the Code page. */
   app.get<{ Querystring: { folder?: string } }>("/api/code-environment", async (req) => (s.config.codeEnvironments?.[String(req.query.folder ?? "")] as Project["environment"]) ?? {});
   app.put<{ Querystring: { folder?: string }; Body: unknown }>("/api/code-environment", async (req, reply) => {
@@ -246,6 +268,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const env = s.conversations.environmentOf(c);
     return {
       folder: c.envFolder ?? c.workspace ?? null,
+      name: c.envId ? (s.conversations.namedEnvironment(c.envId)?.name ?? null) : null,
       actions: (env?.actions ?? []).map((a) => a.name),
       worktree: c.worktree ? { branch: c.worktree.branch, path: c.worktree.path } : null,
       setup: s.conversations.setupCommandOf(req.params.id) ?? null,
@@ -257,7 +280,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** A session's worktree: its branch and what deleting the session would lose there. */
   app.get<{ Params: { id: string } }>("/api/conversations/:id/worktree", async (req) => (await s.conversations.worktreeWorkOf(req.params.id)) ?? null);
 
-  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean; incognito?: boolean } }>(
+  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean; incognito?: boolean; environment?: string } }>(
     "/api/conversations",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -272,6 +295,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
           ...(b.personaId ? { personaId: b.personaId } : {}),
           ...(b.worktree === true && b.kind === "code" ? { worktree: true } : {}),
           ...(b.incognito === true ? { incognito: true } : {}),
+          ...(typeof b.environment === "string" && b.kind === "code" ? { environment: b.environment.slice(0, 40) } : {}),
         });
         const { messages: _m, events: _e, ...summary } = c;
         return summary;

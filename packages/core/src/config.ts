@@ -295,6 +295,8 @@ export const KesherConfigSchema = z.object({
   browserSites: z.array(z.string()).default([]),
   /** Code environments by folder (setup command, actions, variables), set on the Code page. */
   codeEnvironments: z.record(z.string(), z.any()).default({}),
+  /** Named code environments (any folder), picked when a code session starts: { id, name, setup, actions, env }. */
+  namedEnvironments: z.array(z.any()).default([]),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z
     .object({

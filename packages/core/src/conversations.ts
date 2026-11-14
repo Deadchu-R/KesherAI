@@ -49,6 +49,8 @@ export interface NewConversation {
   worktree?: boolean;
   /** No memory read or filed, left out of search. */
   incognito?: boolean;
+  /** A named environment (its id) instead of the folder's. */
+  environment?: string;
 }
 
 
@@ -510,6 +512,7 @@ export class ConversationManager {
       mode: opts.source === "telegram" ? "ask" : (opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit")),
       ...(worktree ? { workspace: worktree.path, worktree } : opts.workspace ? { workspace: opts.workspace } : {}),
       ...(folder ? { envFolder: folder } : {}),
+      ...(opts.environment && this.namedEnvironment(opts.environment) ? { envId: opts.environment } : {}),
       ...(opts.incognito ? { incognito: true } : {}),
       messages: [],
       events: [],
@@ -517,7 +520,7 @@ export class ConversationManager {
       updatedAt: now,
     });
     // The project's setup command runs in the new worktree; the first message waits for it.
-    const env = this.environmentOf({ envFolder: folder, projectId });
+    const env = this.environmentOf({ envFolder: folder, projectId, ...(opts.environment ? { envId: opts.environment } : {}) });
     const setup = process.platform === "win32" ? (env?.setupWindows || env?.setup) : env?.setup;
     if (worktree && setup?.trim()) this.startSetup(id, worktree.path, setup.trim());
     return saved;
@@ -549,9 +552,19 @@ export class ConversationManager {
   }
 
   /** A session's environment: its folder's (set on the Code page), else its project's. */
-  environmentOf(c: { envFolder?: string | undefined; projectId?: string | null | undefined }): ProjectEnvironment | undefined {
+  environmentOf(c: { envId?: string | undefined; envFolder?: string | undefined; projectId?: string | null | undefined }): ProjectEnvironment | undefined {
+    // A named environment picked at the start comes first ("none" picks no environment at all).
+    if (c.envId === "none") return undefined;
+    const named = c.envId ? this.namedEnvironment(c.envId) : undefined;
+    if (named) return named;
     const byFolder = c.envFolder ? (this.deps.config.codeEnvironments?.[c.envFolder] as ProjectEnvironment | undefined) : undefined;
     return byFolder ?? (c.projectId ? this.deps.library.getProject(c.projectId)?.environment : undefined);
+  }
+
+  /** A named environment by id. */
+  namedEnvironment(id: string): (ProjectEnvironment & { id: string; name: string }) | undefined {
+    if (id === "none") return { id: "none", name: "none" };
+    return (this.deps.config.namedEnvironments as Array<ProjectEnvironment & { id: string; name: string }> | undefined)?.find((e) => e.id === id);
   }
 
   /** The environment variables for a session's commands. */

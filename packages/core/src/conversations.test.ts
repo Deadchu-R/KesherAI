@@ -578,3 +578,37 @@ test("a chat's web settings are checked when saved, and the globe's search shows
     await server.close();
   }
 });
+
+test("named environments: picked at the start of a code session; 'none' runs no setup", async () => {
+  const { server } = await setup();
+  const { runIn } = await import("./run-in.js");
+  const { existsSync: ex } = await import("node:fs");
+  const { writeFile: wf } = await import("node:fs/promises");
+  const repo = await mkdtemp(join(tmpdir(), "kesher-named-"));
+  const g = (args: string[]) => runIn(repo, "git", args, false);
+  await g(["init", "-q", "-b", "main"]);
+  await wf(join(repo, "a.txt"), "a\n");
+  await g(["add", "."]);
+  await g(["commit", "-qm", "first"]);
+  try {
+    assert.equal((await server.app.inject({ method: "PUT", url: "/api/code-environments/new", payload: { setup: "x" } })).statusCode, 400, "a name is needed");
+    const e = (await server.app.inject({ method: "PUT", url: "/api/code-environments/new", payload: { name: "Full", setup: "node -e \"require('fs').writeFileSync('full.txt','1')\"", actions: [{ name: "Dev", command: "npm run dev" }] } })).json() as { id: string };
+    await server.app.inject({ method: "PUT", url: `/api/code-environment?folder=${encodeURIComponent(repo)}`, payload: { setup: "node -e \"require('fs').writeFileSync('folder.txt','1')\"" } });
+    const a = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", workspace: repo, modelId: "fake/m", worktree: true, environment: e.id } })).json() as { id: string; workspace: string };
+    const env = await until(async () => {
+      const r = (await server.app.inject({ method: "GET", url: `/api/conversations/${a.id}/environment` })).json() as { name: string | null; actions: string[]; setup: { status: string } | null };
+      return r.setup?.status === "done" ? r : undefined;
+    });
+    assert.equal(env.name, "Full");
+    assert.deepEqual(env.actions, ["Dev"]);
+    assert.ok(ex(join(a.workspace, "full.txt")) && !ex(join(a.workspace, "folder.txt")), "the named environment's setup, not the folder's");
+    const b = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "code", workspace: repo, modelId: "fake/m", worktree: true, environment: "none" } })).json() as { id: string };
+    const envB = (await server.app.inject({ method: "GET", url: `/api/conversations/${b.id}/environment` })).json() as { setup: unknown; actions: string[] };
+    assert.equal(envB.setup, null, "'none': no setup");
+    assert.deepEqual(envB.actions, []);
+    await server.app.inject({ method: "DELETE", url: `/api/code-environments/${e.id}` });
+    assert.deepEqual((await server.app.inject({ method: "GET", url: "/api/code-environments" })).json(), []);
+  } finally {
+    await server.close();
+  }
+});

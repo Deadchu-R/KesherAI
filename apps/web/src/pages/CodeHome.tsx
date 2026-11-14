@@ -1,4 +1,4 @@
-import { EnvironmentEditor } from "../CodeEnvironment";
+import { EnvironmentEditor, useNamedEnvs } from "../CodeEnvironment";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ComposerBar } from "../ComposerBar";
 import { SelfWorkPanel } from "../SelfWorkPanel";
@@ -94,6 +94,9 @@ export function CodeHome() {
     }
   };
   const [envOpen, setEnvOpen] = useState(false);
+  const [envRefresh, setEnvRefresh] = useState(0);
+  const namedEnvs = useNamedEnvs(envRefresh);
+  const [envChoice, setEnvChoice] = useState("");
   // The same + menu as every chat box: the session is made in the chosen folder on the first thing added.
   const [draftId, setDraftId] = useState<string>();
   setDraftIdRef.current = setDraftId;
@@ -104,7 +107,7 @@ export function CodeHome() {
       toast(L("בחרו תיקייה לעבוד בה.", "Choose a folder to work in."));
       return undefined;
     }
-    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}) }, { open: false });
+    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}), ...(envChoice && namedEnvs.some((n) => n.id === envChoice) || envChoice === "none" ? { environment: envChoice } : {}) }, { open: false });
     if (id) setDraftId(id);
     return id;
   };
@@ -119,7 +122,7 @@ export function CodeHome() {
     }
     setBusy(true);
     try {
-      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}) }));
+      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}), ...(envChoice && namedEnvs.some((n) => n.id === envChoice) || envChoice === "none" ? { environment: envChoice } : {}) }));
       if (!id) return;
       if (draftId) location.hash = `#/c/${id}`;
       choose(folder.trim());
@@ -191,9 +194,15 @@ export function CodeHome() {
                   ⑂ {worktree ? L("worktree", "Worktree") : L("בתיקייה", "In the folder")}
                 </button>
                 {folder && (
-                  <button type="button" className="model-chip" onClick={() => setEnvOpen(!envOpen)} aria-expanded={envOpen} title={L("הסביבה: פקודת הכנה, פעולות ומשתנים לסשנים בתיקייה הזו", "Environment: setup command, actions and variables for sessions in this folder")}>
-                    ⚙ {L("סביבה", "Environment")}
-                  </button>
+                  <>
+                    {/* Which environment the new session gets: this folder's, a named one, or none (like Codex). */}
+                    <Select className="model-chip" value={envChoice} onChange={(e) => (e.target.value === "\u0000manage" ? setEnvOpen(true) : setEnvChoice(e.target.value))} aria-label={L("סביבה", "Environment")}>
+                      <option value="">{L("סביבה: של התיקייה", "Environment: the folder's")}</option>
+                      {namedEnvs.map((n) => <option key={n.id} value={n.id}>{L(`סביבה: ${n.name}`, `Environment: ${n.name}`)}</option>)}
+                      <option value="none">{L("בלי סביבה", "No environment")}</option>
+                      <option value={"\u0000manage"}>{L("עריכת סביבות…", "Edit environments…")}</option>
+                    </Select>
+                  </>
                 )}
               </>
             }
@@ -201,7 +210,7 @@ export function CodeHome() {
           />
         </div>
       </form>
-      {envOpen && folder && <EnvironmentEditor folder={folder} onClose={() => setEnvOpen(false)} />}
+      {envOpen && folder && <EnvironmentEditor folder={folder} which={envChoice === "none" ? "" : envChoice} onClose={() => setEnvOpen(false)} onSaved={() => setEnvRefresh((n) => n + 1)} />}
       {folder && !typing && <p className="muted small code-where" dir="ltr">{folder}</p>}
       {folder && <ProjectFacts folder={folder} />}
       <SelfWorkPanel folder={folder} />

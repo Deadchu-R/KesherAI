@@ -84,6 +84,8 @@ export async function createConversation(body: {
   worktree?: boolean;
   /** No memory read or filed, left out of search. */
   incognito?: boolean;
+  /** A named environment's id, or "none" (code sessions). */
+  environment?: string;
 }, opts: { open?: boolean } = {}): Promise<string> {
   let c: { id: string };
   try {

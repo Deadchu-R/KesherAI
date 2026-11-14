@@ -15,6 +15,8 @@ interface Env {
 /** A code session's environment as its page sees it. */
 export interface SessionEnv {
   folder: string | null;
+  /** A named environment picked at the start. */
+  name?: string | null;
   actions: string[];
   worktree: { branch: string; path: string } | null;
   setup: { status: "running" | "done" | "failed"; log: string } | null;
@@ -50,9 +52,10 @@ export function useSessionEnv(convId: string): SessionEnv | null {
  */
 export function SessionEnvBar({ convId }: { convId: string }) {
   const env = useSessionEnv(convId);
-  if (!env || (!env.worktree && !env.setup)) return null;
+  if (!env || (!env.worktree && !env.setup && !env.name)) return null;
   return (
     <div className="session-env row small">
+      {env.name && <span className="pill" title={L("הסביבה של הסשן", "The session's environment")}>⚙ {env.name}</span>}
       {env.worktree && (
         <span className="pill" title={env.worktree.path} dir="ltr">
           ⑂ {env.worktree.branch}
@@ -74,25 +77,67 @@ export function SessionEnvBar({ convId }: { convId: string }) {
  * The folder's environment for code sessions (like Codex's local environments): a setup command that runs once
  * in each new worktree, actions (Dev server, Tests) to start in the session's terminal, and variables.
  */
-export function EnvironmentEditor({ folder, onClose }: { folder: string; onClose: () => void }) {
+/** A named environment (any folder). */
+export interface NamedEnv extends Env {
+  id: string;
+  name: string;
+}
+
+/** The named environments (for the Code page's choice), read again when `refresh` changes. */
+export function useNamedEnvs(refresh = 0): NamedEnv[] {
+  const [list, setList] = useState<NamedEnv[]>([]);
+  useEffect(() => {
+    void api<NamedEnv[]>("/api/code-environments").then(setList, () => setList([]));
+  }, [refresh]);
+  return list;
+}
+
+/**
+ * The code environments (like Codex's local environments): this folder's own, or a named one for any folder
+ * ("Full", "Quick"…), picked when a session starts. Each has a setup command that runs once in a new worktree,
+ * actions (Dev server, Tests) to start in the session's terminal, and variables.
+ *
+ * @param props.which - What to edit first: "" this folder's, a named one's id, or "new".
+ * @param props.onSaved - After a save or delete (the Code page reads the list again).
+ */
+export function EnvironmentEditor({ folder, onClose, which: first = "", onSaved }: { folder: string; onClose: () => void; which?: string; onSaved?: () => void }) {
+  const [which, setWhich] = useState(first);
+  const named = useNamedEnvs();
   const [env, setEnv] = useState<Env | null>(null);
+  const [name, setName] = useState("");
   const [vars, setVars] = useState("");
   const [busy, setBusy] = useState(false);
+  const fill = (e: Env) => {
+    setEnv({ ...e, actions: e.actions?.length ? e.actions : [] });
+    setVars(Object.entries(e.env ?? {}).map(([k, v]) => `${k}=${v}`).join("\n"));
+  };
   useEffect(() => {
-    void api<Env>(`/api/code-environment?folder=${encodeURIComponent(folder)}`).then((e) => {
-      setEnv({ ...e, actions: e.actions?.length ? e.actions : [] });
-      setVars(Object.entries(e.env ?? {}).map(([k, v]) => `${k}=${v}`).join("\n"));
-    }, (e: Error) => toast(e.message));
-  }, [folder]);
+    if (which === "") {
+      setName("");
+      void api<Env>(`/api/code-environment?folder=${encodeURIComponent(folder)}`).then(fill, (e: Error) => toast(e.message));
+    } else if (which === "new") {
+      setName("");
+      fill({});
+    } else {
+      const n = named.find((x) => x.id === which);
+      if (n) {
+        setName(n.name);
+        fill(n);
+      }
+    }
+  }, [folder, which, named]);
   if (!env) return null;
   const actions = env.actions ?? [];
   const setAction = (i: number, patch: Partial<{ name: string; command: string }>) => setEnv({ ...env, actions: actions.map((a, j) => (j === i ? { ...a, ...patch } : a)) });
   const save = async () => {
     setBusy(true);
     const envVars = Object.fromEntries(vars.split(/\r?\n/).map((l) => /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m).map((m) => [m[1]!, m[2]!.trim()]));
+    const body = { ...env, actions: actions.filter((a) => a.name.trim() && a.command.trim()), env: envVars };
     try {
-      await api(`/api/code-environment?folder=${encodeURIComponent(folder)}`, { method: "PUT", body: { ...env, actions: actions.filter((a) => a.name.trim() && a.command.trim()), env: envVars } });
+      if (which === "") await api(`/api/code-environment?folder=${encodeURIComponent(folder)}`, { method: "PUT", body });
+      else await api(`/api/code-environments/${which}`, { method: "PUT", body: { ...body, name } });
       toast(L("הסביבה נשמרה.", "Environment saved."));
+      onSaved?.();
       onClose();
     } catch (e) {
       toast((e as Error).message);
@@ -100,13 +145,34 @@ export function EnvironmentEditor({ folder, onClose }: { folder: string; onClose
       setBusy(false);
     }
   };
+  const remove = async () => {
+    if (!confirm(L(`למחוק את הסביבה "${name}"?`, `Delete the environment "${name}"?`))) return;
+    await api(`/api/code-environments/${which}`, { method: "DELETE" }).catch((e: Error) => toast(e.message));
+    onSaved?.();
+    onClose();
+  };
   return (
     <section className="card stack env-editor" role="dialog" aria-label={L("סביבת קוד", "Code environment")}>
       <div className="row">
-        <h2 className="grow">{L("הסביבה של התיקייה", "This folder's environment")}</h2>
+        <h2 className="grow">{L("סביבות קוד", "Code environments")}</h2>
         <button type="button" className="icon-btn" aria-label={L("סגור", "Close")} onClick={onClose}>✕</button>
       </div>
-      <p className="muted small" dir="ltr">{folder}</p>
+      <label className="stack small">
+        {L("מה לערוך", "Edit")}
+        <select value={which} onChange={(e) => setWhich(e.target.value)}>
+          <option value="">{L("של התיקייה הזו", "This folder's")}</option>
+          {named.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+          <option value="new">{L("+ סביבה חדשה עם שם", "+ A new named environment")}</option>
+        </select>
+      </label>
+      {which === "" ? (
+        <p className="muted small" dir="ltr">{folder}</p>
+      ) : (
+        <label className="stack small">
+          {L("שם (לכל תיקייה)", "Name (for any folder)")}
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={L("למשל: מלאה / מהירה", "e.g. Full / Quick")} dir="auto" />
+        </label>
+      )}
       <label className="stack small">
         {L("פקודת הכנה — רצה פעם אחת בכל worktree חדש, לפני שהמודל מתחיל (למשל npm install)", "Setup command: runs once in each new worktree before the model starts (e.g. npm install)")}
         <input dir="ltr" value={env.setup ?? ""} placeholder="npm install" onChange={(e) => setEnv({ ...env, setup: e.target.value })} />
@@ -132,8 +198,9 @@ export function EnvironmentEditor({ folder, onClose }: { folder: string; onClose
       </label>
       <p className="muted small">{L("קבצים כמו .env נכנסים ל-worktree חדש לפי הקובץ .worktreeinclude בשורש הפרויקט (כמו ב-Claude Code).", "Files such as .env go into a new worktree by the .worktreeinclude file at the project's root (as in Claude Code).")}</p>
       <div className="row">
-        <button type="button" className="primary" disabled={busy} onClick={() => void save()}>{L("שמור", "Save")}</button>
+        <button type="button" className="primary" disabled={busy || (which !== "" && !name.trim())} onClick={() => void save()}>{L("שמור", "Save")}</button>
         <button type="button" onClick={onClose}>{L("ביטול", "Cancel")}</button>
+        {which !== "" && which !== "new" && <button type="button" className="danger" onClick={() => void remove()}>{L("מחק", "Delete")}</button>}
       </div>
     </section>
   );

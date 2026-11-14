@@ -62,6 +62,8 @@ export interface Conversation {
   incognito?: boolean;
   /** Watching the session's pull request: fix failing checks and/or merge when all checks pass (like Claude Code). */
   prWatch?: { autoFix: boolean; autoMerge: boolean; fixedSha?: string };
+  /** A named environment picked when the session started (see namedEnvironments); else the folder's. */
+  envId?: string;
   /** The folder the session was started in (its environment is that folder's; with a worktree, not the worktree). */
   envFolder?: string;
   /** Other models that plan or review alongside the main one. */
