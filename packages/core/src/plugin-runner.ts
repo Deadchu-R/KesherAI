@@ -9,7 +9,7 @@
  * that it works), files outside the plugin's folders cannot be read or written either, and native code is refused.
  */
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 type Msg = Record<string, unknown> & { t: string };
 
@@ -80,8 +80,9 @@ if (!allowed.has("shell")) {
 if (!allowed.has("filesystem") && !env.nodeSandbox) {
   const req = createRequire(import.meta.url);
   const path = req("node:path") as typeof import("node:path");
-  const fsMod = req("node:fs") as Record<string, unknown> & { realpathSync: (p: string) => string };
-  const realpath = fsMod.realpathSync.bind(fsMod);
+  const fsMod = req("node:fs") as Record<string, unknown> & { realpathSync: ((p: string) => string) & { native?: (p: string) => string } };
+  // The native one expands Windows' short names (RUNNER~1) the same way for the folders and the paths asked for.
+  const realpath = (fsMod.realpathSync.native ?? fsMod.realpathSync).bind(fsMod);
   const real = (p: string) => {
     let cur = path.resolve(p);
     const rest: string[] = [];
@@ -100,8 +101,22 @@ if (!allowed.has("filesystem") && !env.nodeSandbox) {
   const roots = (dirs: Array<string | undefined>) => dirs.filter((d): d is string => !!d).map((d) => real(d));
   const readRoots = roots([env.dir ?? path.dirname(env.main), env.dataDir]);
   const writeRoots = roots([env.dataDir]);
-  const within = (p: string, list: string[]) => list.some((r) => p === r || p.startsWith(r.endsWith(path.sep) ? r : r + path.sep));
-  const asPath = (a: unknown): string | undefined => (typeof a === "string" ? a : a instanceof URL ? a.pathname : Buffer.isBuffer(a) ? a.toString() : undefined);
+  // Windows paths are compared without case (C:\\Users and c:\\users are one folder).
+  const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+  const within = (p: string, list: string[]) => list.some((r) => norm(p) === norm(r) || norm(p).startsWith(norm(r.endsWith(path.sep) ? r : r + path.sep)));
+  // A file: URL (Node's loaders pass those) as its path (found on Windows CI: its pathname gave "C:\\C:\\…%7E1…").
+  const asPath = (a: unknown): string | undefined => {
+    const v = typeof a === "string" ? a : a instanceof URL ? a.href : Buffer.isBuffer(a) ? a.toString() : undefined;
+    if (v === undefined) return undefined;
+    if (/^file:/i.test(v)) {
+      try {
+        return fileURLToPath(v);
+      } catch {
+        return v;
+      }
+    }
+    return v;
+  };
   const check = (name: string, a: unknown, write: boolean) => {
     const p = asPath(a);
     if (p === undefined) return; // a file descriptor already opened within the rules
