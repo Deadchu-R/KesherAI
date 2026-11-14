@@ -65,3 +65,19 @@ test("fix it: does only the chosen ids from a fresh list; unknown ids and outsid
   const busy = await runFixes(["unload"], { ...t.ctx, busy: true });
   assert.equal(busy.failed[0]!.id, "unload");
 });
+
+test("pc fix: a KesherAI engine left running on the card is offered and closed; the current ones and other programs are not", async () => {
+  const { fixActions, runFixes, parseGpuApps } = await import("./pc-fix.js");
+  const apps = parseGpuApps("1111, C:\\\\KesherAI\\\\engines\\\\llamacpp\\\\llama-server.exe, 17000\n2222, C:\\\\Games\\\\game.exe, 4000\n3333, C:\\\\KesherAI\\\\engines\\\\llamacpp\\\\llama-server.exe, 9000\n");
+  assert.equal(apps.length, 3);
+  assert.equal(apps[0]!.bytes, 17000 * 1024 * 1024);
+  const killed: number[] = [];
+  const ctx = { busy: false, memoryShort: false, modelsDir: "/nonexistent-models", modelUse: {}, unload: async () => undefined, gpuApps: async () => apps, ownPids: [3333], enginesDir: "C:\\\\KesherAI\\\\engines", kill: (p: number) => void killed.push(p) };
+  const list = await fixActions(ctx);
+  const engines = list.filter((a) => a.kind === "engine");
+  assert.deepEqual(engines.map((a) => a.id), ["engine:1111"]);
+  assert.equal(engines[0]!.safe, true);
+  const r = await runFixes(["engine:1111", "engine:2222"], ctx);
+  assert.deepEqual(killed, [1111]);
+  assert.deepEqual(r.done, ["engine:1111"]);
+});

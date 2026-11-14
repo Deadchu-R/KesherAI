@@ -8,13 +8,18 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const GB = 1024 ** 3;
 const size = (b: number) => (b >= GB ? `${Math.round((b / GB) * 10) / 10} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`);
 
-interface Action { id: string; kind: "unload" | "self-work" | "model"; name: string; bytes?: number; safe: boolean; note?: "changes" | "loaded-busy" | "unused" | "memory"; days?: number }
+interface Action { id: string; kind: "unload" | "self-work" | "model" | "engine"; name: string; bytes?: number; safe: boolean; note?: "changes" | "loaded-busy" | "unused" | "memory" | "left-over"; days?: number }
 
 function label(a: Action): { title: string; detail: string } {
   if (a.kind === "unload")
     return {
       title: L("לפרוק את המודל מהזיכרון", "Unload the model from memory"),
       detail: a.note === "loaded-busy" ? L(`⁦${a.name}⁩ · צ'אט עובד עכשיו, עדיף לחכות`, `${a.name} · a chat is working now, better to wait`) : L(`⁦${a.name}⁩ · משחרר זיכרון. הצ'אט הבא יטען אותו שוב`, `${a.name} · frees memory; the next chat loads it again`),
+    };
+  if (a.kind === "engine")
+    return {
+      title: L("מנוע של KesherAI שנשאר פתוח", "A KesherAI engine left running"),
+      detail: L(`⁦${a.name}⁩ · נשאר מלפני עדכון או קריסה ותופס את כרטיס המסך; נסגר`, `${a.name} · left from before an update or a crash, it holds the graphics card; it is closed`),
     };
   if (a.kind === "self-work")
     return {

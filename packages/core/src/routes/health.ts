@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
@@ -8,7 +9,7 @@ import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
 import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
 import { healthDigest, healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
-import { fixActions, runFixes, type FixContext } from "../pc-fix.js";
+import { fixActions, parseGpuApps, runFixes, type FixContext } from "../pc-fix.js";
 
 /**
  * The Health page: the computer's reading and what to do (fixed rules), and on request the chat model's short
@@ -65,6 +66,12 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
       modelsDir: s.paths.models,
       modelUse: (await s.modelUse?.all()) ?? {},
       ...(run ? { selfWork: { repo: run.repo, worktree: run.worktree } } : {}),
+      ownPids: s.guard.ownPids(),
+      enginesDir: s.paths.engines,
+      gpuApps: () =>
+        new Promise((done) =>
+          execFile("nvidia-smi", ["--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"], { windowsHide: true, timeout: 8000 }, (err, out) => done(err ? [] : parseGpuApps(String(out)))),
+        ),
       unload: async () => {
         await s.engine.stop();
       },

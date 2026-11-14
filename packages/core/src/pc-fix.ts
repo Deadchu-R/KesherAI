@@ -20,7 +20,7 @@ import { folderSize } from "./pc-health.js";
 /** One thing KesherAI can do. */
 export interface FixAction {
   id: string;
-  kind: "unload" | "self-work" | "model";
+  kind: "unload" | "self-work" | "model" | "engine";
   /** What it is (a model's file name, a copy's date). */
   name: string;
   /** What it frees, when known. */
@@ -28,9 +28,38 @@ export interface FixAction {
   /** Sure-safe: ticked to begin with. */
   safe: boolean;
   /** Why it is not ticked, or what to know (short, for the list). */
-  note?: "changes" | "loaded-busy" | "unused" | "memory";
+  note?: "changes" | "loaded-busy" | "unused" | "memory" | "left-over";
   /** Days since last use (models). */
   days?: number;
+}
+
+/** A program using the graphics card. */
+export interface GpuApp {
+  pid: number;
+  /** Its program's path (or name). */
+  name: string;
+  /** Card memory it holds. */
+  bytes: number;
+}
+
+/**
+ * The programs using an NVIDIA card: `nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits`.
+ *
+ * @param out - What nvidia-smi printed.
+ */
+export function parseGpuApps(out: string): GpuApp[] {
+  return out
+    .split(/\r?\n/)
+    .map((l) => l.split(",").map((x) => x.trim()))
+    .filter((p) => p.length >= 3 && /^\d+$/.test(p[0]!))
+    .map((p) => ({ pid: Number(p[0]), name: p.slice(1, -1).join(","), bytes: (Number(p[p.length - 1]) || 0) * 1024 * 1024 }));
+}
+
+/** KesherAI's own engines left running (after an update or a crash) that hold the card. */
+function leftOver(apps: GpuApp[], c: FixContext): GpuApp[] {
+  const own = new Set(c.ownPids ?? []);
+  const dir = c.enginesDir ? resolve(c.enginesDir).toLowerCase() : "";
+  return apps.filter((a) => !own.has(a.pid) && a.pid !== process.pid && ((dir && resolve(a.name).toLowerCase().startsWith(dir + sep.toLowerCase())) || /(^|[\\/])(llama-server|sd-server|whisper-server)(\.exe)?$/i.test(a.name)));
 }
 
 /** What the list is made from (the server's own state). */
@@ -48,6 +77,13 @@ export interface FixContext {
   selfWork?: { repo: string; worktree: string };
   /** Unloads the engine. */
   unload: () => Promise<void>;
+  /** The programs using the graphics card (nvidia-smi), and the processes of the models KesherAI runs now. */
+  gpuApps?: () => Promise<GpuApp[]>;
+  ownPids?: number[];
+  /** KesherAI's engines folder: a program from there that is not running for KesherAI now was left over. */
+  enginesDir?: string;
+  /** Closes a process (a test gives its own). */
+  kill?: (pid: number) => void;
   /** Runs git (a test gives its own). */
   git?: (cwd: string, args: string[]) => Promise<{ code: number; out: string }>;
 }
@@ -105,6 +141,8 @@ async function selfWorkCopies(c: FixContext): Promise<Array<{ path: string; bran
 export async function fixActions(c: FixContext): Promise<FixAction[]> {
   const out: FixAction[] = [];
   if (c.loadedModel) out.push({ id: "unload", kind: "unload", name: basename(c.loadedModel), safe: c.memoryShort && !c.busy, ...(c.busy ? { note: "loaded-busy" as const } : c.memoryShort ? { note: "memory" as const } : {}) });
+  // A KesherAI engine still running from before (found on the PC: the card stayed full and busy with nothing loaded).
+  for (const a of leftOver((await c.gpuApps?.().catch(() => [])) ?? [], c)) out.push({ id: `engine:${a.pid}`, kind: "engine", name: `${basename(a.name)} (${a.pid})`, bytes: a.bytes, safe: true, note: "left-over" });
 
   const git = c.git ?? runGit;
   const copies = await selfWorkCopies(c);
@@ -151,6 +189,13 @@ export async function runFixes(ids: string[], c: FixContext): Promise<{ done: st
       if (a.kind === "unload") {
         if (c.busy) throw new Error("A chat is working; try again when it finishes.");
         await c.unload();
+      } else if (a.kind === "engine") {
+        // Looked up again: still there, still left over (a pid can be reused by another program).
+        const pid = Number(a.id.slice("engine:".length));
+        const still = leftOver((await c.gpuApps?.().catch(() => [])) ?? [], c).find((x) => x.pid === pid);
+        if (!still) throw new Error("It is no longer running.");
+        (c.kill ?? ((p: number) => process.kill(p)))(pid);
+        freed += still.bytes;
       } else if (a.kind === "self-work") {
         const w = copies.find((x) => `self-work:${x.branch}` === a.id);
         if (!w || !c.selfWork) throw new Error("That copy is gone.");

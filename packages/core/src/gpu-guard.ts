@@ -349,6 +349,11 @@ export class GpuGuard {
     }
   }
 
+  /** The processes of the models KesherAI runs now (the engine, ComfyUI…): never closed as left over. */
+  ownPids(): number[] {
+    return this.items.flatMap((i) => i.pids());
+  }
+
   /** Unloads every loaded engine now (while nothing runs), to free the cards' memory. */
   async freeNow(): Promise<void> {
     for (const item of this.items) {

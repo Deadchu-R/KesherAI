@@ -777,6 +777,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
             return await provider.runFlow(graph, signal);
           } finally {
             guard.after();
+            // A chat model is loaded too: ComfyUI gives the card back at once (found on the PC: after a song, both
+            // shared 24 GB and the chat model answered in minutes, not seconds). The next song loads what it needs.
+            if (engine.status().running) void fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
           }
         },
       },
