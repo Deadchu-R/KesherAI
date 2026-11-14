@@ -165,7 +165,7 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
 /** The phone's own reading (from the phone app), for the model's list: numbers only. */
 function phoneNote(p: Record<string, unknown> | undefined): string {
   if (!p || typeof p !== "object") return "";
-  const keep = ["storageFree", "storageTotal", "ramFree", "ramTotal", "lowMemory", "batteryPercent", "batteryTempC", "batteryHealth", "charging", "modelsBytes"];
+  const keep = ["storageFree", "storageTotal", "ramFree", "ramTotal", "lowMemory", "batteryPercent", "batteryTempC", "batteryHealth", "charging", "modelsBytes", "batteryCycles", "batteryNowFullMah", "batteryDesignMah", "batteryVoltageMv", "thermal", "powerSave", "uptimeHours", "securityPatch", "android", "model"];
   const clean = Object.fromEntries(Object.entries(p).filter(([k, v]) => keep.includes(k) && (typeof v === "number" || typeof v === "boolean" || (typeof v === "string" && v.length < 20))));
-  return Object.keys(clean).length ? `\n\nThe user's phone (bytes; add phone items to the list too): ${JSON.stringify(clean)}` : "";
+  return Object.keys(clean).length ? `\n\nThe user's phone (bytes; mAh; thermal is Android's 0 none … 6 shutdown; add phone items to the list too, with the battery's wear and charging habits): ${JSON.stringify(clean)}` : "";
 }

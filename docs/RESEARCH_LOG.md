@@ -940,3 +940,16 @@ not a declared dependency: asked Roee); Node's file sandbox for plugins is not a
   long text without controls scrolls a page at a time; text boxes let the D-pad leave from their first/last line;
   regions that take focus (a whole list) are skipped; a real mouse move switches to pointer mode.
 Stopped at: Roee checks it on the Ally another day.
+
+## 2026-11-14: Phone Health with AI (VISION list item 7)
+- Samsung Device Care (battery, storage, memory, security, one score, optimise), Pixel / Android 14 battery health
+  (cycle count, state of health: the latter needs a system permission), AccuBattery (wear = what the battery holds
+  now against its design capacity, from the charge counter; charging habits: heat near 100% wears it most).
+- What a normal app can read: ACTION_BATTERY_CHANGED (level, temperature, health, voltage, cycle count on 14+),
+  BATTERY_PROPERTY_CHARGE_COUNTER, the power profile's design capacity (reflection, most phones), thermal status
+  (10+), battery saver, uptime, the security patch date.
+- Built (0.6.191): those readings in the phone app; rules for wear (<88% / <80%), cycles (800+), hot full charge,
+  phone heat, a week without restart, old security updates (90/180 days); the numbers shown; all sent to the
+  plain-words AI list.
+Stopped at: a history of readings (charging habits over days, as AccuBattery's), apps that use the most battery
+(needs usage access), and a Phone Health page of its own on the phone's menu.

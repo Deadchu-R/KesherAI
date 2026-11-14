@@ -1,3 +1,4 @@
+import { batteryWear, patchAgeDays } from "../phone-health";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
@@ -27,7 +28,9 @@ interface Reading {
 interface Item { level: "ok" | "warn" | "bad"; title: string; fix: string }
 
 /** What the phone app's native side reads (Android's own APIs). */
-interface PhoneReading { storageFree?: number; storageTotal?: number; ramFree?: number; ramTotal?: number; lowMemory?: boolean; batteryPercent?: number; batteryTempC?: number; batteryHealth?: string; charging?: boolean; modelsBytes?: number; model?: string; android?: string }
+interface PhoneReading { storageFree?: number; storageTotal?: number; ramFree?: number; ramTotal?: number; lowMemory?: boolean; batteryPercent?: number; batteryTempC?: number; batteryHealth?: string; charging?: boolean; modelsBytes?: number; model?: string; android?: string; batteryCycles?: number; batteryNowFullMah?: number; batteryDesignMah?: number; batteryVoltageMv?: number; thermal?: number; powerSave?: boolean; uptimeHours?: number; securityPatch?: string }
+
+
 const phonePlugin = () => (window as unknown as { Capacitor?: { Plugins?: { KesherLlm?: { health?: () => Promise<PhoneReading> } } } }).Capacitor?.Plugins?.KesherLlm;
 
 /** What to do about the phone, from fixed rules (like the computer's). */
@@ -43,6 +46,18 @@ export function phoneItems(p: PhoneReading): Item[] {
   if ((p.batteryTempC ?? 0) >= 42) out.push({ level: "bad", title: L(`הסוללה חמה: ${n(`${p.batteryTempC}°C`)}`, `The battery is hot: ${p.batteryTempC}°C`), fix: L("עצרו מודל מקומי או משחק, הורידו כיסוי, ואל תטעינו בחום.", "Stop a local model or game, take off the case, and do not charge it hot.") });
   if (p.batteryHealth && p.batteryHealth !== "good" && p.batteryHealth !== "unknown") out.push({ level: "warn", title: L("מצב הסוללה לא תקין", "The battery's health is not good"), fix: L("כדאי לבדוק במעבדה מורשית.", "Worth checking at an authorised service.") });
   if (p.lowMemory) out.push({ level: "warn", title: L("הזיכרון בטלפון כמעט מלא", "The phone's memory is almost full"), fix: L("סגרו אפליקציות שרצות ברקע.", "Close apps running in the background.") });
+  // The battery's wear and age (as Samsung's Device Care, Pixel's battery health and AccuBattery show them).
+  const wear = batteryWear(p);
+  if (wear !== undefined && wear < 80) out.push({ level: "bad", title: L(`הסוללה מחזיקה כ-${n(`${wear}%`)} מהקיבולת המקורית`, `The battery holds about ${wear}% of its original capacity`), fix: L("זה הזמן להחלפת סוללה במעבדה מורשית (בדרך כלל מתחת ל-80% הזמן בין טעינות מתקצר מאוד).", "Time for a battery replacement at an authorised service (below 80% the time between charges drops a lot).") });
+  else if (wear !== undefined && wear < 88) out.push({ level: "warn", title: L(`הסוללה מחזיקה כ-${n(`${wear}%`)} מהקיבולת המקורית`, `The battery holds about ${wear}% of its original capacity`), fix: L("כדי להאט את הבלאי: טעינה עד 80–85% (הגדרות ← סוללה ← הגנה על הסוללה), ובלי חום בזמן טעינה.", "To slow the wear: charge to 80–85% (Settings → Battery → battery protection), and no heat while charging.") });
+  if ((p.batteryCycles ?? 0) >= 800) out.push({ level: "warn", title: L(`${n(String(p.batteryCycles))} מחזורי טעינה`, `${p.batteryCycles} charge cycles`), fix: L("רוב סוללות הטלפונים מתוכננות ל-800–1000 מחזורים עד 80%: כדאי לשים לב לזמן הסוללה.", "Most phone batteries are rated for 800–1000 cycles to 80%: keep an eye on the battery time.") });
+  if (p.charging && (p.batteryPercent ?? 0) >= 95 && (p.batteryTempC ?? 0) >= 38) out.push({ level: "warn", title: L("טעינה מלאה בחום", "Fully charged while warm"), fix: L("חום ליד 100% שוחק את הסוללה הכי מהר: נתקו בסביבות 80–90%, או הפעילו טעינה מותאמת.", "Heat near 100% wears the battery fastest: unplug around 80–90%, or turn on adaptive charging.") });
+  if ((p.thermal ?? 0) >= 3) out.push({ level: "bad", title: L("הטלפון חם מאוד ומאט את עצמו", "The phone is very hot and slowing itself down"), fix: L("סגרו משחק או מודל מקומי, הוציאו מהכיסוי והרחיקו מהשמש עד שיתקרר.", "Close a game or local model, take it out of the case and out of the sun until it cools.") });
+  else if (p.thermal === 2) out.push({ level: "warn", title: L("הטלפון חם", "The phone is warm"), fix: L("אם זה בזמן משחק זה צפוי; אחרת בדקו איזו אפליקציה עובדת ברקע (הגדרות ← סוללה).", "Expected in a game; otherwise check what runs in the background (Settings → Battery).") });
+  if ((p.uptimeHours ?? 0) >= 24 * 7) out.push({ level: "warn", title: L(`הטלפון לא הופעל מחדש ${n(String(Math.floor(p.uptimeHours! / 24)))} ימים`, `The phone has not restarted in ${Math.floor(p.uptimeHours! / 24)} days`), fix: L("הפעלה מחדש פעם בשבוע משחררת זיכרון ומתקנת האטות קטנות.", "A restart once a week frees memory and clears small slowdowns.") });
+  const patchAge = patchAgeDays(p.securityPatch);
+  if (patchAge !== undefined && patchAge > 180) out.push({ level: "bad", title: L(`עדכון האבטחה של הטלפון בן ${n(String(Math.floor(patchAge / 30)))} חודשים`, `The phone's security update is ${Math.floor(patchAge / 30)} months old`), fix: L("הגדרות ← מערכת ← עדכון תוכנה. אם אין עדכונים, היצרן הפסיק לתמוך בטלפון: שימו לב לאפליקציות בנק וסיסמאות.", "Settings → System → Software update. If there are none, the maker stopped supporting the phone: take care with banking apps and passwords.") });
+  else if (patchAge !== undefined && patchAge > 90) out.push({ level: "warn", title: L("עדכון האבטחה של הטלפון ישן", "The phone's security update is old"), fix: L("הגדרות ← מערכת ← עדכון תוכנה.", "Settings → System → Software update.") });
   if (!out.length) out.push({ level: "ok", title: L("הטלפון נראה תקין", "The phone looks fine"), fix: L("אין מה לעשות כרגע.", "Nothing to do right now.") });
   return out;
 }
@@ -135,6 +150,7 @@ export function HealthPage() {
           {phone.storageTotal ? <Meter label={L("אחסון", "Storage")} used={phone.storageTotal - (phone.storageFree ?? 0)} total={phone.storageTotal} note={L(`\u2066${gb(phone.storageFree ?? 0)} GB\u2069 פנויים`, `${gb(phone.storageFree ?? 0)} GB free`)} /> : null}
           {phone.ramTotal ? <Meter label={L("זיכרון", "Memory")} used={phone.ramTotal - (phone.ramFree ?? 0)} total={phone.ramTotal} note={`${gb(phone.ramTotal - (phone.ramFree ?? 0))} / ${gb(phone.ramTotal)} GB`} /> : null}
           {phone.batteryPercent !== undefined && phone.batteryPercent >= 0 && <p className="small">{L(`סוללה: \u2066${phone.batteryPercent}%\u2069${phone.charging ? " (בטעינה)" : ""} · \u2066${phone.batteryTempC}°C\u2069`, `Battery: ${phone.batteryPercent}%${phone.charging ? " (charging)" : ""} · ${phone.batteryTempC}°C`)}</p>}
+          <PhoneNumbers p={phone} />
         </section>
       )}
       {r && (
@@ -175,5 +191,30 @@ export function HealthPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** The phone's battery and system numbers (what Samsung's and Pixel's battery pages show). */
+function PhoneNumbers({ p }: { p: PhoneReading }) {
+  const wear = batteryWear(p);
+  const age = patchAgeDays(p.securityPatch);
+  const thermal = [L("רגיל", "normal"), L("קל", "light"), L("בינוני", "moderate"), L("חמור", "severe"), L("קריטי", "critical"), L("חירום", "emergency"), L("כיבוי", "shutdown")];
+  const rows: Array<[string, string]> = [
+    ...(wear !== undefined ? [[L("קיבולת הסוללה", "Battery capacity"), `${wear}% (${p.batteryNowFullMah} / ${p.batteryDesignMah} mAh)`] as [string, string]] : []),
+    ...(p.batteryCycles !== undefined ? [[L("מחזורי טעינה", "Charge cycles"), String(p.batteryCycles)] as [string, string]] : []),
+    ...(p.batteryVoltageMv ? [[L("מתח", "Voltage"), `${(p.batteryVoltageMv / 1000).toFixed(2)} V`] as [string, string]] : []),
+    ...(p.thermal !== undefined ? [[L("חום הטלפון", "Phone heat"), thermal[p.thermal] ?? String(p.thermal)] as [string, string]] : []),
+    ...(p.powerSave !== undefined ? [[L("חיסכון בסוללה", "Battery saver"), p.powerSave ? L("פועל", "on") : L("כבוי", "off")] as [string, string]] : []),
+    ...(p.uptimeHours !== undefined ? [[L("מאז הפעלה מחדש", "Since restart"), p.uptimeHours >= 48 ? L(`${Math.floor(p.uptimeHours / 24)} ימים`, `${Math.floor(p.uptimeHours / 24)} days`) : L(`${p.uptimeHours} שעות`, `${p.uptimeHours} hours`)] as [string, string]] : []),
+    ...(p.securityPatch ? [[L("עדכון אבטחה", "Security update"), `${p.securityPatch}${age !== undefined ? L(` (לפני ${age} ימים)`, ` (${age} days ago)`) : ""}`] as [string, string]] : []),
+    ...(p.android ? [["Android", p.android] as [string, string]] : []),
+  ];
+  if (!rows.length) return null;
+  return (
+    <dl className="phone-numbers small">
+      {rows.map(([k, v]) => (
+        <div key={k} className="row"><dt className="muted grow">{k}</dt><dd dir="ltr">{v}</dd></div>
+      ))}
+    </dl>
   );
 }

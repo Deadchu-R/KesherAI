@@ -338,8 +338,31 @@ public class KesherLlmPlugin extends Plugin {
                 out.put("batteryHealth", health == android.os.BatteryManager.BATTERY_HEALTH_GOOD ? "good" : health == android.os.BatteryManager.BATTERY_HEALTH_OVERHEAT ? "overheat" : health == android.os.BatteryManager.BATTERY_HEALTH_DEAD ? "dead" : health == android.os.BatteryManager.BATTERY_HEALTH_COLD ? "cold" : "unknown");
                 int plugged = b.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
                 out.put("charging", plugged != 0);
+                out.put("batteryVoltageMv", b.getIntExtra(android.os.BatteryManager.EXTRA_VOLTAGE, 0));
+                // Charge cycles (Android 14+, when the phone reports them), as Pixel's and Samsung's battery pages show.
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    int cycles = b.getIntExtra("android.os.extra.CYCLE_COUNT", -1);
+                    if (cycles >= 0) out.put("batteryCycles", cycles);
+                }
+                // The battery's wear, as AccuBattery estimates it: the charge it holds now (charge counter at this
+                // percent) against its designed capacity (the phone's power profile).
+                android.os.BatteryManager bm = (android.os.BatteryManager) getContext().getSystemService(android.content.Context.BATTERY_SERVICE);
+                int counterUah = bm != null ? bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) : 0;
+                if (counterUah > 0 && level > 10 && scale > 0) out.put("batteryNowFullMah", Math.round(counterUah / 1000f / (level / (float) scale)));
+                double design = designCapacityMah();
+                if (design > 0) out.put("batteryDesignMah", Math.round(design));
             }
         } catch (Exception ignored) {}
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getContext().getSystemService(android.content.Context.POWER_SERVICE);
+            if (pm != null) {
+                out.put("powerSave", pm.isPowerSaveMode());
+                // 0 none … 6 shutdown (Android 10+): how hot the whole phone is.
+                if (android.os.Build.VERSION.SDK_INT >= 29) out.put("thermal", pm.getCurrentThermalStatus());
+            }
+        } catch (Exception ignored) {}
+        out.put("uptimeHours", Math.round(android.os.SystemClock.elapsedRealtime() / 3_600_000.0));
+        if (android.os.Build.VERSION.SDK_INT >= 23) out.put("securityPatch", android.os.Build.VERSION.SECURITY_PATCH);
         long models = 0;
         File[] files = dir().listFiles();
         if (files != null) for (File f : files) models += f.length();
@@ -347,6 +370,18 @@ public class KesherLlmPlugin extends Plugin {
         out.put("model", android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
         out.put("android", android.os.Build.VERSION.RELEASE);
         call.resolve(out);
+    }
+
+    /** The battery's designed capacity in mAh, from the phone's power profile (0 when the phone does not say). */
+    private double designCapacityMah() {
+        try {
+            Class<?> c = Class.forName("com.android.internal.os.PowerProfile");
+            Object profile = c.getConstructor(android.content.Context.class).newInstance(getContext());
+            Object v = c.getMethod("getBatteryCapacity").invoke(profile);
+            return v instanceof Double ? (Double) v : 0;
+        } catch (Throwable t) {
+            return 0;
+        }
     }
 
     @PluginMethod
