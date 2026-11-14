@@ -229,6 +229,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get("/api/code-environments", async () => s.config.namedEnvironments ?? []);
   /** Saves one (id "new" makes one); a name is needed. */
   app.put<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/code-environments/:id", async (req, reply) => {
+    // A setup command runs by itself when a session starts: only set on this computer (scan 53).
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Environments are edited on the computer that runs KesherAI." });
     const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 40) : "";
     if (!name) return reply.code(400).send({ error: "Give the environment a name." });
     const env = cleanEnvironment(req.body) ?? {};
@@ -250,6 +252,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** A folder's code environment (setup command, actions, variables), for the Code page. */
   app.get<{ Querystring: { folder?: string } }>("/api/code-environment", async (req) => (s.config.codeEnvironments?.[String(req.query.folder ?? "")] as Project["environment"]) ?? {});
   app.put<{ Querystring: { folder?: string }; Body: unknown }>("/api/code-environment", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Environments are edited on the computer that runs KesherAI." });
     const folder = String(req.query.folder ?? "");
     if (!folder) return reply.code(400).send({ error: "Which folder?" });
     const env = cleanEnvironment(req.body);

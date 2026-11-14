@@ -12,23 +12,29 @@ import type { ActionItem, Entity, JournalSettings } from "../journal.js";
 
 /**
  * "My day" (the journal): settings, the day, replay pictures, reflect,
- * entities, actions and search. All of it stays on this computer, so every
- * route answers only requests from this computer, even with remote access on.
+ * entities, actions and search. It stays on this computer: the phone sees it only when the user allowed that on
+ * the computer (settings are only changed here), and can always pause it.
  *
  * @param app - Fastify instance.
  * @param s - Services.
  */
 export async function journalRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const local = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Your day's journal is only available on the computer it records." });
+    if (!isLocalRequest(req) && !(await s.journal.phoneAllowed())) return reply.code(403).send({ error: "Your day's journal is only available on the computer it records, unless you allow the phone there.", code: "phone-off" });
+  };
+  const onlyHere = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The journal's settings are changed on the computer it records." });
   };
   const opts = { preHandler: local };
 
   app.get("/api/journal", opts, async () => s.journal.info());
-  app.put<{ Body: Partial<JournalSettings> }>("/api/journal/settings", opts, async (req) => s.journal.update(req.body ?? {}));
-  app.post<{ Body: { minutes?: number } }>("/api/journal/pause", opts, async (req) => {
+  app.put<{ Body: Partial<JournalSettings> }>("/api/journal/settings", { preHandler: onlyHere }, async (req) => s.journal.update(req.body ?? {}));
+  // Pausing only adds privacy: the phone can always do it (resuming, only where the phone may see the day).
+  app.post<{ Body: { minutes?: number } }>("/api/journal/pause", async (req, reply) => {
     const m = Number(req.body?.minutes ?? 30);
-    return s.journal.update({ pausedUntil: m > 0 ? Date.now() + m * 60_000 : 0 });
+    if (!(m > 0) && !isLocalRequest(req) && !(await s.journal.phoneAllowed())) return reply.code(403).send({ error: "Resume it on the computer." });
+    const st = await s.journal.update({ pausedUntil: m > 0 ? Date.now() + Math.min(m, 7 * 24 * 60) * 60_000 : 0 });
+    return isLocalRequest(req) || (await s.journal.phoneAllowed()) ? st : { pausedUntil: st.pausedUntil };
   });
   app.post<{ Body: { minutes?: number } }>("/api/journal/forget-recent", opts, async (req) => ({ removed: await s.journal.forgetRecent(Math.min(24 * 60, Math.max(1, Number(req.body?.minutes ?? 15)))) }));
 

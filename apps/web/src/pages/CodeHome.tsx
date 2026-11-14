@@ -6,7 +6,7 @@ import { ProjectFacts } from "../ProjectFacts";
 import { useChatAttach } from "../ChatAttach";
 import { useWebSearch } from "../WebToggle";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
-import { api } from "../api";
+import { api, isRemote } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, desktop, refreshLibrary, toast, useLibrary } from "../library";
 import { useModels } from "../useModels";
@@ -200,7 +200,7 @@ export function CodeHome() {
                       <option value="">{L("סביבה: של התיקייה", "Environment: the folder's")}</option>
                       {namedEnvs.map((n) => <option key={n.id} value={n.id}>{L(`סביבה: ${n.name}`, `Environment: ${n.name}`)}</option>)}
                       <option value="none">{L("בלי סביבה", "No environment")}</option>
-                      <option value={"\u0000manage"}>{L("עריכת סביבות…", "Edit environments…")}</option>
+                      {!isRemote() && <option value={"\u0000manage"}>{L("עריכת סביבות…", "Edit environments…")}</option>}
                     </Select>
                   </>
                 )}

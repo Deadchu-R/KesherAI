@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, withToken } from "../api";
+import { api, isRemote, withToken } from "../api";
 import { getLocale } from "../i18n";
 import { createConversation, toast } from "../library";
 import { MeetingRecorder } from "../MeetingRecorder";
@@ -9,7 +9,7 @@ import { Select } from "../ui/Select";
 /** Hebrew or English, for this page's own words. */
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-interface Settings { enabled: boolean; intervalSec: number; excludeApps: string[]; keepFramesDays: number; keepTextDays: number; modelId?: string; allowCloud: boolean; pausedUntil?: number }
+interface Settings { enabled: boolean; intervalSec: number; excludeApps: string[]; keepFramesDays: number; keepTextDays: number; modelId?: string; allowCloud: boolean; pausedUntil?: number; phone?: boolean }
 interface Info { settings: Settings; status: { running: boolean; lastCapture?: number; error?: string; ocr?: boolean; last?: { app: string; title: string; skipped?: string; idle?: boolean } }; days: string[]; platform: string }
 interface Capture { t: number; app: string; title: string; text?: string; frame?: string; idle?: boolean; skipped?: string }
 interface Observation { id: string; t0: number; t1: number; text: string; kind?: string }
@@ -55,7 +55,9 @@ export function DayPage() {
   const [data, setData] = useState<DayData | null>(null);
   const [replayAt, setReplayAt] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const loadInfo = () => api<Info>("/api/journal").then(setInfo, (e: Error) => toast(e.message));
+  // On the phone, the day shows only when the computer allows it ("phone-off" otherwise: explained, not a red error).
+  const [phoneOff, setPhoneOff] = useState(false);
+  const loadInfo = () => api<Info>("/api/journal").then((i) => { setInfo(i); setPhoneOff(false); }, (e: Error & { code?: string }) => (e.code === "phone-off" || /unless you allow the phone/.test(e.message) ? setPhoneOff(true) : toast(e.message)));
   const loadDay = () => api<DayData>(`/api/journal/day/${day}`).then(setData, () => undefined);
   useEffect(() => {
     void loadInfo();
@@ -69,6 +71,17 @@ export function DayPage() {
     return () => clearInterval(id);
   }, [day]);
 
+  if (phoneOff)
+    return (
+      <div className="page stack">
+        <h1>{L("היום שלי", "My day")}</h1>
+        <section className="card stack">
+          <p>{L("היומן מצלם את המסך של המחשב, ולכן כברירת מחדל הוא נשאר רק במחשב.", "The journal captures the computer's screen, so by default it stays on the computer.")}</p>
+          <p className="muted">{L("כדי לראות אותו גם כאן: במחשב, היום שלי ← הגדרות ← ״לאפשר לטלפון לראות את היום שלי״.", "To see it here too: on the computer, My day → Settings → “Let the phone see my day”.")}</p>
+          <button type="button" style={{ alignSelf: "start" }} onClick={() => void api("/api/journal/pause", { method: "POST", body: { minutes: 60 } }).then(() => toast(L("ההקלטה במחשב מושהית לשעה.", "Recording on the computer is paused for an hour.")), (e: Error) => toast(e.message))}>{L("⏸ השהה את ההקלטה במחשב לשעה", "⏸ Pause recording on the computer for an hour")}</button>
+        </section>
+      </div>
+    );
   if (!info) return <div className="page" />;
   const s = info.settings;
   const paused = !!s.pausedUntil && s.pausedUntil > Date.now();
@@ -183,6 +196,7 @@ function JournalSettingsCard({ info, save }: { info: Info; save: (p: Partial<Set
         </Select>
       </label>
       <label className="row"><input type="checkbox" checked={s.allowCloud} onChange={(e) => void save({ allowCloud: e.target.checked })} />{L("לאפשר למודל בענן לקרוא את הטקסט שעל המסך", "Let a cloud model read the text on screen")}</label>
+      <label className="row"><input type="checkbox" checked={!!s.phone} disabled={isRemote()} onChange={(e) => void save({ phone: e.target.checked })} />{L("לאפשר לטלפון לראות את היום שלי (כולל התמונות; משנים רק במחשב)", "Let the phone see my day (pictures too; changed only on the computer)")}</label>
       {info.status.last && <p className="muted small">{L("צילום אחרון: ", "Last capture: ")}{info.status.lastCapture ? hhmm(info.status.lastCapture) : ""} · {info.status.last.idle ? L("לא היית ליד המחשב", "you were away") : info.status.last.skipped ? L("דולג (חלון פרטי)", "skipped (private window)") : info.status.last.app}</p>}
     </section>
   );

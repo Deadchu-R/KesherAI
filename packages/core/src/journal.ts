@@ -34,6 +34,8 @@ export interface JournalSettings {
   allowCloud: boolean;
   /** Paused until this time (ms). */
   pausedUntil?: number;
+  /** The phone (remote access) may see the day too; set only on this computer. */
+  phone?: boolean;
 }
 
 /** One capture. */
@@ -416,6 +418,13 @@ export class Journal {
   }
 
   /** @returns Settings and status. */
+  /** Whether the phone may see the day (the setting, read once loaded). */
+  async phoneAllowed(): Promise<boolean> {
+    await this.load();
+    return this.settings.phone === true;
+  }
+
+  /** The settings, the recorder's state and the days kept. */
   async info() {
     await this.load();
     return { settings: this.settings, status: this.state, days: await this.days(), platform: process.platform };
@@ -444,6 +453,7 @@ export class Journal {
       keepTextDays: n(patch.keepTextDays, 1, 3650, this.settings.keepTextDays),
       ...(Array.isArray(patch.excludeApps) ? { excludeApps: patch.excludeApps.map(String).filter(Boolean).slice(0, 100) } : {}),
       ...(typeof patch.allowCloud === "boolean" ? { allowCloud: patch.allowCloud } : {}),
+      ...(typeof patch.phone === "boolean" ? { phone: patch.phone } : {}),
       ...("modelId" in patch ? { modelId: patch.modelId || undefined } : {}),
       ...("pausedUntil" in patch ? { pausedUntil: patch.pausedUntil || undefined } : {}),
     };
