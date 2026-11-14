@@ -55,6 +55,29 @@ export function parseGpuApps(out: string): GpuApp[] {
     .map((p) => ({ pid: Number(p[0]), name: p.slice(1, -1).join(","), bytes: (Number(p[p.length - 1]) || 0) * 1024 * 1024 }));
 }
 
+/**
+ * Closes KesherAI's own engine programs left running (llama-server, sd-server, whisper-server) by themselves, before a
+ * model is used (Roee: "close them before you use the card again"). Not ComfyUI's Python: a new KesherAI may be using
+ * the one still running (it answers on its port); "Fix it for me" offers that one.
+ *
+ * @returns The ones closed.
+ */
+export async function closeLeftOverEngines(c: Pick<FixContext, "gpuApps" | "ownPids" | "kill">): Promise<GpuApp[]> {
+  const apps = (await c.gpuApps?.().catch(() => [])) ?? [];
+  const own = new Set(c.ownPids ?? []);
+  const stale = apps.filter((a) => !own.has(a.pid) && a.pid !== process.pid && /(^|[\\/])(llama-server|sd-server|whisper-server)(\.exe)?$/i.test(a.name));
+  const closed: GpuApp[] = [];
+  for (const a of stale) {
+    try {
+      (c.kill ?? ((p: number) => process.kill(p)))(a.pid);
+      closed.push(a);
+    } catch {
+      /* gone already, or not ours to close */
+    }
+  }
+  return closed;
+}
+
 /** KesherAI's own engines left running (after an update or a crash) that hold the card. */
 function leftOver(apps: GpuApp[], c: FixContext): GpuApp[] {
   const own = new Set(c.ownPids ?? []);

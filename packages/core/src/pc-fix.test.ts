@@ -81,3 +81,17 @@ test("pc fix: a KesherAI engine left running on the card is offered and closed; 
   assert.deepEqual(killed, [1111]);
   assert.deepEqual(r.done, ["engine:1111"]);
 });
+
+test("pc fix: before the card is used, KesherAI's own engine programs left running are closed by themselves (not ComfyUI, not others)", async () => {
+  const { closeLeftOverEngines } = await import("./pc-fix.js");
+  const killed: number[] = [];
+  const apps = [
+    { pid: 10, name: "E:\\KesherAI\\engines\\llamacpp\\llama-server.exe", bytes: 1 },
+    { pid: 11, name: "E:\\KesherAI\\engines\\llamacpp\\llama-server.exe", bytes: 1 },
+    { pid: 12, name: "E:\\KesherAI\\engines\\comfyui\\python.exe", bytes: 1 },
+    { pid: 13, name: "C:\\Games\\game.exe", bytes: 1 },
+  ];
+  const closed = await closeLeftOverEngines({ gpuApps: async () => apps, ownPids: [11], kill: (p) => void killed.push(p) });
+  assert.deepEqual(killed, [10]);
+  assert.equal(closed.length, 1);
+});

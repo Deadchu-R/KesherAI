@@ -391,6 +391,10 @@ export class GpuGuard {
     if (providerId) for (const item of this.items) if (item.providers.includes(providerId)) item.used?.();
   }
 
+  /** Called before a model runs (at most every 30 s): closes KesherAI's own engines left running (server.ts). */
+  beforeUse?: () => Promise<void>;
+  private lastBeforeUse = 0;
+
   /**
    * Waits until local work may start, and loads an unloaded engine again.
    * Call {@link after} when the work ends.
@@ -399,6 +403,10 @@ export class GpuGuard {
    * @param signal - Cancels the wait.
    */
   async before(providerId: string, signal?: AbortSignal): Promise<void> {
+    if (this.beforeUse && Date.now() - this.lastBeforeUse > 30_000) {
+      this.lastBeforeUse = Date.now();
+      await this.beforeUse().catch(() => undefined);
+    }
     this.waiting++;
     try {
       while (this.config().enabled && this.holding) {
