@@ -97,6 +97,7 @@ import { healthRoutes } from "./routes/health.js";
 import { Tor } from "./tor.js";
 import { FaultLog, redact } from "./fault-log.js";
 import { torRoutes } from "./routes/tor.js";
+import { remoteDesktopRoutes } from "./routes/remote-desktop.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
@@ -1108,6 +1109,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await memoryRoutes(app, services);
   await healthRoutes(app, services);
   await torRoutes(app, services);
+  await remoteDesktopRoutes(app, services);
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
   await speechRoutes(app, services);

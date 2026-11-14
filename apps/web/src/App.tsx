@@ -20,7 +20,7 @@ import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
 import { Suspense, lazy, useEffect, useState } from "react";
-import { api } from "./api";
+import { api, isRemote } from "./api";
 import { getLocale, t } from "./i18n";
 import { Sidebar } from "./Sidebar";
 import { useAppMenu } from "./AppMenu";
@@ -53,6 +53,7 @@ const ConversationPage = lazy(() => import("./pages/Conversation").then((m) => (
 const ImagesPage = lazy(() => import("./pages/Images").then((m) => ({ default: m.ImagesPage })));
 const BatchImagesPage = lazy(() => import("./pages/BatchImages").then((m) => ({ default: m.BatchImagesPage })));
 const MemoryPage = lazy(() => import("./pages/MemoryPage").then((m) => ({ default: m.MemoryPage })));
+const RemotePage = lazy(() => import("./pages/RemotePage").then((m) => ({ default: m.RemotePage })));
 const HealthPage = lazy(() => import("./pages/HealthPage").then((m) => ({ default: m.HealthPage })));
 const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
@@ -250,6 +251,7 @@ export function App() {
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/health") page = <HealthPage />;
+  else if (hash === "#/remote") page = <RemotePage />;
   else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
   else if (hash === "#/code") page = <CodeHome />;
@@ -292,6 +294,7 @@ export function App() {
 
   return (
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
+      <RemoteBanner />
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />
@@ -316,6 +319,28 @@ export function App() {
       <StopSpeakingBar />
       <PhoneTabs hash={hash} onChats={() => setMenuOpen(true)} />
       <Welcome onLocale={() => rerender((n) => n + 1)} />
+    </div>
+  );
+}
+
+/**
+ * On the computer: a bar at the top while the phone controls it (remote control), with "Disconnect". Checked every
+ * 5 seconds, only on the computer itself.
+ */
+function RemoteBanner() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (isRemote()) return;
+    const read = () => void api<{ active: boolean }>("/api/remote-desktop").then((s) => setOn(s.active), () => undefined);
+    read();
+    const id = setInterval(read, 5000);
+    return () => clearInterval(id);
+  }, []);
+  if (!on) return null;
+  return (
+    <div className="remote-banner" role="status">
+      <span className="grow">{getLocale() === "he" ? "📱 הטלפון שולט במחשב הזה עכשיו" : "📱 Your phone is controlling this computer now"}</span>
+      <button type="button" onClick={() => void api("/api/remote-desktop/end", { method: "POST" }).then(() => setOn(false))}>{getLocale() === "he" ? "נתק" : "Disconnect"}</button>
     </div>
   );
 }

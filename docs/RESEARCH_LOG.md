@@ -691,3 +691,16 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   removed; about 1 MB kept), a `kesher_doctor` tool (state now + faults, all or this chat's), "🔎 Investigate" on a
   failed chat and "Stop and investigate" on a stuck one, and the recent faults on the Health page.
 - Stopped at: engines' own crashes (llama.cpp exits) are not logged yet; next when an engine fault is reported.
+
+## 2026-11-14 — Several computers on the phone; controlling a computer from the phone (asked for)
+- Already in KesherAI: the phone app keeps a list of computers and switches between them (the laptop icon at the
+  top); "My devices" lets one computer use another's models. So "My day" per computer works by switching, once
+  each computer allows the phone (0.6.149).
+- **Chrome Remote Desktop / RustDesk** (rustdesk.com blog, alternativeto): the host streams the screen and takes
+  the remote's mouse and keys; access needs a PIN set on the host (CRD) or a one-time password plus permission
+  (RustDesk); the host shows that it is being controlled and can end it.
+- Plan for KesherAI: "Control this computer from the phone": off by default, switched on and given a PIN on the
+  computer only; a session needs the PIN (5 wrong tries lock it for 10 minutes), ends after 15 idle minutes or from
+  the computer; the computer is told when it starts; the phone gets pictures of the screen and sends taps, keys and
+  scrolls through KesherAI's existing screen and input code. Pictures, not video, at first (no new library).
+- Stopped at: plan written; building now.

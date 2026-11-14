@@ -2144,3 +2144,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .report-lines { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; display: grid; gap: 4px; }
 .report-lines span { word-break: break-all; }
 .report-dialog { max-width: min(640px, calc(100vw - 32px)); }
+/* Remote control from the phone */
+.remote-desk { display: flex; flex-direction: column; height: calc(100dvh - var(--bar-h) - 64px); }
+.remote-screen { flex: 1; min-height: 0; background: #000; display: flex; align-items: flex-start; justify-content: center; }
+.remote-screen img { display: block; max-width: none; touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none; }
+.remote-keys { padding: 6px; gap: 6px; border-top: 1px solid var(--border); }
+.remote-keys button { min-height: 36px; padding: 0 10px; }
+.remote-banner { position: sticky; top: 0; z-index: 70; background: var(--danger, #c0392b); color: #fff; padding: 6px 12px; display: flex; gap: 10px; align-items: center; }
+.remote-banner button { background: #fff; color: #000; }

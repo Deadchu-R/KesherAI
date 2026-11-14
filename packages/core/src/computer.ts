@@ -59,7 +59,7 @@ export interface Foreground {
 }
 
 /** What a platform must do. Coordinates are physical screen pixels. */
-interface Backend {
+export interface Backend {
   /** left/top: where the picture starts on the desktop (a monitor left of or above the main one makes them negative). */
   screenshot(
     maxWidth: number,
@@ -541,6 +541,11 @@ const linux: Backend = {
     ]);
   },
 };
+
+/** The full screen and input backend (the person's own remote control from the phone, remote-desktop.ts). */
+export function screenControl(): Backend {
+  return backend();
+}
 
 /** The screen backend for this platform (also used by the journal). */
 export function screenBackend(): Pick<Backend, "screenshot" | "foreground"> {

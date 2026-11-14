@@ -297,6 +297,8 @@ export const KesherConfigSchema = z.object({
   codeEnvironments: z.record(z.string(), z.any()).default({}),
   /** Named code environments (any folder), picked when a code session starts: { id, name, setup, actions, env }. */
   namedEnvironments: z.array(z.any()).default([]),
+  /** Controlling this computer from the phone: off by default; the PIN is kept only as a salted hash. */
+  remoteDesktop: z.object({ enabled: z.boolean().default(false), pinHash: z.string().max(200).optional() }).default({ enabled: false }),
   /** Settings → Chats: which buttons every chat's bar shows (a chat can change its own). */
   chatBar: z.record(z.string(), z.boolean()).default({}),
   /** Settings → Web: safe search, dark web sites through Tor (off by default), sites never used in any chat. */
