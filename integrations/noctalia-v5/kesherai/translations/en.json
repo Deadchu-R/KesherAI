@@ -1,7 +1,13 @@
 {
   "settings": {
-    "url": { "label": "KesherAI address", "description": "Where KesherAI runs. This computer: http://127.0.0.1:7420" },
-    "token": { "label": "Access token", "description": "Only for KesherAI on another computer: its remote-access token." }
+    "url": {
+      "label": "KesherAI address",
+      "description": "Where KesherAI runs. This computer: http://127.0.0.1:7420"
+    },
+    "token": {
+      "label": "Access token",
+      "description": "Only for KesherAI on another computer: its remote-access token."
+    }
   },
   "bar": {
     "idle": "KesherAI is running",
@@ -10,9 +16,17 @@
   },
   "panel": {
     "offline": "KesherAI is not running on this computer, or the address in the plugin's settings is wrong.",
-    "open": "Open KesherAI",
-    "day": "My day",
-    "refresh": "Check again",
-    "close": "Close"
+    "open": "Open in KesherAI",
+    "close": "Close",
+    "new": "New chat",
+    "placeholder": "Ask KesherAI… (Enter sends, Shift+Enter for a new line)",
+    "empty": "Ask anything. The chat is also saved in KesherAI.",
+    "working": "Writing…",
+    "send": "Send",
+    "stop": "Stop",
+    "approval": "KesherAI asks to do something",
+    "allow": "Allow",
+    "deny": "Deny",
+    "send_failed": "The question was not sent. Is KesherAI running?"
   }
 }

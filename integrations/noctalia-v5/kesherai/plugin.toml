@@ -1,11 +1,11 @@
 id = "kesherai/kesherai"
 name = "KesherAI"
-version = "0.1.0"
+version = "0.2.0"
 plugin_api = 24
 author = "kesherai"
 license = "MIT"
 icon = "sparkles"
-description = "KesherAI on the bar: whether it is running and how many chats are working, with a panel to open it."
+description = "Chat with KesherAI, your local AI, from a side panel; the bar shows when it is working."
 tags = ["bar", "panel", "service", "ai"]
 dependencies = ["xdg-utils"]
 
@@ -35,8 +35,7 @@ entry = "widget.luau"
 [[panel]]
 id = "panel"
 entry = "panel.luau"
-width = 360
-height = 300
+width = 420
+height = "fill"
 placement = "floating"
-position = "auto"
-open_near_click = true
+position = "center_right"

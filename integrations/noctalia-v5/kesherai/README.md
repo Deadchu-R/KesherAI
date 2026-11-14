@@ -1,7 +1,12 @@
 # KesherAI for Noctalia (v5)
 
-A KesherAI button on the Noctalia bar: whether KesherAI is running and how many chats are working. Click it for a
-small panel (open KesherAI, My day); right-click opens KesherAI.
+Chat with KesherAI, your local AI, from a side panel (like Noctalia's Notes). Click the KesherAI button on the bar:
+the panel opens on the right; type and press Enter (Shift+Enter for a new line), and the answer is written live.
+Approvals KesherAI asks for can be answered right there. + starts a new chat; the arrow opens the chat in KesherAI.
+The button shows how many chats are working; right-click opens KesherAI.
+
+From the keyboard: `noctalia msg plugin kesherai/kesherai:bar focused toggle` opens or closes the panel (bind it to a
+key in your compositor).
 
 ## Install
 

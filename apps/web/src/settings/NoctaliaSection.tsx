@@ -18,7 +18,7 @@ export function NoctaliaSection() {
   return (
     <section className="card stack">
       <h2>{L("Noctalia (סרגל שולחן העבודה)", "Noctalia (the desktop bar)")}</h2>
-      <p className="muted">{L("כפתור של KesherAI בבר: מראה אם קשר פועל וכמה צ'אטים עובדים, וחלונית לפתוח אותו.", "A KesherAI button in the bar: whether KesherAI runs and how many chats work, and a panel to open it.")}</p>
+      <p className="muted">{L("כפתור של KesherAI בבר שפותח חלונית צ'אט בצד המסך: כותבים, והתשובה נכתבת שם בזמן אמת. הכפתור גם מראה כמה צ'אטים עובדים.", "A KesherAI button on the bar that opens a chat panel at the side of the screen: type, and the answer is written there live. The button also shows how many chats are working.")}</p>
       {!st.found ? (
         <p className="muted small">{L("Noctalia לא נמצא במחשב הזה.", "Noctalia was not found on this computer.")}</p>
       ) : (
