@@ -345,3 +345,12 @@ This review went through the code part by part. Each finding is listed with what
 - Screens off (0.6.190): an owner action like restart (the token or this computer); no input.
 - Unreal project lookup (0.6.191): a project file found by name among the projects KesherAI already lists, written to
   its own last.json; no path from a request.
+
+## Scan 63 (2026-11-14, after 0.6.193–0.6.195 and the night's later changes)
+- Performance: the controller's right stick looked for the page's scrolling area every frame (a style read per
+  element on the page): kept for a second now.
+- Game Helper load line: reads /api/guard every 5 s only while its window is open. The LB question puts the card's
+  name in a web search the user asked for.
+- Phone readings for charging habits stay in the phone's own localStorage (the last 240), never sent.
+- LM Studio's MCP servers import like the others: off until the user turns each on after seeing its command.
+- @lezer/highlight: CodeMirror's own highlighting tags, already in the tree; no network or code from outside.

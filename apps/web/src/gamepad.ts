@@ -168,8 +168,20 @@ function scroller(el: Element | null): Element {
   return mainScroller();
 }
 
-/** The biggest scrolling area in sight (the page's content), for scrolling without a chosen control. */
+let mainCache: { el: Element; at: number } | undefined;
+
+/**
+ * The biggest scrolling area in sight (the page's content), for scrolling without a chosen control. Kept for a
+ * second (scan 63: the right stick asks every frame, and looking costs a style read per element on the page).
+ */
 function mainScroller(): Element {
+  if (mainCache && performance.now() - mainCache.at < 1000 && mainCache.el.isConnected) return mainCache.el;
+  const el = findMainScroller();
+  mainCache = { el, at: performance.now() };
+  return el;
+}
+
+function findMainScroller(): Element {
   let best: Element | undefined;
   let area = 0;
   for (const e of document.querySelectorAll("main *, .main *, .game-chat *, main, .main")) {
