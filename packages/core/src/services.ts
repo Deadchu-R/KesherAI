@@ -84,6 +84,8 @@ export interface KesherServices {
   guard: GpuGuard;
   /** Tor for blocked pages. */
   tor: import("./tor.js").Tor;
+  /** KesherAI's fault log. */
+  faults: import("./fault-log.js").FaultLog;
   /** The Unreal Editor's connection (KesherAI Bridge plugin) and saved Blueprints. */
   unreal: UnrealBridge;
   /** Unity projects through Unity's CLI (KesherAI Bridge package). */

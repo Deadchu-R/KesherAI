@@ -27,6 +27,9 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { reading: r, items: healthItems(r, req.query.lang === "he") };
   });
 
+  // KesherAI's own recent faults (already cleaned of secrets and home paths), for the Health page.
+  app.get("/api/faults", async () => s.faults.recent({ limit: 15 }));
+
   app.post<{ Body: { lang?: string } }>("/api/pc-health/advice", async (req, reply) => {
     const he = req.body?.lang === "he";
     const chat = s.config.activeModels.chat;

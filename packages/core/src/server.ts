@@ -95,6 +95,7 @@ import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { healthRoutes } from "./routes/health.js";
 import { Tor } from "./tor.js";
+import { FaultLog } from "./fault-log.js";
 import { torRoutes } from "./routes/tor.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
@@ -391,6 +392,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const driveSync = new DriveSync(google, library, config.google, persist);
   // Tor for blocked pages: downloaded only when the user presses Install, started only when a page does not open.
   const tor = new Tor(join(paths.engines, "tor"));
+  const faults = new FaultLog(join(paths.root, "logs", "faults.jsonl"));
   const guard = new GpuGuard(
     () => config.guard,
     undefined,
@@ -646,6 +648,20 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       saveConfig: () => persist(),
       browserPane: () => browser.status().pane,
       tor,
+      faults,
+      doctorState: async () => {
+        const [listing, upd, torSt] = await Promise.all([registry.listAllModels().catch((e: Error) => ({ models: [], errors: [{ providerId: "all", message: e.message }] })), updater.version().catch(() => undefined), tor.status()]);
+        const g = guard.status();
+        return {
+          version: upd?.version,
+          platform: `${process.platform} ${process.arch}`,
+          activeModels: config.activeModels,
+          models: listing.models.length,
+          providersNotAnswering: listing.errors,
+          guard: { paused: g.paused, cooling: g.cooling, systemHold: g.systemHold, waiting: g.waiting, running: g.running, cards: g.cards.map((c) => `${c.name} ${c.temp}°C ${Math.round(c.memUsed / 2 ** 30)}/${Math.round(c.memTotal / 2 ** 30)} GB`), ramPercent: g.system.ramTotal ? Math.round((g.system.ramUsed / g.system.ramTotal) * 100) : undefined },
+          tor: { installed: torSt.installed, running: torSt.running, ...(torSt.job ? { job: torSt.job } : {}) },
+        };
+      },
       onEvent: (convId, e, title, lastAnswer) => {
         notifier.onConversationEvent(convId, title, e, lastAnswer);
         telegram.onConversationEvent(convId, e);
@@ -775,6 +791,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     onedriveSync,
     guard,
     tor,
+    faults,
     copilot,
     business,
     businessManaged: () => !!managedPolicy(paths.root),
@@ -849,6 +866,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
+  // Server errors go into the fault log (the route and the message; never the request's body).
+  app.addHook("onError", async (req, _reply, err) => {
+    services.faults.add({ kind: "server", where: `${req.method} ${req.routeOptions?.url ?? req.url.split("?")[0]}`, message: err.message });
+  });
   injectRef.app = app;
   // Cross-origin access: the model API (/v1) for web apps of any origin (they need an access key);
   // KesherAI's own API only for its own pages, the Android app and, for /api/browser, the extension.

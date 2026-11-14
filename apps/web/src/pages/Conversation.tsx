@@ -459,6 +459,16 @@ export function ConversationPage({ id }: { id: string }) {
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
   // The persona's opening suggestions, for an empty chat (a click puts one in the message box).
   const starters = personas.find((p) => p.id === conv.personaId)?.starters;
+  // "Investigate": the model looks into what went wrong with KesherAI's own doctor (state and fault log).
+  const investigate = async (stopFirst = false) => {
+    setError("");
+    try {
+      if (stopFirst) await api(`/api/conversations/${id}/stop`, { method: "POST" });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: L("משהו השתבש כאן. חקור את התקלה: השתמש ב-kesher_doctor (לצ'אט הזה ובכלל), מצא את הסיבה, ותגיד לי במילים פשוטות מה קרה ומה אפשר לעשות.", "Something went wrong here. Investigate the fault: use kesher_doctor (for this chat and in general), find the cause, and tell me in plain words what happened and what can be done.") } });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const send = async () => {
     // "/goal …": keep going until it is done (checked each time the agent stops); "/goal" alone stops it.
     const goal = /^\/goal(?:\s+([\s\S]*))?$/i.exec(input.trim());
@@ -821,6 +831,7 @@ export function ConversationPage({ id }: { id: string }) {
                   <p key={e.seq} className="error row">
                     <span className="grow">{e.message}</span>
                     {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={retry}>{L("↻ נסה שוב", "↻ Try again")}</button>}
+                    {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => void investigate()}>{L("🔎 חקור", "🔎 Investigate")}</button>}
                   </p>
                 );
               default:
@@ -838,6 +849,7 @@ export function ConversationPage({ id }: { id: string }) {
               <span className="grow small">{L("נראה שהצ'אט נתקע — לא הגיע ממנו כלום כבר שתי דקות.", "This chat looks stuck: nothing has come from it for two minutes.")}</span>
               <button type="button" className="primary" onClick={retry}>{L("נסה שוב", "Try again")}</button>
               <button type="button" onClick={() => { lastWork.current = Date.now(); setStalled(false); }}>{L("לחכות עוד", "Keep waiting")}</button>
+              <button type="button" onClick={() => void investigate(true)}>{L("🔎 עצור וחקור", "🔎 Stop and investigate")}</button>
             </div>
           )}
           {conv.interruptedAt && !busy && (

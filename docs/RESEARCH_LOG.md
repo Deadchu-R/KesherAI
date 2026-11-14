@@ -682,3 +682,12 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - The time limit is sudo's idea (a grant that runs out after N minutes). Plan: every "always" rule KesherAI keeps may
   carry an end time; the chat's approval card offers 15 min / 1 hour / until tonight beside once and always; the
   chat's rules list shows how long each has left and can shorten or remove it.
+
+## 2026-11-14 — KesherAI looks into its own faults (asked for)
+- From what is known of the tools (no new search, to save usage): Claude Code's `/doctor` checks the install and
+  settings and prints problems; VS Code's "Report issue" gathers versions and logs; LM Studio shows a developer log.
+  None lets the model itself read the app's faults.
+- KesherAI had no fault log at all. Built: logs/faults.jsonl (server errors, failed chats; secrets and the home path
+  removed; about 1 MB kept), a `kesher_doctor` tool (state now + faults, all or this chat's), "🔎 Investigate" on a
+  failed chat and "Stop and investigate" on a stuck one, and the recent faults on the Health page.
+- Stopped at: engines' own crashes (llama.cpp exits) are not logged yet; next when an engine fault is reported.

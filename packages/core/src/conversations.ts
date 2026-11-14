@@ -14,6 +14,7 @@ import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
 import { androidPhoneTools } from "./android-phone.js";
 import { delegateTool } from "./delegate.js";
+import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
 import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
 import { chosenPhones, phoneNote, type Phone } from "./phones.js";
@@ -242,6 +243,8 @@ export class ConversationManager {
     const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
     if (id) all.push(this.delegateFor(id, all));
+    // Its own problems: the model can look into KesherAI's state and fault log.
+    if (this.deps.faults && this.deps.doctorState) all.push(doctorTool({ faults: this.deps.faults, state: this.deps.doctorState, ...(id ? { chatId: id } : {}) }));
     // A chat written from Telegram never controls the screen or the browser, whatever else is on.
     const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
     if (telegram) {
@@ -672,6 +675,10 @@ export class ConversationManager {
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type !== "status") return;
       void this.noteWorking(id, e.status === "running" || e.status === "waiting");
+    });
+    // A chat that failed goes into the fault log (its own doctor reads it).
+    session.on("event", (e: { type: string; status?: string; message?: string }) => {
+      if (e.type === "status" && e.status === "error") this.deps.faults?.add({ kind: "chat", where: `chat (${session.modelId})`, message: e.message ?? "failed", chatId: id });
     });
     // When the agent is free again, the next queued message goes; with a goal, it is checked first.
     session.on("event", (e: { type: string; status?: string }) => {

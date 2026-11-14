@@ -85,6 +85,10 @@ export interface ConversationDeps {
   browserPane?(): boolean;
   /** Tor, for pages that do not open directly (when installed). */
   tor?: import("./tor.js").Tor;
+  /** KesherAI's fault log (failed chats are written to it; the doctor tool reads it). */
+  faults?: import("./fault-log.js").FaultLog;
+  /** KesherAI's state for the doctor tool. */
+  doctorState?(): Promise<Record<string, unknown>>;
   /** Saves the settings (after "Always allow on this site" adds a site). */
   saveConfig?(): Promise<void> | void;
 }

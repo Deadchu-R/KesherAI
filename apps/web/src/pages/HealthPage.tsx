@@ -44,11 +44,13 @@ export function HealthPage() {
   const [busy, setBusy] = useState(false);
   const [advice, setAdvice] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
+  const [faults, setFaults] = useState<Array<{ at: string; kind: string; where: string; message: string }>>([]);
   const load = (fresh = false) => {
     setBusy(true);
     void api<{ reading: Reading; items: Item[] }>(`/api/pc-health?lang=${getLocale()}${fresh ? "&fresh=1" : ""}`)
       .then(setData, (e: Error) => toast(e.message))
       .finally(() => setBusy(false));
+    void api<typeof faults>("/api/faults").then(setFaults, () => undefined);
   };
   useEffect(() => {
     load();
@@ -105,6 +107,13 @@ export function HealthPage() {
               <h2>{L("התיקיות של KesherAI", "KesherAI's folders")}</h2>
               <ul className="health-folders">{r.kesher.map((f) => <li key={f.name} className="row small"><span className="grow" dir="ltr">{f.name}</span><span dir="ltr">{gb(f.bytes)} GB{f.partial ? "+" : ""}</span></li>)}</ul>
             </section>
+          )}
+          {faults.length > 0 && (
+            <details className="card">
+              <summary>{L(`תקלות אחרונות של KesherAI (${faults.length})`, `KesherAI's recent faults (${faults.length})`)}</summary>
+              <ul className="health-folders">{faults.map((f, i) => <li key={i} className="small" dir="auto"><span className="muted">{new Date(f.at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} · {f.where}</span><br />{f.message}</li>)}</ul>
+              <p className="muted small">{L("בצ'אט שנכשל יש כפתור \"🔎 חקור\", והמודל יכול לבדוק את התקלות האלה בעצמו.", "A chat that failed has a \"🔎 Investigate\" button; the model can look into these faults itself.")}</p>
+            </details>
           )}
           {r.startup.length > 0 && (
             <details className="card">
