@@ -610,7 +610,7 @@ export class LlamaEngine {
       p.stderr.on("data", (d: Buffer) => {
         const lines = (rest + d.toString()).split("\n");
         rest = lines.pop() ?? "";
-        for (const l of lines) if (/n_layer|MiB used|fit params|failed to fit/.test(l)) log += `${l}\n`;
+        for (const l of lines) if (/n_layer|MiB used|fit params|failed to fit|error|unknown model architecture|failed to load/i.test(l)) log += `${l}\n`;
       });
       const timer = setTimeout(() => p.kill(), 120_000);
       p.once("error", (e) => (clearTimeout(timer), reject(e)));

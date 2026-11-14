@@ -21,3 +21,11 @@ test("reads the plan: layers on each card, memory used and left, context, all on
   assert.equal(moe.gpuLayers, 99);
   assert.equal(parseFit("failed to fit params", "", 10).ok, false);
 });
+
+test("a model the build does not know: no plan, and llama.cpp's reason", () => {
+  const p = parseFit("0.00.120.400 E llama_model_load: error loading model: unknown model architecture: 'qwen4next'\n", "", 300);
+  assert.equal(p.ok, false);
+  assert.equal(p.gpuLayers, 0);
+  assert.match(p.error ?? "", /unknown model architecture: 'qwen4next'/);
+  assert.ok(!/^0\.00/.test(p.error ?? ""), "no timestamp");
+});

@@ -32,6 +32,8 @@ export interface FitPlan {
   args: string[];
   /** How long the check took. */
   ms: number;
+  /** Why there is no plan, from llama.cpp's own words (e.g. a model this build does not know). */
+  error?: string;
 }
 
 /**
@@ -59,6 +61,9 @@ export function parseFit(log: string, stdout: string, ms: number): FitPlan {
   const gpuLayers = devices.length ? devices.reduce((n, d) => n + d.layers, 0) : Number.isFinite(ngl) ? ngl : 0;
   const ctx = Number(arg("-c", "--ctx-size") ?? NaN);
   const ok = /successfully fit params/i.test(flat) && !/failed to fit/i.test(flat);
+  // No plan at all: say why (the first error line, without llama.cpp's timestamp and level).
+  const errLine = !ok && !args.length ? flat.split("\n").find((l) => /unknown model architecture|failed to load|error/i.test(l)) : undefined;
+  const error = errLine?.replace(/^[\d.]+\s+[IWE]\s+/, "").trim().slice(0, 300);
   return {
     ok,
     devices,
@@ -68,5 +73,6 @@ export function parseFit(log: string, stdout: string, ms: number): FitPlan {
     inSystemMemory: args.some((a) => a === "-ot" || a === "--override-tensor" || a === "-ncmoe" || a === "--n-cpu-moe" || a === "-cmoe" || a === "--cpu-moe"),
     args,
     ms,
+    ...(error ? { error } : {}),
   };
 }

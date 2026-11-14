@@ -19,6 +19,8 @@ interface FitPlan {
   context?: number;
   inSystemMemory: boolean;
   ms: number;
+  /** Why there is no plan (llama.cpp's words), e.g. a model this engine does not know yet. */
+  error?: string;
   loadedNow: string | null;
   marginMiB: number;
 }
@@ -50,7 +52,11 @@ export function FitButton({ path, name }: { path: string; name: string }) {
       {plan && (
         <div className="fit-plan small" role="status">
           <strong className={plan.ok && all ? "fit-good" : plan.ok ? "fit-mid" : "fit-bad"}>
-            {!plan.ok
+            {plan.error
+              ? /unknown model architecture/i.test(plan.error)
+                ? L("גרסת llama.cpp הזו עוד לא מכירה את המודל הזה. עדכנו את המנוע (מודלים ← llama.cpp).", "This llama.cpp build does not know this model yet. Update the engine (Models → llama.cpp).")
+                : L("llama.cpp לא הצליח לקרוא את המודל.", "llama.cpp could not read this model.")
+              : !plan.ok
               ? L("לא נכנס בזיכרון הפנוי עכשיו.", "Does not fit in the free memory now.")
               : all
                 ? L("נכנס כולו לכרטיס המסך: מהירות מלאה.", "Fits on the graphics card entirely: full speed.")
@@ -58,6 +64,7 @@ export function FitButton({ path, name }: { path: string; name: string }) {
                   ? L("חלקים ממנו בזיכרון המחשב: עובד, אבל לאט יותר.", "Parts of it in system memory: it works, but slower.")
                   : L(`${plan.gpuLayers} מתוך ${plan.totalLayers ?? "?"} שכבות בכרטיס, השאר בזיכרון המחשב: לאט יותר.`, `${plan.gpuLayers} of ${plan.totalLayers ?? "?"} layers on the card, the rest in system memory: slower.`)}
           </strong>
+          {plan.error && <span className="muted mono" dir="ltr">{plan.error}</span>}
           {plan.devices.map((d) => (
             <span key={d.name} className="muted" dir="auto">
               {d.name}: {L(`${d.layers} שכבות, ${gb(d.usedMiB)} GB בשימוש, ${gb(d.freeMiB)} GB נשאר פנוי`, `${d.layers} layers, ${gb(d.usedMiB)} GB used, ${gb(d.freeMiB)} GB left free`)}
