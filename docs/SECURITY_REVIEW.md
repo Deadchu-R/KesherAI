@@ -325,3 +325,12 @@ This review went through the code part by part. Each finding is listed with what
 - Pure nodes: values are read from the user's own script and written back into it; no new input from outside.
   Parsing is linear in the value's length.
 - GPU cleanup (0.6.181/182): only orphaned engines of KesherAI's own (llama/sd/whisper-server, parent gone) are closed.
+
+## Scan 61 (2026-11-14, after 0.6.185–0.6.188)
+- Plugin runner copy (0.6.188): it was written under a fixed name in the temp folder; on a shared Linux /tmp another
+  user could place a link there or swap the file before it runs. Now in a new owner-only folder (mkdtemp), mode 0600.
+- Game Helper: the global key Ctrl+Shift+G took VS Code's Source Control from every app; now Ctrl+Alt+G. The capture
+  route answers this computer only; the picture route serves only game-*.jpg from that chat's folder.
+- Sign-in returns (0.6.186): allowed only as a top-level GET navigation to the four callback paths; each checks its
+  one-time state (and PKCE), so a page cannot complete a sign-in it did not start.
+- Controller and handheld code runs in the page only; the zoom bridge (setZoom) clamps to 0.5–2.

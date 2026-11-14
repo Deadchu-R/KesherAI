@@ -8,7 +8,7 @@ import { PadHints } from "../PadHints";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 /**
- * The Game Helper's window over the game (`#/game/<chat>/<picture>`), opened by Ctrl+Shift+G: the picture just taken,
+ * The Game Helper's window over the game (`#/game/<chat>/<picture>`), opened by Ctrl+Alt+G: the picture just taken,
  * three big questions on the controller's buttons (as Gaming Copilot's suggestions), and the game's own chat, which
  * remembers earlier questions. B (or Esc) closes it and the game is in front again.
  *

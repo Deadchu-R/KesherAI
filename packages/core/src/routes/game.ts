@@ -1,6 +1,6 @@
 /**
  * The Game Helper (as Xbox's Gaming Copilot and NVIDIA's G-Assist, but on the user's own models and nothing leaves the
- * computer): a key (Ctrl+Shift+G, or a handheld's back button mapped to it) takes a picture of the game in front and
+ * computer): a key (Ctrl+Alt+G, or a handheld's back button mapped to it) takes a picture of the game in front and
  * opens a small window over it. The question goes to the chat model with the picture, in one chat per game, so it
  * remembers where the player was ("I'm stuck at the second boss" last night). The web search finds guides.
  *

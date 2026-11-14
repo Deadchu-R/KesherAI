@@ -8,7 +8,7 @@
  * with "shell", and load no native code. The runner itself refuses the network without "network".
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,8 +43,9 @@ let unpacked: string | undefined;
  */
 function outOfArchive(js: string): string {
   if (unpacked) return unpacked;
-  const file = join(tmpdir(), `kesher-plugin-runner-${process.pid}.mjs`);
-  writeFileSync(file, readFileSync(js));
+  // In a new folder only this user can open (scan 61: a fixed name in a shared /tmp could be swapped by another user).
+  const file = join(mkdtempSync(join(tmpdir(), "kesher-runner-")), "plugin-runner.mjs");
+  writeFileSync(file, readFileSync(js), { mode: 0o600 });
   unpacked = file;
   return file;
 }
