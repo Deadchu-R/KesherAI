@@ -673,3 +673,12 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Plan: one Health page (computer and, in the phone app, the phone): numbers first, then the model's short list of
   what to do; fixes only on KesherAI's own files with a confirmation, everything else as steps; reads only.
 - Stopped at: research enough to start; build t23 first, the phone part after (native plugin method).
+
+## 2026-11-14 — Approvals with a time limit (asked for)
+- **VS Code agents** (code.visualstudio.com/docs/agents/run/approvals): Allow once; scoped grants (command prefix, web
+  host, file/folder) "in this Session"; Always Allow (kept across restarts); manage and reset from the command palette.
+  No time limit.
+- **Codex CLI**: "approve for this session" (smartscope.blog guide); no time limit either.
+- The time limit is sudo's idea (a grant that runs out after N minutes). Plan: every "always" rule KesherAI keeps may
+  carry an end time; the chat's approval card offers 15 min / 1 hour / until tonight beside once and always; the
+  chat's rules list shows how long each has left and can shorten or remove it.

@@ -466,12 +466,13 @@ namespace KesherGraph
 					N->NodePosY = Y;
 					N->NodeWidth = FMath::Clamp(JsonInt(Op, TEXT("width"), 400), 64, 8000);
 					N->NodeHeight = FMath::Clamp(JsonInt(Op, TEXT("height"), 200), 64, 8000);
+					Graph->AddNode(N, true, false);
+					N->PostPlacedNewNode();
+					// After PostPlacedNewNode, which puts back the default title and colour (found on 5.8: the text was lost).
 					const FString Text = JsonStr(Op, TEXT("text"));
 					N->NodeComment = Text.IsEmpty() ? TEXT("Comment") : Text;
 					const FString Color = JsonStr(Op, TEXT("color"));
 					if (!Color.IsEmpty()) N->CommentColor = FLinearColor(FColor::FromHex(Color));
-					Graph->AddNode(N, true, false);
-					N->PostPlacedNewNode();
 					Made = N;
 				}
 				else if (Type == TEXT("sequence"))

@@ -7,6 +7,7 @@ import { getLocale, t } from "./i18n";
 import { desktop } from "./library";
 import { RichText } from "./RichText";
 import { Select } from "./ui/Select";
+import { durations } from "./settings/PermissionsSection";
 
 /*
  * The cards a chat shows between messages: a tool the model ran (with its
@@ -102,12 +103,15 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
   const [scopeOpen, setScopeOpen] = useState(false);
   // "Always": for how long (0 = for good) and, for a command, only commands that start like this one.
   const [minutes, setMinutes] = useState(0);
+  // "Allow" for a while (0 = once).
+  const [forTime, setForTime] = useState(0);
   const firstCmd = ev.name === "run_command" && typeof ev.input.command === "string" ? ev.input.command.trim() : "";
   const [onlyCmd, setOnlyCmd] = useState(!!firstCmd);
   const [prefix, setPrefix] = useState(() => firstCmd.split(/\s+/).slice(0, firstCmd.split(/\s+/).length > 2 ? 2 : 3).join(" ").split(/[;&|]/)[0]!.trim());
-  const decide = async (decision: "allow" | "always" | "deny", scope?: "conversation" | "model" | "everywhere") => {
+  const decide = async (decision: "allow" | "always" | "deny", scope?: "conversation" | "model" | "everywhere", forMinutes?: number) => {
     setBusy(true);
-    const always = decision === "always" ? { ...(minutes > 0 ? { minutes } : {}), ...(firstCmd && onlyCmd && prefix.trim() ? { command: prefix.trim() } : {}) } : {};
+    const m = forMinutes ?? minutes;
+    const always = decision === "always" ? { ...(m > 0 ? { minutes: m } : {}), ...(firstCmd && onlyCmd && prefix.trim() ? { command: prefix.trim() } : {}) } : {};
     await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(scope ? { scope } : {}), ...always, ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
     setBusy(false);
   };
@@ -163,7 +167,14 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
       )}
       <input placeholder={t("noteForAgent")} value={note} onChange={(e) => setNote(e.target.value)} aria-label={t("noteForAgent")} />
       <div className="row">
-        <button type="button" className="primary" disabled={busy} onClick={() => void decide("allow")}>{t("allow")}</button>
+        {/* Allow for a while, right here (like sudo's timeout): a rule for this chat that ends by itself. */}
+        <button type="button" className="primary" disabled={busy} onClick={() => void (forTime > 0 && !ev.scope ? decide("always", "conversation", forTime) : decide("allow"))}>{forTime > 0 && !ev.scope ? L(`אשר ל${durations().find(([m]) => m === forTime)?.[1] ?? ""}`, `Allow for ${durations().find(([m]) => m === forTime)?.[1].toLowerCase() ?? ""}`) : t("allow")}</button>
+        {!ev.scope && !danger && (
+          <Select className="model-chip" value={forTime} aria-label={L("לכמה זמן לאשר", "Allow for how long")} onChange={(e) => setForTime(Number(e.target.value))}>
+            <option value={0}>{L("פעם אחת", "Once")}</option>
+            {durations().filter(([m]) => m > 0 && m <= 24 * 60).map(([m, label]) => <option key={label} value={m}>{label}</option>)}
+          </Select>
+        )}
         {/* The browser: Allow once / Always on this site / Deny (like Claude in Chrome); sites are listed in Settings. */}
         {ev.scope?.startsWith("site:") ? (
           <button type="button" disabled={busy} onClick={() => void decide("always")} title={L("מתי שהוא עובד באתר הזה, בלי לשאול. אפשר לבטל בהגדרות ← דפדפן.", "Whenever it works on this site, without asking. Undo in Settings → Browser.")}>
@@ -180,6 +191,7 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
             {L("לכמה זמן", "For how long")}
             <Select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
               <option value={0}>{L("לתמיד", "For good")}</option>
+              <option value={15}>{L("15 דקות", "15 minutes")}</option>
               <option value={60}>{L("שעה", "1 hour")}</option>
               <option value={240}>{L("4 שעות", "4 hours")}</option>
               <option value={Math.max(1, Math.round((new Date().setHours(24, 0, 0, 0) - Date.now()) / 60_000))}>{L("עד סוף היום", "Until the end of today")}</option>

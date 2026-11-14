@@ -3,6 +3,7 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { appearanceChanged } from "../appearance";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { PermissionsSection } from "../settings/PermissionsSection";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useActivity, useLibrary } from "../library";
@@ -59,6 +60,8 @@ export function ConversationPage({ id }: { id: string }) {
   const personas = usePersonas();
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
+  // The chat's approvals (what runs without asking, and for how long).
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
   const [openedAt] = useState(() => Date.now());
   const [coachOpen, setCoachOpen] = useState(false);
@@ -199,6 +202,8 @@ export function ConversationPage({ id }: { id: string }) {
   // Follow new messages and steps while the user is at the bottom (reading further up stays put). The composer is
   // sticky over the end of the list, so the marker keeps a margin of its height (else it counts as already visible).
   const following = useRef(true);
+  // When the page itself last scrolled to the end (its scroll events are not the user's).
+  const autoAtRef = useRef(0);
   useEffect(() => {
     const el = bottom.current;
     if (!el) return;
@@ -207,42 +212,49 @@ export function ConversationPage({ id }: { id: string }) {
     const target: HTMLElement | Window = scroller ?? window;
     const s = () => scroller ?? document.documentElement;
     const gap = () => s().scrollHeight - s().scrollTop - s().clientHeight;
-    // Reading up while an answer is written (found on Linux: each new word pulled the view back down). A scroll
-    // the user makes (wheel, finger, keys, scrollbar) stops following at once; coming back near the end resumes it.
-    // The page's own scroll to the end is not the user's, so it does not count.
-    let userAt = 0;
-    const mark = () => {
-      userAt = Date.now();
-    };
+    // Reading up while an answer is written (found on Linux, then on the phone: each new word pulled the view back
+    // down). Any move up (wheel, finger, keys, scrollbar) stops following at once; coming back near the end resumes
+    // it. The page's own scroll to the end only ever moves down, so a move up is always the user's.
+    let lastTop = s().scrollTop;
     const onScroll = () => {
-      if (gap() < 80) following.current = true;
-      else if (Date.now() - userAt < 600) following.current = false;
+      const top = s().scrollTop;
+      if (top < lastTop - 2 && Date.now() - autoAtRef.current > 150) following.current = false;
+      else if (gap() < 80) following.current = true;
+      lastTop = top;
     };
     const onWheel = (e: WheelEvent) => {
-      mark();
       if (e.deltaY < 0) following.current = false;
     };
+    let touchY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      touchY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      // The finger moving down scrolls the page up.
+      if ((e.touches[0]?.clientY ?? 0) > touchY + 4) following.current = false;
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (/^(ArrowUp|PageUp|Home)$/.test(e.key)) {
-        mark();
-        following.current = false;
-      }
+      if (/^(ArrowUp|PageUp|Home)$/.test(e.key)) following.current = false;
     };
     target.addEventListener("scroll", onScroll, { passive: true });
     target.addEventListener("wheel", onWheel as EventListener, { passive: true });
-    target.addEventListener("touchmove", mark, { passive: true });
-    target.addEventListener("pointerdown", mark, { passive: true });
+    target.addEventListener("touchstart", onTouchStart as EventListener, { passive: true });
+    target.addEventListener("touchmove", onTouchMove as EventListener, { passive: true });
     addEventListener("keydown", onKey);
     return () => {
       target.removeEventListener("scroll", onScroll);
       target.removeEventListener("wheel", onWheel as EventListener);
-      target.removeEventListener("touchmove", mark);
-      target.removeEventListener("pointerdown", mark);
+      target.removeEventListener("touchstart", onTouchStart as EventListener);
+      target.removeEventListener("touchmove", onTouchMove as EventListener);
       removeEventListener("keydown", onKey);
     };
-  }, [id]);
+    // Again once the chat has loaded: before that the end marker is not on the page, and nothing was listening
+    // (so the view kept following however the user scrolled).
+  }, [id, !!conv]);
   useEffect(() => {
-    if (following.current) bottom.current?.scrollIntoView({ block: "end" });
+    if (!following.current) return;
+    autoAtRef.current = Date.now();
+    bottom.current?.scrollIntoView({ block: "end" });
   }, [events.length, streaming]);
 
   // How long each answer took and how fast it was written (tokens per second, from the model's own counts): shown
@@ -526,6 +538,16 @@ export function ConversationPage({ id }: { id: string }) {
           onClose={() => setVoice(false)}
         />
       )}
+      {approvalsOpen &&
+        createPortal(
+          <div className="dialog-backdrop" role="presentation" onClick={() => setApprovalsOpen(false)}>
+            <div className="dialog card stack" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <PermissionsSection conversationId={conv.id} modelId={conv.modelId} />
+              <button type="button" style={{ alignSelf: "end" }} onClick={() => setApprovalsOpen(false)}>{getLocale() === "he" ? "סגור" : "Close"}</button>
+            </div>
+          </div>,
+          document.body,
+        )}
       {slot && createPortal(
         editingTitle ? (
           <form className="bar-rename" onSubmit={(e) => { e.preventDefault(); setEditingTitle(false); void patch({ title: (e.currentTarget.elements.namedItem("title") as HTMLInputElement).value }); }}>
@@ -546,6 +568,7 @@ export function ConversationPage({ id }: { id: string }) {
           >
             <MenuItem icon="✎" onSelect={() => setEditingTitle(true)}>{t("rename")}</MenuItem>
             {info?.workspace && desktop()?.openPath && <MenuItem icon="📁" onSelect={() => void desktop()!.openPath!(info.workspace!)}>{t("openFolder")}</MenuItem>}
+            <MenuItem icon="🛡" onSelect={() => setApprovalsOpen(true)}>{getLocale() === "he" ? "אישורים בצ'אט" : "Approvals in this chat"}</MenuItem>
             <MenuSeparator />
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "md")}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</MenuItem>
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "pdf")}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</MenuItem>

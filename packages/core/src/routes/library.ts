@@ -653,6 +653,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.config.permissions;
   });
 
+  // How long an approval holds (a chat's approvals list, Settings): minutes from now, or 0 for good. From the phone
+  // an approval can only get shorter (it never widens what runs without asking).
+  app.put<{ Params: { index: string }; Body: { minutes?: number } }>("/api/permissions/:index", async (req, reply) => {
+    const i = Number(req.params.index);
+    const r = s.config.permissions[i];
+    if (!Number.isInteger(i) || !r) return reply.code(404).send({ error: "No such approval" });
+    const m = Number(req.body?.minutes);
+    if (!Number.isFinite(m) || m < 0) return reply.code(400).send({ error: "minutes must be 0 (for good) or more" });
+    const until = m > 0 ? new Date(Date.now() + Math.min(m, 366 * 24 * 60) * 60_000).toISOString() : undefined;
+    const shorter = !!until && (!r.until || Date.parse(until) <= Date.parse(r.until));
+    if (!isLocalRequest(req) && !shorter) return reply.code(403).send({ error: "From the phone an approval can only be shortened." });
+    if (until) r.until = until;
+    else delete r.until;
+    await s.saveConfig();
+    return s.config.permissions;
+  });
+
   // ---------- Settings ----------
   app.get("/api/settings", async () => ({
     activeModels: s.config.activeModels,
