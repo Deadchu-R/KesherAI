@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { addField, csValue, fieldUses, findStmt, insertStep, methodToNodes, newId, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsAccess, type CsClass, type CsStmt } from "@kesher/shared";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { addField, breakExec, csValue, deleteStep, fieldUses, insertStep, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, removeField, updateField, wireExec, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas, type Action } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
@@ -77,6 +77,14 @@ export function ScriptNodes() {
   const [sel, setSel] = useState("");
   const [show, setShow] = useState<"nodes" | "code">("nodes");
   const [tick, setTick] = useState(0);
+  /** Where each node was put, and the steps placed on the graph but not wired in (kept by KesherAI, not in the code). */
+  const layoutRef = useRef<CsLayout>({});
+  const saveTimer = useRef(0);
+  const saveLayout = () => {
+    clearTimeout(saveTimer.current);
+    const p = path;
+    saveTimer.current = window.setTimeout(() => void api("/api/unity/script/layout", { method: "PUT", body: { path: p, layout: layoutRef.current } }).catch(() => undefined), 600);
+  };
   const [saving, setSaving] = useState(false);
   /** Unity's compile errors for this script (file, line, column), and whether a check is running. */
   const [problems, setProblems] = useState<Array<CodeProblem & { file: string }>>([]);
@@ -113,6 +121,11 @@ export function ScriptNodes() {
     }
     setPath(p);
     setSel("");
+    layoutRef.current = {};
+    void api<CsLayout>(`/api/unity/script/layout?path=${encodeURIComponent(p)}`).then((l) => {
+      layoutRef.current = l && typeof l === "object" ? l : {};
+      setTick((x) => x + 1);
+    }, () => undefined);
     void api<{ text: string; mtime: number }>(`/api/unity/script?path=${encodeURIComponent(p)}`).then((r) => {
       setFile(r);
       setTextState(r.text);
@@ -135,10 +148,26 @@ export function ScriptNodes() {
   };
 
   const m = classes.flatMap((c) => c.methods).find((x) => x.id === method);
-  const nodes = useMemo(() => (m ? methodToNodes(m) : []), [m, tick]);
+  const keyOf = useRef(new Map<string, string>());
+  const nodes = useMemo(() => {
+    if (!m) return [];
+    const list = methodToNodes(m, layoutRef.current);
+    // A node whose key changed (its target or name was edited) keeps the place it was given.
+    const pos = (layoutRef.current.positions ??= {});
+    for (const n of list) {
+      const old = keyOf.current.get(n.id);
+      if (n.key && old && old !== n.key && pos[old] && !pos[n.key]) {
+        pos[n.key] = pos[old]!;
+        n.x = pos[n.key]!.x;
+        n.y = pos[n.key]!.y;
+      }
+      if (n.key) keyOf.current.set(n.id, n.key);
+    }
+    return list;
+  }, [m, tick]);
   const out = useMemo(() => (file ? writeCSharp(text, classes) : ""), [file, text, classes, tick]);
   const changed = !!file && out !== file.text;
-  const found = m && sel ? findStmt(m.body, sel) : undefined;
+  const found = m && sel ? locate(m, layoutRef.current, sel) : undefined;
   const st = found?.stmt;
   const edit = (f: (s: CsStmt) => void) => {
     if (!st) return;
@@ -183,22 +212,6 @@ export function ScriptNodes() {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return all.filter((a) => words.every((w) => `${a.title} ${a.category} ${a.function ?? ""}`.toLowerCase().includes(w))).slice(0, 60);
   };
-  /** Where a new step goes: after the step a dragged flow pin comes from (or first in its True/False/Loop), else after the chosen one, else last. */
-  const placeFor = (from?: { node: string; pin: string; dir: string; type: string }): { list: CsStmt[]; at: number } => {
-    if (!m) return { list: [], at: 0 };
-    if (from && from.dir === "out" && from.type === "exec") {
-      if (from.node === m.id) return { list: m.body, at: 0 };
-      const src = findStmt(m.body, from.node);
-      if (src) {
-        const s3 = src.stmt;
-        if (s3.kind === "if" && from.pin === "True") return { list: s3.then, at: 0 };
-        if (s3.kind === "if" && from.pin === "False") return { list: (s3.else ??= []), at: 0 };
-        if (s3.kind === "loop" && from.pin === "Loop Body") return { list: s3.body, at: 0 };
-        return { list: src.list, at: src.index + 1 };
-      }
-    }
-    return found ? { list: found.list, at: found.index + 1 } : { list: m.body, at: m.body.length };
-  };
   /** A C# value's type, for a new variable made from it (Promote to Variable). */
   const typeOfValue = (v: string, pinType: string): string => {
     const s = v.trim();
@@ -214,25 +227,39 @@ export function ScriptNodes() {
   const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }> => {
     if (!m) return ops.map(() => ({ ok: false, error: L("אין מתודה פתוחה.", "No method is open.") }));
     const results = ops.map((op): { ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] } => {
-      if (op.op === "move") return { ok: true };
+      if (op.op === "move") {
+        // Nodes stay where they are put, as in Unreal (saved with the script's graph, not in the code).
+        const n = nodes.find((x) => x.id === op.node);
+        if (n?.key) (layoutRef.current.positions ??= {})[n.key] = { x: Number(op.x), y: Number(op.y) };
+        saveLayout();
+        return { ok: true };
+      }
       if (op.op === "add") {
-        // A node chosen in the menu: a new step, after the pin it was dragged from (as in Unreal).
+        // A node chosen in the menu lands where it was asked for, wired to nothing (as in Unreal); dragged from an
+        // exec pin, it is wired there.
         const a = op.action as Action;
         const stmt: CsStmt =
           a.type === "call" ? { id: newId(), kind: "call", target: a.target ?? "", name: a.function ?? "Log", args: [...(a.args ?? [])], src: "", dirty: true }
           : a.type === "set" ? fresh("set", a.variable)
           : a.type === "local" ? fresh("local")
           : fresh("if");
-        const { list, at } = placeFor(op.from as { node: string; pin: string; dir: string; type: string } | undefined);
-        list.splice(at, 0, stmt);
-        (m as typeof m & { dirty?: boolean }).dirty = true;
-        if (list[at + 1]) list[at + 1]!.dirty = true;
-        setSel(stmt.id);
-        return { ok: true, node: stmt.id };
+        const x = Number(op.x ?? 0);
+        const y = Number(op.y ?? 0);
+        const id = placeAlone(m, layoutRef.current, stmt, x, y);
+        const from = op.from as { node: string; pin: string; dir: string; type: string } | undefined;
+        if (from && from.dir === "out" && from.type === "exec") {
+          const was = nodes.find((n) => n.id === from.node)?.pins.find((p) => p.name === from.pin)?.links?.[0];
+          const next = was ? nodes.find((n) => `${n.id}:execute` === was) : undefined;
+          const err = wireExec(m, layoutRef.current, from, id, { x: next?.x ?? x, y: (next?.y ?? y) + 220 });
+          if (err) toast(err);
+        }
+        setSel(id);
+        saveLayout();
+        return { ok: true, node: id };
       }
       if (op.op === "copy") {
         // Ctrl+C: the chosen steps as text (pasted into this or another script).
-        const steps = (op.nodes as string[]).map((id) => findStmt(m.body, id)?.stmt).filter((x): x is CsStmt => !!x);
+        const steps = (op.nodes as string[]).map((id) => locate(m, layoutRef.current, id)?.stmt).filter((x): x is CsStmt => !!x);
         if (!steps.length) return { ok: false, error: L("אין צעדים להעתקה.", "No steps to copy.") };
         return { ok: true, text: JSON.stringify(steps) };
       }
@@ -252,16 +279,15 @@ export function ScriptNodes() {
           } else if (c.kind === "loop") c.body = c.body.map(renew);
           return c;
         };
+        // Pasted nodes land at the mouse, wired to nothing (as in Unreal).
         const fresh2 = steps.filter((s) => s && typeof s === "object" && "kind" in s).map(renew);
-        const { list, at } = placeFor();
-        list.splice(at, 0, ...fresh2);
-        (m as typeof m & { dirty?: boolean }).dirty = true;
-        if (list[at + fresh2.length]) list[at + fresh2.length]!.dirty = true;
-        return { ok: true, nodes: fresh2.map((s) => s.id) };
+        const ids = fresh2.map((s, i) => placeAlone(m, layoutRef.current, s, Number(op.x ?? 0) + i * 40, Number(op.y ?? 0) + i * 40));
+        saveLayout();
+        return { ok: true, nodes: ids };
       }
       if (op.op === "promote") {
         // Promote to Variable: a new field (shown in the Inspector) holding the input's value; the input now uses it.
-        const f = findStmt(m.body, String(op.node));
+        const f = locate(m, layoutRef.current, String(op.node));
         const pin = String(op.pin);
         if (!f || op.dir !== "in") return { ok: false, error: L("אפשר להפוך למשתנה כניסה של צעד (ערך שהוא מקבל).", "Only a step's input (a value it takes) can be promoted.") };
         const s5 = f.stmt;
@@ -291,16 +317,22 @@ export function ScriptNodes() {
         return { ok: true };
       }
       if (op.op === "delete") {
-        const f = findStmt(m.body, String(op.node));
-        if (!f) return { ok: false, error: L("את הצומת הזה אי אפשר למחוק (זו נקודת הכניסה של המתודה).", "This node cannot be deleted (it is the method's entry).") };
-        f.list.splice(f.index, 1);
-        (m as typeof m & { dirty?: boolean }).dirty = true;
-        if (f.list[f.index]) f.list[f.index]!.dirty = true;
+        if (!deleteStep(m, layoutRef.current, String(op.node))) return { ok: false, error: L("את הצומת הזה אי אפשר למחוק (זו נקודת הכניסה של המתודה).", "This node cannot be deleted (it is the method's entry).") };
+        saveLayout();
         return { ok: true };
       }
       if (op.op === "disconnect") {
-        const f = findStmt(m.body, String(op.node));
         const pin = String(op.pin);
+        const n0 = nodes.find((n) => n.id === op.node);
+        const p0 = n0?.pins.find((p) => p.name === pin);
+        if (p0?.type === "exec") {
+          // Breaking a flow wire: the steps after it leave the code and stay on the graph where they are.
+          const next = p0.dir === "in" ? n0 : nodes.find((n) => p0.links?.[0] === `${n.id}:execute`);
+          breakExec(m, layoutRef.current, String(op.node), pin, p0.dir, { x: next?.x ?? 0, y: next?.y ?? 0 });
+          saveLayout();
+          return { ok: true };
+        }
+        const f = locate(m, layoutRef.current, String(op.node));
         if (!f) return { ok: true };
         const s2 = f.stmt;
         if (s2.kind === "call" && /^arg\d+$/.test(pin)) s2.args[Number(pin.slice(3))] = "0";
@@ -313,48 +345,18 @@ export function ScriptNodes() {
       if (op.op !== "connect") return { ok: false, error: `${String(op.op)}?` };
       const from = op.from as { node: string; pin: string };
       const to = op.to as { node: string; pin: string };
-      const target = findStmt(m.body, to.node);
+      const target = locate(m, layoutRef.current, to.node);
       if (!target) return { ok: false, error: L("אי אפשר לחבר לנקודת הכניסה של המתודה.", "Nothing can connect into the method's entry.") };
       const fromNode = nodes.find((n) => n.id === from.node);
       const fromPin = fromNode?.pins.find((p) => p.name === from.pin);
       if (fromPin?.type === "exec") {
         if (to.pin !== "execute") return { ok: false, error: L("חוט זרימה מתחבר לכניסה של צעד.", "A flow wire goes into a step's entry.") };
-        const moving = target.stmt;
-        // A step cannot go inside itself (a wire from its own branch or loop back into it).
-        const inner = moving.kind === "if" ? [...moving.then, ...(moving.else ?? [])] : moving.kind === "loop" ? moving.body : [];
-        if (from.node === moving.id || findStmt(inner, from.node)) return { ok: false, error: L("צעד לא יכול להיכנס לתוך עצמו.", "A step cannot go inside itself.") };
-        // Take the step out of where it is…
-        target.list.splice(target.index, 1);
-        // …and put it after the step the wire starts from, or first in that step's branch or loop body.
-        let list: CsStmt[];
-        let at: number;
-        if (from.node === m.id) {
-          list = m.body;
-          at = 0;
-        } else {
-          const src = findStmt(m.body, from.node);
-          if (!src) {
-            target.list.splice(target.index, 0, moving);
-            return { ok: false, error: L("לא נמצא הצעד שהחוט יוצא ממנו.", "The step the wire starts from was not found.") };
-          }
-          const s3 = src.stmt;
-          if (s3.kind === "if" && from.pin === "True") {
-            list = s3.then;
-            at = 0;
-          } else if (s3.kind === "if" && from.pin === "False") {
-            list = s3.else ??= [];
-            at = 0;
-          } else if (s3.kind === "loop" && from.pin === "Loop Body") {
-            list = s3.body;
-            at = 0;
-          } else {
-            list = src.list;
-            at = src.index + 1;
-          }
-        }
-        list.splice(at, 0, moving);
-        moving.dirty = true;
-        (m as typeof m & { dirty?: boolean }).dirty = true;
+        // As in Unreal: the step (and the steps after it) moves to the pin; what followed the pin is cut loose.
+        const was = fromPin.links?.[0];
+        const next = was ? nodes.find((n) => `${n.id}:execute` === was) : undefined;
+        const err = wireExec(m, layoutRef.current, from, to.node, { x: next?.x ?? 0, y: (next?.y ?? 0) + 220 });
+        if (err) return { ok: false, error: err };
+        saveLayout();
         return { ok: true };
       }
       // A value: the method's parameter (or any output with a name) written into the step's input.

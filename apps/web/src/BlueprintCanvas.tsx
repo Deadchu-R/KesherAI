@@ -371,7 +371,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     }
     // A C# script: B + click makes a Branch there too.
     if (onOps && localActions && editable && e.button === 0 && held.current === "b") {
-      void apply([{ op: "add", action: { title: "Branch", category: "Flow", type: "if" } }]);
+      const w = world(p);
+      void apply([{ op: "add", action: { title: "Branch", category: "Flow", type: "if" }, x: Math.round(w.x / SCALE), y: Math.round(w.y / SCALE) }]);
       return;
     }
     const quick = !unity && editable && e.button === 0 ? QUICK[held.current] : undefined;
@@ -473,7 +474,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     setMenu(null);
     if (onOps) {
       // Changed here (a C# script as nodes): the page makes the step, and puts it after the pin it was dragged from.
-      void apply([{ op: "add", action: a, ...(m.from ? { from: m.from } : {}) }]);
+      void apply([{ op: "add", action: a, x: Math.round(m.wx / SCALE), y: Math.round(m.wy / SCALE), ...(m.from ? { from: m.from } : {}) }]);
       return;
     }
     const op: Op = { op: "add", type: a.type, ref: "$n", x: Math.round(m.wx / SCALE), y: Math.round(m.wy / SCALE) };
@@ -682,7 +683,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       e.preventDefault();
       const n = nodes.find((x) => selected.has(x.id));
       if (n) void askText(L("הערה לנוד:", "The node's comment:"), n.comment ?? "").then((text) => { if (text !== null) void apply([{ op: "comment", node: n.id, text }]); });
-    } else if (e.key.startsWith("Arrow") && selected.size && !onOps) {
+    } else if (e.key.startsWith("Arrow") && selected.size) {
       e.preventDefault();
       const step = e.shiftKey ? 64 : 16;
       nudge(e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0, e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0);
@@ -877,8 +878,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               [L("גזור (Ctrl+X)", "Cut (Ctrl+X)"), () => void copy(true)],
               [L("העתק (Ctrl+C)", "Copy (Ctrl+C)"), () => void copy()],
               [L("שכפל (Ctrl+D)", "Duplicate (Ctrl+D)"), () => void duplicate()],
-              ...(onOps ? [] : [[L("נתק את כל החיבורים", "Break Node Link(s)"), breakNodeLinks] as const, [L("יישר חיבורים (Q)", "Straighten Connections (Q)"), straighten] as const]),
-              ...(selected.size > 1 && !onOps ? [[L("יישור למעלה", "Align Top"), () => align("top")] as const, [L("יישור לשמאל", "Align Left"), () => align("left")] as const] : []),
+              [L("נתק את כל החיבורים", "Break Node Link(s)"), breakNodeLinks] as const,
+              [L("יישר חיבורים (Q)", "Straighten Connections (Q)"), straighten] as const,
+              ...(selected.size > 1 ? [[L("יישור למעלה", "Align Top"), () => align("top")] as const, [L("יישור לשמאל", "Align Left"), () => align("left")] as const] : []),
             ] as Array<readonly [string, () => void]>).map(([label, act]) => (
               <li key={label}><button type="button" role="menuitem" onClick={() => { setNodeMenu(null); act(); }}>{label}</button></li>
             ))}

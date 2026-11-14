@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
 import { dirname, join } from "node:path";
@@ -509,6 +510,35 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         // Unity compiles it when it notices; ask now when its CLI is there (a failure is fine).
         void unity.cliRaw(["recompile", "--project-path", project], 120_000).catch(() => undefined);
         return { path: rel, mtime: (await stat(abs)).mtimeMs };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    });
+
+    // The script's graph layout (where each node was put, and chains not wired in), kept in KesherAI's own folder so
+    // the Unity project gets no extra files. One small JSON per project and script.
+    const layoutFile = (project: string, rel: string) => join(s.paths.root, "unity-graphs", `${createHash("sha256").update(`${project}|${rel}`).digest("hex").slice(0, 32)}.json`);
+    app.get<{ Querystring: { path?: string } }>(`${base}/script/layout`, async (req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      try {
+        const { rel } = projectPath(project, String(req.query.path ?? ""), ["Assets"]);
+        return JSON.parse(await readFileFs(layoutFile(project, rel), "utf8")) as unknown;
+      } catch {
+        return {};
+      }
+    });
+    app.put<{ Body: { path?: string; layout?: unknown } }>(`${base}/script/layout`, { bodyLimit: 2 * 1024 * 1024 }, async (req, reply) => {
+      const project = unity.activeProject;
+      if (!project) return reply.code(400).send({ error: "Choose a Unity project first." });
+      try {
+        const { rel } = projectPath(project, String(req.body?.path ?? ""), ["Assets"]);
+        const layout = req.body?.layout;
+        if (!layout || typeof layout !== "object" || Array.isArray(layout)) return reply.code(400).send({ error: "Send the layout." });
+        const file = layoutFile(project, rel);
+        await mkdir(join(file, ".."), { recursive: true });
+        await writeFile(file, JSON.stringify(layout));
+        return { ok: true };
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
       }

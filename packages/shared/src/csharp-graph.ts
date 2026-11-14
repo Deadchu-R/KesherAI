@@ -497,15 +497,64 @@ export interface CsNode {
   y: number;
   comment?: string;
   pins: Array<{ name: string; label?: string; dir: "in" | "out"; type: string; default?: string; links?: string[] }>;
+  /** Where the node is in its method (stable across reads of the file), for its saved place. */
+  key?: string;
+  /** Not wired into the method: kept on the graph, not in the code (as an unconnected node in Unreal). */
+  detached?: boolean;
+}
+
+/** A chain of steps placed on the graph but not wired into the method (it is not in the code). */
+export interface CsDetached {
+  x: number;
+  y: number;
+  stmts: CsStmt[];
+}
+
+/** Where the nodes of a script's graphs are (by key) and the chains not wired in, per method name. */
+export interface CsLayout {
+  positions?: Record<string, { x: number; y: number }>;
+  detached?: Record<string, CsDetached[]>;
+}
+
+/** What a statement is, without its values (so editing an input keeps its place on the graph). */
+function signature(s: CsStmt): string {
+  switch (s.kind) {
+    case "call":
+      return `${s.target}.${s.name}/${s.args.length}`;
+    case "set":
+      return s.target;
+    case "local":
+      return s.name;
+    case "loop":
+      return s.head.replace(/\s+/g, "");
+    case "code":
+      return s.src.trim().slice(0, 40);
+    default:
+      return "";
+  }
+}
+
+/**
+ * A stable name for a statement, for its saved place: its method, its kind and what it is, and how many like it
+ * came before (inserting other steps does not move it).
+ */
+export function stmtKey(method: string, s: CsStmt, seen: Map<string, number>, prefix = ""): string {
+  const base = `${method}/${prefix}${s.kind}:${signature(s)}`;
+  const n = seen.get(base) ?? 0;
+  seen.set(base, n + 1);
+  return `${base}#${n}`;
 }
 
 /**
  * One method as nodes: an event node, then each statement wired by its flow
- * pins (Branch: True/False; Loop: Body/Completed), laid out left to right.
+ * pins (Branch: True/False; Loop: Body/Completed). Nodes go where they were put (`layout.positions`); new ones are
+ * laid out left to right. Chains not wired in (`layout.detached`) are drawn where they were left, wired among
+ * themselves only, as unconnected nodes are in Unreal.
  *
  * @param m - The method.
+ * @param layout - Saved places and unwired chains (the script's graph file).
  */
-export function methodToNodes(m: CsMethod): CsNode[] {
+export function methodToNodes(m: CsMethod, layout?: CsLayout): CsNode[] {
   const nodes: CsNode[] = [];
   const ev: CsNode = {
     id: m.id,
@@ -514,40 +563,66 @@ export function methodToNodes(m: CsMethod): CsNode[] {
     x: 0,
     y: 0,
     pins: [{ name: "then", dir: "out", type: "exec" }, ...m.params.map((p) => ({ name: p.name, dir: "out" as const, type: p.type.toLowerCase() }))],
+    key: `${m.name}/entry`,
   };
-  nodes.push(ev);
+  const at = (n: CsNode) => {
+    const p = n.key ? layout?.positions?.[n.key] : undefined;
+    if (p) {
+      n.x = p.x;
+      n.y = p.y;
+    }
+    return n;
+  };
+  nodes.push(at(ev));
   const link = (from: CsNode, pin: string, to: CsNode) => {
     const p = from.pins.find((x) => x.name === pin);
     if (p) (p.links ??= []).push(`${to.id}:execute`);
   };
   // Lays out a list; returns the next column.
-  const place = (list: CsStmt[], from: CsNode, pin: string, col: number, row: number): number => {
+  const seen = new Map<string, number>();
+  const place = (list: CsStmt[], from: CsNode | undefined, pin: string, col: number, row: number, path: string, detached = false): number => {
     let prev = from;
     let prevPin = pin;
-    for (const s of list) {
+    list.forEach((s) => {
       const n = nodeOf(s, col, row);
-      nodes.push(n);
-      link(prev, prevPin, n);
+      n.key = stmtKey(m.name, s, seen, path.startsWith("d") ? "d:" : "");
+      if (detached) n.detached = true;
+      nodes.push(detached ? n : at(n));
+      if (prev) link(prev, prevPin, n);
       col++;
       if (s.kind === "if") {
-        const endT = place(s.then, n, "True", col, row);
-        const endF = s.else ? place(s.else, n, "False", col, row + 2) : col;
+        const endT = place(s.then, n, "True", col, row, path, detached);
+        const endF = s.else ? place(s.else, n, "False", col, row + 2, path, detached) : col;
         col = Math.max(endT, endF);
         // After both branches, the flow goes on from the Branch's Completed pin.
         prev = n;
         prevPin = "Completed";
       } else if (s.kind === "loop") {
-        col = place(s.body, n, "Loop Body", col, row + 1);
+        col = place(s.body, n, "Loop Body", col, row + 1, path, detached);
         prev = n;
         prevPin = "Completed";
       } else {
         prev = n;
         prevPin = "then";
       }
-    }
+    });
     return col;
   };
-  place(m.body, ev, "then", 1, 0);
+  place(m.body, ev, "then", 1, 0, "b");
+  // Unwired chains: drawn where they were left; their own steps are wired among themselves.
+  (layout?.detached?.[m.name] ?? []).forEach((d, k) => {
+    const first = nodes.length;
+    place(d.stmts, undefined, "then", 0, 0, `d${k}`);
+    const made = nodes.slice(first);
+    const x0 = made[0]?.x ?? 0;
+    const y0 = made[0]?.y ?? 0;
+    for (const n of made) {
+      n.detached = true;
+      const p = n.key ? layout?.positions?.[n.key] : undefined;
+      n.x = p ? p.x : d.x + (n.x - x0);
+      n.y = p ? p.y : d.y + (n.y - y0);
+    }
+  });
   return nodes;
 }
 
