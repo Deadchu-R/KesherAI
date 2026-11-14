@@ -334,3 +334,14 @@ This review went through the code part by part. Each finding is listed with what
 - Sign-in returns (0.6.186): allowed only as a top-level GET navigation to the four callback paths; each checks its
   one-time state (and PKCE), so a page cannot complete a sign-in it did not start.
 - Controller and handheld code runs in the page only; the zoom bridge (setZoom) clamps to 0.5–2.
+
+## Scan 62 (2026-11-14, after 0.6.189–0.6.191 and the plugin file limits)
+- Plugin file limits (runner): `new fs.ReadStream/WriteStream(path)`, `fs.openAsBlob` and `fs.glob` went around the
+  wrapped functions; now checked too. Tested (a stream outside the plugin's folders is refused).
+- Native code: without Node's permission model a plugin could `process.dlopen` a .node file from its folder and do
+  anything; now refused unless the plugin declared "shell".
+- Environment: every plugin process got KesherAI's whole environment (API keys a user set there included); now only
+  what a program needs to run (PATH, temp, home and app-data folders, locale). Tested.
+- Screens off (0.6.190): an owner action like restart (the token or this computer); no input.
+- Unreal project lookup (0.6.191): a project file found by name among the projects KesherAI already lists, written to
+  its own last.json; no path from a request.

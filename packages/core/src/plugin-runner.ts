@@ -109,7 +109,7 @@ if (!allowed.has("filesystem") && !env.nodeSandbox) {
     if (!within(full, write ? writeRoots : readRoots)) throw new Error(`The plugin ${env.id} did not ask for the "filesystem" permission (it tried fs.${name} on ${full}).`);
   };
   const WRITE = new Set(["writeFile", "appendFile", "mkdir", "rm", "rmdir", "unlink", "rename", "copyFile", "cp", "createWriteStream", "symlink", "link", "chmod", "chown", "lchown", "utimes", "lutimes", "truncate", "mkdtemp"]);
-  const READ = ["readFile", "readdir", "stat", "lstat", "access", "exists", "opendir", "readlink", "realpath", "createReadStream", "watch", "watchFile", "statfs", "open"];
+  const READ = ["readFile", "readdir", "stat", "lstat", "access", "exists", "opendir", "readlink", "realpath", "createReadStream", "watch", "watchFile", "statfs", "open", "openAsBlob", "glob"];
   const TWO = new Set(["rename", "copyFile", "cp", "symlink", "link"]);
   const guard = (mod: Record<string, unknown>, sync: boolean) => {
     for (const base of [...READ, ...WRITE]) {
@@ -132,8 +132,35 @@ if (!allowed.has("filesystem") && !env.nodeSandbox) {
     }
   };
   guard(fsMod, true);
+  // The stream classes open files too (scan 62: `new fs.ReadStream(path)` went around createReadStream).
+  for (const [n, write] of [["ReadStream", false], ["WriteStream", true]] as const) {
+    const Orig = fsMod[n] as (new (...a: unknown[]) => unknown) | undefined;
+    if (typeof Orig !== "function") continue;
+    const Guarded = class extends (Orig as new (...a: unknown[]) => object) {
+      constructor(...args: unknown[]) {
+        check(n, args[0], write);
+        super(...args);
+      }
+    };
+    try {
+      Object.defineProperty(fsMod, n, { value: Guarded, writable: false, configurable: false });
+    } catch {
+      /* fixed by Node */
+    }
+  }
   guard(req("node:fs/promises") as Record<string, unknown>, false);
   if (fsMod.promises) guard(fsMod.promises as Record<string, unknown>, false);
+}
+
+// Native code can do anything (scan 62): only a plugin trusted with "shell" may load it.
+if (!allowed.has("shell")) {
+  Object.defineProperty(process, "dlopen", {
+    value: () => {
+      throw new Error(`The plugin ${env.id} cannot load native code without the "shell" permission.`);
+    },
+    writable: false,
+    configurable: false,
+  });
 }
 
 // Node's raw bindings (tcp_wrap, spawn_sync, ...) reach the network and child processes without the modules above.

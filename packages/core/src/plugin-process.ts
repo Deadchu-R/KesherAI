@@ -52,7 +52,9 @@ function outOfArchive(js: string): string {
 
 /** Node (or Electron as Node) with the flags the runner needs. */
 function nodeCommand(extra: string[], ts: boolean): { cmd: string; args: string[]; env: NodeJS.ProcessEnv } {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+  // Only what a program needs to run (scan 62: KesherAI's whole environment, keys included, went to every plugin).
+  const KEEP = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|PROGRAMDATA|LANG|LC_ALL|TZ|XDG_RUNTIME_DIR|NODE_OPTIONS)$/i;
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => KEEP.test(k)));
   if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
   // Run through tsx only for the source (tests); the installed app runs the built file.
   // A bare loader name ("--import tsx") is found from the working folder, which is the plugin's: made absolute here.

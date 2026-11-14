@@ -54,6 +54,8 @@ export default {
     ctx.registerTool({ name: "boxed_net", description: "net", inputSchema: { type: "object" }, run: async () => net.connect(80, "example.com") });
     ctx.registerTool({ name: "boxed_shell", description: "shell", inputSchema: { type: "object" }, run: async () => (await import("node:child_process")).execSync("echo hi") });
     ctx.registerTool({ name: "boxed_binding", description: "binding", inputSchema: { type: "object" }, run: async () => process.binding("tcp_wrap") });
+    ctx.registerTool({ name: "boxed_stream_out", description: "stream outside", inputSchema: { type: "object" }, run: async () => { const fs = await import("node:fs"); new fs.ReadStream("/etc/hostname"); return "opened"; } });
+    ctx.registerTool({ name: "boxed_env", description: "env", inputSchema: { type: "object" }, run: async () => process.env.KESHER_TEST_SECRET ?? "none" });
     ctx.registerTool({ name: "boxed_read_out", description: "read outside", inputSchema: { type: "object" }, run: async () => (await import("node:fs")).readFileSync("/etc/hostname", "utf8") });
     ctx.registerTool({ name: "boxed_write_data", description: "write data", inputSchema: { type: "object" }, run: async () => { const fs = await import("node:fs/promises"); await fs.writeFile(ctx.dataDir + "/x.txt", "ok"); return fs.readFile(ctx.dataDir + "/x.txt", "utf8"); } });
     ctx.registerProviderFactory({ type: "boxed-echo", displayName: "Echo", categories: ["chat"], create: (config) => ({
@@ -67,7 +69,9 @@ export default {
   );
   const registry = new ProviderRegistry();
   const host = new PluginHost(registry, KesherConfigSchema.parse({}), root);
+  process.env.KESHER_TEST_SECRET = "sk-secret";
   await host.loadAll([root]);
+  delete process.env.KESHER_TEST_SECRET;
   const rec = host.list().find((p) => p.manifest.id === "boxed")!;
   assert.equal(rec.status, "active", rec.error);
   assert.equal(rec.isolation?.process, true);
@@ -82,6 +86,8 @@ export default {
   // Files: only its own folders without "filesystem" (where Node's own sandbox is not used).
   await assert.rejects(host.tools.get("boxed_read_out")!.run({}, signal), /did not ask for the "filesystem" permission/);
   assert.equal(await host.tools.get("boxed_write_data")!.run({}, signal), "ok");
+  await assert.rejects(host.tools.get("boxed_stream_out")!.run({}, signal), /"filesystem" permission/);
+  assert.equal(await host.tools.get("boxed_env")!.run({}, signal), "none", "KesherAI's environment (keys) does not reach a plugin");
   // A provider whose stream crosses the processes.
   const factory = (registry as unknown as { factories: Map<string, { create(c: unknown): { chat(r: unknown): AsyncIterable<{ text: string }>; listModels(): Promise<unknown[]> } }> }).factories.get("boxed-echo")!;
   const provider = factory.create({ id: "e", type: "boxed-echo", name: "E" });
