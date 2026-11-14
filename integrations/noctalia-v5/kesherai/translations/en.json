@@ -27,6 +27,12 @@
     "approval": "KesherAI asks to do something",
     "allow": "Allow",
     "deny": "Deny",
-    "send_failed": "The question was not sent. Is KesherAI running?"
+    "send_failed": "The question was not sent. Is KesherAI running?",
+    "copy": "Copy the answer",
+    "copied": "Copied.",
+    "select": "Select part of the text",
+    "formatted": "Back to the formatted answer",
+    "sources": "Sources",
+    "model": "Default model"
   }
 }

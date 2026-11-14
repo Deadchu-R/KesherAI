@@ -17,6 +17,8 @@ local err = ""
 local open = false
 local ticks = 0
 local closeButton = true
+local models = {} -- the chat models: { id, name }
+local modelId = noctalia.state.get("kesher-model") or "" -- "" = KesherAI's default
 local live = "" -- the answer as it is being written (from the live stream)
 local stream = nil -- KesherAI's live events while the chat works
 local lastSeq = 0
@@ -72,27 +74,83 @@ local function stripThink(text)
 end
 
 -- The chat as bubbles: questions, answers (the one being written included), and approvals still waiting.
+-- An ISO time ("2026-11-14T13:05:02.123Z") as seconds (for how long an answer took).
+local function seconds(iso)
+  local y, mo, d, h, mi, s = tostring(iso or ""):match("^(%d+)-(%d+)-(%d+)T(%d+):(%d+):([%d.]+)")
+  if not y then
+    return nil
+  end
+  local days = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d), hour = 0 }) / 86400
+  return math.floor(days + 0.5) * 86400 + tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(s)
+end
+
+-- The web pages a search or a fetch used: { title, url }, http(s) only.
+local function sourcesOf(e, call)
+  local out = {}
+  if e.name == "web_search" then
+    for title, url in tostring(e.output or ""):gmatch("%d+%.%s+([^\n]+)\n%s+(https?://[^%s]+)") do
+      table.insert(out, { title = title, url = url })
+    end
+  elseif e.name == "web_fetch" and call ~= nil and type(call.input) == "table" then
+    local url = tostring(call.input.url or "")
+    if url:match("^https?://") then
+      table.insert(out, { title = url:match("^https?://([^/]+)") or url, url = url })
+    end
+  end
+  return out
+end
+
+-- The chat as bubbles: questions, answers (with how long they took, their speed and the web pages they used),
+-- the answer being written, and approvals still waiting.
 local function messages()
   local out = {}
   local answered = {}
+  local calls = {}
   for _, e in ipairs(events) do
     if e.type == "approval_result" then
       answered[e.requestId] = true
+    elseif e.type == "tool_call" then
+      calls[e.callId] = e
     end
   end
   local partial = ""
+  local askedAt, stepAt, tokens = nil, nil, 0
+  local sources, seen = {}, {}
   for _, e in ipairs(events) do
     if e.type == "user" then
       partial = ""
+      askedAt, stepAt, tokens = seconds(e.at), seconds(e.at), 0
+      sources, seen = {}, {}
       table.insert(out, { who = "user", text = tostring(e.text or "") })
     elseif e.type == "assistant_delta" then
       partial ..= tostring(e.text or "")
+    elseif e.type == "usage" then
+      tokens += tonumber(e.output) or 0
+    elseif e.type == "tool_result" then
+      for _, src in ipairs(sourcesOf(e, calls[e.callId])) do
+        if not seen[src.url] and #sources < 8 then
+          seen[src.url] = true
+          table.insert(sources, src)
+        end
+      end
+      stepAt = seconds(e.at) or stepAt
     elseif e.type == "assistant" then
       partial = ""
       local t = stripThink(e.text)
+      local at = seconds(e.at)
       if t ~= "" then
-        table.insert(out, { who = "ai", text = t })
+        local m = { who = "ai", text = t, sources = sources }
+        if at and askedAt then
+          m.took = math.max(0, at - askedAt)
+        end
+        if at and stepAt and tokens > 0 and at - stepAt > 0.2 then
+          m.tps = tokens / (at - stepAt)
+        end
+        table.insert(out, m)
+        sources, seen = {}, {}
       end
+      tokens = 0
+      stepAt = at or stepAt
     elseif e.type == "approval_request" and not answered[e.requestId] then
       table.insert(out, { who = "approval", id = tostring(e.requestId), text = tostring(e.reason or e.name or "") })
     elseif e.type == "status" and e.status == "error" and e.message ~= nil then
@@ -101,7 +159,7 @@ local function messages()
   end
   local p = stripThink(partial ~= "" and partial or live)
   if p ~= "" then
-    table.insert(out, { who = "ai", text = p, live = true })
+    table.insert(out, { who = "ai", text = p, live = true, sources = sources })
   end
   return out
 end
@@ -221,7 +279,7 @@ local function send(text)
     post()
     return
   end
-  call("POST", "/api/conversations", { kind = "chat" }, function(ok, data)
+  call("POST", "/api/conversations", modelId ~= "" and { kind = "chat", modelId = modelId } or { kind = "chat" }, function(ok, data)
     if ok and type(data) == "table" and type(data.id) == "string" then
       chatId = data.id
       noctalia.state.set("kesher-chat", chatId)
@@ -238,6 +296,51 @@ local function decide(requestId, decision)
   call("POST", "/api/conversations/" .. chatId .. "/approvals/" .. requestId, { decision = decision }, function(_ok)
     load()
   end)
+end
+
+local function loadModels()
+  call("GET", "/api/models", nil, function(ok, data)
+    if not ok or type(data) ~= "table" then
+      return
+    end
+    models = {}
+    for _, m in ipairs(type(data.models) == "table" and data.models or data) do
+      if type(m) == "table" and m.category == "chat" and type(m.id) == "string" then
+        table.insert(models, { id = m.id, name = tostring(m.name or m.id):sub(1, 40) })
+      end
+    end
+    if open then
+      render()
+    end
+  end)
+end
+
+local function chooseModel(index)
+  local m = models[(tonumber(index) or -1) + 1]
+  modelId = m and m.id or ""
+  noctalia.state.set("kesher-model", modelId)
+  if chatId ~= "" and modelId ~= "" then
+    call("PATCH", "/api/conversations/" .. chatId, { modelId = modelId }, function(_ok) end)
+  end
+  render()
+end
+
+local selecting = {}
+
+local function copy(text)
+  noctalia.copyToClipboard(text, "text/plain")
+  noctalia.notify("KesherAI", tr("panel.copied"))
+end
+
+local function toggleSelect(i)
+  selecting[i] = not selecting[i]
+  render()
+end
+
+local function openUrl(url)
+  if url:match("^https?://[%w%.%-]+") then
+    noctalia.runAsync({ "xdg-open", url })
+  end
 end
 
 local function bubble(m, i)
@@ -262,9 +365,36 @@ local function bubble(m, i)
   elseif m.who == "error" then
     return ui.label({ key = "m" .. i, text = m.text, color = "error", maxLines = 6 })
   end
-  return ui.column({ key = "m" .. i, padding = 10, radius = 12, fill = "surface_variant/0.55", align = "stretch" }, {
-    ui.label({ text = m.text .. (m.live and " ▍" or ""), color = "on_surface" }),
-  })
+  local body = {}
+  if selecting[i] and not m.live then
+    -- To select part of the answer: the same text in a field (mark it, Ctrl+C).
+    table.insert(body, ui.input({ key = "sel" .. i, value = m.text, multiline = true, height = 220 }))
+  else
+    -- Markdown: headings, lists, tables and code, as the AI wrote them.
+    table.insert(body, ui.markdown({ key = "md" .. i .. (m.live and "l" or ""), text = m.text .. (m.live and " ▍" or "") }))
+  end
+  if not m.live then
+    local stats = {}
+    if m.took then
+      table.insert(stats, string.format("%.1f s", m.took))
+    end
+    if m.tps then
+      table.insert(stats, string.format("%.1f tok/s", m.tps))
+    end
+    table.insert(body, ui.row({ gap = 4, align = "center" }, {
+      ui.label({ text = table.concat(stats, " · "), fontSize = 11, color = "on_surface_variant", flexGrow = 1 }),
+      ui.button({ glyph = "copy", variant = "ghost", tooltip = tr("panel.copy"), onClick = function() copy(m.text) end }),
+      ui.button({ glyph = selecting[i] and "markdown" or "cursor-text", variant = "ghost", tooltip = selecting[i] and tr("panel.formatted") or tr("panel.select"), onClick = function() toggleSelect(i) end }),
+    }))
+  end
+  if m.sources and #m.sources > 0 then
+    local links = { ui.label({ text = tr("panel.sources"), fontSize = 11, fontWeight = "bold", color = "on_surface_variant" }) }
+    for n, src in ipairs(m.sources) do
+      table.insert(links, ui.button({ key = "src" .. i .. "-" .. n, glyph = "world", text = src.title:sub(1, 60), variant = "ghost", contentAlign = "start", onClick = function() openUrl(src.url) end }))
+    end
+    table.insert(body, ui.column({ gap = 2, align = "stretch" }, links))
+  end
+  return ui.column({ key = "m" .. i, gap = 6, padding = 10, radius = 12, fill = "surface_variant/0.55", align = "stretch" }, body)
 end
 
 render = function()
@@ -313,8 +443,16 @@ render = function()
     table.insert(footer, ui.button({ glyph = "send", variant = "primary", tooltip = tr("panel.send"), onClick = "onSend" }))
   end
 
+  local names, selected = {}, -1
+  for n, m in ipairs(models) do
+    table.insert(names, m.name)
+    if m.id == modelId then
+      selected = n - 1
+    end
+  end
   local body = {
     ui.row({ align = "center", gap = 8 }, header),
+    ui.select({ key = "model", options = names, selectedIndex = selected, placeholder = tr("panel.model"), controlSize = "sm", enabled = #names > 0 and not busy(), onChange = function(index) chooseModel(index) end }),
     ui.scroll({ key = "chat", flexGrow = 1, gap = 10, align = "stretch", stickToBottom = true, scrollToBottomRev = #list }, rows),
   }
   if err ~= "" then
@@ -337,6 +475,7 @@ function onOpen(_context)
   panel.setWantsSecondTicks(true)
   render()
   load()
+  loadModels()
 end
 
 function onClose()
@@ -378,6 +517,7 @@ end
 
 function onNewChat()
   stopStream()
+  selecting = {}
   chatId = ""
   noctalia.state.set("kesher-chat", "")
   events = {}

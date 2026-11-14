@@ -1,6 +1,6 @@
 id = "kesherai/kesherai"
 name = "KesherAI"
-version = "0.2.0"
+version = "0.3.0"
 plugin_api = 24
 author = "kesherai"
 license = "MIT"
