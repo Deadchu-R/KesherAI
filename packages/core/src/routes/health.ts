@@ -72,16 +72,24 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
   });
 
-  app.post<{ Body: { lang?: string } }>("/api/pc-health/advice", async (req, reply) => {
+  app.post<{ Body: { lang?: string; phone?: Record<string, unknown> } }>("/api/pc-health/advice", async (req, reply) => {
     const he = req.body?.lang === "he";
     const chat = s.config.activeModels.chat;
     if (!chat) return reply.code(400).send({ error: "Choose a chat model first.", code: "no-model" });
     const r = await read(false);
     try {
-      const out = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: healthPrompt(r, healthItems(r, he), he) }], tools: [] }, AbortSignal.timeout(180_000), () => undefined);
+      const out = await modelTurnFor(s.registry, chat)({ messages: [{ role: "user", content: healthPrompt(r, healthItems(r, he), he) + phoneNote(req.body?.phone) }], tools: [] }, AbortSignal.timeout(180_000), () => undefined);
       return { text: out.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim(), model: chat };
     } catch (err) {
       return reply.code(502).send({ error: (err as Error).message });
     }
   });
+}
+
+/** The phone's own reading (from the phone app), for the model's list: numbers only. */
+function phoneNote(p: Record<string, unknown> | undefined): string {
+  if (!p || typeof p !== "object") return "";
+  const keep = ["storageFree", "storageTotal", "ramFree", "ramTotal", "lowMemory", "batteryPercent", "batteryTempC", "batteryHealth", "charging", "modelsBytes"];
+  const clean = Object.fromEntries(Object.entries(p).filter(([k, v]) => keep.includes(k) && (typeof v === "number" || typeof v === "boolean" || (typeof v === "string" && v.length < 20))));
+  return Object.keys(clean).length ? `\n\nThe user's phone (bytes; add phone items to the list too): ${JSON.stringify(clean)}` : "";
 }

@@ -307,6 +307,48 @@ public class KesherLlmPlugin extends Plugin {
     }
 
     /** Stops showing the answer (the runtime finishes the current one in the background). */
+    /**
+     * Phone Health (asked for: the same as PC Health, in the phone app): storage, memory, battery and the models'
+     * size, from Android's own APIs (nothing is changed). The app's page and model turn it into what to do.
+     */
+    @PluginMethod
+    public void health(PluginCall call) {
+        JSObject out = new JSObject();
+        try {
+            android.os.StatFs fs = new android.os.StatFs(android.os.Environment.getDataDirectory().getPath());
+            out.put("storageFree", fs.getAvailableBytes());
+            out.put("storageTotal", fs.getTotalBytes());
+        } catch (Exception ignored) {}
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getContext().getSystemService(android.content.Context.ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            out.put("ramFree", mi.availMem);
+            out.put("ramTotal", mi.totalMem);
+            out.put("lowMemory", mi.lowMemory);
+        } catch (Exception ignored) {}
+        try {
+            android.content.Intent b = getContext().registerReceiver(null, new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+            if (b != null) {
+                int level = b.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+                int scale = b.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100);
+                out.put("batteryPercent", level >= 0 && scale > 0 ? Math.round(level * 100f / scale) : -1);
+                out.put("batteryTempC", b.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) / 10.0);
+                int health = b.getIntExtra(android.os.BatteryManager.EXTRA_HEALTH, 0);
+                out.put("batteryHealth", health == android.os.BatteryManager.BATTERY_HEALTH_GOOD ? "good" : health == android.os.BatteryManager.BATTERY_HEALTH_OVERHEAT ? "overheat" : health == android.os.BatteryManager.BATTERY_HEALTH_DEAD ? "dead" : health == android.os.BatteryManager.BATTERY_HEALTH_COLD ? "cold" : "unknown");
+                int plugged = b.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
+                out.put("charging", plugged != 0);
+            }
+        } catch (Exception ignored) {}
+        long models = 0;
+        File[] files = dir().listFiles();
+        if (files != null) for (File f : files) models += f.length();
+        out.put("modelsBytes", models);
+        out.put("model", android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
+        out.put("android", android.os.Build.VERSION.RELEASE);
+        call.resolve(out);
+    }
+
     @PluginMethod
     public void stop(PluginCall call) {
         stopRequested = true;

@@ -24,6 +24,27 @@ interface Reading {
 }
 interface Item { level: "ok" | "warn" | "bad"; title: string; fix: string }
 
+/** What the phone app's native side reads (Android's own APIs). */
+interface PhoneReading { storageFree?: number; storageTotal?: number; ramFree?: number; ramTotal?: number; lowMemory?: boolean; batteryPercent?: number; batteryTempC?: number; batteryHealth?: string; charging?: boolean; modelsBytes?: number; model?: string; android?: string }
+const phonePlugin = () => (window as unknown as { Capacitor?: { Plugins?: { KesherLlm?: { health?: () => Promise<PhoneReading> } } } }).Capacitor?.Plugins?.KesherLlm;
+
+/** What to do about the phone, from fixed rules (like the computer's). */
+export function phoneItems(p: PhoneReading): Item[] {
+  const out: Item[] = [];
+  const n = (t: string) => `\u2066${t}\u2069`;
+  if (p.storageFree !== undefined && p.storageTotal) {
+    const pct = p.storageFree / p.storageTotal;
+    if (p.storageFree < 2 * GB || pct < 0.05) out.push({ level: "bad", title: L(`בטלפון נשארו רק ${n(`${gb(p.storageFree)} GB`)}`, `Only ${gb(p.storageFree)} GB left on the phone`), fix: L("הגדרות הטלפון ← אחסון: אפליקציות גדולות, תמונות וסרטונים כפולים, וקבצים שהורדו.", "Phone settings → Storage: big apps, duplicate photos and videos, downloaded files.") });
+    else if (p.storageFree < 8 * GB || pct < 0.1) out.push({ level: "warn", title: L(`בטלפון נשארו ${n(`${gb(p.storageFree)} GB`)}`, `${gb(p.storageFree)} GB left on the phone`), fix: L("כדאי לפנות מקום לפני הורדת מודל לטלפון.", "Worth clearing space before downloading a model to the phone.") });
+  }
+  if ((p.modelsBytes ?? 0) > 3 * GB) out.push({ level: "warn", title: L(`מודלים בטלפון תופסים ${n(`${gb(p.modelsBytes!)} GB`)}`, `Models on the phone take ${gb(p.modelsBytes!)} GB`), fix: L("בעמוד המודלים של הטלפון: מחקו מודל שלא משתמשים בו.", "On the phone's models page: delete one you do not use.") });
+  if ((p.batteryTempC ?? 0) >= 42) out.push({ level: "bad", title: L(`הסוללה חמה: ${n(`${p.batteryTempC}°C`)}`, `The battery is hot: ${p.batteryTempC}°C`), fix: L("עצרו מודל מקומי או משחק, הורידו כיסוי, ואל תטעינו בחום.", "Stop a local model or game, take off the case, and do not charge it hot.") });
+  if (p.batteryHealth && p.batteryHealth !== "good" && p.batteryHealth !== "unknown") out.push({ level: "warn", title: L("מצב הסוללה לא תקין", "The battery's health is not good"), fix: L("כדאי לבדוק במעבדה מורשית.", "Worth checking at an authorised service.") });
+  if (p.lowMemory) out.push({ level: "warn", title: L("הזיכרון בטלפון כמעט מלא", "The phone's memory is almost full"), fix: L("סגרו אפליקציות שרצות ברקע.", "Close apps running in the background.") });
+  if (!out.length) out.push({ level: "ok", title: L("הטלפון נראה תקין", "The phone looks fine"), fix: L("אין מה לעשות כרגע.", "Nothing to do right now.") });
+  return out;
+}
+
 /** A used/total bar with its numbers. */
 function Meter({ label, used, total, note }: { label: string; used: number; total: number; note: string }) {
   const pct = total ? Math.min(100, Math.round((used / total) * 100)) : 0;
@@ -46,6 +67,7 @@ export function HealthPage() {
   const [advice, setAdvice] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [phone, setPhone] = useState<PhoneReading | null>(null);
   const [faults, setFaults] = useState<Array<{ at: string; kind: string; where: string; message: string }>>([]);
   const load = (fresh = false) => {
     setBusy(true);
@@ -53,13 +75,15 @@ export function HealthPage() {
       .then(setData, (e: Error) => toast(e.message))
       .finally(() => setBusy(false));
     void api<typeof faults>("/api/faults").then(setFaults, () => undefined);
+    // In the phone app: the phone's own health too (Android's APIs, through the app).
+    void phonePlugin()?.health?.().then(setPhone, () => undefined);
   };
   useEffect(() => {
     load();
   }, []);
   const ask = () => {
     setThinking(true);
-    void api<{ text: string }>("/api/pc-health/advice", { method: "POST", body: { lang: getLocale() } })
+    void api<{ text: string }>("/api/pc-health/advice", { method: "POST", body: { lang: getLocale(), ...(phone ? { phone } : {}) } })
       .then((r) => setAdvice(r.text), (e: Error) => toast(e.message))
       .finally(() => setThinking(false));
   };
@@ -89,6 +113,22 @@ export function HealthPage() {
           ) : (
             <div className="health-advice"><RichText text={advice} /></div>
           )}
+        </section>
+      )}
+      {phone && (
+        <section className="card stack">
+          <h2>{L(`הטלפון${phone.model ? ` (${phone.model})` : ""}`, `This phone${phone.model ? ` (${phone.model})` : ""}`)}</h2>
+          <ul className="health-items">
+            {phoneItems(phone).map((i, k) => (
+              <li key={k} className={`health-item ${i.level}`}>
+                <span className="health-dot" />
+                <div className="stack"><strong dir="auto">{i.title}</strong><span className="muted small" dir="auto">{i.fix}</span></div>
+              </li>
+            ))}
+          </ul>
+          {phone.storageTotal ? <Meter label={L("אחסון", "Storage")} used={phone.storageTotal - (phone.storageFree ?? 0)} total={phone.storageTotal} note={L(`\u2066${gb(phone.storageFree ?? 0)} GB\u2069 פנויים`, `${gb(phone.storageFree ?? 0)} GB free`)} /> : null}
+          {phone.ramTotal ? <Meter label={L("זיכרון", "Memory")} used={phone.ramTotal - (phone.ramFree ?? 0)} total={phone.ramTotal} note={`${gb(phone.ramTotal - (phone.ramFree ?? 0))} / ${gb(phone.ramTotal)} GB`} /> : null}
+          {phone.batteryPercent !== undefined && phone.batteryPercent >= 0 && <p className="small">{L(`סוללה: \u2066${phone.batteryPercent}%\u2069${phone.charging ? " (בטעינה)" : ""} · \u2066${phone.batteryTempC}°C\u2069`, `Battery: ${phone.batteryPercent}%${phone.charging ? " (charging)" : ""} · ${phone.batteryTempC}°C`)}</p>}
         </section>
       )}
       {r && (
