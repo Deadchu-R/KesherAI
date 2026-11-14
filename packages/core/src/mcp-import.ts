@@ -57,6 +57,7 @@ export function mcpSources(home = homedir(), env: NodeJS.ProcessEnv = process.en
     { app: "Copilot CLI", file: join(home, ".copilot", "mcp-config.json") },
     { app: "Antigravity", file: join(home, ".gemini", "antigravity", "mcp_config.json") },
     { app: "Antigravity CLI", file: join(home, ".gemini", "antigravity-cli", "mcp_config.json") },
+    { app: "LM Studio", file: join(home, ".lmstudio", "mcp.json") },
   ];
 }
 
