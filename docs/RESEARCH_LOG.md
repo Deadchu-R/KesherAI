@@ -1025,3 +1025,18 @@ Stopped at: custom actions, "ignore this app", and an Agent mode with tools (lat
 - Correction (0.6.201's new reason line): the empty memory check for Qwen3.8-Flash-Next was not the engine. KesherAI
   passed llama-server's `--checkpoint-min-step` to llama-fit-params, which refuses it, so the check failed at once for
   every Qwen 3.5+ model. Fixed in 0.6.202 (LlamaEngine.fitArgs). The engine (b12110) still needs checking for this model.
+
+## 2026-11-15 (night): Agent notifications and chat timers (COMPETITORS fourth review, item 4)
+- Open WebUI 0.11 (docs.openwebui.com timers and notifications): a `timer` tool with a prompt and a time (relative
+  "in 2 hours" or an RFC 3339 time with a zone), one-shot, kept in the database (fires after a restart if it came due
+  while down), waits while the chat is busy, runs with the settings captured when it was set; cancel only by
+  `cancel_on` (the user reads or writes in the chat); no list of pending timers in the interface. A `notify` tool
+  (message, title, target) to webhook targets; it ignores away-only delivery.
+- Plan for KesherAI (better than theirs where they are thin):
+  1. `notify_user` tool (title, message) through the existing Notifier (computer, phone, ntfy), opening the chat;
+     at most one a minute per chat and 20 a day.
+  2. `set_timer` tool (in: "45m" / "2h", or at: a local time; prompt; cancelOnReply default true) kept in
+     timers.json; checked with Routines' 30 s clock; when due and the chat is idle, the prompt goes in as a
+     "⏰ Timer" message and the chat answers; at most 10 waiting per chat, 30 days ahead.
+  3. A visible list: waiting timers in the chat header with Cancel (Open WebUI has none), and on the Routines page.
+Stopped at: building it (next, after the 0.6.202 memory check).
