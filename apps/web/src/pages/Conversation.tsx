@@ -5,6 +5,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PermissionsSection } from "../settings/PermissionsSection";
 import { ReportDialog } from "../ReportDialog";
+import { ChatBarButton, barShows, useBarDefaults } from "../ChatBar";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, useActivity, useLibrary } from "../library";
@@ -63,6 +64,7 @@ export function ConversationPage({ id }: { id: string }) {
   const [editingTitle, setEditingTitle] = useState(false);
   // The chat's approvals (what runs without asking, and for how long).
   const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const barDefaults = useBarDefaults();
   // "Report a problem" for this chat's faults.
   const [reportOpen, setReportOpen] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
@@ -457,6 +459,8 @@ export function ConversationPage({ id }: { id: string }) {
 
   const busy = info?.status === "running" || info?.status === "waiting";
   // Code sessions open with the IDE panel on a wide screen; on a phone the chat comes first (the IDE button opens it).
+ // Which buttons the bar shows: the chat's own choice, Settings' default, or the built-in one; an open pane keeps its button.
+  const show = (key: string, open = false) => open || barShows(key, conv.kind, conv.bar, barDefaults);
   const showIde = ideOpen ?? (conv.kind === "code" && !(typeof matchMedia === "function" && matchMedia("(max-width: 700px)").matches));
   // The server titles a conversation from its first message; the sidebar list has the latest title.
   const title = conversations.find((c) => c.id === id)?.title ?? conv.title;
@@ -494,7 +498,7 @@ export function ConversationPage({ id }: { id: string }) {
       setInput(text);
     }
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null; bar: Record<string, boolean> }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
     const { personaId, web: webPrefs, ...rest } = body;
     const next = { ...conv, ...rest };
@@ -593,14 +597,16 @@ export function ConversationPage({ id }: { id: string }) {
         slot,
       )}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
-        <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />
-        {conv.kind === "chat" && <GroupButton group={conv.group ?? []} onChange={(group) => void patch({ group })} />}
+        <ChatBarButton kind={conv.kind} bar={conv.bar} onChange={(bar) => void patch({ bar: bar ?? {} })} />
+        {show("team", (conv.team ?? []).length > 0) && <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />}
+        {conv.kind === "chat" && show("group", (conv.group ?? []).length > 0) && <GroupButton group={conv.group ?? []} onChange={(group) => void patch({ group })} />}
         {pluginUi.panels.map((x) => {
           const key = `${x.pluginId}/${x.id}`;
+          if (!show("plugins", openPanel === key)) return null;
           return <button key={key} type="button" className={openPanel === key ? "on" : ""} aria-pressed={openPanel === key} onClick={() => setOpenPanel(openPanel === key ? "" : key)}>{x.title}</button>;
         })}
         {/* Steps: an icon (a checklist) with the count beside it, like the pane buttons in Claude's title bar. */}
-        <button type="button" className={`pane-btn${stepsOpen ? " on" : ""}`} aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} aria-label={getLocale() === "he" ? "שלבים" : "Steps"} title={getLocale() === "he" ? "שלבים: שלבי המשימה שהמודל עובד עליה" : "Steps: the steps of the task the model is working on"}>
+        {show("steps", stepsOpen) && <button type="button" className={`pane-btn${stepsOpen ? " on" : ""}`} aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} aria-label={getLocale() === "he" ? "שלבים" : "Steps"} title={getLocale() === "he" ? "שלבים: שלבי המשימה שהמודל עובד עליה" : "Steps: the steps of the task the model is working on"}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <path d="M2.6 4.6l1.3 1.3 2.3-2.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             <path d="M2.6 10.1l1.3 1.3 2.3-2.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -608,33 +614,37 @@ export function ConversationPage({ id }: { id: string }) {
             <path d="M9 4.6h6.4M9 10h6.4M9 15h6.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
           {taskSteps.steps.length > 0 && taskSteps.current && <span className="pane-btn-count">{taskSteps.steps.filter((x) => x.status === "done").length}/{taskSteps.steps.length}</span>}
-        </button>
+        </button>}
         {/* Browser: KesherAI's own browser, which the model uses while you watch (opens by itself when it does). */}
-        <button type="button" className={`pane-btn${browserOpen ? " on" : ""}`} aria-pressed={browserOpen} onClick={() => setBrowserOpen(!browserOpen)} aria-label={getLocale() === "he" ? "דפדפן" : "Browser"} title={getLocale() === "he" ? "דפדפן: הדפדפן של KesherAI, שבו המודל פותח דפים ואתם רואים" : "Browser: KesherAI's own browser, where the model opens pages while you watch"}>
+        {show("browser", browserOpen) && <button type="button" className={`pane-btn${browserOpen ? " on" : ""}`} aria-pressed={browserOpen} onClick={() => setBrowserOpen(!browserOpen)} aria-label={getLocale() === "he" ? "דפדפן" : "Browser"} title={getLocale() === "he" ? "דפדפן: הדפדפן של KesherAI, שבו המודל פותח דפים ואתם רואים" : "Browser: KesherAI's own browser, where the model opens pages while you watch"}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <rect x="1.8" y="2.8" width="14.4" height="12.4" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
             <path d="M1.8 6.4h14.4" stroke="currentColor" strokeWidth="1.5" />
             <circle cx="4.2" cy="4.6" r="0.7" fill="currentColor" />
             <circle cx="6.3" cy="4.6" r="0.7" fill="currentColor" />
           </svg>
-        </button>
-        <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>
-        <button type="button" className={contextOpen ? "on" : ""} aria-pressed={contextOpen} onClick={() => setContextOpen(!contextOpen)} title={t("contextHint")}>{t("contextNav")}</button>
+        </button>}
+        {show("coach", coachOpen) && <button type="button" className={coachOpen ? "on" : ""} aria-pressed={coachOpen} onClick={() => setCoachOpen(!coachOpen)} title={t("coachHint")}>{t("coach")}</button>}
+        {show("context", contextOpen) && <button type="button" className={contextOpen ? "on" : ""} aria-pressed={contextOpen} onClick={() => setContextOpen(!contextOpen)} title={t("contextHint")}>{t("contextNav")}</button>}
         <span className="grow" />
         {info?.canUndo && !busy && (
           <button type="button" onClick={() => void api(`/api/conversations/${id}/undo`, { method: "POST" }).catch((e: Error) => setError(e.message))}>{t("undo")}</button>
         )}
-        {(hasUnreal || bpPath) && (
+        {(hasUnreal || bpPath) && show("blueprint", bpOpen || !!bpPath) && (
           <button type="button" className={bpOpen ? "on" : ""} aria-pressed={bpOpen} onClick={() => setBpOpen(!bpOpen)} title={getLocale() === "he" ? "חיבור Blueprint של Unreal לצ'אט: לראות, לשנות ולבדוק" : "Connect an Unreal Blueprint to this chat: see, change and test it"}>
             🔷 Blueprint{bpPath ? ` · ${bpPath.split(".").pop()}` : ""}
           </button>
         )}
-        <button type="button" className={showIde ? "on" : ""} aria-pressed={showIde} onClick={() => setIdeOpen(!showIde)} title={t("workspaceHint")}>
-          {t("workspace")}
-        </button>
-        <button type="button" className={filesOpen ? "on" : ""} aria-pressed={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
-          {t("files")}{fileCount ? ` (${fileCount})` : ""}
-        </button>
+        {show("workspace", showIde) && (
+          <button type="button" className={showIde ? "on" : ""} aria-pressed={showIde} onClick={() => setIdeOpen(!showIde)} title={t("workspaceHint")}>
+            {t("workspace")}
+          </button>
+        )}
+        {show("files", filesOpen) && (
+          <button type="button" className={filesOpen ? "on" : ""} aria-pressed={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
+            {t("files")}{fileCount ? ` (${fileCount})` : ""}
+          </button>
+        )}
       </div>
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
       {(conv.branchOf || branches.length > 0) && (

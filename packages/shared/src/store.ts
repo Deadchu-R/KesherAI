@@ -34,6 +34,9 @@ export interface WebPrefs {
   onion?: boolean;
 }
 
+/** Which buttons a chat's bar shows: button keys to shown (true) or hidden (false), over Settings' default. */
+export type ChatBar = Record<string, boolean>;
+
 /** Settings → Web: the user's own filter for every chat's web search and pages. */
 export interface WebFilter {
   /** The search engine's safe search (default moderate). */
@@ -74,6 +77,8 @@ export interface Conversation {
   worktree?: { repo: string; path: string; branch: string; base: string };
   /** How this chat searches the web: only / never these sites, and how deep (how many pages it reads). */
   web?: WebPrefs;
+  /** Which buttons this chat's bar shows (over Settings' default). */
+  bar?: ChatBar;
   /** Incognito: memory is neither read nor filled, and the chat is left out of search (like Claude's incognito chats). */
   incognito?: boolean;
   /** Watching the session's pull request: fix failing checks and/or merge when all checks pass (like Claude Code). */

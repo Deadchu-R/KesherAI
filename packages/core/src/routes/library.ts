@@ -328,7 +328,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -338,8 +338,11 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       }
       if (b.group && (!Array.isArray(b.group) || b.group.some((x) => typeof x !== "string") || b.group.length > 8)) return reply.code(400).send({ error: "A group is a list of up to 8 persona ids." });
       // The chat's web settings (sites, depth) are checked; empty ones are taken off.
-      const { web, ...rest } = b;
-      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}) });
+      // Only these fields (scan 54: any other key in the body went into the saved chat, e.g. its worktree path).
+      const { web, bar } = b;
+      const rest = Object.fromEntries((["title", "modelId", "mode", "projectId", "team", "group", "personaId"] as const).filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) as Partial<Pick<typeof b, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "personaId">>;
+      if (rest.title !== undefined && typeof rest.title !== "string") return reply.code(400).send({ error: "title must be text" });
+      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}) });
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;
       return summary;
@@ -686,6 +689,14 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return s.config.webFilter;
   });
 
+  // Settings → Chats: which buttons every chat's bar shows by default (a chat can change its own). Any device.
+  app.get("/api/chat-bar", async () => s.config.chatBar ?? {});
+  app.put<{ Body: unknown }>("/api/chat-bar", async (req) => {
+    s.config.chatBar = cleanBar(req.body) ?? {};
+    await s.saveConfig();
+    return s.config.chatBar;
+  });
+
   // ---------- Settings ----------
   app.get("/api/settings", async () => ({
     activeModels: s.config.activeModels,
@@ -787,6 +798,17 @@ export function cleanEnvironment(x: unknown): Project["environment"] | undefined
     ...(actions.length ? { actions } : {}),
     ...(Object.keys(env).length ? { env } : {}),
   };
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * Which buttons a chat's bar shows (its own choice over Settings' default): button keys to true/false.
+ *
+ * @param x - What the request sent.
+ */
+export function cleanBar(x: unknown): Record<string, boolean> | undefined {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return undefined;
+  const out = Object.fromEntries(Object.entries(x as Record<string, unknown>).filter(([k, v]) => /^[\w/-]{1,60}$/.test(k) && typeof v === "boolean").slice(0, 40)) as Record<string, boolean>;
   return Object.keys(out).length ? out : undefined;
 }
 

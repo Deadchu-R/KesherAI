@@ -992,7 +992,7 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web">> & { personaId?: string | null }): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar">> & { personaId?: string | null }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;

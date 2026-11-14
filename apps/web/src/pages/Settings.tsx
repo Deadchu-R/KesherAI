@@ -28,6 +28,7 @@ import { BrowserSection, BrowserSitesSection } from "../BrowserSection";
 import { ApiKeysSection } from "../ApiKeysSection";
 import { PermissionsSection } from "../settings/PermissionsSection";
 import { WebFilterSection } from "../settings/WebFilterSection";
+import { ChatBarSection } from "../ChatBar";
 import { PhoneSection } from "../settings/PhoneSection";
 import { useEffect, useState } from "react";
 import { isRemote } from "../api";
@@ -43,6 +44,7 @@ import { ChatsAtOnce } from "../ChatsAtOnce";
  */
 const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; words: string; render: () => React.ReactNode }> = [
   { id: "general", icon: "⚙", en: "General", he: "כללי", words: "model models default chat image voice speech microphone read aloud מודל מודלים ברירת מחדל צאט קול דיבור הקראה מיקרופון", render: () => <><ActiveModels /><SpeechSection /></> },
+  { id: "chats", icon: "💬", en: "Chats", he: "צ'אטים", words: "chat buttons bar toolbar show hide steps browser files coach context team group כפתורים צאט סרגל להציג להסתיר שלבים דפדפן קבצים מאמן הקשר צוות", render: () => <ChatBarSection /> },
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", words: "parallel chats at once slots context במקביל צאטים שיחות הקשר gpu graphics card vram temperature unload idle minutes ram cpu limit guard performance כרטיס מסך טמפרטורה פריקה לפרוק דקות זיכרון מעבד הגבלה ביצועים עומס", render: () => <><GpuSection /><ChatsAtOnce card /><GuardSection /></> },

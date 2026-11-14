@@ -297,6 +297,8 @@ export const KesherConfigSchema = z.object({
   codeEnvironments: z.record(z.string(), z.any()).default({}),
   /** Named code environments (any folder), picked when a code session starts: { id, name, setup, actions, env }. */
   namedEnvironments: z.array(z.any()).default([]),
+  /** Settings → Chats: which buttons every chat's bar shows (a chat can change its own). */
+  chatBar: z.record(z.string(), z.boolean()).default({}),
   /** Settings → Web: safe search, dark web sites through Tor (off by default), sites never used in any chat. */
   webFilter: z.object({ safeSearch: z.enum(["strict", "moderate", "off"]).default("moderate"), onion: z.boolean().default(false), blocked: z.array(z.string().max(200)).max(200).default([]) }).default({ safeSearch: "moderate", onion: false, blocked: [] }),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
