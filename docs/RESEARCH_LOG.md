@@ -709,3 +709,11 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   the computer's bar or with the buttons on their phone (once / always / deny); "always" keeps that phone (a hash of
   its own id) until removed. Signing in with a Google account on the phone is left for later (needs a Google client
   set up for the app).
+
+## 2026-11-14 — Firefox: the extension and the built-in AI sidebar
+- Firefox MV3 runs `background.scripts` (not a service worker), needs `browser_specific_settings.gecko.id`, has a
+  `sidebar_action` instead of Chrome's side panel, and grants host permissions only when the person allows them.
+- Firefox's own AI chatbot sidebar with a custom provider sends its prompt to `/?q=<prompt>`
+  (nilsheuman.github.io/TIL, 2025-04-17; prefs browser.ml.chat.provider / hideLocalhost / prompts.N).
+- Built: extension 0.2.1 for Firefox; KesherAI answers `?q=` in an incognito, plan-mode chat (a link from any site
+  could carry a question).
