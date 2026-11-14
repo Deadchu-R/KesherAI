@@ -22,6 +22,18 @@ import { extractArchive, waitForDownload } from "./llamacpp.js";
 
 const RELEASES = "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases";
 
+/** The Vulkan driver reset the card ("device lost"). */
+export const DEVICE_LOST = /DeviceLost|DEVICE_LOST|vk::.*ErrorDevice/i;
+
+/** ggml's switches for a gentler Vulkan run: no cooperative-matrix or integer-dot shaders (newer cards' fast paths). */
+const GENTLE_VULKAN: Record<string, string> = { GGML_VK_DISABLE_COOPMAT: "1", GGML_VK_DISABLE_COOPMAT2: "1", GGML_VK_DISABLE_INTEGER_DOT_PRODUCT: "1" };
+
+/** Keeps each "--x-on-cpu" flag once (memory flags and the gentle mode can both add one). */
+export function dedupeCpuFlags(args: string[]): string[] {
+  const seen = new Set<string>();
+  return args.filter((a) => !(/^--[a-z-]+-on-cpu$/.test(a) && (seen.has(a) || !seen.add(a))));
+}
+
 /** A file a model family needs besides the model itself. */
 interface Companion {
   /** Command-line flag, e.g. `--vae`. */
@@ -549,12 +561,26 @@ export class SdEngine {
         `The image engine is getting ready${gb ? `: downloading ${gb.toFixed(1)} GB of files this model needs` : ""}. Follow it in the downloads circle, then try again.`,
       );
     }
-    const run = this.queue.then(() => this.runOnce(modelFile, req, signal));
+    const run = this.queue.then(() =>
+      this.runOnce(modelFile, req, signal, this.vulkanSafe).catch((err: Error) => {
+        // The Vulkan driver reset the card mid-run (seen on Linux with an AMD RX 9060 XT, Mesa's RADV): once more
+        // in a gentler way (no cooperative-matrix or integer-dot shaders, text encoder and decoder on the
+        // processor), and keep that way for the next pictures.
+        if (this.vulkanSafe || signal?.aborted || !DEVICE_LOST.test(err.message)) throw err;
+        this.vulkanSafe = true;
+        return this.runOnce(modelFile, req, signal, true).catch((again: Error) => {
+          throw new Error(`${again.message}\n\nThe graphics driver reset the card while drawing (Vulkan "device lost"), also in the gentler mode. This is a driver problem, not the model: update the graphics driver (on Linux, Mesa 25.1 or newer for Radeon RX 9000 cards) and try again.`);
+        });
+      }),
+    );
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private async runOnce(modelFile: string, req: Omit<ProviderImageRequest, "providerModelId"> & { frames?: number }, signal?: AbortSignal): Promise<GeneratedFile> {
+  /** After a Vulkan "device lost": run in the gentler way from then on (until KesherAI restarts). */
+  private vulkanSafe = false;
+
+  private async runOnce(modelFile: string, req: Omit<ProviderImageRequest, "providerModelId"> & { frames?: number }, signal?: AbortSignal, gentle = false): Promise<GeneratedFile> {
     const exe = (await this.install())!;
     const family = familyFor(modelFile);
     const video = family.video;
@@ -581,6 +607,7 @@ export class SdEngine {
       ...(maskFile ? ["--mask", maskFile] : []),
       ...(/<lora:/i.test(req.prompt) && existsSync(this.loraDir) ? ["--lora-model-dir", this.loraDir] : []),
       ...(await this.memoryArgs(modelFile, family)),
+      ...(gentle ? ["--clip-on-cpu", "--vae-on-cpu"] : []),
     ];
     const started = Date.now();
     this.current = { phase: "loading", startedAt: started };
@@ -588,7 +615,8 @@ export class SdEngine {
     const saveLog = () => writeFile(this.logFile, full.slice(-400_000)).catch(() => undefined);
     const log = await new Promise<string>((resolve, reject) => {
       const card = this.lastCard;
-      const child = spawn(exe, args, { windowsHide: true, cwd: this.dir, ...(card !== undefined ? { env: { ...process.env, CUDA_DEVICE_ORDER: "PCI_BUS_ID", CUDA_VISIBLE_DEVICES: String(card) } } : {}) });
+      const env = { ...process.env, ...(card !== undefined ? { CUDA_DEVICE_ORDER: "PCI_BUS_ID", CUDA_VISIBLE_DEVICES: String(card) } : {}), ...(gentle ? GENTLE_VULKAN : {}) };
+      const child = spawn(exe, dedupeCpuFlags(args), { windowsHide: true, cwd: this.dir, env });
       let text = "";
       const onData = (b: Buffer) => {
         const chunk = b.toString();

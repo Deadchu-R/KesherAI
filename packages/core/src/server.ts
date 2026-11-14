@@ -95,7 +95,7 @@ import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { healthRoutes } from "./routes/health.js";
 import { Tor } from "./tor.js";
-import { FaultLog } from "./fault-log.js";
+import { FaultLog, redact } from "./fault-log.js";
 import { torRoutes } from "./routes/tor.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
@@ -660,6 +660,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           providersNotAnswering: listing.errors,
           guard: { paused: g.paused, cooling: g.cooling, systemHold: g.systemHold, waiting: g.waiting, running: g.running, cards: g.cards.map((c) => `${c.name} ${c.temp}°C ${Math.round(c.memUsed / 2 ** 30)}/${Math.round(c.memTotal / 2 ** 30)} GB`), ramPercent: g.system.ramTotal ? Math.round((g.system.ramUsed / g.system.ramTotal) * 100) : undefined },
           tor: { installed: torSt.installed, running: torSt.running, ...(torSt.job ? { job: torSt.job } : {}) },
+          // The image engine's last run (its command and the end of its output), for failed pictures.
+          imageEngineLastRun: await readFileFs(sd.logFile, "utf8").then((t: string) => redact(t.split("\n").slice(-30).join("\n").slice(-1900)), () => undefined),
         };
       },
       onEvent: (convId, e, title, lastAnswer) => {

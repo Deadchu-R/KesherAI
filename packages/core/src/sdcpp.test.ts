@@ -143,3 +143,10 @@ test("send a model to the phone: lists chat GGUFs that fit, serves them with res
     await s.app.close();
   }
 });
+
+test("a Vulkan device-lost is recognised, and cpu flags stay once", async () => {
+  const { DEVICE_LOST, dedupeCpuFlags } = await import("./sdcpp.js");
+  assert.ok(DEVICE_LOST.test("terminate called after throwing an instance of 'vk::DeviceLostError'\n  what():  vk::Queue::submit: ErrorDeviceLost"));
+  assert.ok(!DEVICE_LOST.test("out of memory"));
+  assert.deepEqual(dedupeCpuFlags(["--vae-tiling", "--clip-on-cpu", "-p", "x", "--clip-on-cpu", "--vae-on-cpu"]), ["--vae-tiling", "--clip-on-cpu", "-p", "x", "--vae-on-cpu"]);
+});
