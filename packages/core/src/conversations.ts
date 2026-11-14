@@ -1,4 +1,5 @@
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
+import { readAttachments, type ReadAttachments } from "./attachments.js";
 import { fileUndoStore } from "./undo-store.js";
 import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
 import type { AcpOption } from "./acp.js";
@@ -1006,7 +1007,11 @@ export class ConversationManager {
       }
       if (first) session.checkpoint(first.id, first.files);
     }
-    session.send(text, context, note, steps);
+    // Attached files, read now: pictures to the model as pictures, documents as their text (not just a path).
+    const roots = [this.workspaceOf(conversation), ...session.grants].filter((x): x is string => !!x);
+    const att = await readAttachments(text, roots).catch(() => ({ images: [] as Array<{ mimeType: string; data: string }> }) as ReadAttachments);
+    if (att.context) context = context ? `${context}\n\n${att.context}` : att.context;
+    session.send(text, context, note, steps, att.images);
   }
 
   /**

@@ -345,10 +345,13 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * @param note - A line for the user about it, e.g. "Searched the web".
    * @throws Error if the agent is still busy with the previous message.
    */
-  send(text: string, context?: string, note?: string, steps: NewEvent[] = []): void {
+  send(text: string, context?: string, note?: string, steps: NewEvent[] = [], images?: Array<{ mimeType: string; data: string }>): void {
     if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
-    // `context` (e.g. web search results) goes to the model with the message, not into the user's bubble.
-    this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text });
+    // `context` (e.g. web search results, an attached PDF's text) goes to the model with the message, not into the
+    // user's bubble; `images` (attached pictures) go with it too.
+    // Pictures are big: only the newest stay in the conversation (as with screenshots).
+    if (images?.length) for (const m of this.messages) if (m.images) delete m.images;
+    this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text, ...(images?.length ? { images } : {}) });
     this.repeats.clear();
     this.push({ type: "user", text });
     // Steps done for the message before the model starts (the search the globe button asked for), shown like its own.
