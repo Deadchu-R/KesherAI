@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { pinColor } from "./BlueprintCanvas";
+import { pinColor, VAR_DRAG } from "./BlueprintCanvas";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
 import { Select } from "./ui/Select";
@@ -59,7 +59,7 @@ const typeLabel = (types: PanelType[], t: string) => {
  * designer sees it, a + to add one, and below it the chosen variable's
  * details (name, type, list or single, starting value, tooltip, shown).
  */
-export function VariablesPanel(p: { /** Lists get a starting value typed as code (C#); false: set in the editor (Unreal). */ listValues?: boolean; vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Public/private choices (the first is a new variable's). */ access?: Array<{ value: string; label: string }>; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean }) {
+export function VariablesPanel(p: { /** Lists get a starting value typed as code (C#); false: set in the editor (Unreal). */ listValues?: boolean; vars: PanelVar[]; types: PanelType[]; actions: PanelActions; /** Public/private choices (the first is a new variable's). */ access?: Array<{ value: string; label: string }>; /** Without it there is no eye (Visual Scripting graph variables have no such setting). */ shownLabel?: string; categories?: boolean; busy?: boolean; /** Rows can be dragged onto a graph (Get/Set, or onto a pin). */ draggable?: boolean }) {
   const [sel, setSel] = useState("");
   const [adding, setAdding] = useState(false);
   const chosen = p.vars.find((v) => v.name === sel);
@@ -98,7 +98,20 @@ export function VariablesPanel(p: { /** Lists get a starting value typed as code
         <ul className="vars-list">
           {p.vars.map((v) => (
             <li key={v.name} className={v.name === sel ? "on" : ""}>
-              <button type="button" className="vars-row" onClick={() => setSel(v.name === sel ? "" : v.name)} aria-expanded={v.name === sel} dir="ltr">
+              <button
+                type="button"
+                className="vars-row"
+                onClick={() => setSel(v.name === sel ? "" : v.name)}
+                aria-expanded={v.name === sel}
+                dir="ltr"
+                // Dragged onto the graph, as in Unreal's My Blueprint panel: Get or Set, or onto a pin.
+                draggable={!!p.actions.setInGraph || !!p.draggable}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(VAR_DRAG, JSON.stringify({ name: v.name, type: v.type }));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                title={p.actions.setInGraph || p.draggable ? L("גררו לגרף: Get או Set (Ctrl = Get, Alt = Set), או על פין", "Drag onto the graph: Get or Set (Ctrl = Get, Alt = Set), or onto a pin") : undefined}
+              >
                 <span className="vars-dot" style={{ background: pinColor(v.type.replace(ARRAY, "")) }} aria-hidden />
                 <span className="grow vars-name">{v.name}{ARRAY.test(v.type) ? " [ ]" : ""}</span>
                 {v.access && v.access !== "public" && <span className="vars-lock" title={p.access?.find((a) => a.value === v.access)?.label ?? v.access} aria-label={v.access}>🔒</span>}

@@ -335,6 +335,20 @@ export function ScriptNodes() {
         saveLayout();
         return { ok: true, nodes: ids };
       }
+      if (op.op === "usevar") {
+        // A variable dropped from the panel on a step's input: the input takes the variable (as a Get node wired in).
+        const f = locate(m, layoutRef.current, String(op.node));
+        const pin = String(op.pin);
+        const name = String(op.name);
+        if (!f || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return { ok: false, error: L("לכניסה הזאת אי אפשר לתת משתנה.", "This input cannot take a variable.") };
+        const s6 = f.stmt;
+        if (s6.kind === "call" && /^arg\d+$/.test(pin)) s6.args[Number(pin.slice(3))] = name;
+        else if ((s6.kind === "set" || s6.kind === "local" || s6.kind === "return") && pin === "value") (s6 as { value?: string }).value = name;
+        else if (s6.kind === "if" && pin === "Condition") s6.cond = name;
+        else return { ok: false, error: L("לכניסה הזאת אי אפשר לתת משתנה.", "This input cannot take a variable.") };
+        s6.dirty = true;
+        return { ok: true };
+      }
       if (op.op === "promote") {
         // Promote to Variable: a new field (shown in the Inspector) holding the input's value; the input now uses it.
         const f = locate(m, layoutRef.current, String(op.node));

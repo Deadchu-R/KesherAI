@@ -808,3 +808,11 @@ token colors (semanticTokenColors) are not mapped.
   Dark Modern"): it gets a dark base. Stopped at: read Antigravity's own default theme name and folder.
 - Wires: a click chooses them; a double-click reached the frame (pointer capture) and the reroute node's pins covered
   it: both fixed in 0.6.170.
+
+## 2026-11-14: Dragging a variable onto the graph (Unreal's My Blueprint panel)
+- Unreal: drag a variable from My Blueprint onto the graph → a small menu "Get X / Set X"; Ctrl while dropping = Get,
+  Alt = Set; dropping it on a compatible pin makes the node and wires it (Get into an input, Set from an output).
+- Built (0.6.172): the variables panel's rows drag onto the graph (Unreal Blueprints and C# scripts). In C#, a value is
+  read where it is used, so Get is "drop it on a step's input" (the input becomes the variable); Set makes a Set step
+  placed alone. On a phone, HTML drag does not work: the panel's "Set in the graph" button stays for that.
+Stopped at: dragging onto a pin of the wrong type is not refused yet (Unreal shows a red "incompatible" tip).

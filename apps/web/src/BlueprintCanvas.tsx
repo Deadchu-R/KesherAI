@@ -16,6 +16,8 @@ const KNOT = 16;
 /** One node the "All Actions" menu offers. */
 export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
 type Op = Record<string, unknown>;
+/** What a variable row of the variables panel carries when it is dragged onto a graph ({ name, type }). */
+export const VAR_DRAG = "application/x-kesher-var";
 
 /** Pin colors as in Unreal, so the picture reads the same. */
 export function pinColor(type: string): string {
@@ -155,6 +157,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
+  /** A variable dropped on empty space: Get or Set (as in Unreal). */
+  const [varMenu, setVarMenu] = useState<{ left: number; top: number; name: string; x: number; y: number } | null>(null);
   const [pinMenu, setPinMenu] = useState<{ left: number; top: number; node: string; pin: string; dir: "in" | "out"; type: string; wx: number; wy: number } | null>(null);
   /** Right-click on a node, as in Unreal: Delete, Cut, Copy, Duplicate, Break Node Links, Straighten, Align. */
   const [nodeMenu, setNodeMenu] = useState<{ left: number; top: number } | null>(null);
@@ -294,6 +298,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const down = (e: React.PointerEvent) => {
     if (menu && !(e.target as Element).closest(".bp-menu")) setMenu(null);
     if (pinMenu && !(e.target as Element).closest(".bp-menu")) setPinMenu(null);
+    if (varMenu && !(e.target as Element).closest(".bp-menu")) setVarMenu(null);
     if (nodeMenu && !(e.target as Element).closest(".bp-menu")) setNodeMenu(null);
     if ((e.target as Element).closest(".bp-menu, .ue-zoom, .bp-find")) return;
     frame.current?.focus();
@@ -644,6 +649,49 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     }
   };
 
+  /** A Get or Set node of a variable at (x, y) in graph units. */
+  const addVar = (kind: "get" | "set", name: string, x: number, y: number) => {
+    setVarMenu(null);
+    if (!onOps) return void apply([{ op: "add", type: kind, variable: name, ref: "$v", x, y }]);
+    // A C# script: a value is read where it is used, so "Get" is dropping the variable on a step's input.
+    if (kind === "get") return toast(L(`כדי להשתמש ב-${name}: גררו אותו אל כניסה של צעד.`, `To use ${name}: drop it on a step's input.`));
+    void apply([{ op: "add", action: { title: `Set ${name}`, category: "Variables", type: "set", variable: name }, x, y }]);
+  };
+  /**
+   * A variable dragged from the variables panel, as in Unreal: on an input it is wired in (a Get node, or the value in
+   * a C# script); on an output, a Set node takes it; on empty space Ctrl drops a Get, Alt a Set, else a small menu asks.
+   */
+  const dropVar = (e: React.DragEvent) => {
+    const raw = e.dataTransfer.getData(VAR_DRAG);
+    if (!raw || !editable) return;
+    e.preventDefault();
+    let v: { name: string; type: string };
+    try {
+      v = JSON.parse(raw) as { name: string; type: string };
+    } catch {
+      return;
+    }
+    const p = local(e);
+    const w = world(p);
+    const x = Math.round(w.x / SCALE);
+    const y = Math.round(w.y / SCALE);
+    const pinEl = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-pin]") as SVGElement | null;
+    if (pinEl) {
+      const d = pinEl.dataset;
+      if (d.type === "exec") return toast(L("משתנה מתחבר לפין של ערך, לא לחץ של זרימה.", "A variable goes on a value pin, not a flow arrow."));
+      if (onOps) {
+        if (d.dir !== "in") return toast(L("גררו את המשתנה אל כניסה (פין משמאל).", "Drop the variable on an input (a pin on the left)."));
+        return void apply([{ op: "usevar", node: d.node, pin: d.pin, name: v.name }]);
+      }
+      if (d.dir === "in") return void apply([{ op: "add", type: "get", variable: v.name, ref: "$v", x: x - 220, y }, { op: "connect", from: { node: "$v", pin: v.name }, to: { node: d.node, pin: d.pin } }]);
+      return void apply([{ op: "add", type: "set", variable: v.name, ref: "$v", x: x + 60, y }, { op: "connect", from: { node: d.node, pin: d.pin }, to: { node: "$v", pin: v.name } }]);
+    }
+    if (e.ctrlKey || e.metaKey) return addVar("get", v.name, x, y);
+    if (e.altKey) return addVar("set", v.name, x, y);
+    const r = frame.current!.getBoundingClientRect();
+    setVarMenu({ left: Math.min(p.x, Math.max(0, r.width - 200)), top: Math.min(p.y, Math.max(0, r.height - 110)), name: v.name, x, y });
+  };
+
   const keys = (e: React.KeyboardEvent) => {
     if ((e.target as Element).closest("input")) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -671,6 +719,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       fit();
     } else if (e.key === "Escape") {
       setWires(new Set());
+      setVarMenu(null);
       setMenu(null);
       setPinMenu(null);
       setNodeMenu(null);
@@ -794,6 +843,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       onPointerCancel={up}
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={keys}
+      onDragOver={(e) => {
+        if (editable && e.dataTransfer.types.includes(VAR_DRAG)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }
+      }}
+      onDrop={dropVar}
       onDoubleClick={(e) => {
         // What is under the mouse: the event's own target is the frame, which holds the pointer since the press (found
         // on the PC: a double-click on a wire did nothing).
@@ -944,6 +1000,15 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
             ] as Array<readonly [string, () => void]>).map(([label, act]) => (
               <li key={label}><button type="button" role="menuitem" onClick={() => { setNodeMenu(null); act(); }}>{label}</button></li>
             ))}
+          </ul>
+        </div>
+      )}
+      {varMenu && (
+        <div className="bp-menu bp-pin-menu" style={{ left: varMenu.left, top: varMenu.top }} role="menu" aria-label={L("משתנה", "Variable")} onPointerDown={(e) => e.stopPropagation()}>
+          <strong className="small" dir="ltr">{varMenu.name}</strong>
+          <ul>
+            <li><button type="button" role="menuitem" onClick={() => addVar("get", varMenu.name, varMenu.x, varMenu.y)} dir="ltr">Get {varMenu.name}</button></li>
+            <li><button type="button" role="menuitem" onClick={() => addVar("set", varMenu.name, varMenu.x, varMenu.y)} dir="ltr">Set {varMenu.name}</button></li>
           </ul>
         </div>
       )}
