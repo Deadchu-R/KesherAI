@@ -62,10 +62,11 @@ export function parseGpuApps(out: string): GpuApp[] {
  *
  * @returns The ones closed.
  */
-export async function closeLeftOverEngines(c: Pick<FixContext, "gpuApps" | "ownPids" | "kill">): Promise<GpuApp[]> {
+export async function closeLeftOverEngines(c: Pick<FixContext, "gpuApps" | "ownPids" | "kill" | "parentOf">): Promise<GpuApp[]> {
   const apps = (await c.gpuApps?.().catch(() => [])) ?? [];
   const own = new Set(c.ownPids ?? []);
-  const stale = apps.filter((a) => !own.has(a.pid) && a.pid !== process.pid && /(^|[\\/])(llama-server|sd-server|whisper-server)(\.exe)?$/i.test(a.name));
+  const named = apps.filter((a) => !own.has(a.pid) && a.pid !== process.pid && /(^|[\\/])(llama-server|sd-server|whisper-server)(\.exe)?$/i.test(a.name));
+  const stale = await orphans(named, c);
   const closed: GpuApp[] = [];
   for (const a of stale) {
     try {
@@ -78,11 +79,59 @@ export async function closeLeftOverEngines(c: Pick<FixContext, "gpuApps" | "ownP
   return closed;
 }
 
+/** Whether a process is alive. */
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Only the orphans: a process whose starter is gone (the KesherAI that ran it exited, an update or a crash). The
+ * engine KesherAI runs now has this server as its starter, and a self-work worker's has the worker; a process whose
+ * starter cannot be read is kept (found on the PC: the current engine was taken for a left-over one by its pid).
+ */
+async function orphans(apps: GpuApp[], c: Pick<FixContext, "parentOf">): Promise<GpuApp[]> {
+  if (!c.parentOf) return [];
+  const out: GpuApp[] = [];
+  for (const a of apps) {
+    const parent = await c.parentOf(a.pid).catch(() => undefined);
+    if (parent === undefined || parent === process.pid || alive(parent)) continue;
+    out.push(a);
+  }
+  return out;
+}
+
 /** KesherAI's own engines left running (after an update or a crash) that hold the card. */
-function leftOver(apps: GpuApp[], c: FixContext): GpuApp[] {
+async function leftOver(apps: GpuApp[], c: FixContext): Promise<GpuApp[]> {
   const own = new Set(c.ownPids ?? []);
   const dir = c.enginesDir ? resolve(c.enginesDir).toLowerCase() : "";
-  return apps.filter((a) => !own.has(a.pid) && a.pid !== process.pid && ((dir && resolve(a.name).toLowerCase().startsWith(dir + sep.toLowerCase())) || /(^|[\\/])(llama-server|sd-server|whisper-server)(\.exe)?$/i.test(a.name)));
+  return orphans(apps.filter((a) => !own.has(a.pid) && a.pid !== process.pid && ((dir && resolve(a.name).toLowerCase().startsWith(dir + sep.toLowerCase())) || /(^|[\\/])(llama-server|sd-server|whisper-server)(\.exe)?$/i.test(a.name))), c);
+}
+
+/**
+ * The starter of a process: Windows through PowerShell (Win32_Process), Linux through /proc.
+ *
+ * @returns Its pid, or undefined when it cannot be read.
+ */
+export async function processParent(pid: number): Promise<number | undefined> {
+  if (!Number.isInteger(pid) || pid <= 0) return undefined;
+  if (process.platform === "win32") {
+    const { execFile } = await import("node:child_process");
+    return new Promise((done) =>
+      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").ParentProcessId`], { windowsHide: true, timeout: 10_000 }, (err, out) => {
+        const n = Number(String(out).trim());
+        done(err || !Number.isInteger(n) || n <= 0 ? undefined : n);
+      }),
+    );
+  }
+  const { readFile } = await import("node:fs/promises");
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
+  const n = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 /** What the list is made from (the server's own state). */
@@ -107,6 +156,11 @@ export interface FixContext {
   enginesDir?: string;
   /** Closes a process (a test gives its own). */
   kill?: (pid: number) => void;
+  /**
+   * The process that started a process (Windows: Win32_Process; Linux: /proc), or undefined when unknown. A process is
+   * only "left over" when this parent is gone (a test gives its own).
+   */
+  parentOf?: (pid: number) => Promise<number | undefined>;
   /** Runs git (a test gives its own). */
   git?: (cwd: string, args: string[]) => Promise<{ code: number; out: string }>;
 }
@@ -165,7 +219,7 @@ export async function fixActions(c: FixContext): Promise<FixAction[]> {
   const out: FixAction[] = [];
   if (c.loadedModel) out.push({ id: "unload", kind: "unload", name: basename(c.loadedModel), safe: c.memoryShort && !c.busy, ...(c.busy ? { note: "loaded-busy" as const } : c.memoryShort ? { note: "memory" as const } : {}) });
   // A KesherAI engine still running from before (found on the PC: the card stayed full and busy with nothing loaded).
-  for (const a of leftOver((await c.gpuApps?.().catch(() => [])) ?? [], c)) out.push({ id: `engine:${a.pid}`, kind: "engine", name: `${basename(a.name)} (${a.pid})`, bytes: a.bytes, safe: true, note: "left-over" });
+  for (const a of await leftOver((await c.gpuApps?.().catch(() => [])) ?? [], c)) out.push({ id: `engine:${a.pid}`, kind: "engine", name: `${basename(a.name)} (${a.pid})`, bytes: a.bytes, safe: true, note: "left-over" });
 
   const git = c.git ?? runGit;
   const copies = await selfWorkCopies(c);
@@ -215,7 +269,7 @@ export async function runFixes(ids: string[], c: FixContext): Promise<{ done: st
       } else if (a.kind === "engine") {
         // Looked up again: still there, still left over (a pid can be reused by another program).
         const pid = Number(a.id.slice("engine:".length));
-        const still = leftOver((await c.gpuApps?.().catch(() => [])) ?? [], c).find((x) => x.pid === pid);
+        const still = (await leftOver((await c.gpuApps?.().catch(() => [])) ?? [], c)).find((x) => x.pid === pid);
         if (!still) throw new Error("It is no longer running.");
         (c.kill ?? ((p: number) => process.kill(p)))(pid);
         freed += still.bytes;

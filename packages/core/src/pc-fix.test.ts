@@ -1,12 +1,19 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixActions, runFixes, type FixContext } from "./pc-fix.js";
 
+// Each setup writes ~150 MB of model files: all removed at the end (they filled the disk before).
+const roots: string[] = [];
+after(() => {
+  for (const r of roots) rmSync(r, { recursive: true, force: true });
+});
+
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "fix-"));
+  roots.push(root);
   const models = join(root, "models");
   mkdirSync(join(models, "org", "old"), { recursive: true });
   mkdirSync(join(models, "new"), { recursive: true });
@@ -72,7 +79,9 @@ test("pc fix: a KesherAI engine left running on the card is offered and closed; 
   assert.equal(apps.length, 3);
   assert.equal(apps[0]!.bytes, 17000 * 1024 * 1024);
   const killed: number[] = [];
-  const ctx = { busy: false, memoryShort: false, modelsDir: "/nonexistent-models", modelUse: {}, unload: async () => undefined, gpuApps: async () => apps, ownPids: [3333], enginesDir: "C:\\\\KesherAI\\\\engines", kill: (p: number) => void killed.push(p) };
+  // 1111's starter is gone (left over); 3333 is the current engine (its starter is this server).
+  const parentOf = async (pid: number) => (pid === 1111 ? 999_999_9 : process.pid);
+  const ctx = { busy: false, memoryShort: false, modelsDir: "/nonexistent-models", modelUse: {}, unload: async () => undefined, gpuApps: async () => apps, ownPids: [3333], enginesDir: "C:\\\\KesherAI\\\\engines", kill: (p: number) => void killed.push(p), parentOf };
   const list = await fixActions(ctx);
   const engines = list.filter((a) => a.kind === "engine");
   assert.deepEqual(engines.map((a) => a.id), ["engine:1111"]);
@@ -91,7 +100,12 @@ test("pc fix: before the card is used, KesherAI's own engine programs left runni
     { pid: 12, name: "E:\\KesherAI\\engines\\comfyui\\python.exe", bytes: 1 },
     { pid: 13, name: "C:\\Games\\game.exe", bytes: 1 },
   ];
-  const closed = await closeLeftOverEngines({ gpuApps: async () => apps, ownPids: [11], kill: (p) => void killed.push(p) });
+  // 10's starter is gone; 11 is not on the guard's list (as on the PC) but this server started it: kept.
+  const closed = await closeLeftOverEngines({ gpuApps: async () => apps, ownPids: [], kill: (p) => void killed.push(p), parentOf: async (pid) => (pid === 10 ? 999_999_9 : process.pid) });
   assert.deepEqual(killed, [10]);
   assert.equal(closed.length, 1);
+  // A starter that cannot be read: nothing is closed.
+  killed.length = 0;
+  await closeLeftOverEngines({ gpuApps: async () => apps, ownPids: [], kill: (p) => void killed.push(p), parentOf: async () => undefined });
+  assert.deepEqual(killed, []);
 });

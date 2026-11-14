@@ -82,7 +82,7 @@ import { lspRoutes } from "./routes/lsp.js";
 import { codeRoutes } from "./routes/code.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
-import { closeLeftOverEngines, ModelUse, parseGpuApps } from "./pc-fix.js";
+import { closeLeftOverEngines, ModelUse, parseGpuApps, processParent } from "./pc-fix.js";
 import { SelfWork } from "./self-work.js";
 import { seedBuiltinSkills } from "./builtin-skills.js";
 import { TaskBoard } from "./task-board.js";
@@ -1256,6 +1256,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const closeStale = async () => {
     const closed = await closeLeftOverEngines({
       ownPids: guard.ownPids(),
+      parentOf: processParent,
       gpuApps: () => new Promise((done) => execFile("nvidia-smi", ["--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"], { windowsHide: true, timeout: 8000 }, (err, out) => done(err ? [] : parseGpuApps(String(out))))),
     });
     if (closed.length) faults.add({ kind: "engine", where: "left-over engines", message: `Closed ${closed.length} KesherAI engine(s) left running: ${closed.map((c) => `${c.name.split(/[\\/]/).pop()} (${Math.round(c.bytes / 1024 ** 3)} GB)`).join(", ")}` });

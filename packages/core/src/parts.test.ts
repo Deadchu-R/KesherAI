@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pageHidden, partOn } from "@kesher/shared";
@@ -11,7 +11,8 @@ test("parts: off ones hide their pages, chat-only and everything presets", async
   assert.equal(partOn({ voice: false }, "voice"), false);
   assert.equal(pageHidden({ images: false }, "#/batch"), true);
   assert.equal(pageHidden({ images: false }, "#/models"), false);
-  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-parts-")), autodetect: false, pluginRoots: [] });
+  const dataDir = await mkdtemp(join(tmpdir(), "kesher-parts-"));
+  const server = await createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
   try {
     const app = server.app;
     const get = async () => ((await app.inject({ method: "GET", url: "/api/parts" })).json() as { parts: Array<{ id: string; on: boolean }> }).parts;
@@ -28,5 +29,6 @@ test("parts: off ones hide their pages, chat-only and everything presets", async
     assert.deepEqual(server.services.config.parts, {});
   } finally {
     await server.close();
+    await rm(dataDir, { recursive: true, force: true });
   }
 });

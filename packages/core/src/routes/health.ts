@@ -9,7 +9,7 @@ import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
 import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
 import { healthDigest, healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
-import { fixActions, parseGpuApps, runFixes, type FixContext } from "../pc-fix.js";
+import { fixActions, parseGpuApps, processParent, runFixes, type FixContext } from "../pc-fix.js";
 
 /**
  * The Health page: the computer's reading and what to do (fixed rules), and on request the chat model's short
@@ -67,6 +67,7 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
       modelUse: (await s.modelUse?.all()) ?? {},
       ...(run ? { selfWork: { repo: run.repo, worktree: run.worktree } } : {}),
       ownPids: s.guard.ownPids(),
+      parentOf: processParent,
       enginesDir: s.paths.engines,
       gpuApps: () =>
         new Promise((done) =>
