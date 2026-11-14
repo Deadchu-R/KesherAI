@@ -36,3 +36,51 @@ test("a mod without code adds pages and styles, and a declared program becomes a
   assert.match(out, /hello from KesherAI/);
   assert.match(out, /exited with code 0/);
 });
+
+test("a plugin's code runs in its own process: tools and providers work across it; the network and programs it did not ask for are refused", async (t) => {
+  const { rm } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "kesher-plugins-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dir = join(root, "boxed");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "kesher-plugin.json"), JSON.stringify({ id: "boxed", name: "Boxed", version: "1.0.0", main: "index.mjs", kesher: { apiVersion: 1 }, permissions: [] }));
+  await writeFile(
+    join(dir, "index.mjs"),
+    `import net from "node:net";
+export default {
+  activate(ctx) {
+    ctx.registerTool({ name: "boxed_pid", description: "pid", inputSchema: { type: "object" }, run: async (input) => ({ pid: process.pid, echo: input.x }) });
+    ctx.registerTool({ name: "boxed_fetch", description: "fetch", inputSchema: { type: "object" }, run: async () => fetch("https://example.com") });
+    ctx.registerTool({ name: "boxed_net", description: "net", inputSchema: { type: "object" }, run: async () => net.connect(80, "example.com") });
+    ctx.registerTool({ name: "boxed_shell", description: "shell", inputSchema: { type: "object" }, run: async () => (await import("node:child_process")).execSync("echo hi") });
+    ctx.registerProviderFactory({ type: "boxed-echo", displayName: "Echo", categories: ["chat"], create: (config) => ({
+      id: config.id, name: config.name, location: "local", capabilities: {},
+      checkHealth: async () => true,
+      listModels: async () => [{ id: "echo", name: "Echo" }],
+      async *chat(req) { for (const w of String(req.messages.at(-1).content).split(" ")) yield { type: "text", text: w }; },
+    }) });
+  },
+};`,
+  );
+  const registry = new ProviderRegistry();
+  const host = new PluginHost(registry, KesherConfigSchema.parse({}), root);
+  await host.loadAll([root]);
+  const rec = host.list().find((p) => p.manifest.id === "boxed")!;
+  assert.equal(rec.status, "active", rec.error);
+  assert.equal(rec.isolation?.process, true);
+  const signal = new AbortController().signal;
+  const r = (await host.tools.get("boxed_pid")!.run({ x: 7 }, signal)) as { pid: number; echo: number };
+  assert.notEqual(r.pid, process.pid, "another process");
+  assert.equal(r.echo, 7);
+  await assert.rejects(host.tools.get("boxed_fetch")!.run({}, signal), /did not ask for the "network" permission/);
+  await assert.rejects(host.tools.get("boxed_net")!.run({}, signal), /did not ask for the "network" permission/);
+  await assert.rejects(host.tools.get("boxed_shell")!.run({}, signal), /did not ask for the "shell" permission/);
+  // A provider whose stream crosses the processes.
+  const factory = (registry as unknown as { factories: Map<string, { create(c: unknown): { chat(r: unknown): AsyncIterable<{ text: string }>; listModels(): Promise<unknown[]> } }> }).factories.get("boxed-echo")!;
+  const provider = factory.create({ id: "e", type: "boxed-echo", name: "E" });
+  assert.equal((await provider.listModels()).length, 1);
+  const words: string[] = [];
+  for await (const piece of provider.chat({ messages: [{ role: "user", content: "one two three" }] })) words.push(piece.text);
+  assert.deepEqual(words, ["one", "two", "three"]);
+  await host.deactivateAll();
+});

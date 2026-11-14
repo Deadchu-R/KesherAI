@@ -869,3 +869,14 @@ Collapse Nodes (a collapsed graph, not a function).
   Ollama load it automatically). Built (0.6.179): the engine passes an mmproj found beside the model; Models → 👁 checks
   the model's repository and downloads its mmproj (after a yes); a model without vision says so and points there.
 Stopped at: offering 👁 at the moment a picture is attached to a model without vision.
+
+## 2026-11-14: Plugins in their own process (board t39)
+- From docs/DESIGN_RESEARCH.md §7 (VS Code extension host, ComfyUI's malicious nodes and registry rules, Open WebUI,
+  Obsidian's move to automatic scans and declared access). Step 1 and 2 built (0.6.183).
+- Node 20 (Electron 33) has --experimental-permission: fs read/write lists, child processes, workers, native addons;
+  it has no network switch, so the runner replaces the network functions in Node's built-in modules (shared by
+  require and import; syncBuiltinESMExports) and fetch/WebSocket before the plugin's code loads.
+- The RPC: Node IPC with "advanced" serialization; tools, provider factories (a provider's optional methods learned
+  from a sample instance; chat as a stream of events; chatWithTools' text as events; AbortSignal as a cancel).
+Stopped at: steps 3–6 (declarative contributions loaded on first use, a scan on install, a public list, API promises);
+the in-engine agents (Unreal/Unity, VISION) build on this sandbox.

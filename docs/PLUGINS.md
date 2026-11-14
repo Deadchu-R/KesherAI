@@ -227,7 +227,22 @@ Read them from `ctx.settings`. Document every setting in your plugin's README.
 
 ## Security
 
-Today plugins run **inside the core server's process**, with the same access as KesherAI itself. The `permissions` field is displayed but not yet enforced. Running each plugin in its own process, limited to the permissions it declared, is on the roadmap. Until then, only install plugins you trust, and as an author, declare honestly what your plugin needs — it will be enforced later.
+A plugin's code runs **in its own process** (since 0.6.183), not inside KesherAI's server: a plugin that crashes or
+hangs takes only itself down. What it can use comes from its `permissions`:
+
+| Permission | Without it |
+|---|---|
+| `network` | `fetch`, WebSocket and Node's network modules (`net`, `http`, `https`, `tls`, `dgram`, `dns`…) throw. |
+| `shell` | `child_process`, workers and `cluster` throw (and, with the file sandbox, Node refuses them too). |
+| `filesystem` | With the file sandbox: it reads only its own folder and data folder, writes only its data folder. |
+
+The file sandbox is Node's permission model (`--experimental-permission`); KesherAI turns it on when the computer's
+Node supports it, and the Plugins page says per plugin whether it is on. Native code (addons) is refused with it.
+Calls cross the processes as messages (tools, model providers with their streamed text, cancellation), so
+`registerTool`, `registerCategory` and `registerProviderFactory` work as before.
+
+This is not a full sandbox: a plugin with `network` can still send what it can read, and one with `filesystem` can read
+your files. Only install plugins you trust, and as an author, ask only for what your plugin needs.
 
 ## Publishing
 

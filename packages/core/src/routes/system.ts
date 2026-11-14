@@ -109,7 +109,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get("/api/hardware", async () => detectHardware());
 
   app.get("/api/plugins", async () =>
-    s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir, removable: resolve(p.dir).startsWith(resolve(s.paths.plugins) + sep) })),
+    s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir, removable: resolve(p.dir).startsWith(resolve(s.paths.plugins) + sep), ...(p.isolation ? { isolation: p.isolation } : {}) })),
   );
 
   app.get("/api/tools", async () =>

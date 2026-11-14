@@ -12,6 +12,8 @@ interface Installed {
   author?: string;
   homepage?: string;
   permissions: string[];
+  /** Its code runs in its own process; files: whether files outside its folders are closed to it. */
+  isolation?: { process: boolean; files: boolean };
   uses?: string[];
   status: "active" | "disabled" | "error";
   error?: string;
@@ -164,6 +166,13 @@ export function PluginsPage() {
                     {getLocale() === "he" ? "משתמש במודלים המקומיים:" : "Uses your local models:"} {p.uses!.map((x) => <span key={x} className="pill">{getLocale() === "he" ? ({ chat: "צ'אט", image: "תמונות", speech: "דיבור" } as Record<string, string>)[x] ?? x : x}</span>)}
                   </p>
                 )}
+                {p.isolation?.process && (
+                  <p className="muted small">
+                    {getLocale() === "he"
+                      ? `🛡 רץ בתהליך נפרד, ומקבל רק את מה שביקש${p.isolation.files ? "; קבצים: רק התיקיות שלו" : "; קבצים: הגישה לא מוגבלת במחשב הזה"}.`
+                      : `🛡 Runs in its own process with only what it asked for${p.isolation.files ? "; files: only its own folders" : "; files: not limited on this computer"}.`}
+                  </p>
+                )}
                 {p.status === "error" && <p className="error small">{p.error}</p>}
               </div>
               <div className="pl-actions">
@@ -171,7 +180,7 @@ export function PluginsPage() {
                   <input type="checkbox" checked={p.status !== "disabled"} disabled={!!busy} onChange={(e) => {
                     const on = e.target.checked;
                     // A plugin from the internet runs its code on this computer: say so before it starts.
-                    if (on && p.removable && !confirm(getLocale() === "he" ? `להפעיל את "${p.name}"${p.author ? ` של ${p.author}` : ""}? תוסף מריץ קוד במחשב שלך עם גישה מלאה${p.permissions.length ? ` (ביקש: ${p.permissions.join(", ")})` : ""}. הפעל רק תוסף ממקור שאתה סומך עליו.` : `Turn on "${p.name}"${p.author ? ` by ${p.author}` : ""}? A plugin runs code on your computer with full access${p.permissions.length ? ` (it asked for: ${p.permissions.join(", ")})` : ""}. Only turn on plugins from people you trust.`)) return;
+                    if (on && p.removable && !confirm(getLocale() === "he" ? `להפעיל את "${p.name}"${p.author ? ` של ${p.author}` : ""}? הקוד שלו ירוץ בתהליך נפרד, רק עם מה שהוא ביקש${p.permissions.length ? ` (${p.permissions.join(", ")})` : " (בלי רשת, בלי תוכנות ובלי קבצים מחוץ לתיקיות שלו)"}. הפעל רק תוסף ממקור שאתה סומך עליו.` : `Turn on "${p.name}"${p.author ? ` by ${p.author}` : ""}? Its code runs in its own process with only what it asked for${p.permissions.length ? ` (${p.permissions.join(", ")})` : " (no network, no programs, no files outside its folders)"}. Only turn on plugins from people you trust.`)) return;
                     void run(`toggle:${p.id}`, () => api(`/api/plugins/${p.id}`, { method: "PUT", body: { enabled: on } }));
                   }} />
                   <span>{p.status === "disabled" ? t("plOff") : t("plOn")}</span>

@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { pathToFileURL } from "node:url";
 import type { CategoryDefinition } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import {
@@ -15,6 +14,7 @@ import {
   type PluginProgram,
 } from "@kesher/plugin-sdk";
 import type { KesherConfig } from "./config.js";
+import { PluginProcess } from "./plugin-process.js";
 
 /** A plugin the host found, whether or not it loaded. */
 export interface LoadedPlugin {
@@ -22,15 +22,17 @@ export interface LoadedPlugin {
   dir: string;
   status: "active" | "disabled" | "error";
   error?: string;
+  /** Its code runs in its own process (board t39); and whether files outside its folders are closed to it there. */
+  isolation?: { process: true; files: boolean };
 }
 
 /**
  * Finds, validates and activates plugins.
  *
  * A plugin is any folder with a `kesher-plugin.json` inside one of the
- * plugin roots. Plugins currently run inside the core server's process;
- * running each in its own process with only the permissions it declared is
- * on the roadmap (see docs/PLUGINS.md → Security).
+ * plugin roots. A plugin's code runs in its own process (plugin-process.ts), with only the permissions its manifest
+ * declares: a plugin that crashes or hangs takes only itself down, and one that did not ask for the network, programs
+ * or files outside its folders does not get them (see docs/PLUGINS.md → Security).
  */
 export class PluginHost {
   /** Tools registered by plugins, by name. */
@@ -38,7 +40,7 @@ export class PluginHost {
   /** Categories registered by plugins. */
   readonly categories: CategoryDefinition[] = [];
   private readonly plugins: LoadedPlugin[] = [];
-  private readonly active: Array<{ id: string; plugin: KesherPlugin }> = [];
+  private readonly active: Array<{ id: string; plugin?: KesherPlugin; proc?: PluginProcess }> = [];
   private roots: string[] = [];
 
   /**
@@ -104,10 +106,24 @@ export class PluginHost {
       // A plugin without code (only `ui` and `programs`) is a mod; older manifests defaulted `main` to dist/index.js.
       const main = manifest.main ?? (existsSync(join(dir, "dist", "index.js")) ? "dist/index.js" : undefined);
       if (main) {
-        const mod = (await import(pathToFileURL(join(dir, main)).href)) as { default?: KesherPlugin };
-        if (!mod.default?.activate) throw new Error(`${main} must default-export definePlugin({...})`);
-        await mod.default.activate(this.contextFor(manifest, dataDir));
-        this.active.push({ id: manifest.id, plugin: mod.default });
+        // Its own process, with only what its manifest declares.
+        const prefix = `[plugin:${manifest.id}]`;
+        const proc = new PluginProcess({
+          id: manifest.id,
+          dir,
+          main,
+          dataDir,
+          settings: this.config.plugins[manifest.id]?.settings ?? {},
+          permissions: manifest.permissions,
+          log: (level, message) => (level === "error" ? console.error : level === "warn" ? console.warn : console.log)(prefix, message),
+        });
+        const parts = await proc.start();
+        const ctx = this.contextFor(manifest, dataDir);
+        for (const f of parts.factories) ctx.registerProviderFactory(f);
+        for (const c of parts.categories) ctx.registerCategory(c);
+        for (const t of parts.tools) ctx.registerTool(t);
+        this.active.push({ id: manifest.id, proc });
+        record.isolation = { process: true, files: proc.sandboxedFiles };
       }
       for (const program of manifest.programs) this.registerProgram(manifest, program, dataDir);
       record.status = "active";
@@ -288,10 +304,11 @@ export class PluginHost {
     await this.loadAll(this.roots);
   }
 
-  /** Calls every active plugin's `deactivate`. */
+  /** Calls every active plugin's `deactivate` (in its own process: it is asked to, then ended). */
   async deactivateAll(): Promise<void> {
-    for (const { id, plugin } of this.active.splice(0)) {
-      await Promise.resolve(plugin.deactivate?.()).catch((err) => console.warn(`[plugins] ${id} deactivate failed`, err));
+    for (const { id, plugin, proc } of this.active.splice(0)) {
+      if (proc) await proc.stop();
+      else await Promise.resolve(plugin?.deactivate?.()).catch((err) => console.warn(`[plugins] ${id} deactivate failed`, err));
     }
   }
 }
