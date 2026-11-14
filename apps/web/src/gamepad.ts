@@ -238,6 +238,17 @@ function setActive(on: boolean): void {
   window.dispatchEvent(new CustomEvent("kesher:pad", { detail: on }));
 }
 
+/**
+ * The node graph (Blueprints, the C# graph) takes the controller while it has focus: true when it did. For "back",
+ * false also when the graph let go (B with nothing chosen), so the controller moves on from it.
+ */
+function canvasTakes(detail: { action: "dir" | "pan" | "zoom" | "back"; dir?: "up" | "down" | "left" | "right"; dx?: number; dy?: number; factor?: number }): boolean {
+  if (!(document.activeElement as HTMLElement | null)?.closest?.(".ue-frame")) return false;
+  const e = new CustomEvent("kesher:pad-canvas", { detail, cancelable: true });
+  window.dispatchEvent(e);
+  return e.defaultPrevented && !(e as CustomEvent & { leave?: boolean }).leave;
+}
+
 /** Lets the page take a button first (the Game Helper's questions); true when it did. */
 function pageTakes(button: string): boolean {
   const e = new CustomEvent("kesher:pad-button", { detail: button, cancelable: true });
@@ -331,12 +342,12 @@ export function startGamepad(): void {
         f();
       }
     };
-    act(UP, true, () => move("up"));
-    act(DOWN, true, () => move("down"));
-    act(LEFT, true, () => move("left"));
-    act(RIGHT, true, () => move("right"));
+    act(UP, true, () => canvasTakes({ action: "dir", dir: "up" }) || move("up"));
+    act(DOWN, true, () => canvasTakes({ action: "dir", dir: "down" }) || move("down"));
+    act(LEFT, true, () => canvasTakes({ action: "dir", dir: "left" }) || move("left"));
+    act(RIGHT, true, () => canvasTakes({ action: "dir", dir: "right" }) || move("right"));
     act(A, false, press);
-    act(B, false, () => pageTakes("B") || back());
+    act(B, false, () => pageTakes("B") || canvasTakes({ action: "back" }) || ((document.activeElement as HTMLElement | null)?.closest?.(".ue-frame") ? move("down") : back()));
     act(X, false, () => pageTakes("X") || context());
     act(Y, false, () => pageTakes("Y") || window.dispatchEvent(new Event("kesher:palette")));
     act(LB, false, () => pageTakes("LB") || page(-1));
@@ -346,13 +357,17 @@ export function startGamepad(): void {
       const box = document.querySelector<HTMLElement>("main textarea, main input[type='text']");
       if (box) focus(box);
     });
-    act(LT, true, () => scrollNear(document.activeElement, -innerHeight * 0.8));
-    act(RT, true, () => scrollNear(document.activeElement, innerHeight * 0.8));
+    act(LT, true, () => canvasTakes({ action: "zoom", factor: 0.85 }) || scrollNear(document.activeElement, -innerHeight * 0.8));
+    act(RT, true, () => canvasTakes({ action: "zoom", factor: 1.18 }) || scrollNear(document.activeElement, innerHeight * 0.8));
     // The right stick scrolls smoothly, faster the further it is pushed.
+    const rx = ax(2);
     const ry = ax(3);
-    if (Math.abs(ry) > 0.2) {
+    if (Math.abs(rx) > 0.2 || Math.abs(ry) > 0.2) {
       used = true;
-      scrollNear(document.activeElement, ry * ry * Math.sign(ry) * 28);
+      // On the graph the right stick pans it; elsewhere it scrolls.
+      const sx = Math.abs(rx) > 0.2 ? rx * Math.abs(rx) * 22 : 0;
+      const sy = Math.abs(ry) > 0.2 ? ry * Math.abs(ry) * 22 : 0;
+      if (!canvasTakes({ action: "pan", dx: sx, dy: sy }) && sy) scrollNear(document.activeElement, sy * 1.3);
     }
     if (used && !document.documentElement.classList.contains("pad")) setActive(true);
     frame = requestAnimationFrame(loop);

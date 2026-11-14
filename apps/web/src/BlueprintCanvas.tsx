@@ -16,6 +16,7 @@ const KNOT = 16;
 /** One node the "All Actions" menu offers. */
 export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
 import { wireFits } from "./wire-fits";
+import { nearest } from "./gamepad";
 
 type Op = Record<string, unknown>;
 /** What a variable row of the variables panel carries when it is dragged onto a graph ({ name, type }). */
@@ -797,6 +798,58 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     const t = setTimeout(() => setFlashing(undefined), 2400);
     return () => clearTimeout(t);
   }, [flash?.n]);
+  /**
+   * A game controller on the graph (gamepad.ts sends these while the graph has focus): the D-pad goes from node to
+   * node (the nearest in that direction, the view follows), the right stick pans, LT / RT zoom, B lets go of the
+   * chosen nodes and then of the graph.
+   */
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ action: "dir" | "pan" | "zoom" | "back"; dir?: "up" | "down" | "left" | "right"; dx?: number; dy?: number; factor?: number }>).detail;
+      if (!frame.current?.contains(document.activeElement)) return;
+      e.preventDefault();
+      if (d.action === "pan") setView((v) => ({ ...v, x: v.x - (d.dx ?? 0), y: v.y - (d.dy ?? 0) }));
+      else if (d.action === "zoom") zoomAt(d.factor ?? 1);
+      else if (d.action === "back") {
+        if (selected.size || wires.size) {
+          setSelected(new Set());
+          setWires(new Set());
+        } else {
+          frame.current.blur();
+          // Not taken: gamepad.ts moves on from the graph.
+          (e as CustomEvent & { leave?: boolean }).leave = true;
+        }
+      } else if (d.action === "dir" && d.dir) {
+        const pickable = boxes.filter((b) => !isCommentBox(b.n));
+        if (!pickable.length) return;
+        const now = pickable.find((b) => selected.has(b.n.id));
+        const r = frame.current.getBoundingClientRect();
+        // Screen boxes (what the user sees), from the graph's own positions.
+        const screen = (b: (typeof pickable)[number]) => ({ x: b.x * view.k + view.x, y: b.y * view.k + view.y, w: b.w * view.k, h: b.h * view.k });
+        let next = now;
+        if (!now) {
+          // Nothing chosen: the node nearest the middle of the view.
+          const cx = r.width / 2;
+          const cy = r.height / 2;
+          next = pickable.reduce((a, b) => {
+            const sa = screen(a);
+            const sb = screen(b);
+            return Math.hypot(sb.x + sb.w / 2 - cx, sb.y + sb.h / 2 - cy) < Math.hypot(sa.x + sa.w / 2 - cx, sa.y + sa.h / 2 - cy) ? b : a;
+          });
+        } else {
+          const others = pickable.filter((b) => b !== now);
+          const i = nearest(screen(now), others.map(screen), d.dir);
+          if (i >= 0) next = others[i];
+        }
+        if (!next) return;
+        setSelected(new Set([next.n.id]));
+        const sb = screen(next);
+        if (sb.x < 0 || sb.y < 0 || sb.x + sb.w > r.width || sb.y + sb.h > r.height) center(next);
+      }
+    };
+    window.addEventListener("kesher:pad-canvas", on);
+    return () => window.removeEventListener("kesher:pad-canvas", on);
+  });
 
   const matches = find?.q.trim() ? boxes.filter((b) => `${b.n.title} ${b.n.comment ?? ""} ${b.n.pins.map((p) => `${p.label ?? p.name} ${p.default ?? ""}`).join(" ")}`.toLowerCase().includes(find.q.trim().toLowerCase())) : [];
   const current = matches.length ? matches[find!.i % matches.length] : undefined;
