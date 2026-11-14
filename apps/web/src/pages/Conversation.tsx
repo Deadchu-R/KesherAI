@@ -428,7 +428,8 @@ export function ConversationPage({ id }: { id: string }) {
   }, [anyPane]);
 
   // Every finished tool may have changed files: refresh the Files count, and open the panel when a program was built.
-  const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result").length, [events]);
+  // An undo (one change, or a run's "Undo all") changes files too (found on the PC: the count stayed at 2 after Undo all).
+  const toolResults = useMemo(() => events.filter((e) => e.type === "tool_result" || e.type === "undo" || e.type === "undo_run").length, [events]);
   const lastBuild = useMemo(() => [...events].reverse().find((e): e is Ev<"tool_result"> => e.type === "tool_result" && e.name === "build_executable" && e.ok), [events]);
   useEffect(() => {
     void api<{ files: unknown[] }>(`/api/conversations/${id}/files`).then((d) => setFileCount(d.files.length)).catch(() => undefined);
