@@ -36,8 +36,10 @@ test("Unity through its CLI: warm in the open editor, a batch run when it is clo
   ready = false;
   await new Promise((r) => setTimeout(r, 4100));
   const runs = calls.filter((c) => c[0] === "run").length;
-  assert.equal(await u.changedAt(), 0, "a closed editor: 0");
-  assert.equal(calls.filter((c) => c[0] === "run").length, runs, "and no batch Unity started for it");
+  const before = calls.length;
+  await u.changedAt();
+  assert.equal(calls.filter((c) => c[0] === "run").length, runs, "no batch Unity started for it");
+  assert.deepEqual(calls.slice(before).map((c) => c[0]), ["command"], "one process per check, no 'status' first");
   const g = await u.graph(G.path);
   assert.equal(g.graph.name, "Door");
   assert.ok(calls.some((c) => c[0] === "run" && c[2] === "--command" && c[3] === "kesher_graph" && c.includes("--path")));

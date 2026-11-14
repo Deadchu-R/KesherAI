@@ -343,7 +343,9 @@ export class UnityCli {
    */
   async changedAt(): Promise<number> {
     const path = this.path;
-    if (!path || !(await this.editorReady())) return 0;
+    if (!path) return 0;
+    // One process: `unity command` answers only from an open editor (it fails at once otherwise, never starting a
+    // batch Unity), so asking `unity status` first would only double the processes every 5 s (scan 52).
     const run = await this.run(["command", "kesher_changed", "--project-path", path, "--result-only", "--timeout", "8"], 12_000);
     if (run.code !== 0) return 0;
     try {
