@@ -1,0 +1,42 @@
+id = "kesherai/kesherai"
+name = "KesherAI"
+version = "0.1.0"
+plugin_api = 24
+author = "kesherai"
+license = "MIT"
+icon = "sparkles"
+description = "KesherAI on the bar: whether it is running and how many chats are working, with a panel to open it."
+tags = ["bar", "panel", "service", "ai"]
+dependencies = ["xdg-utils"]
+
+[[setting]]
+key = "url"
+type = "string"
+label_key = "settings.url.label"
+description_key = "settings.url.description"
+default = "http://127.0.0.1:7420"
+
+[[setting]]
+key = "token"
+type = "string"
+label_key = "settings.token.label"
+description_key = "settings.token.description"
+default = ""
+advanced = true
+
+[[service]]
+id = "status"
+entry = "service.luau"
+
+[[widget]]
+id = "bar"
+entry = "widget.luau"
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+width = 360
+height = 300
+placement = "floating"
+position = "auto"
+open_near_click = true

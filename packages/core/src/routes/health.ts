@@ -4,7 +4,7 @@ import { modelTurnFor } from "../conversations.js";
 import { branding } from "@kesher/shared";
 import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
-import { installNoctaliaPlugin, noctaliaPluginSource, noctaliaStatus } from "../noctalia.js";
+import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
 import { healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
 
 /**
@@ -78,10 +78,8 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get("/api/integrations/noctalia", async () => noctaliaStatus());
   app.post("/api/integrations/noctalia/install", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Connect Noctalia on the computer itself." });
-    const src = noctaliaPluginSource();
-    if (!src) return reply.code(500).send({ error: "The plugin's files are missing from this build." });
     try {
-      return { message: await installNoctaliaPlugin(src), ...noctaliaStatus() };
+      return { message: await installNoctaliaPlugin(), ...noctaliaStatus() };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }

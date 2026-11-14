@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.6.155",
+  "version": "0.6.156",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",
@@ -55,6 +55,10 @@
       {
         "from": "../../integrations/noctalia/kesherai",
         "to": "noctalia-plugin/kesherai"
+      },
+      {
+        "from": "../../integrations/noctalia-v5/kesherai",
+        "to": "noctalia-plugin-v5/kesherai"
       },
       {
         "from": "../../integrations/waybar",

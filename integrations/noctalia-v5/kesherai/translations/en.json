@@ -1,0 +1,18 @@
+{
+  "settings": {
+    "url": { "label": "KesherAI address", "description": "Where KesherAI runs. This computer: http://127.0.0.1:7420" },
+    "token": { "label": "Access token", "description": "Only for KesherAI on another computer: its remote-access token." }
+  },
+  "bar": {
+    "idle": "KesherAI is running",
+    "working": "KesherAI: {count} chats working",
+    "offline": "KesherAI is not running"
+  },
+  "panel": {
+    "offline": "KesherAI is not running on this computer, or the address in the plugin's settings is wrong.",
+    "open": "Open KesherAI",
+    "day": "My day",
+    "refresh": "Check again",
+    "close": "Close"
+  }
+}
