@@ -953,3 +953,25 @@ Stopped at: Roee checks it on the Ally another day.
   plain-words AI list.
 Stopped at: a history of readings (charging habits over days, as AccuBattery's), apps that use the most battery
 (needs usage access), and a Phone Health page of its own on the phone's menu.
+
+## 2026-11-14 (night): Muse-like tools and agents inside the engines (VISION items: Unity Muse's features, plugins as agents)
+- Unity: Muse is deprecated; Unity AI (open beta, Unity 6.0+) has the Assistant with Ask / Plan / Agent modes (writes
+  C#, changes scene components, makes prefabs; undo; permissions), Generators (sprites, textures, placeholder art,
+  scene layouts from a reference, animation and sound from words; AI-generated metadata), an official MCP server
+  (scenes, GameObjects, components, console, settings; no credits) and AI Gateway (the user's own Claude / GPT / Gemini
+  subscriptions in the Editor). Whether AI Gateway takes a custom OpenAI-compatible address is not documented.
+- Unreal: 5.8 ships an MCP plugin exposing Blueprints, assets, levels, materials and meshes to any model (Epic showed
+  Claude driving a project); UE6 plans AI natively (lighting, rigging, skin weights, code). Third-party bridges abound
+  (CodeFizz Editor Agent with 615 commands, VibeUE, Druids).
+- KesherAI already has: both official MCP servers as presets (Unreal 127.0.0.1:8000, Unity's relay), its own bridges
+  (graphs, play tests, builds), local image/sound/3D models.
+Plan, in order (each needs the engine to compile and Roee to check):
+1. An "Ask KesherAI" panel in each editor: Unreal: a Slate tab in the KesherAI Bridge plugin; Unity: an EditorWindow in
+   the KesherAI package. It is a chat bound to a KesherAI chat with that project (the same agent and tools as the
+   app), showing the steps, with the selection (actors, assets, nodes) sent as context. Plan / Agent modes = the
+   chat's approval modes.
+2. Generators from the panel with local models: sprites with a transparent background, tiling textures, sounds
+   (ACE-Step), 3D from a picture (Hunyuan3D), imported into the project with an "AI-generated" tag.
+3. Behavior trees / State Trees from words (Unreal), Behavior graphs (Unity) through the bridges.
+4. KesherAI plugins can add panels and tools there (a plugin's "editorPanel" in its manifest).
+Stopped at: building step 1 (needs compiling in Unreal and Unity on the PC, with Roee there).
