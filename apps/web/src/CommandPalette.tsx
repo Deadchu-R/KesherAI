@@ -6,6 +6,7 @@ import { NAV_GROUPS, NAV_ICONS, useNavItems } from "./Sidebar";
 import { useParts } from "./parts";
 import { fit } from "./palette-fit";
 import { handheldSetting, setHandheld } from "./PadHints";
+import { Glyph } from "./ui/Glyph";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -214,7 +215,7 @@ export function CommandPalette() {
                 onPointerMove={() => i !== at && setAt(i)}
                 onClick={() => pick(e)}
               >
-                <span className="palette-icon" aria-hidden="true">{e.icon}</span>
+                <span className="palette-icon" aria-hidden="true"><Glyph of={e.icon} /></span>
                 <span className="grow palette-title">{e.title}</span>
               </button>
             </li>

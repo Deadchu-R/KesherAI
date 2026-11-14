@@ -48,6 +48,8 @@ export interface Appearance {
   motion?: "none" | "subtle" | "lively";
   /** Your own icon for a tool (key: its page, e.g. "#/images"): an emoji, or a picture from the library. */
   icons?: Record<string, { emoji: string } | { assetId: string }>;
+  /** The menus' icons: thin line drawings (default, as in Claude and Linear) or the colourful emoji. */
+  iconStyle?: "line" | "emoji";
   /** Your own CSS, cleaned by cleanCss: looks only, nothing from outside, never hiding the safety parts. */
   css?: string;
   /** The look's name (for theme files). */
@@ -121,6 +123,7 @@ export function cleanAppearance(input: unknown): Appearance {
   const r = num(o.radius, 0, 28);
   if (r !== undefined) out.radius = r;
   if (o.density === "compact" || o.density === "normal" || o.density === "roomy") out.density = o.density;
+  if (o.iconStyle === "line" || o.iconStyle === "emoji") out.iconStyle = o.iconStyle;
   const bg = o.background as Record<string, unknown> | undefined;
   if (bg && typeof bg === "object") {
     if (bg.kind === "plain") out.background = { kind: "plain" };

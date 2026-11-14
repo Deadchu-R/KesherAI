@@ -7,6 +7,7 @@ import { usePluginUi } from "../plugins";
 import { toast } from "../library";
 import { orderGroups, useAppearance } from "../appearance";
 import { ToolIcon } from "../ToolIcon";
+import { Glyph } from "../ui/Glyph";
 
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
 
@@ -56,7 +57,7 @@ export function AppsPage() {
       <input className="apps-search" type="search" dir="auto" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("toolsSearch")} aria-label={t("toolsSearch")} />
       {groups.map((g) => (
         <section key={g.id} className="apps-group">
-          <h2>{g.icon} {t(g.label)}</h2>
+          <h2><Glyph of={g.icon} /> {t(g.label)}</h2>
           <div className="apps-grid">
             {g.items.map((i) => {
               const off = i.part && !i.part.on;

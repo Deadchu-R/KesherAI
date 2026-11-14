@@ -975,3 +975,18 @@ Plan, in order (each needs the engine to compile and Roee to check):
 3. Behavior trees / State Trees from words (Unreal), Behavior graphs (Unity) through the bridges.
 4. KesherAI plugins can add panels and tools there (a plugin's "editorPanel" in its manifest).
 Stopped at: building step 1 (needs compiling in Unreal and Unity on the PC, with Roee there).
+
+## 2026-11-14 (night): Elegant icons and buttons, like Claude (Roee: "more elegant icons and buttons, like Claude")
+- Claude.ai: flat, depth from contrast and hairline borders, not shadows; buttons 8 px radius, ~36–44 px tall, 500
+  weight, a primary in one strong colour whose hover only shifts its shade; secondary is a transparent surface with a
+  hairline border; a 2 px focus ring; icons are thin single-colour line drawings the colour of the text (the menu
+  never mixes colourful emoji). Linear, VS Code and Notion's sidebars do the same (16–18 px, ~1.5 px strokes).
+- KesherAI had colourful emoji for every page and menu action, buttons 40 px with a blue-tinted hover border and a
+  glowing primary.
+- Built (0.6.198): our own line icon set (57 drawings, 24 × 24, 1.6 stroke, round ends, ui/glyphs.ts) used everywhere
+  an icon comes from a string (sidebar, menus, the palette, All tools, Appearance), mapped from the emoji we already
+  had, so the user's own icons still win; Settings → Appearance → Icons: Line (default) / Emoji. Buttons: 36 px with a
+  mouse (40 px for a finger), weight 500, a neutral hover, the primary's hover a brightness shift (any accent), no glow;
+  icon buttons borderless as Claude's.
+Stopped at: icons inside page bodies that are typed in place (status rows, cards with an emoji in their text).
+Sources: webdesignhot.com design-md for claude.ai; Claude's own interface.

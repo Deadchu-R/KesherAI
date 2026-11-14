@@ -1,9 +1,10 @@
 import { withToken } from "./api";
 import { useAppearance } from "./appearance";
+import { Glyph } from "./ui/Glyph";
 
 /**
  * A tool's icon: the user's own (Settings → Appearance, or the chat), an
- * emoji or a picture from the library, else the built-in one.
+ * emoji or a picture from the library, else the built-in one (a line drawing, or its emoji).
  *
  * @param props.href - The tool's page.
  * @param props.fallback - The built-in icon.
@@ -11,5 +12,5 @@ import { useAppearance } from "./appearance";
 export function ToolIcon({ href, fallback }: { href: string; fallback: string }) {
   const own = useAppearance().icons?.[href];
   if (own && "assetId" in own) return <img className="tool-icon-img" src={withToken(`/api/assets/${own.assetId}`)} alt="" />;
-  return <>{own && "emoji" in own ? own.emoji : fallback}</>;
+  return own && "emoji" in own ? <>{own.emoji}</> : <Glyph of={fallback} href={href} />;
 }

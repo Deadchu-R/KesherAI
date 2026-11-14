@@ -8,6 +8,7 @@ import { toast } from "./library";
 import { exportTheme, importTheme, lookFromPicture, lookFromTokens } from "./themeFiles";
 import { ToolIcon } from "./ToolIcon";
 import { Select } from "./ui/Select";
+import { Glyph, LineIcon } from "./ui/Glyph";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -247,6 +248,17 @@ export function AppearanceSection() {
       </div>
 
       <div className="look-field">
+        <span>{L("אייקונים", "Icons")}</span>
+        <div className="seg" role="group">
+          {(["line", "emoji"] as const).map((s) => (
+            <button key={s} type="button" className={(look.iconStyle ?? "line") === s ? "on" : ""} aria-pressed={(look.iconStyle ?? "line") === s} onClick={() => patch({ iconStyle: s }, true)}>
+              {s === "line" ? <><LineIcon name="image" size={16} /> {L("קווים", "Line")}</> : <>🖼 {L("אימוג'י", "Emoji")}</>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="look-field">
         <span>{L("תנועה", "Motion")}</span>
         <div className="seg" role="group">
           {(["none", "subtle", "lively"] as const).map((m) => (
@@ -292,7 +304,7 @@ export function AppearanceSection() {
           const hidden = look.navHide?.includes(id);
           return (
             <li key={id} className={hidden ? "off" : ""}>
-              <span className="grow">{g.icon} {t(g.label)}</span>
+              <span className="grow"><Glyph of={g.icon} /> {t(g.label)}</span>
               <button type="button" aria-label={L("למעלה", "Up")} disabled={i === 0} onClick={() => move(id, -1)}>↑</button>
               <button type="button" aria-label={L("למטה", "Down")} disabled={i === groupOrder.length - 1} onClick={() => move(id, 1)}>↓</button>
               <label className="row small"><input type="checkbox" checked={!hidden} onChange={(e) => patch({ navHide: e.target.checked ? (look.navHide ?? []).filter((x) => x !== id) : [...(look.navHide ?? []), id] }, true)} /> {L("מוצג", "Shown")}</label>

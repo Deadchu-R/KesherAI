@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { Glyph } from "./Glyph";
 
 /**
  * One menu for the whole app, like Apple's pull-down buttons: press the button and keep the finger (or mouse
@@ -179,7 +180,7 @@ export function MenuItem(p: MenuItemProps) {
   const cls = `kmenu-item${p.danger ? " danger" : ""}${p.className ? ` ${p.className}` : ""}`;
   const body = (
     <>
-      {p.icon !== undefined && <span className="kmenu-icon" aria-hidden="true">{p.icon}</span>}
+      {p.icon !== undefined && <span className="kmenu-icon" aria-hidden="true"><Glyph of={p.icon} /></span>}
       <span className="kmenu-text" dir={p.dir}>{p.children}</span>
       {p.end !== undefined && <span className="kmenu-end">{p.end}</span>}
       {/* At the end, so a lone toggle among plain items lines up with them. */}
@@ -242,7 +243,7 @@ export function MenuSub(p: { label: ReactNode; icon?: ReactNode; open?: boolean;
   return (
     <div className={`kmenu-subwrap${open ? " open" : ""}`}>
       <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open} className="kmenu-item" tabIndex={-1} onClick={toggle}>
-        {p.icon !== undefined && <span className="kmenu-icon" aria-hidden="true">{p.icon}</span>}
+        {p.icon !== undefined && <span className="kmenu-icon" aria-hidden="true"><Glyph of={p.icon} /></span>}
         <span className="kmenu-text">{p.label}</span>
         <span className="kmenu-end kmenu-arrow" aria-hidden="true">›</span>
       </button>

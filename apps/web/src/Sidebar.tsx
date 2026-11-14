@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { askText } from "./ui/askText";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
+import { Glyph } from "./ui/Glyph";
+import { NAV_ICONS } from "./nav-icons";
 import { SidebarShortcuts } from "./SidebarShortcuts";
 import { SidebarEdit } from "./SidebarEdit";
 import { useAppMenu } from "./AppMenu";
@@ -167,13 +169,7 @@ export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typ
   { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "connections"], ["#/plugins", "pluginsNav"], ["#/parts", "partsNav"], ["#/health", "healthNav"], ["#/remote", "remoteNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
 
-/** An icon for each menu page (the sidebar's pins, the Tools page, the phone's bar). */
-export const NAV_ICONS: Record<string, string> = {
-  "#/images": "🖼", "#/batch": "🗂", "#/nodes": "🧩", "#/unreal": "🎮", "#/unity": "🕹", "#/training": "🏋",
-  "#/pages": "📝", "#/knowledge": "📚", "#/libraries": "📦", "#/day": "📅", "#/compare": "⚖", "#/pipelines": "⛓", "#/watch": "🖥", "#/inbox": "🔔", "#/self-work": "🤖",
-  "#/personas": "🎭", "#/memory": "🧠", "#/prompts": "💬", "#/community": "👥", "#/usage": "📊",
-  "#/models": "📦", "#/connections": "🔌", "#/plugins": "🧷", "#/parts": "🎛", "#/health": "🩺", "#/remote": "📲", "#/updates": "⬆", "#/settings": "⚙",
-};
+export { NAV_ICONS };
 
 const PIN_KEY = "kesher.pins";
 export const DEFAULT_PINS = ["#/images", "#/pages", "#/knowledge", "#/models"];
@@ -395,11 +391,11 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         {app.main.map((e) =>
           e.run ? (
             <button key={e.key} type="button" className="nav-link as-link" onClick={e.run}>
-              <span className="plus" aria-hidden>{e.icon}</span> {e.label}
+              <span className="nav-ico" aria-hidden><Glyph of={e.icon} /></span> {e.label}
             </button>
           ) : (
             <a key={e.key} className={`nav-link${e.key === "new-chat" ? " new-chat" : ""}`} href={e.href} aria-current={hash === e.href ? "page" : undefined}>
-              <span className={e.icon === "+" ? "plus" : "nav-ico"} aria-hidden="true">{e.icon}</span> {e.label}
+              <span className={e.icon === "+" ? "plus" : "nav-ico"} aria-hidden="true"><Glyph of={e.icon} href={e.href} {...(e.icon === "+" ? { size: 15 } : {})} /></span> {e.label}
             </a>
           ),
         )}
