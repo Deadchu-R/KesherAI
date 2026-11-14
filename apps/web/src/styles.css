@@ -2173,5 +2173,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .seg.archive, .dot.archive { background: #c0392b; }
 .seg.other, .dot.other { background: #8a8f98; }
 .storage-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.storage-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: start; padding: 10px 12px; }
+.storage-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 4px; text-align: start; padding: 10px 12px; height: auto; min-height: 0; white-space: normal; line-height: 1.35; }
 .storage-compress { border-top: 1px solid var(--border); padding-top: 8px; }

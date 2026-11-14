@@ -76,6 +76,10 @@ const EXT: Record<FileKind, RegExp> = {
 const INSTALLER = /\.(exe|msi|iso|dmg|pkg|deb|rpm|appimage|apk|zip|rar|7z)$/i;
 const SCREENSHOT = /(screenshot|screen shot|צילום מסך|snip|capture)/i;
 const DAY = 86_400_000;
+/** Folders that hold tools' build output and caches, not the person's files. */
+const SKIP_DIRS = new Set(["node_modules", "__pycache__", "venv", "site-packages"]);
+/** Inside a Unity or Unreal project: the engine's own rebuildable folders. */
+const ENGINE_DIRS = new Set(["Library", "Temp", "Logs", "obj", "Intermediate", "DerivedDataCache", "Binaries", "Saved"]);
 const MB = 1024 ** 2;
 
 /** What kind a file name is. */
@@ -170,29 +174,57 @@ export class Storage {
     let seen = 0;
     let partial = false;
     const totals = new Map<string, number>();
-    for (const f of folders) {
-      const stack = [f.path];
-      while (stack.length) {
-        if (seen > 400_000 || Date.now() - started > 25_000) {
+    // Folders are read side by side (32 at a time, one queue for all the person's folders, so a huge Desktop does
+    // not leave Documents unread) and files are measured in parallel. Build and cache folders of tools are skipped:
+    // they are not the person's files and hold most of the entries.
+    const queue: Array<{ dir: string; folder: string }> = folders.map((f) => ({ dir: f.path, folder: f.name }));
+    const deadline = started + 45_000;
+    const worker = async () => {
+      while (queue.length) {
+        if (seen > 600_000 || Date.now() > deadline) {
           partial = true;
-          break;
+          return;
         }
-        const dir = stack.pop()!;
+        // Take from the front: breadth first, every folder gets its turn.
+        const { dir, folder } = queue.shift()!;
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+        seen += entries.length;
+        const files: string[] = [];
+        const names = new Set(entries.map((e) => e.name));
+        const project = (names.has("Assets") && names.has("ProjectSettings")) || entries.some((e) => e.isFile() && /\.uproject$/i.test(e.name));
         for (const e of entries) {
-          seen++;
-          if (e.name.startsWith(".") || e.name === "node_modules") continue;
+          if (e.name.startsWith(".") || SKIP_DIRS.has(e.name) || (project && ENGINE_DIRS.has(e.name))) continue;
           const p = join(dir, e.name);
-          if (e.isDirectory()) stack.push(p);
-          else if (e.isFile()) {
-            const st = await stat(p).catch(() => undefined);
-            if (!st) continue;
-            totals.set(f.name, (totals.get(f.name) ?? 0) + st.size);
-            all.push({ path: p, bytes: st.size, mtime: st.mtimeMs, folder: f.name });
-          }
+          if (e.isDirectory()) queue.push({ dir: p, folder });
+          else if (e.isFile()) files.push(p);
+        }
+        const stats = await Promise.all(files.map((p) => stat(p).then((st) => ({ p, st }), () => undefined)));
+        for (const s of stats) {
+          if (!s) continue;
+          totals.set(folder, (totals.get(folder) ?? 0) + s.st.size);
+          all.push({ path: s.p, bytes: s.st.size, mtime: s.st.mtimeMs, folder });
         }
       }
-    }
+    };
+    // Workers that find the queue empty for a moment wait for others still adding to it.
+    let active = 0;
+    await Promise.all(
+      Array.from({ length: 32 }, async () => {
+        for (;;) {
+          if (!queue.length) {
+            if (active === 0 || partial) return;
+            await new Promise((r) => setTimeout(r, 5));
+            continue;
+          }
+          active++;
+          try {
+            await worker();
+          } finally {
+            active--;
+          }
+        }
+      }),
+    );
     this.files.clear();
     const kinds: Record<FileKind, number> = { video: 0, image: 0, audio: 0, document: 0, archive: 0, other: 0 };
     for (const f of all) kinds[fileKind(f.path)] += f.bytes;
