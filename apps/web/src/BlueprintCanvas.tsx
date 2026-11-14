@@ -220,6 +220,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     const el = frame.current;
     if (!el) return;
     const wheel = (e: WheelEvent) => {
+      // Over a menu or the search box, the wheel scrolls its list (found by Roee: it zoomed the graph instead).
+      if ((e.target as Element | null)?.closest?.(".bp-menu, .bp-find")) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
       zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
