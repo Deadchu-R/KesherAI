@@ -44,3 +44,11 @@ test("--fit-print: the system memory the plan needs, from its Host line", () => 
   assert.deepEqual(parseFitPrint("CUDA0 20480 1024 512\nHost 61000 0 900\n"), { hostMiB: 61900 });
   assert.deepEqual(parseFitPrint("nothing here"), {});
 });
+
+test("a card written twice (a first pass, then the plan) counts once, with the last line", () => {
+  const log = "  - CUDA0 (NVIDIA GeForce RTX 3090): 49 layers (40 overflowing),   5993 MiB used,  11780 MiB free\n  - CUDA0 (NVIDIA GeForce RTX 3090): 49 layers (32 overflowing),  15708 MiB used,   2066 MiB free\n";
+  const p = parseFit(log, "-c 32768 -ngl 49\n", 3500);
+  assert.equal(p.devices.length, 1);
+  assert.equal(p.devices[0]!.usedMiB, 15708);
+  assert.equal(p.gpuLayers, 49);
+});

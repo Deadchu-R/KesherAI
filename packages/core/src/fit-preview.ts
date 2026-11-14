@@ -64,7 +64,11 @@ export function parseFit(log: string, stdout: string, ms: number): FitPlan {
   const flat = log.replace(/\r/g, "");
   // b12110+ adds "(N overflowing)" for a MoE model's layers that are partly in system memory.
   for (const m of flat.matchAll(/-\s+([A-Za-z]+\d+)\s+\(([^)]+)\):\s+(\d+)\s+layers(?:\s+\(\s*\d+\s+overflowing\))?,\s+(\d+)\s+MiB used,\s+(-?\d+)\s+MiB free/g)) {
-    devices.push({ name: `${m[2]!.trim()} (${m[1]})`, layers: Number(m[3]), usedMiB: Number(m[4]), freeMiB: Number(m[5]) });
+    // A card can be written more than once (a first pass, then the final plan): the last line is the plan.
+    const d = { name: `${m[2]!.trim()} (${m[1]})`, layers: Number(m[3]), usedMiB: Number(m[4]), freeMiB: Number(m[5]) };
+    const i = devices.findIndex((x) => x.name === d.name);
+    if (i >= 0) devices[i] = d;
+    else devices.push(d);
   }
   const args = stdout.trim().split(/\s+/).filter(Boolean);
   const arg = (...names: string[]) => {
