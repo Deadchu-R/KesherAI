@@ -741,3 +741,21 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
 - Not found in the docs, so left out: a text input for asking from the panel.
 - Sources: docs.noctalia.dev (v5.4.0 plugins, manifest, entries, declarative UI, bar, configuration); github.com/OHMCFXG/noctalia-plugins (real v5 examples).
 - Stopped at: v5 plugin shipped in 0.6.156. Not yet confirmed on a real v5 machine. Asking from the panel waits for a documented text input.
+
+## PC Health: Fix it for me, and Storage (2026-11-14)
+
+- Fix it for me, modeled on Windows Storage Sense "Cleanup recommendations", CCleaner Health Check ("Make it better") and Microsoft PC Manager:
+  - A scan produces a list with sizes; the person can untick items; one button carries out the rest.
+  - Only sure-safe items are ticked by default.
+- Storage, modeled on Android's Storage settings and Files by Google:
+  - Space shown by kind (videos, pictures, audio, documents, apps).
+  - Cleaning cards: junk, old screenshots, large files, duplicates, old downloads.
+  - Select all or pick single files; files move to the Trash, where they can be recovered.
+- Choices:
+  - Deleting moves files to the Recycle Bin/Trash (Electron shell.trashItem), never deletes them outright.
+  - The page sends ids from the server's last scan only, never paths.
+  - Only the person's own folders are scanned.
+  - Uninstalling runs the program's own uninstaller, from the registry Uninstall keys (Windows) or Flatpak. dpkg packages are listed only, since removing them needs sudo.
+  - Videos are compressed to H.265 at CRF 28 in a new `.compressed.mp4`; the original stays until the person moves it to the bin.
+- Sources: Android Central, "Files by Google" guide; Pureinfotech, "What's taking up space on Windows 11"; Microsoft Support, "Storage settings in Windows".
+- Stopped at: shipped in 0.6.158. Next ideas: blurry-photo and meme detection (Files by Google does these), and moving files to another drive or the cloud.

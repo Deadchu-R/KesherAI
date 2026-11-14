@@ -2155,3 +2155,23 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .remote-keys button { min-height: 36px; padding: 0 10px; }
 .remote-banner { position: sticky; top: 0; z-index: 70; background: var(--danger, #c0392b); color: #fff; padding: 6px 12px; display: flex; gap: 10px; align-items: center; }
 .remote-banner button { background: #fff; color: #000; }
+/* Storage (PC Health) */
+.storage-dialog { max-width: min(680px, calc(100vw - 32px)); width: 100%; max-height: min(86dvh, 820px); }
+.storage-files { list-style: none; margin: 0; padding: 0; overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.storage-files li { padding: 6px 4px; border-bottom: 1px solid var(--border); gap: 8px; }
+.storage-file { min-width: 0; }
+.storage-name { overflow-wrap: anywhere; }
+.storage-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--border); }
+.storage-bar .seg { min-width: 3px; }
+.storage-kinds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.storage-kinds .link-like { background: none; border: 0; padding: 2px 0; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.storage-kinds .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.seg.video, .dot.video { background: #7c5cff; }
+.seg.image, .dot.image { background: #22a6b3; }
+.seg.audio, .dot.audio { background: #e58e26; }
+.seg.document, .dot.document { background: #4a90e2; }
+.seg.archive, .dot.archive { background: #c0392b; }
+.seg.other, .dot.other { background: #8a8f98; }
+.storage-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.storage-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: start; padding: 10px 12px; }
+.storage-compress { border-top: 1px solid var(--border); padding-top: 8px; }

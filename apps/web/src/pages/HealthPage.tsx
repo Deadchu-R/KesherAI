@@ -5,6 +5,7 @@ import { toast } from "../library";
 import { RichText } from "../RichText";
 import { ReportDialog } from "../ReportDialog";
 import { FixDialog } from "../FixDialog";
+import { StorageSection } from "../StorageSection";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const GB = 1024 ** 3;
@@ -119,6 +120,7 @@ export function HealthPage() {
           )}
         </section>
       )}
+      <StorageSection />
       {phone && (
         <section className="card stack">
           <h2>{L(`הטלפון${phone.model ? ` (${phone.model})` : ""}`, `This phone${phone.model ? ` (${phone.model})` : ""}`)}</h2>

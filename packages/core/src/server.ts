@@ -95,6 +95,7 @@ import { memoryTools } from "./memory-tools.js";
 import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { healthRoutes } from "./routes/health.js";
+import { storageRoutes } from "./routes/storage.js";
 import { Tor } from "./tor.js";
 import { FaultLog, redact } from "./fault-log.js";
 import { torRoutes } from "./routes/tor.js";
@@ -1115,6 +1116,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await coachRoutes(app, services);
   await memoryRoutes(app, services);
   await healthRoutes(app, services);
+  await storageRoutes(app, services);
   await torRoutes(app, services);
   await remoteDesktopRoutes(app, services);
   await pluginRoutes(app, services);

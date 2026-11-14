@@ -1,0 +1,50 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, sep } from "node:path";
+import { fileKind, parseSize, Storage } from "./storage.js";
+
+test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async () => {
+  const home = mkdtempSync(join(tmpdir(), "st-"));
+  for (const d of ["Downloads", "Pictures", "Videos", "Documents"]) mkdirSync(join(home, d));
+  const MB = 1024 * 1024;
+  const old = (Date.now() - 120 * 86_400_000) / 1000;
+  writeFileSync(join(home, "Videos", "trip.mp4"), Buffer.alloc(301 * MB));
+  writeFileSync(join(home, "Downloads", "setup.exe"), Buffer.alloc(2 * MB));
+  utimesSync(join(home, "Downloads", "setup.exe"), old, old);
+  writeFileSync(join(home, "Downloads", "notes.pdf"), Buffer.alloc(MB));
+  utimesSync(join(home, "Downloads", "notes.pdf"), old, old);
+  writeFileSync(join(home, "Pictures", "Screenshot 2025.png"), Buffer.alloc(10));
+  utimesSync(join(home, "Pictures", "Screenshot 2025.png"), old, old);
+  const same = Buffer.alloc(3 * MB, 7);
+  writeFileSync(join(home, "Documents", "a.pdf"), same);
+  utimesSync(join(home, "Documents", "a.pdf"), old, old);
+  writeFileSync(join(home, "Downloads", "a (1).pdf"), same);
+  const st = new Storage(home);
+  const r = await st.scan();
+  assert.ok(r.kinds.video >= 301 * MB);
+  const card = (id: string) => r.cards.find((c) => c.id === id)?.files.map((f) => f.name) ?? [];
+  assert.deepEqual(card("compress-videos"), ["trip.mp4"]);
+  assert.deepEqual(card("installers"), ["setup.exe"]);
+  assert.deepEqual(card("old-downloads"), ["notes.pdf"]);
+  assert.deepEqual(card("screenshots"), ["Screenshot 2025.png"]);
+  assert.deepEqual(card("duplicates"), ["a (1).pdf"]);
+  const dup = r.cards.find((c) => c.id === "duplicates")!.files[0]!;
+  assert.equal(dup.folder, `~${sep}Downloads`);
+  const bin = join(home, "bin");
+  mkdirSync(bin);
+  const res = await st.remove([dup.id, "nope"], async (p) => renameSync(p, join(bin, "x")));
+  assert.deepEqual(res.done, [dup.id]);
+  assert.equal(res.failed[0]!.id, "nope");
+  assert.ok(!existsSync(join(home, "Downloads", "a (1).pdf")));
+  assert.ok(!st.last!.cards.some((c) => c.id === "duplicates"));
+});
+
+test("storage helpers: kinds by name, Flatpak sizes", () => {
+  assert.equal(fileKind("a.MKV"), "video");
+  assert.equal(fileKind("b.heic"), "image");
+  assert.equal(fileKind("c.msi"), "archive");
+  assert.equal(parseSize("1.5 GB"), Math.round(1.5 * 1024 ** 3));
+  assert.equal(parseSize("300 MB"), 300 * 1024 ** 2);
+});
