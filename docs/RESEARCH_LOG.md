@@ -1040,3 +1040,15 @@ Stopped at: custom actions, "ignore this app", and an Agent mode with tools (lat
      "⏰ Timer" message and the chat answers; at most 10 waiting per chat, 30 days ahead.
   3. A visible list: waiting timers in the chat header with Cancel (Open WebUI has none), and on the Routines page.
 Built (0.6.203): chat-timers.ts (set_timer, notify_user, timers.json, a 15 s clock), the clock button in the chat header with Cancel. Not yet: the Routines page list.
+
+## 2026-11-15 (night): Dictation into any app (COMPETITORS fourth review, item 1)
+- AnythingLLM Magic Echo (docs.useanything.com/pro/magic-echo): Alt+Z (Option+Z), quick mode sends after a pause,
+  hold for long dictation with a Stop button, Esc cancels; a resizable widget; a local transcription model kept
+  loaded a few minutes; text inserted at the cursor; Raw or Smart (the LLM fixes punctuation and grammar); custom
+  vocabulary; voice-command snippets; optional screen awareness; history; macOS needs Accessibility.
+- Chosen for KesherAI: Ctrl+Alt+D (Alt+Z opens the NVIDIA overlay, which Roee's PC has). A small bar at the bottom of
+  the screen that never takes focus (so the text lands where the cursor was), a level meter and seconds; it stops on
+  the key again, on 2 s of silence after speech, or at 2 minutes; Cancel. Whisper on this computer (the existing
+  /api/speech/transcribe, language from Settings → Speech); pasted through the Text Helper's Paste, the clipboard put
+  back. On the phone the keyboard's own voice typing already does this (not duplicated).
+Stopped at: Smart cleanup with the chat model, vocabulary and voice-command snippets (later).

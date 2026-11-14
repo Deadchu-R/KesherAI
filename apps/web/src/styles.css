@@ -2289,6 +2289,13 @@ html.handheld .palette-list button { min-height: 44px; }
 .phone-numbers { margin: 0; display: grid; gap: 2px; }
 .phone-numbers > div { gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .phone-numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* The dictation bar (Ctrl+Alt+D over any app): one row, a dot that grows with the voice. */
+.dictate { display: flex; align-items: center; gap: 10px; height: 100vh; padding: 0 12px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; }
+.dictate-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; transition: transform .08s; }
+.dictate-dot.on { background: var(--bad); }
+.dictate-msg { font-size: 13.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dictate-time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dictate button.primary { height: 30px; padding: 0 12px; font-size: 13px; }
 /* The Text Helper (Ctrl+Alt+K over any app; Android's selection menu): the selection, quick actions, the answer. */
 .text-helper { display: flex; flex-direction: column; height: 100vh; gap: 10px; padding: 12px; background: var(--bg); }
 .text-head { gap: 8px; color: var(--text-2); }

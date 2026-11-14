@@ -368,3 +368,17 @@ This review went through the code part by part. Each finding is listed with what
 - Selections wait in memory only (30 at most, 20,000 characters each, 10 minutes), behind the access token.
 - Line icons (0.6.198): static paths drawn in React (no HTML from data); the user's own icons keep winning.
 - Loop guard and item cost: counters in memory; no new input.
+
+## Scan 65 (2026-11-15, after 0.6.201–0.6.204 and dictation)
+- Fixed: chat timers saved their prompt to timers.json from an incognito chat too; incognito chats get no timer tools.
+- Timers: a fired timer runs in the chat's own mode, so approvals still hold (no way around them through a timer); at
+  most 10 per chat, 30 days ahead. notify_user: one a minute and 20 a day per chat; the text is the model's, and a
+  tap opens the chat (no outside link).
+- Dictation (Ctrl+Alt+D): the microphone is on only after the user's own key, for at most two minutes; the recording
+  goes to /api/speech/transcribe (Whisper on this computer, or the cloud service the user chose for speech) and is not
+  kept. The bar's window never takes focus, may only navigate inside the app, and is the only sender its paste IPC
+  accepts (up to 20,000 characters).
+- "What fits?" (0.6.201–0.6.202): llama.cpp's own error line is shown (cut to 300 characters), no paths added.
+- Unreal bridge race (0.6.204): a disconnect during hello no longer throws (unhandled rejection in the server).
+- Performance: the dictation bar loads the app again for each use (about a second); acceptable now, a kept-warm bar
+  is a later improvement.

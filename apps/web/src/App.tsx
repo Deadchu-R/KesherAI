@@ -40,6 +40,7 @@ import { SelfWorkPage } from "./pages/SelfWorkPage";
 import { PadHints } from "./PadHints";
 import { GameHelper } from "./pages/GameHelper";
 import { TextHelper } from "./pages/TextHelper";
+import { Dictate } from "./pages/Dictate";
 
 /* Pages load only when opened, so starting KesherAI (and a part that is off) costs nothing. */
 const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
@@ -305,6 +306,7 @@ export function App() {
   // The Game Helper's window over a game: only the helper, no menus.
   if (hash.startsWith("#/game/")) return <GameHelper hash={hash} />;
   if (hash.startsWith("#/text/")) return <TextHelper hash={hash} />;
+  if (hash === "#/dictate") return <Dictate />;
   return (
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
       <RemoteBanner />

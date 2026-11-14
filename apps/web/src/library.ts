@@ -63,6 +63,9 @@ interface DesktopBridge {
   openDevice?(id: string): Promise<{ name?: string; error?: string }>;
   /** The Text Helper's "Replace" (only in its own window). Missing before 0.6.199. */
   textPaste?(text: string): Promise<{ pasted?: boolean; error?: string }>;
+  /** The dictation bar (Ctrl+Alt+D). Missing before 0.6.205. */
+  dictateDone?(text: string): Promise<{ pasted?: boolean; error?: string }>;
+  onDictateStop?(fn: () => void): () => void;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

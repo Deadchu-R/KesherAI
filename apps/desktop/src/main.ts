@@ -529,6 +529,58 @@ async function toggleTextHelper(coreUrl: string): Promise<void> {
   textWin.focus();
 }
 
+let dictWin: BrowserWindow | undefined;
+
+/**
+ * Dictation into any app (as AnythingLLM's Magic Echo, on Whisper on this computer): the key shows a small bar at the
+ * bottom of the screen that never takes focus, so the words land where the cursor is. Pressed again, it stops.
+ *
+ * @param coreUrl - KesherAI's local address.
+ */
+async function toggleDictation(coreUrl: string): Promise<void> {
+  if (dictWin && !dictWin.isDestroyed() && dictWin.isVisible()) {
+    dictWin.webContents.send("kesher:dictate-stop");
+    return;
+  }
+  const base = coreUrl.replace(/\/$/, "");
+  const area = displays.getDisplayNearestPoint(displays.getCursorScreenPoint()).workArea;
+  const width = 360;
+  const height = 64;
+  const bounds = { x: Math.round(area.x + (area.width - width) / 2), y: area.y + area.height - height - 24, width, height };
+  if (!dictWin || dictWin.isDestroyed()) {
+    dictWin = new BrowserWindow({
+      ...bounds,
+      frame: false,
+      resizable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      // Never takes the focus: the app being typed in keeps it.
+      focusable: false,
+      transparent: false,
+      backgroundColor: "#18181a",
+      show: false,
+      icon: appIcon(),
+      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(import.meta.dirname, "preload.cjs") },
+    });
+    dictWin.setAlwaysOnTop(true, "screen-saver");
+    dictWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    dictWin.webContents.on("will-navigate", (event, target) => {
+      if (!target.startsWith(`${base}/`)) event.preventDefault();
+    });
+  } else dictWin.setBounds(bounds);
+  await dictWin.loadURL(`${base}/#/dictate`);
+  dictWin.showInactive();
+}
+
+// The dictation bar's words: typed where the cursor is (only from that bar's own window).
+ipcMain.handle("kesher:dictate-done", async (event, text: unknown) => {
+  if (!fromApp(event) || !dictWin || dictWin.isDestroyed() || event.sender !== dictWin.webContents) return { error: "Not allowed." };
+  dictWin.hide();
+  if (typeof text !== "string" || !text.trim() || text.length > 20_000) return { pasted: false };
+  const pasted = await pasteText(text.trim()).catch(() => false);
+  return { pasted };
+});
+
 // The Text Helper's "Replace": only its own window may paste into the app behind it.
 ipcMain.handle("kesher:text-paste", async (event, text: unknown) => {
   if (!fromApp(event) || !textWin || textWin.isDestroyed() || event.sender !== textWin.webContents || typeof text !== "string" || !text || text.length > 50_000) return { error: "Not allowed." };
@@ -816,6 +868,9 @@ app.whenReady().then(async () => {
     // developer console on a Mac, so Control+Option+K there.
     const textKey = process.platform === "darwin" ? "Control+Option+K" : "Control+Alt+K";
     globalShortcut.register(textKey, () => void toggleTextHelper(coreUrl));
+    // Dictation into any app: Ctrl+Alt+D (not Alt+Z as AnythingLLM: that opens NVIDIA's overlay).
+    const dictKey = process.platform === "darwin" ? "Control+Option+D" : "Control+Alt+D";
+    globalShortcut.register(dictKey, () => void toggleDictation(coreUrl));
   } catch (err) {
     await rescue(err);
   }

@@ -15,6 +15,14 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
   saveChatPdf: (id: string): Promise<string | null> => ipcRenderer.invoke("kesher:chat-pdf", id),
   /** The Text Helper's "Replace": puts the answer in place of the text selected in the app behind it. */
   textPaste: (text: string): Promise<{ pasted?: boolean; error?: string }> => ipcRenderer.invoke("kesher:text-paste", text),
+  /** The dictation bar: its words, typed where the cursor is (empty: just closes the bar). */
+  dictateDone: (text: string): Promise<{ pasted?: boolean; error?: string }> => ipcRenderer.invoke("kesher:dictate-done", text),
+  /** The dictation key was pressed again: stop and type. Returns a function that stops listening. */
+  onDictateStop: (fn: () => void): (() => void) => {
+    const on = () => fn();
+    ipcRenderer.on("kesher:dictate-stop", on);
+    return () => ipcRenderer.removeListener("kesher:dictate-stop", on);
+  },
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("kesher:pick-folder"),
   /** Start with the computer in the background; pass nothing to read it. */

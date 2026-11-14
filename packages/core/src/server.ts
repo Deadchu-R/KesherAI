@@ -820,7 +820,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       },
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
       memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
-      timerTools: (convId) => timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined)),
+      // None in an incognito chat: a timer is written to disk (scan 65).
+      timerTools: (convId) => (library.summary(convId)?.incognito ? [] : timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined))),
       memory,
     }),
     coach,
