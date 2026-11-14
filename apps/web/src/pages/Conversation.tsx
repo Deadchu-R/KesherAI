@@ -20,6 +20,8 @@ import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 import { BrowserPanel } from "../BrowserPanel";
+import { SourcesPanel } from "../SourcesPanel";
+import { answerSources } from "../answerSources";
 import { SessionEnvBar } from "../CodeEnvironment";
 import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
@@ -263,6 +265,8 @@ export function ConversationPage({ id }: { id: string }) {
     return out;
   }, [events]);
 
+  const sources = useMemo(() => answerSources(events), [events]);
+
   const byCall = useMemo(() => {
     const m = new Map<string, Ev<"tool_result">>();
     for (const e of events) if (e.type === "tool_result") m.set(e.callId, e);
@@ -337,6 +341,8 @@ export function ConversationPage({ id }: { id: string }) {
   }, [blocks, versions.lastUser]);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
+  // An answer's sources (the seq of that answer), shown in the pane column.
+  const [sourcesFor, setSourcesFor] = useState<number | null>(null);
   const stepsAuto = useRef("");
   useEffect(() => {
     if (taskSteps.steps.length && taskSteps.current && stepsAuto.current !== id && innerWidth > 760) {
@@ -349,8 +355,9 @@ export function ConversationPage({ id }: { id: string }) {
   }, [id]);
 
   // The pane column: any of Steps, Files, Context, Coach. Its width is remembered on this device.
-  const anyPane = stepsOpen || filesOpen || contextOpen || coachOpen || browserOpen;
+  const anyPane = stepsOpen || filesOpen || contextOpen || coachOpen || browserOpen || sourcesFor !== null;
   const closePanes = () => {
+    setSourcesFor(null);
     setBrowserOpen(false);
     setStepsOpen(false);
     setFilesOpen(false);
@@ -696,6 +703,11 @@ export function ConversationPage({ id }: { id: string }) {
                               void api(`/api/conversations/${id}/regenerate`, { method: "POST" }).catch((err: Error) => setError(err.message));
                             }}>↻</button>
                           )}
+                          {sources.get(e.seq) && (
+                            <button type="button" className={`sources-btn small${sourcesFor === e.seq ? " on" : ""}`} aria-pressed={sourcesFor === e.seq} onClick={() => setSourcesFor(sourcesFor === e.seq ? null : e.seq)} title={getLocale() === "he" ? "האתרים שהתשובה התבססה עליהם" : "The sites this answer was based on"}>
+                              🔗 {getLocale() === "he" ? "מקורות" : "Sources"} ({sources.get(e.seq)!.sources.length})
+                            </button>
+                          )}
                           {(() => {
                             const st2 = answerStats.get(e.seq);
                             if (!st2 || !st2.seconds) return null;
@@ -916,6 +928,7 @@ export function ConversationPage({ id }: { id: string }) {
             <button type="button" className="icon-btn" title={getLocale() === "he" ? "סגור את כל החלוניות (Ctrl+\\)" : "Close all panes (Ctrl+\\)"} aria-label={getLocale() === "he" ? "סגור את כל החלוניות" : "Close all panes"} onClick={closePanes}>✕</button>
           </div>
           <div className="conv-panes-body">
+            {sourcesFor !== null && sources.get(sourcesFor) && <SourcesPanel data={sources.get(sourcesFor)!} onClose={() => setSourcesFor(null)} />}
             {browserOpen && <BrowserPanel />}
             {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
             {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}

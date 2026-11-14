@@ -2094,3 +2094,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .diff .diff-mark { display: block; white-space: pre-wrap; font-family: inherit; color: var(--text); background: rgba(250, 204, 21, 0.12); border-inline-start: 3px solid #facc15; padding: 2px 8px; margin: 2px 0; }
 .review-box { gap: 6px; margin: 6px 0; }
 .review-item { gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+/* An answer's sources: the button under it, and the cards in the pane column. */
+.sources-btn { background: none; border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; color: var(--muted); cursor: pointer; }
+.sources-btn.on, .sources-btn:hover { color: var(--text); border-color: var(--accent, #9aa4ff); }
+.sources-pane h3 { margin: 6px 0 0; }
+.source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.source-card { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
+.source-card a { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; }
+.source-card a:hover .source-title { text-decoration: underline; }
+.source-site { font-size: .78em; color: var(--muted); }
+.source-title { font-weight: 600; overflow-wrap: anywhere; }
+.source-card p { margin: 4px 0 0; }

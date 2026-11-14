@@ -16,7 +16,7 @@
     "build": "pnpm build:packages && pnpm --filter @kesher/web build && pnpm --filter @kesher/desktop build",
     "typecheck": "pnpm build:packages && pnpm --filter @kesher/web typecheck && pnpm --filter @kesher/desktop typecheck",
     "lint": "eslint .",
-    "test": "node --conditions=source --import tsx --test --test-force-exit --test-timeout=120000 \"packages/*/src/**/*.test.ts\"",
+    "test": "node --conditions=source --import tsx --test --test-force-exit --test-timeout=120000 \"packages/*/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\"",
     "docs:api": "typedoc",
     "create-plugin": "node scripts/create-plugin.mjs",
     "clean": "rm -rf packages/*/dist plugins/*/dist apps/*/dist apps/*/out packages/*/tsconfig.tsbuildinfo plugins/*/tsconfig.tsbuildinfo"
