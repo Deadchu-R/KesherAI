@@ -20,3 +20,4 @@ export * from "./appearance.js";
 export * from "./blueprint-code.js";
 export * from "./csharp-graph.js";
 export * from "./csharp-free.js";
+export * from "./csharp-collapse.js";

@@ -850,3 +850,14 @@ Stopped at: a diff view per file from the receipt, and undoing one file of a run
 - Built now (0.6.175): the daily check from VISION: a fresh reading every 6 hours, a note only when something is bad
   or a warning is new, at most once a day, a bad thing again after 3 days; what was told is kept across restarts.
 Stopped at: OneDrive's offline size; the note in the user's language (board t57).
+
+## 2026-11-14: Collapse to Function; switching graphs by keyboard
+- Unreal: select nodes → right-click → Collapse to Function: a new function graph holds them, a call node takes their
+  place; each wire coming in becomes an input of the function. Switching graphs: the My Blueprint panel, tabs
+  (Ctrl+Tab); Visual Studio and VS Code use Ctrl+PageUp/PageDown for tabs.
+- Built (0.6.176) for C# scripts: steps one after another in the code become a private method; the method's
+  parameters and earlier variables they read become its parameters; refused (with why) for steps apart, a return,
+  yield, a variable made inside and used after, a "var" without a type, or a passed-in value the steps change.
+  Ctrl+PageUp/PageDown switch the method's graph.
+Stopped at: Collapse to Function for Unreal Blueprints (the editor's own command needs the open editor), and
+Collapse Nodes (a collapsed graph, not a function).

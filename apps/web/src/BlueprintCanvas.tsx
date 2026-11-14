@@ -662,6 +662,15 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     }
   };
 
+  /** Collapse to Function (a C# script): asks the new function's name, then the page moves the steps. */
+  const collapse = async () => {
+    const ids = [...selected].filter((id) => !id.startsWith("knot-"));
+    if (!ids.length) return;
+    const name = await askText(L("שם הפונקציה החדשה:", "The new function's name:"), "NewFunction");
+    if (!name?.trim()) return;
+    void apply([{ op: "collapse", nodes: ids, name: name.trim() }]);
+    setSelected(new Set());
+  };
   /** A Get or Set node of a variable at (x, y) in graph units. */
   const addVar = (kind: "get" | "set", name: string, x: number, y: number) => {
     setVarMenu(null);
@@ -1010,6 +1019,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               [L("נתק את כל החיבורים", "Break Node Link(s)"), breakNodeLinks] as const,
               [L("יישר חיבורים (Q)", "Straighten Connections (Q)"), straighten] as const,
               ...(selected.size > 1 ? [[L("יישור למעלה", "Align Top"), () => align("top")] as const, [L("יישור לשמאל", "Align Left"), () => align("left")] as const] : []),
+              // A C# script: the chosen steps become a new method, called where they were (Unreal's Collapse to Function).
+              ...(onOps ? [[L("כווץ לפונקציה (Collapse to Function)", "Collapse to Function"), () => void collapse()] as const] : []),
             ] as Array<readonly [string, () => void]>).map(([label, act]) => (
               <li key={label}><button type="button" role="menuitem" onClick={() => { setNodeMenu(null); act(); }}>{label}</button></li>
             ))}

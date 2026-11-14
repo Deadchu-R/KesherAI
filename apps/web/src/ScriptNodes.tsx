@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { addField, addKnot, breakExec, csValue, deleteStep, fieldUses, insertStep, isKnotId, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, realPin, removeField, removeKnot, updateField, wireExec, withKnots, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
+import { addField, addKnot, breakExec, collapseToFunction, csValue, deleteStep, fieldUses, insertStep, isKnotId, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, realPin, removeField, removeKnot, updateField, wireExec, withKnots, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas, type Action } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
@@ -335,6 +335,16 @@ export function ScriptNodes() {
         saveLayout();
         return { ok: true, nodes: ids };
       }
+      if (op.op === "collapse") {
+        // Collapse to Function: the steps move into a new method of the class; a call takes their place.
+        const r = collapseToFunction(text, classes, ci, m.name, (op.nodes as string[]).filter((x) => !isKnotId(x)), String(op.name));
+        if ("error" in r) return { ok: false, error: r.error };
+        setTimeout(() => {
+          setText(r.text);
+          toast(L(`נוצרה הפונקציה ${String(op.name)}: לחצו עליה בלשוניות המתודות כדי לראות את הגרף שלה.`, `Made the function ${String(op.name)}: choose it in the method tabs to see its graph.`));
+        }, 0);
+        return { ok: true };
+      }
       if (op.op === "usevar") {
         // A variable dropped from the panel on a step's input: the input takes the variable (as a Get node wired in).
         const f = locate(m, layoutRef.current, String(op.node));
@@ -618,7 +628,20 @@ export function ScriptNodes() {
               </Fullscreen>
             ) : (
               <Fullscreen className="script-fs" label={L("הסקריפט במסך מלא", "The script, full screen")}>
-              <div className="script-graph">
+              <div
+                className="script-graph"
+                onKeyDown={(e) => {
+                  // Ctrl+PageUp / Ctrl+PageDown: the previous / next method's graph (as tabs in Visual Studio and VS Code).
+                  if (!(e.ctrlKey || e.metaKey) || (e.key !== "PageUp" && e.key !== "PageDown")) return;
+                  const list = cls?.methods ?? [];
+                  const at = list.findIndex((x) => x.id === method);
+                  const next = list[(at + (e.key === "PageDown" ? 1 : -1) + list.length) % list.length];
+                  if (!next || next.id === method) return;
+                  e.preventDefault();
+                  setMethod(next.id);
+                  setSel("");
+                }}
+              >
                 <div className="script-canvas">
                   <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: כשהשחקן נוגע במטבע תוסיף נקודה", "e.g. when the player touches a coin add a point")} />
                   {m && <BlueprintCanvas key={`${ci}:${m.name}`} nodes={drawn} path={path} graph={m.name} editable unity onOps={graphOps} localActions={localActions} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
