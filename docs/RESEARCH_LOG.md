@@ -1022,3 +1022,6 @@ heavy programs closed (it needs ~104 of the ~110 GB left after Windows).
   Reply, and a free question; Copy, and Replace (pastes the answer in place, then the clipboard back). All questions
   go to one "✍ Text helper" chat. On the phone: "KesherAI" in Android's selection menu (PROCESS_TEXT) opens the same page.
 Stopped at: custom actions, "ignore this app", and an Agent mode with tools (later items).
+- Correction (0.6.201's new reason line): the empty memory check for Qwen3.8-Flash-Next was not the engine. KesherAI
+  passed llama-server's `--checkpoint-min-step` to llama-fit-params, which refuses it, so the check failed at once for
+  every Qwen 3.5+ model. Fixed in 0.6.202 (LlamaEngine.fitArgs). The engine (b12110) still needs checking for this model.

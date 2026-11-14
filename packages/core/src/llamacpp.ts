@@ -486,6 +486,25 @@ export class LlamaEngine {
   }
 
   /**
+   * The server's arguments without those llama-fit-params refuses (server-only: context checkpoints), so the
+   * memory check plans with the same settings the server loads with.
+   *
+   * @param args - llama-server's arguments.
+   * @returns The ones llama-fit-params takes.
+   */
+  static fitArgs(args: readonly string[]): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === "--checkpoint-min-step" || args[i] === "-cms") {
+        i++;
+        continue;
+      }
+      out.push(args[i]!);
+    }
+    return out;
+  }
+
+  /**
    * Arguments for hybrid models (Qwen3.5–3.8, Qwen3-Next: recurrent Gated DeltaNet layers). Their state cannot be
    * rolled back, so after a change in the middle of a conversation llama-server resumes from the nearest saved
    * checkpoint, by default at least 8,192 tokens apart. Closer checkpoints (1,024) mean far less to read again on
@@ -598,7 +617,9 @@ export class LlamaEngine {
     if (!LlamaEngine.fits(this.opts.version)) throw new Error("This llama.cpp build cannot plan the memory ahead (update the engine).");
     const tool = join(dirname(binary), basename(binary).replace(/llama-server/, "llama-fit-params"));
     if (!existsSync(tool)) throw new Error("This llama.cpp build has no llama-fit-params.");
-    const args = ["-m", modelPath, ...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)];
+    // Not hybridArgs: llama-fit-params refuses --checkpoint-min-step (a server-only setting), which made the check
+    // fail at once for every Qwen 3.5+ model (found on the PC with Qwen3.8-Flash-Next).
+    const args = ["-m", modelPath, ...LlamaEngine.fitArgs(LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType))];
     const t0 = Date.now();
     return await new Promise<FitPlan>((resolve, reject) => {
       const p = spawn(tool, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });

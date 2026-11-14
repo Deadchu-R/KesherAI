@@ -119,3 +119,8 @@ test("the Vulkan install command fits the distribution (CachyOS, Ubuntu, Fedora)
   assert.match(vulkanInstallHint("amd", "ID=ubuntu\nID_LIKE=debian"), /apt install mesa-vulkan-drivers/);
   assert.match(vulkanInstallHint("amd", "ID=fedora"), /dnf/);
 });
+
+test("the memory check gets the server's arguments without the server-only checkpoint setting", () => {
+  assert.deepEqual(LlamaEngine.fitArgs(["-c", "32768", "--checkpoint-min-step", "1024", "-ngl", "99", "-cms", "512"]), ["-c", "32768", "-ngl", "99"]);
+  assert.deepEqual(LlamaEngine.fitArgs(["-c", "8192"]), ["-c", "8192"]);
+});
