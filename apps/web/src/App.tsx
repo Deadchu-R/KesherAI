@@ -4,6 +4,7 @@
  * picks the page. Pages load lazily (their code is fetched the first time they open).
  */
 import { clearPhoneNotes } from "./phoneNotify";
+import { CommandPalette } from "./CommandPalette";
 import { GuardBanner } from "./GuardSection";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
@@ -297,6 +298,7 @@ export function App() {
       <RemoteBanner />
       <ExtensionPage />
       <AskFromUrl />
+      <CommandPalette />
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />

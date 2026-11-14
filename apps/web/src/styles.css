@@ -2194,3 +2194,23 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .storage-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .storage-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 4px; text-align: start; padding: 10px 12px; height: auto; min-height: 0; white-space: normal; line-height: 1.35; }
 .storage-compress { border-top: 1px solid var(--border); padding-top: 8px; }
+
+/* Command palette (Ctrl+K): near the top like Claude's and Linear's, the list scrolls, full width on a phone. */
+.palette-back { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.45); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
+.palette { width: min(620px, 100%); max-height: min(70vh, 560px); display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--panel-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2); }
+.palette > input { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; font-size: 16px; padding: 14px 16px; min-height: 52px; }
+.palette > input:focus { outline: none; box-shadow: none; }
+.palette-list { list-style: none; margin: 0; padding: 6px; overflow: auto; flex: 1; }
+.palette-group { padding: 8px 10px 4px; }
+.palette-list button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: start; background: transparent; border: 0; border-radius: 10px; padding: 8px 10px; min-height: 40px; font: inherit; color: var(--text); }
+.palette-list button.on { background: var(--accent-soft); }
+.palette-icon { width: 24px; text-align: center; flex: none; }
+.palette-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-none { padding: 14px 10px; }
+.palette-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--border); }
+.palette-foot kbd { font: inherit; border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 5px; }
+@media (max-width: 760px) {
+  .palette-back { padding: 8px; align-items: stretch; }
+  .palette { max-height: calc(100dvh - 16px); }
+  .palette-foot { display: none; }
+}

@@ -816,3 +816,11 @@ token colors (semanticTokenColors) are not mapped.
   read where it is used, so Get is "drop it on a step's input" (the input becomes the variable); Set makes a Set step
   placed alone. On a phone, HTML drag does not work: the panel's "Set in the graph" button stays for that.
 Stopped at: dragging onto a pin of the wrong type is not refused yet (Unreal shows a red "incompatible" tip).
+
+## 2026-11-14: Command palette (board t41)
+- Claude.ai and ChatGPT: Ctrl+K searches the chats. Linear and Raycast: Ctrl+K runs any action. Slack: Ctrl+K jumps to a
+  conversation. VS Code: Ctrl+P files, ">" for commands. Shared: one box near the top, fuzzy match, groups (actions,
+  places, recent), ↑↓ + Enter, Esc, a hint row; on phones a search button.
+- Built: actions (new chat, new code session, updates, settings), every menu page (by its name in both languages and its
+  address), the chats by title (the five latest when empty). The code editor keeps its own Ctrl+K. 🔍 in the top bar.
+Stopped at: recent items first, plugin pages and settings sections as entries, a ">" commands-only mode.

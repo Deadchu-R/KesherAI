@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { openPalette } from "./CommandPalette";
 import { useEffect, useRef, useState } from "react";
 import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 import { useAppMenu } from "./AppMenu";
@@ -126,6 +127,9 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {/* Pages render their own title here with a portal; React leaves this element's children to them. */}
           <div id="appbar-title" className="appbar-slot" />
         </div>
+        <button type="button" className="bar-btn palette-btn" aria-label={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} title={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} onClick={openPalette}>
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.8" stroke="currentColor" strokeWidth="1.6" fill="none" /><path d="M11.2 11.2 15 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        </button>
         <UpdateButton />
         <DesignAssistant />
         <InboxBell />
