@@ -6,6 +6,7 @@ import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
 import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
 import { healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
+import { fixActions, runFixes, type FixContext } from "../pc-fix.js";
 
 /**
  * The Health page: the computer's reading and what to do (fixed rules), and on request the chat model's short
@@ -29,6 +30,40 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get<{ Querystring: { lang?: string; fresh?: string } }>("/api/pc-health", async (req) => {
     const r = await read(req.query.fresh === "1");
     return { reading: r, items: healthItems(r, req.query.lang === "he") };
+  });
+
+  // "Fix it for me": what KesherAI can safely do itself, then the chosen ones (ids only; looked up again here).
+  // From the phone too: the remote token is the owner's, and the page asks before doing anything.
+  const fixContext = async (): Promise<FixContext> => {
+    const st = s.engine.status();
+    const g = s.guard.status();
+    const run = s.selfWork?.current;
+    return {
+      ...(st.modelPath ? { loadedModel: st.modelPath } : {}),
+      busy: Object.keys(s.conversations.activity()).length > 0,
+      memoryShort: g.system.ramTotal > 0 && g.system.ramUsed / g.system.ramTotal > 0.85,
+      modelsDir: s.paths.models,
+      modelUse: (await s.modelUse?.all()) ?? {},
+      ...(run ? { selfWork: { repo: run.repo, worktree: run.worktree } } : {}),
+      unload: async () => {
+        await s.engine.stop();
+      },
+    };
+  };
+  app.get("/api/pc-health/fixes", async () => ({ actions: await fixActions(await fixContext()) }));
+  let fixing = false;
+  app.post<{ Body: { ids?: unknown } }>("/api/pc-health/fix", async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map(String) : [];
+    if (!ids.length) return reply.code(400).send({ error: "Nothing chosen." });
+    if (fixing) return reply.code(409).send({ error: "Already fixing." });
+    fixing = true;
+    try {
+      const r = await runFixes(ids, await fixContext());
+      last = undefined;
+      return r;
+    } finally {
+      fixing = false;
+    }
   });
 
   // KesherAI's own recent faults (already cleaned of secrets and home paths), for the Health page.

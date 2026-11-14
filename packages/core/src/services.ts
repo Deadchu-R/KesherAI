@@ -3,6 +3,7 @@
  * app (provider registry, conversation manager, engine, guard, notifier, downloads, config…), so a route never
  * creates its own and everything shares one state.
  */
+import type { ModelUse } from "./pc-fix.js";
 import type { MemoryStore } from "./memory-store.js";
 import type { ProjectFacts } from "./project-facts.js";
 import type { SelfWork } from "./self-work.js";
@@ -146,6 +147,8 @@ export interface KesherServices {
   routines: Routines;
   /** KesherAI working on a git project by itself (set once the chats exist). */
   selfWork?: SelfWork;
+  /** When each model was last loaded (PC Health's "Fix it for me"). */
+  modelUse?: ModelUse;
   /** The task board self-work shares with Claude. */
   board?: TaskBoard;
   /** Set in worker mode: its version, and "move to the newer version after the current item". */

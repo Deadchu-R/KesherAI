@@ -4,6 +4,7 @@ import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
 import { ReportDialog } from "../ReportDialog";
+import { FixDialog } from "../FixDialog";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const GB = 1024 ** 3;
@@ -67,6 +68,7 @@ export function HealthPage() {
   const [advice, setAdvice] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [phone, setPhone] = useState<PhoneReading | null>(null);
   const [faults, setFaults] = useState<Array<{ at: string; kind: string; where: string; message: string }>>([]);
   const load = (fresh = false) => {
@@ -91,11 +93,13 @@ export function HealthPage() {
   return (
     <div className="page health-page">
       {reporting && <ReportDialog onClose={() => setReporting(false)} />}
+      {fixing && <FixDialog onClose={() => setFixing(false)} onDone={() => load(true)} />}
       <div className="row">
         <h1 className="grow">{L("בריאות המחשב", "PC Health")}</h1>
+        <button type="button" className="primary" onClick={() => setFixing(true)}>{L("🛠 תקן לי", "🛠 Fix it for me")}</button>
         <button type="button" disabled={busy} onClick={() => load(true)}>{busy ? L("בודק…", "Checking…") : L("בדוק שוב", "Check again")}</button>
       </div>
-      <p className="muted">{L("מה חסר למחשב ומה לעשות. KesherAI רק קורא כאן ולא מוחק שום דבר: כל תיקון הוא צעד שאתם עושים.", "What the computer is short of and what to do. KesherAI only reads here and deletes nothing: every fix is a step you take.")}</p>
+      <p className="muted">{L("מה חסר למחשב ומה לעשות. \"תקן לי\" עושה בעצמו את מה שבטוח, רק בדברים של KesherAI ורק אחרי שתאשרו. כל השאר הם צעדים שאתם עושים.", "What the computer is short of and what to do. \"Fix it for me\" does the safe part itself, only with KesherAI's own things and only after you confirm; the rest are steps you take.")}</p>
       {!data && <p className="muted">{L("בודק את המחשב…", "Checking the computer…")}</p>}
       {data && (
         <section className="card stack">

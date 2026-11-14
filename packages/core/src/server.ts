@@ -80,6 +80,7 @@ import { lspRoutes } from "./routes/lsp.js";
 import { codeRoutes } from "./routes/code.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
+import { ModelUse } from "./pc-fix.js";
 import { SelfWork } from "./self-work.js";
 import { seedBuiltinSkills } from "./builtin-skills.js";
 import { TaskBoard } from "./task-board.js";
@@ -326,6 +327,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   }
   await library.load();
 
+  // When each model was last loaded (PC Health's "Fix it for me": models nobody used for 30 days).
+  const modelUse = new ModelUse(join(paths.root, "model-use.json"));
   const engine = new LlamaEngine({
     dir: paths.engines,
     ...(config.engines.llamaServerPath ? { binaryPath: config.engines.llamaServerPath } : {}),
@@ -337,6 +340,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     ...(config.engines.fitTargetMiB !== undefined ? { fitTargetMiB: config.engines.fitTargetMiB } : {}),
     ...(config.engines.kvType !== undefined ? { kvType: config.engines.kvType } : {}),
     gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
+    onLoad: (modelPath) => void modelUse.used(modelPath),
   });
   downloads.limit = config.downloadLimitMBps * 1024 * 1024;
   const assets = new AssetStore(paths.assets);
@@ -851,6 +855,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
   });
   services.selfWork = selfWork;
+  services.modelUse = modelUse;
   services.worker = worker ? { version: worker.version, upgrade: () => {
     workerUpgrade = true;
     const r = selfWork.current;

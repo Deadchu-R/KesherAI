@@ -311,7 +311,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; gpuPlan?: (modelPath: string) => Promise<GpuPlan> },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
   ) {}
 
   /** @returns The engine's state. */
@@ -685,6 +685,7 @@ export class LlamaEngine {
    * @throws Error if the engine is not installed, or the server exits or does not become ready.
    */
   async load(modelPath: string, timeoutMs?: number): Promise<void> {
+    this.opts.onLoad?.(modelPath);
     timeoutMs ??= LlamaEngine.loadTimeout((await stat(modelPath).catch(() => undefined))?.size ?? 0);
     const binary = this.opts.binaryPath;
     if (!binary || !existsSync(binary)) throw new Error("The llama.cpp engine is not installed yet. Install it from the Models screen.");
