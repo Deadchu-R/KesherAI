@@ -182,3 +182,6 @@ Not scheduled; kept here so they are not lost.
   editors it runs in, what it adds there: a panel, menu items, tools for the agent), the same permissions shown before
   install, and the same sandbox as other plugins (t39: its own process, only what it declared). Research first: Unity
   Muse/AI Assistant, Unreal's AI assistant and MCP toolsets, and Rider/VS AI panels, end to end, in RESEARCH_LOG.
+- **Dependency note: @lezer/highlight** (approved by Roee 2026-11-14): CodeMirror's highlighting tags, so the phone
+  editor wears the IDE's syntax colours. It already came with CodeMirror; to drop it, the phone editor would need its
+  own tokenizer colours (not worth it while CodeMirror is used).

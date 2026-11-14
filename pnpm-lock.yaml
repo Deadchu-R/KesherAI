@@ -197,6 +197,9 @@ importers:
       '@kesher/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@lezer/highlight':
+        specifier: 1.2.5
+        version: 1.2.5
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0

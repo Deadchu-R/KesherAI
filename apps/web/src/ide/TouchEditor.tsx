@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { autocompletion, snippet, startCompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { indentWithTab, redo, undo } from "@codemirror/commands";
-import { StreamLanguage } from "@codemirror/language";
+import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
+import { tags as t, type Tag } from "@lezer/highlight";
 import { setDiagnostics } from "@codemirror/lint";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { csharp } from "@codemirror/legacy-modes/mode/clike";
@@ -76,6 +77,35 @@ function lookTheme(l: IdeLook | undefined): Extension {
   );
 }
 
+/** The desktop editor's token names (Monaco, from the IDE's theme) as CodeMirror's highlighting tags. */
+const TOKEN_TAGS: Record<string, Tag[]> = {
+  keyword: [t.keyword, t.controlKeyword, t.modifier, t.definitionKeyword, t.operatorKeyword, t.bool, t.null, t.self],
+  string: [t.string, t.special(t.string), t.character, t.regexp],
+  number: [t.number, t.integer, t.float],
+  comment: [t.comment, t.lineComment, t.blockComment, t.docComment],
+  type: [t.typeName, t.className, t.namespace, t.standard(t.typeName)],
+  "identifier.function": [t.function(t.variableName), t.function(t.propertyName), t.function(t.definition(t.variableName))],
+  identifier: [t.variableName, t.propertyName, t.definition(t.variableName)],
+  delimiter: [t.operator, t.punctuation, t.bracket],
+  annotation: [t.meta, t.attributeName, t.tagName],
+};
+
+/** The IDE theme's syntax colours (keywords, strings, comments, types…) as the phone editor's highlighting. */
+function lookHighlight(l: IdeLook | undefined): Extension {
+  const rules = l?.theme?.rules ?? [];
+  if (!rules.length) return [];
+  const seen = new Set<string>();
+  const specs = [];
+  // A theme lists general rules first and narrower ones after: the last rule for a token wins, as in Monaco.
+  for (const r of [...rules].reverse()) {
+    const tags = TOKEN_TAGS[r.token];
+    if (!tags || seen.has(r.token)) continue;
+    seen.add(r.token);
+    specs.push({ tag: tags, ...(r.foreground ? { color: `#${r.foreground}` } : {}), ...(/italic/.test(r.fontStyle ?? "") ? { fontStyle: "italic" } : {}), ...(/bold/.test(r.fontStyle ?? "") ? { fontWeight: "bold" } : {}) });
+  }
+  return specs.length ? Prec.highest(syntaxHighlighting(HighlightStyle.define(specs))) : [];
+}
+
 /** A snippet with $1-style places as CodeMirror's ${} ones. */
 const applyOf = (insert: string): Completion["apply"] => (/\$\{?\d/.test(insert) ? snippet(insert.replace(/\$\{(\d+)(?::([^}]*))?\}/g, (_m, _n, d: string | undefined) => `\${${d ?? ""}}`).replace(/\$(\d+)/g, "${}")) : insert);
 
@@ -127,7 +157,7 @@ const TouchEditor = forwardRef<EditorHandle, EditorProps>(function TouchEditor(p
   // The chosen IDE's look (VS Code, Antigravity, Rider…), as on the desktop editor.
   const [look, setLook] = useState<IdeLook | undefined>(undefined);
   const lookPart = useRef(new Compartment());
-  const lookExt = (l: IdeLook | undefined): Extension => [...(document.documentElement.dataset.light === "1" && l?.theme?.base !== "vs-dark" ? [] : [oneDark]), lookTheme(l)];
+  const lookExt = (l: IdeLook | undefined): Extension => [...(document.documentElement.dataset.light === "1" && l?.theme?.base !== "vs-dark" ? [] : [oneDark]), lookTheme(l), lookHighlight(l)];
   useEffect(() => {
     void ideLook().then(setLook);
     return onIdeLook(setLook);
