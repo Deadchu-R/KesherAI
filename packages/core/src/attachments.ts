@@ -7,7 +7,7 @@
  *
  * Only files inside the chat's own folder or the folders opened to it are read.
  */
-import { stat, readFile } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, extname, isAbsolute, relative, resolve } from "node:path";
 import { documentText, formatPages } from "@kesher/agent";
 
@@ -44,8 +44,12 @@ export async function readAttachments(text: string, roots: string[]): Promise<Re
   for (const m of text.matchAll(LINE)) {
     const given = m[1]!.trim();
     const path = isAbsolute(given) ? resolve(given) : roots[0] ? resolve(roots[0], given) : "";
-    if (!path || seen.has(path) || !roots.some((r) => inside(r, path))) continue;
+    if (!path || seen.has(path)) continue;
     seen.add(path);
+    // The real places (a link inside the chat's folder must not lead outside it).
+    const real = await realpath(path).catch(() => "");
+    const realRoots = await Promise.all(roots.map((r) => realpath(r).catch(() => r)));
+    if (!real || !realRoots.some((r) => inside(r, real))) continue;
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile()) continue;
     const ext = extname(path).toLowerCase();
