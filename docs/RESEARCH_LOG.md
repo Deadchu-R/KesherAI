@@ -717,3 +717,27 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   (nilsheuman.github.io/TIL, 2025-04-17; prefs browser.ml.chat.provider / hideLocalhost / prompts.N).
 - Built: extension 0.2.1 for Firefox; KesherAI answers `?q=` in an incognito, plan-mode chat (a link from any site
   could carry a question).
+
+## Noctalia v5 plugins (2026-11-14)
+
+- Problem: "Connect to Noctalia" copied the QML plugin, but the brother's Noctalia never listed it. His Noctalia is v5 (the `noctalia` program), and v5 only loads Luau plugins.
+- v5 plugin layout: a folder with `plugin.toml` (`id = "author/plugin"`, name, version, `plugin_api`, author) and `.luau` entries (`[[widget]]`, `[[panel]]`, `[[service]]`).
+- Where v5 plugins go and how they turn on:
+  - Hand-placed plugins go in `$XDG_DATA_HOME/noctalia/plugins/<plugin>/`.
+  - To enable: `noctalia msg plugins enable author/plugin`, or `[plugins] enabled` in config.toml.
+- Config behavior:
+  - Every `*.toml` file in the config folder is merged.
+  - The GUI writes `~/.local/state/noctalia/settings.toml`, which wins over hand-written config.
+  - Both are hot-reloaded.
+- Bar placement: bar widgets are named `"author/plugin:entry"` in the `[bar.<name>]` `start`/`center`/`end` lanes. Arrays are replaced when files merge, not combined, so KesherAI doesn't write lanes; the person adds the widget from Settings → Bar.
+- Luau API used:
+  - `noctalia.http({url, method, headers}, cb)`
+  - `noctalia.json.decode`
+  - `noctalia.state.set/get/watch`
+  - `noctalia.runAsync(argv)` (plugin_api 24)
+  - `barWidget.setGlyph/setText/setTooltip`
+  - `panel.render(ui.*)`
+  - `ui.button {text, glyph, variant, enabled, onClick}`
+- Not found in the docs, so left out: a text input for asking from the panel.
+- Sources: docs.noctalia.dev (v5.4.0 plugins, manifest, entries, declarative UI, bar, configuration); github.com/OHMCFXG/noctalia-plugins (real v5 examples).
+- Stopped at: v5 plugin shipped in 0.6.156. Not yet confirmed on a real v5 machine. Asking from the panel waits for a documented text input.
