@@ -43,7 +43,10 @@ function nodeCommand(extra: string[], ts: boolean): { cmd: string; args: string[
   const loader = ts
     ? process.execArgv.flatMap((a, i, all) => (a === "--import" ? [] : all[i - 1] === "--import" ? ["--import", abs(a)] : a.startsWith("--import=") ? [`--import=${abs(a.slice(9))}`] : a.startsWith("--conditions") ? [a] : []))
     : [];
-  return { cmd: process.execPath, args: [...loader, ...extra], env };
+  // A plugin's .js with `import` runs as a module even without its package.json beside it (found on the PC: the
+  // installed app ships a plugin's dist/ without it).
+  const detect = process.allowedNodeEnvironmentFlags.has("--experimental-detect-module") ? ["--experimental-detect-module"] : [];
+  return { cmd: process.execPath, args: [...detect, ...loader, ...extra], env };
 }
 
 let permissionModel: Promise<boolean> | undefined;

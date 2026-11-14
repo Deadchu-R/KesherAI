@@ -37,6 +37,7 @@ import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
 import { CodeHome } from "./pages/CodeHome";
 import { SelfWorkPage } from "./pages/SelfWorkPage";
+import { PadHints } from "./PadHints";
 
 /* Pages load only when opened, so starting KesherAI (and a part that is off) costs nothing. */
 const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
@@ -232,6 +233,12 @@ export function App() {
     }
   };
   const message = useToast();
+  // The controller's Menu button (≡) opens and closes the side menu.
+  useEffect(() => {
+    const f = () => toggleSidebar();
+    window.addEventListener("kesher:sidebar", f);
+    return () => window.removeEventListener("kesher:sidebar", f);
+  });
 
   // On a phone the sidebar is a full-screen menu; close it when the user navigates.
   useEffect(() => {
@@ -299,6 +306,7 @@ export function App() {
       <ExtensionPage />
       <AskFromUrl />
       <CommandPalette />
+      <PadHints />
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />

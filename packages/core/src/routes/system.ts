@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { deviceInfo } from "../handheld.js";
 import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
 import { basename, join, resolve, sep } from "node:path";
@@ -107,6 +108,8 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get("/api/categories", async () => [...BUILT_IN_CATEGORIES, ...s.plugins.categories]);
 
   app.get("/api/hardware", async () => detectHardware());
+  // Which computer this is (a handheld gaming PC gets the handheld look and controller hints).
+  app.get("/api/system/device", async () => deviceInfo());
 
   app.get("/api/plugins", async () =>
     s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir, removable: resolve(p.dir).startsWith(resolve(s.paths.plugins) + sep), ...(p.isolation ? { isolation: p.isolation } : {}) })),

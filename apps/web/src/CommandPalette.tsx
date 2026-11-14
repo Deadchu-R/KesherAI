@@ -4,6 +4,7 @@ import { getLocale, t } from "./i18n";
 import { NAV_GROUPS, NAV_ICONS, useNavItems } from "./Sidebar";
 import { useParts } from "./parts";
 import { fit } from "./palette-fit";
+import { handheldSetting, setHandheld } from "./PadHints";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -86,6 +87,22 @@ export function CommandPalette() {
       ...(simple ? [] : [{ id: "new-code", icon: "</>", title: L("סשן קוד חדש", "New code session"), also: "new code קוד חדש", group: "action" as const, run: go("#/code") }]),
       { id: "updates", icon: "⟳", title: L("בדיקת עדכונים", "Check for updates"), also: "updates עדכונים", group: "action", run: go("#/updates") },
       { id: "settings", icon: "⚙", title: L("הגדרות", "Settings"), also: "settings הגדרות", group: "action", run: go("#/settings") },
+      (() => {
+        // The handheld look (bigger targets): automatic on a handheld gaming PC, or on / off by hand.
+        const now = document.documentElement.classList.contains("handheld");
+        return {
+          id: "handheld",
+          icon: "🎮",
+          title: now ? L("כיבוי מצב מחשב כף יד", "Turn off the handheld look") : L("הפעלת מצב מחשב כף יד (כפתורים גדולים)", "Turn on the handheld look (bigger buttons)"),
+          also: "handheld ally steam deck controller gamepad שלט כף יד",
+          group: "action" as const,
+          run: () => {
+            const was = handheldSetting();
+            const detected = !!document.documentElement.dataset.handheld;
+            setHandheld(now ? (detected ? "off" : "auto") : detected && was === "off" ? "auto" : "on");
+          },
+        };
+      })(),
     ];
     // The menu's own pages (without parts that are off, or what simple mode leaves out), plus All tools.
     const groupOf = (id: string) => NAV_GROUPS.find((g) => g.id === id);

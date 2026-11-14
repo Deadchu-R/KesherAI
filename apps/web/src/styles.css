@@ -2233,3 +2233,19 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .receipt-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 12.5px; }
 .part-simple { gap: 12px; align-items: center; margin-bottom: 10px; }
 .part-simple input { width: auto; min-height: 0; }
+
+/* Game controllers and handheld gaming PCs (gamepad.ts, PadHints.tsx). */
+html.pad :focus-visible, html.pad :focus { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+html.pad textarea:focus, html.pad input:focus { box-shadow: 0 0 0 4px var(--accent-soft); }
+html.pad, html.pad * { cursor: none; }
+.pad-hints { position: fixed; inset-inline: 0; bottom: 0; z-index: 60; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; padding: 6px 12px calc(6px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 88%, transparent); border-top: 1px solid var(--border); font-size: 13px; pointer-events: none; }
+.pad-hint { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pad-btn { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; font-weight: 700; font-size: 12px; color: #fff; background: #555; }
+.pad-btn.a { background: #3f9d3f; } .pad-btn.b { background: #c8402f; } .pad-btn.x { background: #2f6fc8; } .pad-btn.y { background: #c9a227; color: #1b1b1b; }
+.pad-btn.lr, .pad-btn.m { background: #4b4f58; }
+html.pad .main { padding-bottom: 44px; }
+/* The handheld look: a 7–8" screen held at arm's length, used by thumb (bigger targets and text, as Steam's). */
+html.handheld { font-size: 17px; }
+html.handheld button, html.handheld .button, html.handheld select, html.handheld input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 44px; }
+html.handheld .sidebar a { min-height: 44px; display: flex; align-items: center; }
+html.handheld input[type="checkbox"], html.handheld input[type="radio"] { width: 22px; height: 22px; }

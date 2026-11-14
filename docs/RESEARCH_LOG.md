@@ -900,3 +900,13 @@ several uses (Unreal keeps one node per use too), and Unreal's own pure nodes in
   change width at runtime (noctalia.layer.configure), driven by a slider or buttons, not a drag.
 Stopped at: which Noctalia the brother runs; for v5 the options are a layer with a width slider, or asking Noctalia
 for resizable plugin panels.
+
+## 2026-11-14: Controller and handheld gaming PCs (Roee's ROG Xbox Ally X)
+- Steam Big Picture / Xbox app conventions: A choose, B back, X more, Y search, LB/RB tabs, Menu, View, right stick
+  scrolls; a footer of button hints; bold focus. Spatial navigation (nearest control in the pressed direction), as
+  TV and console web UIs. The browser's Gamepad API (standard mapping) reads XInput pads in Electron.
+- Models: ROG Xbox Ally X RC73XA, ROG Xbox Ally RC73YA, ROG Ally X RC72LA, ROG Ally RC71L (rog.asus.com spec pages);
+  Steam Deck Jupiter/Galileo; Legion Go 83E1. Read from the firmware's product name (registry / DMI).
+- Built (0.6.185): gamepad.ts, PadHints.tsx, /api/system/device, the handheld look (bigger targets), 🎮 in the palette.
+Stopped at: an on-screen keyboard for fields (Windows' touch keyboard opens on tap; with the controller only, Xbox
+Game Bar's keyboard or Steam's), haptics on press (vibrationActuator), and per-page shortcuts (e.g. the graph editor).
