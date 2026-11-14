@@ -13,7 +13,7 @@ try {
   python = false;
 }
 
-test("runs the user's own ComfyUI folder, waits until it answers, and stops it", { skip: !python }, async () => {
+test("runs the user's own ComfyUI folder, waits until it answers, and stops it", { skip: !python, timeout: 90_000 }, async () => {
   const dir = await mkdtemp(join(tmpdir(), "kesher-comfy-"));
   const own = join(dir, "MyComfy");
   await import("node:fs/promises").then((f) => f.mkdir(own));
@@ -35,7 +35,8 @@ test("runs the user's own ComfyUI folder, waits until it answers, and stops it",
   });
   assert.equal(m.status().installed, true);
   assert.equal(m.status().managed, false);
-  await m.start(20_000);
+  // Python starts slowly on GitHub's Windows machines (once more than 20 s, 0.6.193): a minute.
+  await m.start(60_000);
   assert.equal(m.status().running, true);
   assert.deepEqual(ready, [`http://127.0.0.1:${port}`]);
   const args = JSON.parse(await import("node:fs/promises").then((f) => f.readFile(join(own, "args.json"), "utf8"))) as string[];
