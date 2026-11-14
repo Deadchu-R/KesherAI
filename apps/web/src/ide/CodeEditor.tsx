@@ -1,8 +1,9 @@
-import { Suspense, lazy, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import type { EditorHandle, EditorProps } from "./editor-types";
+import { chooseIde, chosenIde, ides, openInChosenIde, type IdeInfo } from "./ide-look";
 
 export type { CodeProblem } from "./editor-types";
 
@@ -24,6 +25,24 @@ export default function CodeEditor(p: EditorProps) {
   const [onTouch] = useState(touch);
   const [completing, setCompleting] = useState(false);
   const Engine = onTouch ? TouchEditor : MonacoEditor;
+  // The person's own code editors (VS Code, Cursor, Rider…): their look here, and opening this file in one.
+  const [editors, setEditors] = useState<IdeInfo[]>([]);
+  const [lookOf, setLookOf] = useState(chosenIde);
+  useEffect(() => {
+    let live = true;
+    void ides().then((l) => live && setEditors(l));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const openThere = async () => {
+    try {
+      await openInChosenIde(p.fullPath!, ref.current?.line() ?? 1);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  const target = editors.find((x) => x.id === lookOf) ?? editors[0];
   const complete = async () => {
     const h = ref.current;
     if (!h || completing) return;
@@ -49,6 +68,15 @@ export default function CodeEditor(p: EditorProps) {
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.insert("    ")} title="Tab">⇥</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.undo()} title={L("בטל (Ctrl+Z)", "Undo (Ctrl+Z)")} aria-label={L("בטל", "Undo")}>↶</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.redo()} title={L("חזור (Ctrl+Y)", "Redo (Ctrl+Y)")} aria-label={L("חזור", "Redo")}>↷</button>
+          {editors.length > 0 && !onTouch && (
+            <select className="code-look" value={lookOf} onChange={(e) => { setLookOf(e.target.value); void chooseIde(e.target.value); }} title={L("המראה של הקוד: כמו בעורך שלך", "How the code looks: like your editor")} aria-label={L("מראה הקוד", "Code look")}>
+              <option value="">{L("מראה KesherAI", "KesherAI look")}</option>
+              {editors.map((x) => <option key={x.id} value={x.id}>{L(`מראה ${x.name}`, `${x.name} look`)}</option>)}
+            </select>
+          )}
+          {p.fullPath && target && (
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void openThere()} title={L(`פתח את הקובץ ב-${target.name} בשורה של הסמן`, `Open the file in ${target.name} at the cursor's line`)}>↗ {target.name}</button>
+          )}
         </div>
       )}
       <Suspense fallback={<div className={`code-editor ${p.className ?? ""}`} />}>

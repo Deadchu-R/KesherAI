@@ -1710,6 +1710,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .editor-pane > .code-editor-wrap { flex: 1; }
 .code-toolbar { gap: 4px; flex-wrap: wrap; align-items: center; }
 .code-toolbar button { padding: 4px 10px; font-size: 13px; min-height: 34px; }
+.code-toolbar .code-look { width: auto; max-width: 170px; padding: 4px 8px; font-size: 13px; min-height: 34px; margin-inline-start: auto; }
 .touch-editor .cm-editor { height: 100%; font-size: 14px; }
 .touch-editor .cm-scroller { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .kesher-monaco-overflow { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 1000; }

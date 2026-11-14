@@ -784,3 +784,20 @@ Sources: [Pinggy: 8 tools](https://pinggy.io/blog/tools_to_reduce_ai_coding_agen
   - Collapse to Function.
   - Copy/paste in Unity graphs (the package has no copy op yet).
 - Stopped at: the first list above is shipped (0.6.163). Next is the "Not done yet" list, with the variable drag first.
+
+## 2026-11-14: The code editors on the computer (VS Code, Cursor, Antigravity, Rider, Visual Studio)
+Asked for: "connect to the IDEs on my computer and see code their way in a small panel".
+- Cursor's "Import from VS Code" brings extensions, themes, settings and keybindings: the VS Code family keeps
+  them in the same shape (User/settings.json, themes as JSON with `include` and TextMate `tokenColors`).
+- VS Code family: `workbench.colorTheme` names the theme; the theme file is found through the `contributes.themes`
+  of an extension (~/.vscode/extensions, or the editor's built-in resources/app/extensions; built-in labels are
+  "%…%" placeholders, so the id or file name is matched). Font: editor.fontFamily/fontSize/fontLigatures/lineHeight.
+  Open at a line: `code -g file:line` (Cursor and Antigravity take the same).
+- Rider: options/colors.scheme.xml names the scheme, colors/<name>.icls holds a user scheme's attributes
+  (DEFAULT_KEYWORD, DEFAULT_STRING…); options/editor-font.xml the font. Open at a line: `rider64 --line N file`.
+- Visual Studio: vswhere -latest -property productPath finds devenv; `devenv /Edit file` (no line from the command
+  line). Its theme lives in the registry and .vstheme packages: KesherAI uses VS Dark's well-known colors.
+Built (0.6.167): /api/ides, /api/ides/look, /api/ides/open; the code editor's toolbar picks a look and opens the file
+at the cursor's line. Reads the editors' settings only; never changes them.
+Stopped at: the touch editor (phone) keeps its own look; Visual Studio's real theme colors; extensions' semantic
+token colors (semanticTokenColors) are not mapped.

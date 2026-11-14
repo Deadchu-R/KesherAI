@@ -206,6 +206,7 @@ const TouchEditor = forwardRef<EditorHandle, EditorProps>(function TouchEditor(p
       return { prefix: t.slice(0, pos), suffix: t.slice(pos) };
     },
     focus: () => view.current?.focus(),
+    line: () => (view.current ? view.current.state.doc.lineAt(view.current.state.selection.main.head).number : 1),
   }));
 
   return <div className={`code-editor touch-editor ${p.className ?? ""}`} ref={box} dir="ltr" />;

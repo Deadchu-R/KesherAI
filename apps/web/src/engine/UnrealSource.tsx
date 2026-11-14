@@ -137,7 +137,7 @@ export function UnrealSource() {
           <Fullscreen className="script-fs" label={L("הקוד במסך מלא", "The code, full screen")}>
             <div className="script-code-wrap">
               <Suspense fallback={<p className="muted">…</p>}>
-                <CodeEditor path={`${current?.name ?? "project"}/${path}`} value={text} onChange={setText} problems={mine} onSave={() => void save()} />
+                <CodeEditor path={`${current?.name ?? "project"}/${path}`} fullPath={`${project.replace(/[\\/][^\\/]+\.uproject$/i, "")}/${path}`} value={text} onChange={setText} problems={mine} onSave={() => void save()} />
               </Suspense>
               {mine.length > 0 && (
                 <ul className="code-problems">

@@ -14,6 +14,8 @@ export interface EditorProps {
   readOnly?: boolean;
   minimap?: boolean;
   className?: string;
+  /** The file's full path on the computer: shows "open in your editor" at the cursor's line. */
+  fullPath?: string;
   /** A language server for this file (Rider-like help): its WebSocket, the project folder and the file's full path. */
   lsp?: { url: string; root: string; file: string; onStatus?: (s: string) => void };
 }
@@ -29,4 +31,6 @@ export interface EditorHandle {
   /** The text before and after the cursor. */
   around: () => { prefix: string; suffix: string };
   focus: () => void;
+  /** The cursor's line (1-based), for opening the file there in another editor. */
+  line: () => number;
 }

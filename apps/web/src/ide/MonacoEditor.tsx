@@ -5,6 +5,7 @@ import { liveMarkers, registerCSharpAssist, setProjectTypes } from "./csharp-ass
 import { languageOf } from "./languages";
 import { fileUri, lspLink, registerLspProviders } from "./lsp-client";
 import { registerInlineSuggestions } from "./inline-suggest";
+import { ideLook, onIdeLook, type IdeLook } from "./ide-look";
 
 import type { EditorHandle, EditorProps } from "./editor-types";
 
@@ -62,7 +63,29 @@ const MonacoEditor = forwardRef<EditorHandle, EditorProps>(function MonacoEditor
     });
     e.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => save.current?.());
     ed.current = e;
+    // The look of the person's own editor (VS Code, Cursor, Rider…), when one is chosen: its colors and font.
+    const dress = (l: IdeLook | undefined) => {
+      if (ed.current !== e) return;
+      try {
+        if (l?.theme) {
+          monaco.editor.defineTheme("kesher-ide", l.theme);
+          monaco.editor.setTheme("kesher-ide");
+        } else monaco.editor.setTheme(document.documentElement.dataset.light === "1" ? "vs" : "vs-dark");
+      } catch {
+        monaco.editor.setTheme(light ? "vs" : "vs-dark");
+      }
+      e.updateOptions({
+        fontFamily: l?.fontFamily ? `${l.fontFamily}, "IBM Plex Mono", ui-monospace, monospace` : '"IBM Plex Mono", ui-monospace, monospace',
+        fontSize: l?.fontSize ?? 13,
+        fontLigatures: !!l?.ligatures,
+        lineHeight: l?.lineHeight ?? 0,
+        tabSize: l?.tabSize ?? 4,
+      });
+    };
+    void ideLook().then(dress);
+    const offLook = onIdeLook(dress);
     return () => {
+      offLook();
       e.getModel()?.dispose();
       e.dispose();
       ed.current = null;
@@ -150,6 +173,7 @@ const MonacoEditor = forwardRef<EditorHandle, EditorProps>(function MonacoEditor
       return { prefix: m.getValueInRange(new monaco.Range(1, 1, pos.lineNumber, pos.column)), suffix: m.getValueInRange(new monaco.Range(pos.lineNumber, pos.column, full.endLineNumber, full.endColumn)) };
     },
     focus: () => ed.current?.focus(),
+    line: () => ed.current?.getPosition()?.lineNumber ?? 1,
   }));
 
   return <div className={`code-editor ${p.className ?? ""}`} ref={box} dir="ltr" />;

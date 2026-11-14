@@ -542,7 +542,7 @@ export function ScriptNodes() {
                   ))}
                 </div>
                 <Suspense fallback={<p className="muted">…</p>}>
-                  <CodeEditor path={path} value={out} onChange={setText} language="csharp" problems={problems} {...(lsp?.installed && lsp.solution && lsp.project ? { lsp: { url: "/api/unity/lsp", root: lsp.project, file: `${lsp.project}/${path}`, onStatus: setLspStatus } } : {})} projectTypes={types.filter((t) => t.group !== "Unity" && t.input === "none").map((t) => t.value)} onSave={() => changed && void save()} />
+                  <CodeEditor path={path} {...(lsp?.project ? { fullPath: `${lsp.project}/${path}` } : {})} value={out} onChange={setText} language="csharp" problems={problems} {...(lsp?.installed && lsp.solution && lsp.project ? { lsp: { url: "/api/unity/lsp", root: lsp.project, file: `${lsp.project}/${path}`, onStatus: setLspStatus } } : {})} projectTypes={types.filter((t) => t.group !== "Unity" && t.input === "none").map((t) => t.value)} onSave={() => changed && void save()} />
                 </Suspense>
                 {problems.length > 0 && (
                   <ul className="code-problems">
