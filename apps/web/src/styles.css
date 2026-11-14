@@ -1654,6 +1654,14 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .script-canvas { height: clamp(420px, 72vh, 900px); }
 .script-side { max-height: clamp(420px, 72vh, 900px); overflow: auto; }
 .fs-box.fs-on .script-side { max-height: calc(100dvh - 70px); }
+/* By the room the graph really has (the page beside the side menu can be narrow on a wide screen): below 760px the
+   panels go under the graph (found on the PC: the graph was squeezed to 200px beside them). */
+.script-fs { container-type: inline-size; }
+@container (max-width: 760px) {
+  .script-graph { grid-template-columns: minmax(0, 1fr); }
+  .script-canvas { height: min(560px, 70vh); }
+  .script-side { max-height: none; overflow: visible; }
+}
 @media (max-width: 760px) {
   .script-canvas { height: 360px; }
   .script-side { max-height: none; overflow: visible; }
