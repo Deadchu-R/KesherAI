@@ -1,0 +1,6 @@
+{
+  "menu": { "open": "Open KesherAI", "settings": "Widget settings" },
+  "widget": { "offline": "KesherAI is not running", "working": "KesherAI: {count} chats working", "idle": "KesherAI: ask something" },
+  "panel": { "placeholder": "Ask your local AI…", "ask": "Ask", "working": "Working…", "open-chat": "Open in KesherAI", "offline": "KesherAI is not running on this computer (or the address in the settings is wrong)." },
+  "settings": { "url": { "label": "KesherAI's address", "desc": "This computer: http://127.0.0.1:7420" }, "token": { "label": "Remote-access token (another computer only)", "desc": "Empty for this computer." } }
+}

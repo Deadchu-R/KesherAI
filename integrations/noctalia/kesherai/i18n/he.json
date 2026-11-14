@@ -1,0 +1,6 @@
+{
+  "menu": { "open": "פתח את KesherAI", "settings": "הגדרות הווידג'ט" },
+  "widget": { "offline": "KesherAI לא פועל", "working": "KesherAI: {count} צ'אטים עובדים", "idle": "KesherAI: לשאול משהו" },
+  "panel": { "placeholder": "לשאול את ה-AI המקומי…", "ask": "שאל", "working": "עובד…", "open-chat": "פתח ב-KesherAI", "offline": "KesherAI לא פועל במחשב הזה (או שהכתובת בהגדרות לא נכונה)." },
+  "settings": { "url": { "label": "הכתובת של KesherAI", "desc": "המחשב הזה: http://127.0.0.1:7420" }, "token": { "label": "אסימון גישה מרחוק (רק למחשב אחר)", "desc": "ריק למחשב הזה." } }
+}

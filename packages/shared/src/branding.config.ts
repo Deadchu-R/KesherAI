@@ -44,7 +44,7 @@ export const branding: Branding = {
   appId: "kesher",
   accentColor: "#5EEAD4",
   repositoryUrl: "https://github.com/Deadchu-R/KesherAI",
-  reportUrl: "",
+  reportUrl: "https://script.google.com/macros/s/AKfycbxtY_LnYJ1Q1IqNS-oynINPrVIVnWbbVDpMy6g1wx2idgZOK6XnsmJRnsD5fbd1chZE/exec",
   docsUrl: "https://deadchu-r.github.io/KesherAI",
   defaultPort: 7420,
   google: { clientId: "", clientSecret: "" },
