@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import "@fastify/websocket";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
@@ -650,6 +651,23 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         }),
       ),
     };
+  });
+
+  /**
+   * Opens a project found on this computer in the Unreal Editor of its engine version (like Unity's "Open in Unity").
+   * Only on this computer, and only a project from the list (never any path).
+   */
+  app.post<{ Body: { project?: string } }>("/api/unreal/open-editor", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Open Unreal on the computer that runs KesherAI." });
+    const p = (await unrealProjects()).find((x) => x.path === req.body?.project);
+    if (!p) return reply.code(400).send({ error: "Choose one of the projects found on this computer." });
+    const engines = await findEngines();
+    const e = engines.find((x) => x.version === p.engine) ?? (p.engine ? undefined : engines[0]);
+    if (!e) return reply.code(400).send({ error: `Unreal ${p.engine ?? ""} is not installed on this computer.`.replace("  ", " ") });
+    const exe = join(e.path, "Engine", "Binaries", process.platform === "win32" ? "Win64" : "Linux", process.platform === "win32" ? "UnrealEditor.exe" : "UnrealEditor");
+    if (!existsSync(exe)) return reply.code(400).send({ error: `Unreal ${e.version}'s editor was not found.` });
+    spawn(exe, [join(p.path, `${p.name}.uproject`)], { detached: true, stdio: "ignore" }).unref();
+    return { ok: true, engine: e.version };
   });
 
   app.post<{ Body: { project?: string } }>("/api/unreal/install", async (req, reply) => {

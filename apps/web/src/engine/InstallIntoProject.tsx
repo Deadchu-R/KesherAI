@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, isRemote } from "../api";
 import { getLocale } from "../i18n";
 import type { Job } from "./types";
-import { desktop } from "../library";
+import { desktop, toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -68,6 +68,7 @@ export function InstallIntoProject() {
                 <span className="grow" dir="auto" title={p.path}>◆ {p.name}{p.engine ? <span className="muted small"> UE {p.engine}</span> : null}</span>
                 <span className="muted small">{p.plugin ? (current ? `✅ ${L("מותקן", "Installed")} ${p.plugin}` : `${L("מותקן", "Installed")} ${p.plugin}`) : L("בלי הפלאגין", "No plugin")}</span>
                 {!current && !p.open && <button type="button" className="primary" disabled={running} onClick={() => void installTo(p.path)}>{p.plugin ? L("עדכן", "Update") : L("התקן בלחיצה", "Install")}</button>}
+                {!p.open && !isRemote() && <button type="button" disabled={running} onClick={() => void api("/api/unreal/open-editor", { method: "POST", body: { project: p.path } }).then(() => toast(L("Unreal נפתח… (בפעם הראשונה זה לוקח דקה ומעלה)", "Opening Unreal… (a minute or more the first time)")), (e: Error) => toast(e.message))}>{L("פתח ב-Unreal", "Open in Unreal")}</button>}
                 {!current && p.open && <span className="muted small">{p.plugin ? L("פתוח: \"עדכן אוטומטית\" למעלה", "Open: use \"Update automatically\" above") : L("סגרו את Unreal ואז התקינו", "Close Unreal, then install")}</span>}
               </li>
             );
