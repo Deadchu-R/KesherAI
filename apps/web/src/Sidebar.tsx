@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { askText } from "./ui/askText";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
 import { SidebarShortcuts } from "./SidebarShortcuts";
@@ -135,7 +136,7 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
     }
   };
   const rename = async () => {
-    const title = prompt(he ? "שם חדש לצ'אט" : "A new name for the chat", c.title)?.trim();
+    const title = (await askText(he ? "שם חדש לצ'אט" : "A new name for the chat", c.title))?.trim();
     if (!title || title === c.title) return;
     await api(`/api/conversations/${c.id}`, { method: "PATCH", body: { title } }).then(() => refreshLibrary(), (e: Error) => toast(e.message));
   };

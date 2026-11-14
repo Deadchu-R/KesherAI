@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { siteIcon } from "./site-icon.js";
 import { AgentSession, type AgentTool, type ModelTurn } from "@kesher/agent";
 import { cleanShortcut, type Shortcut } from "./menu-shortcuts.js";
 
@@ -53,7 +54,7 @@ export function menuTool(store: MenuStore, pages: MenuPage[], fallbackPins: stri
           pins: { type: "array", items: { type: "string" }, description: "Page addresses (#/…), the whole list in order." },
           addShortcuts: {
             type: "array",
-            items: { type: "object", properties: { label: { type: "string" }, href: { type: "string", description: "A page (#/…) or a web address (https://…)." }, icon: { type: "string", description: "One emoji." } }, required: ["label", "href"] },
+            items: { type: "object", properties: { label: { type: "string" }, href: { type: "string", description: "A page (#/…) or a web address (https://…)." }, icon: { type: "string", description: "One emoji." }, iconFromSite: { type: "boolean", description: "For a web address: use the site's own icon (fetched from the site) instead of an emoji, when the user asks for its icon." } }, required: ["label", "href"] },
           },
           removeShortcuts: { type: "array", items: { type: "string" }, description: "Names (or addresses) of shortcuts to remove." },
           shortcutOrder: { type: "array", items: { type: "string" }, description: "Shortcut names, in the order wanted (the rest keep their order after them)." },
@@ -89,7 +90,14 @@ export function menuTool(store: MenuStore, pages: MenuPage[], fallbackPins: stri
             said.push("There are already 25 shortcuts (the most the menu takes).");
             break;
           }
-          const c = cleanShortcut({ ...raw, id: randomUUID() });
+          let image: string | undefined;
+          if ((raw as { iconFromSite?: unknown }).iconFromSite === true && /^https?:/i.test(String(raw?.href ?? ""))) {
+            image = await siteIcon(String(raw.href)).catch((e: Error) => {
+              said.push(`No icon from the site for ${String(raw?.label ?? "")}: ${e.message}`);
+              return undefined;
+            });
+          }
+          const c = cleanShortcut({ ...raw, ...(image ? { image } : {}), id: randomUUID() });
           if ("error" in c) said.push(`Not added (${String(raw?.label ?? "")}): ${c.error}`);
           else if (shortcuts.some((s) => s.href === c.href)) said.push(`${c.label} is already a shortcut.`);
           else {

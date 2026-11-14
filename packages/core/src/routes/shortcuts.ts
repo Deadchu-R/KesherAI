@@ -3,6 +3,7 @@ import type { KesherServices } from "../services.js";
 import { menuTool, runDesigner } from "../design-assistant.js";
 import { modelTurnFor } from "../model-turn.js";
 import { cleanShortcut, type Shortcut } from "../menu-shortcuts.js";
+import { siteIcon } from "../site-icon.js";
 
 export { cleanShortcut, type Shortcut } from "../menu-shortcuts.js";
 
@@ -20,6 +21,14 @@ export { cleanShortcut, type Shortcut } from "../menu-shortcuts.js";
  */
 export function shortcutRoutes(app: FastifyInstance, s: KesherServices): void {
   app.get("/api/shortcuts", async () => ({ shortcuts: s.config.shortcuts }));
+  // A web site's own icon for a shortcut (public sites only; a small image).
+  app.post<{ Body: { url?: string } }>("/api/shortcuts/site-icon", async (req, reply) => {
+    try {
+      return { image: await siteIcon(String(req.body?.url ?? "")) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
   // The pinned tools: one list for every device (Roee: one menu on the computer and the phone). null = the defaults.
   app.get("/api/pins", async () => ({ pins: s.config.pins ?? null }));
   app.put<{ Body: { pins?: unknown } }>("/api/pins", async (req, reply) => {

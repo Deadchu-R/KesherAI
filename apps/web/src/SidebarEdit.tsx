@@ -7,7 +7,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getLocale } from "./i18n";
 import { DEFAULT_PINS, NAV_ICONS, setPinOrder, useNavItems, usePins } from "./Sidebar";
-import { saveShortcuts, useShortcuts } from "./SidebarShortcuts";
+import { ShortcutForm, describeShortcut, saveShortcuts, useShortcuts, type Shortcut } from "./SidebarShortcuts";
+import { createPortal } from "react-dom";
 import { ToolIcon } from "./ToolIcon";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -66,7 +67,7 @@ function useHandleDrag(ids: string[], onOrder: (next: string[]) => void) {
 }
 
 /** One row: drag handle, icon, name, up, down, hide. */
-function Row(p: { id: string; dragging: boolean; handle: React.HTMLAttributes<HTMLElement>; icon: React.ReactNode; label: string; first: boolean; last: boolean; onMove: (by: number) => void; onHide: () => void; hideLabel: string }) {
+function Row(p: { id: string; dragging: boolean; handle: React.HTMLAttributes<HTMLElement>; icon: React.ReactNode; label: string; first: boolean; last: boolean; onMove: (by: number) => void; onHide: () => void; hideLabel: string; onEdit?: () => void }) {
   return (
     <li className={`side-edit-row${p.dragging ? " dragging" : ""}`} data-edit-id={p.id}>
       <span className="side-edit-grip" aria-hidden="true" title={L("גררו לשינוי הסדר", "Drag to reorder")} {...p.handle}>⠿</span>
@@ -74,6 +75,7 @@ function Row(p: { id: string; dragging: boolean; handle: React.HTMLAttributes<HT
       <span className="grow side-edit-name" dir="auto">{p.label}</span>
       <button type="button" className="icon-btn" disabled={p.first} aria-label={L(`${p.label}: למעלה`, `${p.label}: up`)} title={L("למעלה", "Up")} onClick={() => p.onMove(-1)}>↑</button>
       <button type="button" className="icon-btn" disabled={p.last} aria-label={L(`${p.label}: למטה`, `${p.label}: down`)} title={L("למטה", "Down")} onClick={() => p.onMove(1)}>↓</button>
+      {p.onEdit && <button type="button" className="icon-btn" aria-label={L(`${p.label}: עריכה`, `${p.label}: edit`)} title={L("עריכה", "Edit")} onClick={p.onEdit}>✏</button>}
       <button type="button" className="icon-btn" aria-label={`${p.label}: ${p.hideLabel}`} title={p.hideLabel} onClick={p.onHide}>✕</button>
     </li>
   );
@@ -86,6 +88,8 @@ export function SidebarEdit({ onDone }: { onDone: () => void }) {
   const [pins, toggle] = usePins();
   const nav = useNavItems();
   const shortcuts = useShortcuts();
+  // A shortcut being added (i = -1) or changed.
+  const [cutForm, setCutForm] = useState<{ i: number; s: Shortcut } | null>(null);
   // Only pages that exist now (a part that is off keeps its place for when it is back on).
   const shown = pins.filter((h) => nav.some((n) => n.href === h));
   const labelOf = (h: string) => nav.find((n) => n.href === h)?.label ?? h;
@@ -114,16 +118,17 @@ export function SidebarEdit({ onDone }: { onDone: () => void }) {
           <Row key={h} id={h} dragging={pinDrag.dragging === h} handle={pinDrag.handle(h)} icon={<ToolIcon href={h} fallback={NAV_ICONS[h] ?? "•"} />} label={labelOf(h)} first={i === 0} last={i === shown.length - 1} onMove={(by) => reorder(moved(shown, i, by))} onHide={() => toggle(h)} hideLabel={L("הסתר", "Hide")} />
         ))}
       </ul>
-      {shortcuts.length > 0 && (
-        <>
-          <div className="side-edit-title">{L("קיצורי דרך", "Shortcuts")}</div>
-          <ul className="side-edit-list">
-            {cuts.map((s, i) => (
-              <Row key={s.id} id={s.id} dragging={cutDrag.dragging === s.id} handle={cutDrag.handle(s.id)} icon={s.icon ?? "⭐"} label={s.label} first={i === 0} last={i === cuts.length - 1} onMove={(by) => void saveShortcuts(moved(cuts, i, by))} onHide={() => void saveShortcuts(cuts.filter((_, j) => j !== i))} hideLabel={L("הסר", "Remove")} />
-            ))}
-          </ul>
-        </>
-      )}
+      <div className="side-edit-title">{L("קיצורי דרך", "Shortcuts")}</div>
+      <ul className="side-edit-list">
+        {cuts.map((s, i) => (
+          <Row key={s.id} id={s.id} dragging={cutDrag.dragging === s.id} handle={cutDrag.handle(s.id)} icon={s.image ? <img src={s.image} alt="" width={16} height={16} /> : s.icon ?? "⭐"} label={s.label} first={i === 0} last={i === cuts.length - 1} onMove={(by) => void saveShortcuts(moved(cuts, i, by))} onHide={() => void saveShortcuts(cuts.filter((_, j) => j !== i))} hideLabel={L("הסר", "Remove")} onEdit={() => setCutForm({ i, s })} />
+        ))}
+      </ul>
+      <div className="side-edit-add">
+        <button type="button" className="pill-btn" onClick={() => setCutForm({ i: -1, s: { id: "", label: "", icon: "🔗", href: "https://" } })}>+ {L("קיצור דרך", "Shortcut")}</button>
+        <button type="button" className="pill-btn" onClick={() => void describeShortcut(nav)}>✨ {L("לתאר ל-AI", "Describe to the AI")}</button>
+      </div>
+      {cutForm && createPortal(<ShortcutForm initial={cutForm.s} onClose={() => setCutForm(null)} onSave={(next) => { void saveShortcuts(cutForm.i < 0 ? [...cuts, next] : cuts.map((x, j) => (j === cutForm.i ? next : x))); setCutForm(null); }} />, document.body)}
       {hidden.length > 0 && (
         <>
           <div className="side-edit-title">{L("הוספה לתפריט", "Add to the menu")}</div>

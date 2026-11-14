@@ -151,7 +151,7 @@ export const KesherConfigSchema = z.object({
    */
   /** The sidebar's pinned tools in order (`#/images`…), the same on the computer and the phone; unset = the defaults. */
   pins: z.array(z.string().max(100)).max(40).optional(),
-  shortcuts: z.array(z.object({ id: z.string().max(40), label: z.string().max(40), icon: z.string().max(8).optional(), href: z.string().max(500) })).max(25).default([]),
+  shortcuts: z.array(z.object({ id: z.string().max(40), label: z.string().max(40), icon: z.string().max(8).optional(), image: z.string().max(70_000).optional(), href: z.string().max(500) })).max(25).default([]),
   /** Looks the user saved by name (Settings → Appearance → My looks). */
   savedLooks: z.array(z.object({ name: z.string().max(60), appearance: z.record(z.string(), z.unknown()) })).max(40).default([]),
   /** The first-run welcome: whether it was finished, and the role the user picked (shapes suggestions). */

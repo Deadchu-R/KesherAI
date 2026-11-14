@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { askText } from "./ui/askText";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
@@ -409,7 +410,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (a.event) op.event = a.event;
     if (a.variable) op.variable = a.variable;
     if (a.type === "custom_event") {
-      const name = prompt(L("שם האירוע:", "Event name:"), "NewEvent");
+      const name = await askText(L("שם האירוע:", "Event name:"), "NewEvent", { ltr: true });
       if (!name) return;
       op.name = name.replace(/[^\w]/g, "") || "NewEvent";
     }
@@ -537,8 +538,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         const c = (e.target as Element).closest("[data-comment]") as SVGElement | null;
         if (c && editable) {
           const n = nodes.find((x) => x.id === c.dataset.node);
-          const text = n && prompt(L("הכותרת של ההערה:", "The comment's title:"), n.comment ?? "");
-          if (n && text !== null && text !== undefined) void apply([{ op: "comment", node: n.id, text }]);
+          if (n) void askText(L("הכותרת של ההערה:", "The comment's title:"), n.comment ?? "").then((text) => { if (text !== null) void apply([{ op: "comment", node: n.id, text }]); });
           return;
         }
         if (!(e.target as Element).closest("[data-node], .bp-menu, .ue-zoom, .bp-find")) fit();

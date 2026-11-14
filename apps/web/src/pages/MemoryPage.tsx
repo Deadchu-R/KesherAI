@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { askText } from "../ui/askText";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
@@ -130,7 +131,7 @@ export function MemoryPage() {
               <article key={t.id} className="card stack memory-topic">
                 <div className="row">
                   <h3 className="grow" dir="auto">{t.title}</h3>
-                  <button type="button" className="link-btn" onClick={() => { const v = prompt(L("שם הנושא:", "Topic name:"), t.title); if (v?.trim()) void call(() => api<Memory>(`/api/memory/topics/${t.id}`, { method: "PUT", body: { title: v } })); }}>{L("שינוי שם", "Rename")}</button>
+                  <button type="button" className="link-btn" onClick={() => void askText(L("שם הנושא:", "Topic name:"), t.title).then((v) => { if (v?.trim()) void call(() => api<Memory>(`/api/memory/topics/${t.id}`, { method: "PUT", body: { title: v } })); })}>{L("שינוי שם", "Rename")}</button>
                   <button type="button" className="link-btn" onClick={() => confirm(L(`למחוק את הנושא "${t.title}"?`, `Delete the topic "${t.title}"?`)) && void call(() => api<Memory>(`/api/memory/topics/${t.id}`, { method: "DELETE" }))}>{L("מחק נושא", "Delete topic")}</button>
                 </div>
                 <ul className="memory-list">

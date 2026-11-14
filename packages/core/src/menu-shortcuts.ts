@@ -6,7 +6,8 @@ import { randomUUID } from "node:crypto";
  */
 
 /** A shortcut as kept. */
-export interface Shortcut { id: string; label: string; icon?: string; href: string }
+/** `image`: the site's own icon (a data: address), shown instead of the emoji. */
+export interface Shortcut { id: string; label: string; icon?: string; image?: string; href: string }
 
 /**
  * Checks one shortcut.
@@ -28,5 +29,7 @@ export function cleanShortcut(s: Partial<Shortcut>): Shortcut | { error: string 
     web = false;
   }
   if (!page && !web) return { error: "A shortcut opens a page of KesherAI (#/…) or a web address (https://…)." };
-  return { id: s.id && /^[\w-]{1,40}$/.test(s.id) ? s.id : randomUUID(), label, ...(icon ? { icon } : {}), href };
+  // A site's icon: a small image as a data: address (shown in an <img>, so even an SVG runs nothing).
+  const image = typeof s.image === "string" && s.image.length <= 70_000 && /^data:image\/(png|x-icon|vnd\.microsoft\.icon|svg\+xml|webp|jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(s.image) ? s.image : undefined;
+  return { id: s.id && /^[\w-]{1,40}$/.test(s.id) ? s.id : randomUUID(), label, ...(icon ? { icon } : {}), ...(image ? { image } : {}), href };
 }

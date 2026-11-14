@@ -30,6 +30,6 @@ export function useAppMenu(): AppMenu {
       const n = nav.find((x) => x.href === href);
       return n ? [{ key: href, label: n.label, icon: NAV_ICONS[href] ?? "•", href, tool: true }] : [];
     }),
-    shortcuts: shortcuts.map((s) => ({ key: `sc:${s.id}`, label: s.label, icon: s.icon ?? "⭐", href: s.href, external: /^https?:/i.test(s.href) })),
+    shortcuts: shortcuts.map((s) => ({ key: `sc:${s.id}`, label: s.label, icon: s.image ? "🌐" : s.icon ?? "⭐", href: s.href, external: /^https?:/i.test(s.href) })),
   };
 }
