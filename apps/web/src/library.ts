@@ -86,6 +86,8 @@ export async function createConversation(body: {
   incognito?: boolean;
   /** A named environment's id, or "none" (code sessions). */
   environment?: string;
+  /** How the agent may act ("plan": it changes nothing). */
+  mode?: "plan" | "ask" | "auto-edit" | "auto";
 }, opts: { open?: boolean } = {}): Promise<string> {
   let c: { id: string };
   try {

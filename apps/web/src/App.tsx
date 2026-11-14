@@ -296,6 +296,7 @@ export function App() {
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
       <RemoteBanner />
       <ExtensionPage />
+      <AskFromUrl />
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />
@@ -385,6 +386,21 @@ function ExtensionPage() {
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
+  }, []);
+  return null;
+}
+
+/**
+ * `/?q=…`: a question handed over in the address, as Firefox's AI chatbot sidebar does with a custom provider
+ * ("Summarize page", "Explain this"). A new chat answers it. Any web site could link here with a question, so this
+ * chat neither reads nor files memory (incognito) and is in plan mode (it changes nothing; the user sees it all).
+ */
+function AskFromUrl() {
+  useEffect(() => {
+    const q = new URLSearchParams(location.search).get("q");
+    if (!q?.trim()) return;
+    history.replaceState(null, "", location.pathname + location.hash);
+    void createConversation({ kind: "chat", incognito: true, mode: "plan" }).then((id) => id && api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: q.slice(0, 40_000) } }));
   }, []);
   return null;
 }
