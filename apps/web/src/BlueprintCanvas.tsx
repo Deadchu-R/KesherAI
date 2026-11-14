@@ -60,7 +60,8 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  *   at the mouse; right-click a pin for Break Pin Link(s) / Promote to Variable; right-click a node for Delete,
  *   Cut, Copy, Duplicate, Break Node Links, Straighten Connections, Align; Ctrl+C / X / V / D copy, cut, paste
  *   and duplicate (Unreal's own clipboard text, so it pastes into Unreal and back); Ctrl+drag from a pin moves its
- *   wires to another pin; double-click a wire for a reroute node; Q straightens; arrow keys nudge; F2 edits the
+ *   wires to another pin; double-click a wire for a reroute node (also in a C# script, kept on its graph); click a
+ *   wire to choose it (Shift/Ctrl adds) and Delete breaks it; Q straightens; arrow keys nudge; F2 edits the
  *   node's comment; Shift+drag adds to the selection box, Ctrl+drag takes away; the hovered node's wires stand out;
  * Each change goes to the editor at once (one undo step there).
  * Without `editable` (the editor closed) it only looks: pan, zoom, search, and says why when the user tries to
@@ -149,6 +150,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const frame = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** Chosen wires ("from>to"): a click on a wire chooses it, Shift or Ctrl adds; Delete breaks them (asked by Roee). */
+  const [wires, setWires] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
@@ -365,7 +368,20 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       saidWhy.current = Date.now();
       toast(readOnlyWhy ?? L("הגרף פתוח לקריאה בלבד: כדי לחבר ולהזיז, פתחו את הפרויקט בעורך כשהוא מחובר ל-KesherAI.", "The graph is read-only: to connect and move, open the project in the editor with KesherAI connected."));
     }
+    // A click on a wire chooses it (the wider invisible line around it, so it is easy to hit).
+    const wireEl = el.closest("[data-wire]") as SVGElement | null;
+    if (wireEl && !nodeEl && editable && e.button === 0) {
+      const l = links[Number(wireEl.dataset.wire)];
+      if (l) {
+        const key = `${l.from}>${l.to}`;
+        const add = e.shiftKey || e.ctrlKey || e.metaKey;
+        setWires((w) => (add ? new Set(w.has(key) ? [...w].filter((x) => x !== key) : [...w, key]) : new Set([key])));
+        if (!add) setSelected(new Set());
+        return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false, onNode: true });
+      }
+    }
     if (nodeEl) {
+      if (!(e.ctrlKey || e.shiftKey)) setWires(new Set());
       const id = nodeEl.dataset.node!;
       if (e.ctrlKey || e.shiftKey) setSelected((s) => new Set(s.has(id) ? [...s].filter((x) => x !== id) : [...s, id]));
       else if (!selected.has(id)) setSelected(new Set([id]));
@@ -387,6 +403,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     }
     if (touch || !editable) return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: false });
     // Shift adds to the selection, Ctrl takes away (as in Unreal).
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey) setWires(new Set());
     setDrag({ kind: "marquee", sx: p.x, sy: p.y, ex: p.x, ey: p.y, add: e.shiftKey, remove: e.ctrlKey || e.metaKey });
   };
   const move = (e: React.PointerEvent) => {
@@ -653,6 +670,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       e.preventDefault();
       fit();
     } else if (e.key === "Escape") {
+      setWires(new Set());
       setMenu(null);
       setPinMenu(null);
       setNodeMenu(null);
@@ -691,10 +709,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       e.preventDefault();
       const step = e.shiftKey ? 64 : 16;
       nudge(e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0, e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0);
-    } else if ((e.key === "Delete" || e.key === "Backspace") && selected.size) {
+    } else if ((e.key === "Delete" || e.key === "Backspace") && (selected.size || wires.size)) {
       e.preventDefault();
-      void apply([...selected].map((id) => ({ op: "delete", node: id })));
-      setSelected(new Set());
+      removeChosen();
     }
   };
 
@@ -718,6 +735,22 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
 
   if (!layout) return <p className="muted ue-empty">{L("הגרף ריק.", "This graph is empty.")}</p>;
   const links: Array<{ d: string; color: string; from: string; to: string; mx: number; my: number }> = [];
+  /** Deletes the chosen nodes, and breaks the chosen wires (each at its end: an input takes one wire). */
+  const removeChosen = () => {
+    const ops: Op[] = [];
+    for (const key of wires) {
+      const [from, to] = key.split(">") as [string, string];
+      const at = to.lastIndexOf(":");
+      const fat = from.lastIndexOf(":");
+      // node/pin: the end (Unreal 0.1.15 breaks just this wire, from "link"; a C# script, a Unity port); from/to: a
+      // Unity state graph's transition.
+      ops.push({ op: "disconnect", node: to.slice(0, at), pin: to.slice(at + 1), link: from, from: { node: from.slice(0, fat), pin: from.slice(fat + 1) }, to: { node: to.slice(0, at), pin: to.slice(at + 1) } });
+    }
+    for (const id of selected) ops.push({ op: "delete", node: id });
+    if (ops.length) void apply(ops);
+    setSelected(new Set());
+    setWires(new Set());
+  };
   for (const b of boxes) {
     for (const p of b.outs) {
       const a = pinAt.get(`${b.n.id}:${p.name}`)!;
@@ -761,9 +794,20 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       onDoubleClick={(e) => {
         // Double-click a wire: a reroute node on it (Unreal).
         const wireEl = (e.target as Element).closest("[data-wire]") as SVGElement | null;
+        if (wireEl && editable && onOps) {
+          // A C# script: the dot is kept on the graph (the code stays the same).
+          const l = links[Number(wireEl.dataset.wire)];
+          if (l) {
+            const w = world(local(e));
+            void apply([{ op: "reroute", from: l.from, to: l.to, x: Math.round(w.x / SCALE) - 8, y: Math.round(w.y / SCALE) - 8 }]);
+            setWires(new Set());
+          }
+          return;
+        }
         if (wireEl && editable && !unity && !onOps) {
           const l = links[Number(wireEl.dataset.wire)];
           if (l) {
+            setWires(new Set());
             const w = world(local(e));
             const [fn, fp] = [l.from.slice(0, l.from.indexOf(":")), l.from.slice(l.from.indexOf(":") + 1)];
             const [tn, tp] = [l.to.slice(0, l.to.indexOf(":")), l.to.slice(l.to.indexOf(":") + 1)];
@@ -803,9 +847,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           })}
           {links.map((l, i) => {
             const lit = !!hot && (l.from.startsWith(`${hot}:`) || l.to.startsWith(`${hot}:`));
+            const chosen = wires.has(`${l.from}>${l.to}`);
             return (
               <g key={i}>
-                <path d={l.d} stroke={l.color} strokeWidth={lit ? 3.5 : 2} fill="none" opacity={hot && !lit ? 0.45 : 0.9} />
+                {chosen && <path d={l.d} stroke="#ffd166" strokeWidth={7} fill="none" opacity={0.55} />}
+                <path d={l.d} stroke={l.color} strokeWidth={lit || chosen ? 3.5 : 2} fill="none" opacity={hot && !lit && !chosen ? 0.45 : 0.9} />
                 {/* A wider, invisible line to double-click (a reroute node, as in Unreal). */}
                 <path d={l.d} stroke="transparent" strokeWidth={12} fill="none" data-wire={i} />
               </g>
@@ -852,7 +898,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
             <button type="button" onClick={() => undo(false)} aria-label={L("ביטול (Ctrl+Z)", "Undo (Ctrl+Z)")} title={L("ביטול (Ctrl+Z)", "Undo (Ctrl+Z)")}>↶</button>
             <button type="button" onClick={() => undo(true)} aria-label={L("חזרה (Ctrl+Y)", "Redo (Ctrl+Y)")} title={L("חזרה (Ctrl+Y)", "Redo (Ctrl+Y)")}>↷</button>
             <button type="button" onClick={() => { const r = frame.current!.getBoundingClientRect(); openMenu({ x: r.width / 2 - 140, y: 40 }); }} aria-label={L("הוספת נוד", "Add a node")} title={L("הוספת נוד (קליק ימני)", "Add a node (right-click)")}>⊕</button>
-            {selected.size > 0 && <button type="button" onClick={() => { void apply([...selected].map((id) => ({ op: "delete", node: id }))); setSelected(new Set()); }} aria-label={L("מחיקת הנבחרים (Delete)", "Delete selected (Delete)")} title={L("מחיקת הנבחרים (Delete)", "Delete selected (Delete)")}>🗑</button>}
+            {(selected.size > 0 || wires.size > 0) && <button type="button" onClick={removeChosen} aria-label={L("מחיקת הנבחרים (Delete)", "Delete selected (Delete)")} title={L("מחיקת הנבחרים (Delete)", "Delete selected (Delete)")}>🗑</button>}
           </>
         )}
         <span className="muted small">{busy ? "…" : `${Math.round(view.k * 100)}%`}</span>

@@ -8,7 +8,7 @@
  * - breaking an exec wire takes the step and the ones after it out of the code, onto the graph.
  * Only what is wired from the method's entry is written as C#.
  */
-import type { CsDetached, CsLayout, CsMethod, CsStmt } from "./csharp-graph.js";
+import type { CsDetached, CsKnot, CsLayout, CsMethod, CsNode, CsStmt } from "./csharp-graph.js";
 
 let nextDetached = 0;
 
@@ -175,5 +175,89 @@ export function deleteStep(m: CsMethod, layout: CsLayout, id: string): boolean {
   at.list.splice(at.index, 1);
   if (!at.chain) touched(m, at.list, at.index);
   dropEmpty(m, layout);
+  return true;
+}
+
+/** Whether an id is a reroute node's (they are only on the graph). */
+export const isKnotId = (id: string): boolean => id.startsWith("knot-");
+
+/**
+ * The graph with its reroute nodes: each splits its wire in two through a dot (a node of class K2Node_Knot, the way
+ * the canvas draws Unreal's). A reroute node whose wire is gone (the wire was broken or rewired) is dropped.
+ *
+ * @returns The nodes to draw, and the reroute nodes still on a wire (to keep).
+ */
+export function withKnots(nodes: CsNode[], knots: CsKnot[]): { nodes: CsNode[]; live: CsKnot[] } {
+  const all = nodes.map((n) => ({ ...n, pins: n.pins.map((p) => ({ ...p, ...(p.links ? { links: [...p.links] } : {}) })) }));
+  const byId = new Map(all.map((n) => [n.id, n]));
+  const pinOf = (ref: string, dir: "in" | "out") => {
+    const at = ref.lastIndexOf(":");
+    return byId.get(ref.slice(0, at))?.pins.find((p) => p.name === ref.slice(at + 1) && p.dir === dir);
+  };
+  const live: CsKnot[] = [];
+  for (const k of knots) {
+    const out = pinOf(k.from, "out");
+    const i = out?.links?.indexOf(k.to) ?? -1;
+    if (!out || i < 0) continue;
+    out.links![i] = `${k.id}:InputPin`;
+    const into = pinOf(k.to, "in");
+    if (into?.links) into.links = into.links.map((l) => (l === k.from ? `${k.id}:OutputPin` : l));
+    const knot: CsNode = {
+      id: k.id,
+      title: "",
+      class: "K2Node_Knot",
+      x: k.x,
+      y: k.y,
+      pins: [
+        { name: "InputPin", dir: "in", type: out.type, links: [k.from] },
+        { name: "OutputPin", dir: "out", type: out.type, links: [k.to] },
+      ],
+    };
+    all.push(knot);
+    byId.set(k.id, knot);
+    live.push(k);
+  }
+  return { nodes: all, live };
+}
+
+/**
+ * The real pin behind a reroute node's pin: its OutputPin stands for the wire's source, its InputPin for the wire's
+ * end (followed through other reroute nodes).
+ */
+export function realPin(knots: CsKnot[], ref: string): string {
+  for (let i = 0; i < 32; i++) {
+    const at = ref.lastIndexOf(":");
+    const k = knots.find((x) => x.id === ref.slice(0, at));
+    if (!k) return ref;
+    ref = ref.slice(at + 1) === "OutputPin" ? k.from : k.to;
+  }
+  return ref;
+}
+
+let nextKnot = 0;
+
+/**
+ * A reroute node on the wire from `from` to `to` (as drawn, so either may be another reroute node's pin).
+ *
+ * @returns Its id.
+ */
+export function addKnot(layout: CsLayout, method: string, from: string, to: string, x: number, y: number): string {
+  const list = ((layout.knots ??= {})[method] ??= []);
+  let id = `knot-${Date.now().toString(36)}${++nextKnot}`;
+  while (list.some((k) => k.id === id)) id = `knot-${Date.now().toString(36)}${++nextKnot}`;
+  list.push({ id, x, y, from, to });
+  return id;
+}
+
+/** Removes a reroute node: the wire through it runs straight again. */
+export function removeKnot(layout: CsLayout, method: string, id: string): boolean {
+  const list = layout.knots?.[method];
+  const k = list?.find((x) => x.id === id);
+  if (!list || !k) return false;
+  for (const o of list) {
+    if (o.from === `${id}:OutputPin`) o.from = k.from;
+    if (o.to === `${id}:InputPin`) o.to = k.to;
+  }
+  layout.knots![method] = list.filter((x) => x !== k);
   return true;
 }

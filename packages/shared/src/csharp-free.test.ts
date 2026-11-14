@@ -76,3 +76,28 @@ test("free graph: breaking an exec wire takes the steps out of the code; delete 
   assert.ok(wireExec(m, layout, { node: m.body[0]!.id, pin: "then" }, m.body[0]!.id, { x: 0, y: 0 }));
   assert.ok(detachFrom(m, layout, loose.stmts[0]!.id, 9, 9));
 });
+
+test("reroute nodes: split a wire, chain, follow back to the real pins, and run straight when removed", async () => {
+  const { withKnots, realPin, addKnot, removeKnot } = await import("./csharp-free.js");
+  const nodes = [
+    { id: "a", title: "A", class: "", x: 0, y: 0, pins: [{ name: "then", dir: "out" as const, type: "exec", links: ["b:execute"] }] },
+    { id: "b", title: "B", class: "", x: 300, y: 0, pins: [{ name: "execute", dir: "in" as const, type: "exec", links: ["a:then"] }] },
+  ];
+  const layout: import("./csharp-graph.js").CsLayout = {};
+  const k1 = addKnot(layout, "Update", "a:then", "b:execute", 100, 50);
+  const k2 = addKnot(layout, "Update", `${k1}:OutputPin`, "b:execute", 200, 50);
+  const { nodes: drawn, live } = withKnots(nodes, layout.knots!.Update!);
+  assert.equal(live.length, 2);
+  assert.deepEqual(drawn.find((n) => n.id === "a")!.pins[0]!.links, [`${k1}:InputPin`]);
+  assert.deepEqual(drawn.find((n) => n.id === k1)!.pins[1]!.links, [`${k2}:InputPin`]);
+  assert.deepEqual(drawn.find((n) => n.id === k2)!.pins[1]!.links, ["b:execute"]);
+  assert.equal(drawn.find((n) => n.id === k2)!.class, "K2Node_Knot");
+  assert.deepEqual(nodes[0]!.pins[0]!.links, ["b:execute"], "the parsed nodes are not changed");
+  assert.equal(realPin(layout.knots!.Update!, `${k2}:OutputPin`), "a:then");
+  assert.equal(realPin(layout.knots!.Update!, `${k1}:InputPin`), "b:execute");
+  // Removing the first: the second now starts at A.
+  assert.ok(removeKnot(layout, "Update", k1));
+  assert.deepEqual(layout.knots!.Update!.map((k) => k.from), ["a:then"]);
+  // A wire that is gone takes its reroute nodes with it.
+  assert.equal(withKnots([{ ...nodes[0]!, pins: [{ ...nodes[0]!.pins[0]!, links: [] }] }, nodes[1]!], layout.knots!.Update!).live.length, 0);
+});

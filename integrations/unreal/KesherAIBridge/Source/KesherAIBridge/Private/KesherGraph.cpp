@@ -601,7 +601,21 @@ namespace KesherGraph
 				else
 				{
 					N->Modify();
-					Schema->BreakPinLinks(*Pin, true);
+					// "link" ("node:pin" of the other end): one chosen wire only (0.1.15); else every wire of the pin.
+					const FString Link = JsonStr(Op, TEXT("link"));
+					FString OtherNode, OtherPinName;
+					UEdGraphPin* Other = nullptr;
+					if (Link.Split(TEXT(":"), &OtherNode, &OtherPinName, ESearchCase::IgnoreCase, ESearchDir::FromEnd))
+					{
+						if (UEdGraphNode* O = NodeOf(OtherNode)) Other = FindPin(O, OtherPinName, Pin->Direction == EGPD_Input ? EGPD_Output : EGPD_Input);
+					}
+					if (Other && Pin->LinkedTo.Contains(Other))
+					{
+						Other->GetOwningNode()->Modify();
+						Schema->BreakSinglePinLink(Pin, Other);
+					}
+					else if (!Link.IsEmpty()) Problem = TEXT("That wire was not found");
+					else Schema->BreakPinLinks(*Pin, true);
 				}
 			}
 			else if (Kind == TEXT("comment"))

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { addField, breakExec, csValue, deleteStep, fieldUses, insertStep, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, removeField, updateField, wireExec, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
+import { addField, addKnot, breakExec, csValue, deleteStep, fieldUses, insertStep, isKnotId, locate, methodToNodes, newId, parseCSharp, placeAlone, plainValue, realPin, removeField, removeKnot, updateField, wireExec, withKnots, writeCSharp, type CsAccess, type CsClass, type CsLayout, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
 import { BlueprintCanvas, type Action } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
@@ -165,6 +165,17 @@ export function ScriptNodes() {
     }
     return list;
   }, [m, tick]);
+  // The graph as drawn: with its reroute nodes; one whose wire is gone is dropped from the layout.
+  const drawn = useMemo(() => {
+    if (!m) return [];
+    const knots = layoutRef.current.knots?.[m.name] ?? [];
+    const r = withKnots(nodes, knots);
+    if (r.live.length !== knots.length) {
+      layoutRef.current.knots![m.name] = r.live;
+      saveLayout();
+    }
+    return r.nodes;
+  }, [nodes]);
   const out = useMemo(() => (file ? writeCSharp(text, classes) : ""), [file, text, classes, tick]);
   const changed = !!file && out !== file.text;
   const found = m && sel ? locate(m, layoutRef.current, sel) : undefined;
@@ -226,7 +237,46 @@ export function ScriptNodes() {
   };
   const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }> => {
     if (!m) return ops.map(() => ({ ok: false, error: L("אין מתודה פתוחה.", "No method is open.") }));
+    const knots = layoutRef.current.knots?.[m.name] ?? [];
     const results = ops.map((op): { ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] } => {
+      // Reroute nodes (dots on wires) are only on the graph: their own ops here, and a wire through them stands for
+      // the real wire (from its source to its end).
+      if (op.op === "reroute") {
+        addKnot(layoutRef.current, m.name, String(op.from), String(op.to), Number(op.x ?? 0), Number(op.y ?? 0));
+        saveLayout();
+        return { ok: true };
+      }
+      if ((op.op === "move" || op.op === "delete") && isKnotId(String(op.node))) {
+        const k = knots.find((x) => x.id === op.node);
+        if (!k) return { ok: true };
+        if (op.op === "delete") removeKnot(layoutRef.current, m.name, k.id);
+        else {
+          k.x = Number(op.x);
+          k.y = Number(op.y);
+        }
+        saveLayout();
+        return { ok: true };
+      }
+      const real = (node: string, pin: string) => {
+        const r = realPin(knots, `${node}:${pin}`);
+        const at = r.lastIndexOf(":");
+        return { node: r.slice(0, at), pin: r.slice(at + 1) };
+      };
+      if (op.op === "disconnect" && (op.link || isKnotId(String(op.node)))) {
+        // One wire (chosen and deleted, or Alt+click on a reroute node): break it at its end, which takes one wire.
+        const end = isKnotId(String(op.node)) ? real(String(op.node), "InputPin") : real(String(op.node), String(op.pin));
+        op = { op: "disconnect", node: end.node, pin: end.pin };
+      }
+      if (op.op === "connect") {
+        const f = op.from as { node: string; pin: string };
+        const t = op.to as { node: string; pin: string };
+        op = { ...op, from: real(f.node, f.pin), to: real(t.node, t.pin) };
+      }
+      if (op.op === "add" && op.from && isKnotId((op.from as { node: string }).node)) {
+        const f = op.from as { node: string; pin: string; dir: string; type: string };
+        op = { ...op, from: { ...f, ...real(f.node, f.pin) } };
+      }
+      if (op.op === "copy") op = { ...op, nodes: (op.nodes as string[]).filter((id) => !isKnotId(id)) };
       if (op.op === "move") {
         // Nodes stay where they are put, as in Unreal (saved with the script's graph, not in the code).
         const n = nodes.find((x) => x.id === op.node);
@@ -557,7 +607,7 @@ export function ScriptNodes() {
               <div className="script-graph">
                 <div className="script-canvas">
                   <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: כשהשחקן נוגע במטבע תוסיף נקודה", "e.g. when the player touches a coin add a point")} />
-                  {m && <BlueprintCanvas key={`${ci}:${m.name}`} nodes={nodes} path={path} graph={m.name} editable unity onOps={graphOps} localActions={localActions} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
+                  {m && <BlueprintCanvas key={`${ci}:${m.name}`} nodes={drawn} path={path} graph={m.name} editable unity onOps={graphOps} localActions={localActions} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
                 <div className="script-side">
                 <aside className="script-vars card">{variables}</aside>

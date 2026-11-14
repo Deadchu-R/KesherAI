@@ -514,6 +514,17 @@ export interface CsDetached {
 export interface CsLayout {
   positions?: Record<string, { x: number; y: number }>;
   detached?: Record<string, CsDetached[]>;
+  /** Reroute nodes per method: dots on wires, only on the graph (the code is the same). */
+  knots?: Record<string, CsKnot[]>;
+}
+
+/** A reroute node on the wire from `from` to `to` ("node:pin"; either end may be another reroute node). */
+export interface CsKnot {
+  id: string;
+  x: number;
+  y: number;
+  from: string;
+  to: string;
 }
 
 /** What a statement is, without its values (so editing an input keeps its place on the graph). */
