@@ -8,7 +8,8 @@
  * with "shell", and load no native code. The runner itself refuses the network without "network".
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CategoryDefinition } from "@kesher/shared";
@@ -29,8 +30,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 /** The runner: the built file next to this one, or (tests, development) the TypeScript source run through tsx. */
 function runner(): { file: string; ts: boolean } {
   const js = join(here, "plugin-runner.js");
-  if (existsSync(js)) return { file: js, ts: false };
+  if (existsSync(js)) return { file: /\.asar[\\/]/.test(js) ? outOfArchive(js) : js, ts: false };
   return { file: join(here, "plugin-runner.ts"), ts: true };
+}
+
+let unpacked: string | undefined;
+
+/**
+ * The runner as a real file: inside the installed app it is in app.asar, which Electron running as plain Node cannot
+ * load as a module (found on the PC: "Cannot use import statement", then "Cannot read file …app.asar…"). It uses only
+ * Node's own modules, so a copy outside the archive runs the same; written once per start, as .mjs (always a module).
+ */
+function outOfArchive(js: string): string {
+  if (unpacked) return unpacked;
+  const file = join(tmpdir(), `kesher-plugin-runner-${process.pid}.mjs`);
+  writeFileSync(file, readFileSync(js));
+  unpacked = file;
+  return file;
 }
 
 /** Node (or Electron as Node) with the flags the runner needs. */
@@ -106,7 +122,8 @@ export class PluginProcess {
       const all = this.o.permissions.includes("filesystem");
       // The runner's own folder (inside the app) must be readable to start; inside the installed app that folder is
       // in an archive (app.asar), which Node reads as one file (found on the PC: the plugin could not start).
-      const own = resolve(here, "..", "..");
+      // The runner copied out of the archive: only that one file (not the whole temp folder).
+      const own = r.file.endsWith(".mjs") ? r.file : resolve(here, "..", "..");
       const archive = /^(.*?\.asar)(?=[\\/]|$)/.exec(own)?.[1];
       flags.push("--experimental-permission", `--allow-fs-read=${all ? "*" : [resolve(this.o.dir), resolve(this.o.dataDir), own, ...(archive ? [archive] : [])].join(",")}`, `--allow-fs-write=${all ? "*" : resolve(this.o.dataDir)}`);
       if (this.o.permissions.includes("shell")) flags.push("--allow-child-process", "--allow-worker");
