@@ -23,6 +23,44 @@ local live = "" -- the answer as it is being written (from the live stream)
 local stream = nil -- KesherAI's live events while the chat works
 local lastSeq = 0
 
+-- The same chat runs in Noctalia's panel or in KesherAI's own floating window (a layer), whose width the user
+-- drags with a slider (Noctalia keeps a panel's size fixed; a layer can be resized while it shows).
+local isWindow = panel == nil and layer ~= nil
+local host = isWindow and layer or panel
+local WINDOW = "window"
+local MIN_W, MAX_W = 320, 1400
+local width = 420
+local sizing = false -- the width slider is showing
+
+local function sizeFile()
+  local dir = noctalia.pluginDataDir()
+  return dir and (dir .. "/window.json") or nil
+end
+
+local function loadWidth()
+  local path = sizeFile()
+  local raw = path and noctalia.readFile(path)
+  local ok, saved = pcall(function() return raw and noctalia.json.decode(raw) end)
+  if ok and type(saved) == "table" and type(saved.width) == "number" then
+    width = math.clamp(math.floor(saved.width), MIN_W, MAX_W)
+  end
+end
+
+local function saveWidth()
+  local path = sizeFile()
+  if path then
+    noctalia.writeFile(path, noctalia.json.encode({ width = width }))
+  end
+end
+
+local function close()
+  if isWindow then
+    noctalia.layer.hide(WINDOW)
+  else
+    panel.close()
+  end
+end
+
 local render
 local load
 
@@ -461,6 +499,12 @@ render = function()
     ui.button({ key = "h-new", glyph = "plus", variant = "ghost", tooltip = tr("panel.new"), enabled = not busy(), onClick = "onNewChat" }),
     ui.button({ key = "h-open", glyph = "external-link", variant = "ghost", tooltip = tr("panel.open"), onClick = "onOpenApp" }),
   }
+  if isWindow then
+    table.insert(header, ui.button({ key = "h-size", glyph = "arrows-horizontal", variant = sizing and "outline" or "ghost", tooltip = tr("panel.width"), onClick = function()
+      sizing = not sizing
+      render()
+    end }))
+  end
   if closeButton then
     table.insert(header, ui.button({ key = "h-close", glyph = "close", variant = "ghost", onClick = "onCloseClicked" }))
   end
@@ -510,9 +554,27 @@ render = function()
   end
   local body = {
     ui.row({ align = "center", gap = 8 }, header),
+  }
+  if isWindow and sizing then
+    -- The window follows the slider as it moves; the width is kept when it is let go.
+    table.insert(body, ui.row({ key = "size", align = "center", gap = 8 }, {
+      ui.glyph({ name = "arrows-horizontal", size = 16, color = "on_surface_variant" }),
+      ui.slider({ key = "width", min = MIN_W, max = MAX_W, step = 10, value = width, controlSize = "sm", flexGrow = 1, onChange = function(v)
+        width = math.floor(tonumber(v) or width)
+        noctalia.layer.configure(WINDOW, { width = width })
+        render()
+      end, onDragEnd = function(_v)
+        saveWidth()
+      end }),
+      ui.label({ text = tostring(width), fontSize = 11, color = "on_surface_variant" }),
+    }))
+  end
+  for _, part in ipairs({
     ui.select({ key = "model", options = names, selectedIndex = selected, placeholder = tr("panel.model"), controlSize = "sm", enabled = #names > 0 and not busy(), onChange = function(index) chooseModel(index) end }),
     ui.scroll({ key = "chat", flexGrow = 1, gap = 10, align = "stretch", stickToBottom = true, scrollToBottomRev = #list }, rows),
-  }
+  }) do
+    table.insert(body, part)
+  end
   if err ~= "" then
     table.insert(body, ui.label({ text = err, color = "error", maxLines = 3 }))
   end
@@ -527,7 +589,12 @@ render = function()
     table.insert(body, ui.row({ gap = 6, align = "center" }, chips))
   end
   table.insert(body, ui.row({ gap = 8, align = "end" }, footer))
-  panel.render(ui.column({ flexGrow = 1, gap = 10, align = "stretch" }, body))
+  local tree = ui.column({ flexGrow = 1, gap = 10, align = "stretch" }, body)
+  if isWindow then
+    -- A layer has no panel frame: its own background, border and padding.
+    tree = ui.column({ flexGrow = 1, fill = "surface", radius = 16, border = "outline_variant", borderWidth = 1, padding = 14, align = "stretch" }, { tree })
+  end
+  host.render(tree)
 end
 
 noctalia.state.watch("kesher", function(value)
@@ -539,8 +606,12 @@ end)
 
 function onOpen(_context)
   open = true
-  closeButton = noctalia.getSetting("shell.show_close_buttons") ~= false
-  panel.setWantsSecondTicks(true)
+  closeButton = isWindow or noctalia.getSetting("shell.show_close_buttons") ~= false
+  if host.setWantsSecondTicks then
+    host.setWantsSecondTicks(true)
+  else
+    noctalia.setUpdateInterval(1000)
+  end
   render()
   load()
   loadModels()
@@ -548,7 +619,9 @@ end
 
 function onClose()
   open = false
-  panel.setWantsSecondTicks(false)
+  if host.setWantsSecondTicks then
+    host.setWantsSecondTicks(false)
+  end
   stopStream()
 end
 
@@ -598,9 +671,24 @@ end
 
 function onOpenApp()
   noctalia.runAsync({ "xdg-open", base() .. "/" .. (chatId ~= "" and ("#/c/" .. chatId) or "") })
-  panel.close()
+  close()
 end
 
 function onCloseClicked()
-  panel.close()
+  close()
+end
+
+-- The window (a layer) is made when it is shown and ends when it is hidden: it opens as it loads.
+if isWindow then
+  loadWidth()
+  noctalia.layer.configure(WINDOW, { width = width })
+  noctalia.state.set("kesher-window", true)
+  onOpen(nil)
+end
+
+function onExit(_signal, _reason)
+  if isWindow then
+    noctalia.state.set("kesher-window", false)
+  end
+  onClose()
 end

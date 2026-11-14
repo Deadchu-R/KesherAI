@@ -1,5 +1,6 @@
 --!nonstrict
--- KesherAI on the bar: a mark, and how many chats are working. Click opens the panel; right-click opens KesherAI.
+-- KesherAI on the bar: a mark, and how many chats are working. Click opens the chat (as a floating window that can be
+-- made wider, or as Noctalia's panel: the "Open as" setting); right-click opens KesherAI.
 
 local PANEL = "kesherai/kesherai:panel"
 local s = noctalia.state.get("kesher") or {}
@@ -27,8 +28,18 @@ function update()
   render()
 end
 
+local function toggle()
+  if noctalia.getConfig("open_as") == "panel" then
+    noctalia.togglePanel(PANEL)
+  elseif noctalia.state.get("kesher-window") then
+    noctalia.layer.hide("window")
+  else
+    noctalia.layer.show("window")
+  end
+end
+
 function onClick()
-  noctalia.togglePanel(PANEL)
+  toggle()
 end
 
 function onRightClick()
@@ -38,7 +49,7 @@ end
 
 function onIpc(event, _payload)
   if event == "toggle" then
-    noctalia.togglePanel(PANEL)
+    toggle()
   end
 end
 

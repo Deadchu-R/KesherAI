@@ -7,6 +7,12 @@
     "token": {
       "label": "Access token",
       "description": "Only for KesherAI on another computer: its remote-access token."
+    },
+    "open_as": {
+      "label": "Open as",
+      "description": "A floating window you can make wider (↔ in its header), or Noctalia's panel (fixed size).",
+      "window": "Floating window (resizable)",
+      "panel": "Noctalia panel"
     }
   },
   "bar": {
@@ -36,6 +42,7 @@
     "model": "Default model",
     "attach": "Add files",
     "no_picker": "To add files, install zenity (or kdialog).",
-    "attach_failed": "That file could not be added."
+    "attach_failed": "That file could not be added.",
+    "width": "Width"
   }
 }
