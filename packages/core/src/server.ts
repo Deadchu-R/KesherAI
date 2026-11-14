@@ -552,6 +552,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     port: () => config.comfyui.port,
     folder: () => config.comfyui.folder,
     nvidia: async () => (await nvidiaGpus()).length > 0,
+    // Linux with an AMD card (RDNA 2 or newer has enough memory to matter): ComfyUI on ROCm.
+    amd: async () => amdCardOnLinux(),
     onReady: (url) => {
       // ComfyUI's checkpoints become image models.
       if (!registry.get("comfyui")) registry.add({ id: "comfyui", type: "comfyui", name: "ComfyUI (KesherAI)", location: "local", baseUrl: url });
@@ -1326,4 +1328,17 @@ async function modelSize(modelPath: string): Promise<number> {
   const files = (await readdir(dirname(modelPath)).catch(() => [])).filter((f) => f.startsWith(`${split[1]}-`) && f.endsWith(`-of-${split[2]}.gguf`));
   const sizes = await Promise.all(files.map((f) => stat(join(dirname(modelPath), f)).then((x) => x.size, () => 0)));
   return sizes.reduce((a, b) => a + b, 0);
+}
+
+/** An AMD graphics card with at least 4 GB of its own memory, on Linux (its driver's files in /sys). */
+async function amdCardOnLinux(): Promise<boolean> {
+  if (process.platform !== "linux") return false;
+  const { readdir, readFile } = await import("node:fs/promises");
+  for (const c of await readdir("/sys/class/drm").catch(() => [] as string[])) {
+    if (!/^card\d+$/.test(c)) continue;
+    const vendor = (await readFile(`/sys/class/drm/${c}/device/vendor`, "utf8").catch(() => "")).trim();
+    const vram = Number((await readFile(`/sys/class/drm/${c}/device/mem_info_vram_total`, "utf8").catch(() => "0")).trim());
+    if (vendor === "0x1002" && vram >= 4 * 1024 ** 3) return true;
+  }
+  return false;
 }

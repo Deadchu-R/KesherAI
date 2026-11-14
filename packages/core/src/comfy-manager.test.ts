@@ -49,3 +49,10 @@ test("without ComfyUI it says how to get it", async () => {
   assert.equal(m.status().installed, false);
   await assert.rejects(m.start(), /not installed/);
 });
+
+test("PyTorch for the card: CUDA for NVIDIA, ROCm for AMD on Linux, else the processor build", async () => {
+  const { torchIndex } = await import("./comfy-manager.js");
+  assert.deepEqual(torchIndex(true, false), ["--index-url", "https://download.pytorch.org/whl/cu128"]);
+  if (process.platform === "linux") assert.deepEqual(torchIndex(false, true), ["--index-url", "https://download.pytorch.org/whl/rocm7.2"]);
+  if (process.platform !== "darwin") assert.deepEqual(torchIndex(false, false), ["--index-url", "https://download.pytorch.org/whl/cpu"]);
+});

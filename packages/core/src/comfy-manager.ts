@@ -63,6 +63,8 @@ export class ComfyManager {
       /** The user's own ComfyUI, if chosen. */
       folder: () => string | undefined;
       nvidia: () => Promise<boolean>;
+      /** An AMD card PyTorch's ROCm build can use (Linux): then PyTorch for ROCm, not the processor-only build. */
+      amd?: () => Promise<boolean>;
       onReady: (url: string) => void;
     },
   ) {}
@@ -95,6 +97,42 @@ export class ComfyManager {
       ...(this.message ? { message: this.message } : {}),
       log: this.log.slice(-40),
     };
+  }
+
+  /** Whether this computer has an AMD card PyTorch's ROCm build can use (Linux only). */
+  private async amdCard(): Promise<boolean> {
+    return process.platform === "linux" && !!this.opts.amd && (await this.opts.amd().catch(() => false));
+  }
+
+  /**
+   * Makes KesherAI's own ComfyUI use PyTorch's ROCm build (for an AMD card): reads the installed one and, when it is
+   * the processor-only build, installs the ROCm one (a few GB, once). A ComfyUI the user chose is left as it is.
+   *
+   * @returns Whether ComfyUI can run on the card.
+   */
+  private async rocmTorch(py: string, folder: string): Promise<boolean> {
+    if (folder !== this.ownFolder) return true;
+    const version = await new Promise<string>((done) => {
+      const p = spawn(py, ["-c", "import torch; print(torch.__version__)"], { windowsHide: true });
+      let out = "";
+      p.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+      p.on("error", () => done(""));
+      p.on("exit", () => done(out.trim()));
+    });
+    if (/\+rocm/.test(version)) return true;
+    try {
+      this.message = "Installing PyTorch for your AMD card (ROCm, a few GB, once)…";
+      this.add(this.message);
+      await this.opts.runtimes.install("uv");
+      const uvDir = (await this.opts.runtimes.paths()).find((p) => existsSync(join(p, "uv")));
+      if (!uvDir) return false;
+      const env = { ...process.env, UV_CACHE_DIR: join(this.dir, "uv-cache") };
+      await run(join(uvDir, "uv"), ["pip", "install", "--python", py, "--reinstall", "torch", "torchvision", "torchaudio", ...torchIndex(false, true)], { env, onLine: (l) => this.add(l) });
+      return true;
+    } catch (e) {
+      this.add(`PyTorch for ROCm could not be installed (${(e as Error).message}); ComfyUI runs on the processor.`);
+      return false;
+    }
   }
 
   private async python(folder: string): Promise<{ cmd: string; args: string[] }> {
@@ -143,7 +181,8 @@ export class ComfyManager {
         const py = join(venv, process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
         this.message = "Installing PyTorch (a few GB; this takes a while)…";
         const nvidia = process.platform !== "darwin" && (await this.opts.nvidia().catch(() => false));
-        await run(uv, ["pip", "install", "--python", py, "torch", "torchvision", "torchaudio", ...(nvidia ? ["--index-url", "https://download.pytorch.org/whl/cu128"] : process.platform === "darwin" ? [] : ["--index-url", "https://download.pytorch.org/whl/cpu"])], { env, onLine: (l) => this.add(l) });
+        const amd = !nvidia && (await this.amdCard());
+        await run(uv, ["pip", "install", "--python", py, "torch", "torchvision", "torchaudio", ...torchIndex(nvidia, amd)], { env, onLine: (l) => this.add(l) });
         this.message = "Installing ComfyUI's packages…";
         await run(uv, ["pip", "install", "--python", py, "-r", join(this.ownFolder, "requirements.txt")], { env, onLine: (l) => this.add(l) });
         this.phase = undefined;
@@ -170,7 +209,10 @@ export class ComfyManager {
     await writeFile(yaml, `kesherai:\n  base_path: ${JSON.stringify(this.opts.modelsDir())}\n  checkpoints: .\n  loras: loras\n  vae: vae\n  diffusion_models: video\n  text_encoders: text_encoders\n  controlnet: controlnet\n`);
     const { cmd, args } = await this.python(folder);
     const nvidia = await this.opts.nvidia().catch(() => false);
-    const full = [...args, "--listen", "127.0.0.1", "--port", String(this.opts.port()), "--extra-model-paths-config", yaml, ...(nvidia || process.platform === "darwin" ? [] : ["--cpu"])];
+    // An AMD card on Linux: ComfyUI runs on it when PyTorch is the ROCm build (a copy installed before had the
+    // processor-only build: it is swapped once here).
+    const amd = !nvidia && (await this.amdCard()) && (await this.rocmTorch(cmd, folder));
+    const full = [...args, "--listen", "127.0.0.1", "--port", String(this.opts.port()), "--extra-model-paths-config", yaml, ...(nvidia || amd || process.platform === "darwin" ? [] : ["--cpu"])];
     this.phase = "starting";
     this.message = "Starting ComfyUI…";
     this.add(`> ${cmd} ${full.join(" ")}`);
@@ -221,4 +263,18 @@ export class ComfyManager {
       c.once("exit", () => (clearTimeout(t), r(undefined)));
     });
   }
+}
+
+/**
+ * Where PyTorch comes from: CUDA for NVIDIA, ROCm for an AMD card on Linux (the build ComfyUI's install guide names),
+ * the processor-only build elsewhere (macOS gets Metal from the default one).
+ *
+ * @param nvidia - An NVIDIA card.
+ * @param amd - An AMD card ROCm can use (Linux).
+ */
+export function torchIndex(nvidia: boolean, amd: boolean): string[] {
+  if (nvidia) return ["--index-url", "https://download.pytorch.org/whl/cu128"];
+  if (process.platform === "darwin") return [];
+  if (amd && process.platform === "linux") return ["--index-url", "https://download.pytorch.org/whl/rocm7.2"];
+  return ["--index-url", "https://download.pytorch.org/whl/cpu"];
 }
