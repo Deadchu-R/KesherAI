@@ -30,7 +30,7 @@ export function takeGameShot(chatId: string): string {
 }
 
 /** Programs in front that are not games (the helper then names the window, not "a game"). */
-const NOT_GAMES = /^(explorer|kesherai|electron|chrome|msedge|firefox|code|devenv|rider64|unity|unrealeditor|steamwebhelper|discord|powershell|windowsterminal|cmd)$/i;
+const NOT_GAMES = /^(explorer|kesherai|electron|chrome|msedge|firefox|opera|opera_gx|brave|vivaldi|arc|zen|claude|chatgpt|code|cursor|antigravity|windsurf|devenv|rider64|idea64|unity|unity hub|unrealeditor|epicgameslauncher|steam|steamwebhelper|galaxyclient|eadesktop|battle\.net|discord|slack|teams|ms-teams|whatsapp|telegram|spotify|obs64|obs|notepad|notepad\+\+|winword|excel|powerpnt|outlook|olk|acrobat|photoshop|blender|powershell|pwsh|windowsterminal|cmd|taskmgr|systemsettings|applicationframehost|armourycrate|lockapp|searchhost|shellexperiencehost|startmenuexperiencehost)$/i;
 
 /**
  * A game's name from the window in front: its title without the engine's and launcher's additions.
@@ -83,7 +83,7 @@ export async function gameRoutes(app: FastifyInstance, s: KesherServices): Promi
         pending.set(chat.id, file);
       }
     }
-    return { chatId: chat.id, game, ...(file ? { file } : {}) };
+    return { chatId: chat.id, game, app: front.app, ...(file ? { file } : {}) };
   });
 
   /** The game's latest picture (for the window's header). */
