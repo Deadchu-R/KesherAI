@@ -1,4 +1,4 @@
-import { batteryWear, patchAgeDays } from "../phone-health";
+import { addSample, batteryWear, chargingHabits, patchAgeDays, type PhoneSample } from "../phone-health";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
@@ -31,6 +31,8 @@ interface Item { level: "ok" | "warn" | "bad"; title: string; fix: string }
 interface PhoneReading { storageFree?: number; storageTotal?: number; ramFree?: number; ramTotal?: number; lowMemory?: boolean; batteryPercent?: number; batteryTempC?: number; batteryHealth?: string; charging?: boolean; modelsBytes?: number; model?: string; android?: string; batteryCycles?: number; batteryNowFullMah?: number; batteryDesignMah?: number; batteryVoltageMv?: number; thermal?: number; powerSave?: boolean; uptimeHours?: number; securityPatch?: string }
 
 
+/** Where the phone keeps its readings (localStorage, this device). */
+const SAMPLES = "kesher.phone.samples";
 const phonePlugin = () => (window as unknown as { Capacitor?: { Plugins?: { KesherLlm?: { health?: () => Promise<PhoneReading> } } } }).Capacitor?.Plugins?.KesherLlm;
 
 /** What to do about the phone, from fixed rules (like the computer's). */
@@ -86,6 +88,7 @@ export function HealthPage() {
   const [reporting, setReporting] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [phone, setPhone] = useState<PhoneReading | null>(null);
+  const [samples, setSamples] = useState<PhoneSample[]>([]);
   const [faults, setFaults] = useState<Array<{ at: string; kind: string; where: string; message: string }>>([]);
   const load = (fresh = false) => {
     setBusy(true);
@@ -94,7 +97,18 @@ export function HealthPage() {
       .finally(() => setBusy(false));
     void api<typeof faults>("/api/faults").then(setFaults, () => undefined);
     // In the phone app: the phone's own health too (Android's APIs, through the app).
-    void phonePlugin()?.health?.().then(setPhone, () => undefined);
+    void phonePlugin()?.health?.().then((p) => {
+      setPhone(p);
+      // Kept on the phone (this device only) for the charging habits over days.
+      try {
+        const kept = JSON.parse(localStorage.getItem(SAMPLES) ?? "[]") as PhoneSample[];
+        const next = addSample(kept, { at: Date.now(), percent: p.batteryPercent, tempC: p.batteryTempC, charging: p.charging, wear: batteryWear(p) });
+        localStorage.setItem(SAMPLES, JSON.stringify(next));
+        setSamples(next);
+      } catch {
+        /* not kept this time */
+      }
+    }, () => undefined);
   };
   useEffect(() => {
     load();
@@ -151,6 +165,7 @@ export function HealthPage() {
           {phone.ramTotal ? <Meter label={L("זיכרון", "Memory")} used={phone.ramTotal - (phone.ramFree ?? 0)} total={phone.ramTotal} note={`${gb(phone.ramTotal - (phone.ramFree ?? 0))} / ${gb(phone.ramTotal)} GB`} /> : null}
           {phone.batteryPercent !== undefined && phone.batteryPercent >= 0 && <p className="small">{L(`סוללה: \u2066${phone.batteryPercent}%\u2069${phone.charging ? " (בטעינה)" : ""} · \u2066${phone.batteryTempC}°C\u2069`, `Battery: ${phone.batteryPercent}%${phone.charging ? " (charging)" : ""} · ${phone.batteryTempC}°C`)}</p>}
           <PhoneNumbers p={phone} />
+          <PhoneHabits list={samples} />
         </section>
       )}
       {r && (
@@ -216,5 +231,24 @@ function PhoneNumbers({ p }: { p: PhoneReading }) {
         <div key={k} className="row"><dt className="muted grow">{k}</dt><dd dir="ltr">{v}</dd></div>
       ))}
     </dl>
+  );
+}
+
+/** The charging habits from the readings kept on this phone (as AccuBattery's), once there are a few. */
+function PhoneHabits({ list }: { list: PhoneSample[] }) {
+  const h = chargingHabits(list);
+  if (h.samples < 4) return <p className="muted small">{L("הרגלי הטעינה יופיעו אחרי כמה פתיחות של הדף בימים שונים.", "Charging habits appear after a few visits to this page on different days.")}</p>;
+  const pct = (n: number) => (h.chargingSamples ? Math.round((n / h.chargingSamples) * 100) : 0);
+  return (
+    <div className="stack small">
+      <strong>{L("הרגלי טעינה", "Charging habits")}</strong>
+      <span className="muted">
+        {L(`מתוך ${h.samples} קריאות, ${h.chargingSamples} בזמן טעינה`, `Of ${h.samples} readings, ${h.chargingSamples} while charging`)}
+        {h.chargingSamples ? L(` · ${pct(h.hotCharging)}% מהן בחום (38°C ומעלה) · ${pct(h.nearFull)}% מעל 95%`, ` · ${pct(h.hotCharging)}% of them warm (38°C+) · ${pct(h.nearFull)}% above 95%`) : ""}
+        {h.maxTempC !== undefined ? L(` · הכי חם: ${h.maxTempC}°C`, ` · hottest: ${h.maxTempC}°C`) : ""}
+        {h.wearFrom !== undefined && h.wearTo !== undefined ? L(` · קיבולת: ${h.wearFrom}% ← ${h.wearTo}%`, ` · capacity: ${h.wearFrom}% → ${h.wearTo}%`) : ""}
+      </span>
+      {h.chargingSamples > 0 && pct(h.hotCharging) + pct(h.nearFull) >= 60 && <span>{L("טעינה בחום או עד הסוף שוחקת את הסוללה הכי מהר: טעינה עד 85% בלי כיסוי עוזרת.", "Charging warm or to full wears the battery fastest: charging to 85% without a case helps.")}</span>}
+    </div>
   );
 }

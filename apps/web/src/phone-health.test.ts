@@ -9,3 +9,14 @@ test("the battery's wear and the security update's age", () => {
   assert.equal(patchAgeDays("2026-08-01", Date.parse("2026-11-09")), 100);
   assert.equal(patchAgeDays("not a date"), undefined);
 });
+
+test("phone readings kept over time, and what they say about charging", async () => {
+  const { addSample, chargingHabits } = await import("./phone-health.js");
+  let list = addSample([], { at: 0, percent: 50, tempC: 30, charging: true, wear: 92 });
+  list = addSample(list, { at: 10 * 60_000, percent: 60, tempC: 31, charging: true, wear: 92 });
+  assert.equal(list.length, 1, "within half an hour: replaced");
+  list = addSample(list, { at: 60 * 60_000, percent: 98, tempC: 39, charging: true, wear: 91 });
+  list = addSample(list, { at: 120 * 60_000, percent: 80, tempC: 33, charging: false, wear: 91 });
+  const h = chargingHabits(list);
+  assert.deepEqual(h, { samples: 3, chargingSamples: 2, hotCharging: 1, nearFull: 1, maxTempC: 39, wearFrom: 92, wearTo: 91 });
+});
