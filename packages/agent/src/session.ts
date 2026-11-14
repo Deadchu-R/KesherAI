@@ -237,6 +237,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
   /** Pictures the tool that just ran returned, for its tool message. */
   private pendingImages?: Array<{ mimeType: string; data: string }>;
+  /** The same failure seen in this run, by its key (the loop guard). */
+  private failures = new Map<string, number>();
   /** What the model said in its latest answer, shown on approval cards as the reason for the action. */
   private lastSaid = "";
 
@@ -822,6 +824,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         const plan = await this.askTeammate(planner, PLANNER_PROMPT, `The user's request:\n${request}`, abort.signal);
         if (plan) this.messages.push({ role: "user", content: `(A plan from your teammate ${planner.modelId}; follow it where it makes sense, the user's words come first.)\n${plan}` });
       }
+      this.failures.clear();
       for (let step = 0; step < this.maxSteps; step++) {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
@@ -901,6 +904,17 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             for (const m of this.messages) if (m.images) delete m.images;
           }
           this.messages.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: output, ...(images ? { images } : {}) });
+          // The loop guard (from Microsoft's TokenEconomizer): the same step failing the same way three times gets one
+          // note to stop and change course, instead of the model trying it again (small local models do).
+          const key = failureKey(call.name, output);
+          if (key) {
+            const n = (this.failures.get(key) ?? 0) + 1;
+            this.failures.set(key, n);
+            if (n === 3) {
+              this.push({ type: "note", text: "The same step failed the same way three times: the agent was told to change course." });
+              this.messages.push({ role: "user", content: `[KesherAI] ${call.name} has now failed the same way three times (${key.split("|")[1]}). Do not run it again unchanged. Read the error, check what you assumed (open the file, list the folder, look up the API), then try a different approach, or tell the user what blocks you.` });
+            }
+          }
         }
         this.onChange?.(this);
       }
@@ -1155,4 +1169,23 @@ export function languageNote(text: string): string {
     if (count >= 3) return `The user writes in ${name}: write everything you say to them in ${name} (code, commands, file names and tool arguments stay as they are).`;
   }
   return "";
+}
+
+/**
+ * What makes two tool results "the same failure": the tool and the first line that reads as an error, with numbers,
+ * paths' line positions and quoted values smoothed out. Undefined for a result that is not a failure.
+ *
+ * @param tool - The tool's name.
+ * @param output - What it returned.
+ */
+export function failureKey(tool: string, output: string): string | undefined {
+  const lines = output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const line = lines.find((l) => /\b(error|failed|failure|cannot|could not|not found|no such|exception|denied|exit code [1-9]|exited with [1-9]|traceback)\b/i.test(l));
+  if (!line) return undefined;
+  const norm = line
+    .replace(/(["'`]).*?\1/g, "…")
+    .replace(/\(\d+,\d+\)|:\d+(:\d+)?/g, "")
+    .replace(/\d+/g, "#")
+    .slice(0, 160);
+  return `${tool}|${norm}`;
 }
