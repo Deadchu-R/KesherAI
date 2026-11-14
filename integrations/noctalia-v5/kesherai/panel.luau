@@ -253,18 +253,52 @@ load = function()
   end)
 end
 
-local function send(text)
-  text = noctalia.string.trim(tostring(text or ""))
-  if text == "" or busy() then
+local attached = {} -- files given to the next question (paths KesherAI opened to this chat)
+
+-- The chat, made when there is none yet; cb(ok).
+local function ensureChat(cb)
+  if chatId ~= "" then
+    cb(true)
     return
   end
+  call("POST", "/api/conversations", modelId ~= "" and { kind = "chat", modelId = modelId } or { kind = "chat" }, function(ok, data)
+    if ok and type(data) == "table" and type(data.id) == "string" then
+      chatId = data.id
+      noctalia.state.set("kesher-chat", chatId)
+      cb(true)
+    else
+      cb(false)
+    end
+  end)
+end
+
+local function send(text)
+  text = noctalia.string.trim(tostring(text or ""))
+  if (text == "" and #attached == 0) or busy() then
+    return
+  end
+  -- Files go first, as KesherAI's own chat box writes them.
+  local lines = {}
+  for _, f in ipairs(attached) do
+    table.insert(lines, "[Attached: " .. f .. "]")
+  end
+  if #lines > 0 then
+    text = table.concat(lines, "\n") .. (text ~= "" and "\n" .. text or "")
+  end
+  attached = {}
   sending = true
   err = ""
   draft = ""
   inputRev += 1
   table.insert(events, { type = "user", text = text })
   render()
-  local function post()
+  ensureChat(function(made)
+    if not made then
+      sending = false
+      err = tr("panel.offline")
+      render()
+      return
+    end
     call("POST", "/api/conversations/" .. chatId .. "/messages", { text = text }, function(ok)
       sending = false
       if not ok then
@@ -274,22 +308,45 @@ local function send(text)
       end
       load()
     end)
-  end
-  if chatId ~= "" then
-    post()
+  end)
+end
+
+-- Picks files with the desktop's own dialog (zenity, or kdialog on KDE) and opens them to the chat.
+local function attachFiles()
+  local argv
+  if noctalia.commandExists("zenity") then
+    argv = { "zenity", "--file-selection", "--multiple", "--separator=\n", "--title=KesherAI" }
+  elseif noctalia.commandExists("kdialog") then
+    argv = { "kdialog", "--getopenfilename", ".", "--multiple", "--separate-output" }
+  else
+    err = tr("panel.no_picker")
+    render()
     return
   end
-  call("POST", "/api/conversations", modelId ~= "" and { kind = "chat", modelId = modelId } or { kind = "chat" }, function(ok, data)
-    if ok and type(data) == "table" and type(data.id) == "string" then
-      chatId = data.id
-      noctalia.state.set("kesher-chat", chatId)
-      post()
-    else
-      sending = false
-      err = tr("panel.offline")
-      render()
+  noctalia.runAsync(argv, function(result)
+    if type(result) ~= "table" or result.exitCode ~= 0 then
+      return
     end
-  end)
+    ensureChat(function(made)
+      if not made then
+        err = tr("panel.offline")
+        render()
+        return
+      end
+      for path in tostring(result.stdout or ""):gmatch("[^\n]+") do
+        if #attached < 10 then
+          call("POST", "/api/conversations/" .. chatId .. "/access", { path = path }, function(ok, data)
+            if ok and type(data) == "table" and type(data.path) == "string" then
+              table.insert(attached, data.path)
+            else
+              err = (type(data) == "table" and type(data.error) == "string") and data.error or tr("panel.attach_failed")
+            end
+            render()
+          end)
+        end
+      end
+    end)
+  end, 600000)
 end
 
 local function decide(requestId, decision)
@@ -424,6 +481,7 @@ render = function()
   end
 
   local footer = {
+    ui.button({ glyph = "paperclip", variant = "ghost", tooltip = tr("panel.attach"), enabled = not busy(), onClick = function() attachFiles() end }),
     ui.input({
       key = "ask-" .. inputRev,
       value = draft,
@@ -457,6 +515,16 @@ render = function()
   }
   if err ~= "" then
     table.insert(body, ui.label({ text = err, color = "error", maxLines = 3 }))
+  end
+  if #attached > 0 then
+    local chips = {}
+    for n, f in ipairs(attached) do
+      table.insert(chips, ui.button({ key = "att" .. n, glyph = "x", text = (f:match("[^/\\]+$") or f):sub(1, 30), variant = "outline", controlSize = "sm", tooltip = f, onClick = function()
+        table.remove(attached, n)
+        render()
+      end }))
+    end
+    table.insert(body, ui.row({ gap = 6, align = "center" }, chips))
   end
   table.insert(body, ui.row({ gap = 8, align = "end" }, footer))
   panel.render(ui.column({ flexGrow = 1, gap = 10, align = "stretch" }, body))
@@ -518,6 +586,7 @@ end
 function onNewChat()
   stopStream()
   selecting = {}
+  attached = {}
   chatId = ""
   noctalia.state.set("kesher-chat", "")
   events = {}

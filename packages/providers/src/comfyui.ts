@@ -37,6 +37,9 @@ export function defaultTextToImageWorkflow(req: ProviderImageRequest): ComfyWork
   };
 }
 
+/** Files in the shared models folder that are not image checkpoints (other kinds, parts of models, MLX). */
+const NOT_IMAGE = /wan2[._]?[12]|umt5|t5xxl|text_encoder|ace_step|hunyuan3d|(^|[\\/])(video|music|3d|chat|code|embeddings?|speech-to-text|text-to-speech|tts|stt|vae|image-support|upscale(rs)?|loras?|clip|text_encoders|vision)[\\/]|(^|[\\/])vae[^\\/]*$|model-\d{5}-of-\d{5}|[-_]mtp\b|mlx/i;
+
 /**
  * Provider for a ComfyUI server (local or remote), using its native API:
  * `POST /prompt` to queue a workflow, `GET /history/<id>` to wait for it,
@@ -87,7 +90,9 @@ export class ComfyUIProvider implements Provider {
     };
     const names = info.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? [];
     // The models folder is shared with KesherAI's own engines: leave out video models and text encoders.
-    const images: ModelInfo[] = names.filter((f) => !/wan2[._]?[12]|umt5|t5xxl|text_encoder|ace_step|hunyuan3d|(^|[\\/])(video|music|3d)[\\/]/i.test(f)).map((file) => ({
+    // KesherAI keeps its models in folders by kind (chat\…, embedding\…, speech-to-text\…): only image ones are
+    // ComfyUI checkpoints. Found on the PC: chat, embedding, speech and VAE files were listed as image models.
+    const images: ModelInfo[] = names.filter((f) => !NOT_IMAGE.test(f)).map((file) => ({
       id: makeModelId(this.id, file),
       providerId: this.id,
       providerModelId: file,

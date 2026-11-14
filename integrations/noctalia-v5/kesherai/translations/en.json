@@ -33,6 +33,9 @@
     "select": "Select part of the text",
     "formatted": "Back to the formatted answer",
     "sources": "Sources",
-    "model": "Default model"
+    "model": "Default model",
+    "attach": "Add files",
+    "no_picker": "To add files, install zenity (or kdialog).",
+    "attach_failed": "That file could not be added."
   }
 }
