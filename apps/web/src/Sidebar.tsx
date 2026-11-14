@@ -386,6 +386,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
 
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
+      <SidebarGrip />
       <QuickMenu />
       <ConversationSearch />
       {!searching && <div className="sidebar-actions">
@@ -567,5 +568,74 @@ function ConversationSearch() {
         </div>
       )}
     </div>
+  );
+}
+
+const SIDE_MIN = 200;
+const SIDE_MAX = 520;
+
+/** Sets the sidebar's width (kept for next time). */
+function setSideWidth(px: number | null) {
+  if (px === null) document.documentElement.style.removeProperty("--side-w");
+  else document.documentElement.style.setProperty("--side-w", `${Math.round(px)}px`);
+}
+try {
+  const saved = Number(localStorage.getItem("kesher.sideWidth"));
+  if (saved >= SIDE_MIN && saved <= SIDE_MAX) setSideWidth(saved);
+} catch {
+  // the usual width
+}
+
+/**
+ * The sidebar's edge, dragged with the mouse to make it wider or narrower (200-520 px, kept for next time);
+ * double-click or Home puts back the usual width; arrow keys move it too.
+ */
+function SidebarGrip() {
+  const save = (px: number | null) => {
+    setSideWidth(px);
+    try {
+      if (px === null) localStorage.removeItem("kesher.sideWidth");
+      else localStorage.setItem("kesher.sideWidth", String(Math.round(px)));
+    } catch {
+      // only for this visit
+    }
+  };
+  const width = () => (document.querySelector(".sidebar") as HTMLElement | null)?.getBoundingClientRect().width ?? 264;
+  // The sidebar is at the start of the row: on the right in a right-to-left page.
+  const sign = () => (getComputedStyle(document.documentElement).direction === "rtl" ? -1 : 1);
+  const start = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const x0 = e.clientX;
+    const w0 = width();
+    let last = w0;
+    const move = (ev: PointerEvent) => {
+      last = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w0 + (ev.clientX - x0) * sign()));
+      setSideWidth(last);
+    };
+    const end = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", end);
+      document.body.style.removeProperty("cursor");
+      save(last);
+    };
+    document.body.style.cursor = "col-resize";
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", end);
+  };
+  return (
+    <div
+      className="sidebar-grip"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={getLocale() === "he" ? "שינוי רוחב סרגל הצד" : "Resize the sidebar"}
+      tabIndex={0}
+      onPointerDown={start}
+      onDoubleClick={() => save(null)}
+      onKeyDown={(e) => {
+        if (e.key === "Home") return save(null);
+        const step = e.key === "ArrowRight" ? 16 : e.key === "ArrowLeft" ? -16 : 0;
+        if (step) save(Math.min(SIDE_MAX, Math.max(SIDE_MIN, width() + step * sign())));
+      }}
+    />
   );
 }

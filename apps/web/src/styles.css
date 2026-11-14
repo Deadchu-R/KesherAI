@@ -118,7 +118,7 @@ label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: c
 }
 
 /* ---------- sidebar: projects and conversations ---------- */
-.sidebar { flex: 0 0 264px; gap: 8px; height: calc(100vh - var(--bar-h)); position: sticky; top: var(--bar-h); }
+.sidebar { flex: 0 0 var(--side-w, 264px); gap: 8px; height: calc(100vh - var(--bar-h)); position: sticky; top: var(--bar-h); }
 .sidebar-actions { display: grid; gap: 6px; padding: 0 4px 6px; }
 .sidebar-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
 .sidebar-nav { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
@@ -398,7 +398,7 @@ html, body { overflow-x: hidden; }
 /* ---------- top bar (Claude-like): window controls on the sidebar side, then the page title ---------- */
 :root { --bar-h: 48px; }
 .app { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: var(--bar-h) 1fr; grid-template-areas: "bar bar" "side main"; }
-.app > .sidebar { grid-area: side; width: 264px; }
+.app > .sidebar { grid-area: side; width: var(--side-w, 264px); }
 .app > .main { grid-area: main; min-width: 0; }
 .appbar { grid-area: bar; height: var(--bar-h); display: flex; position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border); }
 .appbar-start { flex: 0 0 264px; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: var(--panel); border-inline-end: 1px solid var(--border); }
@@ -2131,3 +2131,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .health-bar.bad > span { background: var(--danger, #e5534b); }
 .health-folders { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .health-advice { border-inline-start: 3px solid var(--accent); padding-inline-start: 12px; }
+
+/* The sidebar's edge: drag to widen or narrow it (double-click: back to the usual width). Not on a phone. */
+.sidebar-grip { position: absolute; inset-block: 0; inset-inline-end: -3px; width: 6px; cursor: col-resize; z-index: 3; touch-action: none; }
+.sidebar-grip:hover, .sidebar-grip:focus-visible { background: var(--accent); opacity: .5; }
+@media (max-width: 760px) { .sidebar-grip { display: none; } }
