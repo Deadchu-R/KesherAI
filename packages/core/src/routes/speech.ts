@@ -37,7 +37,10 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (!text) return reply.code(400).send({ error: "No text" });
     if (req.body?.provider === "local") {
       try {
-        return reply.type("audio/wav").send(await s.kokoro.speak(text, Number(req.body.voice ?? 3) || 3, Number(req.body.speed ?? 1) || 1));
+        const wav = await s.kokoro.speak(text, Number(req.body.voice ?? 3) || 3, Number(req.body.speed ?? 1) || 1);
+        // Found on the PC (desktop app): the WAV reached Fastify as a plain Uint8Array ("invalid payload type
+        // 'object'"); a copy into this realm's Buffer always sends.
+        return reply.type("audio/wav").send(Buffer.isBuffer(wav) ? wav : Buffer.from(wav as Uint8Array));
       } catch (err) {
         return reply.code(409).send({ error: (err as Error).message });
       }

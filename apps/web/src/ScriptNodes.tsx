@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { addField, csValue, fieldUses, findStmt, insertStep, methodToNodes, newId, parseCSharp, plainValue, removeField, updateField, writeCSharp, type CsAccess, type CsClass, type CsStmt } from "@kesher/shared";
 import { api } from "./api";
-import { BlueprintCanvas } from "./BlueprintCanvas";
+import { BlueprintCanvas, type Action } from "./BlueprintCanvas";
 import { Fullscreen } from "./Fullscreen";
 import { CodeAiBubble } from "./CodeAiBubble";
 import type { CodeProblem } from "./ide/CodeEditor";
@@ -30,6 +30,23 @@ const UNITY_TYPES: PanelType[] = [
   ...(["bool", "int", "float", "string"] as const).map((t): PanelType => ({ value: t, label: t, input: t === "bool" ? "bool" : t === "string" ? "text" : "number", group: L("בסיסי", "Basic") })),
   ...["Vector2", "Vector3", "Color"].map((t): PanelType => ({ value: t, label: t, input: "code", group: "Unity" })),
   ...["GameObject", "Transform", "Rigidbody", "Rigidbody2D", "Collider", "Animator", "AudioSource", "AudioClip", "Sprite", "Material", "Camera", "ParticleSystem"].map((t): PanelType => ({ value: t, label: t, input: "none", group: "Unity" })),
+];
+
+/** Common Unity actions for the "All Actions" menu (right-click or Space on the graph, as in Unreal). */
+const UNITY_CALLS: Array<{ title: string; target: string; name: string; args: string[] }> = [
+  { title: "Print to Console (Debug.Log)", target: "Debug", name: "Log", args: ['"Hello"'] },
+  { title: "Move (transform.Translate)", target: "transform", name: "Translate", args: ["Vector3.forward * Time.deltaTime"] },
+  { title: "Rotate (transform.Rotate)", target: "transform", name: "Rotate", args: ["0f", "90f * Time.deltaTime", "0f"] },
+  { title: "Look At (transform.LookAt)", target: "transform", name: "LookAt", args: ["Vector3.zero"] },
+  { title: "Show / Hide (gameObject.SetActive)", target: "gameObject", name: "SetActive", args: ["false"] },
+  { title: "Destroy Object (Destroy)", target: "", name: "Destroy", args: ["gameObject"] },
+  { title: "Spawn a Copy (Instantiate)", target: "", name: "Instantiate", args: ["gameObject", "transform.position", "Quaternion.identity"] },
+  { title: "Call Later (Invoke)", target: "", name: "Invoke", args: ['"MethodName"', "1f"] },
+  { title: "Push (Rigidbody.AddForce)", target: "GetComponent<Rigidbody>()", name: "AddForce", args: ["Vector3.up * 5f"] },
+  { title: "Push 2D (Rigidbody2D.AddForce)", target: "GetComponent<Rigidbody2D>()", name: "AddForce", args: ["Vector2.up * 5f"] },
+  { title: "Play Sound (AudioSource.Play)", target: "GetComponent<AudioSource>()", name: "Play", args: [] },
+  { title: "Play Animation (Animator.Play)", target: "GetComponent<Animator>()", name: "Play", args: ['"StateName"'] },
+  { title: "Load Scene (SceneManager.LoadScene)", target: "UnityEngine.SceneManagement.SceneManager", name: "LoadScene", args: ['"SceneName"'] },
 ];
 
 /**
@@ -154,10 +171,96 @@ export function ScriptNodes() {
    * - a value wire from the method's input (a parameter) to a step's input writes that name there;
    * - Delete removes steps; Alt+click on an input clears it. Moving a node only moves the picture.
    */
-  const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string }> => {
+  /** What the "All Actions" menu offers here (right-click or Space on the graph, as in Unreal), by the words typed. */
+  const localActions = (q: string): Action[] => {
+    const all: Action[] = [
+      { title: L("תנאי (Branch)", "Branch (if)"), category: L("זרימה", "Flow"), type: "if" },
+      { title: L("משתנה חדש בתוך המתודה", "New local variable"), category: L("משתנים", "Variables"), type: "local" },
+      ...(cls?.fields ?? []).map((f): Action => ({ title: `Set ${f.name}`, category: L("משתנים", "Variables"), type: "set", variable: f.name })),
+      ...UNITY_CALLS.map((c): Action => ({ title: c.title, category: "Unity", type: "call", target: c.target, function: c.name, args: c.args })),
+      ...(cls?.methods ?? []).filter((x) => x.id !== m?.id).map((x): Action => ({ title: `${x.name}()`, category: L("המתודות של הסקריפט", "This script's methods"), type: "call", target: "", function: x.name, args: x.params.map(() => "0") })),
+    ];
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return all.filter((a) => words.every((w) => `${a.title} ${a.category} ${a.function ?? ""}`.toLowerCase().includes(w))).slice(0, 60);
+  };
+  /** Where a new step goes: after the step a dragged flow pin comes from (or first in its True/False/Loop), else after the chosen one, else last. */
+  const placeFor = (from?: { node: string; pin: string; dir: string; type: string }): { list: CsStmt[]; at: number } => {
+    if (!m) return { list: [], at: 0 };
+    if (from && from.dir === "out" && from.type === "exec") {
+      if (from.node === m.id) return { list: m.body, at: 0 };
+      const src = findStmt(m.body, from.node);
+      if (src) {
+        const s3 = src.stmt;
+        if (s3.kind === "if" && from.pin === "True") return { list: s3.then, at: 0 };
+        if (s3.kind === "if" && from.pin === "False") return { list: (s3.else ??= []), at: 0 };
+        if (s3.kind === "loop" && from.pin === "Loop Body") return { list: s3.body, at: 0 };
+        return { list: src.list, at: src.index + 1 };
+      }
+    }
+    return found ? { list: found.list, at: found.index + 1 } : { list: m.body, at: m.body.length };
+  };
+  /** A C# value's type, for a new variable made from it (Promote to Variable). */
+  const typeOfValue = (v: string, pinType: string): string => {
+    const s = v.trim();
+    if (/^(true|false)$/.test(s)) return "bool";
+    if (/^-?\d+$/.test(s)) return "int";
+    if (/^-?\d*\.?\d+f?$/.test(s)) return "float";
+    if (/^".*"$/.test(s)) return "string";
+    const ctor = /^new\s+(Vector2|Vector3|Color|Quaternion)\b/.exec(s);
+    if (ctor) return ctor[1]!;
+    if (/^(bool|int|float|string|Vector2|Vector3|Color)$/.test(pinType)) return pinType;
+    return "float";
+  };
+  const graphOps = (ops: Array<Record<string, unknown>>): Array<{ ok: boolean; error?: string; node?: string }> => {
     if (!m) return ops.map(() => ({ ok: false, error: L("אין מתודה פתוחה.", "No method is open.") }));
-    const results = ops.map((op): { ok: boolean; error?: string } => {
+    const results = ops.map((op): { ok: boolean; error?: string; node?: string } => {
       if (op.op === "move") return { ok: true };
+      if (op.op === "add") {
+        // A node chosen in the menu: a new step, after the pin it was dragged from (as in Unreal).
+        const a = op.action as Action;
+        const stmt: CsStmt =
+          a.type === "call" ? { id: newId(), kind: "call", target: a.target ?? "", name: a.function ?? "Log", args: [...(a.args ?? [])], src: "", dirty: true }
+          : a.type === "set" ? fresh("set", a.variable)
+          : a.type === "local" ? fresh("local")
+          : fresh("if");
+        const { list, at } = placeFor(op.from as { node: string; pin: string; dir: string; type: string } | undefined);
+        list.splice(at, 0, stmt);
+        (m as typeof m & { dirty?: boolean }).dirty = true;
+        if (list[at + 1]) list[at + 1]!.dirty = true;
+        setSel(stmt.id);
+        return { ok: true, node: stmt.id };
+      }
+      if (op.op === "promote") {
+        // Promote to Variable: a new field (shown in the Inspector) holding the input's value; the input now uses it.
+        const f = findStmt(m.body, String(op.node));
+        const pin = String(op.pin);
+        if (!f || op.dir !== "in") return { ok: false, error: L("אפשר להפוך למשתנה כניסה של צעד (ערך שהוא מקבל).", "Only a step's input (a value it takes) can be promoted.") };
+        const s5 = f.stmt;
+        const current = s5.kind === "call" && /^arg\d+$/.test(pin) ? s5.args[Number(pin.slice(3))] : (s5.kind === "set" || s5.kind === "local" || s5.kind === "return") && pin === "value" ? s5.value : s5.kind === "if" && pin === "Condition" ? s5.cond : undefined;
+        if (current === undefined) return { ok: false, error: L("לקלט הזה אי אפשר לתת משתנה.", "This input cannot take a variable.") };
+        const type = typeOfValue(current ?? "", String(op.type ?? ""));
+        const taken = new Set((cls?.fields ?? []).map((x) => x.name));
+        const base = s5.kind === "call" ? `${s5.name[0]!.toLowerCase()}${s5.name.slice(1)}${pin.replace("arg", "")}` : s5.kind === "if" ? "condition" : s5.kind === "set" ? `new${s5.target[0]!.toUpperCase()}${s5.target.slice(1)}` : "value";
+        let name = base.replace(/[^A-Za-z0-9_]/g, "") || "newVar";
+        for (let k = 2; taken.has(name); k++) name = `${base}${k}`;
+        if (s5.kind === "call") s5.args[Number(pin.slice(3))] = name;
+        else if (s5.kind === "if") s5.cond = name;
+        else (s5 as { value?: string }).value = name;
+        s5.dirty = true;
+        const value = current && current !== name ? current : "";
+        setTimeout(() => {
+          try {
+            const now = writeCSharp(text, classes);
+            const c = parseCSharp(now)[ci];
+            if (!c) return;
+            setText(addField(now, c, { type, name, value, shown: true }));
+            toast(L(`נוצר המשתנה ${name} (${type}), מוצג ב-Inspector.`, `Made the variable ${name} (${type}), shown in the Inspector.`));
+          } catch (e) {
+            toast((e as Error).message);
+          }
+        }, 0);
+        return { ok: true };
+      }
       if (op.op === "delete") {
         const f = findStmt(m.body, String(op.node));
         if (!f) return { ok: false, error: L("את הצומת הזה אי אפשר למחוק (זו נקודת הכניסה של המתודה).", "This node cannot be deleted (it is the method's entry).") };
@@ -423,7 +526,7 @@ export function ScriptNodes() {
               <div className="script-graph">
                 <div className="script-canvas">
                   <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: כשהשחקן נוגע במטבע תוסיף נקודה", "e.g. when the player touches a coin add a point")} />
-                  {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable unity onOps={graphOps} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
+                  {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable unity onOps={graphOps} localActions={localActions} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
                 <div className="script-side">
                 <aside className="script-vars card">{variables}</aside>

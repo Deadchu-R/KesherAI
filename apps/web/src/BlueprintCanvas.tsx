@@ -13,7 +13,8 @@ export interface GNode { id: string; title: string; class: string; x: number; y:
 const isCommentBox = (n: GNode) => n.class === "EdGraphNode_Comment";
 const isKnot = (n: GNode) => n.class === "K2Node_Knot";
 const KNOT = 16;
-interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string }
+/** One node the "All Actions" menu offers. */
+export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
 type Op = Record<string, unknown>;
 
 /** Pin colors as in Unreal, so the picture reads the same. */
@@ -68,7 +69,7 @@ const QUICK: Record<string, Partial<Op>> = {
   r: { op: "add", type: "reroute" },
 };
 
-export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string }> }) {
+export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps, localActions }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string }>; /** The nodes the menu offers when the graph is changed here (onOps), filtered by the words typed. */ localActions?: (q: string) => Action[] }) {
   // Unity and Unreal share the canvas; each has its own routes.
   const engine = unity ? "unity" : "unreal";
   const saidWhy = useRef(0);
@@ -137,6 +138,10 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
+  const [pinMenu, setPinMenu] = useState<{ left: number; top: number; node: string; pin: string; dir: "in" | "out"; type: string; wx: number; wy: number } | null>(null);
+  /** Where the mouse is (Space opens the node search there). */
+  const hover = useRef<{ x: number; y: number } | null>(null);
   const [find, setFind] = useState<{ q: string; i: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [flashing, setFlashing] = useState<string | undefined>();
@@ -251,7 +256,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
 
   const openMenu = (p: { x: number; y: number }, from?: Menu["from"]) => {
     if (!editable) return;
-    if (onOps) return toast(L("הוספת צעד: בלוח שמשמאל (+ פעולה, + שינוי ערך, + תנאי).", "Adding a step: in the panel beside the graph (+ Action, + Change a value, + Condition)."));
+    if (onOps && !localActions) return toast(L("הוספת צעד: בלוח שמשמאל (+ פעולה, + שינוי ערך, + תנאי).", "Adding a step: in the panel beside the graph (+ Action, + Change a value, + Condition)."));
+    setPinMenu(null);
     const r = frame.current!.getBoundingClientRect();
     const w = world(p);
     setMenu({ left: Math.min(p.x, Math.max(0, r.width - 300)), top: Math.min(p.y, Math.max(0, r.height - 330)), wx: w.x, wy: w.y, ...(from ? { from } : {}) });
@@ -259,6 +265,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
 
   const down = (e: React.PointerEvent) => {
     if (menu && !(e.target as Element).closest(".bp-menu")) setMenu(null);
+    if (pinMenu && !(e.target as Element).closest(".bp-menu")) setPinMenu(null);
     if ((e.target as Element).closest(".bp-menu, .ue-zoom, .bp-find")) return;
     frame.current?.focus();
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -297,6 +304,15 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         openMenu(at);
       }, 550);
     }
+    if (e.button === 2 && pinEl && editable) {
+      // Right-click a pin: its menu, as in Unreal.
+      const d = pinEl.dataset;
+      const r = frame.current!.getBoundingClientRect();
+      const w = world(p);
+      setMenu(null);
+      setPinMenu({ left: Math.min(p.x, Math.max(0, r.width - 240)), top: Math.min(p.y, Math.max(0, r.height - 140)), node: d.node!, pin: d.pin!, dir: d.dir as "in" | "out", type: d.type!, wx: w.x, wy: w.y });
+      return;
+    }
     if (e.button === 2) return setDrag({ kind: "pan", sx: p.x, sy: p.y, moved: false, right: true });
     if (pinEl && editable) {
       const d = pinEl.dataset;
@@ -331,6 +347,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     setDrag({ kind: "marquee", sx: p.x, sy: p.y, ex: p.x, ey: p.y, add: e.ctrlKey || e.shiftKey });
   };
   const move = (e: React.PointerEvent) => {
+    hover.current = local(e);
     const prev = pointers.current.get(e.pointerId);
     if (!prev) return;
     const now = local(e);
@@ -405,6 +422,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (!menu) return;
     const m = menu;
     setMenu(null);
+    if (onOps) {
+      // Changed here (a C# script as nodes): the page makes the step, and puts it after the pin it was dragged from.
+      void apply([{ op: "add", action: a, ...(m.from ? { from: m.from } : {}) }]);
+      return;
+    }
     const op: Op = { op: "add", type: a.type, ref: "$n", x: Math.round(m.wx / SCALE), y: Math.round(m.wy / SCALE) };
     if (a.function) op.function = a.function;
     if (a.event) op.event = a.event;
@@ -432,6 +454,38 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     }
   };
 
+  /** The pin menu's "Break Link(s)". */
+  const breakLinks = (pm: NonNullable<typeof pinMenu>) => {
+    setPinMenu(null);
+    void apply([{ op: "disconnect", node: pm.node, pin: pm.pin }]);
+  };
+  /**
+   * The pin menu's "Promote to Variable", as in Unreal: a new variable of the pin's type (named after the pin),
+   * with a Get node feeding an input pin, or a Set node taking an output pin.
+   */
+  const promote = async (pm: NonNullable<typeof pinMenu>) => {
+    setPinMenu(null);
+    if (onOps) {
+      void apply([{ op: "promote", node: pm.node, pin: pm.pin, dir: pm.dir, type: pm.type }]);
+      return;
+    }
+    const n = nodes.find((x) => x.id === pm.node);
+    const label = n?.pins.find((x) => x.name === pm.pin)?.label ?? pm.pin;
+    const base = label.replace(/[^A-Za-z0-9 _]/g, "").split(/[\s_]+/).filter(Boolean).map((w) => w[0]!.toUpperCase() + w.slice(1)).join("") || "NewVar";
+    const name = /^[0-9]/.test(base) ? `Var${base}` : base;
+    try {
+      await api(`/api/${engine}/vars`, { method: "POST", body: { path, ops: [{ op: "add", name, type: pm.type }] } });
+      const x = Math.round((pm.dir === "in" ? pm.wx - 260 : pm.wx + 60) / SCALE);
+      const y = Math.round(pm.wy / SCALE);
+      const node = { op: "add", type: pm.dir === "in" ? "get" : "set", variable: name, ref: "$v", x, y };
+      const wire = pm.dir === "in" ? { op: "connect", from: { node: "$v", pin: name }, to: { node: pm.node, pin: pm.pin } } : { op: "connect", from: { node: pm.node, pin: pm.pin }, to: { node: "$v", pin: name } };
+      await apply([node, wire]);
+      toast(L(`נוצר המשתנה ${name}.`, `Made the variable ${name}.`));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+
   const keys = (e: React.KeyboardEvent) => {
     if ((e.target as Element).closest("input")) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -449,11 +503,17 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         const y1 = Math.max(...sel.map((b) => b.y + b.h)) + 20;
         void apply([{ op: "add", type: "comment_box", ref: "$c", x: Math.round(x0 / SCALE), y: Math.round(y0 / SCALE), width: Math.round((x1 - x0) / SCALE), height: Math.round((y1 - y0) / SCALE), text: "Comment" }]);
       }
+    } else if (e.key === " " && !mod && editable) {
+      // Space: the node search at the mouse, as in Unreal.
+      e.preventDefault();
+      const r = frame.current!.getBoundingClientRect();
+      openMenu(hover.current ?? { x: r.width / 2, y: r.height / 2 });
     } else if (e.key === "Home") {
       e.preventDefault();
       fit();
     } else if (e.key === "Escape") {
       setMenu(null);
+      setPinMenu(null);
       setFind(null);
       setSelected(new Set());
     } else if (!editable) return;
@@ -623,17 +683,31 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           <button type="button" onClick={() => setFind(null)} aria-label={L("סגור", "Close")}>✕</button>
         </div>
       )}
-      {menu && <ActionMenu engine={engine} path={path} menu={menu} onPick={(a) => void add(a)} onClose={() => setMenu(null)} />}
+      {menu && <ActionMenu engine={engine} path={path} menu={menu} local={localActions} onPick={(a) => void add(a)} onClose={() => setMenu(null)} />}
+      {pinMenu && (
+        <div className="bp-menu bp-pin-menu" style={{ left: pinMenu.left, top: pinMenu.top }} role="menu" aria-label={L("פעולות על הפין", "Pin actions")} onPointerDown={(e) => e.stopPropagation()}>
+          <strong className="small" dir="ltr">{nodes.find((x) => x.id === pinMenu.node)?.pins.find((x) => x.name === pinMenu.pin)?.label ?? pinMenu.pin}</strong>
+          <ul>
+            <li><button type="button" role="menuitem" onClick={() => breakLinks(pinMenu)}>{L("נתק את החיבורים (Break Link)", "Break Pin Link(s)")}</button></li>
+            {pinMenu.type !== "exec" && (onOps || !unity) && <li><button type="button" role="menuitem" onClick={() => void promote(pinMenu)}>{L("הפוך למשתנה (Promote to Variable)", "Promote to Variable")}</button></li>}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
 
 /** Unreal's "All Actions for this Blueprint": a search over the nodes the editor can add. */
-function ActionMenu({ engine, path, menu, onPick, onClose }: { engine: string; path: string; menu: Menu; onPick: (a: Action) => void; onClose: () => void }) {
+function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: string; path: string; menu: Menu; local?: (q: string) => Action[]; onPick: (a: Action) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Action[] | null>(null);
   const [i, setI] = useState(0);
   useEffect(() => {
+    if (local) {
+      setItems(local(q));
+      setI(0);
+      return;
+    }
     let alive = true;
     const id = setTimeout(() => {
       void api<{ actions: Action[] }>(`/api/${engine}/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`).then(
@@ -657,7 +731,7 @@ function ActionMenu({ engine, path, menu, onPick, onClose }: { engine: string; p
   return (
     <div className="bp-menu" style={{ left: menu.left, top: menu.top }} role="dialog" aria-label={L("כל הפעולות", "All actions")} onPointerDown={(e) => e.stopPropagation()}>
       <div className="row">
-        <strong className="grow small">{menu.from ? L(`מ-${menu.from.pin}`, `From ${menu.from.pin}`) : L("כל הפעולות ל-Blueprint הזה", "All Actions for this Blueprint")}</strong>
+        <strong className="grow small">{menu.from ? L(`מ-${menu.from.pin}`, `From ${menu.from.pin}`) : local ? L("כל הפעולות לסקריפט הזה", "All Actions for this script") : L("כל הפעולות ל-Blueprint הזה", "All Actions for this Blueprint")}</strong>
         <button type="button" className="icon-btn" onClick={onClose} aria-label={L("סגור", "Close")}>✕</button>
       </div>
       <input
@@ -684,7 +758,7 @@ function ActionMenu({ engine, path, menu, onPick, onClose }: { engine: string; p
         {items === null && <li className="muted small">{L("טוען…", "Loading…")}</li>}
         {items?.length === 0 && <li className="muted small">{L("אין תוצאות.", "Nothing found.")}</li>}
         {items?.map((a, k) => (
-          <li key={`${a.type}${a.function ?? a.event ?? a.variable ?? a.title}`}>
+          <li key={`${a.type}${a.title}${a.function ?? a.event ?? a.variable ?? ""}`}>
             <button type="button" className={k === i ? "on" : ""} onClick={() => onPick(a)} onMouseEnter={() => setI(k)}>
               <span dir="ltr">{a.title}</span>
               {a.category && <span className="muted small" dir="ltr">{a.category}</span>}
