@@ -160,3 +160,34 @@ test("variables: sent to a plugin that has them, an older plugin is asked to upd
     await server.app.close();
   }
 });
+
+test("Unreal closed: commands run in a headless editor (one start for several), not 'not connected'", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { UnrealBridge } = await import("./unreal-bridge.js");
+  const dir = mkdtempSync(join(tmpdir(), "ub-"));
+  const uproject = join(dir, "Game.uproject");
+  writeFileSync(uproject, "{}");
+  writeFileSync(join(dir, "last.json"), JSON.stringify({ last: "Game", projectFile: uproject }));
+  const b = new UnrealBridge(dir);
+  const runs: Array<Array<Record<string, unknown>>> = [];
+  b.setHeadless(async (file, commands) => {
+    assert.equal(file, uproject);
+    runs.push(commands);
+    return commands.map((c) => (c.cmd === "graph" ? { ok: true, result: { path: c.path, name: "BP", variables: [], graphs: [] } } : c.cmd === "list" ? { ok: true, result: { blueprints: [{ path: "/Game/BP.BP", name: "BP" }] } } : { ok: true, result: { ok: true } }));
+  });
+  await b.project();
+  assert.equal(b.available, true);
+  assert.equal((await b.status()).offline, true);
+  const g = await b.graph("/Game/BP.BP");
+  assert.equal(g.graph.name, "BP");
+  assert.equal(g.offline, true);
+  await b.graph("/Game/BP.BP");
+  assert.equal(runs.length, 1, "the second read uses the saved copy");
+  assert.deepEqual(await b.request("compile", { path: "/Game/BP.BP" }), { ok: true });
+  const made = await b.createBlueprint("BP_New", "/Game", "Actor");
+  assert.equal(made.queued, false);
+  assert.deepEqual(runs.at(-1)!.map((c) => c.cmd), ["create", "list"]);
+  await assert.rejects(b.request("play", {}), /not connected/);
+});

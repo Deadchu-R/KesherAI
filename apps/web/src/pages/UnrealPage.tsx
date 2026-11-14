@@ -33,6 +33,8 @@ interface Status {
   download: string;
   /** Unreal: when a Blueprint last compiled in the editor. */
   changedAt?: number;
+  /** Unreal: the editor is closed and commands run in a headless editor (plugin 0.1.13+). */
+  offline?: boolean;
 }
 interface BpItem { path: string; name: string; parent?: string; saved?: boolean }
 interface Blueprint { path: string; name: string; parent?: string; variables: BpVar[]; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
@@ -322,6 +324,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const shownView = view === "design" && !(isWidget && !unity) ? "graph" : view;
   const shown = (list?.blueprints ?? []).filter((b) => !filter || b.name.toLowerCase().includes(filter.toLowerCase()));
   const neverConnected = !st.connected && !st.projects.length;
+  // The editor is closed but the work still runs: Unreal in a headless editor, Unity through its CLI (both slower).
+  const ready = st.connected || (unity ? !!st.cli : !!st.offline);
 
   return (
     <div className="page ue-page">
@@ -329,7 +333,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <h1 className="grow">{unity ? "Unity" : "Unreal Blueprints"}</h1>
         <OpenInChat line={unity ? (st.active ? `[Unity project: ${st.active.split(/[\\/]/).pop()} — ${st.active}] ` : "") : list?.project ? `[Unreal project: ${list.project}${st.editor?.projectFile ? ` — ${st.editor.projectFile}${st.connected ? "; the editor is connected" : ""}` : st.connected ? " — the editor is connected" : ""}] ` : ""} />
         <span className={`pill ${st.connected ? "good" : ""}`}>
-          {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
+          {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : ready ? `🟡 ${L(`${app} סגור · עובד ברקע (איטי יותר)`, `${app} is closed · works in the background (slower)`)}${list?.project ? ` · ${list.project}` : ""}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>
       </div>
       {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
@@ -370,12 +374,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
             <Select className="ue-select" value={path} onChange={(e) => setPath(e.target.value)} aria-label={unity ? "Script Graph" : "Blueprint"}>
               <option value="">{unity ? L("בחר Script Graph או State Graph", "Choose a Script Graph or State Graph") : L("בחר Blueprint", "Choose a Blueprint")}</option>
-              {shown.map((b) => <option key={b.path} value={b.path} disabled={!st.connected && !b.saved}>{b.name}</option>)}
+              {shown.map((b) => <option key={b.path} value={b.path} disabled={!ready && !b.saved}>{b.name}</option>)}
             </Select>
             <ul>
               {shown.map((b) => (
                 <li key={b.path}>
-                  <button type="button" className={b.path === path ? "on" : ""} disabled={!st.connected && !b.saved} onClick={() => setPath(b.path)} title={b.path}>
+                  <button type="button" className={b.path === path ? "on" : ""} disabled={!ready && !b.saved} onClick={() => setPath(b.path)} title={b.path}>
                     <span className="grow">{b.name}</span>
                     {b.parent && <span className="muted small">{b.parent}</span>}
                   </button>
@@ -383,7 +387,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
               ))}
               {!shown.length && <li className="muted small">{unity ? L("אין עדיין Script Graphs או State Graphs.", "No Script Graphs or State Graphs yet.") : L("אין Blueprints עדיין.", "No Blueprints yet.")}</li>}
             </ul>
-            {!unity && (st.connected || st.projects.length > 0) && <NewBlueprint connected={st.connected} onMade={(p) => { loadList(); loadQueue(); setPath(p); }} />}
+            {!unity && (st.connected || st.projects.length > 0) && <NewBlueprint connected={ready} onMade={(p) => { loadList(); loadQueue(); setPath(p); }} />}
           </aside>
 
           <section className="ue-main card stack">
@@ -395,8 +399,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                   <strong className="grow">{bp.graph.name}{bp.graph.parent ? <span className="muted small"> · {bp.graph.parent}</span> : null}</strong>
                   {bp.offline && bp.savedAt && <span className="muted small">{L("עותק מ-", "Copy from ")}{new Date(bp.savedAt).toLocaleString()}</span>}
                   <button type="button" disabled={!st.connected} onClick={() => void call("open")}>{L(`פתח ב-${app}`, `Open in ${app}`)}</button>
-                  <button type="button" disabled={!st.connected} onClick={() => void call("compile")}>{unity ? L("בדוק", "Check") : L("קמפל", "Compile")}</button>
-                  <button type="button" disabled={!st.connected} onClick={() => void call("save")}>{L("שמור", "Save")}</button>
+                  <button type="button" disabled={!ready} onClick={() => void call("compile")}>{unity ? L("בדוק", "Check") : L("קמפל", "Compile")}</button>
+                  <button type="button" disabled={!ready} onClick={() => void call("save")}>{L("שמור", "Save")}</button>
                   <button type="button" className="primary" disabled={!st.connected || testing} onClick={() => void test()} title={unity ? L("מריץ את הסצנה ב-Play Mode כמה שניות, אוסף את ה-Console ותמונה, והמודל בודק אם הגרף עובד", "Plays the scene in Play Mode for a few seconds, collects the Console and a picture, and the model checks whether the graph works") : L("מריץ את המשחק ב-Unreal כמה שניות, אוסף את הלוג ותמונה, והמודל בודק אם ה-Blueprint עובד", "Plays the game in Unreal for a few seconds, collects the log and a picture, and the model checks whether the Blueprint works")}>{testing ? L("בודק…", "Testing…") : `🧪 ${L("בדיקה", "Test")}`}</button>
                 </div>
                 <div className="ue-tabs" role="tablist">

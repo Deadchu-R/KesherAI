@@ -151,7 +151,7 @@ async function mcpUp(): Promise<boolean> {
 }
 
 /** The engine a project wants (its EngineAssociation), else the newest installed. */
-function engineFor(engines: UnrealEngine[], want: string): UnrealEngine | undefined {
+export function engineFor(engines: UnrealEngine[], want: string): UnrealEngine | undefined {
   return engines.find((e) => e.version === want) ?? engines.find((e) => want && e.version.startsWith(want)) ?? (want ? undefined : engines[0]);
 }
 

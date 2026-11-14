@@ -202,9 +202,9 @@ export class ConversationManager {
       split.push(...graphTools("unity", this.deps.unity, this.deps.registry, chatModel));
       media.notes.push("unity_list_graphs, unity_read_graph and unity_change_graph see and change the project's Visual Scripting graphs (Script Graphs and State Graphs) in words; prefer them for graph logic.");
     }
-    if (this.deps.unreal?.connected) {
+    if (this.deps.unreal?.available) {
       split.push(...graphTools("unreal", this.deps.unreal, this.deps.registry, chatModel, async (png) => (await this.deps.assets.save(png, "image/png", { meta: { use: "unreal-test" } })).id));
-      media.notes.push("The user's Unreal Editor is connected (KesherAI Bridge): unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled); unreal_test_blueprint plays the game in the editor for a few seconds and returns the log and a picture, to check a change works.");
+      media.notes.push((this.deps.unreal.connected ? "The user's Unreal Editor is connected (KesherAI Bridge)" : "The user's Unreal Editor is closed: graph tools start a headless editor (30-90 s a call, so batch a change into one unreal_change_graph)") + ": unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled); unreal_test_blueprint plays the game in the editor for a few seconds and returns the log and a picture, to check a change works.");
     }
     // Unreal 5.8's own MCP server (the "Unreal Engine" connection): how to use it well.
     if ((this.deps.mcpTools?.() ?? []).some((t) => /(^|_)(list_toolsets|describe_toolset)$/.test(t.spec.name))) {
@@ -661,7 +661,7 @@ export class ConversationManager {
         // Only in a chat that is about Unity: the project is chosen for the whole app, and every other chat paid
         // ~1,600 tokens of Unity tools plus its guide (found on the PC: 8,300 tokens before the first word).
         const unityHere = this.unityInChat(id);
-        return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.connected ? UNREAL_GRAPH_TOOLS : [])];
+        return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.available ? UNREAL_GRAPH_TOOLS : [])];
       },
       isAlwaysAllowed: (tool, modelId, command, scope) =>
         scope?.startsWith("site:")

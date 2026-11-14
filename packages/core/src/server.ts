@@ -7,7 +7,7 @@
  */
 import { ensureFfmpeg } from "./ffmpeg.js";
 import type { AgentTool } from "@kesher/agent";
-import { mkdir, readFile as readFileFs, writeFile as writeFileFs } from "node:fs/promises";
+import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { constants as zlibConstants } from "node:zlib";
@@ -61,7 +61,8 @@ import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { librariesRoutes } from "./routes/libraries.js";
 import { Libraries } from "./libraries.js";
-import { findEngines } from "./unreal-install.js";
+import { findEngines, readProject } from "./unreal-install.js";
+import { engineFor, runProgram } from "./unreal-tools.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
 import { ComfyUIProvider } from "@kesher/providers";
@@ -624,6 +625,28 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Look for the CLI now, so the first chat already has the Unity tools.
   unityCli.cliKnown();
   const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));
+  // With Unreal closed, graph commands run in a headless editor (the plugin's KesherBridge commandlet).
+  unrealBridge.setHeadless(async (projectFile, commands) => {
+    const p = await readProject(projectFile);
+    const e = engineFor(await findEngines(), p.engine);
+    if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
+    const win = process.platform === "win32";
+    const cmd = join(e.path, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux", win ? "UnrealEditor-Cmd.exe" : "UnrealEditor-Cmd");
+    const dir = join(p.dir, "Saved", "KesherAI");
+    await mkdir(dir, { recursive: true });
+    const request = join(dir, "bridge-request.json");
+    const response = join(dir, "bridge-response.json");
+    await rmFs(response, { force: true });
+    await writeFileFs(request, JSON.stringify({ commands }));
+    const r = await runProgram(cmd, [p.file, "-run=KesherBridge", "-unattended", "-nop4", "-nosplash", "-NullRHI", "-stdout"], { env: { ...process.env, KESHER_BRIDGE_REQUEST: request, KESHER_BRIDGE_RESPONSE: response }, timeoutMs: 900_000 });
+    const text = await readFileFs(response, "utf8").catch(() => "");
+    if (!text) {
+      const why = /Commandlet KesherBridge|KesherBridgeCommandlet|Could not find.*commandlet/i.test(r.out) ? "The KesherAI Bridge plugin in this project is older than 0.1.13: update it from the Unreal page (Update the plugin), then try again." : r.out.split(/\r?\n/).filter((l) => /Error/i.test(l)).slice(-5).join("\n") || `The headless Unreal editor stopped (exit ${r.code}).`;
+      throw new Error(why);
+    }
+    const j = JSON.parse(text) as { answers?: Array<{ ok: boolean; result?: unknown; error?: string }>; ok?: boolean; result?: unknown; error?: string };
+    return j.answers ?? [j as { ok: boolean; result?: unknown; error?: string }];
+  });
   // The task board self-work shares with Claude: a file on this computer only.
   const sharedDir = join(worker ? worker.mainRoot : paths.root, "self-work");
   const taskBoard = new TaskBoard(join(sharedDir, "board.json"));

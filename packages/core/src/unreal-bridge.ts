@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.12";
+export const BRIDGE_VERSION = "0.1.13";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -55,7 +55,19 @@ export interface BridgeStatus {
   queued: number;
   /** When a Blueprint last compiled in the editor (ms since 1970). */
   changedAt?: number;
+  /** With the editor closed, commands run in a headless editor (the KesherBridge commandlet, plugin 0.1.13+). */
+  offline?: boolean;
 }
+
+/** One answer of the headless editor. */
+export interface HeadlessAnswer {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+/** Commands the headless editor (the editor closed) can run. */
+const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply"]);
 
 const slug = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 80) || "project";
 const fileFor = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
@@ -68,6 +80,47 @@ export class UnrealBridge {
   private readonly listeners = new Set<(event: string) => void>();
   /** The project shown when the editor is closed: the last one that connected. */
   private lastProject?: string;
+  /** Its .uproject (for the headless editor). */
+  private lastProjectFile?: string;
+  /** Runs commands in a headless editor (UnrealEditor-Cmd -run=KesherBridge); set by the server. */
+  private headless?: (projectFile: string, commands: Array<Record<string, unknown>>) => Promise<HeadlessAnswer[]>;
+  /** One headless editor at a time. */
+  private headlessChain: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Lets commands run with the editor closed (asked for: "everything works offline").
+   *
+   * @param run - Starts a headless editor on the project with these commands and returns its answers.
+   */
+  setHeadless(run: (projectFile: string, commands: Array<Record<string, unknown>>) => Promise<HeadlessAnswer[]>): void {
+    this.headless = run;
+    void this.project().catch(() => undefined);
+  }
+
+  /** Whether commands can run now: the editor is connected, or it is closed and a headless editor can run them. */
+  get available(): boolean {
+    return this.connected || (!!this.headless && !!this.lastProjectFile && existsSync(this.lastProjectFile));
+  }
+
+  /**
+   * Runs commands in one headless editor start (30-90 s), the editor being closed.
+   *
+   * @param commands - { cmd, ...args } each.
+   * @returns Their answers, in order.
+   */
+  async offline(commands: Array<Record<string, unknown>>): Promise<HeadlessAnswer[]> {
+    await this.project();
+    const file = this.lastProjectFile;
+    if (!this.headless || !file || !existsSync(file)) throw new Error(`The ${this.editor} is closed and KesherAI does not know the project yet: open it once with the KesherAI Bridge plugin.`);
+    const run = this.headlessChain.then(() => this.headless!(file, commands));
+    this.headlessChain = run.catch(() => undefined);
+    const answers = await run;
+    if (commands.some((c) => c.cmd !== "list" && c.cmd !== "graph" && c.cmd !== "actions" && c.cmd !== "widget")) {
+      this.changedAt = Date.now();
+      this.emit("changed");
+    }
+    return answers;
+  }
 
   /**
    * @param dir - Folder for saved graphs and the queue (`<data>/unreal`, `<data>/unity`).
@@ -124,7 +177,8 @@ export class UnrealBridge {
   async project(): Promise<string | undefined> {
     if (this.info) return this.info.project;
     if (this.lastProject) return this.lastProject;
-    const meta = await this.readJson<{ last?: string }>(join(this.dir, "last.json"));
+    const meta = await this.readJson<{ last?: string; projectFile?: string }>(join(this.dir, "last.json"));
+    if (meta?.projectFile && /\.uproject$/i.test(meta.projectFile)) this.lastProjectFile = meta.projectFile;
     return (this.lastProject = meta?.last);
   }
 
@@ -179,8 +233,9 @@ export class UnrealBridge {
       const pid = typeof msg.pid === "number" && Number.isInteger(msg.pid) && msg.pid > 0 ? msg.pid : undefined;
       this.info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), ...(pid ? { pid } : {}), connectedAt: new Date().toISOString() };
       this.lastProject = this.info.project;
+      if (pf) this.lastProjectFile = pf;
       await mkdir(this.dir, { recursive: true });
-      await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: this.info.project }));
+      await writeFile(join(this.dir, "last.json"), JSON.stringify({ last: this.info.project, ...(this.lastProjectFile ? { projectFile: this.lastProjectFile } : {}) }));
       this.emit("connected");
       void this.afterConnect().catch(() => undefined);
       return;
@@ -232,7 +287,12 @@ export class UnrealBridge {
    */
   request<T = unknown>(cmd: string, args: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
     const socket = this.socket;
-    if (!socket || !this.connected) return Promise.reject(new Error(`The ${this.editor} is not connected. Open your project with the KesherAI Bridge plugin.`));
+    if (!socket || !this.connected) {
+      // The editor is closed: a headless editor runs it (slower), instead of "not connected".
+      if (this.headless && OFFLINE_COMMANDS.has(cmd))
+        return this.offline([{ cmd, ...args }]).then(([a]) => (a?.ok ? (a.result as T) : Promise.reject(new Error(a?.error ?? `The ${this.editor} could not do that.`))));
+      return Promise.reject(new Error(`The ${this.editor} is not connected. Open your project with the KesherAI Bridge plugin.`));
+    }
     const id = randomUUID();
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -280,7 +340,16 @@ export class UnrealBridge {
         offline = true;
       }
     }
-    list ??= (await this.readJson<typeof list>(file)) ?? { blueprints: [] };
+    list ??= await this.readJson<typeof list>(file);
+    if (!list && this.available) {
+      try {
+        list = await this.request<typeof list>("list", {}, 900_000);
+        await this.writeJson(file, list);
+      } catch {
+        /* the saved one (none) */
+      }
+    }
+    list ??= { blueprints: [] };
     // Blueprints made in KesherAI that wait for Unreal: listed (and editable) already.
     for (const q of await this.queue()) {
       if (q.kind === "create" && q.project === project && !list!.blueprints.some((b) => b.path === q.path)) list!.blueprints.push({ path: q.path, name: q.path.split(".").pop() ?? q.path, parent: q.parent ?? "Actor", pending: true } as { path: string; name: string; parent?: string });
@@ -313,8 +382,25 @@ export class UnrealBridge {
       }
     }
     const saved = await this.readJson<{ graph: BlueprintJson; savedAt: string }>(file);
-    if (!saved) throw new Error(`This graph was not opened while the ${this.editor} was connected, so there is no copy of it here yet.`);
-    return { ...saved, offline: true };
+    if (saved) return { ...saved, offline: true };
+    if (this.available) {
+      const graph = await this.request<BlueprintJson>("graph", { path }, 900_000);
+      const savedAt = new Date().toISOString();
+      await this.writeJson(file, { graph, savedAt });
+      return { graph, offline: true, savedAt };
+    }
+    throw new Error(`This graph was not opened while the ${this.editor} was connected, so there is no copy of it here yet.`);
+  }
+
+  /**
+   * Keeps a graph read from the headless editor as the saved copy the page shows.
+   *
+   * @param path - The Blueprint's object path.
+   * @param graph - Its graphs.
+   */
+  async remember(path: string, graph: BlueprintJson): Promise<void> {
+    const project = await this.project();
+    if (project) await this.writeJson(join(this.projectDir(project), "graphs", fileFor(path)), { graph, savedAt: new Date().toISOString() });
   }
 
   /** @returns Changes waiting for the editor. */
@@ -372,6 +458,16 @@ export class UnrealBridge {
     }
     const project = await this.project();
     if (!project) throw new Error(`Connect the ${this.editor} once first, so KesherAI knows the project.`);
+    if (this.available) {
+      // A headless editor makes it now; when that cannot start (no engine here, an older plugin) it waits as before.
+      const answers = await this.offline([{ cmd: "create", path, parent }, { cmd: "list" }]).catch(() => undefined);
+      if (answers) {
+        const [made, listed] = answers;
+        if (!made?.ok) throw new Error(made?.error ?? "Unreal could not make it.");
+        if (listed?.ok) await this.writeJson(join(this.projectDir(project), "list.json"), listed.result);
+        return { path, queued: false };
+      }
+    }
     if ((await this.queue()).some((q) => q.kind === "create" && q.path === path)) throw new Error("That Blueprint is already waiting to be made.");
     await this.enqueue({ project, path, graph: "EventGraph", ops: [], kind: "create", parent, request: `New ${parent === "UserWidget" ? "Widget Blueprint" : `Blueprint (${parent})`}` });
     // An empty graph to work on until Unreal opens.
@@ -387,7 +483,8 @@ export class UnrealBridge {
   async status(): Promise<BridgeStatus> {
     const { readdir } = await import("node:fs/promises");
     const projects = (await readdir(this.dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && !e.name.startsWith("_")).map((e) => e.name);
-    return { connected: this.connected, ...(this.info ? { editor: this.info } : {}), projects, queued: (await this.queue()).length, ...(this.changedAt ? { changedAt: this.changedAt } : {}) };
+    await this.project();
+    return { connected: this.connected, ...(this.info ? { editor: this.info } : {}), projects, queued: (await this.queue()).length, ...(this.changedAt ? { changedAt: this.changedAt } : {}), ...(!this.connected && this.available ? { offline: true } : {}) };
   }
 }
 

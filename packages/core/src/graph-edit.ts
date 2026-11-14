@@ -1,7 +1,7 @@
 import type { ProviderRegistry } from "@kesher/providers";
 import type { AgentTool } from "@kesher/agent";
 import { modelTurnFor } from "./model-turn.js";
-import { blueprintPrompt, parseOps, unityPrompt, type UnrealBridge } from "./unreal-bridge.js";
+import { blueprintPrompt, parseOps, unityPrompt, type BlueprintJson, type UnrealBridge } from "./unreal-bridge.js";
 import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import type { UnityCli } from "./unity-cli.js";
 import { describeRun, runBlueprintTest } from "./blueprint-test.js";
@@ -38,6 +38,18 @@ export async function editGraph(
   const text = (await turn({ messages: kind === "unreal" ? blueprintPrompt(g, graphName, opts.request) : unityPrompt(g, opts.request), tools: [] }, AbortSignal.any([opts.signal, AbortSignal.timeout(300_000)]), () => undefined)).text;
   const { ops, note } = parseOps(text);
   if (!ops.length) return { ops, note: note || "Nothing to change.", applied: false };
+  if (kind === "unreal" && !b.connected && (b as UnrealBridge).available) {
+    // Unreal is closed: one headless editor start applies, compiles (and saves) the change and reads the graph back.
+    const u = b as UnrealBridge;
+    // When the headless editor cannot start (no engine here, an older plugin), the change waits for Unreal as before.
+    const answers = await u.offline([{ cmd: "apply", path: opts.path, graph: graphName, ops }, { cmd: "compile", path: opts.path }, { cmd: "graph", path: opts.path }]).catch(() => undefined);
+    if (answers) {
+      const [applied, compiled, read] = answers;
+      if (!applied?.ok) throw new Error(applied?.error ?? "Unreal could not apply the change.");
+      if (read?.ok) await u.remember(opts.path, read.result as BlueprintJson);
+      return { ops, note, applied: true, result: applied.result as { results: Array<{ ok: boolean; error?: string }>; failed: number }, ...(compiled?.ok ? { compile: compiled.result as { ok: boolean; messages: Array<{ severity: string; text: string }> } } : {}) };
+    }
+  }
   if (kind === "unreal" && !b.connected) {
     const project = (await b.project()) ?? "Project";
     const queued = await (b as UnrealBridge).enqueue({ project, path: opts.path, graph: graphName, ops, request: opts.request });
