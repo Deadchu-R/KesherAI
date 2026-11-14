@@ -824,3 +824,12 @@ Stopped at: dragging onto a pin of the wrong type is not refused yet (Unreal sho
 - Built: actions (new chat, new code session, updates, settings), every menu page (by its name in both languages and its
   address), the chats by title (the five latest when empty). The code editor keeps its own Ctrl+K. 🔍 in the top bar.
 Stopped at: recent items first, plugin pages and settings sections as entries, a ">" commands-only mode.
+
+## 2026-11-14: Context Sensitive (Unreal's action menu)
+- Unreal: the "Context Sensitive" box (on by default) in the right-click menu; dragged from a pin, the menu lists only
+  actions with a pin that can take that wire (same type, numbers convert, a child class into a parent), and the chosen
+  node is wired at once. From an exec pin: impure functions, flow control, Set variables; events only from an exec input.
+- Built (plugin 0.1.16): the menu sends the pin's type and direction; the plugin keeps only what fits (functions by
+  their parameters and return value, Get/Set by the variable's type, Branch from exec or a bool output). The box is
+  remembered. C# scripts: every step is a flow step, so their menu has no box.
+Stopped at: a "wrong type" tip while dragging a wire onto a pin (Unreal's red "incompatible" note).

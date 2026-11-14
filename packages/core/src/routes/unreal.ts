@@ -297,10 +297,13 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       }
     });
     /** Unreal's right-click menu: nodes that can be added, matching the words typed (plugin 0.1.4+). */
-    app.get<{ Querystring: { path?: string; q?: string } }>(`${base}/actions`, async (req, reply) => {
+    app.get<{ Querystring: { path?: string; q?: string; pinType?: string; pinDir?: string } }>(`${base}/actions`, async (req, reply) => {
       if (!req.query.path) return reply.code(400).send({ error: "Which Blueprint?" });
+      // Context Sensitive (plugin 0.1.16; an older one ignores it and lists everything).
+      const pinType = String(req.query.pinType ?? "").slice(0, 200);
+      const pinDir = req.query.pinDir === "in" || req.query.pinDir === "out" ? req.query.pinDir : "";
       try {
-        return await unreal.request("actions", { path: req.query.path, query: String(req.query.q ?? "").slice(0, 100) }, 20_000);
+        return await unreal.request("actions", { path: req.query.path, query: String(req.query.q ?? "").slice(0, 100), ...(pinType ? { pinType, pinDir } : {}) }, 20_000);
       } catch (err) {
         return reply.code(502).send({ error: (err as Error).message });
       }

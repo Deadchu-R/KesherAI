@@ -1030,6 +1030,15 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Action[] | null>(null);
   const [i, setI] = useState(0);
+  // Unreal's "Context Sensitive": dragged from a pin, only the nodes that can wire to it (remembered, on by default).
+  const [ctx, setCtx] = useState(() => {
+    try {
+      return localStorage.getItem("kesher-bp-context") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const fromPin = !local && engine === "unreal" ? menu.from : undefined;
   useEffect(() => {
     if (local) {
       setItems(local(q));
@@ -1038,7 +1047,8 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
     }
     let alive = true;
     const id = setTimeout(() => {
-      void api<{ actions: Action[] }>(`/api/${engine}/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`).then(
+      const pin = fromPin && ctx ? `&pinType=${encodeURIComponent(fromPin.type)}&pinDir=${fromPin.dir}` : "";
+      void api<{ actions: Action[] }>(`/api/${engine}/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}${pin}`).then(
         (r) => {
           if (!alive) return;
           setItems(r.actions);
@@ -1055,11 +1065,28 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
       alive = false;
       clearTimeout(id);
     };
-  }, [q]);
+  }, [q, ctx]);
   return (
     <div className="bp-menu" style={{ left: menu.left, top: menu.top }} role="dialog" aria-label={L("כל הפעולות", "All actions")} onPointerDown={(e) => e.stopPropagation()}>
       <div className="row">
         <strong className="grow small">{menu.from ? L(`מ-${menu.from.pin}`, `From ${menu.from.pin}`) : local ? L("כל הפעולות לסקריפט הזה", "All Actions for this script") : L("כל הפעולות ל-Blueprint הזה", "All Actions for this Blueprint")}</strong>
+        {fromPin && (
+          <label className="row small bp-ctx" title={L("רק נודים שמתחברים לפין שממנו גררתם (Unreal: Context Sensitive)", "Only nodes that connect to the pin you dragged from (Unreal: Context Sensitive)")}>
+            <input
+              type="checkbox"
+              checked={ctx}
+              onChange={(e) => {
+                setCtx(e.target.checked);
+                try {
+                  localStorage.setItem("kesher-bp-context", e.target.checked ? "1" : "0");
+                } catch {
+                  /* this page only */
+                }
+              }}
+            />
+            Context Sensitive
+          </label>
+        )}
         <button type="button" className="icon-btn" onClick={onClose} aria-label={L("סגור", "Close")}>✕</button>
       </div>
       <input

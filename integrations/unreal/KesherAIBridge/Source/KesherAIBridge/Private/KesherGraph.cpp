@@ -863,10 +863,57 @@ namespace KesherGraph
 		return Out;
 	}
 
-	TSharedRef<FJsonObject> Actions(const FString& Path, const FString& Query)
+	/**
+	 * Whether a pin of type T can take a wire from (or give one to) the dragged pin, as Unreal's "Context Sensitive"
+	 * menu decides: the same type, numbers into numbers (Unreal adds the conversion), an object into its parent class.
+	 * DraggedType is "category[:Sub][[]]" as the graph names pin types.
+	 */
+	bool TypeFits(const FString& DraggedType, const FEdGraphPinType& T, bool DraggedIsOutput)
+	{
+		FString Name = T.PinCategory.ToString();
+		const bool List = DraggedType.EndsWith(TEXT("[]"));
+		if ((T.ContainerType == EPinContainerType::Array) != List) return false;
+		FString D = List ? DraggedType.LeftChop(2) : DraggedType;
+		FString DCat = D, DSub;
+		D.Split(TEXT(":"), &DCat, &DSub);
+		if (DCat.IsEmpty()) DCat = D;
+		auto Numeric = [](const FString& C) { return C == TEXT("int") || C == TEXT("int64") || C == TEXT("real") || C == TEXT("float") || C == TEXT("double") || C == TEXT("byte"); };
+		if (Numeric(DCat) && Numeric(Name)) return true;
+		if (DCat != Name) return false;
+		UObject* Sub = T.PinSubCategoryObject.Get();
+		if (DSub.IsEmpty() || !Sub) return true;
+		if (DSub == Sub->GetName()) return true;
+		// An object pin: a child class goes into a parent's pin.
+		const UClass* Other = Cast<UClass>(Sub);
+		const UClass* Mine = FindFirstObject<UClass>(*DSub, EFindFirstObjectOptions::None);
+		if (Other && Mine) return DraggedIsOutput ? Mine->IsChildOf(Other) : Other->IsChildOf(Mine);
+		return false;
+	}
+
+	TSharedRef<FJsonObject> Actions(const FString& Path, const FString& Query, const FString& PinType, const FString& PinDir)
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
 		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
+		// "Context Sensitive" (0.1.16): dragged from a pin, only what can wire to it.
+		const bool Ctx = !PinType.IsEmpty();
+		const bool Exec = PinType == TEXT("exec");
+		const bool FromOutput = PinDir == TEXT("out");
+		const UEdGraphSchema_K2* K2 = GetDefault<UEdGraphSchema_K2>();
+		auto FunctionFits = [&](const UFunction* F) -> bool
+		{
+			if (!Ctx) return true;
+			const bool Pure = F->HasAnyFunctionFlags(FUNC_BlueprintPure);
+			if (Exec) return !Pure;
+			for (TFieldIterator<FProperty> P(F); P && (P->PropertyFlags & CPF_Parm); ++P)
+			{
+				const bool Out = P->HasAnyPropertyFlags(CPF_ReturnParm) || (P->HasAnyPropertyFlags(CPF_OutParm) && !P->HasAnyPropertyFlags(CPF_ReferenceParm));
+				// From an output the new node needs an input of that type; from an input, an output.
+				if (Out == FromOutput) continue;
+				FEdGraphPinType T;
+				if (K2->ConvertPropertyToPinType(*P, T) && TypeFits(PinType, T, FromOutput)) return true;
+			}
+			return false;
+		};
 		TArray<FString> Words;
 		Query.ToLower().ParseIntoArrayWS(Words);
 		auto Matches = [&](const FString& A, const FString& B, const FString& C)
@@ -890,15 +937,19 @@ namespace KesherGraph
 			Items.Add(MakeShared<FJsonValueObject>(J));
 		};
 		// Flow control first, like Unreal's own menu.
-		if (Matches(TEXT("Branch"), TEXT("if"), TEXT("Flow Control"))) Add(TEXT("Branch"), TEXT("Flow Control"), TEXT("branch"), TEXT(""), TEXT(""));
-		if (Matches(TEXT("Sequence"), TEXT(""), TEXT("Flow Control"))) Add(TEXT("Sequence"), TEXT("Flow Control"), TEXT("sequence"), TEXT(""), TEXT(""));
-		if (Matches(TEXT("Add Custom Event"), TEXT(""), TEXT("Add Event"))) Add(TEXT("Add Custom Event…"), TEXT("Add Event"), TEXT("custom_event"), TEXT("name"), TEXT("NewEvent"));
+		const bool BoolOut = PinType == TEXT("bool") && FromOutput;
+		if ((!Ctx || Exec || BoolOut) && Matches(TEXT("Branch"), TEXT("if"), TEXT("Flow Control"))) Add(TEXT("Branch"), TEXT("Flow Control"), TEXT("branch"), TEXT(""), TEXT(""));
+		if ((!Ctx || Exec) && Matches(TEXT("Sequence"), TEXT(""), TEXT("Flow Control"))) Add(TEXT("Sequence"), TEXT("Flow Control"), TEXT("sequence"), TEXT(""), TEXT(""));
+		if ((!Ctx || (Exec && !FromOutput)) && Matches(TEXT("Add Custom Event"), TEXT(""), TEXT("Add Event"))) Add(TEXT("Add Custom Event…"), TEXT("Add Event"), TEXT("custom_event"), TEXT("name"), TEXT("NewEvent"));
 		// The Blueprint's variables.
 		for (const FBPVariableDescription& V : BP->NewVariables)
 		{
 			const FString Name = V.VarName.ToString();
-			if (Items.Num() < Max && Matches(TEXT("Get ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Get ") + Name, TEXT("Variables"), TEXT("get"), TEXT("variable"), Name);
-			if (Items.Num() < Max && Matches(TEXT("Set ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Set ") + Name, TEXT("Variables"), TEXT("set"), TEXT("variable"), Name);
+			// Get gives the value (fits an input of its type); Set takes it (fits an output) and is a step (fits exec).
+			const bool GetFits = !Ctx || (!Exec && !FromOutput && TypeFits(PinType, V.VarType, false));
+			const bool SetFits = !Ctx || Exec || TypeFits(PinType, V.VarType, FromOutput);
+			if (GetFits && Items.Num() < Max && Matches(TEXT("Get ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Get ") + Name, TEXT("Variables"), TEXT("get"), TEXT("variable"), Name);
+			if (SetFits && Items.Num() < Max && Matches(TEXT("Set ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Set ") + Name, TEXT("Variables"), TEXT("set"), TEXT("variable"), Name);
 		}
 		auto Usable = [](const UFunction* F)
 		{
@@ -911,9 +962,9 @@ namespace KesherGraph
 			{
 				UFunction* F = *It;
 				const FString Title = F->GetDisplayNameText().ToString();
-				if (F->HasAnyFunctionFlags(FUNC_BlueprintEvent) && !F->GetReturnProperty() && Matches(TEXT("Event ") + Title, F->GetName(), TEXT("Add Event")))
+				if (F->HasAnyFunctionFlags(FUNC_BlueprintEvent) && !F->GetReturnProperty() && (!Ctx || (Exec && !FromOutput)) && Matches(TEXT("Event ") + Title, F->GetName(), TEXT("Add Event")))
 					Add(TEXT("Event ") + Title, TEXT("Add Event"), TEXT("event"), TEXT("event"), F->GetName());
-				else if (Usable(F) && Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
+				else if (Usable(F) && FunctionFits(F) && Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
 					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), F->GetOwnerClass()->GetName() + TEXT(":") + F->GetName());
 			}
 		}
@@ -924,7 +975,7 @@ namespace KesherGraph
 			for (TFieldIterator<UFunction> It(*C, EFieldIteratorFlags::ExcludeSuper); It && Items.Num() < Max; ++It)
 			{
 				UFunction* F = *It;
-				if (!Usable(F)) continue;
+				if (!Usable(F) || !FunctionFits(F)) continue;
 				const FString Title = F->GetDisplayNameText().ToString();
 				if (Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
 					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), C->GetName() + TEXT(":") + F->GetName());

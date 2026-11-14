@@ -2214,3 +2214,5 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
   .palette { max-height: calc(100dvh - 16px); }
   .palette-foot { display: none; }
 }
+.bp-ctx { gap: 4px; align-items: center; white-space: nowrap; color: var(--muted); }
+.bp-ctx input { width: auto; min-height: 0; margin: 0; }

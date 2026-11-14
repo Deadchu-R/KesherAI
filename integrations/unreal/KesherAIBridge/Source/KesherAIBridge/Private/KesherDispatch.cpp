@@ -68,9 +68,11 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 	else if (Cmd == TEXT("open")) Result = KesherGraph::Open(Path);
 	else if (Cmd == TEXT("actions"))
 	{
-		FString Query;
+		FString Query, PinType, PinDir;
 		In->TryGetStringField(TEXT("query"), Query);
-		Result = KesherGraph::Actions(Path, Query);
+		In->TryGetStringField(TEXT("pinType"), PinType);
+		In->TryGetStringField(TEXT("pinDir"), PinDir);
+		Result = KesherGraph::Actions(Path, Query, PinType, PinDir);
 	}
 	else if (Cmd == TEXT("widget")) Result = KesherWidget::Read(Path);
 	else if (Cmd == TEXT("create"))

@@ -43,7 +43,8 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> Save(const FString& Path);
 
 	/** Nodes that can be added to a Blueprint, matching the words of a search (Unreal's right-click menu). */
-	TSharedRef<FJsonObject> Actions(const FString& Path, const FString& Query);
+	/** The nodes the right-click menu offers; with a pin's type and direction ("in"/"out"), only those that fit it. */
+	TSharedRef<FJsonObject> Actions(const FString& Path, const FString& Query, const FString& PinType = FString(), const FString& PinDir = FString());
 
 	/** The editor's own Undo (Ctrl+Z) or Redo (Ctrl+Y). */
 	TSharedRef<FJsonObject> Undo(bool bRedo);
