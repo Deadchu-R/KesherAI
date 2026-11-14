@@ -254,7 +254,7 @@ What they added since the third review, and what KesherAI already has:
 
 **Added to the list, in order** (none needs a paid service):
 
-1. Dictation into any app: a global key, the local Whisper, the text typed where the cursor is (AnythingLLM Magic Echo) ⬜
+1. Dictation into any app: a global key, the local Whisper, the text typed where the cursor is (AnythingLLM Magic Echo) ✅ (0.6.205: Ctrl+Alt+D, a bar that never takes focus, stops on a pause)
 2. Select text in any app → a small window with Summarize / Translate / Rewrite / Ask, on the local model (Magic Beacon) ✅ (0.6.199: Ctrl+Alt+K on the computer, "KesherAI" in Android's selection menu; Replace pastes the answer back)
 3. Previews of Word, Excel, PowerPoint, CSV and HTML attachments in the chat (Bionic) ⬜
 4. A `notify` tool and chat timers: the agent can send a notification, or bring a chat back at a time ("check the build in an hour") (Open WebUI) ✅ (0.6.203: `set_timer`, `notify_user`; waiting timers listed in the chat with Cancel)
