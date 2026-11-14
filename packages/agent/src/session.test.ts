@@ -533,3 +533,33 @@ test("a site-scoped tool: Always covers that site only, and the app keeps it", a
   session.approve(second.type === "approval_request" ? second.requestId : "", "deny");
   await waitFor(session, (e) => e.type === "assistant" && e.text === "Done.");
 });
+
+test("a safe tool's askFirst call waits for the person even in auto mode", async () => {
+  const { AgentSession } = await import("./index.js");
+  const ran: unknown[] = [];
+  const tool = {
+    risk: "safe" as const,
+    spec: { name: "make_music", description: "", inputSchema: { type: "object" } },
+    askFirst: (input: Record<string, unknown>) => (input.download === true ? "Downloads a model of about 7.7 GB." : undefined),
+    async run(input: Record<string, unknown>) {
+      ran.push(input.download);
+      return { output: "ok" };
+    },
+  };
+  let turn = 0;
+  const session = new AgentSession({
+    id: "dl",
+    modelId: "m",
+    mode: "auto",
+    tools: [tool],
+    systemPrompt: "",
+    model: async () => (turn++ === 0 ? { text: "", toolCalls: [{ id: "a", name: "make_music", arguments: { download: true } }] } : { text: "done", toolCalls: [] }),
+  });
+  session.send("make music, don't ask");
+  const req = await new Promise<{ requestId: string; reason: string }>((resolve) => session.on("event", (e) => e.type === "approval_request" && resolve(e)));
+  assert.match(req.reason, /7\.7 GB/);
+  assert.deepEqual(ran, []);
+  session.approve(req.requestId, "deny");
+  await new Promise<void>((resolve) => session.on("event", (e) => e.type === "status" && e.status === "idle" && resolve()));
+  assert.deepEqual(ran, []);
+});

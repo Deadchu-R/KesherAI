@@ -88,6 +88,9 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
       },
     });
   }
+  // A part the user switched off: say so instead of "I have no such tool" (found on the PC: the model told the
+  // user video was impossible when it was only off).
+  if (deps.video && !on("video")) notes.push("Making videos is switched off (Settings → Parts → Video). If the user asks for a video, tell them it can be switched on there (it downloads the video model, about 7 GB).");
   if (deps.video && on("video")) {
     const video = deps.video;
     notes.push("generate_video makes a short video clip (about 2 seconds) from an English description with the built-in video engine; it takes a few minutes. If the model is still downloading, tell the user and stop.");
@@ -233,11 +236,19 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     }
     return `This needs a model download of about ${st.missingGb} GB first. Ask the user whether to download it; only if they agree, call again with download: true.`;
   };
+  // The yes to a download is the person's (an approval card), never the model's own: seen live, a model told
+  // "don't ask me questions" set download: true by itself and started 7.7 GB.
+  const askDownload = (id: string) => (input: Record<string, unknown>): string | undefined => {
+    if (input.download !== true) return undefined;
+    const st = flows.state(id);
+    return st.ready || st.downloading ? undefined : `Downloads a model of about ${st.missingGb} GB.`;
+  };
   notes.push(
     "make_music writes a song (style tags and lyrics) with ACE-Step in ComfyUI, and make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
   );
   const music: AgentTool = {
     risk: "safe",
+    askFirst: askDownload("music-ace-step"),
     spec: {
       name: "make_music",
       description: "Make a song or a piece of music from style tags and lyrics (ACE-Step in ComfyUI). The user gets a player. Slow (minutes).",
@@ -269,6 +280,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
   };
   const model3d: AgentTool = {
     risk: "safe",
+    askFirst: askDownload("3d-hunyuan3d"),
     spec: {
       name: "make_3d",
       description: "Turn a picture of one object (plain background) into a 3D model (GLB, shape only, no colors) with Hunyuan3D 2 in ComfyUI. The user gets the file. Slow (minutes).",

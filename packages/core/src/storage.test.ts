@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileKind, parseSize, Storage } from "./storage.js";
 
-test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async () => {
+test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async (t) => {
   const home = mkdtempSync(join(tmpdir(), "st-"));
+  // 300+ MB of test files: never left behind.
+  t.after(() => rmSync(home, { recursive: true, force: true }));
   for (const d of ["Downloads", "Pictures", "Videos", "Documents"]) mkdirSync(join(home, d));
   const MB = 1024 * 1024;
   const old = (Date.now() - 120 * 86_400_000) / 1000;

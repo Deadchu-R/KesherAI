@@ -67,6 +67,11 @@ export interface AgentTool {
    * the web site ("site:example.com"), shared by every tool with the same scope (like "Always allow on this site").
    */
   scopeOf?(input: Record<string, unknown>, ctx: ToolContext): Promise<string | undefined>;
+  /**
+   * For a call the person must agree to whatever the mode and "Always allow" (a download of several GB): the
+   * reason shown on the approval card. Undefined for calls that need no extra yes.
+   */
+  askFirst?(input: Record<string, unknown>): string | undefined;
   /** What the user sees in an approval request: a diff, a command. */
   preview?(input: Record<string, unknown>, ctx: ToolContext): Promise<string>;
   /** Runs the tool. Throw an Error to report a failure to the model. */

@@ -946,7 +946,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     }
     const alwaysKey = scope ?? tool.spec.name;
     const always = this.alwaysAllowed.has(alwaysKey) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments), scope);
-    const verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
+    let verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
+    // A call the tool says the person must agree to (a download of several GB): asked every time, in every mode.
+    const mustAsk = tool.askFirst?.(call.arguments);
+    if (mustAsk && verdict.action !== "deny") verdict = { action: "ask", reason: mustAsk };
     if (verdict.action === "deny") return fail(verdict.reason);
     if (verdict.action === "ask") {
       let preview = "";

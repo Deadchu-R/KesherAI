@@ -557,7 +557,7 @@ export function ScriptNodes() {
               <div className="script-graph">
                 <div className="script-canvas">
                   <CodeAiBubble ask={askAi} errors={problems.filter((e) => e.severity === "error").length} canUndo={beforeAi !== null} onUndo={() => { if (beforeAi !== null) { setText(beforeAi); setBeforeAi(null); } }} placeholder={L("למשל: כשהשחקן נוגע במטבע תוסיף נקודה", "e.g. when the player touches a coin add a point")} />
-                  {m && <BlueprintCanvas key={method} nodes={nodes} path={path} graph={m.name} editable unity onOps={graphOps} localActions={localActions} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
+                  {m && <BlueprintCanvas key={`${ci}:${m.name}`} nodes={nodes} path={path} graph={m.name} editable unity onOps={graphOps} localActions={localActions} onChanged={() => undefined} onSelect={(ids) => setSel([...ids][0] ?? "")} />}
                 </div>
                 <div className="script-side">
                 <aside className="script-vars card">{variables}</aside>

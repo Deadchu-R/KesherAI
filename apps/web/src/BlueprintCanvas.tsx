@@ -185,7 +185,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     fitted.current = `${path}|${graph}`;
     fit();
   }, [layout, path, graph]);
-  // Fit again when the frame becomes much bigger or smaller (full screen and back, a turned phone).
+  // When the frame changes size (full screen, a turned phone, the side panel filling after a click on a node), the
+  // view keeps its zoom and the point in the middle stays in the middle, as in Unreal: it never jumps to "fit"
+  // by itself (found by Roee: clicking a node zoomed out). Only a frame that had no size yet (a hidden tab) fits.
   const fitRef = useRef(fit);
   fitRef.current = fit;
   useEffect(() => {
@@ -194,11 +196,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     let last = el.getBoundingClientRect();
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      const grew = Math.abs(r.width - last.width) / Math.max(1, last.width) + Math.abs(r.height - last.height) / Math.max(1, last.height);
-      if (grew > 0.25) {
-        last = r;
-        fitRef.current();
-      }
+      if (r.width < 2 || r.height < 2) return;
+      const was = last;
+      last = r;
+      if (was.width < 2 || was.height < 2) return fitRef.current();
+      const dx = (r.width - was.width) / 2;
+      const dy = (r.height - was.height) / 2;
+      if (dx || dy) setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -778,7 +782,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           if (n) void askText(L("הכותרת של ההערה:", "The comment's title:"), n.comment ?? "").then((text) => { if (text !== null) void apply([{ op: "comment", node: n.id, text }]); });
           return;
         }
-        if (!(e.target as Element).closest("[data-node], .bp-menu, .ue-zoom, .bp-find")) fit();
+        // Double-clicking empty space does nothing, as in Unreal (Home or ⤢ fits): a quick second click beside a node
+        // must not throw the view out.
       }}
     >
       <svg className="ue-graph" width="100%" height="100%" role="img">
