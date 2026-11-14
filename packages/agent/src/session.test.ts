@@ -588,3 +588,25 @@ test("a run that changes files ends with a receipt; Undo all puts them back, ask
   assert.ok(session.events.some((e) => e.type === "undo_run"));
   await assert.rejects(session.undoRun(r.run), /no longer kept/);
 });
+
+test("tool search: a tool the message names or points at is loaded before the model answers", async () => {
+  const { AgentSession } = await import("./index.js");
+  const tool = (name: string) => ({ risk: "safe" as const, spec: { name, description: `${name} does it.`, inputSchema: { type: "object" } }, async run() { return { output: "" }; } });
+  const seen: string[][] = [];
+  const session = new AgentSession({
+    id: "ts",
+    modelId: "m",
+    mode: "auto",
+    tools: [tool("read_file"), tool("make_music"), tool("generate_video")],
+    systemPrompt: "",
+    toolSearch: () => ["read_file"],
+    model: async ({ tools }) => {
+      seen.push(tools.map((t) => t.name));
+      return { text: "ok", toolCalls: [] };
+    },
+  });
+  session.send("make me some calm music please");
+  await new Promise<void>((resolve) => session.on("event", (e) => e.type === "status" && e.status === "idle" && resolve()));
+  assert.ok(seen[0]!.includes("make_music"));
+  assert.ok(!seen[0]!.includes("generate_video"));
+});

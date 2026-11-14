@@ -129,6 +129,9 @@ export interface UndoStore {
   remove(run: string): Promise<void>;
 }
 
+/** Words in many tools' names: they do not point at one tool (loadToolsFor). */
+const COMMON_TOOL_WORDS = new Set(["make", "get", "set", "list", "read", "write", "edit", "find", "open", "run", "use", "add", "file", "files", "the", "new", "change", "graph", "graphs", "status", "tool", "tools", "web", "search", "fetch", "computer", "app", "unity", "unreal", "project", "code", "check"]);
+
 /** A content fingerprint ("none" for no file). */
 const print = (text: string | null): string => (text === null ? "none" : createHash("sha1").update(text).digest("hex"));
 
@@ -353,6 +356,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (images?.length) for (const m of this.messages) if (m.images) delete m.images;
     this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text, ...(images?.length ? { images } : {}) });
     this.repeats.clear();
+    this.loadToolsFor(text);
     this.push({ type: "user", text });
     // Steps done for the message before the model starts (the search the globe button asked for), shown like its own.
     for (const st of steps) this.push(st);
@@ -707,6 +711,23 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     }
     const recent = msgs.slice(cut);
     return [{ role: "system", content: `${this.systemPrompt}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...(sizeOf(recent) > budget * 0.8 ? shortenOldToolOutputs(recent, 1) : recent)];
+  }
+
+  /**
+   * Tool search: the tools a message points at are loaded before the model answers, so a local model does not wander
+   * looking for them (seen on the PC: asked to "use make_music", it wrote files and tried a skill before find_tools).
+   * A tool the message names, one this conversation used before, or one whose own word is in the message ("music" →
+   * make_music, "video" → generate_video).
+   */
+  private loadToolsFor(text: string): void {
+    if (!this.toolSearch?.()?.length) return;
+    const lower = text.toLowerCase();
+    const words = new Set(lower.split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+    const used = new Set(this.events.flatMap((e) => (e.type === "tool_call" ? [e.name] : [])));
+    for (const name of this.tools.keys()) {
+      const own = name.split("_").filter((w) => w.length > 2 && !COMMON_TOOL_WORDS.has(w));
+      if (lower.includes(name) || used.has(name) || own.some((w) => words.has(w))) this.loadedTools.add(name);
+    }
   }
 
   private specs(): ToolSpec[] {
