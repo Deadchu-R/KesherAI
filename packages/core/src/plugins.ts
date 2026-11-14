@@ -123,7 +123,8 @@ export class PluginHost {
         for (const c of parts.categories) ctx.registerCategory(c);
         for (const t of parts.tools) ctx.registerTool(t);
         this.active.push({ id: manifest.id, proc });
-        record.isolation = { process: true, files: proc.sandboxedFiles };
+        // Files are limited by Node's sandbox or, where that is not used (the installed app), by the runner itself.
+        record.isolation = { process: true, files: proc.sandboxedFiles || !manifest.permissions?.includes("filesystem") };
       }
       for (const program of manifest.programs) this.registerProgram(manifest, program, dataDir);
       record.status = "active";
