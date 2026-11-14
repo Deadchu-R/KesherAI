@@ -15,6 +15,8 @@
 #include "K2Node_Event.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_IfThenElse.h"
+#include "K2Node_Knot.h"
+#include "EdGraphNode_Comment.h"
 #include "K2Node_Variable.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
@@ -173,6 +175,12 @@ namespace
 		N->SetNumberField(TEXT("x"), Node->NodePosX);
 		N->SetNumberField(TEXT("y"), Node->NodePosY);
 		if (!Node->NodeComment.IsEmpty()) N->SetStringField(TEXT("comment"), Node->NodeComment);
+		if (const UEdGraphNode_Comment* C = Cast<UEdGraphNode_Comment>(Node))
+		{
+			N->SetNumberField(TEXT("width"), C->NodeWidth);
+			N->SetNumberField(TEXT("height"), C->NodeHeight);
+			N->SetStringField(TEXT("color"), C->CommentColor.ToFColor(true).ToHex());
+		}
 		if (const UK2Node_CallFunction* Call = Cast<UK2Node_CallFunction>(Node))
 		{
 			if (const UFunction* F = Call->GetTargetFunction())
@@ -439,6 +447,33 @@ namespace KesherGraph
 					Creator.Finalize();
 					Made = N;
 				}
+				else if (Type == TEXT("reroute"))
+				{
+					// A reroute node (the dot on a wire): connect it like any node.
+					FGraphNodeCreator<UK2Node_Knot> Creator(*Graph);
+					UK2Node_Knot* N = Creator.CreateNode();
+					N->NodePosX = X;
+					N->NodePosY = Y;
+					Creator.Finalize();
+					Made = N;
+				}
+				else if (Type == TEXT("comment_box"))
+				{
+					// A comment box (C in Unreal): a coloured frame with a title around nodes.
+					UEdGraphNode_Comment* N = NewObject<UEdGraphNode_Comment>(Graph);
+					N->CreateNewGuid();
+					N->NodePosX = X;
+					N->NodePosY = Y;
+					N->NodeWidth = FMath::Clamp(JsonInt(Op, TEXT("width"), 400), 64, 8000);
+					N->NodeHeight = FMath::Clamp(JsonInt(Op, TEXT("height"), 200), 64, 8000);
+					const FString Text = JsonStr(Op, TEXT("text"));
+					N->NodeComment = Text.IsEmpty() ? TEXT("Comment") : Text;
+					const FString Color = JsonStr(Op, TEXT("color"));
+					if (!Color.IsEmpty()) N->CommentColor = FLinearColor(FColor::FromHex(Color));
+					Graph->AddNode(N, true, false);
+					N->PostPlacedNewNode();
+					Made = N;
+				}
 				else if (Type == TEXT("sequence"))
 				{
 					FGraphNodeCreator<UK2Node_ExecutionSequence> Creator(*Graph);
@@ -544,9 +579,22 @@ namespace KesherGraph
 				{
 					N->Modify();
 					N->NodeComment = JsonStr(Op, TEXT("text"));
-					N->bCommentBubbleVisible = !N->NodeComment.IsEmpty();
+					// A comment box keeps its title as its text; another node shows it as a bubble.
+					if (!N->IsA<UEdGraphNode_Comment>()) N->bCommentBubbleVisible = !N->NodeComment.IsEmpty();
+					const FString Color = JsonStr(Op, TEXT("color"));
+					if (UEdGraphNode_Comment* C = Cast<UEdGraphNode_Comment>(N); C && !Color.IsEmpty()) C->CommentColor = FLinearColor(FColor::FromHex(Color));
 				}
 				else Problem = TEXT("Node not found");
+			}
+			else if (Kind == TEXT("resize"))
+			{
+				if (UEdGraphNode_Comment* C = Cast<UEdGraphNode_Comment>(NodeOf(JsonStr(Op, TEXT("node")))))
+				{
+					C->Modify();
+					C->NodeWidth = FMath::Clamp(JsonInt(Op, TEXT("width"), C->NodeWidth), 64, 8000);
+					C->NodeHeight = FMath::Clamp(JsonInt(Op, TEXT("height"), C->NodeHeight), 64, 8000);
+				}
+				else Problem = TEXT("Comment box not found");
 			}
 			else Problem = TEXT("Unknown operation ") + Kind;
 

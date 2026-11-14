@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.10";
+export const BRIDGE_VERSION = "0.1.11";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {

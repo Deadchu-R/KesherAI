@@ -6,7 +6,12 @@ import { toast } from "./library";
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 export interface Pin { name: string; label?: string; dir: "in" | "out"; type: string; default?: string; links?: string[] }
-export interface GNode { id: string; title: string; class: string; x: number; y: number; comment?: string; pins: Pin[] }
+export interface GNode { id: string; title: string; class: string; x: number; y: number; comment?: string; pins: Pin[]; /** Comment boxes (plugin 0.1.11). */ width?: number; height?: number; color?: string }
+
+/** A comment box (a frame with a title around nodes) and a reroute node (a dot on a wire), as Unreal draws them. */
+const isCommentBox = (n: GNode) => n.class === "EdGraphNode_Comment";
+const isKnot = (n: GNode) => n.class === "K2Node_Knot";
+const KNOT = 16;
 interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string }
 type Op = Record<string, unknown>;
 
@@ -24,10 +29,11 @@ const ROW = 19;
 /** Unreal units → picture units. */
 const SCALE = 0.7;
 
-interface Box { n: GNode; x: number; y: number; h: number; ins: Pin[]; outs: Pin[] }
+interface Box { n: GNode; x: number; y: number; w: number; h: number; ins: Pin[]; outs: Pin[] }
 type Drag =
   | { kind: "pan"; sx: number; sy: number; moved: boolean; right: boolean; onNode?: boolean }
   | { kind: "move"; sx: number; sy: number; moved: boolean }
+  | { kind: "resize"; id: string; sx: number; sy: number; w0: number; h0: number }
   | { kind: "marquee"; sx: number; sy: number; ex: number; ey: number; add: boolean }
   | { kind: "wire"; node: string; pin: string; dir: "in" | "out"; type: string; ax: number; ay: number; ex: number; ey: number };
 interface Menu { left: number; top: number; wx: number; wy: number; from?: { node: string; pin: string; dir: "in" | "out"; type: string } }
@@ -45,7 +51,8 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  *   nodes; Ctrl+Z / Ctrl+Y undo and redo in the editor itself; Ctrl+F
  *   searches the nodes (Enter: next);
  * - Unreal's hold-a-letter shortcuts: hold B / S / D / P and click empty space for Branch, Sequence, Delay,
- *   Event BeginPlay (Epic's Blueprint cheat sheet);
+ *   Event BeginPlay; R + click: a reroute node; C with nodes selected: a comment box around them (moved by its
+ *   title with the nodes inside, resized from its corner, renamed by double-clicking its title) (plugin 0.1.11);
  * Each change goes to the editor at once (one undo step there).
  * Without `editable` (the editor closed) it only looks: pan, zoom, search, and says why when the user tries to
  * change something. Unity: moving, connecting and deleting work (what its package supports); adding nodes and
@@ -57,6 +64,7 @@ const QUICK: Record<string, Partial<Op>> = {
   s: { op: "add", type: "sequence" },
   d: { op: "add", type: "call", function: "KismetSystemLibrary:Delay" },
   p: { op: "add", type: "event", event: "ReceiveBeginPlay" },
+  r: { op: "add", type: "reroute" },
 };
 
 export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string }> }) {
@@ -64,23 +72,38 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const engine = unity ? "unity" : "unreal";
   const saidWhy = useRef(0);
   const [moved, setMoved] = useState<Record<string, { x: number; y: number }>>({});
+  const [resized, setResized] = useState<Record<string, { w: number; h: number }>>({});
   useEffect(() => {
     setMoved({});
+    setResized({});
   }, [nodes]);
+  // Comment boxes where they are now (moved ones too), in canvas units.
+  const commentBoxes = useMemo(
+    () =>
+      nodes.filter(isCommentBox).map((n) => ({
+        n,
+        x: moved[n.id]?.x ?? n.x * SCALE,
+        y: moved[n.id]?.y ?? n.y * SCALE,
+        w: (resized[n.id]?.w ?? n.width ?? 400) * SCALE,
+        h: (resized[n.id]?.h ?? n.height ?? 200) * SCALE,
+      })),
+    [nodes, moved, resized],
+  );
   const layout = useMemo(() => {
     if (!nodes.length) return null;
-    const boxes: Box[] = nodes.map((n) => {
+    const boxes: Box[] = nodes.filter((n) => !isCommentBox(n)).map((n) => {
       const ins = n.pins.filter((p) => p.dir === "in");
       const outs = n.pins.filter((p) => p.dir === "out");
-      return { n, x: n.x * SCALE, y: n.y * SCALE, h: HEAD + Math.max(ins.length, outs.length, 1) * ROW + 8, ins, outs };
+      if (isKnot(n)) return { n, x: n.x * SCALE, y: n.y * SCALE, w: KNOT, h: KNOT, ins, outs };
+      return { n, x: n.x * SCALE, y: n.y * SCALE, w: W, h: HEAD + Math.max(ins.length, outs.length, 1) * ROW + 8, ins, outs };
     });
     // Nodes on top of each other move right until clear, so every node and pin can be read.
-    const hit = (a: Box, b: Box) => a.x < b.x + W + 12 && b.x < a.x + W + 12 && a.y < b.y + b.h + 12 && b.y < a.y + a.h + 12;
+    const hit = (a: Box, b: Box) => a.x < b.x + b.w + 12 && b.x < a.x + a.w + 12 && a.y < b.y + b.h + 12 && b.y < a.y + a.h + 12;
     for (let i = 1; i < boxes.length; i++) {
       for (let guard = 0; guard < 50; guard++) {
         const other = boxes.slice(0, i).find((b) => hit(b, boxes[i]!));
         if (!other) break;
-        boxes[i]!.x = other.x + W + 40;
+        boxes[i]!.x = other.x + other.w + 40;
       }
     }
     return boxes;
@@ -89,17 +112,24 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const pinAt = useMemo(() => {
     const at = new Map<string, { x: number; y: number }>();
     for (const b of boxes) {
+      if (isKnot(b.n)) {
+        b.ins.forEach((p) => at.set(`${b.n.id}:${p.name}`, { x: b.x, y: b.y + KNOT / 2 }));
+        b.outs.forEach((p) => at.set(`${b.n.id}:${p.name}`, { x: b.x + KNOT, y: b.y + KNOT / 2 }));
+        continue;
+      }
       b.ins.forEach((p, i) => at.set(`${b.n.id}:${p.name}`, { x: b.x, y: b.y + HEAD + i * ROW + ROW / 2 }));
-      b.outs.forEach((p, i) => at.set(`${b.n.id}:${p.name}`, { x: b.x + W, y: b.y + HEAD + i * ROW + ROW / 2 }));
+      b.outs.forEach((p, i) => at.set(`${b.n.id}:${p.name}`, { x: b.x + b.w, y: b.y + HEAD + i * ROW + ROW / 2 }));
     }
     return at;
   }, [boxes]);
   const bounds = useMemo(() => {
-    if (!boxes.length) return { x: 0, y: 0, w: 1, h: 1 };
-    const x = Math.min(...boxes.map((b) => b.x)) - 30;
-    const y = Math.min(...boxes.map((b) => b.y)) - 30;
-    return { x, y, w: Math.max(...boxes.map((b) => b.x + W)) + 30 - x, h: Math.max(...boxes.map((b) => b.y + b.h)) + 30 - y };
-  }, [boxes]);
+    // Comment boxes count too, so "fit" shows them whole.
+    const all = [...boxes, ...commentBoxes];
+    if (!all.length) return { x: 0, y: 0, w: 1, h: 1 };
+    const x = Math.min(...all.map((b) => b.x)) - 30;
+    const y = Math.min(...all.map((b) => b.y)) - 30;
+    return { x, y, w: Math.max(...all.map((b) => b.x + b.w)) + 30 - x, h: Math.max(...all.map((b) => b.y + b.h)) + 30 - y };
+  }, [boxes, commentBoxes]);
 
   const frame = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
@@ -159,7 +189,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const center = (b: Box) => {
     const r = frame.current?.getBoundingClientRect();
     if (!r) return;
-    setView((v) => ({ ...v, x: r.width / 2 - (b.x + W / 2) * v.k, y: r.height / 2 - (b.y + b.h / 2) * v.k }));
+    setView((v) => ({ ...v, x: r.width / 2 - (b.x + b.w / 2) * v.k, y: r.height / 2 - (b.y + b.h / 2) * v.k }));
   };
   useEffect(() => {
     const el = frame.current;
@@ -241,6 +271,20 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       return;
     }
     const el = e.target as Element;
+    // A comment box's corner: resize it.
+    const resizeEl = editable ? (el.closest("[data-resize]") as SVGElement | null) : null;
+    if (resizeEl) {
+      const c = commentBoxes.find((b) => b.n.id === resizeEl.dataset.resize);
+      if (c) return setDrag({ kind: "resize", id: c.n.id, sx: p.x, sy: p.y, w0: c.w / SCALE, h0: c.h / SCALE });
+    }
+    // A comment box's title: it moves with the nodes inside it, as in Unreal.
+    const commentId = (el.closest("[data-node]") as SVGElement | null)?.dataset.node;
+    const comment = commentBoxes.find((b) => b.n.id === commentId);
+    if (comment && editable && !(e.ctrlKey || e.shiftKey)) {
+      const inside = boxes.filter((b) => b.x >= comment.x && b.y >= comment.y && b.x + b.w <= comment.x + comment.w && b.y + b.h <= comment.y + comment.h).map((b) => b.n.id);
+      setSelected(new Set([comment.n.id, ...inside]));
+      return setDrag({ kind: "move", sx: p.x, sy: p.y, moved: false });
+    }
     const pinEl = el.closest("[data-pin]") as HTMLElement | SVGElement | null;
     const nodeEl = el.closest("[data-node]") as HTMLElement | SVGElement | null;
     const touch = e.pointerType === "touch";
@@ -308,9 +352,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       const dy = (now.y - prev.y) / view.k;
       setMoved((m) => {
         const out = { ...m };
-        for (const b of boxes) if (selected.has(b.n.id)) out[b.n.id] = { x: b.x + dx, y: b.y + dy };
+        for (const b of [...boxes, ...commentBoxes]) if (selected.has(b.n.id)) out[b.n.id] = { x: b.x + dx, y: b.y + dy };
         return out;
       });
+    } else if (drag.kind === "resize") {
+      const w = Math.max(64, drag.w0 + (now.x - drag.sx) / view.k / SCALE);
+      const h = Math.max(64, drag.h0 + (now.y - drag.sy) / view.k / SCALE);
+      setResized((r) => ({ ...r, [drag.id]: { w, h } }));
     } else if (drag.kind === "marquee") setDrag({ ...drag, ex: now.x, ey: now.y });
     else if (drag.kind === "wire") {
       const w = world(now);
@@ -329,12 +377,15 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       if (d.right && !d.moved) openMenu(p);
       else if (!d.moved && !d.right && !d.onNode && e.pointerType !== "touch") setSelected(new Set());
     } else if (d.kind === "move" && d.moved) {
-      const ops = boxes.filter((b) => selected.has(b.n.id)).map((b) => ({ op: "move", node: b.n.id, x: Math.round(b.x / SCALE), y: Math.round(b.y / SCALE) }));
+      const ops = [...boxes, ...commentBoxes].filter((b) => selected.has(b.n.id)).map((b) => ({ op: "move", node: b.n.id, x: Math.round(b.x / SCALE), y: Math.round(b.y / SCALE) }));
       if (ops.length) void apply(ops);
+    } else if (d.kind === "resize") {
+      const r = resized[d.id];
+      if (r) void apply([{ op: "resize", node: d.id, width: Math.round(r.w), height: Math.round(r.h) }]);
     } else if (d.kind === "marquee") {
       const a = world({ x: Math.min(d.sx, d.ex), y: Math.min(d.sy, d.ey) });
       const z = world({ x: Math.max(d.sx, d.ex), y: Math.max(d.sy, d.ey) });
-      const inside = boxes.filter((b) => b.x < z.x && b.x + W > a.x && b.y < z.y && b.y + b.h > a.y).map((b) => b.n.id);
+      const inside = boxes.filter((b) => b.x < z.x && b.x + b.w > a.x && b.y < z.y && b.y + b.h > a.y).map((b) => b.n.id);
       setSelected((s) => new Set(d.add ? [...s, ...inside] : inside));
     } else if (d.kind === "wire") {
       const target = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
@@ -386,6 +437,17 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (mod && e.key.toLowerCase() === "f") {
       e.preventDefault();
       setFind({ q: "", i: 0 });
+    } else if (!mod && e.key.toLowerCase() === "c" && editable && !unity && selected.size) {
+      // C: a comment box around the selected nodes, as in Unreal.
+      const sel = boxes.filter((b) => selected.has(b.n.id));
+      if (sel.length) {
+        e.preventDefault();
+        const x0 = Math.min(...sel.map((b) => b.x)) - 20;
+        const y0 = Math.min(...sel.map((b) => b.y)) - 40;
+        const x1 = Math.max(...sel.map((b) => b.x + b.w)) + 20;
+        const y1 = Math.max(...sel.map((b) => b.y + b.h)) + 20;
+        void apply([{ op: "add", type: "comment_box", ref: "$c", x: Math.round(x0 / SCALE), y: Math.round(y0 / SCALE), width: Math.round((x1 - x0) / SCALE), height: Math.round((y1 - y0) / SCALE), text: "Comment" }]);
+      }
     } else if (e.key === "Home") {
       e.preventDefault();
       fit();
@@ -470,16 +532,50 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       onPointerCancel={up}
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={keys}
-      onDoubleClick={(e) => !(e.target as Element).closest("[data-node], .bp-menu, .ue-zoom, .bp-find") && fit()}
+      onDoubleClick={(e) => {
+        // Double-click a comment box's title: rename it.
+        const c = (e.target as Element).closest("[data-comment]") as SVGElement | null;
+        if (c && editable) {
+          const n = nodes.find((x) => x.id === c.dataset.node);
+          const text = n && prompt(L("הכותרת של ההערה:", "The comment's title:"), n.comment ?? "");
+          if (n && text !== null && text !== undefined) void apply([{ op: "comment", node: n.id, text }]);
+          return;
+        }
+        if (!(e.target as Element).closest("[data-node], .bp-menu, .ue-zoom, .bp-find")) fit();
+      }}
     >
       <svg className="ue-graph" width="100%" height="100%" role="img">
         <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+          {/* Comment boxes, behind everything: drag the title bar to move, the corner to resize. */}
+          {commentBoxes.map(({ n, x, y, w, h }) => {
+            const color = n.color ? `#${n.color.slice(0, 6)}` : "#ffffff";
+            const on = selected.has(n.id);
+            return (
+              <g key={n.id} className="bp-comment-box">
+                <rect x={x} y={y} width={w} height={h} rx={4} fill={color} fillOpacity={0.12} stroke={on ? "#f0a830" : color} strokeOpacity={on ? 1 : 0.5} strokeWidth={on ? 2 : 1} />
+                <rect x={x} y={y} width={w} height={22} rx={4} fill={color} fillOpacity={0.45} data-node={n.id} data-comment="1" style={{ cursor: editable ? "move" : "default" }} />
+                <text x={x + 8} y={y + 15} className="ue-title" pointerEvents="none">{(n.comment || n.title).slice(0, 60)}</text>
+                {editable && <rect x={x + w - 12} y={y + h - 12} width={12} height={12} fill={color} fillOpacity={0.6} data-resize={n.id} style={{ cursor: "nwse-resize" }} />}
+              </g>
+            );
+          })}
           {links.map((l, i) => <path key={i} d={l.d} stroke={l.color} strokeWidth={2} fill="none" opacity={0.85} />)}
           {wire && <path d={`M${wire.ax},${wire.ay} C${wire.ax + (wire.dir === "out" ? 60 : -60)},${wire.ay} ${wire.ex + (wire.dir === "out" ? -60 : 60)},${wire.ey} ${wire.ex},${wire.ey}`} stroke={pinColor(wire.type)} strokeWidth={2} fill="none" strokeDasharray="5 4" />}
           {boxes.map((b) => {
             const head = /Event/.test(b.n.class) ? "#7a1f1f" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
             const on = selected.has(b.n.id);
             const found = current?.n.id === b.n.id ? "#f2c94c" : matches.some((m) => m.n.id === b.n.id) ? "#8a7a3a" : undefined;
+            if (isKnot(b.n)) {
+              const t = b.ins[0]?.type ?? b.outs[0]?.type ?? "";
+              const cy = b.y + KNOT / 2;
+              return (
+                <g key={b.n.id} data-node={b.n.id} className="bp-node bp-knot">
+                  <circle cx={b.x + KNOT / 2} cy={cy} r={KNOT / 2} fill="#1b1c20" stroke={on ? "#f0a830" : pinColor(t)} strokeWidth={on ? 2.5 : 2} />
+                  {b.ins[0] && <circle cx={b.x} cy={cy} r={Math.max(7, 9 / view.k)} fill="transparent" data-pin={b.ins[0].name} data-node={b.n.id} data-dir="in" data-type={t} className={editable ? "bp-pin" : undefined} />}
+                  {b.outs[0] && <circle cx={b.x + KNOT} cy={cy} r={Math.max(7, 9 / view.k)} fill="transparent" data-pin={b.outs[0].name} data-node={b.n.id} data-dir="out" data-type={t} className={editable ? "bp-pin" : undefined} />}
+                </g>
+              );
+            }
             return (
               <g key={b.n.id} data-node={b.n.id} className="bp-node">
                 {b.n.comment && <text x={b.x} y={b.y - 6} className="ue-comment">💬 {b.n.comment.length > 40 ? `${b.n.comment.slice(0, 40)}…` : b.n.comment}</text>}
