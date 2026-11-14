@@ -54,6 +54,8 @@ export default {
     ctx.registerTool({ name: "boxed_net", description: "net", inputSchema: { type: "object" }, run: async () => net.connect(80, "example.com") });
     ctx.registerTool({ name: "boxed_shell", description: "shell", inputSchema: { type: "object" }, run: async () => (await import("node:child_process")).execSync("echo hi") });
     ctx.registerTool({ name: "boxed_binding", description: "binding", inputSchema: { type: "object" }, run: async () => process.binding("tcp_wrap") });
+    ctx.registerTool({ name: "boxed_read_out", description: "read outside", inputSchema: { type: "object" }, run: async () => (await import("node:fs")).readFileSync("/etc/hostname", "utf8") });
+    ctx.registerTool({ name: "boxed_write_data", description: "write data", inputSchema: { type: "object" }, run: async () => { const fs = await import("node:fs/promises"); await fs.writeFile(ctx.dataDir + "/x.txt", "ok"); return fs.readFile(ctx.dataDir + "/x.txt", "utf8"); } });
     ctx.registerProviderFactory({ type: "boxed-echo", displayName: "Echo", categories: ["chat"], create: (config) => ({
       id: config.id, name: config.name, location: "local", capabilities: {},
       checkHealth: async () => true,
@@ -77,6 +79,9 @@ export default {
   await assert.rejects(host.tools.get("boxed_net")!.run({}, signal), /did not ask for the "network" permission/);
   await assert.rejects(host.tools.get("boxed_shell")!.run({}, signal), /did not ask for the "shell" permission/);
   await assert.rejects(host.tools.get("boxed_binding")!.run({}, signal), /internal bindings/);
+  // Files: only its own folders without "filesystem" (where Node's own sandbox is not used).
+  await assert.rejects(host.tools.get("boxed_read_out")!.run({}, signal), /did not ask for the "filesystem" permission/);
+  assert.equal(await host.tools.get("boxed_write_data")!.run({}, signal), "ok");
   // A provider whose stream crosses the processes.
   const factory = (registry as unknown as { factories: Map<string, { create(c: unknown): { chat(r: unknown): AsyncIterable<{ text: string }>; listModels(): Promise<unknown[]> } }> }).factories.get("boxed-echo")!;
   const provider = factory.create({ id: "e", type: "boxed-echo", name: "E" });

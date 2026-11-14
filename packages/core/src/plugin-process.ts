@@ -131,7 +131,7 @@ export class PluginProcess {
       this.sandboxedFiles = !all;
     }
     const { cmd, args, env } = nodeCommand([...flags, r.file], r.ts);
-    env.KESHER_PLUGIN = JSON.stringify({ id: this.o.id, main: join(this.o.dir, this.o.main), dataDir: this.o.dataDir, settings: this.o.settings, permissions: this.o.permissions });
+    env.KESHER_PLUGIN = JSON.stringify({ id: this.o.id, dir: this.o.dir, main: join(this.o.dir, this.o.main), dataDir: this.o.dataDir, settings: this.o.settings, permissions: this.o.permissions, nodeSandbox: this.sandboxedFiles });
     const proc = spawn(cmd, args, { env, cwd: this.o.dir, stdio: ["ignore", "pipe", "pipe", "ipc"], serialization: "advanced", windowsHide: true });
     this.proc = proc;
     proc.stdout?.on("data", (d: Buffer) => this.o.log("info", d.toString().trimEnd()));

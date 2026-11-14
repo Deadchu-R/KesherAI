@@ -17,7 +17,7 @@ const send = (m: Msg): void => {
   process.send?.(m);
 };
 
-const env = JSON.parse(process.env.KESHER_PLUGIN ?? "{}") as { id: string; main: string; dataDir: string; settings: Record<string, unknown>; permissions: string[] };
+const env = JSON.parse(process.env.KESHER_PLUGIN ?? "{}") as { id: string; dir?: string; main: string; dataDir: string; settings: Record<string, unknown>; permissions: string[]; nodeSandbox?: boolean };
 const allowed = new Set(env.permissions ?? []);
 
 /**
@@ -72,6 +72,70 @@ if (!allowed.has("network")) {
 if (!allowed.has("shell")) {
   refuse({ child_process: ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"], worker_threads: ["Worker"], cluster: ["fork"] }, "shell");
 }
+/**
+ * Files, where Node's own file sandbox is not available (the installed app's Electron, found on the PC): without
+ * "filesystem", the plugin's file functions reach only its own folder (to read) and its data folder (to read and
+ * write). Paths are resolved, and real paths followed, before the check.
+ */
+if (!allowed.has("filesystem") && !env.nodeSandbox) {
+  const req = createRequire(import.meta.url);
+  const path = req("node:path") as typeof import("node:path");
+  const fsMod = req("node:fs") as Record<string, unknown> & { realpathSync: (p: string) => string };
+  const realpath = fsMod.realpathSync.bind(fsMod);
+  const real = (p: string) => {
+    let cur = path.resolve(p);
+    const rest: string[] = [];
+    // The real place of the nearest part that exists (a link inside the plugin's folder must not lead out of it).
+    for (;;) {
+      try {
+        return path.join(realpath(cur), ...rest.reverse());
+      } catch {
+        const up = path.dirname(cur);
+        if (up === cur) return path.resolve(p);
+        rest.push(path.basename(cur));
+        cur = up;
+      }
+    }
+  };
+  const roots = (dirs: Array<string | undefined>) => dirs.filter((d): d is string => !!d).map((d) => real(d));
+  const readRoots = roots([env.dir ?? path.dirname(env.main), env.dataDir]);
+  const writeRoots = roots([env.dataDir]);
+  const within = (p: string, list: string[]) => list.some((r) => p === r || p.startsWith(r.endsWith(path.sep) ? r : r + path.sep));
+  const asPath = (a: unknown): string | undefined => (typeof a === "string" ? a : a instanceof URL ? a.pathname : Buffer.isBuffer(a) ? a.toString() : undefined);
+  const check = (name: string, a: unknown, write: boolean) => {
+    const p = asPath(a);
+    if (p === undefined) return; // a file descriptor already opened within the rules
+    const full = real(p);
+    if (!within(full, write ? writeRoots : readRoots)) throw new Error(`The plugin ${env.id} did not ask for the "filesystem" permission (it tried fs.${name} on ${full}).`);
+  };
+  const WRITE = new Set(["writeFile", "appendFile", "mkdir", "rm", "rmdir", "unlink", "rename", "copyFile", "cp", "createWriteStream", "symlink", "link", "chmod", "chown", "lchown", "utimes", "lutimes", "truncate", "mkdtemp"]);
+  const READ = ["readFile", "readdir", "stat", "lstat", "access", "exists", "opendir", "readlink", "realpath", "createReadStream", "watch", "watchFile", "statfs", "open"];
+  const TWO = new Set(["rename", "copyFile", "cp", "symlink", "link"]);
+  const guard = (mod: Record<string, unknown>, sync: boolean) => {
+    for (const base of [...READ, ...WRITE]) {
+      for (const n of sync ? [base, `${base}Sync`] : [base]) {
+        const orig = mod[n];
+        if (typeof orig !== "function") continue;
+        const wrapped = function (this: unknown, ...args: unknown[]) {
+          // open with a write flag counts as writing.
+          const writes = WRITE.has(base) || (base === "open" && typeof args[1] === "string" && /[wa+]/.test(args[1]));
+          check(n, args[0], writes);
+          if (TWO.has(base)) check(n, args[1], true);
+          return (orig as (...a: unknown[]) => unknown).apply(this, args);
+        };
+        try {
+          Object.defineProperty(mod, n, { value: wrapped, writable: false, configurable: false });
+        } catch {
+          /* fixed by Node */
+        }
+      }
+    }
+  };
+  guard(fsMod, true);
+  guard(req("node:fs/promises") as Record<string, unknown>, false);
+  if (fsMod.promises) guard(fsMod.promises as Record<string, unknown>, false);
+}
+
 // Node's raw bindings (tcp_wrap, spawn_sync, ...) reach the network and child processes without the modules above.
 if (!allowed.has("network") || !allowed.has("shell")) {
   for (const k of ["binding", "_linkedBinding"]) {

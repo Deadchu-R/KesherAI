@@ -255,3 +255,10 @@ your files. Only install plugins you trust, and as an author, ask only for what 
 ## Testing
 
 Use `node:test` like the rest of the repo. `packages/core/src/server.test.ts` shows how to start a real core server with your plugin folder and call its routes with `app.inject`, without opening a port.
+
+### Files without "filesystem"
+
+Where Node's own file sandbox cannot be used (the installed desktop app runs plugins with Electron's Node), the plugin
+runner limits the file functions itself: a plugin that did not declare "filesystem" can read its own folder and read
+and write its data folder (`ctx.dataDir`). Bundle the packages your plugin uses into its `dist/` (a bundler such as
+esbuild), so nothing outside its folder has to be read.
