@@ -98,7 +98,8 @@ export class Kokoro {
        });
        parentPort.on("message", ({ id, text, sid, speed }) => {
          try {
-           const a = tts.generate({ text, sid, speed });
+           // Electron forbids external buffers ("External buffers are not allowed"): the samples are copied.
+           const a = tts.generate({ text, sid, speed, enableExternalBuffer: false });
            parentPort.postMessage({ id, samples: a.samples, rate: a.sampleRate });
          } catch (e) {
            parentPort.postMessage({ id, error: String(e && e.message || e) });
