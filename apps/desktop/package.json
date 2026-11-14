@@ -53,6 +53,14 @@
         "to": "browser-extension"
       },
       {
+        "from": "../../integrations/noctalia/kesherai",
+        "to": "noctalia-plugin/kesherai"
+      },
+      {
+        "from": "../../integrations/waybar",
+        "to": "waybar"
+      },
+      {
         "from": "../../integrations/unity/com.kesherai.bridge",
         "to": "unity-package/com.kesherai.bridge"
       },
