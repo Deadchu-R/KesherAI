@@ -21,10 +21,15 @@ export interface AgentDef {
   tools?: string[];
   /** Where it was defined. */
   source: "persona" | "project";
+  /** A worker: it may change files, in its own copy of the project (a git worktree); its changes come back as a diff. */
+  write?: boolean;
 }
 
 /** Claude Code's tool names, as KesherAI's. */
 const CLAUDE_TOOLS: Record<string, string[]> = {
+  edit: ["edit_file"],
+  multiedit: ["edit_file"],
+  write: ["write_file"],
   read: ["read_file", "view_image", "read_document"],
   grep: ["search", "find_symbol"],
   glob: ["list_files", "code_map"],
@@ -59,8 +64,11 @@ export function parseAgentFile(text: string, fallbackName: string): AgentDef | u
   const instructions = m[2]!.trim().slice(0, 20_000);
   if (!name || !description || !instructions) return undefined;
   const model = fields.model && fields.model.includes("/") ? fields.model : undefined;
-  const tools = fields.tools ? [...new Set(list(fields.tools).flatMap((t) => CLAUDE_TOOLS[t.toLowerCase()] ?? [t]))] : undefined;
-  return { name, description, instructions, ...(model ? { model } : {}), ...(tools?.length ? { tools } : {}), source: "project" };
+  const raw = fields.tools ? list(fields.tools) : [];
+  const tools = fields.tools ? [...new Set(raw.flatMap((t) => CLAUDE_TOOLS[t.toLowerCase()] ?? [t]))] : undefined;
+  // Claude Code's Edit / Write (or KesherAI's edit_file / write_file) make a worker.
+  const write = raw.some((t) => /^(edit|write|multiedit|edit_file|write_file)$/i.test(t));
+  return { name, description, instructions, ...(model ? { model } : {}), ...(tools?.length ? { tools } : {}), ...(write ? { write: true } : {}), source: "project" };
 }
 
 const cache = new Map<string, { at: number; agents: AgentDef[] }>();

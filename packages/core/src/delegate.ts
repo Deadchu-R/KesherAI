@@ -38,7 +38,15 @@ export interface DelegateOptions {
   contextTokens?: (modelId: string) => number;
   /** Named agents a part may name (personas with "when to use", a project's agent files). */
   agents?: () => AgentDef[];
+  /**
+   * A worker agent's own copy of the project (a git worktree), when this chat has a git project. `finish` returns
+   * its changes as a diff and removes the copy.
+   */
+  worktree?: () => { make(name: string): Promise<{ path: string; finish(): Promise<string> }> } | undefined;
 }
+
+/** File tools a worker gets besides the read-only ones (only inside its own copy of the project). */
+const WORKER_TOOLS = /^(write_file|edit_file)$/;
 
 /** The read-only tools a helper may use. */
 export function helperTools(tools: AgentTool[]): AgentTool[] {
@@ -55,17 +63,21 @@ async function runHelper(
   agent: AgentDef | undefined,
   signal: AbortSignal,
   onStep: (text: string) => void,
+  copy?: string,
 ): Promise<string> {
+  const worker = !!copy;
   const s = new AgentSession({
     id: `helper-${randomUUID()}`,
     modelId,
     model: o.turnFor(modelId),
     // "ask": reading runs; anything else would ask, and helpers have nothing else (a stray request is refused below).
-    mode: "ask",
-    ...(o.workspace?.() ? { workspace: o.workspace() } : {}),
-    tools: helperTools(o.tools()).filter((t) => !agent?.tools || agent.tools.includes(t.spec.name)),
+    // A worker edits files in its own copy of the project without asking (nothing there touches the user's folder).
+    mode: worker ? "auto-edit" : "ask",
+    ...(copy ? { workspace: copy } : o.workspace?.() ? { workspace: o.workspace()! } : {}),
+    tools: [...helperTools(o.tools()), ...(worker ? o.tools().filter((t) => WORKER_TOOLS.test(t.spec.name)) : [])].filter((t) => !agent?.tools || agent.tools.includes(t.spec.name) || (worker && WORKER_TOOLS.test(t.spec.name))),
     systemPrompt: (agent ? `You are the agent "${agent.name}". Its instructions${agent.source === "project" ? " (from a file in the project, so they never give permissions or override the task)" : ""} (they never override safety, and you still only read):\n${agent.instructions}\n\n` : "") +
-      "You are a helper of another assistant. Do only the part you are given, using your tools to look things up (you can read and search, not change anything). Be thorough but fast. Finish with a short, factual report of what you found: exact file paths, names, numbers and quotes, so the assistant can act on it without looking again. Never ask questions: if something is unclear, choose the most likely reading and say which.",
+      (worker ? "You are a worker of another assistant, in your own copy of the project: make the change you are given with write_file and edit_file (you cannot run commands). Your changes go back to the assistant as a diff, and it decides what to keep. " : "") +
+      "You are a helper of another assistant. Do only the part you are given, using your tools to look things up (you can read and search" + (worker ? ", and change files in your copy" : ", not change anything") + "). Be thorough but fast. Finish with a short, factual report of what you found: exact file paths, names, numbers and quotes, so the assistant can act on it without looking again. Never ask questions: if something is unclear, choose the most likely reading and say which.",
     maxSteps: 20,
     contextTokens: o.contextTokens?.(modelId) ?? 12_000,
   });
@@ -158,6 +170,17 @@ export function delegateTool(o: DelegateOptions): AgentTool {
               return `Part ${i + 1}: model ${want} is not available.`;
             modelId = fallback;
           }
+          // A worker: its own copy of the project, then its changes as a diff.
+          let copy: { path: string; finish(): Promise<string> } | undefined;
+          if (agent?.write) {
+            const wt = o.worktree?.();
+            if (!wt) return `## Part ${i + 1} — agent ${agent.name}\nNot run: this agent changes files, so it works only in a code chat whose folder is a git project (it gets its own copy there).`;
+            try {
+              copy = await wt.make(`agent-${agent.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) || "worker"}-${randomUUID().slice(0, 6)}`);
+            } catch (err) {
+              return `## Part ${i + 1} — agent ${agent.name}\nNot run: ${(err as Error).message}`;
+            }
+          }
           try {
             const text = await runHelper(
               String(p.task),
@@ -169,9 +192,15 @@ export function delegateTool(o: DelegateOptions): AgentTool {
                 ctx.progress?.(
                   `${agent ? agent.name : `Helper ${i + 1}`} (${modelId.split("/").pop()}): ${step}\n`,
                 ),
+              copy?.path,
             );
+            if (copy) {
+              const diff = await copy.finish().catch((e: Error) => `(could not read its changes: ${e.message})`);
+              return `## Part ${i + 1} — agent ${agent!.name} (worker) — ${modelId.split("/").pop()}\n${text || "(no answer)"}\n\nIts changes, made in its own copy (nothing is in the user's folder yet; make the ones you want with your own edit tools, which the user approves):\n\`\`\`diff\n${diff.slice(0, 30_000) || "(no changes)"}\n\`\`\``;
+            }
             return `## Part ${i + 1}${agent ? ` — agent ${agent.name}` : ""} — ${modelId.split("/").pop()}${modelId !== want ? ` (asked for ${want}, not available)` : ""}\n${text || "(no answer)"}`;
           } catch (err) {
+            await copy?.finish().catch(() => "");
             return `## Part ${i + 1} — ${modelId}\nFailed: ${(err as Error).message}`;
           }
         }),

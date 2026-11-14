@@ -101,3 +101,20 @@ test("a named agent brings its instructions, model and tools", async () => {
   assert.match(seen[0]!.system, /agent "Perf"[\s\S]*per-frame allocations/);
   assert.deepEqual(seen[0]!.tools.filter((t) => t !== "ask_user" && t !== "request_access"), ["search"]);
 });
+
+test("a worker agent edits in its own copy and its changes come back as a diff", async () => {
+  const wrote: string[] = [];
+  let finished = false;
+  const write: AgentTool = { risk: "write", spec: { name: "write_file", description: "w", inputSchema: { type: "object", properties: {} } }, run: async (_i, ctx) => { wrote.push(ctx.workspace ?? ""); return { output: "written" }; } };
+  let step = 0;
+  const turn: ModelTurn = async () => (step++ === 0 ? { text: "", toolCalls: [{ id: "1", name: "write_file", arguments: { path: "a.ts", content: "x" } }] } : { text: "done", toolCalls: [] });
+  const base = { tools: () => [tool("read_file", "read"), write], currentModel: () => "m", turnFor: () => turn, models: () => [], agents: () => [{ name: "Fixer", description: "fixes", instructions: "fix", write: true, source: "persona" as const }] };
+  const none = delegateTool(base);
+  const r0 = await none.run({ parts: [{ task: "fix", agent: "Fixer" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.match(r0.output, /only in a code chat whose folder is a git project/);
+  const d = delegateTool({ ...base, worktree: () => ({ make: async () => ({ path: "/copy", finish: async () => { finished = true; return "+x"; } }) }) });
+  const r = await d.run({ parts: [{ task: "fix a.ts", agent: "Fixer" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.deepEqual(wrote, ["/copy"], "it wrote in its copy, without asking");
+  assert.ok(finished);
+  assert.match(r.output, /worker[\s\S]*```diff\n\+x/);
+});

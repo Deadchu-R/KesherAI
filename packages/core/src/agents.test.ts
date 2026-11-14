@@ -25,3 +25,10 @@ test("a project's agents: .kesher first, then .claude; the first of a name wins"
   const list = projectAgents(dir);
   assert.deepEqual(list.map((a) => [a.name, a.instructions, a.model ?? ""]), [["Docs", "mine", "ollama/qwen3"], ["c", "run tests", ""]]);
 });
+
+test("an agent file with Edit or Write is a worker", () => {
+  const a = parseAgentFile("---\nname: fixer\ndescription: fixes bugs\ntools: Read, Edit, Grep\n---\nFix it.", "x");
+  assert.equal(a?.write, true);
+  assert.ok(a?.tools?.includes("edit_file"));
+  assert.equal(parseAgentFile("---\nname: r\ndescription: reads\ntools: Read\n---\nRead.", "x")?.write, undefined);
+});

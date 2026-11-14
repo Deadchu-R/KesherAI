@@ -127,7 +127,9 @@ defines and calls by name, like Claude Code's subagents and Codex's agents. Rese
 
 - Done (step 1): named read-only agents. A persona with "when to use it" is an agent; a project's
   `.kesher/agents/*.md` and `.claude/agents/*.md` (Claude Code's format) are too. `delegate` takes `agent`.
-- Next (step 2): worker agents that change files, each in its own worktree, approvals shown in the chat.
+- Done (step 2): worker agents (a persona's "also changes files", or an agent file with Edit/Write) edit in
+  their own git worktree without asking; their changes come back as a diff and the chat's model makes the ones it
+  wants with its own edit tools, which the user approves. No commands for workers yet.
 
 ## Risks
 - **The browser pane is a security surface.** Its own profile, no access to the app's session, per-site approval,

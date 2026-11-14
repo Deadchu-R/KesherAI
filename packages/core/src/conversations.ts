@@ -278,8 +278,29 @@ export class ConversationManager {
       models: () => this.chatModelIds,
       workspace: () => this.sessions.get(id)?.workspace,
       contextTokens: (m) => this.contextFor(m),
+      // A worker agent's own copy of the project: a worktree from the folder's last commit, its changes as a diff.
+      worktree: () => {
+        const ws = this.sessions.get(id)?.workspace;
+        if (!ws || this.deps.library.summary(id)?.kind !== "code") return undefined;
+        return {
+          make: async (name: string) => {
+            const wt = await createSessionWorktree(ws, name, this.git);
+            return {
+              path: wt.path,
+              finish: async () => {
+                try {
+                  await this.git(wt.path, ["add", "-A"]);
+                  return await this.git(wt.path, ["diff", "--cached", wt.base]);
+                } finally {
+                  await removeSessionWorktree(wt, this.git, true).catch(() => false);
+                }
+              },
+            };
+          },
+        };
+      },
       agents: () => [
-        ...(this.deps.personas?.now() ?? []).filter((p) => p.agentWhen).map((p): AgentDef => ({ name: p.name, description: p.agentWhen!, instructions: p.instructions, ...(p.modelId ? { model: p.modelId } : {}), source: "persona" })),
+        ...(this.deps.personas?.now() ?? []).filter((p) => p.agentWhen).map((p): AgentDef => ({ name: p.name, description: p.agentWhen!, instructions: p.instructions, ...(p.modelId ? { model: p.modelId } : {}), ...(p.agentWrite ? { write: true } : {}), source: "persona" })),
         ...projectAgents(this.sessions.get(id)?.workspace),
       ],
     });

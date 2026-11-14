@@ -54,6 +54,8 @@ export interface Persona {
   starters?: string[];
   /** When set, the persona is also an agent: a chat's model hands it work when this fits (like a subagent's description). */
   agentWhen?: string;
+  /** As an agent, it may change files (in its own copy of a code chat's project; its changes come back as a diff). */
+  agentWrite?: boolean;
   updatedAt: string;
 }
 
@@ -130,6 +132,7 @@ export class Personas {
         return starters.length ? { starters } : {};
       })(),
       ...(input.agentWhen?.trim() ? { agentWhen: input.agentWhen.trim().slice(0, 500) } : {}),
+      ...(input.agentWhen?.trim() && input.agentWrite === true ? { agentWrite: true } : {}),
       updatedAt: new Date().toISOString(),
     };
     if (!p.name || !p.instructions) throw new Error("A persona needs a name and instructions.");

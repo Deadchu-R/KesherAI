@@ -88,8 +88,14 @@ export function PersonasPage() {
           <label>
             {L("גם כסוכן: מתי לתת לו עבודה (לא חובה)", "Also as an agent: when to hand it work (optional)")}
             <input dir="auto" value={draft.agentWhen ?? ""} placeholder={L("למשל: לבדוק קוד Unity לבעיות ביצועים", "e.g. checking Unity code for performance problems")} onChange={(e) => setDraft({ ...draft, agentWhen: e.target.value })} />
-            <span className="muted small">{L("המודל בצ'אט יעביר לו חלק מהעבודה כשזה מתאים, או כשכותבים @השם. הסוכן רק קורא ומחפש, ומחזיר דוח.", "The chat's model hands it part of a job when this fits, or when you write @its name. The agent only reads and searches, and reports back.")}</span>
+            <span className="muted small">{L("המודל בצ'אט יעביר לו חלק מהעבודה כשזה מתאים, או כשכותבים @השם. הסוכן קורא ומחפש ומחזיר דוח.", "The chat's model hands it part of a job when this fits, or when you write @its name. The agent reads and searches, and reports back.")}</span>
           </label>
+          {draft.agentWhen?.trim() && (
+            <label className="check">
+              <input type="checkbox" checked={!!draft.agentWrite} onChange={(e) => setDraft({ ...draft, agentWrite: e.target.checked })} />
+              {L("גם משנה קבצים (בסשן קוד של פרויקט git: בעותק משלו, והשינויים חוזרים כ-diff שהמודל מחליט מה לקחת — באישורך)", "Also changes files (in a code session of a git project: in its own copy; its changes come back as a diff the model takes from, with your approval)")}
+            </label>
+          )}
           <details className="persona-more">
             <summary>{L("עוד: איך המודל כותב, והצעות פתיחה", "More: how the model writes, and opening suggestions")}</summary>
             <label>
