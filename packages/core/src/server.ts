@@ -79,7 +79,6 @@ import { SelfWork } from "./self-work.js";
 import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
-import { Tunnel } from "./tunnel.js";
 import { sdProvider } from "./sdcpp.js";
 import { BrowserBridge } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
@@ -133,7 +132,6 @@ import { Journal } from "./journal.js";
 import { McpManager } from "./mcp.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
-import { freeSpace } from "@kesher/downloads";
 import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes, TERMINATED_FILE } from "./routes/system.js";
@@ -154,6 +152,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
+import { buildTunnel, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -315,18 +314,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
-  const tailscaleCli = new Tailscale();
-  const tunnel = new Tunnel(join(paths.engines, "cloudflared"), downloads, {
-    mode: () => config.remote.anywhereMode,
-    named: () => config.remote.cloudflare,
-    saveNamed: async (n) => {
-      config.remote.cloudflare = n;
-      await persist();
-    },
-    tailscale: tailscaleCli,
-    // Funnel passes requests to 127.0.0.1; they still need a key: they name another host and carry forwarding headers.
-    tailscaleTarget: async () => ((await tailscaleCli.status(config.port).catch(() => undefined))?.running ? "127.0.0.1" : undefined),
-  });
+  const { tunnel } = buildTunnel(paths, downloads, config, persist);
   const whisper = new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
     const nv = await nvidiaGpus();
     return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
@@ -358,16 +346,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       }
     }
   });
-  // A nearly full drive (found on the PC: 27 MB left) breaks downloads, self-work and Windows itself: say so, once a day.
-  let diskWarned = 0;
-  const checkDisk = async () => {
-    const free = await freeSpace(paths.models).catch(() => undefined);
-    if (free === undefined || free >= 5 * 1024 ** 3 || Date.now() - diskWarned < 24 * 3_600_000) return;
-    diskWarned = Date.now();
-    await notifier.send({ title: "The drive is almost full", body: `Only ${(free / 1024 ** 3).toFixed(1)} GB is free where KesherAI keeps its models. Downloads and self-work will fail; Windows may slow down. Remove models you do not use (Models page) or other large files.`, path: "#/models", tags: ["warning"] }).catch(() => undefined);
-  };
-  setTimeout(() => void checkDisk(), 60_000).unref();
-  setInterval(() => void checkDisk(), 30 * 60_000).unref();
+  watchDisk(paths, notifier);
   // Telegram: the user's own bot; each paired chat has its own conversation (telegram.ts).
   const telegram = new TelegramBridge(config.telegram, persist, {
     newConversation: async (title) => (await services.conversations.create({ kind: "chat", title, source: "telegram" })).id,

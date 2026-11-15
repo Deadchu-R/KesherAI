@@ -1151,7 +1151,9 @@ Stopped at: building step 1 (server store and tool).
   2026-11-15 late morning: the conversation manager moved to `server/build-conversations.ts` (`buildConversations`
   with a typed `ConversationParts`: 35 services, found with the TypeScript checker, the body unchanged; `mainSlot`,
   which a timer updates, passes as a function). server.ts 1,115 → 989 lines.
-  Stopped at: B5 (`server/build-remote.ts`: auth, device keys, access log, tunnels, phone push, notifications).
+  B5, first part: `server/build-remote.ts` (`buildTunnel`: Tailscale or the Cloudflare tunnel; `watchDisk`: the
+  full-drive warning); 968 lines. Stopped at: the notifier, Telegram, device keys and the access log need the
+  conversation manager (late-bound through `services`): move them with a small `late` object next.
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
