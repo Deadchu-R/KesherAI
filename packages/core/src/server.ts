@@ -128,6 +128,7 @@ import { gameRoutes } from "./routes/game.js";
 import { trainingRoutes } from "./routes/training.js";
 import { resetRoutes } from "./routes/reset.js";
 import { remoteDeviceRoutes } from "./routes/remote-devices.js";
+import { timerRoutes } from "./routes/timers.js";
 import { textHelperRoutes } from "./routes/text-helper.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
@@ -1099,9 +1100,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await journalRoutes(app, services);
   await gameRoutes(app, services);
   await textHelperRoutes(app, services);
-  // The model's waiting timers: listed in the chat (and the Routines page), cancelled by the user.
-  app.get<{ Querystring: { conv?: string } }>("/api/timers", async (req) => ({ timers: chatTimers.list(req.query.conv || undefined) }));
-  app.delete<{ Params: { id: string } }>("/api/timers/:id", async (req, reply) => ((await chatTimers.cancel(req.params.id)) ? { ok: true } : reply.code(404).send({ error: "This timer is no longer waiting." })));
+  await timerRoutes(app, chatTimers);
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);
