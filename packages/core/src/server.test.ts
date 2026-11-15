@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createKesherServer } from "./server.js";
+import { amdCardOnLinux, createKesherServer } from "./server.js";
 import { destinationFor } from "./routes/downloads.js";
 
 /**
@@ -174,5 +174,37 @@ test("chat streams over a real socket, not only through inject", async () => {
     assert.match(text, /"type":"done"/);
   } finally {
     await server.close();
+  }
+});
+
+test("amdCardOnLinux: an AMD card with at least 4 GB of its own memory", async () => {
+  // The sysfs tree is faked in a temp folder (the same way hardware-gpus.test.ts reads fake /sys).
+  const cardIn = async (dir: string, n: string, vendor: string, vram?: string) => {
+    const dev = join(dir, n, "device");
+    await mkdir(dev, { recursive: true });
+    await writeFile(join(dev, "vendor"), `${vendor}\n`);
+    if (vram) await writeFile(join(dev, "mem_info_vram_total"), vram);
+  };
+  const root = await mkdtemp(join(tmpdir(), "kesher-drm-"));
+  await cardIn(root, "card0", "0x1002", String(4 * 1024 ** 3)); // AMD, exactly 4 GB → yes
+  // A real card also shows its monitor connectors (card0-HDMI-A-1): they are not cards.
+  await mkdir(join(root, "card0-HDMI-A-1"), { recursive: true });
+  if (process.platform === "linux") {
+    // The full detection matrix only works where /sys/class/drm really is the kernel's.
+    assert.equal(await amdCardOnLinux(root), true);
+    await cardIn(root, "card1", "0x1002", String(2 * 1024 ** 3)); // an AMD card with too little memory is ignored
+    assert.equal(await amdCardOnLinux(root), true);
+    const none = await mkdtemp(join(tmpdir(), "kesher-drm-"));
+    await cardIn(none, "card0", "0x10de", "16384"); // NVIDIA is reported by nvidia-smi, not /sys
+    await cardIn(none, "card1", "0x1002", String(2 * 1024 ** 3)); // AMD but only 2 GB → no
+    assert.equal(await amdCardOnLinux(none), false);
+    // A folder with no cards at all.
+    assert.equal(await amdCardOnLinux(await mkdtemp(join(tmpdir(), "kesher-drm-"))), false);
+    // The real tree: whatever the computer has, it must answer without crashing.
+    const real = await amdCardOnLinux();
+    assert.equal(typeof real, "boolean");
+  } else {
+    // Not Linux: the guard answers no, even for a fake tree with an AMD card.
+    assert.equal(await amdCardOnLinux(root), false);
   }
 });

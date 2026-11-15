@@ -53,7 +53,14 @@ test("without ComfyUI it says how to get it", async () => {
 
 test("PyTorch for the card: CUDA for NVIDIA, ROCm for AMD on Linux, else the processor build", async () => {
   const { torchIndex } = await import("./comfy-manager.js");
-  assert.deepEqual(torchIndex(true, false), ["--index-url", "https://download.pytorch.org/whl/cu128"]);
-  if (process.platform === "linux") assert.deepEqual(torchIndex(false, true), ["--index-url", "https://download.pytorch.org/whl/rocm7.2"]);
-  if (process.platform !== "darwin") assert.deepEqual(torchIndex(false, false), ["--index-url", "https://download.pytorch.org/whl/cpu"]);
+  const cu = ["--index-url", "https://download.pytorch.org/whl/cu128"];
+  const rocm = ["--index-url", "https://download.pytorch.org/whl/rocm7.2"];
+  const cpu = ["--index-url", "https://download.pytorch.org/whl/cpu"];
+  // NVIDIA wins, no matter what else is there.
+  assert.deepEqual(torchIndex(true, false), cu);
+  assert.deepEqual(torchIndex(true, true), cu);
+  // An AMD card means ROCm only on Linux (its ROCm driver is what loads there).
+  assert.deepEqual(torchIndex(false, true), process.platform === "linux" ? rocm : cpu);
+  // Nothing else: the processor build — and nothing at all on macOS (its PyTorch ships with CUDA support).
+  assert.deepEqual(torchIndex(false, false), process.platform === "darwin" ? [] : cpu);
 });
