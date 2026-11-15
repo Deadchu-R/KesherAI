@@ -478,3 +478,13 @@ This review went through the code part by part. Each finding is listed with what
 - On the PC (Roee's request): the feature-research routine now uses KesherAI's active model, and the LM Studio
   connection was removed from this computer's settings (the code keeps LM Studio support; it is found again only if it
   is running at start-up, for that session).
+
+## Scan 73 (2026-11-15, 0.6.226)
+
+- server.ts split B4–B6 (conversation manager, remote access, notifier, Telegram, routines moved to `server/`): no
+  behaviour change. The auth hook is registered at the same point among the routes (`setupRemoteAccess`), and the
+  remote tests (401 from outside, device keys, the lockout, `/s/` reachable) pass unchanged. Pieces made before the
+  chats read them through a function at use time, as they did through `services` before.
+- Unreal plugin 0.1.19: the version its hello sends now matches its `.uplugin` and KesherAI's latest (a test checks
+  all three), so an installed plugin is not offered again. Close from KesherAI tested on the PC (UE 5.8, no dialog).
+- `pnpm audit --prod --audit-level high`: clean. ui-check passes at both widths; speed 0.3 s / 8 ms / 3 ms.
