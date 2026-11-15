@@ -44,6 +44,12 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string, params
       r = await once();
     } catch (err) {
       const msg = (err as Error).message ?? "";
+      // Nothing listens there at all (LM Studio or Ollama not running): say so, not "the conversation is too long"
+      // (found on the PC: a night routine on an LM Studio model, with LM Studio closed).
+      const code = (err as { cause?: { code?: string } }).cause?.code;
+      if (code === "ECONNREFUSED" || /ECONNREFUSED/.test(msg)) {
+        throw new Error(`The model server for ${modelId} is not running (nothing answers at its address). Start it (e.g. LM Studio or Ollama), or choose another model for this chat or routine.`);
+      }
       // The model server dropped the connection (a local server restarting, or out of memory/context).
       const dropped = /terminated|ECONNRESET|socket hang up|fetch failed|other side closed/i.test(msg);
       if (!dropped || signal?.aborted) throw err;
