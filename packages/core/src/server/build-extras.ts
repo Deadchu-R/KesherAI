@@ -14,6 +14,9 @@ import type { ConversationManager } from "../conversations.js";
 import type { Notifier } from "../notify.js";
 import type { Pipelines } from "../pipelines.js";
 import { Routines } from "../routines.js";
+import { runIn } from "../run-in.js";
+import { SelfWork } from "../self-work.js";
+import type { KesherServerOptions } from "./options.js";
 import type { TelegramBridge } from "../telegram.js";
 import { UnityCli } from "../unity-cli.js";
 import { UnrealBridge } from "../unreal-bridge.js";
@@ -163,4 +166,70 @@ export function buildJournal(paths: DataPaths, config: KesherConfig, registry: P
   }, undefined, screen);
   void journal.load();
   return journal;
+}
+
+/**
+ * Self-work (B6, last part): KesherAI works on a git project by itself, on its own branch, item by item, in its own
+ * code chat. In the worker process it also stops between items when asked to move to a newer version, and ends after
+ * 10 idle minutes (the main app starts it again for the next run).
+ *
+ * @param p - The data folders, the chats (made later), the notifier, the worker's settings (worker mode only) and
+ *   the shared folder (board and handoff).
+ * @returns Self-work (loading) and, in the worker, how to move it to a newer version.
+ */
+export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationManager; notifier: Notifier; worker: KesherServerOptions["worker"]; sharedDir: string }): { selfWork: SelfWork; upgrade?: () => void } {
+  const { paths, chats, notifier, worker, sharedDir } = p;
+  let workerUpgrade = false;
+  const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
+    createChat: async (folder, title, modelId, extra = []) => {
+      const c = await chats().create({ kind: "code", workspace: folder, mode: "auto", title, ...(modelId ? { modelId } : {}) });
+      // The shared board and handoff: readable by this chat's file tools.
+      for (const f of extra) {
+        await mkdir(f, { recursive: true }).catch(() => undefined);
+        await (await chats().open(c.id))?.session.grant(f);
+      }
+      return c.id;
+    },
+    send: async (id, text) => void (await chats().send(id, text)),
+    state: async (id) => {
+      const opened = await chats().open(id);
+      const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");
+      return { status: opened?.session.info().status ?? "error", last: last && last.type === "assistant" ? last.text : "", events: opened?.session.events.length ?? 0 };
+    },
+    stopTurn: (id) => chats().stop(id),
+    // The chat's tokens so far (its usage events), for each self-work item's cost.
+    tokens: async (id) => {
+      const opened = await chats().open(id);
+      return (opened?.session.events ?? []).reduce((n, e) => (e.type === "usage" ? n + (e.input ?? 0) + (e.output ?? 0) : n), 0);
+    },
+    git: (repo, args) => runIn(repo, "git", args, false),
+    check: (repo, command) => runIn(repo, command, [], true),
+    // The worker tells the main app, which has the phone notifications set up.
+    notify: async (title, body, path) =>
+      void (worker
+        ? await fetch(`${worker.mainUrl.replace(/\/$/, "")}/api/self-work/notify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, body, path }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined)
+        : await notifier.send({ title, body, path, tags: ["robot"] }).catch(() => undefined)),
+    shared: sharedDir,
+    // Between items: a worker asked to move to a newer version stops here (its run continues in the new one).
+    between: async () => {
+      if (workerUpgrade) process.exit(75);
+    },
+  });
+  void selfWork.load().catch(() => undefined);
+  if (!worker) return { selfWork };
+  // A worker with nothing to do for 10 minutes ends (the main app starts it again for the next run).
+  let idleSince = Date.now();
+  setInterval(() => {
+    const r = selfWork.current;
+    if (r && (r.status === "running" || r.status === "waiting")) idleSince = Date.now();
+    else if (Date.now() - idleSince > 10 * 60_000) process.exit(0);
+  }, 30_000).unref();
+  return {
+    selfWork,
+    upgrade: () => {
+      workerUpgrade = true;
+      const r = selfWork.current;
+      if (!r || (r.status !== "running" && r.status !== "waiting")) setTimeout(() => process.exit(75), 500);
+    },
+  };
 }

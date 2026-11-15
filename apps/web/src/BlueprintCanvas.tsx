@@ -161,7 +161,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [menu, setMenu] = useState<Menu | null>(null);
   /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
   /** Over a pin while dragging a wire: whether it connects (shown by the mouse, as in Unreal). */
-  const [over, setOver] = useState<{ x: number; y: number; ok: boolean; why: string } | null>(null);
+  const [over, setOver] = useState<{ x: number; y: number; ok: boolean; why: string; touch?: boolean; at?: { x: number; y: number } } | null>(null);
   /** A variable dropped on empty space: Get or Set (as in Unreal). */
   const [varMenu, setVarMenu] = useState<{ left: number; top: number; name: string; x: number; y: number } | null>(null);
   const [pinMenu, setPinMenu] = useState<{ left: number; top: number; node: string; pin: string; dir: "in" | "out"; type: string; wx: number; wy: number } | null>(null);
@@ -268,6 +268,40 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     };
   }, []);
   const world = (p: { x: number; y: number }) => ({ x: (p.x - view.x) / view.k, y: (p.y - view.y) / view.k });
+  /**
+   * The pin a dragged wire would go to: the one under the pointer, else (a finger is wide) the nearest pin of another
+   * node within reach. "self": only the wire's own node is there.
+   */
+  const pinNear = (e: { clientX: number; clientY: number; pointerType?: string }, fromNode: string): { node: string; pin: string; dir: "in" | "out"; type: string } | "self" | undefined => {
+    const el = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
+    const d = el?.dataset;
+    if (d?.node && d.pin && d.node !== fromNode) return { node: d.node, pin: d.pin, dir: d.dir as "in" | "out", type: d.type ?? "" };
+    const at = local(e);
+    const reach = e.pointerType === "mouse" ? 14 : 40;
+    let best: { node: string; pin: string; dir: "in" | "out"; type: string } | undefined;
+    let bestD = reach;
+    for (const b of boxes) {
+      if (b.n.id === fromNode) continue;
+      for (const p of [...b.ins, ...b.outs]) {
+        const w = pinAt.get(`${b.n.id}:${p.name}`);
+        if (!w) continue;
+        const dist = Math.hypot(w.x * view.k + view.x - at.x, w.y * view.k + view.y - at.y);
+        if (dist < bestD) {
+          bestD = dist;
+          best = { node: b.n.id, pin: p.name, dir: p.dir as "in" | "out", type: p.type };
+        }
+      }
+    }
+    if (best) return best;
+    return d?.node === fromNode || (el ?? document.elementFromPoint(e.clientX, e.clientY))?.closest(`[data-node="${CSS.escape(fromNode)}"]`) ? "self" : undefined;
+  };
+  /** Whether a dragged wire can go to a pin, and in words why (or why not). */
+  const wireJudge = (w: { dir: "in" | "out"; type: string; moveLinks?: boolean }, t: { dir: "in" | "out"; type: string }): { ok: boolean; why: string } => {
+    if (w.moveLinks) return t.dir === w.dir ? { ok: true, why: L("העברת החיבורים", "Move the wires") } : { ok: false, why: L("גררו לפין מאותו כיוון", "Drag to a pin of the same direction") };
+    if (t.dir === w.dir) return { ok: false, why: w.dir === "out" ? L("יציאה מתחברת לכניסה (נקודה משמאל)", "An output goes into an input (a pin on the left)") : L("כניסה מקבלת מיציאה (נקודה מימין)", "An input takes an output (a pin on the right)") };
+    const f = w.dir === "out" ? wireFits(w.type, t.type) : wireFits(t.type, w.type);
+    return { ok: f.ok, why: f.ok ? (f.why ? L(`המרה ${f.why}`, `Convert ${f.why}`) : L("חיבור", "Connect")) : f.why ?? L("סוגים שלא מתחברים", "Types that do not connect") };
+  };
 
   /** Sends operations to the editor (one undo step there) and reads the graph again. */
   const apply = async (ops: Op[]): Promise<Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>> => {
@@ -335,8 +369,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     const pinEl = el.closest("[data-pin]") as HTMLElement | SVGElement | null;
     const nodeEl = el.closest("[data-node]") as HTMLElement | SVGElement | null;
     const touch = e.pointerType === "touch";
-    // Long-press on a phone = right-click.
-    if (touch && editable) {
+    // Long-press on a phone = right-click (not on a pin: holding a finger still there, before dragging a wire, would
+    // drop the wire for the menu).
+    if (touch && editable && !pinEl) {
       const at = p;
       press.current = window.setTimeout(() => {
         setDrag(null);
@@ -452,14 +487,19 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     } else if (drag.kind === "marquee") setDrag({ ...drag, ex: now.x, ey: now.y });
     else if (drag.kind === "wire") {
       const w = world(now);
-      setDrag({ ...drag, ex: w.x, ey: w.y });
-      const t = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
-      const d = t?.dataset;
-      if (!d?.node || d.node === drag.node) setOver(null);
-      else if (d.dir === drag.dir && !drag.moveLinks) setOver({ x: now.x, y: now.y, ok: false, why: L("יציאה מתחברת לכניסה", "An output goes into an input") });
-      else {
-        const f = drag.dir === "out" ? wireFits(drag.type, d.type ?? "") : wireFits(d.type ?? "", drag.type);
-        setOver({ x: now.x, y: now.y, ok: f.ok, why: f.ok ? (f.why ? L(`המרה ${f.why}`, `Convert ${f.why}`) : L("חיבור", "Connect")) : f.why });
+      const touch = e.pointerType !== "mouse";
+      const t = pinNear(e, drag.node);
+      if (t === "self") {
+        setDrag({ ...drag, ex: w.x, ey: w.y });
+        setOver({ x: now.x, y: now.y, ok: false, why: L("לא מחברים צומת לעצמו", "A node does not connect to itself"), touch });
+      } else if (!t) {
+        setDrag({ ...drag, ex: w.x, ey: w.y });
+        setOver(touch ? { x: now.x, y: now.y, ok: true, why: L("גררו לנקודה של צומת אחר", "Drag to a pin of another node"), touch } : null);
+      } else {
+        // The wire's end snaps to the pin it would go to, which lights up (green: it connects; red: it does not).
+        const at = pinAt.get(`${t.node}:${t.pin}`) ?? w;
+        setDrag({ ...drag, ex: at.x, ey: at.y });
+        setOver({ x: now.x, y: now.y, ...wireJudge(drag, t), touch, at });
       }
     }
   };
@@ -487,13 +527,17 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       const inside = boxes.filter((b) => b.x < z.x && b.x + b.w > a.x && b.y < z.y && b.y + b.h > a.y).map((b) => b.n.id);
       setSelected((s) => new Set(d.remove ? [...s].filter((x) => !inside.includes(x)) : d.add ? [...s, ...inside] : inside));
     } else if (d.kind === "wire") {
-      const target = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
-      if (target?.dataset.node && target.dataset.node !== d.node) {
-        const t = target.dataset;
-        if (t.dir === d.dir) return toast(L("חברו יציאה לכניסה.", "Connect an output to an input."));
+      if (e.type === "pointercancel") return;
+      const t = pinNear(e, d.node);
+      if (t === "self") return toast(L("✗ לא מחברים צומת לעצמו: גררו לנקודה של צומת אחר.", "✗ A node does not connect to itself: drag to a pin of another node."));
+      if (t) {
+        const judged = wireJudge(d, t);
+        if (!judged.ok) {
+          navigator.vibrate?.([30, 40, 30]);
+          return toast(`✗ ${judged.why}`);
+        }
         if (d.moveLinks) {
           // Ctrl+drag from a pin to another: its wires move there (as in Unreal).
-          if (t.dir !== d.dir) return toast(L("גררו לפין מאותו כיוון.", "Drag to a pin of the same direction."));
           const others = linksOf(d.node, d.pin, d.dir);
           if (!others.length) return;
           const ops: Op[] = others.map((o) => (d.dir === "out" ? { op: "connect", from: { node: t.node, pin: t.pin }, to: o } : { op: "connect", from: o, to: { node: t.node, pin: t.pin } }));
@@ -502,8 +546,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         }
         const from = d.dir === "out" ? { node: d.node, pin: d.pin } : { node: t.node, pin: t.pin };
         const to = d.dir === "out" ? { node: t.node, pin: t.pin } : { node: d.node, pin: d.pin };
-        void apply([{ op: "connect", from, to }]);
-      } else if (!target) openMenu(p, { node: d.node, pin: d.pin, dir: d.dir, type: d.type });
+        void apply([{ op: "connect", from, to }]).then((r) => {
+          if (r.length && r.every((x) => x.ok)) {
+            navigator.vibrate?.(20);
+            toast(L(`✓ חובר: ${from.pin} ← ${to.pin}`, `✓ Connected: ${from.pin} → ${to.pin}`));
+          }
+        });
+      } else openMenu(p, { node: d.node, pin: d.pin, dir: d.dir, type: d.type });
     }
   };
 
@@ -995,6 +1044,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
             );
           })}
           {wire && <path d={`M${wire.ax},${wire.ay} C${wire.ax + (wire.dir === "out" ? 60 : -60)},${wire.ay} ${wire.ex + (wire.dir === "out" ? -60 : 60)},${wire.ey} ${wire.ex},${wire.ey}`} stroke={pinColor(wire.type)} strokeWidth={2} fill="none" strokeDasharray="5 4" />}
+          {wire && over?.at && <circle cx={over.at.x} cy={over.at.y} r={Math.max(9, 12 / view.k)} fill={over.ok ? "rgb(123 216 143 / 0.25)" : "rgb(255 123 123 / 0.25)"} stroke={over.ok ? "#7bd88f" : "#ff7b7b"} strokeWidth={2} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
           {boxes.map((b) => {
             const head = /Event/.test(b.n.class) ? "#7a1f1f" : /_Pure|Operator|MakeStruct|ArrayItem/.test(b.n.class) ? "#3d6b2e" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
             const on = selected.has(b.n.id);
@@ -1082,7 +1132,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         </div>
       )}
       {over && (
-        <div className={`bp-wire-tip ${over.ok ? "ok" : "bad"}`} style={{ left: over.x + 14, top: over.y + 14 }} role="status" dir="ltr">
+        <div className={`bp-wire-tip ${over.ok ? "ok" : "bad"}`} style={over.touch ? { left: Math.max(4, over.x - 70), top: Math.max(4, over.y - 64) } : { left: over.x + 14, top: over.y + 14 }} role="status" dir="auto">
           {over.ok ? "✓" : "✗"} {over.why}
         </div>
       )}

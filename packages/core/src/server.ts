@@ -5,7 +5,7 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
-import { mkdir, readFile as readFileFs } from "node:fs/promises";
+import { readFile as readFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
@@ -70,9 +70,7 @@ import { codeRoutes } from "./routes/code.js";
 import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
 import { closeLeftOverEngines, ModelUse, parseGpuApps, processParent } from "./pc-fix.js";
-import { SelfWork } from "./self-work.js";
 import { TaskBoard } from "./task-board.js";
-import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { sdProvider } from "./sdcpp.js";
 import { BrowserBridge } from "./browser-bridge.js";
@@ -143,7 +141,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
-import { buildGameEngines, buildJournal, buildRoutines } from "./server/build-extras.js";
+import { buildGameEngines, buildJournal, buildRoutines, buildSelfWork } from "./server/build-extras.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -497,61 +495,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   chatsBusy = () => Object.values(services.conversations.activity()).includes("running");
   stopConversation = (id) => services.conversations.stop(id);
   // Self-work: KesherAI works on a git project by itself, on its own branch, item by item.
-  let workerUpgrade = false;
-  const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
-    createChat: async (folder, title, modelId, extra = []) => {
-      const c = await services.conversations.create({ kind: "code", workspace: folder, mode: "auto", title, ...(modelId ? { modelId } : {}) });
-      // The shared board and handoff: readable by this chat's file tools.
-      for (const f of extra) {
-        await mkdir(f, { recursive: true }).catch(() => undefined);
-        await (await services.conversations.open(c.id))?.session.grant(f);
-      }
-      return c.id;
-    },
-    send: async (id, text) => void (await services.conversations.send(id, text)),
-    state: async (id) => {
-      const opened = await services.conversations.open(id);
-      const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");
-      return { status: opened?.session.info().status ?? "error", last: last && last.type === "assistant" ? last.text : "", events: opened?.session.events.length ?? 0 };
-    },
-    stopTurn: (id) => services.conversations.stop(id),
-    // The chat's tokens so far (its usage events), for each self-work item's cost.
-    tokens: async (id) => {
-      const opened = await services.conversations.open(id);
-      return (opened?.session.events ?? []).reduce((n, e) => (e.type === "usage" ? n + (e.input ?? 0) + (e.output ?? 0) : n), 0);
-    },
-    git: (repo, args) => runIn(repo, "git", args, false),
-    check: (repo, command) => runIn(repo, command, [], true),
-    // The worker tells the main app, which has the phone notifications set up.
-    notify: async (title, body, path) =>
-      void (worker
-        ? await fetch(`${worker.mainUrl.replace(/\/$/, "")}/api/self-work/notify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, body, path }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined)
-        : await notifier.send({ title, body, path, tags: ["robot"] }).catch(() => undefined)),
-    shared: sharedDir,
-    // Between items: a worker asked to move to a newer version stops here (its run continues in the new one).
-    between: async () => {
-      if (workerUpgrade) process.exit(75);
-    },
-  });
+  const { selfWork, upgrade: workerUpgrade } = buildSelfWork({ paths, chats: () => services.conversations, notifier, worker, sharedDir });
   services.selfWork = selfWork;
   services.modelUse = modelUse;
-  services.worker = worker ? { version: worker.version, upgrade: () => {
-    workerUpgrade = true;
-    const r = selfWork.current;
-    if (!r || (r.status !== "running" && r.status !== "waiting")) setTimeout(() => process.exit(75), 500);
-  } } : undefined;
+  services.worker = worker && workerUpgrade ? { version: worker.version, upgrade: workerUpgrade } : undefined;
   services.workerHost = options.workerHost;
   services.board = taskBoard;
-  void selfWork.load().catch(() => undefined);
-  if (worker) {
-    // A worker with nothing to do for 10 minutes ends (the main app starts it again for the next run).
-    let idleSince = Date.now();
-    setInterval(() => {
-      const r = selfWork.current;
-      if (r && (r.status === "running" || r.status === "waiting")) idleSince = Date.now();
-      else if (Date.now() - idleSince > 10 * 60_000) process.exit(0);
-    }, 30_000).unref();
-  }
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
