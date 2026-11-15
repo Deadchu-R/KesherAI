@@ -1,5 +1,7 @@
 import type React from "react";
 import { CodeView } from "./ide/CodeView";
+import { ChartView } from "./ChartView";
+import { parseChart } from "./chart";
 
 /** Inline Markdown: **bold**, *italic*, `code` and [links](https://…). */
 function inline(text: string, key: string): React.ReactNode[] {
@@ -109,7 +111,11 @@ export function RichText({ text }: { text: string }) {
       });
       flush(`l${i}-end`);
     }
-    if (parts[i + 2] !== undefined) out.push(<CodeView key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />);
+    if (parts[i + 2] !== undefined) {
+      // A ```chart block with complete JSON is drawn; while it is still being written (or if it is not a chart) it shows as code.
+      const chart = parts[i + 1] === "chart" ? parseChart(parts[i + 2]!) : undefined;
+      out.push(chart ? <ChartView key={`c${i}`} spec={chart} /> : <CodeView key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />);
+    }
   }
   return <div className="msg-text">{out}</div>;
 }

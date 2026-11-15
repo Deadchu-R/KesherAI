@@ -87,6 +87,8 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
       ].join("\n"),
     );
   }
+  // Charts inside the answer (audit F18): the chat draws this block as a chart.
+  parts.push('To show numbers as a chart, write a ```chart block with JSON: {"type": "bar" | "line" | "pie", "title": "...", "labels": [...], "series": [{"name": "...", "values": [...]}], "unit": "%"}. Use real numbers only.');
   if (opts.toolNotes?.length) parts.push(opts.toolNotes.join("\n"));
   if (opts.projectInstructions) parts.push(`Instructions for this project:\n${opts.projectInstructions}`);
   if (opts.persona) parts.push(opts.persona);

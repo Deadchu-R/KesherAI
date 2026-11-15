@@ -2479,3 +2479,12 @@ html.handheld .palette-list button { min-height: 44px; }
 .releases h3 { margin: 0; font-size: 16px; display: flex; gap: 10px; align-items: baseline; }
 .releases h3 small { font-size: 12px; color: var(--muted); font-weight: 400; }
 .releases ul { margin: 0; padding-inline-start: 20px; font-size: 14px; line-height: 1.7; }
+
+/* Charts inside an answer (```chart): SVG on the panel colours, readable at 390 px. */
+.chart-view { margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel); display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.chart-view figcaption { font-weight: 600; font-size: 14px; }
+.chart-view svg { width: 100%; height: auto; display: block; }
+.chart-axis { fill: var(--muted); font-size: 11px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }

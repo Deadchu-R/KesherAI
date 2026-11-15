@@ -1312,3 +1312,11 @@ Stopped at: building (store and public page first, then the chat menu and the se
   temperature and three opening suggestions. The draft shows the sources; nothing is saved until the user saves.
 - **Stopped at:** done.
 
+
+## Charts inside the answer, F18 (2026-11-15, night)
+- **Claude (Mar 2026) and ChatGPT** draw charts inline from numbers in the conversation; **Open WebUI** renders
+  Mermaid. A charting library or Mermaid is large; the audit's plan was a small JSON block drawn as SVG.
+- **Built:** a ```chart block (`{type: bar|line|pie, title, labels, series, unit}`) is drawn as SVG by RichText,
+  with a legend, hover values and "The numbers" as a table; while it is still being written, or if it is not a valid
+  chart, it shows as code. One line in the system prompt tells every model about it. No new dependency.
+- **Stopped at:** done; Mermaid only if Roee asks.
