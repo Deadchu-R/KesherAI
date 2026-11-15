@@ -32,6 +32,7 @@ startPlacement();
 
 // After an update the server has the new version's files while this page is still the old one:
 // a part that loads later is gone. Load the page again once (not in a loop) instead of showing an error.
+// eslint-disable-next-line no-restricted-syntax -- the page's entry, never loaded by tests
 window.addEventListener("vite:preloadError", (e) => {
   try {
     const last = Number(sessionStorage.getItem("kesher-reloaded") ?? 0);

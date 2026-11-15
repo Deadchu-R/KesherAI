@@ -21,7 +21,13 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "error",
       // An effect must not return a value by accident: new Chrome versions return a Promise from
       // scrollIntoView/scrollTo, and React then calls it as the cleanup ("M is not a function").
-      "no-restricted-syntax": ["error", { selector: "CallExpression[callee.name=/^use(Layout)?Effect$/] > ArrowFunctionExpression[expression=true]:first-child:not([body.type=/^(UnaryExpression|ArrowFunctionExpression)$/])", message: "Use a block body { ... } in effects, so nothing is returned as the cleanup." }],
+      "no-restricted-syntax": [
+        "error",
+        { selector: "CallExpression[callee.name=/^use(Layout)?Effect$/] > ArrowFunctionExpression[expression=true]:first-child:not([body.type=/^(UnaryExpression|ArrowFunctionExpression)$/])", message: "Use a block body { ... } in effects, so nothing is returned as the cleanup." },
+        // A listener added when a module loads runs in node tests too (no window there): add it in a start function.
+        { selector: "Program > ExpressionStatement > CallExpression[callee.property.name='addEventListener']", message: "Add listeners inside a start function (like startGamepad), not when the module loads." },
+        { selector: "Program > ExpressionStatement > CallExpression[callee.name='addEventListener']", message: "Add listeners inside a start function (like startGamepad), not when the module loads." },
+      ],
     } },
   { files: ["apps/browser-extension/**"], languageOptions: { globals: { ...globals.browser, ...globals.serviceworker, chrome: "readonly" } } },
   ...tseslint.configs.recommended,
