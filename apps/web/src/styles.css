@@ -2375,3 +2375,10 @@ html.handheld .palette-list button { min-height: 44px; }
 .customize-tabs a:hover { color: var(--text); }
 .customize-tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
 @media (max-width: 760px) { .customize-tabs { padding: 4px 16px 0; } }
+
+/* Short screens (a laptop at 860 px): the recent chats keep at least 40% of the sidebar, and the pinned tools above
+   scroll on their own instead of squeezing the chats to a sliver (found in the audit's screenshots). */
+@media (min-width: 761px) {
+  .sidebar .sidebar-actions { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .sidebar .sidebar-scroll { flex: 1 0 40%; }
+}
