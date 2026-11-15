@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { activeFractionOf } from "../gguf.js";
 import { mkdir, readdir, rmdir, stat, unlink } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
@@ -134,14 +135,19 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     ]);
     const own = await Promise.all(
       files.map(async (path) => {
-        const size = (await stat(path)).size;
+        const st = await stat(path);
+        const size = st.size;
         const measured = await s.speeds.get(basename(path));
-        return { path, name: relative(s.paths.models, path), size, source: "KesherAI", gguf: path.toLowerCase().endsWith(".gguf"), estimate: estimatePerformance(size, hw), ...(measured ? { measured } : {}) };
+        // Mixture-of-experts models read only their chosen experts per token: much faster than their size says.
+        const activeFraction = await activeFractionOf(path, size, st.mtimeMs);
+        return { path, name: relative(s.paths.models, path), size, source: "KesherAI", gguf: path.toLowerCase().endsWith(".gguf"), estimate: estimatePerformance(size, hw, activeFraction ? { activeFraction } : {}), ...(measured ? { measured } : {}) };
       }),
     );
     const others = await Promise.all(extra.flat().map(async (m) => {
       const measured = await s.speeds.get(basename(m.path));
-      return { path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw), ...(measured ? { measured } : {}) };
+      const st = m.format === "gguf" ? await stat(m.path).catch(() => undefined) : undefined;
+      const activeFraction = st ? await activeFractionOf(m.path, m.size, st.mtimeMs) : undefined;
+      return { path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw, activeFraction ? { activeFraction } : {}), ...(measured ? { measured } : {}) };
     }));
     // A split model's estimate is for all its parts together (the first part alone can be only its metadata).
     return joinSplitModels([...own, ...others]).map((m) => (m.parts ? { ...m, estimate: estimatePerformance(m.size, hw) } : m));

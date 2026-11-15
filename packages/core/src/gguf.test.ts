@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mtpLayers, readGgufHeader } from "./gguf.js";
+import { activeFractionFrom, mtpLayers, readGgufHeader } from "./gguf.js";
 
 /** A tiny GGUF header: a string, an array of strings (skipped), a u32. */
 function gguf(kv: Array<[string, "str" | "u32" | "strs", unknown]>): Buffer {
@@ -46,4 +46,15 @@ test("MTP: on for a model with an MTP head, with the chosen guesses ahead; 0 tur
   assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b12110", 0), []);
   assert.deepEqual(await LlamaEngine.mtpArgs(a, ["--spec-type", "ngram"], "b12110", 2), []);
   assert.deepEqual(await LlamaEngine.mtpArgs(a, [], "b11000", 2), [], "older engines have no MTP");
+});
+
+test("mixture-of-experts: the share read per token comes from the expert counts", () => {
+  // Qwen3 30B-A3B: 128 experts, 8 used.
+  assert.equal(activeFractionFrom(new Map([["qwen3moe.expert_count", 128], ["qwen3moe.expert_used_count", 8]])), 0.1125);
+  // Qwen3-Coder-Next: 512 experts, 10 used: a few percent of the file.
+  const next = activeFractionFrom(new Map([["qwen3next.expert_count", 512], ["qwen3next.expert_used_count", 10]]))!;
+  assert.ok(next > 0.05 && next < 0.1);
+  // Dense models: none.
+  assert.equal(activeFractionFrom(new Map([["llama.block_count", 32]])), undefined);
+  assert.equal(activeFractionFrom(new Map([["x.expert_count", 8], ["x.expert_used_count", 8]])), undefined);
 });

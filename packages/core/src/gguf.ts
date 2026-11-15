@@ -88,3 +88,40 @@ export async function mtpLayers(path: string): Promise<number> {
   for (const [k, v] of h) if (k.endsWith(".nextn_predict_layers")) return Number(v) || 0;
   return 0;
 }
+
+/**
+ * The share of a model's weights read for each token. A mixture-of-experts model (`<arch>.expert_count` and
+ * `<arch>.expert_used_count`) reads only its chosen experts plus the parts every token uses (attention, shared
+ * experts: about 5% of the file); a dense model reads all of it.
+ *
+ * @param header - The file's header ({@link readGgufHeader}).
+ * @returns A share from 0.02 to 1, or undefined for a dense model.
+ */
+export function activeFractionFrom(header: Map<string, GgufValue>): number | undefined {
+  let count = 0;
+  let used = 0;
+  for (const [k, v] of header) {
+    if (k.endsWith(".expert_count")) count = Number(v) || 0;
+    else if (k.endsWith(".expert_used_count")) used = Number(v) || 0;
+  }
+  if (count < 2 || used < 1 || used >= count) return undefined;
+  return Math.min(1, Math.max(0.02, used / count + 0.05));
+}
+
+const fractions = new Map<string, number | undefined>();
+
+/**
+ * {@link activeFractionFrom} for a file, remembered per path, size and change time (the header is read once).
+ *
+ * @param path - A `.gguf` file.
+ * @param size - Its size in bytes.
+ * @param mtimeMs - When it last changed.
+ */
+export async function activeFractionOf(path: string, size: number, mtimeMs: number): Promise<number | undefined> {
+  const key = `${path}|${size}|${mtimeMs}`;
+  if (fractions.has(key)) return fractions.get(key);
+  const h = path.toLowerCase().endsWith(".gguf") ? await readGgufHeader(path).catch(() => undefined) : undefined;
+  const f = h ? activeFractionFrom(h) : undefined;
+  fractions.set(key, f);
+  return f;
+}
