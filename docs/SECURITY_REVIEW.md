@@ -488,6 +488,23 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 83 (2026-11-16, 0.6.256 + APK 464)
+
+- Animate (`/api/comfy-ui/flows/:id?asset=`): the asset id must match `[\w-]{1,80}`, must exist and be a picture;
+  only its bytes go to the local ComfyUI's `/upload/image` under a fixed name `kesher_<id>.<ext>`. No path from the
+  request reaches the disk.
+- Speed up from outside: emptying the Recycle Bin, closing a program and the Windows Update cache are behind the
+  key like every `/api` route (the paired phone may use them, as asked: every feature works in remote). The update
+  cache still needs Windows' own administrator prompt on the computer, so it cannot be done from the phone alone.
+  `closeProgram` takes only `[\w .()+-]` names and never Windows' parts, security or KesherAI's engines.
+- Phone crash report: Android's exit reason and the first 6000 bytes of its trace (addresses and library names, no
+  messages or keys) are sent once, the same way and to the same route as the Java crash report, with the same caps.
+  The renderer guard writes down only the page path, not its query.
+- Phone health: package names are escaped before they go into the page; `clearOwnCache` deletes only inside the
+  app's own cache folder (canonical path check); uninstall and emptying the trash use Android's own confirmation.
+- App lock: the framework's BiometricPrompt with the device credential; nothing is stored but on/off.
+- `pnpm audit --prod --audit-level high`: no known vulnerabilities.
+
 ## Scan 82 (2026-11-15, 0.6.255)
 
 - Reviewed the ten changes since scan 81 (MoE estimate, Compare, What's new, charts, keys at rest, CivitAI, the GGUF
