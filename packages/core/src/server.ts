@@ -34,7 +34,6 @@ import { Knowledge, knowledgeTools } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
 import { ensureEngine } from "./routes/engine.js";
-import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
 import { Notifier } from "./notify.js";
 import { speechTools } from "./speech-tools.js";
@@ -43,7 +42,6 @@ import { phoneRoutes } from "./routes/phones.js";
 import { anthropicRoutes } from "./routes/anthropic.js";
 import { apiKeyRoutes } from "./routes/api-keys.js";
 import { ApiKeys } from "./api-keys.js";
-import { SkillStore } from "./skill-store.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
 import { Pipelines } from "./pipelines.js";
@@ -83,7 +81,6 @@ import { guardRoutes } from "./routes/guard.js";
 import { selfWorkRoutes } from "./routes/self-work.js";
 import { closeLeftOverEngines, ModelUse, parseGpuApps, processParent } from "./pc-fix.js";
 import { SelfWork } from "./self-work.js";
-import { seedBuiltinSkills } from "./builtin-skills.js";
 import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
@@ -157,7 +154,7 @@ import { loadModel } from "./routes/engine.js";
 import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
-import { addProviders } from "./server/build-chat.js";
+import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -283,12 +280,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const src = join(e.path, "Engine", "Source", "Runtime");
     return [join(src, "Engine", "Classes"), join(src, "CoreUObject", "Public", "UObject"), join(src, "InputCore", "Classes"), join(src, "UMG", "Public")];
   });
-  const personas = new Personas(join(paths.root, "personas.json"));
-  const skills = new SkillStore(paths.skills);
-  // The specialist skills KesherAI ships with (materials, VFX, level design); the user's own edits are kept.
-  void seedBuiltinSkills(paths.skills).then(() => skills.list()).catch(() => undefined);
-  void skills.list().catch(() => undefined);
-  void personas.load();
+  const { personas, skills } = openPersonasAndSkills(paths);
   const persist = () => saveConfig(paths, config);
   // The project's own OAuth client (branding.config.ts) is used unless the user set another.
   // The project's Google client: from the release build, or — for a copy run from the source — a

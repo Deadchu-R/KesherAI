@@ -3,7 +3,11 @@
  * servers found running (LM Studio, Ollama…). Personas, skills, MCP and the conversation manager follow.
  */
 import { PROVIDER_PRESETS, type ProviderRegistry } from "@kesher/providers";
-import type { KesherConfig } from "../config.js";
+import { join } from "node:path";
+import { seedBuiltinSkills } from "../builtin-skills.js";
+import type { DataPaths, KesherConfig } from "../config.js";
+import { Personas } from "../personas.js";
+import { SkillStore } from "../skill-store.js";
 
 /**
  * Adds the providers from the settings (one that cannot be made is skipped with a warning), then, when asked, tries
@@ -33,4 +37,20 @@ export async function addProviders(registry: ProviderRegistry, config: KesherCon
     );
   }
   return autodetected;
+}
+
+/**
+ * The personas and the skills. Both read their files in the background; the skills KesherAI ships with (materials,
+ * VFX, level design) are written first, keeping the user's own edits.
+ *
+ * @param paths - The data folders.
+ * @returns The two stores.
+ */
+export function openPersonasAndSkills(paths: DataPaths): { personas: Personas; skills: SkillStore } {
+  const personas = new Personas(join(paths.root, "personas.json"));
+  const skills = new SkillStore(paths.skills);
+  void seedBuiltinSkills(paths.skills).then(() => skills.list()).catch(() => undefined);
+  void skills.list().catch(() => undefined);
+  void personas.load();
+  return { personas, skills };
 }
