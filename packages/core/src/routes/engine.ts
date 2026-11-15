@@ -37,7 +37,7 @@ export async function ensureEngine(s: KesherServices): Promise<void> {
   s.config.engines.llamaVersion = version;
   if (build) s.config.engines.llamaBuild = build;
   await s.saveConfig();
-  if (upgrade && was.running && was.modelPath) await loadModel(s, was.modelPath).catch(() => undefined);
+  if (upgrade && was.running && was.modelPath) await loadModel(s, was.modelPath, undefined, "back after the llama.cpp update").catch(() => undefined);
 }
 
 /** What the last look over this computer found (kept five minutes: the models page asks often, and big ComfyUI or Hugging Face folders take a while to walk). */
@@ -71,9 +71,12 @@ async function modelsOnComputer(s: KesherServices, fresh = false): Promise<Found
  *
  * @param s - Services.
  * @param modelPath - Absolute path inside the models folder.
+ * @param name - The id's name (default: the file's).
+ * @param why - Who asked, for the engine log (found on the PC: a model came back after restarts, cause unknown).
  * @returns The model id, e.g. `llamacpp/Qwen3-8B-Q4_K_M`.
  */
-export async function loadModel(s: KesherServices, modelPath: string, name?: string): Promise<string> {
+export async function loadModel(s: KesherServices, modelPath: string, name?: string, why = "asked"): Promise<string> {
+  s.engine.note(`loading ${basename(modelPath)} (${why})`);
   // Before too: the guard checks every few seconds, and a load takes up to a minute; after a long idle time it
   // stopped the server while it was still loading (found on the PC: "stopped: unused for a while" twice in a row).
   s.guard.touch("llamacpp");
@@ -105,7 +108,7 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
  * @param s - Services.
  */
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
-  app.get("/api/engines/llamacpp", async () => ({ ...s.engine.status(), fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048 }));
+  app.get("/api/engines/llamacpp", async () => ({ ...s.engine.status(), fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, lastModel: s.config.engines.lastModel ? basename(s.config.engines.lastModel) : null }));
 
   /**
    * "Check the graphics card": what KesherAI sees and which engine build it uses, in one place, to read out or
@@ -190,7 +193,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added can be loaded" });
     if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "llama.cpp loads GGUF files" });
     try {
-      const modelId = await loadModel(s, path, req.body.name);
+      const modelId = await loadModel(s, path, req.body.name, "chosen on the Models page or through the API");
       return { ...s.engine.status(), modelId };
     } catch (err) {
       return reply.code(500).send({ error: (err as Error).message });
@@ -208,7 +211,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "Speed tests run on GGUF files" });
     if (engineBusy(s)) return reply.code(409).send({ error: "The engine is busy. Wait for the current step to finish." });
     try {
-      if (s.engine.status().modelPath !== path || !s.engine.status().running) await loadModel(s, path);
+      if (s.engine.status().modelPath !== path || !s.engine.status().running) await loadModel(s, path, undefined, "speed test");
       const body = { prompt: "Write a short story about a lighthouse keeper, in plain English.", n_predict: 200, temperature: 0.7, cache_prompt: false };
       const res = await fetch(`${s.engine.baseUrl.replace(/\/v1$/, "")}/completion`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${s.engine.apiKey}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(300_000) });
       if (!res.ok) throw new Error(`The engine answered ${res.status}`);
@@ -265,7 +268,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
     await s.saveConfig();
     const st = s.engine.status();
-    if (reload && st.running && st.modelPath) void loadModel(s, st.modelPath).catch((err) => s.engine.fail(err));
+    if (reload && st.running && st.modelPath) void loadModel(s, st.modelPath, undefined, "reload after a settings change").catch((err) => s.engine.fail(err));
     return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null, fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, kvType: s.config.engines.kvType ?? "q8_0" };
   });
 
@@ -308,7 +311,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
         run.error = (e as Error).message;
       } finally {
         delete run.ctrl;
-        if (before) await loadModel(s, before).catch((err) => s.engine.fail(err));
+        if (before) await loadModel(s, before, undefined, "back after calibration").catch((err) => s.engine.fail(err));
       }
     })();
     return { run: calView() };
@@ -367,7 +370,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       s.config.engines.llamaVersion = version;
       if (build) s.config.engines.llamaBuild = build;
       await s.saveConfig();
-      if (running.running && running.modelPath) await loadModel(s, running.modelPath);
+      if (running.running && running.modelPath) await loadModel(s, running.modelPath, undefined, "back after the engine update");
     })().catch((err) => s.engine.fail(err));
     return reply.code(202).send(s.engine.status());
   });
@@ -529,5 +532,5 @@ async function setUp(s: KesherServices, models: RecommendedModel[]): Promise<voi
     s.engine.fail(new Error("Setup skipped. You can download a model any time from this page."));
     return;
   }
-  await loadModel(s, paths[0]!);
+  await loadModel(s, paths[0]!, undefined, "first-run setup");
 }

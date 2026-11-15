@@ -1083,7 +1083,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     reload: async () => {
       if (startLoad) return void (await startLoad);
       const path = config.engines.lastModel;
-      if (path && existsSync(path) && engine.status().installed) await loadModel(services, path);
+      if (path && existsSync(path) && engine.status().installed) await loadModel(services, path, undefined, "a request needed the model");
     },
     pids: () => (engine.pid ? [engine.pid] : []),
   });
@@ -1121,7 +1121,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // and on the PC half a minute after an update).
   if (last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
   if (config.engines.autoLoadLast && !afterTerminate && last && existsSync(last) && engine.status().installed) {
-    startLoad = loadModel(services, last)
+    startLoad = loadModel(services, last, undefined, "the last model, at start-up")
       .catch((err) => engine.fail(err))
       .finally(() => (startLoad = undefined));
   }

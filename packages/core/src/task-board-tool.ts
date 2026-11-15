@@ -12,7 +12,7 @@ export function taskBoardTool(board: TaskBoard): AgentTool {
     spec: {
       name: "task_board",
       description:
-        "The task board you share with Claude (and Roee) on this computer. action 'read' shows the tasks and the latest notes. Yours are those marked {for self-work} first, then {small} ones; {big} and {fable} ones are Claude's. Before you work on a task, 'claim' it (it fails if Claude took it: pick another). When finished: 'done' with result = what changed, the commit, and how you checked it (tests). 'block' with result = why, when you need Roee or Claude. 'note' leaves a message (e.g. a question for Claude). 'add' adds a task you found. Never take a task someone else claimed.",
+        "The task board you share with Claude (and Roee) on this computer. action 'read' shows the tasks and the latest notes. Yours are those marked {for self-work} first, then {small} ones; {big} and {fable} ones are Claude's. Before you work on a task, 'claim' it (it fails if Claude took it: pick another). When finished: 'done' with result = what changed, the commit, and how you checked it (tests). 'block' with result = why, when you need Roee or Claude. 'note' leaves a message (e.g. a question for Claude). 'add' adds a task you found. Never take a task someone else claimed. You and Claude work together: Claude may finish or free a task you claimed (then it is done for you, go on to the next), and you may finish or free one Claude claimed only when Claude's note asks you to. A task Roee claimed is his.",
       inputSchema: {
         type: "object",
         properties: {

@@ -61,7 +61,7 @@ test("a load that another load overtook does not write its model into the settin
   const config = { engines: { lastModel: "/m/new.gguf" }, activeModels: { chat: "llamacpp/new" } };
   const s = {
     guard: { touch: () => undefined },
-    engine: { load: async (p: string) => void (p === "/m/old.gguf" ? (current = "/m/new.gguf") : (current = p)), status: () => ({ modelPath: current }) },
+    engine: { load: async (p: string) => void (p === "/m/old.gguf" ? (current = "/m/new.gguf") : (current = p)), status: () => ({ modelPath: current }), note: () => undefined },
     registerEngineProvider: () => undefined,
     config,
     saveConfig: async () => undefined,

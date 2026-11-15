@@ -431,3 +431,16 @@ This review went through the code part by part. Each finding is listed with what
 - Model listing: split GGUFs now get an estimate for their full size (was the ~10 MB first part: "fits, 55,000 t/s").
 - To check next: ComfyUI on 127.0.0.1:8188 has no key either (it does not send CORS headers by default, so pages cannot
   read its answers, but a simple POST could still queue work).
+
+## Scan 70 (2026-11-15, 0.6.219)
+
+- Task board: Claude and self-work may now finish or free each other's items (Roee's request). Who writes (`as`) is
+  declared by the caller, behind the API's normal authentication (this computer or a paired device), so the board is a
+  way to coordinate, not a security boundary; nothing on it unlocks a tool or a permission. Items Roee claimed still
+  stay his. The self-work model is told to touch Claude's items only when Claude's note asks.
+- Engine log: each model load now says who asked (start-up, a request, the Models page, calibration, updates), and
+  `GET /api/engines/llamacpp` shows the last model's file name only (no folder), so the phone sees no local paths.
+- server.ts B1/B2 moves, the phone rules move and ui-check's speed numbers: no behaviour change; tests unchanged and
+  passing (562).
+- Load race (0.6.218): an overtaken load no longer writes the settings. A second cause of an old model coming back
+  after a restart is still open; the new engine log will show it on the next restart.

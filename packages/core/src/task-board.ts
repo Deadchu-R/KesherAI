@@ -13,6 +13,21 @@ import { dirname } from "node:path";
 /** Who works on the board. */
 export type BoardActor = "claude" | "kesher" | "roee";
 
+/** The two that work the board (Claude and KesherAI's self-work): they finish or free each other's items. */
+const WORKERS = new Set<BoardActor>(["claude", "kesher"]);
+
+/**
+ * Whether `by` may finish, block or free an item that `owner` took: its owner, Roee (anything), and Claude and
+ * self-work for each other (Roee, 2026-11-15: "they need to work in harmony"). An item Roee took stays his.
+ *
+ * @param owner - Who took the item (none: anyone).
+ * @param by - Who acts.
+ * @returns Whether it is allowed.
+ */
+function mayTouch(owner: string | undefined, by: BoardActor): boolean {
+  return !owner || owner === by || by === "roee" || (WORKERS.has(by) && WORKERS.has(owner as BoardActor));
+}
+
 /**
  * Who a task is for: `normal` — Claude (Opus) in its sessions; `cooldown` — KesherAI's local model (self-work)
  * while Claude's weekly usage is used up; `fable` — the bigger tasks kept for Claude Fable.
@@ -156,7 +171,7 @@ export class TaskBoard {
           }
           case "release": {
             const t = find(c.id);
-            if (t.owner && t.owner !== by && by !== "roee") throw new Error(`${c.id} belongs to ${t.owner}.`);
+            if (!mayTouch(t.owner, by)) throw new Error(`${c.id} belongs to ${t.owner}.`);
             t.status = "open";
             delete t.owner;
             Object.assign(t, { updatedAt: now, updatedBy: by });
@@ -165,7 +180,7 @@ export class TaskBoard {
           case "done":
           case "block": {
             const t = find(c.id);
-            if (t.owner && t.owner !== by && by !== "roee") throw new Error(`${c.id} belongs to ${t.owner}.`);
+            if (!mayTouch(t.owner, by)) throw new Error(`${c.id} belongs to ${t.owner}.`);
             Object.assign(t, { status: c.op === "done" ? "done" : "blocked", owner: t.owner ?? by, result: text(c.result, 4000), updatedAt: now, updatedBy: by });
             break;
           }

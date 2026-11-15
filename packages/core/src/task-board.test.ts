@@ -16,10 +16,17 @@ test("two agents share tasks: claim once, done with a result, notes, revisions",
   b = await board.change("kesher", [{ op: "done", id: "t2", result: "commit abc123, pnpm test passed" }, { op: "note", text: "t2 done, taking nothing else", task: "t2" }], b.rev);
   assert.equal(b.tasks[1]!.status, "done");
   assert.equal(b.notes[0]!.from, "kesher");
-  await assert.rejects(board.change("claude", [{ op: "done", id: "t2", result: "x" }]), /belongs to kesher/);
+  // Claude and self-work finish or free each other's items; an item Roee took stays his.
+  b = await board.change("kesher", [{ op: "claim", id: "t1" }]);
+  b = await board.change("claude", [{ op: "done", id: "t1", result: "done by Claude" }]);
+  assert.equal(b.tasks[0]!.status, "done");
+  assert.equal(b.tasks[0]!.updatedBy, "claude");
+  b = await board.change("claude", [{ op: "add", title: "Roee's own" }]);
+  await board.change("roee", [{ op: "claim", id: "t3" }]);
+  await assert.rejects(board.change("claude", [{ op: "done", id: "t3", result: "x" }]), /belongs to roee/);
+  await assert.rejects(board.change("kesher", [{ op: "release", id: "t3" }]), /belongs to roee/);
   const text = boardText(await board.read());
-  assert.match(text, /t1 \[open\] p1 {big} Refactor the composer/);
-  assert.match(text, /Done: 1/);
+  assert.match(text, /Done: 2/);
   assert.match(text, /kesher \(t2\): t2 done/);
 });
 

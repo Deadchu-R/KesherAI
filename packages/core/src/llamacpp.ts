@@ -416,6 +416,16 @@ export class LlamaEngine {
   }
 
   /**
+   * Adds a line of KesherAI's own to the engine log (shown with llama-server's), e.g. who asked for a load.
+   *
+   * @param line - The line.
+   */
+  note(line: string): void {
+    this.log.push(`KesherAI: ${line}`);
+    if (this.log.length > 400) this.log.splice(0, this.log.length - 400);
+  }
+
+  /**
    * Downloads and unpacks the right llama.cpp build for this computer.
    *
    * @param downloads - Where the download shows progress.
