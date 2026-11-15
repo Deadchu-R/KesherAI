@@ -59,6 +59,24 @@ export interface Appearance {
   homeHide?: HomeSection[];
   /** The phone's bottom bar, start to end. */
   tabsOrder?: PhoneTab[];
+  /** How the graph editors (Unreal Blueprints, Unity graphs, C# as nodes) draw wires, like Electronic Nodes. */
+  wires?: GraphWires;
+}
+
+/** Wire styles: curves (the engines' own), right angles (Manhattan), or 45° (Subway). */
+export type WireStyle = "curve" | "manhattan" | "subway";
+
+/** The graph editors' wire settings (Electronic Nodes' main options). */
+export interface GraphWires {
+  style?: WireStyle;
+  /** Execution wires (the white ones) can have their own style. */
+  exec?: WireStyle;
+  /** Corner radius in graph units (0 = sharp). */
+  radius?: number;
+  /** Spread parallel wires so they do not sit on each other (ribbon). */
+  ribbon?: boolean;
+  /** Moving dots along the chosen node's wires, showing the direction of flow. */
+  bubbles?: boolean;
 }
 
 /** What the start screen can show under the message box. */
@@ -124,6 +142,20 @@ export function cleanAppearance(input: unknown): Appearance {
   if (r !== undefined) out.radius = r;
   if (o.density === "compact" || o.density === "normal" || o.density === "roomy") out.density = o.density;
   if (o.iconStyle === "line" || o.iconStyle === "emoji") out.iconStyle = o.iconStyle;
+  const w = o.wires as Record<string, unknown> | undefined;
+  if (w && typeof w === "object") {
+    const style = (v: unknown): WireStyle | undefined => (v === "curve" || v === "manhattan" || v === "subway" ? v : undefined);
+    const wires: GraphWires = {};
+    const s = style(w.style);
+    if (s) wires.style = s;
+    const e = style(w.exec);
+    if (e) wires.exec = e;
+    const rr = num(w.radius, 0, 40);
+    if (rr !== undefined) wires.radius = rr;
+    if (typeof w.ribbon === "boolean") wires.ribbon = w.ribbon;
+    if (typeof w.bubbles === "boolean") wires.bubbles = w.bubbles;
+    if (Object.keys(wires).length) out.wires = wires;
+  }
   const bg = o.background as Record<string, unknown> | undefined;
   if (bg && typeof bg === "object") {
     if (bg.kind === "plain") out.background = { kind: "plain" };

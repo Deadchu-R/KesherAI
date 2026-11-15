@@ -16,6 +16,9 @@ const KNOT = 16;
 /** One node the "All Actions" menu offers. */
 export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
 import { wireFits } from "./wire-fits";
+import { ribbonOffset, wireLook, wirePath } from "./wire-style";
+import { saveAppearance, useAppearance } from "./appearance";
+import type { WireStyle } from "@kesher/shared";
 import { nearest } from "./gamepad";
 
 type Op = Record<string, unknown>;
@@ -171,6 +174,12 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const clip = useRef("");
   /** The node under the mouse: its wires are emphasized, as in Unreal. */
   const [hot, setHot] = useState<string | undefined>();
+  // Wires drawn like the Electronic Nodes plugin (right angles, 45°, ribbon, flow bubbles): Settings in the toolbar.
+  const look = useAppearance();
+  const wl = wireLook(look.wires);
+  const [wireMenu, setWireMenu] = useState(false);
+  const setWires2 = (patch: Partial<typeof wl>) => void saveAppearance({ ...look, wires: { ...look.wires, ...patch } }).catch((e: Error) => toast(e.message));
+  const calm = look.motion === "none" || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
   /** Where the mouse is (Space opens the node search there). */
   const hover = useRef<{ x: number; y: number } | null>(null);
   const [find, setFind] = useState<{ q: string; i: number } | null>(null);
@@ -937,13 +946,15 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     setWires(new Set());
   };
   for (const b of boxes) {
+    // Ribbon: each wired output of a node gets its own lane for the wire's middle part.
+    const wired = b.outs.filter((p) => p.links?.length);
     for (const p of b.outs) {
       const a = pinAt.get(`${b.n.id}:${p.name}`)!;
+      const lane = wl.ribbon ? ribbonOffset(wired.indexOf(p), wired.length) : 0;
       for (const l of p.links ?? []) {
         const z = pinAt.get(l);
         if (!z) continue;
-        const dx = Math.max(40, Math.abs(z.x - a.x) / 2);
-        links.push({ d: `M${a.x},${a.y} C${a.x + dx},${a.y} ${z.x - dx},${z.y} ${z.x},${z.y}`, color: pinColor(p.type), from: `${b.n.id}:${p.name}`, to: l, mx: (a.x + z.x) / 2, my: (a.y + z.y) / 2 });
+        links.push({ d: wirePath(a, z, p.type === "exec" ? wl.exec : wl.style, wl.radius, lane), color: pinColor(p.type), from: `${b.n.id}:${p.name}`, to: l, mx: (a.x + z.x) / 2, my: (a.y + z.y) / 2 });
       }
     }
   }
@@ -1047,6 +1058,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
               <g key={i}>
                 {chosen && <path d={l.d} stroke="#ffd166" strokeWidth={7} fill="none" opacity={0.55} />}
                 <path d={l.d} stroke={l.color} strokeWidth={lit || chosen ? 3.5 : 2} fill="none" opacity={hot && !lit && !chosen ? 0.45 : 0.9} />
+                {/* Bubbles (Electronic Nodes): dots moving along the chosen nodes' and wires' wires, out to in. */}
+                {wl.bubbles && !calm && (chosen || [...selected].some((id) => l.from.startsWith(`${id}:`) || l.to.startsWith(`${id}:`))) &&
+                  [0, 1, 2].map((k) => (
+                    <circle key={k} r={3} fill={l.color} pointerEvents="none">
+                      <animateMotion dur="1.8s" begin={`${-k * 0.6}s`} repeatCount="indefinite" path={l.d} />
+                    </circle>
+                  ))}
                 {/* A wider, invisible line to click (choose) or double-click (a reroute node): 14 screen pixels at any zoom. */}
                 <path d={l.d} stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" fill="none" data-wire={i} style={{ cursor: editable ? "pointer" : undefined }} />
               </g>
@@ -1100,8 +1118,34 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
             {(selected.size > 0 || wires.size > 0) && <button type="button" onClick={removeChosen} aria-label={L("מחיקת הנבחרים (Delete)", "Delete selected (Delete)")} title={L("מחיקת הנבחרים (Delete)", "Delete selected (Delete)")}>🗑</button>}
           </>
         )}
+        <button type="button" className={wireMenu ? "on" : ""} aria-expanded={wireMenu} onClick={() => setWireMenu(!wireMenu)} aria-label={L("צורת החוטים", "Wire style")} title={L("צורת החוטים", "Wire style")}>
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 4h5v8h9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+        </button>
         <span className="muted small">{busy ? "…" : `${Math.round(view.k * 100)}%`}</span>
       </div>
+      {wireMenu && (
+        <div className="bp-menu bp-wire-menu" role="dialog" aria-label={L("צורת החוטים", "Wire style")} onPointerDown={(e) => e.stopPropagation()}>
+          {(["style", "exec"] as const).map((key) => (
+            <div key={key} className="stack" style={{ gap: 4 }}>
+              <strong className="small">{key === "style" ? L("חוטים", "Wires") : L("חוטי ביצוע (לבנים)", "Execution wires (white)")}</strong>
+              <div className="seg" role="radiogroup">
+                {([["curve", L("עקומות", "Curves")], ["manhattan", L("ישרים", "Right angles")], ["subway", "45°"]] as Array<[WireStyle, string]>).map(([v, label]) => (
+                  <button key={v} type="button" role="radio" aria-checked={wl[key] === v} className={wl[key] === v ? "on" : ""} onClick={() => setWires2(key === "style" && look.wires?.exec === undefined ? { style: v } : { [key]: v })}>{label}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {wl.style !== "curve" || wl.exec !== "curve" ? (
+            <label className="row small" style={{ gap: 8 }}>
+              {L("עיגול פינות", "Round corners")}
+              <input type="range" min={0} max={30} value={wl.radius} onChange={(e) => setWires2({ radius: Number(e.target.value) })} aria-label={L("עיגול פינות", "Round corners")} />
+            </label>
+          ) : null}
+          <label className="check small"><input type="checkbox" checked={wl.ribbon} onChange={(e) => setWires2({ ribbon: e.target.checked })} />{L("לפרוש חוטים מקבילים (שלא יעלו זה על זה)", "Spread parallel wires (so they do not overlap)")}</label>
+          <label className="check small"><input type="checkbox" checked={wl.bubbles} onChange={(e) => setWires2({ bubbles: e.target.checked })} />{L("נקודות זורמות על החוטים של מה שנבחר", "Flowing dots on the chosen node's wires")}</label>
+          <p className="muted small">{L("כמו התוסף Electronic Nodes. נשמר לכל הגרפים, גם בטלפון.", "Like the Electronic Nodes plugin. Saved for every graph, on the phone too.")}</p>
+        </div>
+      )}
       {find && (
         <div className="bp-find row">
           <input

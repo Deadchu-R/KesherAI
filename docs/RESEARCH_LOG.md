@@ -1231,3 +1231,17 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - **Stopped at:** Hebrew singing quality is the models' limit, not KesherAI's; revisit when a model with real Hebrew
   training appears (check ACE-Step releases and Lyria's API). Lyrics guidance in make_music stays (it helps any
   language).
+
+## Graph wires like Electronic Nodes (2026-11-15)
+
+- **Electronic Nodes (Unreal plugin, hugoattal, 3.24):** wire styles Default (bezier), Manhattan (right angles) and
+  Subway (45°); a separate style for execution wires; rounded corners; a horizontal lead out of each pin; wire
+  alignment left/right; ribbon (overlapping wires offset, not split when from the same node); bubbles (moving dots
+  showing flow, on selection, with speed/size); per-graph activation and a master toggle shortcut.
+- **UltraWire (StraySpark, UE 5.7):** the same styles plus chamfered corners, A* routing around node bodies,
+  crossing markers, neon glow, an execution heatmap from the profiler, presets, per-graph profiles, a minimap.
+- **Built (0.6.238):** `wire-style.ts` (curve / right angles / 45°, rounded corners, lead, behind-routing, ribbon
+  lanes per wired output), bubbles on the chosen node's wires (off with reduced motion), a separate style for exec
+  wires; a toolbar menu in every graph (Unreal Blueprints, Unity graphs, C# as nodes), saved in the look so the phone
+  matches. Tests in `wire-style.test.ts`.
+- **Stopped at / later:** routing around node bodies (UltraWire's A*), crossing markers, a minimap.

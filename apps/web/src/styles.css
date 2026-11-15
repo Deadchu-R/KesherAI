@@ -2361,3 +2361,10 @@ html.handheld .palette-list button { min-height: 44px; }
 .side-routines > summary::-webkit-details-marker { display: none; }
 .side-routines > summary span::before { content: "▸ "; }
 .side-routines[open] > summary span::before { content: "▾ "; }
+
+/* The graph's wire style menu (Electronic Nodes-like), under the toolbar. */
+.bp-wire-menu { inset-block-start: 56px; inset-inline-end: 8px; gap: 10px; padding: 12px; }
+.bp-wire-menu .seg { display: flex; gap: 4px; }
+.bp-wire-menu .seg button { flex: 1; height: 32px; padding: 0 8px; font-size: 13px; }
+.bp-wire-menu input[type="range"] { flex: 1; }
+.ue-zoom button.on { color: var(--accent); }
