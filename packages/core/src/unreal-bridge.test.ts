@@ -217,3 +217,15 @@ test("Close from KesherAI: the choice (save or not) goes to the editor, the answ
     await server.app.close();
   }
 });
+
+test("the Unreal plugin reports the same version everywhere (its .uplugin, its C++ hello, and KesherAI's latest)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { BRIDGE_VERSION } = await import("./unreal-bridge.js");
+  const root = join(import.meta.dirname, "..", "..", "..", "integrations", "unreal", "KesherAIBridge");
+  const uplugin = JSON.parse(await readFile(join(root, "KesherAIBridge.uplugin"), "utf8")) as { VersionName: string };
+  const cpp = await readFile(join(root, "Source", "KesherAIBridge", "Private", "KesherAIBridgeModule.cpp"), "utf8");
+  // Found on the PC: 0.1.18 was installed but the editor said 0.1.17 (the C++ constant was not bumped), so KesherAI
+  // kept offering the update it had just made.
+  assert.equal(uplugin.VersionName, BRIDGE_VERSION);
+  assert.equal(/BridgeVersion = TEXT\("([^"]+)"\)/.exec(cpp)?.[1], BRIDGE_VERSION);
+});
