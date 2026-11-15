@@ -1287,3 +1287,17 @@ Stopped at: building (store and public page first, then the chat menu and the se
   before, so no breaker is needed. Commands on the always-ask list never reach it. Each yes is a note in the chat.
   Off by default; turned on only from the computer (Settings → Privacy); off from anywhere; not settable from a chat.
 - **Stopped at:** done. Possible later: a second, smaller model as the reviewer when F19's "beside" model is loaded.
+
+## A model on the phone itself, F1 (2026-11-15, evening)
+- **PocketPal AI** (open source): React Native, llama.cpp through `llama.rn`; any GGUF from Hugging Face, Q4_K_M
+  advised for phones; per-model settings; benchmark screen. The common path for "any model" apps.
+- **Google LiteRT-LM** (Google AI Edge, used by AI Edge Gallery): Kotlin/C++, `.litertlm` models from Hugging Face's
+  `litert-community`; Gemma 4 E2B about 52 tokens/s on a Galaxy S26 Ultra GPU, NPU on Android; fast but few models.
+- **For our app (Capacitor):** `llama-cpp-capacitor` (MIT): GGUF, streaming completion, embeddings, Android
+  arm64/x86 `.so`; young package, no tested-model list. `@capgo/capacitor-llm`: LiteRT/MediaPipe and Gemini Nano
+  where available, with download and progress events.
+- **Recommendation:** llama.cpp (GGUF), the same model files as the computer, so a model can be copied from the PC
+  over the device link instead of downloaded again; LiteRT-LM later as a "fast Gemma" option. Phone side: a small
+  model (1–4B, Q4) chosen by the phone's RAM; the computer/phone switch's "on the phone" side turns on when one is loaded.
+- **Needs Roee:** a new dependency (the plugin, native code in the Android app) and a GitHub build of the APK.
+- **Stopped at:** research done, waiting for his yes on the dependency.
