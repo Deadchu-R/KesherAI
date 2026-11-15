@@ -20,7 +20,7 @@ import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
 import { branding, cleanAppearance, features } from "@kesher/shared";
-import { dataPaths, loadConfig, saveConfig } from "./config.js";
+import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
 import { LlamaEngine, findMmproj } from "./llamacpp.js";
@@ -110,7 +110,6 @@ import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
 import { Training } from "./training.js";
 import { ChatTrainer } from "./chat-trainer.js";
-import { applyPendingReset } from "./reset.js";
 import { DeviceKeys, type DeviceKey } from "./device-keys.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
@@ -157,6 +156,7 @@ import { googleRoutes } from "./routes/google.js";
 import { onedriveRoutes } from "./routes/onedrive.js";
 import { loadModel } from "./routes/engine.js";
 import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
+import { openDataDir } from "./server/data-dir.js";
 
 export { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 
@@ -177,24 +177,10 @@ export { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/o
  * @returns The server, not yet listening.
  */
 export async function createKesherServer(options: KesherServerOptions = {}): Promise<KesherServer> {
-  const paths = dataPaths(options.dataDir);
-  // "Start over" (Settings → General): the old data folder moves aside before anything uses it.
-  const resetBackup = await applyPendingReset(paths.root).catch(() => undefined);
-  const config = await loadConfig(paths);
-  if (config.modelsDir) {
-    paths.models = config.modelsDir;
-    await mkdir(paths.models, { recursive: true }).catch(() => undefined);
-  }
-  if (options.port !== undefined) config.port = options.port;
+  const { paths, config, resetBackup } = await openDataDir(options);
   const worker = options.worker;
   /** The server itself, once made: routines start self-work through its route. */
   const injectRef: { app?: { inject: (o: { method: "POST"; url: string; payload: unknown; remoteAddress: string; headers: Record<string, string> }) => Promise<{ statusCode: number; json: () => unknown }> } } = {};
-  if (worker) {
-    // The worker only works for the main app on this computer: no remote access, no device sharing.
-    config.remote.enabled = false;
-    config.devices.share = false;
-    process.env.KESHER_NO_BEACON = "1";
-  }
 
   const registry = new ProviderRegistry();
   const downloads = new DownloadManager();

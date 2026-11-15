@@ -1122,7 +1122,8 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
   constructions) needs a context object passed to each area; next steps: remote and device keys, then self-work.
 - 2026-11-15 morning (Roee approved continuing): B1 done — `server/options.ts` holds `KesherServerOptions`,
   `KesherServer` and `WEB_CSP` (re-exported from server.ts, so no other file changed); server.ts 1,279 → 1,205.
-  Stopped at: B2 (`server/data-dir.ts`: reading the config, "start over", the paths) is next.
+  B2 done too: `server/data-dir.ts` (`openDataDir`: "start over", the config, the paths, worker mode); 1,191 lines.
+  Stopped at: B3 (`server/build-engines.ts`: llama.cpp, the image engine, ComfyUI, the guard) is next.
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
