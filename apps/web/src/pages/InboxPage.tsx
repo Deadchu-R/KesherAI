@@ -225,7 +225,7 @@ export function InboxPage({ tab: first }: { tab?: InboxTab }) {
         <p className="muted">{L("מה שמחכה לאישור שלך מכל שיחה ומהעבודה העצמית, ההתראות האחרונות, והמסך של המחשב כשסוכן משתמש בו.", "What waits for your approval from every chat and self-work, the latest notifications, and the computer's screen while an agent uses it.")}</p>
       </div>
       <nav className="tabs" role="tablist" aria-label={L("תיבת דואר", "Inbox")}>
-        {([["waiting", L("מחכה לך", "Waiting for you"), box.approvals.length], ["notes", L("הודעות", "Notifications"), box.notes.filter((n) => n.at > seen && !n.resolved).length], ["screen", L("מסך המחשב", "The computer's screen"), 0]] as const).map(([id, label, n]) => (
+        {([["waiting", L("מחכה לך", "Waiting for you"), box.approvals.length], ["notes", L("הודעות", "Notifications"), 0], ["screen", L("מסך המחשב", "The computer's screen"), 0]] as const).map(([id, label, n]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
             {label}{n > 0 && <span className="tab-count">{n}</span>}
           </button>

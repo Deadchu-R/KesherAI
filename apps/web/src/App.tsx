@@ -149,6 +149,7 @@ function Home() {
           <PromptTextarea
             rows={3}
             autoFocus
+            at={{}}
             value={text}
             placeholder={t("homePlaceholder")}
             aria-label={t("messagePlaceholder")}

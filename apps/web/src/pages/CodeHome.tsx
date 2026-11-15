@@ -143,6 +143,7 @@ export function CodeHome() {
           <PromptTextarea
             rows={3}
             autoFocus
+            at={{}}
             value={text}
             placeholder={L("תארו מה לכתוב, לתקן או לבדוק בקוד…", "Describe what to write, fix or check in the code…")}
             aria-label={L("משימת קוד", "Code task")}

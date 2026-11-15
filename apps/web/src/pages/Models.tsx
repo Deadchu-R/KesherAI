@@ -354,7 +354,7 @@ export function ModelsPage() {
   // dictation and reading aloud, and the rarely used kinds sit under "More". `tab` stays the category the page
   // works with; a group with two kinds shows a second, smaller choice.
   const groups: Array<{ id: string; label: string; kinds: string[] }> = [
-    { id: "chat", label: categoryLabel("chat"), kinds: ["chat"] },
+    { id: "chat", label: L("צ׳אט", "Chat"), kinds: ["chat"] },
     { id: "code", label: L("קוד", "Code"), kinds: ["code"] },
     { id: "image", label: categoryLabel("image"), kinds: ["image"] },
     { id: "video", label: categoryLabel("video"), kinds: ["video"] },

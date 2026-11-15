@@ -2405,7 +2405,8 @@ html.handheld .palette-list button { min-height: 44px; }
 /* The @ menu (redesign 2026-11): grouped lines, the keys at the bottom. */
 .at-menu { gap: 0; }
 .at-item { display: flex; flex-direction: column; }
-.at-item button { width: 100%; min-height: 40px; align-items: center; }
+.at-item button { width: 100%; min-height: 40px; align-items: center; justify-content: flex-start; text-align: start; }
+.at-item button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .at-group { padding: 8px 10px 2px; }
 .at-keys { padding: 8px 10px 4px; border-top: 1px solid var(--border); margin-top: 4px; }
 

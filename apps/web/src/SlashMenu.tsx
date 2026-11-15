@@ -101,7 +101,7 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
       const text = (page?.content ?? "").slice(0, 6000);
       onValue(`${without()}[${L("דף", "Page")}: ${pg.title ?? pg.name ?? pg.id}]\n${text}${(page?.content?.length ?? 0) > 6000 ? "\n…" : ""}\n`);
     } })),
-  ].filter((x) => !atTyped || x.label.toLowerCase().includes(atTyped)).slice(0, 10);
+  ].filter((x) => !atTyped || x.label.toLowerCase().includes(atTyped)).filter((x, i, all) => all.slice(0, i).filter((y) => y.group === x.group).length < 4);
   const open = typed !== undefined && !closed && (matches.length > 0 || prompts.length === 0);
   const atOpen = atTyped !== undefined && !closed;
   useEffect(() => {
