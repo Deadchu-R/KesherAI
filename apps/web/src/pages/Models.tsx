@@ -435,6 +435,7 @@ export function ModelsPage() {
                     {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <FitButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
                     {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <CalibrateButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
                     {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && loadButton(f)}
+                    {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <BesideButton path={f.path} />}
                   </div>
                 ))}
               </div>
@@ -481,24 +482,68 @@ export function ModelsPage() {
  */
 function LoadedNow({ local }: { local: LocalFile[] }) {
   const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const [beside, setBeside] = useState<{ running: boolean; modelPath?: string; modelId?: string } | null>(null);
   useEffect(() => {
-    const tick = () => void api<EngineStatus>("/api/engines/llamacpp").then(setEngine, () => undefined);
+    const tick = () => {
+      void api<EngineStatus>("/api/engines/llamacpp").then(setEngine, () => undefined);
+      void api<{ running: boolean; modelPath?: string; modelId?: string }>("/api/engines/beside").then(setBeside, () => undefined);
+    };
     tick();
+    addEventListener(BESIDE_EVENT, tick);
     const id = setInterval(tick, 10_000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      removeEventListener(BESIDE_EVENT, tick);
+    };
   }, []);
-  if (!engine?.running || !engine.modelPath) return null;
-  const name = engine.modelPath.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "");
-  const measured = local.find((f) => f.path === engine.modelPath)?.measured;
+  const rows: Array<{ path: string; label: string; stop: () => void }> = [];
+  if (engine?.running && engine.modelPath) rows.push({ path: engine.modelPath, label: L("ראשי", "Main"), stop: () => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine, (e: Error) => toast(e.message)) });
+  if (beside?.running && beside.modelPath) rows.push({ path: beside.modelPath, label: L("לצד הראשי", "Beside the main one"), stop: () => void api<{ running: boolean }>("/api/engines/beside/stop", { method: "POST" }).then(setBeside, (e: Error) => toast(e.message)) });
+  if (!rows.length) return null;
   return (
-    <section className="loaded-now" aria-label={L("טעון עכשיו", "Loaded now")}>
-      <span className="loaded-dot" aria-hidden="true" />
-      <div className="grow">
-        <strong dir="ltr">{name}</strong>
-        <span className="muted small">{L("טעון עכשיו בכרטיס המסך", "Loaded in the graphics card now")}{measured ? ` · ${Math.round(measured.tps)} ${L("טוקנים/שנ׳", "tokens/s")}` : ""}</span>
-      </div>
-      <button type="button" className="small" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine, (e: Error) => toast(e.message))}>{L("פרוק", "Unload")}</button>
+    <section className="loaded-now-list" aria-label={L("טעון עכשיו", "Loaded now")}>
+      {rows.map((r) => {
+        const measured = local.find((f) => f.path === r.path)?.measured;
+        return (
+          <div key={r.path} className="loaded-now">
+            <span className="loaded-dot" aria-hidden="true" />
+            <div className="grow">
+              <strong dir="ltr">{r.path.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "")}</strong>
+              <span className="muted small">{r.label}{measured ? ` · ${Math.round(measured.tps)} ${L("טוקנים/שנ׳", "tokens/s")}` : ""}</span>
+            </div>
+            <button type="button" className="small" onClick={r.stop}>{L("פרוק", "Unload")}</button>
+          </div>
+        );
+      })}
     </section>
+  );
+}
+
+/** Fired when a model is loaded beside the main one, so "Loaded now" shows it at once. */
+const BESIDE_EVENT = "kesher:beside";
+
+/**
+ * "Load beside": a second model next to the main one (a small fast one beside a big one; audit F19). It shows in
+ * every chat's model list as "beside".
+ *
+ * @param p.path - The GGUF file.
+ */
+function BesideButton({ path }: { path: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      title={L("טוען את המודל במנוע שני, לצד המודל הראשי (שניהם בזיכרון; מתאים למודל קטן ומהיר)", "Loads the model in a second engine beside the main one (both stay in memory; best for a small fast model)")}
+      onClick={() => {
+        setBusy(true);
+        void api<{ modelId: string }>("/api/engines/beside/load", { method: "POST", body: { modelPath: path } })
+          .then((r) => { toast(L(`נטען לצד הראשי: ${r.modelId.split("/").pop()}`, `Loaded beside the main one: ${r.modelId.split("/").pop()}`)); dispatchEvent(new Event(BESIDE_EVENT)); }, (e: Error) => toast(e.message))
+          .finally(() => setBusy(false));
+      }}
+    >
+      {busy ? t("loading") : L("טען לצד", "Load beside")}
+    </button>
   );
 }
 

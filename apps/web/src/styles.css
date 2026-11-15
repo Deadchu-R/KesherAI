@@ -2453,3 +2453,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .loaded-now > div { display: flex; flex-direction: column; min-width: 0; }
 .loaded-now strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loaded-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
+.loaded-now-list { display: flex; flex-direction: column; gap: 8px; }

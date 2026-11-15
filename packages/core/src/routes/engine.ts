@@ -12,6 +12,7 @@ import { insideAny, looksLikeGguf, matchRecommended, scanComputer, scanFolder, t
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
 import { BENCH_SET, BENCH_SYSTEM, benchRight } from "../bench-set.js";
+import { SideEngine } from "../side-engine.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -109,6 +110,26 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
  * @param s - Services.
  */
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
+  // A second model beside the main one (audit F19): loaded only when asked, never remembered.
+  const side = new SideEngine({ dir: s.paths.engines, binary: () => s.engine.status().binaryPath, ...(s.config.engines.llamaVersion ? { version: s.config.engines.llamaVersion } : {}), args: s.config.engines.llamaServerArgs, registry: s.registry });
+  app.addHook("onClose", async () => side.stop());
+  app.get("/api/engines/beside", async () => side.status());
+  app.post<{ Body: { modelPath?: string } }>("/api/engines/beside/load", async (req, reply) => {
+    const path = req.body?.modelPath ?? "";
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added can be loaded" });
+    if (!(await looksLikeGguf(path))) return reply.code(400).send({ error: "Only GGUF files load in the engine" });
+    if (s.engine.status().modelPath === path) return reply.code(400).send({ error: "This model is already the main one." });
+    try {
+      return { modelId: await side.load(path) };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+  app.post("/api/engines/beside/stop", async () => {
+    await side.stop();
+    return side.status();
+  });
+
   app.get("/api/engines/llamacpp", async () => ({ ...s.engine.status(), fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, lastModel: s.config.engines.lastModel ? basename(s.config.engines.lastModel) : null }));
 
   /**

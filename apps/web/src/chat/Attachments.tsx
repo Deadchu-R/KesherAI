@@ -67,7 +67,7 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
           {p?.kind === "table" && (
             <>
               {p.sheets.length > 1 && (
-                <div className="seg" role="tablist">
+                <div className="seg-pills" role="tablist">
                   {p.sheets.map((s, i) => <button key={s.name + i} type="button" role="tab" aria-selected={i === sheet} className={i === sheet ? "on" : ""} onClick={() => setSheet(i)} dir="auto">{s.name}</button>)}
                 </div>
               )}
