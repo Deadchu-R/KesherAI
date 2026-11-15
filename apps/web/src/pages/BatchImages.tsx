@@ -87,6 +87,22 @@ export function BatchImagesPage() {
       return [...prev, ...images.slice(0, Math.max(0, room)).map((f) => ({ id: crypto.randomUUID(), name: f.name, src: URL.createObjectURL(f), status: "waiting" as const }))];
     });
   };
+  // A picture sent from the Pictures page (its "Remove background" / "Make larger" under a result).
+  useEffect(() => {
+    const read = (): { assets?: string[]; action?: Action } | null => {
+      try {
+        const v = JSON.parse(sessionStorage.getItem("kesher-batch-in") ?? "null") as { assets?: string[]; action?: Action } | null;
+        sessionStorage.removeItem("kesher-batch-in");
+        return v;
+      } catch {
+        return null;
+      }
+    };
+    const sent = read();
+    if (!sent?.assets?.length) return;
+    if (sent.action === "remove-bg" || sent.action === "upscale" || sent.action === "both") setAction(sent.action);
+    setItems(sent.assets.slice(0, MAX).map((id) => ({ id: crypto.randomUUID(), name: `${id}.png`, src: withToken(`/api/assets/${encodeURIComponent(id)}`), status: "waiting" as const })));
+  }, []);
   const update = (id: string, patch: Partial<Item>) => setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   const needsUpscaler = action !== "remove-bg";
 

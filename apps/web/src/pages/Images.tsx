@@ -164,7 +164,12 @@ export function ImagesPage() {
         {results.map((a) => (
           <figure key={a.id} style={{ margin: 0 }}>
             <img src={withToken(`/api/assets/${a.id}`)} alt={String(a.meta?.prompt ?? "")} style={{ width: "100%", borderRadius: 10 }} />
-            <figcaption className="muted">seed {String(a.meta?.seed ?? "")}</figcaption>
+            <figcaption className="row wrap small" style={{ gap: 6, marginTop: 6 }}>
+              <span className="muted grow">seed {String(a.meta?.seed ?? "")}</span>
+              {/* Picture lanes (F4): one press sends this picture to the tool, ready to run. */}
+              <button type="button" className="chip" onClick={() => { try { sessionStorage.setItem("kesher-batch-in", JSON.stringify({ assets: [a.id], action: "remove-bg" })); } catch { /* fine */ } location.hash = "#/batch"; }}>{t("batchRemoveBg")}</button>
+              <button type="button" className="chip" onClick={() => { try { sessionStorage.setItem("kesher-batch-in", JSON.stringify({ assets: [a.id], action: "upscale" })); } catch { /* fine */ } location.hash = "#/batch"; }}>{t("batchUpscale")}</button>
+            </figcaption>
           </figure>
         ))}
       </div>
