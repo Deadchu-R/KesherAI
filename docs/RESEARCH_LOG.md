@@ -1093,3 +1093,12 @@ Stopped at: a timers list on the Routines page (the chat header shows them), and
   the global keys from it and reports a key another program holds; Settings → Keyboard with Change / Off / Default /
   "Everything back", a master switch for the in-app ones. A global key must have Ctrl, Cmd or Alt.
 Stopped at: more in-app shortcuts (new chat, settings) to remap; they are added to SHORTCUTS when made.
+
+## 2026-11-15 (night): Pictures in Knowledge (COMPETITORS fourth review, item 7)
+- Msty Studio 2.9's Context Studio describes pictures and videos by visual analysis, tags them, and reads those first.
+  KesherAI's Knowledge already searches every passage by meaning, but skipped pictures entirely (and Excel/PowerPoint).
+- Built (0.6.210): pictures (png, jpg, webp, up to 8 MB) in a knowledge folder are described once by the chat model
+  when it is local and has its vision file (mmproj), never a cloud model; 12 per pass, waiting while a chat works, the
+  rest ten minutes later; "Picture <file>: <description>" is indexed and found like text, with the file as its source.
+  .xlsx and .pptx are indexed too.
+Stopped at: videos (a few frames each), and showing the picture itself in the search result.

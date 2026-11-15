@@ -83,3 +83,32 @@ test("vectors from an older embedding model are not used against a new model's q
   assert.match(hits[0]!.source, /a\.txt/, "words still find it; the old vectors are left out");
   assert.equal(hits.length, 1);
 });
+
+test("pictures: described once by the local vision model and found by search; they wait while a chat works or without one", async () => {
+  const data = await mkdtemp(join(tmpdir(), "kesher-kb-"));
+  const docs = await mkdtemp(join(tmpdir(), "kesher-docs-"));
+  await writeFile(join(docs, "whiteboard.jpg"), Buffer.from([0xff, 0xd8, 0xff, 1, 2, 3]));
+  await writeFile(join(docs, "plan.md"), "Release plan");
+  let busy = true;
+  let seesPictures = false;
+  const asked: string[] = [];
+  const k = new Knowledge(data, () => undefined, {
+    describe: async () => (seesPictures ? async (_d, mime) => (asked.push(mime), "A whiteboard with the sprint goals: ship the inventory screen by Friday.") : undefined),
+    busy: () => busy,
+  });
+  const base = await k.save({ name: "Team", folders: [docs] });
+  await k.reindex(base.id);
+  assert.equal(asked.length, 0, "a chat is working: the picture waits");
+  busy = false;
+  await k.reindex(base.id);
+  assert.equal(asked.length, 0, "no local vision model: the picture waits");
+  seesPictures = true;
+  await k.reindex(base.id);
+  assert.deepEqual(asked, ["image/jpeg"]);
+  const hit = (await k.search("inventory screen friday"))[0];
+  assert.equal(hit?.source, "whiteboard.jpg");
+  assert.match(hit!.text, /^Picture whiteboard\.jpg: A whiteboard/);
+  await k.reindex(base.id);
+  assert.equal(asked.length, 1, "described once (until the file changes)");
+  k.close();
+});

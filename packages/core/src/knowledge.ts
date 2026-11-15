@@ -58,7 +58,13 @@ export interface KnowledgeHit {
   score: number;
 }
 
-const DOC_EXT = new Set([".pdf", ".docx", ".md", ".markdown", ".txt", ".csv", ".html", ".htm", ".json", ".rtf", ".cs", ".ts", ".js", ".py", ".cpp", ".h", ".hpp", ".rst", ".mdx", ".gd", ".java", ".go", ".rs", ".yaml", ".yml", ".xml", ".ini", ".log"]);
+/** Pictures, described by the local vision model so they can be found (Msty Studio 2.9 describes its library's pictures too). */
+const PIC_EXT: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
+/** Pictures described per pass (each is a call to the model; the rest come in the next pass). */
+const PICTURES_PER_PASS = 12;
+const MAX_PICTURE = 8 * 1024 * 1024;
+
+const DOC_EXT = new Set([".pdf", ".docx", ".xlsx", ".pptx", ".md", ".markdown", ".txt", ".csv", ".html", ".htm", ".json", ".rtf", ".cs", ".ts", ".js", ".py", ".cpp", ".h", ".hpp", ".rst", ".mdx", ".gd", ".java", ".go", ".rs", ".yaml", ".yml", ".xml", ".ini", ".log"]);
 const SKIP_DIRS = new Set(["node_modules", ".git", "Library", "Temp", "obj", "bin", "Binaries", "Intermediate", "DerivedDataCache", "Saved", "dist", "build", ".venv", "venv", "__pycache__"]);
 const MAX_FILE = 60 * 1024 * 1024;
 const HEB_PREFIX = /^[והבלמשכ]/;
@@ -190,9 +196,19 @@ export class Knowledge {
   private loaded?: Promise<void>;
 
   /** @param dir - The knowledge folder in KesherAI's data. */
+  /** Pictures still waiting for a description (a later pass takes them). */
+  private later = new Map<string, NodeJS.Timeout>();
+
+  /**
+   * @param dir - The knowledge folder in KesherAI's data.
+   * @param embedder - Search by meaning, when a model for it is set.
+   * @param seeing - Describes a picture with a vision model on this computer, when one is loaded (never a cloud model:
+   *   the user's pictures stay here), and whether a chat is working now (pictures then wait, so chats stay fast).
+   */
   constructor(
     private readonly dir: string,
     private readonly embedder: () => Embedder | undefined = () => undefined,
+    private readonly seeing: { describe?: () => Promise<((data: Buffer, mime: string) => Promise<string>) | undefined>; busy?: () => boolean } = {},
   ) {}
 
   /** Reads the bases and starts keeping them up to date (once). */
@@ -309,6 +325,9 @@ export class Knowledge {
       if (!b) return;
       const ix = this.indexes.get(id) ?? { files: {} };
       const seen = new Set<string>();
+      let describe: ((data: Buffer, mime: string) => Promise<string>) | null | undefined;
+      let described = 0;
+      let pending = 0;
       try {
         for (const folder of b.folders) {
           for await (const file of walk(folder)) {
@@ -318,6 +337,27 @@ export class Knowledge {
             if (!st || st.size > MAX_FILE) continue;
             const old = ix.files[key];
             if (old && old.mtime === st.mtimeMs && old.size === st.size) continue;
+            const mime = PIC_EXT[extname(file).toLowerCase()];
+            if (mime) {
+              // A picture: described once by the local vision model, then searched like text. Without one, or while a
+              // chat works, or past this pass's share, it waits (not recorded, so a later pass takes it).
+              if (st.size > MAX_PICTURE) continue;
+              if (described >= PICTURES_PER_PASS || this.seeing.busy?.()) {
+                pending++;
+                continue;
+              }
+              describe ??= (await this.seeing.describe?.().catch(() => undefined)) ?? null;
+              if (!describe) continue;
+              try {
+                const text = (await describe(await readFile(file), mime)).trim();
+                described++;
+                const rel = relative(folder, file) || file;
+                if (text) ix.files[key] = { mtime: st.mtimeMs, size: st.size, passages: passagesOf(`Picture ${rel}: ${text}`).map((t) => ({ source: rel, page: 1, text: t })) };
+              } catch {
+                pending++;
+              }
+              continue;
+            }
             try {
               const doc = await documentText(await readFile(file), file);
               const rel = relative(folder, file) || file;
@@ -359,6 +399,13 @@ export class Knowledge {
         }
         ix.indexedAt = new Date().toISOString();
         delete ix.error;
+        // Pictures left for later: another pass in ten minutes.
+        clearTimeout(this.later.get(id));
+        if (pending) {
+          const t = setTimeout(() => void this.reindex(id).catch(() => undefined), 10 * 60_000);
+          t.unref?.();
+          this.later.set(id, t);
+        }
       } catch (e) {
         ix.error = (e as Error).message;
       }
@@ -443,7 +490,7 @@ async function* walk(dir: string, depth = 0): AsyncGenerator<string> {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
       if (!SKIP_DIRS.has(e.name)) yield* walk(full, depth + 1);
-    } else if (e.isFile() && DOC_EXT.has(extname(e.name).toLowerCase())) yield full;
+    } else if (e.isFile() && (DOC_EXT.has(extname(e.name).toLowerCase()) || PIC_EXT[extname(e.name).toLowerCase()])) yield full;
   }
 }
 

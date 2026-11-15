@@ -24,7 +24,7 @@ import { branding, cleanAppearance, features } from "@kesher/shared";
 import { dataPaths, loadConfig, saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
-import { LlamaEngine } from "./llamacpp.js";
+import { LlamaEngine, findMmproj } from "./llamacpp.js";
 import { Library } from "./library.js";
 import { ConversationManager, modelTurnFor, onModelSpeed } from "./conversations.js";
 import { Speeds } from "./speeds.js";
@@ -375,7 +375,27 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Assigned below, once the engine exists; the knowledge bases ask for it when they search.
   // eslint-disable-next-line prefer-const
   let semantic: Semantic | undefined;
-  const knowledge = new Knowledge(join(paths.root, "knowledge"), () => semantic?.embedder());
+  // Set once the chats exist (below); until then nothing is answering.
+  let chatsBusy: () => boolean = () => false;
+  // Pictures in a knowledge folder: described by the chat model when it is local and sees pictures (its mmproj file),
+  // never sent to a cloud model; they wait while a chat is working.
+  const knowledge = new Knowledge(join(paths.root, "knowledge"), () => semantic?.embedder(), {
+    describe: async () => {
+      const st = engine.status();
+      const chat = config.activeModels.chat ?? "";
+      if (!st.running || !st.modelPath || !chat.startsWith("llamacpp/") || !(await findMmproj(st.modelPath))) return undefined;
+      const turn = modelTurnFor(registry, chat);
+      return async (data, mime) =>
+        (
+          await turn(
+            { messages: [{ role: "user", content: "Describe this picture so it can be found by searching later: what it shows, any text in it (word for word), people, objects, the place, and its kind (photo, screenshot, diagram, receipt…). Plain sentences, at most 120 words.", images: [{ mimeType: mime, data: data.toString("base64") }] }], tools: [] },
+            AbortSignal.timeout(180_000),
+            () => undefined,
+          )
+        ).text;
+    },
+    busy: () => chatsBusy(),
+  });
   void knowledge.load();
   // The library store: documentation downloaded once, searched offline as knowledge bases. Unreal's API comes
   // from the installed engine's own headers (the UObject classes and Core), with no download.
@@ -894,6 +914,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       }
     },
   };
+  chatsBusy = () => Object.values(services.conversations.activity()).includes("running");
   stopConversation = (id) => services.conversations.stop(id);
   // Self-work: KesherAI works on a git project by itself, on its own branch, item by item.
   let workerUpgrade = false;
