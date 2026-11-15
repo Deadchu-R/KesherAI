@@ -230,13 +230,62 @@ export function describeCanvas(doc: CanvasDoc): string {
   return lines.length ? `Canvas "${doc.title}" (${lines.length} items):\n${lines.join("\n")}` : `Canvas "${doc.title}" is empty.`;
 }
 
-/** Where the next shapes go: rows of four under everything already there. */
-function nextSpots(doc: CanvasDoc, count: number): Array<{ x: number; y: number }> {
+/** The bottom of everything already on the canvas (new shapes go under it). */
+function bottomOf(doc: CanvasDoc): number {
   let bottom = -Infinity;
   for (const e of doc.elements) if (!e.isDeleted && e.type !== "arrow") bottom = Math.max(bottom, (e.y ?? 0) + (e.height ?? 0));
   for (const p of doc.pending) if (p.type !== "arrow") bottom = Math.max(bottom, p.y + (p.height ?? 100));
-  const top = Number.isFinite(bottom) ? bottom + 80 : 0;
-  return Array.from({ length: count }, (_, i) => ({ x: (i % 4) * 280, y: top + Math.floor(i / 4) * 180 }));
+  return Number.isFinite(bottom) ? bottom + 80 : 0;
+}
+
+/**
+ * Places new shapes that came without a position as a left-to-right flowchart: a shape an arrow points to goes one
+ * column after the shape it comes from (the longest path decides), shapes in a column one under another. Shapes with
+ * no arrows among the new ones form the first column. Everything goes under what is already on the canvas.
+ *
+ * @param ids - The new shapes to place, in the order given.
+ * @param arrows - Arrows between shapes (only those between two of `ids` count).
+ * @param top - Where the first row goes.
+ * @returns Each id's position.
+ */
+export function layoutShapes(ids: string[], arrows: Array<{ from: string; to: string }>, top: number): Map<string, { x: number; y: number }> {
+  const set = new Set(ids);
+  const edges = arrows.filter((a) => set.has(a.from) && set.has(a.to) && a.from !== a.to);
+  const level = new Map(ids.map((id) => [id, 0]));
+  // Longest path, at most ids.length rounds (a cycle stops growing there).
+  for (let round = 0; round < ids.length; round++) {
+    let moved = false;
+    for (const e of edges) {
+      const want = level.get(e.from)! + 1;
+      if (want > level.get(e.to)! && want < ids.length) {
+        level.set(e.to, want);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  const rows = new Map<number, number>();
+  const out = new Map<string, { x: number; y: number }>();
+  for (const id of ids) {
+    const col = level.get(id)!;
+    const row = rows.get(col) ?? 0;
+    rows.set(col, row + 1);
+    out.set(id, { x: col * 300, y: top + row * 160 });
+  }
+  return out;
+}
+
+/** Where an arrow between two boxes starts and ends: on their edges, along the line between their centres. */
+function edgePoints(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): { x: number; y: number; dx: number; dy: number } {
+  const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+  const cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  const dx = cb.x - ca.x;
+  const dy = cb.y - ca.y;
+  const exit = (w: number, h: number) => Math.min(dx ? w / 2 / Math.abs(dx) : Infinity, dy ? h / 2 / Math.abs(dy) : Infinity);
+  const gap = 8 / Math.max(1, Math.hypot(dx, dy));
+  const s = Math.min(0.5, exit(a.w, a.h) + gap);
+  const t = Math.max(0.5, 1 - exit(b.w, b.h) - gap);
+  return { x: ca.x + dx * s, y: ca.y + dy * s, dx: dx * (t - s), dy: dy * (t - s) };
 }
 
 const SHAPES = ["rectangle", "ellipse", "diamond", "note", "text"] as const;
@@ -258,7 +307,7 @@ export function canvasTools(store: CanvasStore, convId: string, title: () => str
       spec: {
         name: "canvas",
         description:
-          "This chat's Canvas: a whiteboard the user sees and edits with you (diagrams, flows, architecture, mockups, mind maps). action 'read' lists what is on it (ids, text, arrows). 'add' adds shapes (each with your own short id, a kind: rectangle, ellipse, diamond, note or text, and its text; x and y are optional, KesherAI places them) and arrows (from and to are shape ids, optional text). 'change' sets a shape's text or color. 'delete' removes shapes (and their arrows). Colors: black, red, green, blue, yellow, purple, gray. Read first when the user may have drawn on it.",
+          "This chat's Canvas: a whiteboard the user sees and edits with you (diagrams, flows, architecture, mockups, mind maps). action 'read' lists what is on it (ids, text, arrows). 'add' adds shapes (each with your own short id, a kind: rectangle, ellipse, diamond, note or text, and its text; x and y are optional: KesherAI lays shapes out as a left-to-right flowchart along your arrows) and arrows (from and to are shape ids, optional text). 'change' sets a shape's text or color. 'delete' removes shapes (and their arrows). Colors: black, red, green, blue, yellow, purple, gray. Read first when the user may have drawn on it.",
         inputSchema: {
           type: "object",
           properties: {
@@ -302,35 +351,34 @@ export function canvasTools(store: CanvasStore, convId: string, title: () => str
           if (!shapes.length && !arrows.length) throw new Error("Give shapes or arrows to add.");
           const saved = await store.update(doc.id, (d) => {
             const taken = new Set([...d.elements.filter((e) => !e.isDeleted).map((e) => e.id), ...d.pending.map((p) => p.id)]);
-            const spots = nextSpots(d, shapes.filter((s) => typeof s.x !== "number" || typeof s.y !== "number").length);
-            let spot = 0;
+            const unplaced = shapes.filter((s) => typeof s.x !== "number" || typeof s.y !== "number").map((s) => String(s.id ?? ""));
+            const spots = layoutShapes(unplaced, arrows.map((a) => ({ from: String(a.from ?? ""), to: String(a.to ?? "") })), bottomOf(d));
             for (const s of shapes) {
               const id = String(s.id ?? "");
               if (!ID.test(id)) throw new Error(`Shape id "${id}": use letters, digits, - and _.`);
               if (taken.has(id)) throw new Error(`There is already a shape "${id}": use 'change', or another id.`);
               taken.add(id);
               const kind = SHAPES.includes(String(s.kind) as (typeof SHAPES)[number]) ? (String(s.kind) as (typeof SHAPES)[number]) : "rectangle";
-              const at = typeof s.x === "number" && typeof s.y === "number" ? { x: s.x, y: s.y } : spots[spot++]!;
+              const at = typeof s.x === "number" && typeof s.y === "number" ? { x: s.x, y: s.y } : spots.get(id)!;
               const text = String(s.text ?? "").slice(0, 500);
               const [stroke, fill] = CANVAS_COLORS[String(s.color ?? "")] ?? (kind === "note" ? CANVAS_COLORS.yellow! : [undefined, undefined]);
               const colors = { ...(stroke ? { strokeColor: stroke } : {}), ...(fill && fill !== "transparent" ? { backgroundColor: fill } : {}) };
               if (kind === "text") d.pending.push({ type: "text", id, ...at, text, ...colors });
               else d.pending.push({ type: kind === "note" ? "rectangle" : kind, id, ...at, width: 200, height: 100, label: { text }, ...colors });
             }
-            const where = new Map<string, { x: number; y: number }>();
-            for (const e of d.elements) if (!e.isDeleted) where.set(e.id, { x: e.x ?? 0, y: e.y ?? 0 });
-            for (const p of d.pending) where.set(p.id, { x: p.x, y: p.y });
+            const where = new Map<string, { x: number; y: number; w: number; h: number }>();
+            for (const e of d.elements) if (!e.isDeleted && e.type !== "arrow") where.set(e.id, { x: e.x ?? 0, y: e.y ?? 0, w: e.width ?? 200, h: e.height ?? 100 });
+            for (const p of d.pending) if (p.type !== "arrow") where.set(p.id, { x: p.x, y: p.y, w: p.width ?? 200, h: p.height ?? 40 });
             for (const a of arrows) {
               const from = String(a.from ?? "");
               const to = String(a.to ?? "");
               if (!where.has(from) || !where.has(to)) throw new Error(`An arrow needs two shapes that exist: "${from}" -> "${to}".`);
-              const p = where.get(from)!;
-              const q = where.get(to)!;
+              const line = edgePoints(where.get(from)!, where.get(to)!);
               const id = `${from}-to-${to}`.slice(0, 80).replace(/[^\w-]/g, "_");
               if (taken.has(id)) continue;
               taken.add(id);
               const text = a.text ? String(a.text).slice(0, 200) : "";
-              d.pending.push({ type: "arrow", id, x: p.x + 100, y: p.y + 50, width: q.x - p.x, height: q.y - p.y, start: { id: from }, end: { id: to }, ...(text ? { label: { text } } : {}) });
+              d.pending.push({ type: "arrow", id, x: line.x, y: line.y, width: line.dx, height: line.dy, start: { id: from }, end: { id: to }, ...(text ? { label: { text } } : {}) });
             }
           });
           return { output: `Added. The user sees it on the canvas (it is drawn as soon as the canvas is open).\n${describeCanvas(saved)}` };

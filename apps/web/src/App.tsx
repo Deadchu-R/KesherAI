@@ -60,6 +60,7 @@ const BatchImagesPage = lazy(() => import("./pages/BatchImages").then((m) => ({ 
 const MemoryPage = lazy(() => import("./pages/MemoryPage").then((m) => ({ default: m.MemoryPage })));
 const RemotePage = lazy(() => import("./pages/RemotePage").then((m) => ({ default: m.RemotePage })));
 const HealthPage = lazy(() => import("./pages/HealthPage").then((m) => ({ default: m.HealthPage })));
+const CanvasPage = lazy(() => import("./pages/CanvasPage").then((m) => ({ default: m.CanvasPage })));
 const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
@@ -262,6 +263,7 @@ export function App() {
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;
   else if (hash === "#/health") page = <HealthPage />;
+  else if (hash === "#/canvas" || hash.startsWith("#/canvas/")) page = <CanvasPage key={hash} {...(hash.length > 9 ? { id: hash.slice(9) } : {})} />;
   else if (hash === "#/remote") page = <RemotePage />;
   else if (hash === "#/nodes") page = <NodesPage />;
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;

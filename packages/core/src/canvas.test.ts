@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify from "fastify";
-import { CanvasStore, canvasTools, describeCanvas, type CanvasElement } from "./canvas.js";
+import { CanvasStore, canvasTools, describeCanvas, layoutShapes, type CanvasElement } from "./canvas.js";
 import { canvasRoutes } from "./routes/canvas.js";
 
 const store = async () => new CanvasStore(join(await mkdtemp(join(tmpdir(), "kesher-canvas-")), "canvases"));
@@ -14,12 +14,13 @@ test("the model adds shapes and arrows by id; KesherAI places them; the page dra
   const [tool] = canvasTools(s, "c1", () => "Login flow");
   const out = await tool!.run({ action: "add", shapes: [{ id: "start", text: "Open app" }, { id: "login", kind: "diamond", text: "Signed in?", color: "blue" }, { id: "home", text: "Home" }], arrows: [{ from: "start", to: "login" }, { from: "login", to: "home", text: "yes" }] }, {} as never);
   assert.match(String(out.output), /rectangle start at 0,0: "Open app" \(not drawn yet\)/);
-  assert.match(String(out.output), /diamond login at 280,0/);
+  assert.match(String(out.output), /diamond login at 300,0/);
+  assert.match(String(out.output), /rectangle home at 600,0/);
   assert.match(String(out.output), /arrow login-to-home: login -> home "yes"/);
   const doc = (await s.get("chat-c1"))!;
   assert.equal(doc.title, "Login flow");
   assert.equal(doc.pending.length, 5);
-  assert.deepEqual(doc.pending.find((p) => p.id === "login"), { type: "diamond", id: "login", x: 280, y: 0, width: 200, height: 100, label: { text: "Signed in?" }, strokeColor: "#1971c2", backgroundColor: "#a5d8ff" });
+  assert.deepEqual(doc.pending.find((p) => p.id === "login"), { type: "diamond", id: "login", x: 300, y: 0, width: 200, height: 100, label: { text: "Signed in?" }, strokeColor: "#1971c2", backgroundColor: "#a5d8ff" });
   await assert.rejects(tool!.run({ action: "add", shapes: [{ id: "home", text: "again" }] }, {} as never), /already a shape "home"/);
   await assert.rejects(tool!.run({ action: "add", arrows: [{ from: "home", to: "nowhere" }] }, {} as never), /two shapes that exist/);
 
@@ -82,4 +83,17 @@ test("canvas routes: a chat's canvas, saving with revisions, bad ids, sizes", as
   } finally {
     await app.close();
   }
+});
+
+test("new shapes are laid out as a left-to-right flowchart along the arrows; arrows run edge to edge", async () => {
+  const at = layoutShapes(["a", "b", "c", "d", "lone"], [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "b", to: "d" }, { from: "a", to: "d" }], 40);
+  assert.deepEqual([...at.entries()], [["a", { x: 0, y: 40 }], ["b", { x: 300, y: 40 }], ["c", { x: 600, y: 40 }], ["d", { x: 600, y: 200 }], ["lone", { x: 0, y: 200 }]]);
+  // A cycle does not loop for ever.
+  assert.equal(layoutShapes(["x", "y"], [{ from: "x", to: "y" }, { from: "y", to: "x" }], 0).size, 2);
+  const s = await store();
+  const [tool] = canvasTools(s, "c2", () => "Flow");
+  await tool!.run({ action: "add", shapes: [{ id: "a", text: "A" }, { id: "b", text: "B" }], arrows: [{ from: "a", to: "b" }] }, {} as never);
+  const arrow = (await s.get("chat-c2"))!.pending.find((p) => p.type === "arrow")!;
+  // From A's right edge (x 200) to B's left edge (x 300), with a small gap each side, at the boxes' middle height.
+  assert.deepEqual([Math.round(arrow.x), Math.round(arrow.y), Math.round(arrow.width!), Math.round(arrow.height!)], [208, 50, 84, 0]);
 });

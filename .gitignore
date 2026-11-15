@@ -12,3 +12,6 @@ apps/android/android/
 .kesher-self/
 apps/android/www/google-client.json
 ui-check/
+
+# Copied from @excalidraw/excalidraw at build (scripts/copy-excalidraw-fonts.mjs)
+apps/web/public/excalidraw-assets/

@@ -32,7 +32,7 @@ export function CloseEditor({ kind, onClosed }: { kind: "unreal" | "unity"; onCl
   return (
     <Menu
       trigger={busy ? (busy === "save" ? L("שומר וסוגר…", "Saving and closing…") : L("סוגר…", "Closing…")) : L(`סגור את ${app}`, `Close ${app}`)}
-      triggerClassName="chip"
+      triggerClassName="chip text-chip"
       popClassName="bar-pop"
       disabled={!!busy}
       aria-label={L(`סגירת ${app}`, `Close ${app}`)}

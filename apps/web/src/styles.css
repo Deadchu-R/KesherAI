@@ -2338,3 +2338,15 @@ html.handheld .palette-list button { min-height: 44px; }
 .text-chat { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
 @media (pointer: coarse) { .text-actions button, .text-use button, .text-use .btn { height: 40px; } }
 .game-load { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted, inherit); font-variant-numeric: tabular-nums; }
+
+/* Canvas (pages/CanvasPage.tsx): Excalidraw fills what is left under a thin header. */
+.canvas-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.canvas-head { gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.canvas-title { font-weight: 600; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.canvas-board { flex: 1; min-height: 0; position: relative; }
+.canvas-board .excalidraw { --ui-font: inherit; }
+.canvas-list { list-style: none; padding: 0; margin: 0; }
+.canvas-head > * { flex-shrink: 0; white-space: nowrap; }
+.canvas-head > .canvas-title { flex: 1 1 auto; }
+/* A chip with words (the plain .chip is a 32px icon square). */
+.chip.text-chip { width: auto; min-width: 32px; padding: 0 10px; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text); text-decoration: none; }

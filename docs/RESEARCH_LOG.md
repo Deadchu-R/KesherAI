@@ -1115,6 +1115,22 @@ Stopped at: videos (a few frames each), and showing the picture itself in the se
      diamonds, notes, text, arrows tied to elements; a `canvas` tool (add / move / change / link / delete / read, with
      an automatic layout so a small model need not place things); export SVG, PNG and .excalidraw JSON. No new package.
 Stopped at: the decision (A is faster and fuller; B keeps the app small and matches KesherAI's look).
+- 2026-11-15 morning: Roee chose A (Excalidraw). Technical research:
+  - @excalidraw/excalidraw 0.18.1 (official, MIT, published 2026-04-20; peers React 17–19, we use 19). Fonts load from
+    a CDN by default; KesherAI's CSP allows only its own files, so they are copied into the web build and
+    `window.EXCALIDRAW_ASSET_PATH` points there. Loaded only on the Canvas page (lazy), so the app's start stays small.
+  - Its Element Skeleton API (`convertToExcalidrawElements`): a shape needs only type, x, y; `label.text` puts text in
+    it; an arrow's `start`/`end` take a shape's id and bind to it; `regenerateIds: false` keeps our ids. It runs in the
+    browser, so the server keeps the model's additions as skeletons until the open page turns them into elements.
+  - yctimlin/mcp_excalidraw (the best-known Excalidraw MCP): create/batch_create/update/delete/query elements, group,
+    align, distribute, lock; a canvas server pushes changes to browsers over WebSocket, so the agent's drawing shows
+    live. debu-sinha/excalidraw-mcp-server: batch_create_elements too.
+- Design for KesherAI: a canvas belongs to a chat (and is listed on a Canvas page). One `canvas` tool for the model:
+  read (shapes with their ids, text and links), add (shapes and arrows by id, text; positions optional, KesherAI
+  places them in rows so a small model need not), change (text, colour), delete. The open canvas follows the chat
+  live and saves the user's edits; export PNG, SVG and .excalidraw. Steps: server store + tool + tests; the page;
+  the chat's Canvas button; phone check.
+Stopped at: building step 1 (server store and tool).
 
 ## 2026-11-15 (night): server.ts split, first step (board t49)
 - The training routes (routes/training.ts) and the reset routes (routes/reset.ts) moved out of createKesherServer,
