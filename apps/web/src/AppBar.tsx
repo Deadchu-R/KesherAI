@@ -122,6 +122,18 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {/* Code, like the Claude app's Code side: its own start screen, the folder chosen in the message box (no dialog). */}
           {!simple && <a href="#/code" className={inCode ? "on" : ""} aria-label={t("codeSide")} title={t("codeSide")}>{Icon.code}</a>}
         </div>
+        {/* In the phone app: where the model runs (redesign 2026-11). Here it is the computer; "on the phone" opens the
+            app's own chat with a small model on the phone itself. */}
+        {appHome() && (
+          <div className="bar-seg device-seg" role="group" aria-label={getLocale() === "he" ? "איפה זה רץ" : "Where it runs"}>
+            <a href="#/" className="on" aria-current="true" aria-label={getLocale() === "he" ? "במחשב" : "On the computer"} title={getLocale() === "he" ? "במחשב" : "On the computer"}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></svg>
+            </a>
+            <a href={`${appHome()!.replace(/\/$/, "")}/local.html?chat=1`} aria-label={t("phoneChat")} title={t("phoneChat")}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>
+            </a>
+          </div>
+        )}
       </div>
       <div className="appbar-main">
         <div className="appbar-title">

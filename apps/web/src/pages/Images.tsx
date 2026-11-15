@@ -1,3 +1,4 @@
+import { ImageTabs } from "./ImageTabs";
 import { useEffect, useState } from "react";
 import { HubBrowser } from "../HubBrowser";
 import { MaskEditor, type StartImage } from "../MaskEditor";
@@ -56,6 +57,7 @@ export function ImagesPage() {
   return (
     <div className="page">
       <h1>{t("images")}</h1>
+      <ImageTabs at="#/images" />
       {models.length === 0 && <p className="muted">{t("noModels")}</p>}
       <form
         className="card"

@@ -11,6 +11,7 @@ import { enginePlatform, findLlamaRelease, vulkanIcds, waitForDownload } from ".
 import { insideAny, looksLikeGguf, matchRecommended, scanComputer, scanFolder, type FoundModel } from "../model-scan.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
+import { BENCH_SET, BENCH_SYSTEM, benchRight } from "../bench-set.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -220,7 +221,19 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       const ms = j.timings?.predicted_ms ?? 0;
       if (!n || !ms) throw new Error("The engine did not report its speed.");
       await s.speeds.record(basename(path), n, ms);
-      return { tps: Math.round((n / (ms / 1000)) * 10) / 10, promptTps: Math.round(j.timings?.prompt_per_second ?? 0), tokens: n };
+      // Then the fixed questions (audit F11): how many it gets right, at temperature 0, thinking off.
+      let right = 0;
+      for (const q of BENCH_SET) {
+        const r = await fetch(`${s.engine.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${s.engine.apiKey}` },
+          body: JSON.stringify({ messages: [{ role: "system", content: BENCH_SYSTEM }, { role: "user", content: q.q }], temperature: 0, max_tokens: 96, cache_prompt: false, chat_template_kwargs: { enable_thinking: false } }),
+          signal: AbortSignal.timeout(120_000),
+        }).catch(() => null);
+        const a = r?.ok ? ((await r.json()) as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content ?? "" : "";
+        if (benchRight(a, q)) right++;
+      }
+      return { tps: Math.round((n / (ms / 1000)) * 10) / 10, promptTps: Math.round(j.timings?.prompt_per_second ?? 0), tokens: n, right, of: BENCH_SET.length };
     } catch (err) {
       return reply.code(500).send({ error: (err as Error).message });
     }

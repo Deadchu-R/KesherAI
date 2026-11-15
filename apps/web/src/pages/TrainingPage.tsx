@@ -1,3 +1,4 @@
+import { ImageTabs } from "./ImageTabs";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale } from "../i18n";
@@ -104,6 +105,7 @@ export function TrainingPage() {
   return (
     <div className="page training">
       <h1>{L("אימון מודלים", "Train models")}</h1>
+      <ImageTabs at="#/training" />
       <p className="muted">{L("ללמד מודל משהו שלך, במחשב שלך. כאן רואים מה המחשב הזה יכול לאמן ומה צריך בשביל זה.", "Teach a model something of yours, on your computer. Here you see what this computer can train, and what it needs.")}</p>
 
       <div className="train-kinds">

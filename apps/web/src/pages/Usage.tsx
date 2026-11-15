@@ -3,7 +3,7 @@ import { api } from "../api";
 import { tokens } from "../CoachPanel";
 import { useModels } from "../useModels";
 import { ModelMenu } from "../ModelMenu";
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 
 interface UsageReport {
   totals: { requests: number; calls: number; inputTokens: number; outputTokens: number; wastedTokens: number; failedSteps: number; estimated: boolean };
@@ -39,8 +39,6 @@ export function UsagePage() {
   const all = u ? u.totals.inputTokens + u.totals.outputTokens : 0;
   const models_ = u ? Object.entries(u.byModel).sort((a, b) => b[1] - a[1]) : [];
   const maxModel = Math.max(1, ...models_.map(([, n]) => n));
-  const days = u ? Object.entries(u.byDay).sort((a, b) => a[0].localeCompare(b[0])).slice(-14) : [];
-  const maxDay = Math.max(1, ...days.map(([, n]) => n));
 
   return (
     <div className="page usage">
@@ -71,19 +69,7 @@ export function UsagePage() {
         </section>
       )}
 
-      {days.length > 1 && (
-        <section className="card">
-          <h2>{t("usageByDay")}</h2>
-          <div className="vbars" role="img" aria-label={t("usageByDay")}>
-            {days.map(([d, n]) => (
-              <div key={d} title={`${d}: ${tokens(n)}`}>
-                <span style={{ height: `${Math.max(3, (n / maxDay) * 100)}%` }} />
-                <small dir="ltr">{d.slice(5)}</small>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {Object.keys(u?.byDay ?? {}).length > 0 && <UsageHeatmap byDay={u!.byDay} />}
 
       {u && u.costly.length > 0 && (
         <section className="card">
@@ -136,5 +122,55 @@ export function UsagePage() {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * The last 12 weeks as a grid of days (Open WebUI's and GitHub's usage picture, audit F21): darker = more tokens.
+ * Weeks are columns, days run down; the streak counts the days in a row up to today (or yesterday).
+ *
+ * @param p.byDay - Tokens per day (YYYY-MM-DD).
+ */
+export function UsageHeatmap({ byDay }: { byDay: Record<string, number> }) {
+  const he = getLocale() === "he";
+  const day = (d: Date) => d.toLocaleDateString("sv-SE");
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  // Start on the Sunday 11 weeks before this week's, so the last column is this week.
+  const start = new Date(today);
+  start.setDate(today.getDate() - today.getDay() - 77);
+  const cells: Array<{ d: string; n: number; future: boolean }> = [];
+  for (let i = 0; i < 84; i++) {
+    const at = new Date(start);
+    at.setDate(start.getDate() + i);
+    cells.push({ d: day(at), n: byDay[day(at)] ?? 0, future: at > today });
+  }
+  const max = Math.max(1, ...cells.map((c) => c.n));
+  const level = (n: number) => (n <= 0 ? 0 : Math.min(4, 1 + Math.floor((n / max) * 3.999)));
+  let streak = 0;
+  const back = new Date(today);
+  if (!byDay[day(back)]) back.setDate(back.getDate() - 1);
+  while (byDay[day(back)]) {
+    streak++;
+    back.setDate(back.getDate() - 1);
+  }
+  const active = cells.filter((c) => c.n > 0).length;
+  return (
+    <section className="card stack">
+      <h2>{he ? "12 השבועות האחרונים" : "The last 12 weeks"}</h2>
+      <div className="heat-scroll">
+        <div className="heatmap" role="img" aria-label={he ? `שימוש ב־${active} ימים מתוך 84` : `Used on ${active} of 84 days`}>
+          {cells.map((c) => (
+            <span key={c.d} className={`heat l${c.future ? "x" : level(c.n)}`} title={c.future ? undefined : `${c.d}: ${tokens(c.n)}`} />
+          ))}
+        </div>
+      </div>
+      <div className="row wrap small">
+        <span>{he ? `רצף: ${streak} ימים` : `Streak: ${streak} days`}</span>
+        <span className="muted">{he ? `${active} ימי שימוש` : `${active} days used`}</span>
+        <span className="grow" />
+        <span className="heat-legend muted" aria-hidden="true">{he ? "פחות" : "Less"} <span className="heat l0" /><span className="heat l1" /><span className="heat l2" /><span className="heat l3" /><span className="heat l4" /> {he ? "יותר" : "More"}</span>
+      </div>
+    </section>
   );
 }

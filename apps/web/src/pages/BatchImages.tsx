@@ -1,3 +1,4 @@
+import { ImageTabs } from "./ImageTabs";
 import { useEffect, useRef, useState } from "react";
 import { zipSync } from "fflate";
 import { api, withToken } from "../api";
@@ -143,6 +144,7 @@ export function BatchImagesPage() {
   return (
     <div className="page">
       <h1>{t("batchTitle")}</h1>
+      <ImageTabs at="#/batch" />
       <p className="muted">{t("batchIntro", { n: MAX })}</p>
       <div className="card stack">
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>

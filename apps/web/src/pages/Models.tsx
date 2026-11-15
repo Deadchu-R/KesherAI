@@ -157,8 +157,8 @@ function BenchButton({ path, onDone }: { path: string; onDone: () => void }) {
       title={t("benchHint")}
       onClick={() => {
         setState("busy");
-        void api<{ tps: number }>("/api/models/benchmark", { method: "POST", body: { modelPath: path } }).then(
-          (r) => { setState(t("benchResult", { tps: r.tps })); onDone(); },
+        void api<{ tps: number; right?: number; of?: number }>("/api/models/benchmark", { method: "POST", body: { modelPath: path } }).then(
+          (r) => { setState(`${t("benchResult", { tps: r.tps })}${r.of ? L(` · ${r.right} מתוך ${r.of} נכון`, ` · ${r.right} of ${r.of} right`) : ""}`); onDone(); },
           (e: Error) => { setState("idle"); toast(e.message); },
         );
       }}
