@@ -69,7 +69,7 @@ export interface RoutineDeps {
   runPrompt(name: string, prompt: string, modelId?: string, personaId?: string, opts?: { web?: boolean; folder?: string }): Promise<{ ok: boolean; message: string; link: string }>;
   /** Starts a self-work run (it goes on by itself; this returns once it started). */
   startSelfWork?(o: { repo: string; goal: string; hours: number; check: string; modelId?: string }): Promise<{ ok: boolean; message: string; link: string }>;
-  /** Whether any chat is working now (background routines wait until none is). */
+  /** Whether any chat is working or a model is loading now (background and start-up routines wait until not). */
   busy?(): boolean;
   notify(title: string, body: string, path: string): Promise<void>;
   /** Removes the chat a quiet run made when it found nothing. */
@@ -312,9 +312,12 @@ export class Routines {
   /** Runs what is due. */
   async tick(): Promise<void> {
     const t = this.now();
-    // A background routine waits (checked every 30 s) while any chat is working, so it never slows the user's own work.
+    // A background routine, and one that runs after KesherAI starts, waits (checked every 30 s) while any chat is
+    // working or a model is loading, so it never slows the user's own work (found on the PC: "feature research" ran
+    // three minutes after each update, while a chat was starting).
     const busy = this.deps.busy?.() ?? false;
-    const due = this.list_.filter((r) => r.enabled && (this.due.get(r.id) ?? Infinity) <= t && !(busy && r.action.type === "prompt" && r.action.background));
+    const waits = (r: Routine) => r.action.type === "prompt" && (r.action.background || r.schedule.kind === "startup");
+    const due = this.list_.filter((r) => r.enabled && (this.due.get(r.id) ?? Infinity) <= t && !(busy && waits(r)));
     await Promise.all(due.map((r) => (r.schedule.kind === "page" ? this.checkPage(r) : this.runNow(r.id))));
   }
 

@@ -18,6 +18,7 @@ import type { Personas } from "../personas.js";
 import { transcribeWith } from "../speech-tools.js";
 import type { WhisperEngine } from "../whisper.js";
 import { IMAGE_SUPPORT_FILE } from "../chat-tools-media.js";
+import type { LlamaEngine } from "../llamacpp.js";
 import { Routines } from "../routines.js";
 import { runIn } from "../run-in.js";
 import { SelfWork } from "../self-work.js";
@@ -40,8 +41,8 @@ export interface InjectRef {
  *   routine runs), the notifier, the settings and Telegram.
  * @returns The routines.
  */
-export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injectRef: InjectRef; chats: () => ConversationManager; notifier: Notifier; config: KesherConfig; telegram: TelegramBridge }): Routines {
-  const { paths, pipelines, injectRef, chats, notifier, config, telegram } = p;
+export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injectRef: InjectRef; chats: () => ConversationManager; notifier: Notifier; config: KesherConfig; telegram: TelegramBridge; engine?: Pick<LlamaEngine, "note" | "status"> }): Routines {
+  const { paths, pipelines, injectRef, chats, notifier, config, telegram, engine } = p;
   return new Routines(join(paths.root, "routines.json"), {
     runPipeline: async (id, inputs) => {
       const run = await pipelines.start(id, inputs);
@@ -57,6 +58,8 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
       return r.statusCode === 200 && body.run ? { ok: true, message: `Self-work started on ${body.run.branch ?? "a new branch"}.`, link: "#/code" } : { ok: false, message: body.error ?? `It did not start (${r.statusCode}).`, link: "#/code" };
     },
     runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
+      // The engine log says who sent a request no chat on screen asked for.
+      engine?.note(`the routine "${name}" started a chat (Routines page)`);
       const c = await chats().create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString()}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
       // A routine's folder (e.g. a list it keeps): created if missing, then opened to this chat's file tools.
       if (opts.folder) {
@@ -91,7 +94,7 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
       const body = (await res.text()).slice(0, 3_000_000);
       return /html/i.test(res.headers.get("content-type") ?? "") ? htmlToText(body) : body;
     },
-    busy: () => Object.keys(chats().activity()).length > 0,
+    busy: () => Object.keys(chats().activity()).length > 0 || engine?.status().job?.phase === "loading",
   });
 }
 

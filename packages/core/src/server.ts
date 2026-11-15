@@ -314,7 +314,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     exists: async (convId) => !!library.summary(convId),
   });
   void chatTimers.start();
-  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram });
+  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine });
   void routines.start();
   const { unityCli, unrealBridge } = buildGameEngines(paths, config, persist);
   // The task board self-work shares with Claude: a file on this computer only.

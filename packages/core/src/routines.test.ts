@@ -69,6 +69,27 @@ test("a heartbeat speaks only when something needs the user", async () => {
   r.close();
 });
 
+test("a start-up routine (not marked background) also waits while a chat works or a model loads", async () => {
+  let now = new Date(2026, 10, 9, 9, 0).getTime();
+  let busy = true;
+  let runs = 0;
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-rt-")), "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async () => (runs++, { ok: true, message: "Done.", link: "#/c/x" }),
+    notify: async () => undefined,
+    busy: () => busy,
+  }, () => now);
+  await r.save({ name: "Feature research", schedule: { kind: "startup", delayMinutes: 3 }, action: { type: "prompt", prompt: "Research" } });
+  await r.save({ name: "Morning", schedule: { kind: "daily", time: "09:02" }, action: { type: "prompt", prompt: "Plan the day" } });
+  now += 4 * 60_000;
+  await r.tick();
+  assert.equal(runs, 1, "the timed routine runs (it was asked for that time); the start-up one waits");
+  busy = false;
+  await r.tick();
+  assert.equal(runs, 2);
+  r.close();
+});
+
 test("a background routine runs once per start, after a delay, and waits while chats work", async () => {
   let now = new Date(2026, 10, 9, 9, 0).getTime();
   let busy = true;
