@@ -165,3 +165,34 @@ export function TimersButton({ convId }: { convId: string }) {
     </Menu>
   );
 }
+
+/** Opens this chat's canvas (made on first open). */
+export function openChatCanvas(convId: string): void {
+  void api<{ id: string }>(`/api/conversations/${encodeURIComponent(convId)}/canvas`, { method: "POST" }).then(
+    (d) => (location.hash = `#/canvas/${d.id}`),
+    (e: Error) => toast(e.message),
+  );
+}
+
+/**
+ * The chat's Canvas button, once the chat has one (the model drew on it, or the user opened it from the ⋯ menu):
+ * like LM Studio's Canvas, the board the user and the model draw on together.
+ *
+ * @param props.convId - The chat.
+ * @param props.events - How many events the chat has (a new one may be the model's drawing: look again).
+ */
+export function CanvasButton({ convId, events }: { convId: string; events: number }) {
+  const [has, setHas] = useState(false);
+  const he = getLocale() === "he";
+  useEffect(() => {
+    if (has) return;
+    const t = window.setTimeout(() => void api(`/api/canvases/chat-${encodeURIComponent(convId)}`).then(() => setHas(true), () => undefined), 400);
+    return () => window.clearTimeout(t);
+  }, [convId, events, has]);
+  if (!has) return null;
+  return (
+    <button type="button" className="pane-btn" onClick={() => openChatCanvas(convId)} title={he ? "הקנבס של הצ'אט: לוח שאתם והמודל מציירים עליו" : "This chat's canvas: a board you and the model draw on"} aria-label={he ? "קנבס" : "Canvas"}>
+      <LineIcon name="palette" size={16} />
+    </button>
+  );
+}

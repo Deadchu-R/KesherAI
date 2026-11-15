@@ -444,3 +444,17 @@ This review went through the code part by part. Each finding is listed with what
   passing (562).
 - Load race (0.6.218): an overtaken load no longer writes the settings. A second cause of an old model coming back
   after a restart is still open; the new engine log will show it on the next restart.
+
+## Scan 71 (2026-11-15, 0.6.221)
+
+- **Canvas (new):** canvases live in `<data>/canvases/<id>.json`; ids are checked (`[\w-]{1,80}`, so no path can be
+  named) and a chat's canvas id is derived from the chat's id. Saves are capped at 5 MB and 5,000 elements, take a
+  revision (a stale page cannot overwrite the model's newer change: 409, then it merges), and drop anything that is not
+  an element with an id and a type. The `canvas` tool is `read` risk: it changes only the chat's own canvas, and
+  incognito chats have none. Text from the model is capped (500 characters a shape).
+- **Excalidraw 0.18.1** (new dependency, Roee approved): loaded only on the Canvas page. Its fonts are served by
+  KesherAI; its built-in fallback to esm.sh is blocked by the CSP (`font-src 'self'`), checked in a browser: nothing is
+  fetched from outside, the two unused fonts that try it stay unloaded. Its library browser and file opening are off.
+  An `.excalidraw` file the user exports is plain JSON; opening files in the page is turned off for now.
+- server.ts B3/B4 moves and the engine log line: no behaviour change. ui-check passes at both widths, including the
+  Canvas page; speed numbers unchanged (0.3 s / 8 ms / 3 ms).

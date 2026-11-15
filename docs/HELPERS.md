@@ -45,6 +45,15 @@ In **Pipelines → Routines**, besides "at a time", "every few minutes" and "eac
   names of the changed files.
 - **When a download finishes** (optionally only one whose name contains some text, e.g. `gguf`).
 
+## Canvas: a board you and the model draw on
+
+Ask a chat to draw something: "draw the login flow", "sketch the architecture of this project", "make a mind map of
+these ideas". The model puts shapes and arrows on the chat's canvas (KesherAI lays them out as a flowchart along the
+arrows), and a **Canvas** button appears at the top of the chat. The canvas is an Excalidraw board: move, restyle and
+add to the drawing yourself; the model sees your changes when it reads the canvas, and its own appear while it is
+open. **Export** saves a PNG, an SVG or an `.excalidraw` file. Every canvas is listed under **Create → Canvas**, where
+you can also start one without a chat (or open one from a chat's ⋯ menu). Incognito chats have no canvas.
+
 ## Files in the chat
 
 Attached files show as chips in your message; a tap opens a preview: a table for Excel, CSV and TSV (with sheet

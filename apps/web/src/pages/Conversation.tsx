@@ -37,7 +37,7 @@ import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../Blueprin
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
-import { GroupButton, TeamButton, TimersButton, exportChat } from "../chat/ChatHeaderTools";
+import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
 import { splitAttachments } from "../attach-lines";
 import { isShortcut } from "../keyboard";
@@ -598,6 +598,7 @@ export function ConversationPage({ id }: { id: string }) {
             <MenuSeparator />
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "md")}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</MenuItem>
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "pdf")}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</MenuItem>
+            {!conv.incognito && <MenuItem icon="🎨" onSelect={() => openChatCanvas(conv.id)}>{getLocale() === "he" ? "קנבס" : "Canvas"}</MenuItem>}
             <MenuSeparator />
             <MenuItem icon="🗑" danger onSelect={() => void remove()}>{t("delete")}</MenuItem>
           </Menu>
@@ -609,6 +610,7 @@ export function ConversationPage({ id }: { id: string }) {
         {show("team", (conv.team ?? []).length > 0) && <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />}
         {conv.kind === "chat" && show("group", (conv.group ?? []).length > 0) && <GroupButton group={conv.group ?? []} onChange={(group) => void patch({ group })} />}
         <TimersButton convId={conv.id} />
+        {!conv.incognito && <CanvasButton convId={conv.id} events={events.length} />}
         {pluginUi.panels.map((x) => {
           const key = `${x.pluginId}/${x.id}`;
           if (!show("plugins", openPanel === key)) return null;
