@@ -20,6 +20,8 @@ import { isLocalRequest } from "../auth.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
 import { readProject } from "../unreal-install.js";
 import { findGameProjects, findScripts } from "../game-projects.js";
+import { SideChats } from "../side-chat.js";
+import { modelTurnFor } from "../model-turn.js";
 
 const MODES: PermissionMode[] = ["plan", "ask", "auto-edit", "auto"];
 
@@ -418,6 +420,28 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       const msg = (err as Error).message;
       return reply.code(/not found/i.test(msg) ? 404 : 409).send({ error: msg });
     }
+  });
+
+  // Side chat (audit F3): a question beside the chat that never enters it; the thread is kept in memory only.
+  const side = new SideChats();
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/side", async (req) => ({ thread: side.thread(req.params.id) }));
+  app.post<{ Params: { id: string }; Body: { text?: string } }>("/api/conversations/:id/side", async (req, reply) => {
+    const text = req.body?.text?.trim().slice(0, 4000);
+    if (!text) return reply.code(400).send({ error: "Empty question" });
+    const c = await s.library.getConversation(req.params.id);
+    if (!c) return reply.code(404).send({ error: "Conversation not found" });
+    const modelId = c.modelId || s.config.activeModels.chat;
+    if (!modelId || modelId.startsWith("agent/")) return reply.code(400).send({ error: "This chat has no model that can answer a side question." });
+    try {
+      const answer = await side.ask(c.id, c.events, text, modelTurnFor(s.registry, modelId), AbortSignal.timeout(180_000));
+      return { answer, thread: side.thread(c.id) };
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/conversations/:id/side", async (req) => {
+    side.clear(req.params.id);
+    return { ok: true };
   });
 
   app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string; scope?: "conversation" | "model" | "everywhere"; minutes?: number; command?: string } }>(

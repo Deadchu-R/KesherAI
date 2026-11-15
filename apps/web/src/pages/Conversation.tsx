@@ -14,6 +14,7 @@ import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
+import { SideChat } from "../chat/SideChat";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
 import { useWebSearch } from "../WebToggle";
@@ -368,6 +369,8 @@ export function ConversationPage({ id }: { id: string }) {
   }, [blocks, versions.lastUser]);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // The side chat (audit F3): open, and a question to ask right away (from "/side …").
+  const [side, setSide] = useState<{ first?: string } | null>(null);
   const [browserOpen, setBrowserOpen] = useState(false);
   // An answer's sources (the seq of that answer), shown in the pane column.
   const [sourcesFor, setSourcesFor] = useState<number | null>(null);
@@ -496,6 +499,13 @@ export function ConversationPage({ id }: { id: string }) {
       await api(`/api/conversations/${id}/goal`, { method: "POST", body: { goal: goal[1] ?? "" } }).catch((e: Error) => setError(e.message));
       return;
     }
+    // "/side …" (or "/btw …"): a question on the side that does not enter the chat.
+    const aside = /^\/(?:side|btw)(?:\s+([\s\S]*))?$/i.exec(input.trim());
+    if (aside) {
+      setInput("");
+      setSide(aside[1]?.trim() ? { first: aside[1].trim() } : {});
+      return;
+    }
     const text = expandSlash(input.trim());
     // While the agent works, the message joins the queue and goes when it is free.
     if (!text) return;
@@ -602,6 +612,7 @@ export function ConversationPage({ id }: { id: string }) {
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "md")}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</MenuItem>
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "pdf")}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</MenuItem>
             {!conv.incognito && <MenuItem icon="🎨" onSelect={() => openChatCanvas(conv.id)}>{getLocale() === "he" ? "קנבס" : "Canvas"}</MenuItem>}
+            <MenuItem icon="💭" onSelect={() => setSide({})}>{getLocale() === "he" ? "צ׳אט צד" : "Side chat"}</MenuItem>
             {!conv.incognito && <MenuItem icon="🔗" onSelect={() => setSharing(true)}>{getLocale() === "he" ? "שיתוף…" : "Share…"}</MenuItem>}
             <MenuSeparator />
             <MenuItem icon="🗑" danger onSelect={() => void remove()}>{t("delete")}</MenuItem>
@@ -610,6 +621,7 @@ export function ConversationPage({ id }: { id: string }) {
         slot,
       )}
       {sharing && <ShareDialog convId={conv.id} onClose={() => setSharing(false)} />}
+      {side && <SideChat convId={conv.id} {...(side.first ? { first: side.first } : {})} onClose={() => setSide(null)} />}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
         <ChatBarButton kind={conv.kind} bar={conv.bar} onChange={(bar) => void patch({ bar: bar ?? {} })} />
         {show("team", (conv.team ?? []).length > 0) && <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />}
