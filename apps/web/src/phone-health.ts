@@ -41,3 +41,49 @@ export function chargingHabits(list: PhoneSample[]): { samples: number; charging
     ...(wears.length >= 2 ? { wearFrom: wears[0]!, wearTo: wears[wears.length - 1]! } : {}),
   };
 }
+
+/** What the phone app's native side reads (Android's own APIs). */
+export interface PhoneReading { storageFree?: number; storageTotal?: number; ramFree?: number; ramTotal?: number; lowMemory?: boolean; batteryPercent?: number; batteryTempC?: number; batteryHealth?: string; charging?: boolean; modelsBytes?: number; model?: string; android?: string; batteryCycles?: number; batteryNowFullMah?: number; batteryDesignMah?: number; batteryVoltageMv?: number; thermal?: number; powerSave?: boolean; uptimeHours?: number; securityPatch?: string }
+
+/** One thing to do (or "fine"). */
+export interface PhoneItem { level: "ok" | "warn" | "bad"; title: string; fix: string }
+
+const GB = 1024 ** 3;
+const gb = (b: number) => (b >= 10 * GB ? Math.round(b / GB) : Math.round((b / GB) * 10) / 10);
+
+/**
+ * What to do about the phone, from fixed rules (like the computer's).
+ *
+ * @param p - The phone's reading.
+ * @param he - Hebrew text (else English).
+ * @param now - The time (tests pass their own).
+ * @returns The items, worst first as found; one "fine" item when nothing is wrong.
+ */
+export function phoneItems(p: PhoneReading, he: boolean, now = Date.now()): PhoneItem[] {
+  const L = (h: string, e: string) => (he ? h : e);
+  const out: PhoneItem[] = [];
+  const n = (t: string) => `\u2066${t}\u2069`;
+  if (p.storageFree !== undefined && p.storageTotal) {
+    const pct = p.storageFree / p.storageTotal;
+    if (p.storageFree < 2 * GB || pct < 0.05) out.push({ level: "bad", title: L(`בטלפון נשארו רק ${n(`${gb(p.storageFree)} GB`)}`, `Only ${gb(p.storageFree)} GB left on the phone`), fix: L("הגדרות הטלפון ← אחסון: אפליקציות גדולות, תמונות וסרטונים כפולים, וקבצים שהורדו.", "Phone settings → Storage: big apps, duplicate photos and videos, downloaded files.") });
+    else if (p.storageFree < 8 * GB || pct < 0.1) out.push({ level: "warn", title: L(`בטלפון נשארו ${n(`${gb(p.storageFree)} GB`)}`, `${gb(p.storageFree)} GB left on the phone`), fix: L("כדאי לפנות מקום לפני הורדת מודל לטלפון.", "Worth clearing space before downloading a model to the phone.") });
+  }
+  if ((p.modelsBytes ?? 0) > 3 * GB) out.push({ level: "warn", title: L(`מודלים בטלפון תופסים ${n(`${gb(p.modelsBytes!)} GB`)}`, `Models on the phone take ${gb(p.modelsBytes!)} GB`), fix: L("בעמוד המודלים של הטלפון: מחקו מודל שלא משתמשים בו.", "On the phone's models page: delete one you do not use.") });
+  if ((p.batteryTempC ?? 0) >= 42) out.push({ level: "bad", title: L(`הסוללה חמה: ${n(`${p.batteryTempC}°C`)}`, `The battery is hot: ${p.batteryTempC}°C`), fix: L("עצרו מודל מקומי או משחק, הורידו כיסוי, ואל תטעינו בחום.", "Stop a local model or game, take off the case, and do not charge it hot.") });
+  if (p.batteryHealth && p.batteryHealth !== "good" && p.batteryHealth !== "unknown") out.push({ level: "warn", title: L("מצב הסוללה לא תקין", "The battery's health is not good"), fix: L("כדאי לבדוק במעבדה מורשית.", "Worth checking at an authorised service.") });
+  if (p.lowMemory) out.push({ level: "warn", title: L("הזיכרון בטלפון כמעט מלא", "The phone's memory is almost full"), fix: L("סגרו אפליקציות שרצות ברקע.", "Close apps running in the background.") });
+  // The battery's wear and age (as Samsung's Device Care, Pixel's battery health and AccuBattery show them).
+  const wear = batteryWear(p);
+  if (wear !== undefined && wear < 80) out.push({ level: "bad", title: L(`הסוללה מחזיקה כ-${n(`${wear}%`)} מהקיבולת המקורית`, `The battery holds about ${wear}% of its original capacity`), fix: L("זה הזמן להחלפת סוללה במעבדה מורשית (בדרך כלל מתחת ל-80% הזמן בין טעינות מתקצר מאוד).", "Time for a battery replacement at an authorised service (below 80% the time between charges drops a lot).") });
+  else if (wear !== undefined && wear < 88) out.push({ level: "warn", title: L(`הסוללה מחזיקה כ-${n(`${wear}%`)} מהקיבולת המקורית`, `The battery holds about ${wear}% of its original capacity`), fix: L("כדי להאט את הבלאי: טעינה עד 80–85% (הגדרות ← סוללה ← הגנה על הסוללה), ובלי חום בזמן טעינה.", "To slow the wear: charge to 80–85% (Settings → Battery → battery protection), and no heat while charging.") });
+  if ((p.batteryCycles ?? 0) >= 800) out.push({ level: "warn", title: L(`${n(String(p.batteryCycles))} מחזורי טעינה`, `${p.batteryCycles} charge cycles`), fix: L("רוב סוללות הטלפונים מתוכננות ל-800–1000 מחזורים עד 80%: כדאי לשים לב לזמן הסוללה.", "Most phone batteries are rated for 800–1000 cycles to 80%: keep an eye on the battery time.") });
+  if (p.charging && (p.batteryPercent ?? 0) >= 95 && (p.batteryTempC ?? 0) >= 38) out.push({ level: "warn", title: L("טעינה מלאה בחום", "Fully charged while warm"), fix: L("חום ליד 100% שוחק את הסוללה הכי מהר: נתקו בסביבות 80–90%, או הפעילו טעינה מותאמת.", "Heat near 100% wears the battery fastest: unplug around 80–90%, or turn on adaptive charging.") });
+  if ((p.thermal ?? 0) >= 3) out.push({ level: "bad", title: L("הטלפון חם מאוד ומאט את עצמו", "The phone is very hot and slowing itself down"), fix: L("סגרו משחק או מודל מקומי, הוציאו מהכיסוי והרחיקו מהשמש עד שיתקרר.", "Close a game or local model, take it out of the case and out of the sun until it cools.") });
+  else if (p.thermal === 2) out.push({ level: "warn", title: L("הטלפון חם", "The phone is warm"), fix: L("אם זה בזמן משחק זה צפוי; אחרת בדקו איזו אפליקציה עובדת ברקע (הגדרות ← סוללה).", "Expected in a game; otherwise check what runs in the background (Settings → Battery).") });
+  if ((p.uptimeHours ?? 0) >= 24 * 7) out.push({ level: "warn", title: L(`הטלפון לא הופעל מחדש ${n(String(Math.floor(p.uptimeHours! / 24)))} ימים`, `The phone has not restarted in ${Math.floor(p.uptimeHours! / 24)} days`), fix: L("הפעלה מחדש פעם בשבוע משחררת זיכרון ומתקנת האטות קטנות.", "A restart once a week frees memory and clears small slowdowns.") });
+  const patchAge = patchAgeDays(p.securityPatch, now);
+  if (patchAge !== undefined && patchAge > 180) out.push({ level: "bad", title: L(`עדכון האבטחה של הטלפון בן ${n(String(Math.floor(patchAge / 30)))} חודשים`, `The phone's security update is ${Math.floor(patchAge / 30)} months old`), fix: L("הגדרות ← מערכת ← עדכון תוכנה. אם אין עדכונים, היצרן הפסיק לתמוך בטלפון: שימו לב לאפליקציות בנק וסיסמאות.", "Settings → System → Software update. If there are none, the maker stopped supporting the phone: take care with banking apps and passwords.") });
+  else if (patchAge !== undefined && patchAge > 90) out.push({ level: "warn", title: L("עדכון האבטחה של הטלפון ישן", "The phone's security update is old"), fix: L("הגדרות ← מערכת ← עדכון תוכנה.", "Settings → System → Software update.") });
+  if (!out.length) out.push({ level: "ok", title: L("הטלפון נראה תקין", "The phone looks fine"), fix: L("אין מה לעשות כרגע.", "Nothing to do right now.") });
+  return out;
+}
