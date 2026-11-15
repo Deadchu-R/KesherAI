@@ -21,7 +21,7 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 
 	TSharedPtr<FJsonObject> Result;
 	// With the editor closed (the KesherBridge commandlet), only what needs no open editor window runs.
-	if (bOffline && (Cmd == TEXT("live_coding") || Cmd == TEXT("open") || Cmd == TEXT("undo") || Cmd == TEXT("redo") || Cmd == TEXT("quit_for_update") || Cmd.StartsWith(TEXT("play"))))
+	if (bOffline && (Cmd == TEXT("live_coding") || Cmd == TEXT("open") || Cmd == TEXT("undo") || Cmd == TEXT("redo") || Cmd == TEXT("quit_for_update") || Cmd == TEXT("close_editor") || Cmd.StartsWith(TEXT("play"))))
 	{
 		Result = MakeShared<FJsonObject>();
 		Result->SetStringField(TEXT("error"), TEXT("This needs the open Unreal Editor."));
@@ -103,6 +103,28 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 		Result = MakeShared<FJsonObject>();
 		Result->SetBoolField(TEXT("ok"), bSaved);
 		if (bSaved) FPlatformMisc::RequestExit(false);
+	}
+	else if (Cmd == TEXT("close_editor"))
+	{
+		// The user pressed Close in KesherAI and already chose there: save everything first, or throw unsaved
+		// changes away. Unreal asks nothing either way.
+		bool bSave = false;
+		In->TryGetBoolField(TEXT("save"), bSave);
+		Result = MakeShared<FJsonObject>();
+		if (bSave && GEditor && GEditor->PlayWorld)
+		{
+			Result->SetStringField(TEXT("error"), TEXT("The game is playing in the editor. Stop it, then close with saving."));
+		}
+		else if (bSave && !FEditorFileUtils::SaveDirtyPackages(false, true, true))
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Some files could not be saved, so Unreal stays open."));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("ok"), true);
+			Result->SetBoolField(TEXT("saved"), bSave);
+			FPlatformMisc::RequestExit(false);
+		}
 	}
 	else if (Cmd == TEXT("play"))
 	{

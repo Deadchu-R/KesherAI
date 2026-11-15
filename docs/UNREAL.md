@@ -47,3 +47,9 @@ Create → Unreal Blueprints → "Connect chats to Unreal 5.8+ (MCP)…" picks t
 - adds and turns on the "Unreal Engine" connection (http://127.0.0.1:8000/mcp).
 
 When the project is open, every chat gets the editor's tools (`list_toolsets`, `describe_toolset`, `call_tool`) with Unreal's guidance in the prompt: discover before calling, check for project skills, save before changes across assets, wait for compiles, read every result, mind Play-in-Editor. Calls that change things ask first. Projects on Unreal 5.7 or older keep using the KesherAI Bridge plugin above.
+
+## Closing Unreal from KesherAI
+
+With Unreal connected, **Close Unreal** at the top of the page offers **Save and close** (every unsaved file is
+saved first; nothing is asked in Unreal) and **Close without saving** (unsaved changes are lost). It works from the
+phone too. Needs the KesherAI plugin 0.1.18 (update it from the page).

@@ -64,3 +64,8 @@ The project is the one chosen on the Unity page (Create → Unity Visual Scripti
 While a Unity project is in use, these tools are always sent to the model in full (tool search never hides them), so a small local model cannot "forget" it has them and invent an answer.
 
 **Safety:** paths are checked to stay inside the project (no `..`, no link leading out), writes only go to `Assets/` and only code files; text the model gives (names, paths) reaches C# only as escaped string literals, and type names are checked; nothing runs through a shell. Writing a script is as powerful as running code (an Editor script runs inside Unity), so it follows your approval setting for file changes, and Telegram chats never get it.
+
+## Closing Unity from KesherAI
+
+With Unity open, **Close Unity** at the top of the page offers **Save and close** (open scenes and assets are saved
+first) and **Close without saving**. Unity asks nothing. Needs the bridge package 0.2.7.

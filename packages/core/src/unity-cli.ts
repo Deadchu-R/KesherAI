@@ -293,7 +293,7 @@ export class UnityCli {
   }
 
   /** Whether an editor has the project open and ready (checked at most every 4 seconds). */
-  private async editorReady(): Promise<boolean> {
+  async editorReady(): Promise<boolean> {
     const path = this.path;
     if (!path) return false;
     if (this.statusCache && this.statusCache.project === path && Date.now() - this.statusCache.at < 4000) return this.statusCache.ready;

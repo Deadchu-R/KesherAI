@@ -43,7 +43,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.6";
+export const UNITY_PACKAGE_VERSION = "0.2.7";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -402,6 +402,26 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       });
     }
   }
+
+  /**
+   * Closes the open editor, with the choice made here: `save: true` saves everything first, `false` throws
+   * unsaved changes away. The editor asks nothing. From this computer, or a paired phone (the page asks first).
+   */
+  app.post<{ Body: { save?: boolean } }>(`${base}/close`, async (req, reply) => {
+    const save = req.body?.save === true;
+    try {
+      if (kind === "unreal") return await unreal.closeEditor(save);
+      const unity = s.unity;
+      if (!(await unity.editorReady())) return reply.code(409).send({ error: "Unity is not open (with the KesherAI package)." });
+      await unity.request("close", { save: save ? "true" : "false" }, 10 * 60_000).catch((err: Error) => {
+        throw /kesher_close|Unknown command|not found/i.test(err.message) ? Object.assign(new Error(`Closing from KesherAI needs the KesherAI Unity package ${UNITY_PACKAGE_VERSION}. Update it on this page, or close Unity yourself.`), { code: 409 }) : err;
+      });
+      return { closed: true, saved: save };
+    } catch (err) {
+      const e = err as Error & { code?: number };
+      return reply.code(e.code === 409 ? 409 : 502).send({ error: e.message });
+    }
+  });
 
   app.get(`${base}/queue`, async () => b.queue());
   app.delete<{ Params: { id: string } }>(`${base}/queue/:id`, async (req) => ({ removed: await b.unqueue(req.params.id) }));

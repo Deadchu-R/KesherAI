@@ -16,6 +16,7 @@ import { ConnectUnityAssistant } from "../engine/ConnectUnityAssistant";
 import { NewBlueprint } from "../engine/NewBlueprint";
 import { OpenInChat } from "../engine/OpenInChat";
 import { PluginUpdate } from "../engine/PluginUpdate";
+import { CloseEditor } from "../engine/CloseEditor";
 import { UnrealSource } from "../engine/UnrealSource";
 import { Select } from "../ui/Select";
 
@@ -335,6 +336,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <span className={`pill ${st.connected ? "good" : ""}`}>
           {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : ready ? `🟡 ${L(`${app} סגור · עובד ברקע (איטי יותר)`, `${app} is closed · works in the background (slower)`)}${list?.project ? ` · ${list.project}` : ""}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>
+        {st.connected && <CloseEditor kind={unity ? "unity" : "unreal"} onClosed={() => { loadStatus(); loadList(); }} />}
       </div>
       {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
       {unity && <FoundUnityProjects onAdded={() => { loadStatus(); loadList(); }} />}

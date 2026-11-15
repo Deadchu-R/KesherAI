@@ -1137,3 +1137,17 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
 Stopped at: this assessment. Proposed order for Roee: (1) a small fast model's speed on the 3090 next to Qwen,
 (2) UI Automation around the caret in Notepad, Word and Chrome, (3) only then the overlay. Not before the Canvas
 and share-link decisions.
+
+## 2026-11-15: closing the engine from KesherAI (save / don't save)
+
+Asked by Roee after closing Unreal by hand. Looked at how others do it:
+- ChiR24/Unreal_mcp: `unreal.SystemLibrary.quit_editor()` over Python; saves nothing first and answers "Quit command
+  sent" before Unreal has closed.
+- The `ue` editor tool (listed on policylayer): separate `save_dirty` and `stop_editor` ("gracefully") actions.
+- Unity: `EditorApplication.Exit` quits at once and asks nothing, so the docs' own example saves the scene first.
+
+What KesherAI does: one "Close Unreal/Unity" menu on the engine page with **Save and close** and **Close without
+saving**. The choice is made in KesherAI, so the editor never shows a dialog (that dialog would be unreachable from
+the phone). Saving stops if the game is playing in the editor or a file cannot be saved (the editor stays open). The
+answer comes only once the editor process has really gone. Needs plugin 0.1.18 / Unity package 0.2.7; older ones say so.
+Stopped at: done; nothing open.

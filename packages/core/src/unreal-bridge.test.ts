@@ -191,3 +191,29 @@ test("Unreal closed: commands run in a headless editor (one start for several), 
   assert.deepEqual(runs.at(-1)!.map((c) => c.cmd), ["create", "list"]);
   await assert.rejects(b.request("play", {}), /not connected/);
 });
+
+test("Close from KesherAI: the choice (save or not) goes to the editor, the answer waits until it has closed", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "kesher-ue-close-"));
+  const server = await createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
+  await server.app.listen({ port: 0, host: "127.0.0.1" });
+  const port = (server.app.server.address() as { port: number }).port;
+  const get = async (url: string) => (await server.app.inject({ method: "GET", url })).json() as Record<string, unknown>;
+  try {
+    const closed = await server.app.inject({ method: "POST", url: "/api/unreal/close", payload: { save: true } });
+    assert.equal(closed.statusCode, 409, "nothing is open");
+
+    const sent: Array<{ cmd: string; save?: boolean }> = [];
+    const ws = await fakeEditor(port, [], undefined, "0.1.18", sent);
+    ws.on("message", (d) => {
+      if ((JSON.parse(String(d)) as { cmd: string }).cmd === "close_editor") ws.close();
+    });
+    await until(async () => (await get("/api/unreal")).connected === true);
+    const r = await server.app.inject({ method: "POST", url: "/api/unreal/close", payload: { save: true } });
+    assert.equal(r.statusCode, 200);
+    assert.deepEqual(r.json(), { closed: true, saved: true });
+    assert.equal(sent.find((m) => m.cmd === "close_editor")?.save, true);
+    assert.equal((await get("/api/unreal")).connected, false);
+  } finally {
+    await server.app.close();
+  }
+});

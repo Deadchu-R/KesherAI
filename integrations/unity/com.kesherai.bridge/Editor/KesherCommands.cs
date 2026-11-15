@@ -2,6 +2,8 @@
 
 using System.Collections.Generic;
 using Unity.Pipeline.Commands;
+using UnityEditor;
+using UnityEditor.SceneManagement;
 
 namespace KesherAI.Bridge
 {
@@ -14,7 +16,7 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.6";
+        const string Version = "0.2.7";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 
@@ -61,5 +63,20 @@ namespace KesherAI.Bridge
 
         [CliCommand("kesher_open", "KesherAI Bridge: open a graph in the editor")]
         static string Open([CliArg("path", "Where the graph lives")] string path) => Out(KesherGraph.Open(path));
+
+        [CliCommand("kesher_close", "KesherAI Bridge: close the editor, saving open scenes and assets first or throwing unsaved changes away")]
+        static string Close([CliArg("save", "true: save first; false: close without saving")] string save = "false")
+        {
+            var keep = save == "true";
+            if (keep)
+            {
+                if (EditorApplication.isPlaying) return Out(new Dictionary<string, object> { ["error"] = "The game is playing in the editor. Stop it, then close with saving." });
+                if (!EditorSceneManager.SaveOpenScenes()) return Out(new Dictionary<string, object> { ["error"] = "The open scenes could not be saved, so Unity stays open." });
+                AssetDatabase.SaveAssets();
+            }
+            // After this answer has gone back to KesherAI. Exit asks nothing (the choice was made in KesherAI).
+            EditorApplication.delayCall += () => EditorApplication.Exit(0);
+            return Out(new Dictionary<string, object> { ["ok"] = true, ["saved"] = keep });
+        }
     }
 }

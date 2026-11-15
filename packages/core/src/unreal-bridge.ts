@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.17";
+export const BRIDGE_VERSION = "0.1.18";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -166,6 +166,36 @@ export class UnrealBridge {
       if (Date.now() > until) throw new Error("Unreal did not close. Close it, then press Update again.");
       await new Promise((r) => setTimeout(r, 1000));
     }
+  }
+
+  /**
+   * Closes the open editor from KesherAI (plugin 0.1.18+), with the choice already made: save everything
+   * first, or throw unsaved changes away. Unreal asks nothing. Waits (up to a minute) until it has closed.
+   *
+   * @param save - Save all unsaved files first.
+   * @returns Whether it saved.
+   */
+  async closeEditor(save: boolean): Promise<{ closed: true; saved: boolean }> {
+    if (!this.connected) throw Object.assign(new Error("Unreal is not open (or its KesherAI plugin is not connected)."), { code: 409 });
+    const pid = this.info?.pid;
+    await this.request("close_editor", { save }, 10 * 60_000).catch((err: Error) => {
+      throw /Unknown command/.test(err.message) ? Object.assign(new Error(`Closing from KesherAI needs the KesherAI plugin ${BRIDGE_VERSION}. Update it on this page, or close Unreal yourself.`), { code: 409 }) : err;
+    });
+    const until = Date.now() + 60_000;
+    while (Date.now() < until) {
+      let alive: boolean = this.connected;
+      if (pid) {
+        try {
+          process.kill(pid, 0);
+          alive = true;
+        } catch {
+          alive = false;
+        }
+      }
+      if (!alive) return { closed: true, saved: save };
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error("Unreal was asked to close but is still open. Look at its window.");
   }
 
   /** @returns Whether an editor is connected now. */
