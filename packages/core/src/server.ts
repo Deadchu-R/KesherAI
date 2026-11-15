@@ -5,7 +5,6 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
-import { htmlToText } from "@kesher/agent";
 import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify from "fastify";
@@ -41,7 +40,6 @@ import { ApiKeys } from "./api-keys.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
 import { Pipelines } from "./pipelines.js";
-import { Routines } from "./routines.js";
 import { ComfyManager } from "./comfy-manager.js";
 import { ConversationSearch } from "./conversation-search.js";
 import { comfyRoutes } from "./routes/comfy.js";
@@ -149,6 +147,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
+import { buildRoutines } from "./server/build-extras.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -439,57 +438,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     exists: async (convId) => !!library.summary(convId),
   });
   void chatTimers.start();
-  const routines = new Routines(join(paths.root, "routines.json"), {
-    runPipeline: async (id, inputs) => {
-      const run = await pipelines.start(id, inputs);
-      const done = await pipelines.wait(run.id);
-      const files = done?.files.length ? ` Files: ${done.files.join(", ")}.` : "";
-      return { ok: done?.status === "done", message: done?.status === "done" ? `Finished.${files}` : done?.error ?? "Stopped.", link: "#/pipelines" };
-    },
-    // The same checks as the panel's Start (through the route, so a worker is used when there is one).
-    startSelfWork: async (o) => {
-      if (!injectRef.app) return { ok: false, message: "KesherAI is still starting.", link: "#/code" };
-      const r = await injectRef.app.inject({ method: "POST", url: "/api/self-work/start", payload: o, remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } });
-      const body = r.json() as { run?: { branch?: string; convId?: string }; error?: string };
-      return r.statusCode === 200 && body.run ? { ok: true, message: `Self-work started on ${body.run.branch ?? "a new branch"}.`, link: "#/code" } : { ok: false, message: body.error ?? `It did not start (${r.statusCode}).`, link: "#/code" };
-    },
-    runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
-      const c = await services.conversations.create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString()}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
-      // A routine's folder (e.g. a list it keeps): created if missing, then opened to this chat's file tools.
-      if (opts.folder) {
-        await mkdir(opts.folder, { recursive: true });
-        await (await services.conversations.open(c.id))?.session.grant(opts.folder);
-      }
-      await services.conversations.send(c.id, opts.folder ? `${prompt}\n\n(Your folder for this: ${opts.folder})` : prompt, opts.web ? { web: true } : {});
-      const end = Date.now() + 30 * 60_000;
-      for (;;) {
-        await new Promise((r) => setTimeout(r, 1500));
-        const opened = await services.conversations.open(c.id);
-        const st = opened?.session.info().status;
-        if (st === "waiting") return { ok: true, message: "Waiting for your approval.", link: `#/c/${c.id}` };
-        if (st !== "running" || Date.now() > end) {
-          const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");
-          const lastErr = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "status" && e.status === "error");
-          const err = st === "error" && lastErr?.type === "status" ? lastErr.message : undefined;
-          return { ok: st !== "error" && !!last, message: last && last.type === "assistant" ? last.text.replace(/\s+/g, " ").slice(0, 300) : err ? `It stopped: ${err.slice(0, 280)}` : "No answer.", link: `#/c/${c.id}` };
-        }
-      }
-    },
-    notify: async (title, body, path) => void (await notifier.send({ title, body: config.notifications.includeText ? body : body.length > 80 ? "Done — open KesherAI to read it." : body, path, tags: ["alarm_clock"] })),
-    discard: async (link) => {
-      const id = /^#\/c\/([\w-]+)$/.exec(link)?.[1];
-      if (id) await services.conversations.delete(id);
-    },
-    telegram: async (text) => telegram.broadcast(text),
-    // Page routines: the page's readable text (20 s, 3 MB at most; http and https only, checked when saved).
-    pageText: async (url) => {
-      const res = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { "user-agent": "KesherAI page check" }, redirect: "follow" });
-      if (!res.ok) throw new Error(`The page answered ${res.status}.`);
-      const body = (await res.text()).slice(0, 3_000_000);
-      return /html/i.test(res.headers.get("content-type") ?? "") ? htmlToText(body) : body;
-    },
-    busy: () => Object.keys(services.conversations.activity()).length > 0,
-  });
+  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram });
   void routines.start();
   // Unity's CLI: the Unity page and the chat's Unity tools share it.
   UnityCli.setLogFile(join(paths.root, "logs", "unity-cli.log"));
