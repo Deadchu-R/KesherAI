@@ -164,6 +164,9 @@ export type AgentEvent = EventBase &
         estimated: boolean;
         /** The tools this call asked for (its action). */
         tools: string[];
+        /** Main model: milliseconds until its first word (reading the prompt), and spent writing after it. */
+        waitMs?: number;
+        writeMs?: number;
       }
     | {
         /** A teammate model's contribution: a plan before the work, or a review after it. */

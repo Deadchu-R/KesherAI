@@ -275,19 +275,31 @@ export function ConversationPage({ id }: { id: string }) {
   /** Runs whose receipt was undone ("Undo all"). */
   const undoneRuns = useMemo(() => new Set(events.flatMap((e) => (e.type === "undo_run" ? [e.run] : []))), [events]);
   const answerStats = useMemo(() => {
-    const out = new Map<number, { seconds: number; tps?: number; tokens: number }>();
+    const out = new Map<number, { seconds: number; tps?: number; tokens: number; wait?: number }>();
     let from = 0;
     let tokens = 0;
+    // Writing speed from the time spent writing (after the first word), when the model's calls were timed; the
+    // wait for the first word is shown apart.
+    let timedTokens = 0;
+    let writeMs = 0;
+    let waitMs = 0;
     for (const e of events) {
       if (e.type === "user") {
         from = Date.parse(e.at);
-        tokens = 0;
-      } else if (e.type === "usage") tokens += e.output;
-      else if (e.type === "assistant" && from) {
+        tokens = timedTokens = writeMs = waitMs = 0;
+      } else if (e.type === "usage") {
+        tokens += e.output;
+        if (e.writeMs !== undefined && e.role === "main") {
+          timedTokens += e.output;
+          writeMs += e.writeMs;
+          waitMs += e.waitMs ?? 0;
+        }
+      } else if (e.type === "assistant" && from) {
         const seconds = Math.max(0, (Date.parse(e.at) - from) / 1000);
-        out.set(e.seq, { seconds, tokens, ...(tokens && seconds > 0.2 ? { tps: tokens / seconds } : {}) });
+        const tps = timedTokens && writeMs > 200 ? timedTokens / (writeMs / 1000) : tokens && seconds > 0.2 ? tokens / seconds : undefined;
+        out.set(e.seq, { seconds, tokens, ...(tps ? { tps } : {}), ...(waitMs > 1500 ? { wait: waitMs / 1000 } : {}) });
         from = Date.parse(e.at);
-        tokens = 0;
+        tokens = timedTokens = writeMs = waitMs = 0;
       }
     }
     return out;
@@ -798,7 +810,7 @@ export function ConversationPage({ id }: { id: string }) {
                             const secs = st2.seconds < 60 ? `${st2.seconds.toFixed(1)}s` : `${Math.floor(st2.seconds / 60)}m ${Math.round(st2.seconds % 60)}s`;
                             return (
                               <span className="answer-stats muted small" dir="ltr" title={getLocale() === "he" ? `${st2.tokens} טוקנים נכתבו ב-${secs}, כולל קריאת השאלה והכלים` : `${st2.tokens} tokens written in ${secs}, including reading the question and tools`}>
-                                {st2.tps ? `${st2.tps.toFixed(1)} tok/s · ` : ""}{secs}
+                                {st2.tps ? `${st2.tps.toFixed(1)} tok/s · ` : ""}{st2.wait ? `${getLocale() === "he" ? "קריאה" : "reading"} ${st2.wait.toFixed(1)}s · ` : ""}{secs}
                               </span>
                             );
                           })()}

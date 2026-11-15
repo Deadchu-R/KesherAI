@@ -537,15 +537,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * @param role - `main`, or a teammate's role.
    * @param sent - Messages sent.
    * @param result - What came back.
+   * @param timing - How long until the first word, and how long the writing took (the main model's calls).
    */
-  private recordUsage(modelId: string, role: "main" | TeamRole, sent: AgentMessage[], result: Awaited<ReturnType<ModelTurn>>): void {
+  private recordUsage(modelId: string, role: "main" | TeamRole, sent: AgentMessage[], result: Awaited<ReturnType<ModelTurn>>, timing?: { waitMs: number; writeMs: number }): void {
     // What the model really counted: code and Hebrew have fewer characters per token than English prose, so the
     // window is measured with this model's own ratio from now on.
     if (role === "main" && (result.usage?.inputTokens ?? 0) > 500) this.learnRatio(sizeOf(sent) + JSON.stringify(this.specs()).length, result.usage!.inputTokens!);
     const reported = result.usage?.inputTokens !== undefined && result.usage?.outputTokens !== undefined;
     const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
-    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name) });
+    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}) });
   }
 
   /** Characters per token for this model, learned from what it reports (see {@link recordUsage}). */
@@ -838,10 +839,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         const turn = ++this.turn;
         const conversation = await this.fitContext(abort.signal);
         let result: Awaited<ReturnType<ModelTurn>>;
+        // Reading (until the first word) and writing are timed apart: a long prompt on a big model can take half a
+        // minute to read and then write fast, and one number for both made a 47 tokens/s model show "2.3 tok/s".
+        const askedAt = Date.now();
+        let firstAt = 0;
+        const onText = (text: string) => {
+          if (!firstAt) firstAt = Date.now();
+          this.push({ type: "assistant_delta", turn, text }, false);
+        };
         try {
-          result = await this.model({ messages: conversation, tools: this.specs() }, abort.signal, (text) =>
-            this.push({ type: "assistant_delta", turn, text }, false),
-          );
+          result = await this.model({ messages: conversation, tools: this.specs() }, abort.signal, onText);
         } catch (err) {
           // Too long for the model after all (the estimate is in characters; a local server may share its context between
           // chats): take the server's own numbers, make the window smaller and send a shorter conversation once.
@@ -860,9 +867,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
               const shorter = await this.fitContext(abort.signal);
               sentChars = sizeOf(shorter) + JSON.stringify(this.specs()).length;
               try {
-                result = await this.model({ messages: shorter, tools: this.specs() }, abort.signal, (text) =>
-                  this.push({ type: "assistant_delta", turn, text }, false),
-                );
+                result = await this.model({ messages: shorter, tools: this.specs() }, abort.signal, onText);
                 over = null;
               } catch (again) {
                 over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|context (?:size|length|window) (?:has been |was )?exceeded/i.exec((again as Error).message);
@@ -875,12 +880,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           if (!this.toolsUnsupported && /tool|function/i.test((err as Error).message) && !abort.signal.aborted) {
             this.toolsUnsupported = true;
             this.push({ type: "note", text: "This model does not support tools, so it will answer without them (no files, commands or images)." });
-            result = await this.model({ messages: conversation, tools: [] }, abort.signal, (text) =>
-              this.push({ type: "assistant_delta", turn, text }, false),
-            );
+            result = await this.model({ messages: conversation, tools: [] }, abort.signal, onText);
           } else throw err;
         }
-        this.recordUsage(this.modelId, "main", conversation, result);
+        this.recordUsage(this.modelId, "main", conversation, result, firstAt ? { waitMs: firstAt - askedAt, writeMs: Date.now() - firstAt } : undefined);
         if (result.text) this.push({ type: "assistant", turn, text: result.text });
         this.lastSaid = result.text.trim();
         this.messages.push({ role: "assistant", content: result.text, ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {}) });
