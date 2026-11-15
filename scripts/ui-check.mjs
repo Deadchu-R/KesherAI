@@ -1,8 +1,9 @@
-/* global window, document, localStorage, getComputedStyle -- the functions passed to page.evaluate run in the browser */
+/* global window, document, localStorage, getComputedStyle, requestAnimationFrame -- the functions passed to page.evaluate run in the browser */
 // The interface check that runs on every version: the real server starts empty,
 // a browser opens every main screen at computer width (1280) and phone width
 // (390, as the remote app), and the check fails on a page error or a page wider
-// than the screen. A picture of every screen is saved, to look at when it fails.
+// than the screen. A picture of every screen is saved, to look at when it fails. It also measures three speeds
+// (first screen, typing in a 200-message chat, drawing a streamed token) and fails above generous limits.
 //
 // Usage: node scripts/ui-check.mjs [outDir]   (needs `pnpm build:packages` and the web build)
 // Playwright is found as a dependency, or set PLAYWRIGHT_MODULE to its index.js.
@@ -18,7 +19,7 @@ const out = resolve(process.argv[2] ?? join(root, "ui-check"));
 const port = 7990;
 const base = `http://127.0.0.1:${port}`;
 
-/** The screens to open (hash routes); a chat is made by the check itself. */
+/** The screens to open (hash routes), and a made-up 200-message chat. */
 const PAGES = ["#/", "#/code", "#/unity", "#/unreal", "#/models", "#/personas", "#/knowledge", "#/pages", "#/images", "#/connections", "#/updates", "#/apps", "#/nodes", "#/pipelines", "#/watch", "#/settings"];
 
 const load = async () => {
@@ -38,11 +39,18 @@ try {
     up = await fetch(`${base}/api/health`).then((r) => r.ok, () => false);
   }
   if (!up) throw new Error("The server did not start.");
-  const chat = await (await fetch(`${base}/api/conversations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "chat" }) })).json();
-  const pages = [...PAGES, `#/c/${chat.id}`];
+  // A made-up chat (the check's KesherAI has no model, so it cannot make a real one): its summary, session and events.
+  const at = new Date().toISOString();
+  const fake = { id: "speed-check", title: "Speed check", kind: "chat", projectId: null, modelId: "none/none", mode: "auto-edit", createdAt: at, updatedAt: at };
+  const session = { id: fake.id, status: "idle", modelId: fake.modelId, mode: fake.mode, pendingApprovals: [], pendingQuestions: [], canUndo: false, grants: [] };
+  const para = "A **long** answer with `code`, a [link](https://example.com) and a list:\n\n- one\n- two\n\nThen more words to wrap over a few lines in the chat column, like a real reply would.";
+  const events = Array.from({ length: 200 }, (_, i) => (i % 2 ? { seq: i + 1, at, type: "assistant", turn: (i + 1) / 2, text: para } : { seq: i + 1, at, type: "user", text: `Question number ${i / 2 + 1}?` }));
+  const fakeChat = (r) => (r.request().method() === "GET" ? r.fulfill({ json: { ...fake, session, events } }) : r.continue());
+  const pages = [...PAGES, `#/c/${fake.id}`];
   const browser = await pw.chromium.launch();
   for (const [w, h, name] of [[1280, 800, "computer"], [390, 844, "phone"]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
+    await page.route(`**/api/conversations/${fake.id}`, fakeChat);
     let current = "";
     page.on("pageerror", (e) => problems.push(`${name} ${current}: page error: ${e.message}`));
     page.on("console", (m) => {
@@ -85,6 +93,65 @@ try {
     }
     await page.close();
   }
+
+  // Speed (docs/DESIGN_RESEARCH.md §5): start to first screen, typing lag in a 200-message chat, and the time to draw
+  // one streamed token. Printed every run; generous limits fail the check only on a real slowdown.
+  const perf = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  perf.on("pageerror", (e) => problems.push(`speed: page error: ${e.message}`));
+  const t0 = Date.now();
+  await perf.goto(`${base}/#/`);
+  await perf.waitForFunction(() => (document.getElementById("root")?.childElementCount ?? 0) > 0, null, { timeout: 15000 });
+  const startMs = Date.now() - t0;
+  // A chat with 200 messages (fake: the real chat's answer with made-up events), and the live events in the check's hands.
+  await perf.route(`**/api/conversations/${fake.id}`, fakeChat);
+  await perf.addInitScript(() => {
+    const Real = window.EventSource;
+    window.EventSource = function (url, o) {
+      if (!String(url).includes("/events?after=")) return new Real(url, o);
+      const fake = { onmessage: null, onerror: null, readyState: 1, close() {}, addEventListener() {}, removeEventListener() {} };
+      window.__chatES = fake;
+      return fake;
+    };
+  });
+  await perf.goto(`${base}/#/c/${fake.id}`);
+  await perf.reload(); // a new hash alone does not reload the page, and the stand-in EventSource comes with a load
+  await perf.waitForFunction(() => !!window.__chatES, null, { timeout: 15000 }).catch(async (e) => {
+    await perf.screenshot({ path: join(out, "speed-chat.png") });
+    throw new Error(`the 200-message chat did not open its live events (${e.message.split("\n")[0]})`);
+  });
+  await perf.waitForTimeout(800);
+  await perf.click(".composer textarea");
+  await perf.evaluate(() => {
+    window.__lags = [];
+    document.addEventListener("keydown", () => {
+      const t = performance.now();
+      requestAnimationFrame(() => window.__lags.push(performance.now() - t));
+    }, true);
+  });
+  await perf.keyboard.type("Typing in a long chat should feel instant.", { delay: 30 });
+  const lags = (await perf.evaluate(() => window.__lags)).sort((a, b) => a - b);
+  const typingMs = lags.length ? lags[Math.floor(lags.length / 2)] : Infinity;
+  const tokenMs = await perf.evaluate(async () => {
+    const es = window.__chatES;
+    const words = "The answer streams in word by word, with **bold**, `code` and lists, and the page redraws each time.".split(" ");
+    // After each token, wait for React's scheduled work (a MessageChannel task, like React's own scheduler), then force layout.
+    const tick = () => new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
+    const n = 300;
+    const t = performance.now();
+    for (let i = 0; i < n; i++) {
+      es.onmessage({ data: JSON.stringify({ type: "assistant_delta", seq: 0, at: new Date().toISOString(), turn: 999, text: `${words[i % words.length]}${i % 40 === 39 ? "\n\n" : " "}` }) });
+      await tick();
+      void document.body.offsetHeight;
+    }
+    return (performance.now() - t) / n;
+  });
+  const drawn = await perf.evaluate(() => document.querySelector(".msg.streaming")?.textContent?.length ?? 0);
+  if (!drawn) problems.push("speed: the streamed answer was not drawn");
+  console.log(`Speed: first screen ${startMs} ms · typing ${typingMs.toFixed(1)} ms per key (200 messages) · ${tokenMs.toFixed(2)} ms per streamed token`);
+  if (startMs > 3000) problems.push(`speed: the first screen took ${startMs} ms (limit 3000)`);
+  if (typingMs > 50) problems.push(`speed: typing lags ${typingMs.toFixed(1)} ms per key in a 200-message chat (limit 50)`);
+  if (tokenMs > 8) problems.push(`speed: drawing a streamed token takes ${tokenMs.toFixed(2)} ms (limit 8)`);
+  await perf.close();
   await browser.close();
 } catch (e) {
   problems.push(`The check could not run: ${e.message}`);

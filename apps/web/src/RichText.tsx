@@ -71,7 +71,7 @@ export function RichText({ text }: { text: string }) {
       let list: { ordered: boolean; items: React.ReactNode[] } | null = null;
       const flush = (k: string) => {
         if (!list) return;
-        out.push(list.ordered ? <ol key={k}>{list.items}</ol> : <ul key={k}>{list.items}</ul>);
+        out.push(list.ordered ? <ol key={k} dir="auto">{list.items}</ol> : <ul key={k} dir="auto">{list.items}</ul>);
         list = null;
       };
       let skip = 0;
@@ -94,17 +94,17 @@ export function RichText({ text }: { text: string }) {
         const li = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(line);
         if (h) {
           flush(`l${k}`);
-          out.push(<p key={k} className={`md-h md-h${h[1]!.length}`}>{inline(h[2]!, k)}</p>);
+          out.push(<p key={k} dir="auto" className={`md-h md-h${h[1]!.length}`}>{inline(h[2]!, k)}</p>);
         } else if (li) {
           const ordered = !!li[2];
           if (!list || list.ordered !== ordered) {
             flush(`l${k}`);
             list = { ordered, items: [] };
           }
-          list.items.push(<li key={k}>{inline(li[3]!, k)}</li>);
+          list.items.push(<li key={k} dir="auto">{inline(li[3]!, k)}</li>);
         } else {
           flush(`l${k}`);
-          if (line.trim()) out.push(<p key={k}>{inline(line, k)}</p>);
+          if (line.trim()) out.push(<p key={k} dir="auto">{inline(line, k)}</p>);
         }
       });
       flush(`l${i}-end`);
