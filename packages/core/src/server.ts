@@ -96,7 +96,6 @@ import { remoteDesktopRoutes } from "./routes/remote-desktop.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes } from "./routes/parts.js";
-import { TelegramBridge } from "./telegram.js";
 import { Training } from "./training.js";
 import { ChatTrainer } from "./chat-trainer.js";
 import { telegramRoutes } from "./routes/telegram.js";
@@ -150,7 +149,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
-import { buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
+import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -324,15 +323,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   }
   // The phone app's own notifications (live connection, or UnifiedPush through ntfy).
   const phonePush = new PhonePush(() => config.remote.devices, persist);
-  const notifier = new Notifier(() => config.notifications, {
-    app: phonePush,
-    ...(options.notify ? { desktop: options.notify } : {}),
-    publicUrl: () => tunnel.status().url,
-    // The Approve / Deny buttons on the phone's (and watch's) notification.
-    decide: async (convId, requestId, decision) => !!(await services.conversations.open(convId))?.session.approve(requestId, decision),
-    // The notifications page lists them after a restart too (only the main app; the worker sends through it).
-    ...(worker ? {} : { history: join(paths.root, "notifications.json") }),
-  });
+  const notifier = buildNotifier({ config, phonePush, ...(options.notify ? { desktop: options.notify } : {}), tunnel, chats: () => services.conversations, worker, paths });
   downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => {
     notifier.onDownload(job);
     // "When a download finishes" routines (once, when it is done).
@@ -346,27 +337,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   watchDisk(paths, notifier);
   // Telegram: the user's own bot; each paired chat has its own conversation (telegram.ts).
-  const telegram = new TelegramBridge(config.telegram, persist, {
-    newConversation: async (title) => (await services.conversations.create({ kind: "chat", title, source: "telegram" })).id,
-    send: async (convId, text) => void (await services.conversations.send(convId, text)),
-    decide: async (convId, requestId, decision) => !!(await services.conversations.open(convId))?.session.approve(requestId, decision),
-    answer: async (convId, questionId, text) => !!(await services.conversations.open(convId))?.session.answer(questionId, text),
-    image: async (id) => {
-      const a = await assets.get(id);
-      return a && a.asset.mimeType.startsWith("image/") ? { data: a.data, mimeType: a.asset.mimeType } : undefined;
-    },
-    alert: (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["warning"], priority: 4 }).catch(() => undefined),
-    allowed: () => registry.permitted("telegram"),
-    saveFile: async (convId, name, data) => {
-      const conv = await library.getConversation(convId);
-      const folder = conv ? services.conversations.workspaceOf(conv) : undefined;
-      if (!folder) throw new Error("This chat has no folder.");
-      await mkdir(join(folder, "shared"), { recursive: true });
-      await writeFileFs(join(folder, "shared", name), data);
-      return `shared/${name}`;
-    },
-    transcribe: async (data, ext) => (await transcribeWith({ whisper, speech: () => config.speech, providers: () => config.providers }, Buffer.from(data), ext, config.speech.language)).text,
-  });
+  const telegram = buildTelegram({ config, persist, chats: () => services.conversations, assets, notifier, registry, library, whisper });
   const devices = new Devices({
     config: config.devices,
     remote: config.remote,

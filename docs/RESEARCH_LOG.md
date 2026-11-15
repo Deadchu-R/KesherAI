@@ -1154,6 +1154,9 @@ Stopped at: building step 1 (server store and tool).
   B5, first part: `server/build-remote.ts` (`buildTunnel`: Tailscale or the Cloudflare tunnel; `watchDisk`: the
   full-drive warning); 968 lines. Stopped at: the notifier, Telegram, device keys and the access log need the
   conversation manager (late-bound through `services`): move them with a small `late` object next.
+  Done the same day: `setupRemoteAccess` (access log, device keys, the auth hook, at its old place), `buildNotifier`
+  and `buildTelegram` (they get the chats as a function, `() => services.conversations`, read when used); 927 lines.
+  Stopped at: B6 (`server/build-extras.ts`: journal, computer control, Unreal, Unity, self-work, routines).
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
