@@ -313,8 +313,9 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       const seconds = Math.min(v15 ? 600 : 240, Math.max(10, Number(input.seconds ?? 60) || 60));
       const files = await flows.run(id, (flow) => {
         const enc = flow["2"]!.inputs;
-        enc.tags = String(input.tags ?? "");
-        enc.lyrics = String(input.lyrics ?? (v15 ? "[Instrumental]" : "[instrumental]"));
+        // Bounded (scan 75): the words go into ComfyUI's text encoder and into the song's saved details.
+        enc.tags = String(input.tags ?? "").slice(0, 1000);
+        enc.lyrics = String(input.lyrics ?? (v15 ? "[Instrumental]" : "[instrumental]")).slice(0, 8000);
         flow["4"]!.inputs.seconds = seconds;
         flow["8"]!.inputs.seed = randomInt(2 ** 31);
         if (v15) {
@@ -329,7 +330,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       }, ctx.signal);
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
-      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: input.tags, lyrics: input.lyrics } })));
+      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: String(input.tags ?? "").slice(0, 1000), lyrics: String(input.lyrics ?? "").slice(0, 8000) } })));
       return { output: `Made the song (${seconds} s${v15 ? "" : ", with the first ACE-Step: ACE-Step 1.5 sings in more languages, on the Nodes page"}); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
     },
   };

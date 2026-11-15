@@ -479,6 +479,19 @@ This review went through the code part by part. Each finding is listed with what
   connection was removed from this computer's settings (the code keeps LM Studio support; it is found again only if it
   is running at start-up, for that session).
 
+## Scan 75 (2026-11-15, 0.6.231)
+
+- server.ts split B3 (ComfyUI), B7 (`server/routes.ts`) and B8 (`server/start-engines.ts`): the same calls in the same
+  order. The key check for remote access (`setupRemoteAccess`) is still registered before `registerRoutes`, so it
+  covers every route; the smoke test (foreign origin and `Origin: null` refused, DNS rebinding needs the token, `/mcp`
+  refuses a foreign site) passes on the built server.
+- Start-up routines wait while a chat works or a model loads; the engine log line carries the routine's name (the
+  user's own words, shown as text in the log view, never as HTML).
+- make_music with ACE-Step 1.5: the language and key are mapped to the node's own lists (anything else falls back to
+  `en` / no key), the length is clamped to 10–600 s and the tempo to 40–220. Found: the style and the lyrics were not
+  bounded on their way into ComfyUI and the song's saved details; now 1,000 and 8,000 characters. The 10 GB model is
+  downloaded only after the user's yes (an approval card), as before.
+
 ## Scan 74 (2026-11-15, 0.6.228)
 
 - Phone app crash capture (Android `Crashes`, `POST /api/faults/phone`): the app keeps only the error, the stack,
