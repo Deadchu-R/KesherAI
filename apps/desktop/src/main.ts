@@ -16,7 +16,7 @@ import { chmod, copyFile, readFile, rename, stat, writeFile } from "node:fs/prom
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import type { KesherServer } from "@kesher/core";
-import { branding } from "@kesher/shared";
+import { SHORTCUTS, branding, shortcutKey, toAccelerator, type ShortcutMap } from "@kesher/shared";
 import { BrowserPane } from "./browser-pane.js";
 import { connectComputer, forgetComputer, listComputers, openComputer } from "./computers.js";
 import { WORKER_PORT, workerHost } from "./worker.js";
@@ -529,6 +529,55 @@ async function toggleTextHelper(coreUrl: string): Promise<void> {
   textWin.focus();
 }
 
+/** What each global key did when registered: "ok", "taken" (another program has it), or "off". */
+let globalKeyState: Record<string, "ok" | "taken" | "off"> = {};
+let globalKeysUrl = "";
+
+/**
+ * Registers the global keys from Settings → Keyboard (again after a change). A combination another program holds is
+ * reported as "taken", so the settings can say so.
+ */
+async function registerGlobalKeys(): Promise<Record<string, "ok" | "taken" | "off">> {
+  const base = globalKeysUrl.replace(/\/$/, "");
+  if (!base) return globalKeyState;
+  const saved = (await fetch(`${base}/api/settings/keyboard`, { signal: AbortSignal.timeout(5000) })
+    .then((r) => r.json())
+    .catch(() => ({}))) as { shortcuts?: ShortcutMap };
+  const actions: Record<string, () => void> = {
+    stopComputer: () => {
+      void fetch(`${base}/api/computer/stop`, { method: "POST" }).catch(() => undefined);
+      BrowserWindow.getAllWindows()[0]?.show();
+    },
+    gameHelper: () => void toggleGameHelper(base),
+    textHelper: () => void toggleTextHelper(base),
+    dictate: () => void toggleDictation(base),
+  };
+  globalShortcut.unregisterAll();
+  const state: Record<string, "ok" | "taken" | "off"> = {};
+  for (const d of SHORTCUTS.filter((x) => x.scope === "global")) {
+    const combo = shortcutKey(d.id, saved.shortcuts, process.platform === "darwin");
+    if (!combo || !actions[d.id]) {
+      state[d.id] = "off";
+      continue;
+    }
+    let ok = false;
+    try {
+      ok = globalShortcut.register(toAccelerator(combo), actions[d.id]!);
+    } catch {
+      ok = false;
+    }
+    state[d.id] = ok ? "ok" : "taken";
+  }
+  globalKeyState = state;
+  return state;
+}
+
+// Settings → Keyboard: register the global keys again after a change, and say which ones another program holds.
+ipcMain.handle("kesher:keys", async (event, reload: unknown) => {
+  if (!fromApp(event)) return {};
+  return reload === true ? await registerGlobalKeys() : globalKeyState;
+});
+
 let dictWin: BrowserWindow | undefined;
 
 /**
@@ -853,24 +902,11 @@ app.whenReady().then(async () => {
     powerMonitor.on("suspend", () => void announce("asleep"));
     powerMonitor.on("shutdown", () => void announce("asleep"));
     powerMonitor.on("resume", () => setTimeout(() => void announce("awake"), 5000));
-    // Stops computer control from anywhere, even when another app is in front.
-    const stopKey = process.platform === "darwin" ? "Command+Shift+Escape" : "Control+Alt+Escape";
-    globalShortcut.register(stopKey, () => {
-      void fetch(`${coreUrl.replace(/\/$/, "")}/api/computer/stop`, { method: "POST" }).catch(() => undefined);
-      BrowserWindow.getAllWindows()[0]?.show();
-    });
-    // The Game Helper (as Xbox's Gaming Copilot, on the user's own models): the key takes a picture of the game in
-    // front, then opens a small window over it. On a handheld, map a back button to this key (Armoury Crate, Steam).
-    // Ctrl+Alt+G, not Ctrl+Shift+G: that one is VS Code's Source Control, and a global key takes it from every app (scan 61).
-    const gameKey = process.platform === "darwin" ? "Command+Option+G" : "Control+Alt+G";
-    globalShortcut.register(gameKey, () => void toggleGameHelper(coreUrl));
-    // The Text Helper: select text in any app, then this key. Ctrl+Alt+K ("Kesher"); Cmd+Option+K is a browser's
-    // developer console on a Mac, so Control+Option+K there.
-    const textKey = process.platform === "darwin" ? "Control+Option+K" : "Control+Alt+K";
-    globalShortcut.register(textKey, () => void toggleTextHelper(coreUrl));
-    // Dictation into any app: Ctrl+Alt+D (not Alt+Z as AnythingLLM: that opens NVIDIA's overlay).
-    const dictKey = process.platform === "darwin" ? "Control+Option+D" : "Control+Alt+D";
-    globalShortcut.register(dictKey, () => void toggleDictation(coreUrl));
+    // The global keys (stop computer control, Game / Text helper, dictation), from Settings → Keyboard.
+    // Notes on the defaults: Ctrl+Alt+G, not Ctrl+Shift+G (VS Code's Source Control, scan 61); Ctrl+Alt+K, as
+    // Cmd+Option+K is a browser's developer console on a Mac; Ctrl+Alt+D, not Alt+Z (NVIDIA's overlay).
+    globalKeysUrl = coreUrl;
+    await registerGlobalKeys();
   } catch (err) {
     await rescue(err);
   }

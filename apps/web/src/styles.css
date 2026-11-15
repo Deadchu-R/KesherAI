@@ -2289,6 +2289,14 @@ html.handheld .palette-list button { min-height: 44px; }
 .phone-numbers { margin: 0; display: grid; gap: 2px; }
 .phone-numbers > div { gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .phone-numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* Settings → Keyboard: one row per shortcut, its keys as a key cap. */
+.kbd-row { gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.kbd-row button { height: 30px; padding: 0 10px; font-size: 13px; }
+.kbd-combo { font: 500 13px/1 "IBM Plex Mono", ui-monospace, monospace; padding: 6px 8px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 6px; background: var(--panel-2); color: var(--text); white-space: nowrap; }
+.kbd-combo.off { color: var(--muted); font-family: inherit; }
+.kbd-combo.taken { border-color: var(--bad); }
+.kbd-recording { font-size: 13px; color: var(--accent); }
+@media (max-width: 600px) { .kbd-row { flex-wrap: wrap; } .kbd-row > .grow { flex-basis: 100%; } }
 /* Attached files in a message, and their preview (tables, slides, a Word page in a frame without scripts). */
 .attach-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .attach-chip { height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; background: var(--panel); max-width: 100%; }

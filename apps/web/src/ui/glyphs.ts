@@ -77,6 +77,7 @@ export const GLYPHS: Record<string, string[]> = {
   microscope: ["M9 3.5h4l-.5 8h-3z", "M7 20.5h11M10.5 11.5v3a4 4 0 0 0 4 4h0a5.5 5.5 0 0 0 1.5-10.8"],
   crayon: ["m16 3.5 4.5 4.5-10 10H6v-4.5z", "M4 20.5h7"],
   half: [circle(12, 12, 8.5), "M12 3.5v17"],
+  keyboard: [rect(2.5, 6, 19, 12, 2), "M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 13.5h.01M18 13.5h.01M8.5 14.5h7"],
 };
 
 /** Emoji and signs used across the app, and the drawing that stands for each. */
@@ -85,7 +86,7 @@ const FROM_TEXT: Record<string, string> = {
   "📁": "folder", "💬": "chat", "🎨": "palette", "✏": "pencil", "✏️": "pencil", "✎": "pencil", "🤖": "bot", "🛡": "shield", "🛡️": "shield", "🗑": "trash", "🗑️": "trash",
   "🖥": "monitor", "🖥️": "monitor", "📎": "paperclip", "🌐": "globe", "⬇": "download", "⟳": "refresh", "↻": "refresh", "🧩": "nodes", "🖍": "crayon", "🔬": "microscope",
   "🔧": "wrench", "🔔": "bell", "🔌": "plug", "📷": "camera", "📱": "phone", "📲": "phone", "📦": "box", "📜": "scroll", "📚": "book", "📋": "clipboard", "📄": "page", "📝": "page",
-  "🏢": "building", "🌙": "moon", "⭐": "star", "✨": "sparkle", "✦": "sparkle", "✕": "close", "✅": "check", "☁": "cloud", "☁️": "cloud", "◐": "half", "▶": "play", "⇄": "swap",
+  "🏢": "building", "🌙": "moon", "⭐": "star", "✨": "sparkle", "✦": "sparkle", "✕": "close", "✅": "check", "☁": "cloud", "☁️": "cloud", "◐": "half", "▶": "play", "⇄": "swap", "⌨": "keyboard", "⌨️": "keyboard",
   "🖼": "image", "🖼️": "image", "🗂": "stack", "🗂️": "stack", "🏋": "dumbbell", "🏋️": "dumbbell", "📅": "calendar", "⚖": "compare", "⚖️": "compare", "⛓": "flow", "⛓️": "flow",
   "🎭": "person", "👥": "people", "📊": "chart", "🧷": "puzzle", "🎛": "sliders", "🎛️": "sliders", "🩺": "pulse", "⬆": "upload",
 };

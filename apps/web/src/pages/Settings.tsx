@@ -31,6 +31,7 @@ import { WebFilterSection } from "../settings/WebFilterSection";
 import { ChatBarSection } from "../ChatBar";
 import { NoctaliaSection } from "../settings/NoctaliaSection";
 import { PhoneSection } from "../settings/PhoneSection";
+import { KeyboardSection } from "../settings/KeyboardSection";
 import { useEffect, useState } from "react";
 import { isRemote } from "../api";
 import { getLocale, t } from "../i18n";
@@ -48,6 +49,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; w
   { id: "chats", icon: "💬", en: "Chats", he: "צ'אטים", words: "chat buttons bar toolbar show hide steps browser files coach context team group כפתורים צאט סרגל להציג להסתיר שלבים דפדפן קבצים מאמן הקשר צוות", render: () => <ChatBarSection /> },
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },
+  { id: "keyboard", icon: "⌨", en: "Keyboard", he: "מקלדת", words: "keyboard shortcuts keys hotkey ctrl alt change remap dictation text helper game palette מקלדת קיצורים מקשים צירוף שינוי הכתבה עוזר טקסט משחקים", render: () => <KeyboardSection /> },
   { id: "computer", icon: "🖥", en: "Computer and graphics card", he: "המחשב וכרטיס המסך", words: "noctalia waybar bar linux desktop נוקטליה בר לינוקס parallel chats at once slots context במקביל צאטים שיחות הקשר gpu graphics card vram temperature unload idle minutes ram cpu limit guard performance כרטיס מסך טמפרטורה פריקה לפרוק דקות זיכרון מעבד הגבלה ביצועים עומס", render: () => <><GpuSection /><ChatsAtOnce card /><GuardSection /><NoctaliaSection /></> },
   { id: "privacy", icon: "🛡", en: "Privacy and permissions", he: "פרטיות והרשאות", words: "permissions always allow approve rules computer control screen mouse access log privacy web search safe search censorship blocked sites onion dark web tor חיפוש סינון צנזורה אתרים חסומים דארק ווב הרשאות תמיד לאשר כללים שליטה במחשב מסך עכבר יומן גישה פרטיות", render: () => <><PermissionsSection /><WebFilterSection /><ComputerSection /></> },
   { id: "phone", icon: "📱", en: "Phone and remote access", he: "טלפון וגישה מרחוק", words: "phone remote anywhere tunnel qr pair device keys tailscale telegram computers start with computer access log טלפון מרחוק מכל מקום מנהרה קוד סריקה מכשירים מפתחות טלגרם מחשבים הפעלה עם המחשב יומן גישה", render: () => <><PhoneSection /><DeviceKeysSection /><ComputersSection /><TelegramSection /><AccessLogSection /></> },

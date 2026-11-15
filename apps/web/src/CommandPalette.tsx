@@ -7,6 +7,7 @@ import { useParts } from "./parts";
 import { fit } from "./palette-fit";
 import { handheldSetting, setHandheld } from "./PadHints";
 import { Glyph } from "./ui/Glyph";
+import { isShortcut } from "./keyboard";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -50,7 +51,7 @@ export function CommandPalette() {
       setOpen(true);
     };
     const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      if (isShortcut(e, "palette")) {
         // The code editor keeps its own Ctrl+K chords.
         if ((e.target as Element | null)?.closest?.(".monaco-editor")) return;
         e.preventDefault();

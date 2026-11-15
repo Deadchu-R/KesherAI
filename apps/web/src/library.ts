@@ -66,6 +66,8 @@ interface DesktopBridge {
   /** The dictation bar (Ctrl+Alt+D). Missing before 0.6.205. */
   dictateDone?(text: string): Promise<{ pasted?: boolean; error?: string }>;
   onDictateStop?(fn: () => void): () => void;
+  /** Global keys: their state, or registered again after Settings → Keyboard changed. Missing before 0.6.209. */
+  keys?(reload?: boolean): Promise<Record<string, "ok" | "taken" | "off">>;
 }
 
 /** @returns The desktop bridge when running in the desktop app, else `undefined`. */

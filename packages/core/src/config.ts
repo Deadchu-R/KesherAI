@@ -295,6 +295,10 @@ export const KesherConfigSchema = z.object({
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */
   browserSites: z.array(z.string()).default([]),
+  /** The user's keyboard shortcuts (Settings → Keyboard): a combination per id, or null for off (see shortcuts.ts). */
+  keyboardShortcuts: z.record(z.string(), z.string().nullable()).default({}),
+  /** Turn off KesherAI's in-app shortcuts (global ones are turned off one by one). */
+  keyboardOff: z.boolean().default(false),
   /** Code environments by folder (setup command, actions, variables), set on the Code page. */
   codeEnvironments: z.record(z.string(), z.any()).default({}),
   /** Named code environments (any folder), picked when a code session starts: { id, name, setup, actions, env }. */

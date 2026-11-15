@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { deviceInfo } from "../handheld.js";
-import { BUILT_IN_CATEGORIES, branding, features } from "@kesher/shared";
+import { BUILT_IN_CATEGORIES, branding, cleanShortcuts, features } from "@kesher/shared";
 import { detectHardware } from "@kesher/downloads";
 import { basename, join, resolve, sep } from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -25,6 +25,15 @@ const tailscale = new Tailscale();
  * @param s - Services.
  */
 export async function systemRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
+  /** Keyboard shortcuts (Settings → Keyboard): the user's changes and the in-app master switch. */
+  app.get("/api/settings/keyboard", async () => ({ shortcuts: s.config.keyboardShortcuts ?? {}, off: s.config.keyboardOff ?? false }));
+  app.put<{ Body: { shortcuts?: unknown; off?: unknown } }>("/api/settings/keyboard", async (req) => {
+    if (req.body?.shortcuts !== undefined) s.config.keyboardShortcuts = cleanShortcuts(req.body.shortcuts);
+    if (typeof req.body?.off === "boolean") s.config.keyboardOff = req.body.off;
+    await s.saveConfig();
+    return { shortcuts: s.config.keyboardShortcuts, off: s.config.keyboardOff };
+  });
+
   app.get("/api/health", async () => ({
     ok: true,
     version: CORE_VERSION,

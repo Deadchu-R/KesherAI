@@ -40,6 +40,7 @@ import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
 import { GroupButton, TeamButton, TimersButton, exportChat } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
 import { splitAttachments } from "../attach-lines";
+import { isShortcut } from "../keyboard";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -420,7 +421,7 @@ export function ConversationPage({ id }: { id: string }) {
   useEffect(() => {
     if (!anyPane) return;
     const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+      if (isShortcut(e, "closePanes")) {
         e.preventDefault();
         closePanes();
       }

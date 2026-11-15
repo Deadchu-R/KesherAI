@@ -22,3 +22,4 @@ export * from "./csharp-graph.js";
 export * from "./csharp-free.js";
 export * from "./csharp-collapse.js";
 export * from "./csharp-expr.js";
+export * from "./shortcuts.js";

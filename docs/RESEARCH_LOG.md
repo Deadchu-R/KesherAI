@@ -1083,3 +1083,13 @@ Built (0.6.207): office.ts (zip reader with limits, xlsxSheets, pptxSlides, docx
   routine runs only when it changed, with the lines added and removed), "when files change in a folder" (a watcher,
   20 s to gather, the names go with the routine), "when a download finishes" (optionally by name).
 Stopped at: a timers list on the Routines page (the chat header shows them), and a run history per routine.
+
+## 2026-11-15 (night): Remappable keyboard shortcuts (COMPETITORS fourth review, item 6)
+- Open WebUI 0.11: Settings → Keyboard, click a shortcut and press the new keys, a warning on a clash, saved to the
+  account, one-click reset, a master switch for when keys clash with the browser or the system. VS Code: the same, with
+  a recorded key and conflicts listed.
+- Built (0.6.209): shared/shortcuts.ts (the list, one spelling, the key's place so a Hebrew layout records "K",
+  Electron's form, conflicts, cleaning), config.keyboardShortcuts, /api/settings/keyboard, the desktop app registers
+  the global keys from it and reports a key another program holds; Settings → Keyboard with Change / Off / Default /
+  "Everything back", a master switch for the in-app ones. A global key must have Ctrl, Cmd or Alt.
+Stopped at: more in-app shortcuts (new chat, settings) to remap; they are added to SHORTCUTS when made.

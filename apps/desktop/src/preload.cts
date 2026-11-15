@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
     ipcRenderer.on("kesher:dictate-stop", on);
     return () => ipcRenderer.removeListener("kesher:dictate-stop", on);
   },
+  /** The global keys' state ("ok", "taken" by another program, "off"); `true` registers them again after a change. */
+  keys: (reload?: boolean): Promise<Record<string, "ok" | "taken" | "off">> => ipcRenderer.invoke("kesher:keys", reload === true),
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("kesher:pick-folder"),
   /** Start with the computer in the background; pass nothing to read it. */
