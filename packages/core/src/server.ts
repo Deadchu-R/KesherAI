@@ -399,6 +399,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
   // Server errors go into the fault log (the route and the message; never the request's body).
   app.addHook("onError", async (req, _reply, err) => {
+    // Only real failures: an answer like "not set up yet" (a 4xx the page explains) is not a fault (audit 2026-11:
+    // a Unity project without the Bridge package filled the log).
+    if ((err.statusCode ?? 500) < 500) return;
     services.faults.add({ kind: "server", where: `${req.method} ${req.routeOptions?.url ?? req.url.split("?")[0]}`, message: err.message });
   });
   injectRef.app = app;

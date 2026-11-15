@@ -156,7 +156,7 @@ function failure(run: CliRun): Error {
   try {
     const j = JSON.parse(run.stdout) as { errors?: Array<{ code?: string; message?: string }> };
     const e = j.errors?.[0];
-    if (e?.code === "REMOTE_COMMAND_FAILED" || /kesher_/.test(e?.message ?? "")) return new Error("This project does not have the KesherAI Bridge package yet: press “Add to a project…”.");
+    if (e?.code === "REMOTE_COMMAND_FAILED" || /kesher_/.test(e?.message ?? "")) return Object.assign(new Error("This project does not have the KesherAI Bridge package yet: press “Add to a project…”."), { statusCode: 409 }); // a state the page explains, not a fault
     if (e?.message) return new Error(e.message);
   } catch {
     // not JSON
