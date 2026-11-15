@@ -1490,8 +1490,11 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .pl-preview { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--panel-2); }
 .pl-warn { margin: 0; padding-inline-start: 4px; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--warn); }
 /* Start screen: recent chats and pinned tools under the message box */
-.home-recent, .home-pins { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 720px; margin: 14px auto 0; }
-.home-recent a, .home-pins a { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; padding: 7px 14px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-2); text-decoration: none; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The start screen without a sidebar (the phone): recents as rows, pinned tools as tiles (redesign 2026-11). */
+.home-recent { display: flex; flex-direction: column; gap: 8px; width: min(720px, 100%); margin: 14px auto 0; }
+.home-recent a { display: flex; align-items: center; min-height: 48px; padding: 0 14px; border-radius: var(--radius-sm); background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); text-decoration: none; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; width: min(720px, 100%); margin: 14px auto 0; }
+.home-pins a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 72px; padding: 8px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); text-decoration: none; font-size: 13px; text-align: center; }
 .home-recent a:hover, .home-pins a:hover { border-color: var(--accent); color: var(--text); }
 /* On a computer with the sidebar showing, the recent chats and pinned tools are right beside Home: not twice. */
 @media (min-width: 761px) { .app:not(.sidebar-hidden) .home-recent, .app:not(.sidebar-hidden) .home-pins { display: none; } }
