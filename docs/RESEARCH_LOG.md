@@ -1224,4 +1224,10 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - **Cover art (0.6.232):** Gemini's songs come with AI cover art (Nano Banana), and so do Suno's. make_music now makes
   a square cover with the active image model (no words on it: image models misspell them), shown with the song;
   without a usable image model, or if it fails, the song comes alone.
-- **Stopped at:** the 4B planner (`split_llm` template) for better songs: later, if Roee finds the songs weak.
+- **XL + 4B planner (0.6.233), compared on the PC:** the same song, lyrics and seed with 1.5 turbo (21 s) and XL with
+  the planner (18 s): no time cost. Roee's verdict on Hebrew, both versions: recognizably Hebrew, but it still sounds
+  artificial (stress, vowels, the Israeli accent); he expects no music model to get those nuances yet. Kept XL as
+  the default (no cost).
+- **Stopped at:** Hebrew singing quality is the models' limit, not KesherAI's; revisit when a model with real Hebrew
+  training appears (check ACE-Step releases and Lyria's API). Lyrics guidance in make_music stays (it helps any
+  language).
