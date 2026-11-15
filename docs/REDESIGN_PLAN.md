@@ -1,0 +1,36 @@
+# Redesign plan (2026-11)
+
+The design canvas ("KesherAI — redesign") holds every screen at computer and phone width. This is the order it goes
+into the app. Every step keeps the canvas's look: tokens (bg #121213, panel #18181a, panel-2 #1f1f22, line #2a2a2e,
+accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px targets, 390px phone.
+
+## Stage 1: the new design
+1. Shared base: tokens as CSS variables; one segmented control, card, tabs, switch, and the computer/phone toggle.
+2. Sidebar: one "new" button, recents always visible, routines folded; phone top bar (☰, bell) and the
+   computer/phone toggle on screens that work on both.
+3. Home, chat and message box: the `@` menu (F17), the approval card, dictation with ▾.
+4. Code and code start: the approvals chip only in code.
+5. Inbox: "Watch and approve" moves in; the bell opens it.
+6. Models: tabs chat, code, images, video, music, speech, more; each with loaded now, recommended, on this computer.
+7. PC health: overview, storage, programs, battery, and the computer/phone toggle.
+8. All tools, settings, my day, memory, self-work.
+9. Images (tabs by action), batch, training, canvas, Nodes, pipelines, compare.
+10. Knowledge, libraries and their store as one screen, prompts, pages, personas, community.
+11. Unity, Unreal, game helper, usage, updates, remote, dictation bar, text helper.
+12. Phone pass: every screen at 390px; Android phone health (needs native code in the Android app).
+
+## Stage 2: features the canvas already draws
+13. F12 the chat changes settings, with an old → new approval card.
+14. F21 usage heatmap of 12 weeks, top models and tools.
+15. F11 model benchmark ("8/10 right") beside the speed.
+16. F19 two models loaded at once.
+17. A local update source: updates without GitHub, for computers and the phone.
+18. F3 side chat.
+19. F6 previews of Word, Excel and 3D.
+20. F10 smart auto approvals.
+21. F1 a model on the phone itself (turns on the "on the phone" side of the toggle).
+
+## Throughout
+- A security and performance scan every 5 changes.
+- Each step checked on the computer through KesherAI, at 390px and through remote.
+- A release every few steps.
