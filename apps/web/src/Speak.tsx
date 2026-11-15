@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { withToken } from "./api";
 import { getLocale, t } from "./i18n";
 import { Select } from "./ui/Select";
+import { LineIcon } from "./ui/Glyph";
 
 const VOICE_KEY = "kesher-tts-voice"; // "system:<voiceURI>" | "cloud:openai:<voice>" | ""
 // A new key (0.5.47): reading aloud by itself starts off for everyone; turn it on in Settings → Accessibility.
@@ -203,7 +204,7 @@ export function SpeakButton({ text }: { text: string }) {
         }
       }}
     >
-      {on ? "■" : "🔊"}
+      <LineIcon name={on ? "stop" : "speaker"} size={15} />
     </button>
   );
 }

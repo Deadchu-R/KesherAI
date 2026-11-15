@@ -80,6 +80,7 @@ button.primary:hover { background: var(--accent); filter: brightness(1.08); }
 /* A line icon inside a button or a menu sits on the text's middle. */
 .glyph { display: inline-block; flex: none; vertical-align: -0.22em; }
 button > .glyph:first-child, .btn > .glyph:first-child { margin-inline-end: 6px; }
+.retry-btn { display: inline-flex; align-items: center; }
 button:disabled { opacity: 0.5; cursor: default; }
 input, select, textarea {
   height: 40px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);

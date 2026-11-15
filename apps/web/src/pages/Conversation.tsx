@@ -41,6 +41,7 @@ import { GroupButton, TeamButton, TimersButton, exportChat } from "../chat/ChatH
 import { AttachmentChips } from "../chat/Attachments";
 import { splitAttachments } from "../attach-lines";
 import { isShortcut } from "../keyboard";
+import { LineIcon } from "../ui/Glyph";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -640,7 +641,7 @@ export function ConversationPage({ id }: { id: string }) {
         )}
         {(hasUnreal || bpPath) && show("blueprint", bpOpen || !!bpPath) && (
           <button type="button" className={bpOpen ? "on" : ""} aria-pressed={bpOpen} onClick={() => setBpOpen(!bpOpen)} title={getLocale() === "he" ? "חיבור Blueprint של Unreal לצ'אט: לראות, לשנות ולבדוק" : "Connect an Unreal Blueprint to this chat: see, change and test it"}>
-            🔷 Blueprint{bpPath ? ` · ${bpPath.split(".").pop()}` : ""}
+            <LineIcon name="nodes" size={15} />Blueprint{bpPath ? ` · ${bpPath.split(".").pop()}` : ""}
           </button>
         )}
         {show("workspace", showIde) && (
@@ -736,7 +737,7 @@ export function ConversationPage({ id }: { id: string }) {
                       const { body, files } = splitAttachments(e.text);
                       return files.length ? <>{body}<AttachmentChips convId={id} files={files} /></> : e.text;
                     })()}
-                    {!busy && <span className="msg-tools"><button type="button" className="msg-tool" title={t("editMessage")} aria-label={t("editMessage")} onClick={() => { setEditingSeq(e.seq); setEditText(e.text.replace(/\n*\[[^\]\n]+: [^\]\n]+\]\s*$/g, "")); }}>✎</button></span>}
+                    {!busy && <span className="msg-tools"><button type="button" className="msg-tool" title={t("editMessage")} aria-label={t("editMessage")} onClick={() => { setEditingSeq(e.seq); setEditText(e.text.replace(/\n*\[[^\]\n]+: [^\]\n]+\]\s*$/g, "")); }}><LineIcon name="pencil" size={14} /></button></span>}
                   </div>
                 );
               case "assistant":
@@ -744,7 +745,7 @@ export function ConversationPage({ id }: { id: string }) {
                   <div key={e.seq} className="msg">
                     <RichText text={e.text} />
                     {voicePart && <SpeakButton text={e.text} />}
-                    {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}>⑂</button>}
+                    {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}><LineIcon name="branch" size={15} /></button>}
                     {(() => {
                       const u = versions.turnOf.get(e.seq);
                       if (!u || versions.lastAnswerOf.get(u) !== e.seq) return null;
@@ -860,9 +861,9 @@ export function ConversationPage({ id }: { id: string }) {
                 return (
                   <p key={e.seq} className="error row">
                     <span className="grow">{e.message}</span>
-                    {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={retry}>{L("↻ נסה שוב", "↻ Try again")}</button>}
-                    {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => void investigate()}>{L("🔎 חקור", "🔎 Investigate")}</button>}
-                    {e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => setReportOpen(true)}>{L("📮 דווח", "📮 Report")}</button>}
+                    {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={retry}><LineIcon name="refresh" size={15} />{L("נסה שוב", "Try again")}</button>}
+                    {!busy && e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => void investigate()}><LineIcon name="microscope" size={15} />{L("חקור", "Investigate")}</button>}
+                    {e.seq === events.at(-1)?.seq && <button type="button" className="retry-btn" onClick={() => setReportOpen(true)}><LineIcon name="chat" size={15} />{L("דווח", "Report")}</button>}
                   </p>
                 );
               default:
@@ -880,7 +881,7 @@ export function ConversationPage({ id }: { id: string }) {
               <span className="grow small">{L("נראה שהצ'אט נתקע — לא הגיע ממנו כלום כבר שתי דקות.", "This chat looks stuck: nothing has come from it for two minutes.")}</span>
               <button type="button" className="primary" onClick={retry}>{L("נסה שוב", "Try again")}</button>
               <button type="button" onClick={() => { lastWork.current = Date.now(); setStalled(false); }}>{L("לחכות עוד", "Keep waiting")}</button>
-              <button type="button" onClick={() => void investigate(true)}>{L("🔎 עצור וחקור", "🔎 Stop and investigate")}</button>
+              <button type="button" onClick={() => void investigate(true)}><LineIcon name="microscope" size={15} />{L("עצור וחקור", "Stop and investigate")}</button>
             </div>
           )}
           {conv.interruptedAt && !busy && (
