@@ -12,17 +12,14 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
 import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
-import { UNITY_NOTE, UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
-import { UNREAL_NOTE, UNREAL_TOOL_NAMES, unrealTools } from "./unreal-tools.js";
-import { androidPhoneTools } from "./android-phone.js";
+import { UNITY_TOOL_NAMES } from "./unity-tools.js";
+import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { delegateTool } from "./delegate.js";
 import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
-import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
-import { chosenPhones, phoneNote, type Phone } from "./phones.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
-import { graphTools } from "./graph-edit.js";
+import { gameTools } from "./chat-tools-games.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
@@ -190,53 +187,14 @@ export class ConversationManager {
     const split = splitTools(this.deps, () => this.defaultChatModel(), media.notes, id);
     // The numbers of an exported chat between people (the relationship analyst persona uses it).
     split.push(analyzeChatTool);
-    // Unity through its CLI: when it is installed here, or a Unity project was added (then unity_status explains a missing CLI).
-    const unity = this.deps.unity && (this.deps.unity.cliKnown() || this.deps.unity.activeProject)
-      ? unityTools(this.deps.unity, join(this.deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await this.deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id, () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[]))
-      : [];
-    // Fewer tokens: the long Unity guide and every Unity tool only while a Unity project is in use.
-    if (unity.length && this.unityInChat(id)) media.notes.push(UNITY_NOTE);
-    else if (unity.length && this.deps.unity?.activeProject) media.notes.push(`The user's Unity project is ${basename(this.deps.unity.activeProject)}. For Unity work, load its tools with find_tools (unity_status first); their guide comes with them.`);
-    else if (unity.length) media.notes.push("Unity's CLI is installed here: for Unity work, ask the user to pick or create a Unity project (+ → Project, or the Unity page); unity_status shows what is ready.");
-    // Graphs in words from any chat: Unity Script/State Graphs, and Unreal Blueprints (KesherAI Bridge plugin).
-    const chatModel = () => this.defaultChatModel();
-    if (unity.length && this.deps.unity?.activeProject) {
-      split.push(...graphTools("unity", this.deps.unity, this.deps.registry, chatModel));
-      media.notes.push("unity_list_graphs, unity_read_graph and unity_change_graph see and change the project's Visual Scripting graphs (Script Graphs and State Graphs) in words; prefer them for graph logic.");
-    }
-    if (this.deps.unreal?.available) {
-      split.push(...graphTools("unreal", this.deps.unreal, this.deps.registry, chatModel, async (png) => (await this.deps.assets.save(png, "image/png", { meta: { use: "unreal-test" } })).id));
-      media.notes.push((this.deps.unreal.connected ? "The user's Unreal Editor is connected (KesherAI Bridge)" : "The user's Unreal Editor is closed: graph tools start a headless editor (30-90 s a call, so batch a change into one unreal_change_graph)") + ": unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled); unreal_test_blueprint plays the game in the editor for a few seconds and returns the log and a picture, to check a change works.");
-    }
-    // Unreal 5.8's own MCP server (the "Unreal Engine" connection): how to use it well.
-    if ((this.deps.mcpTools?.() ?? []).some((t) => /(^|_)(list_toolsets|describe_toolset)$/.test(t.spec.name))) {
-      media.notes.push(
-        "Unreal Editor tools (Unreal's own MCP server): first list_toolsets, then describe_toolset on the one you need to read its tools' exact arguments, then call_tool with toolset_name, tool_name and arguments — never guess tool names. Check for project skills with AgentSkillToolset.ListSkills and follow a relevant one. Ask the user to save before a change that touches several assets. Wait for compiles to finish (LiveCodingToolset.CompileLiveCoding for C++). Read every result: anything that is not an explicit success is a stop. If Play-in-Editor is running, asset tools behave differently: stop it first or tell the user.",
-      );
-    }
-    split.push(...(this.deps.unity?.activeProject ? unity : unity.filter((t) => t.spec.name === "unity_status")));
+    // Unity, Unreal, their graphs and running a game on the phone (chat-tools-games.ts). Unreal is looked for in
+    // the background, at most every 5 minutes.
+    this.checkUnreal();
+    const games = gameTools({ deps: this.deps, id, unityInChat: this.unityInChat(id), unreal: this.unrealState, unrealEngines: this.unrealEngines, jobs: () => this.jobs(), refresh: () => void this.refreshTools(id), chatModel: () => this.defaultChatModel() });
+    split.push(...games.tools);
+    media.notes.push(...games.notes);
     // Code sessions (self-work among them) share a task board with Claude on this computer.
     if (kind === "code" && this.deps.board) split.push(taskBoardTool(this.deps.board));
-    // Unreal: when an engine is installed here (checked in the background, at most every 5 minutes) or a project is in use.
-    this.checkUnreal();
-    // Fewer tokens: with no Unreal project in use, only the three entry tools and one line go to the model
-    // (the full set and its long guide come once a project is created or opened); every message carried ~1,500
-    // tokens of Unreal guidance before, also in chats that had nothing to do with Unreal.
-    if (this.unrealState.project) {
-      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id), () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[])));
-      media.notes.push(UNREAL_NOTE);
-    } else if (this.unrealEngines) {
-      split.push(...unrealTools(this.unrealState, join(this.deps.outputsDir, "..", "logs"), this.jobs(), () => void this.refreshTools(id), () => chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[])).filter((t) => /^unreal_(status|create_project|use_project)$/.test(t.spec.name)));
-      media.notes.push("Unreal Engine is installed here: for Unreal work start with unreal_status, then unreal_create_project or unreal_use_project (the other Unreal tools and their guide come after that).");
-    }
-    // A game project in use: running its Android build on the user's phone and reading why it closed.
-    if (this.unrealState.project || this.deps.unity?.activeProject) {
-      split.push(...androidPhoneTools());
-      media.notes.push(BUILD_RESEARCH_NOTE);
-      // The phones the user builds for (Settings → For developers → Target phones): one short line.
-      const phones = chosenPhones(this.deps.config.phones?.targets ?? [], (this.deps.config.phones?.custom ?? []) as Phone[]);
-      if (phones.length) media.notes.push(phoneNote(phones));
-    }
     // The task's steps, shown beside the chat (every kind of chat).
     media.notes.push(STEPS_NOTE);
     // "Check my change" (like Claude's browser pane): in a code chat with KesherAI's own browser, look at the result.
