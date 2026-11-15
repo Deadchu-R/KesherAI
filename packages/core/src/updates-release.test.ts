@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +16,9 @@ test("versions and installers", () => {
   assert.equal(installerFor(names, "linux", "x64", true), "KesherAI-0.4.2.AppImage");
 });
 
+const NAMES = ["KesherAI-Setup-0.4.2.exe", "KesherAI-0.4.2-arm64.dmg", "KesherAI-0.4.2-x64.dmg", "KesherAI-0.4.2.AppImage", "KesherAI-0.4.2.deb"];
+const HELLO_SHA512 = createHash("sha512").update("hello").digest("base64");
+
 test("an installed copy finds a newer release, downloads the installer and runs it", async () => {
   const srv = createServer((req, res) => {
     const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
@@ -23,9 +27,11 @@ test("an installed copy finds a newer release, downloads the installer and runs 
       // 0.4.3 is still being built: no installers yet.
       return res.end(JSON.stringify([
         { tag_name: "v0.4.3", name: "KesherAI 0.4.3", body: "", assets: [] },
-        { tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "### New\n- **Google:** Drive files\n- Fixes", assets: ["KesherAI-Setup-0.4.2.exe", "KesherAI-0.4.2-arm64.dmg", "KesherAI-0.4.2-x64.dmg", "KesherAI-0.4.2.AppImage"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) },
+        { tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "### New\n- **Google:** Drive files\n- Fixes", assets: [...NAMES.slice(0, 4), "latest.yml", "latest-mac.yml", "latest-linux.yml"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) },
       ]));
     }
+    // The release's update feed: every installer with its sha512 (an installer with no fingerprint is never run).
+    if (req.url?.startsWith("/dl/latest")) return res.end(NAMES.map((n) => `  - url: ${n}\n    sha512: ${HELLO_SHA512}`).join("\n"));
     if (req.url?.startsWith("/dl/")) return res.end("hello");
     res.writeHead(404).end();
   });
@@ -56,4 +62,29 @@ test("Linux: an AppImage copy gets the AppImage, a .deb install gets the .deb", 
   assert.equal(installerFor(names, "linux", "x64", true), "KesherAI-0.6.127.AppImage");
   assert.equal(installerFor(names, "linux", "x64", false), "KesherAI-0.6.127.deb");
   assert.equal(installerFor(["KesherAI-0.6.127.AppImage"], "linux", "x64", false), "KesherAI-0.6.127.AppImage");
+});
+
+test("an installer with no fingerprint in the release's feed is deleted, not run", async () => {
+  const srv = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+    if (req.url === "/repos/o/r/releases?per_page=10") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify([{ tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "", assets: [...NAMES.slice(0, 4), "latest.yml", "latest-mac.yml", "latest-linux.yml"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) }]));
+    }
+    // A feed that does not list the installer (or did not load).
+    if (req.url?.startsWith("/dl/latest")) return res.end("version: 0.4.2\n");
+    if (req.url?.startsWith("/dl/")) return res.end("hello");
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const api = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+  let ran = false;
+  const u = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.1", repo: "o/r", api, install: async () => { ran = true; } });
+  await u.check();
+  await u.apply();
+  for (let i = 0; i < 50 && u.status().running; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.equal(ran, false);
+  assert.match(JSON.stringify(u.status()), /fingerprint/);
+  srv.closeAllConnections();
+  srv.close();
 });

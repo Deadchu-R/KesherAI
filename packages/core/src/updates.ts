@@ -260,7 +260,12 @@ export class Updater {
             throw new Error("The downloaded installer does not match the release's fingerprint (sha512), so it was deleted and not run. Try again.");
           }
           line("Checked the installer's sha512 against the release: it matches");
-        } else line("The release has no sha512 for this file; installing without that check");
+        } else {
+          // No fingerprint to check against (the feed did not load, or it is for another file): never run an
+          // installer unchecked (audit 2026-11, S1).
+          await rm(file, { force: true });
+          throw new Error("Could not check the installer against the release's fingerprint (sha512), so it was deleted and not run. Check the internet connection and try again.");
+        }
         line(`Downloaded in ${((Date.now() - t0) / 1000).toFixed(0)} s; starting the installer`);
         prog("Installing");
         await installer.install(file);

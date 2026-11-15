@@ -479,6 +479,15 @@ This review went through the code part by part. Each finding is listed with what
   connection was removed from this computer's settings (the code keeps LM Studio support; it is found again only if it
   is running at start-up, for that session).
 
+## Audit 2026-11 (0.6.235): what else to check
+
+From docs/AUDIT_2026-11.md §5. Fixed now: an update whose installer has no sha512 in the release's feed (the feed
+did not load, or does not list the file) was installed with the check skipped; now it is deleted and not run, with
+a test. Confirmed on the real 0.6.234 release that latest.yml, latest-linux.yml and latest-mac.yml list every
+installer. Open: S2 connection keys in plain text in config.json (encrypt with safeStorage), S3 a test that the
+Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
+S5 an outside scanner's rules for Electron.
+
 ## Scan 76 (2026-11-15, 0.6.234)
 
 - Chat tool groups (`chat-tool-groups.ts`, `chat-tools-games.ts`): the same tools and notes; the Telegram rule (no

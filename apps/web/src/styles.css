@@ -1490,6 +1490,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .home-recent, .home-pins { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 720px; margin: 14px auto 0; }
 .home-recent a, .home-pins a { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; padding: 7px 14px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-2); text-decoration: none; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-recent a:hover, .home-pins a:hover { border-color: var(--accent); color: var(--text); }
+/* On a computer with the sidebar showing, the recent chats and pinned tools are right beside Home: not twice. */
+@media (min-width: 761px) { .app:not(.sidebar-hidden) .home-recent, .app:not(.sidebar-hidden) .home-pins { display: none; } }
 /* Train models */
 .train-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 14px; }
 .train-kind h2 { font-size: 16px; margin: 0 0 4px; }

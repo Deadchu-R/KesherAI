@@ -11,6 +11,28 @@ import { Glyph } from "../ui/Glyph";
 
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
 
+/** One line for a page that is not its part's main page (those take the part's own line), or has no part. */
+const PAGE_LINES: Record<string, { he: string; en: string }> = {
+  "#/canvas": { he: "לוח ציור משותף לך ולמודל: תרשימים, סקיצות ותרשימי זרימה.", en: "A board you and the model both draw on: diagrams, sketches, flowcharts." },
+  "#/batch": { he: "אותה פעולה על הרבה תמונות בבת אחת.", en: "The same change on many pictures at once." },
+  "#/training": { he: "לימוד סגנון או דמות משלך למודל התמונות (LoRA).", en: "Teach the image model your own style or character (a LoRA)." },
+  "#/libraries": { he: "ספריות ידע מוכנות להורדה: תיעוד של מנועים, שפות וכלים.", en: "Ready-made knowledge to download: docs of engines, languages and tools." },
+  "#/inbox": { he: "אישורים שמחכים לך, והודעות מהסוכנים.", en: "Approvals waiting for you, and notes from the agents." },
+  "#/self-work": { he: "KesherAI עובד לבד על פרויקט קוד, משימה אחרי משימה.", en: "KesherAI works on a code project by itself, task after task." },
+  "#/personas": { he: "דמויות עם הוראות, מודל וסגנון משלהן.", en: "Characters with their own instructions, model and style." },
+  "#/memory": { he: "מה שהמודלים זוכרים עליך, לקריאה ולעריכה.", en: "What the models remember about you, to read and edit." },
+  "#/prompts": { he: "בקשות שמורות לשימוש חוזר, עם פקודת /.", en: "Saved requests to use again, with a / command." },
+  "#/usage": { he: "כמה השתמשת בכל מודל, ועצות לשימוש טוב יותר.", en: "How much each model was used, and tips for using them better." },
+  "#/models": { he: "הורדה, טעינה והשוואה של מודלים לכל סוג עבודה.", en: "Download, load and compare models for every kind of work." },
+  "#/connections": { he: "שירותי ענן, שרתים מקומיים, MCP והמכשירים שלך.", en: "Cloud services, local servers, MCP and your devices." },
+  "#/plugins": { he: "תוספות שמרחיבות את KesherAI, ושינויי מראה.", en: "Add-ons that extend KesherAI, and changes to its look." },
+  "#/parts": { he: "הפעלה וכיבוי של חלקים שלמים, כדי שיישאר רק מה שצריך.", en: "Turn whole parts on and off, to keep only what you need." },
+  "#/health": { he: "מצב הזיכרון, הדיסק וכרטיס המסך, ומה אפשר לשחרר.", en: "Memory, disk and graphics card, and what can be freed." },
+  "#/remote": { he: "לראות ולהפעיל את המחשב הזה מהטלפון.", en: "See and use this computer from the phone." },
+  "#/updates": { he: "הגרסה המותקנת, מה חדש, והתקנת עדכון.", en: "The installed version, what is new, and installing an update." },
+  "#/settings": { he: "כל ההגדרות, מסודרות לפי נושא.", en: "Every setting, by subject." },
+};
+
 /**
  * All tools, like a launcher (Raycast's, a phone's app library): every page
  * in its group with an icon and one line, a star to pin it to the sidebar,
@@ -28,7 +50,9 @@ export function AppsPage() {
     items: [
       ...g.items.map(([href, key]) => {
         const part = partOf(href);
-        return { href, label: t(key), icon: NAV_ICONS[href] ?? "•", desc: part ? pick(part.description) : "", part };
+        // The part's line only on its main page; its other pages (and pages with no part) have their own.
+        const line = PAGE_LINES[href];
+        return { href, label: t(key), icon: NAV_ICONS[href] ?? "•", desc: line ? pick(line) : part && part.pages[0] === href ? pick(part.description) : "", part };
       }),
       ...(g.id === "create"
         ? pages.map((p) => {

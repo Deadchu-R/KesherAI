@@ -60,7 +60,7 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
     runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
       // The engine log says who sent a request no chat on screen asked for.
       engine?.note(`the routine "${name}" started a chat (Routines page)`);
-      const c = await chats().create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString()}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
+      const c = await chats().create({ kind: "chat", title: `${name} · ${new Date().toLocaleDateString("sv-SE")}`, ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}) });
       // A routine's folder (e.g. a list it keeps): created if missing, then opened to this chat's file tools.
       if (opts.folder) {
         await mkdir(opts.folder, { recursive: true });

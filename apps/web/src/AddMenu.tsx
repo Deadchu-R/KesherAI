@@ -190,7 +190,6 @@ export function AddMenu(p: AddMenuProps) {
         </MenuSub>
       )}
       <MenuSeparator />
-      <MenuItem icon="🌐" checked={p.web} keepOpen onSelect={() => p.onWeb(!p.web)}>{L("חיפוש באינטרנט", "Web search")}</MenuItem>
       <MenuItem icon="🔬" onSelect={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); }}>{L("מחקר מעמיק", "Deep research")}</MenuItem>
       <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
         {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (
