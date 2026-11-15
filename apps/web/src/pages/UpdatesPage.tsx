@@ -115,9 +115,47 @@ function Updates() {
     }
   };
 
+  // Is the computer free for the restart, and is the install waiting for that.
+  const [ready, setReady] = useState<{ chats: number; selfWork: boolean; downloads: number; updating: boolean; whenFree: boolean } | null>(null);
+  const loadReady = () => void api<NonNullable<typeof ready>>("/api/updates/ready").then(setReady, () => undefined);
+  useEffect(loadReady, []);
+  useEffect(() => {
+    if (!ready?.whenFree) return;
+    const timer = setInterval(loadReady, 10_000);
+    return () => clearInterval(timer);
+  }, [ready?.whenFree]);
+  const setWhenFree = async (on: boolean) => {
+    setError("");
+    try {
+      await api("/api/updates/when-free", { method: "POST", body: { on } });
+      loadReady();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const he = getLocale() === "he";
+  const showReady = !!ready && !progress?.running && (ready.whenFree || (check?.newCommits.length ?? 0) > 0);
+
   return (
     <section className="card stack">
       <h2>{t("version")}</h2>
+      {showReady && ready && (
+        <div className="update-ready stack">
+          <div className="ready-checks">
+            <span className={ready.chats ? "busy" : "free"}>{ready.chats ? (he ? `${ready.chats} צ׳אטים עובדים` : `${ready.chats} chats working`) : he ? "אין צ׳אט שעובד" : "No chat working"}</span>
+            <span className={ready.selfWork ? "busy" : "free"}>{ready.selfWork ? (he ? "עבודה עצמית רצה" : "Self-work running") : he ? "עבודה עצמית לא רצה" : "Self-work not running"}</span>
+            <span className={ready.downloads ? "busy" : "free"}>{ready.downloads ? (he ? `${ready.downloads} הורדות` : `${ready.downloads} downloads`) : he ? "אין הורדה" : "No download"}</span>
+          </div>
+          {ready.whenFree ? (
+            <div className="row">
+              <span className="grow small">{he ? "העדכון יותקן לבד כשכל אלה יתפנו." : "The update installs by itself once all of these are free."}</span>
+              <button type="button" onClick={() => void setWhenFree(false)}>{he ? "בטל המתנה" : "Stop waiting"}</button>
+            </div>
+          ) : (
+            <button type="button" className="primary" style={{ alignSelf: "flex-start" }} onClick={() => void setWhenFree(true)}>{he ? "התקן כשהמחשב פנוי" : "Install when the computer is free"}</button>
+          )}
+        </div>
+      )}
       <p className="row muted small">
         <span className="grow">{t("restartHint")}</span>
         <button type="button" onClick={() => void reconnect({ restart: true })}>{t("restartComputerApp")}</button>

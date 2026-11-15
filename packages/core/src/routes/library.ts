@@ -17,6 +17,7 @@ import { join as joinPath } from "node:path";
 import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-export.js";
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
+import { InstallWhenFree, type FreeState } from "../install-when-free.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
 import { readProject } from "../unreal-install.js";
 import { findGameProjects, findScripts } from "../game-projects.js";
@@ -802,6 +803,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get("/api/jobs", async () => ({
     running: (await s.conversations.jobs().running()).map((j) => ({ id: j.id, key: j.key, startedAt: j.startedAt })),
   }));
+  // "Install when the computer is free": waits for no chat, no self-work, no download, then installs.
+  const freeState = async (): Promise<FreeState> => {
+    const run = (await app.inject({ method: "GET", url: "/api/self-work", remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } }).then((r) => r.json() as { run?: { status?: string } | null }, () => ({ run: null }))).run;
+    return {
+      chats: Object.keys(s.conversations.activity()).length,
+      selfWork: run?.status === "running",
+      downloads: s.downloads.list().filter((j) => j.status === "downloading" || j.status === "queued").length,
+      updating: s.updater.status().running,
+    };
+  };
+  const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, apply: () => s.updater.apply() });
+  app.addHook("onClose", async () => whenFree.stop());
+  app.get("/api/updates/ready", async () => ({ ...(await freeState()), whenFree: whenFree.on }));
+  app.post<{ Body: { on?: boolean } | undefined }>("/api/updates/when-free", async (req) => {
+    whenFree.set(req.body?.on === true);
+    return { whenFree: whenFree.on };
+  });
   app.post<{ Body: { force?: boolean } | undefined }>("/api/updates/apply", async (req, reply) => {
     // Installing restarts KesherAI: a chat that is working would stop in the middle. Ask first.
     const working = Object.keys(s.conversations.activity());
