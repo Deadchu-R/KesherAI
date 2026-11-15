@@ -143,7 +143,8 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
       const measured = await s.speeds.get(basename(m.path));
       return { path: m.path, name: m.name, size: m.size, source: m.source, gguf: m.format === "gguf", estimate: estimatePerformance(m.size, hw), ...(measured ? { measured } : {}) };
     }));
-    return joinSplitModels([...own, ...others]);
+    // A split model's estimate is for all its parts together (the first part alone can be only its metadata).
+    return joinSplitModels([...own, ...others]).map((m) => (m.parts ? { ...m, estimate: estimatePerformance(m.size, hw) } : m));
   });
 
   /**
