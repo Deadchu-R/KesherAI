@@ -488,6 +488,18 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 77 (2026-11-15, 0.6.238)
+
+- Character cards (`characterCard`, `cardFromPng`): the PNG is read in the browser and only the card's JSON is sent;
+  a chunk with a wrong size ends the loop (the reads are clamped); a picture without a card says so. The card's words
+  become a persona's instructions (cut to 20,000 characters, the name to 60), like any persona the user writes; the
+  upload route keeps its 20 MB limit and 100 personas.
+- Graph wires (`appearance.wires`): only the three styles, a radius 0–40 and two booleans pass `cleanAppearance`.
+- Updates: an installer is never run without the release's sha512 (deleted instead), and a second one cannot start
+  for 10 minutes; the example plugins stay off until turned on; the fault log skips answers under 500.
+- Customize page, sidebar and message-box changes: interface only (no new routes).
+- typecheck, lint and tests pass; `pnpm audit --prod`: no known vulnerabilities. Nothing to fix.
+
 ## Scan 76 (2026-11-15, 0.6.234)
 
 - Chat tool groups (`chat-tool-groups.ts`, `chat-tools-games.ts`): the same tools and notes; the Telegram rule (no
