@@ -10,7 +10,7 @@ import type { AgentTool } from "@kesher/agent";
 import { htmlToText } from "@kesher/agent";
 import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
 import { execFile } from "node:child_process";
 import cors from "@fastify/cors";
@@ -28,8 +28,7 @@ import { Library } from "./library.js";
 import { ConversationManager, modelTurnFor, onModelSpeed } from "./conversations.js";
 import { Speeds } from "./speeds.js";
 import { Updater } from "./updates.js";
-import type { PackagedUpdates } from "./updates.js";
-import { GoogleDrive, GOOGLE_ENDPOINTS, type GoogleEndpoints } from "./google.js";
+import { GoogleDrive, GOOGLE_ENDPOINTS } from "./google.js";
 import { googleTools } from "./google-tools.js";
 import { Knowledge, knowledgeTools } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
@@ -37,7 +36,7 @@ import { Tailscale } from "./tailscale.js";
 import { ensureEngine } from "./routes/engine.js";
 import { Personas } from "./personas.js";
 import { Prompts } from "./prompts.js";
-import { Notifier, type Note } from "./notify.js";
+import { Notifier } from "./notify.js";
 import { speechTools } from "./speech-tools.js";
 import { mcpServerRoutes } from "./routes/mcp-server.js";
 import { phoneRoutes } from "./routes/phones.js";
@@ -87,7 +86,7 @@ import { SelfWork } from "./self-work.js";
 import { seedBuiltinSkills } from "./builtin-skills.js";
 import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
-import { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveEndpoints } from "./onedrive.js";
+import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
 import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
@@ -136,7 +135,7 @@ import { Runtimes } from "./runtimes.js";
 import { Checkpoints } from "./checkpoints.js";
 import { Devices } from "./devices.js";
 import { deviceRoutes } from "./routes/devices.js";
-import { Journal, type ScreenSource } from "./journal.js";
+import { Journal } from "./journal.js";
 import { McpManager, mcpResultText } from "./mcp.js";
 import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
@@ -157,82 +156,9 @@ import websocket from "@fastify/websocket";
 import { googleRoutes } from "./routes/google.js";
 import { onedriveRoutes } from "./routes/onedrive.js";
 import { loadModel } from "./routes/engine.js";
+import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 
-/** Options for {@link createKesherServer}. All optional. */
-export interface KesherServerOptions {
-  /** Data folder. Defaults to `KESHER_DATA_DIR` or `~/.kesher`. */
-  dataDir?: string;
-  /** Port; defaults to the config file's `port`. */
-  port?: number;
-  /** Built web UI to serve at `/` (the phone uses this). */
-  webDir?: string;
-  /** Extra plugin folders on top of `<dataDir>/plugins`. */
-  pluginRoots?: string[];
-  /** Probe LM Studio, Ollama and ComfyUI on start-up (default: the feature flag). */
-  autodetect?: boolean;
-  /** Fastify request logging. */
-  logger?: boolean;
-  /** Google endpoints (tests point these at a fake server). */
-  googleEndpoints?: GoogleEndpoints;
-  /** The project's Google OAuth client (defaults to branding.config.ts; builds pass the one from repository secrets). */
-  googleClient?: { clientId: string; clientSecret: string };
-  /** Microsoft endpoints (tests point these at a fake server). */
-  onedriveEndpoints?: OneDriveEndpoints;
-  /** Installed copies: update from GitHub releases (the desktop app passes its version and how to run an installer). */
-  updates?: PackagedUpdates;
-  /** The desktop app's screen capture for "My day" (no PowerShell, which antivirus programs block). */
-  screen?: ScreenSource;
-  /** Shows a notification on this computer (desktop app); returns false when the window is in front. */
-  notify?: (n: Note) => boolean | Promise<boolean>;
-  /** Brings the desktop window to the front. */
-  focusApp?: () => void;
-  /** Restarts the desktop app (installing a downloaded update first, if there is one). */
-  restartApp?: () => void;
-  /** The project's GitHub OAuth App client id, for "Connect with GitHub" (builds pass it from repository secrets). */
-  githubClientId?: string;
-  /**
-   * Worker mode: this is a second, window-less KesherAI that runs self-work, so
-   * an update of the main app never stops the work. It uses the main app's
-   * models over its local API (waiting while the main app restarts), shares its
-   * task board, and sends notifications through it.
-   */
-  worker?: { mainUrl: string; mainRoot: string; version: string };
-  /** Main mode (desktop app): self-work runs in the worker; this starts it when needed and says where it is. */
-  workerHost?: { ensure: () => Promise<string>; url: () => string | undefined };
-}
-
-/** What {@link createKesherServer} returns. */
-export interface KesherServer {
-  app: FastifyInstance;
-  services: KesherServices;
-  /** Starts listening. Returns the URL. */
-  listen(): Promise<string>;
-  /** Stops the server, llama-server and plugins. */
-  close(): Promise<void>;
-}
-
-/**
- * The interface's Content-Security-Policy: scripts, styles, fonts, pictures
- * and connections only from KesherAI itself (and Google's profile pictures).
- * A theme's CSS, a chat's Markdown or a page someone tricked the model into
- * writing cannot load anything from outside or send data away.
- */
-export const WEB_CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.googleusercontent.com",
-  "media-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-src 'self' blob: data:",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  // Only KesherAI itself and a browser extension (its side panel) may show the app in a frame, never a web site.
-  "frame-ancestors 'self' chrome-extension: moz-extension:",
-].join("; ");
+export { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 
 /**
  * Builds the core server. This is the one place where services are created
