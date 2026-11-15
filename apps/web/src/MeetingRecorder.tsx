@@ -167,18 +167,30 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
   );
 }
 
-/** Keep the recording, so the transcript follows playback (off: deleted after the write-up). */
+/** Keep the recording, so the transcript follows playback (off: deleted after the write-up), and for how long. */
 function RecordingOption() {
-  const [keep, setKeep] = useState<boolean | null>(null);
-  useEffect(() => void api<{ keep: boolean }>("/api/journal/recordings").then((r) => setKeep(r.keep), () => undefined), []);
-  if (keep === null) return null;
+  const [opt, setOpt] = useState<{ keep: boolean; days: number } | null>(null);
+  useEffect(() => void api<{ keep: boolean; days?: number }>("/api/journal/recordings").then((r) => setOpt({ keep: r.keep, days: r.days ?? 30 }), () => undefined), []);
+  if (opt === null) return null;
+  const save = (body: { keep?: boolean; days?: number }) => void api<{ keep: boolean; days: number }>("/api/journal/recordings", { method: "PUT", body }).then(setOpt);
+  const choices = [7, 30, 90, 365];
   return (
     <div className="stack" style={{ gap: 4 }}>
       <label className="check">
-        <input type="checkbox" checked={keep} onChange={(e) => void api<{ keep: boolean }>("/api/journal/recordings", { method: "PUT", body: { keep: e.target.checked } }).then((r) => setKeep(r.keep))} />
+        <input type="checkbox" checked={opt.keep} onChange={(e) => save({ keep: e.target.checked })} />
         {L("לשמור את ההקלטה (התמלול עוקב אחרי הניגון)", "Keep the recording (the transcript follows playback)")}
       </label>
-      {keep && <p className="muted small">{L("ההקלטה נשמרת רק במחשב הזה, כ-115 MB לשעה. אפשר למחוק אותה בכל פגישה.", "The recording stays on this computer only, about 115 MB an hour. You can delete it from any meeting.")}</p>}
+      {opt.keep && (
+        <>
+          <label className="row small" style={{ gap: 8 }}>
+            {L("לשמור למשך:", "Keep for:")}
+            <select value={opt.days} onChange={(e) => save({ days: Number(e.target.value) })}>
+              {[...new Set([...choices, opt.days])].sort((a, b) => a - b).map((d) => <option key={d} value={d}>{d === 365 ? L("שנה", "1 year") : L(`${d} ימים`, `${d} days`)}</option>)}
+            </select>
+          </label>
+          <p className="muted small">{L(`ההקלטה נשמרת רק במחשב הזה, כ-115 MB לשעה, ונמחקת אחרי ${opt.days} ימים (התמלול והסיכום נשארים). אפשר למחוק אותה בכל פגישה.`, `The recording stays on this computer only, about 115 MB an hour, and is deleted after ${opt.days} days (the transcript and write-up stay). You can delete it from any meeting.`)}</p>
+        </>
+      )}
     </div>
   );
 }

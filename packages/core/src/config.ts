@@ -264,6 +264,8 @@ export const KesherConfigSchema = z.object({
       speakers: z.boolean().default(true),
       /** Keep the meeting's recording, so its transcript follows playback (off: deleted after the write-up). */
       keepRecording: z.boolean().default(false),
+      /** How many days a kept recording stays (then only the transcript and write-up remain). */
+      keepRecordingDays: z.number().int().min(1).max(3650).default(30),
     })
     .prefault({}),
   speech: z

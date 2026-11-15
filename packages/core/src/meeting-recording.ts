@@ -92,3 +92,25 @@ export async function recordingResponse(dir: string, range?: string): Promise<{ 
   }
   return { status: 200, headers: { "content-type": "audio/wav", "accept-ranges": "bytes", "content-length": String(st.size) }, body: createReadStream(file) };
 }
+
+/**
+ * Deletes kept recordings older than the days the user chose (by when the recording was saved); the transcripts and
+ * write-ups stay. A recording whose meeting is gone goes the same way.
+ *
+ * @param journalDir - The journal folder.
+ * @param keepDays - How many days a recording stays.
+ * @param now - The time (tests pass their own).
+ * @returns The meetings whose recording was deleted.
+ */
+export async function pruneRecordings(journalDir: string, keepDays: number, now = Date.now()): Promise<string[]> {
+  const root = join(journalDir, "recordings");
+  const gone: string[] = [];
+  for (const id of await readdir(root).catch(() => [] as string[])) {
+    const dir = join(root, id);
+    const st = await stat(join(dir, "recording.wav")).catch(() => stat(dir).catch(() => undefined));
+    if (!st || now - st.mtimeMs <= keepDays * 86_400_000) continue;
+    await rm(dir, { recursive: true, force: true });
+    gone.push(id);
+  }
+  return gone;
+}

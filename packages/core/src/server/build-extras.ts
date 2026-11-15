@@ -173,6 +173,7 @@ export function buildJournal(paths: DataPaths, config: KesherConfig, registry: P
     }
   }, undefined, screen);
   void journal.load();
+  journal.recordingDays = () => config.meetings.keepRecordingDays;
   return journal;
 }
 

@@ -137,13 +137,18 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
     await s.journal.setRecording(req.params.day, req.params.id, undefined).catch(() => undefined);
     return { ok: true };
   });
-  /** Keep meeting recordings: `{ keep }`. */
-  app.put<{ Body: { keep?: boolean } }>("/api/journal/recordings", opts, async (req) => {
-    s.config.meetings.keepRecording = !!req.body?.keep;
+  /** Keep meeting recordings, and for how many days: `{ keep?, days? }` (1–3650). */
+  app.put<{ Body: { keep?: boolean; days?: number } }>("/api/journal/recordings", opts, async (req, reply) => {
+    const b = req.body ?? {};
+    if (b.days !== undefined && !(Number.isInteger(b.days) && b.days >= 1 && b.days <= 3650)) return reply.code(400).send({ error: "Keep recordings 1 to 3650 days." });
+    if (b.keep !== undefined) s.config.meetings.keepRecording = !!b.keep;
+    if (b.days !== undefined) s.config.meetings.keepRecordingDays = b.days;
     await s.saveConfig();
-    return { keep: s.config.meetings.keepRecording };
+    // A shorter time takes effect now, not at the next start.
+    if (b.days !== undefined) void s.journal.cleanup().catch(() => undefined);
+    return { keep: s.config.meetings.keepRecording, days: s.config.meetings.keepRecordingDays };
   });
-  app.get("/api/journal/recordings", opts, async () => ({ keep: s.config.meetings.keepRecording }));
+  app.get("/api/journal/recordings", opts, async () => ({ keep: s.config.meetings.keepRecording, days: s.config.meetings.keepRecordingDays }));
 
   app.delete<{ Params: { day: string; id: string } }>("/api/journal/meetings/:day/:id", opts, async (req) => {
     await rm(recordingDir(join(s.paths.root, "journal"), req.params.id), { recursive: true, force: true });

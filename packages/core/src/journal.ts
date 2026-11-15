@@ -4,6 +4,7 @@ import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/pro
 import { join } from "node:path";
 import type { ModelTurn } from "@kesher/agent";
 import { isSensitiveWindow, screenBackend } from "./computer.js";
+import { pruneRecordings } from "./meeting-recording.js";
 
 /**
  * "My day": an opt-in journal of what was on this computer's screen, kept
@@ -796,12 +797,22 @@ export class Journal {
     return drop.length;
   }
 
-  /** Deletes old pictures and old text, as the settings say. */
+  /** How many days a kept meeting recording stays (the meetings setting; set where the journal is made). */
+  recordingDays: () => number = () => 30;
+
+  /** Deletes old pictures, old text and old meeting recordings, as the settings say. */
   async cleanup(now = Date.now()): Promise<void> {
     for (const day of await this.days()) {
       const age = (now - new Date(`${day}T23:59:59`).getTime()) / 86_400_000;
       if (age > this.settings.keepTextDays) await rm(join(this.dir, day), { recursive: true, force: true });
       else if (age > this.settings.keepFramesDays) await rm(join(this.dir, day, "frames"), { recursive: true, force: true });
+    }
+    // Recordings were kept for ever before (found 2026-11-15); the meeting forgets its recording too, so no player
+    // points at a file that is gone.
+    const gone = new Set(await pruneRecordings(this.dir, this.recordingDays(), now));
+    if (!gone.size) return;
+    for (const day of await this.days()) {
+      for (const m of await this.meetings(day).catch(() => [] as Meeting[])) if (gone.has(m.id) && m.recording) await this.setRecording(day, m.id, undefined).catch(() => undefined);
     }
   }
 
