@@ -2505,3 +2505,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .app-lock { position: fixed; inset: 0; z-index: 2147483647; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
 .app-lock-icon { font-size: 44px; }
 .app-lock button { min-height: 48px; padding: 0 22px; }
+
+/* Long chats: messages off screen are not laid out or painted until they come near (the answer being written and
+   the last few always are). The size placeholder keeps the scrollbar from jumping. */
+.messages > .msg:not(.streaming):not(:nth-last-child(-n + 6)) { content-visibility: auto; contain-intrinsic-size: auto 160px; }

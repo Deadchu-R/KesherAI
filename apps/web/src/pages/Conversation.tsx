@@ -763,6 +763,7 @@ export function ConversationPage({ id }: { id: string }) {
                   </form>
                 ) : (
                   <div key={e.seq} className="msg user" dir="auto">
+                    <h3 className="sr-only">{L("ההודעה שלך", "You")}</h3>
                     {(() => {
                       // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
                       const { body, files } = splitAttachments(e.text);
@@ -774,6 +775,7 @@ export function ConversationPage({ id }: { id: string }) {
               case "assistant":
                 return (
                   <div key={e.seq} className="msg">
+                    <h3 className="sr-only">{L("תשובה", "Answer")}</h3>
                     <RichText text={e.text} />
                     {voicePart && <SpeakButton text={e.text} />}
                     {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}><LineIcon name="branch" size={15} /></button>}
@@ -1017,7 +1019,19 @@ export function ConversationPage({ id }: { id: string }) {
                 busy ? (
                   <>
                     {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
-                    <button type="button" className="send stop" onClick={() => void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500))} aria-label={t("stop")}>■</button>
+                    <button
+                      type="button"
+                      className="send stop"
+                      onClick={(ev) => {
+                        // The Stop button goes away: keyboard and screen-reader focus goes back to the message box.
+                        const box = ev.currentTarget.closest(".composer")?.querySelector("textarea");
+                        box?.focus();
+                        void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500));
+                      }}
+                      aria-label={t("stop")}
+                    >
+                      ■
+                    </button>
                   </>
                 ) : undefined
               }

@@ -3,6 +3,7 @@ import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { BarPopover } from "../ui/BarPopover";
+import { groupNotes } from "../note-groups";
 import { ComputerScreen } from "./WatchPage";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -92,7 +93,8 @@ export function InboxBell() {
     setBusy("");
     refresh();
   };
-  const notes = box.notes.slice(0, 8);
+  // Notes in a row from the same place are one line with a count ("Download done (3)").
+  const notes = groupNotes(box.notes).slice(0, 8);
   return (
     <BarPopover
       className={`inbox-bell${waiting ? " urgent" : ""}`}
@@ -140,7 +142,7 @@ export function InboxBell() {
                 const inner = (
                   <>
                     <span className="row">
-                      <strong className="grow" dir="auto">{n.title}</strong>
+                      <strong className="grow" dir="auto">{n.title}{n.count > 1 && <span className="muted"> ({n.count})</span>}</strong>
                       <span className="muted small">{time(n.at)}</span>
                     </span>
                     {n.resolved ? <span className="inbox-resolved small">✓ {resolvedLabel(n.resolved)}</span> : n.body && <span className="muted small inbox-pop-body" dir="auto">{n.body}</span>}
