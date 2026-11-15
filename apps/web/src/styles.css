@@ -2355,3 +2355,9 @@ html.handheld .palette-list button { min-height: 44px; }
 .share-warn { color: #fbbf24; }
 .shares-list { list-style: none; padding: 0; margin: 0; }
 .shares-list li { gap: 8px; flex-wrap: wrap; }
+
+/* Sidebar: chats that routines started, folded under the user's own. */
+.side-routines > summary { cursor: pointer; list-style: none; }
+.side-routines > summary::-webkit-details-marker { display: none; }
+.side-routines > summary span::before { content: "▸ "; }
+.side-routines[open] > summary span::before { content: "▾ "; }

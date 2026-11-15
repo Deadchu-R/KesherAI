@@ -46,7 +46,7 @@ export interface NewConversation {
   title?: string;
   personaId?: string;
   /** `telegram`: written from Telegram (fewer tools, always asks). */
-  source?: "telegram";
+  source?: "telegram" | "routine";
   /** A code session in its own git worktree and branch (see session-worktrees.ts). */
   worktree?: boolean;
   /** No memory read or filed, left out of search. */

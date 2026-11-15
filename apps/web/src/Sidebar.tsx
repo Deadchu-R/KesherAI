@@ -353,6 +353,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   const [editing, setEditing] = useState(false);
   const [version, setVersion] = useState("");
   const activeId = hash.startsWith("#/c/") ? hash.slice(4) : "";
+  // The code side: its start screen, or an open code session.
+  const inCode = hash === "#/code" || conversations.find((c) => c.id === activeId)?.kind === "code";
 
   useEffect(() => {
     const open = () => setDialog("code");
@@ -366,7 +368,9 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       .catch(() => undefined);
   }, []);
 
-  const loose = conversations.filter((c) => !c.projectId);
+  // Chats that routines started keep to their own folded group, so they do not push the user's own chats down.
+  const byRoutine = conversations.filter((c) => !c.projectId && c.source === "routine");
+  const loose = conversations.filter((c) => !c.projectId && c.source !== "routine");
   // A newer version next to "Updates" (checked once when the app opens).
   const [newVersion, setNewVersion] = useState("");
   useEffect(() => {
@@ -387,9 +391,14 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
       <QuickMenu />
       <ConversationSearch />
       {!searching && <div className="sidebar-actions">
-        {/* The same main actions as every other menu (useAppMenu). */}
-        {app.main.map((e) =>
-          e.run ? (
+        {/* The same main actions as every other menu (useAppMenu). One "new" button, for the side you are on (the
+            top bar's Chat / Code switch goes to the other): "New chat" in a chat, "New code session" in code. */}
+        {app.main.filter((e) => (inCode ? e.key !== "new-chat" : e.key !== "new-code")).map((e) =>
+          e.key === "new-code" ? (
+            <a key={e.key} className="nav-link new-chat" href="#/code" aria-current={hash === "#/code" ? "page" : undefined}>
+              <span className="plus" aria-hidden="true"><Glyph of="+" size={15} /></span> {e.label}
+            </a>
+          ) : e.run ? (
             <button key={e.key} type="button" className="nav-link as-link" onClick={e.run}>
               <span className="nav-ico" aria-hidden><Glyph of={e.icon} /></span> {e.label}
             </button>
@@ -453,6 +462,14 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         {loose.map((c) => (
           <ConversationLink key={c.id} c={c} active={c.id === activeId} />
         ))}
+        {byRoutine.length > 0 && (
+          <details className="side-routines" open={byRoutine.some((c) => c.id === activeId) || undefined}>
+            <summary className="section-head"><span>{getLocale() === "he" ? `משגרות (${byRoutine.length})` : `From routines (${byRoutine.length})`}</span></summary>
+            {byRoutine.map((c) => (
+              <ConversationLink key={c.id} c={c} active={c.id === activeId} />
+            ))}
+          </details>
+        )}
         </>)}
       </div>
 
