@@ -4,7 +4,7 @@
  * Journal, computer control, Unreal, Unity and self-work follow.
  */
 import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { htmlToText } from "@kesher/agent";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { DataPaths, KesherConfig } from "../config.js";
@@ -12,7 +12,12 @@ import { Journal, type ScreenSource } from "../journal.js";
 import { modelTurnFor } from "../model-turn.js";
 import type { ConversationManager } from "../conversations.js";
 import type { Notifier } from "../notify.js";
-import type { Pipelines } from "../pipelines.js";
+import { Pipelines } from "../pipelines.js";
+import type { Knowledge } from "../knowledge.js";
+import type { Personas } from "../personas.js";
+import { transcribeWith } from "../speech-tools.js";
+import type { WhisperEngine } from "../whisper.js";
+import { IMAGE_SUPPORT_FILE } from "../chat-tools-media.js";
 import { Routines } from "../routines.js";
 import { runIn } from "../run-in.js";
 import { SelfWork } from "../self-work.js";
@@ -232,4 +237,45 @@ export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationMa
       if (!r || (r.status !== "running" && r.status !== "waiting")) setTimeout(() => process.exit(75), 500);
     },
   };
+}
+
+/**
+ * Pipelines (B6): chains of model calls and tools, with conditions and loops, saved in the data folder.
+ *
+ * @param p - The data folders, the settings, the models, the personas, the knowledge bases, the speech engine and the
+ *   notifier (each pipeline step reaches what it needs through them).
+ * @returns The pipelines.
+ */
+export function buildPipelines(p: { paths: DataPaths; config: KesherConfig; registry: ProviderRegistry; personas: Personas; knowledge: Knowledge; whisper: WhisperEngine; notifier: Notifier }): Pipelines {
+  const { paths, config, registry, personas, knowledge, whisper, notifier } = p;
+  return new Pipelines(join(paths.root, "pipelines"), join(paths.root, "outputs", "pipelines"), {
+    ask: async ({ prompt, system, model, persona }, signal) => {
+      await personas.load();
+      const p = persona ? (await personas.list()).find((x) => x.id === persona || x.name.toLowerCase() === persona.toLowerCase()) : undefined;
+      const id = model || p?.modelId || config.activeModels.chat;
+      if (!id) throw new Error("No chat model is active. Pick one on the Models page.");
+      const sys = [p?.instructions, system].filter(Boolean).join("\n\n");
+      const r = await modelTurnFor(registry, id)({ messages: [...(sys ? [{ role: "system" as const, content: sys }] : []), { role: "user" as const, content: prompt }], tools: [] }, signal, () => undefined);
+      return r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+    },
+    knowledge: async (query, base) => {
+      const hits = await knowledge.search(query, base);
+      return hits.map((h) => `[${h.source}${/^https?:/.test(h.source) ? "" : `, p. ${h.page}`}] ${h.text}`).join("\n\n") || "(nothing found)";
+    },
+    image: async ({ prompt, width, height }, signal) => {
+      const id = config.activeModels.image;
+      if (!id) throw new Error("No image model is active. Pick one on the Models page.");
+      // A support file saved as the image model (found on the PC: a VAE): say so instead of a failed ComfyUI run.
+      if (IMAGE_SUPPORT_FILE.test(id)) throw new Error(`The active image model (${id.split(/[\\/]/).pop()}) is part of a model, not one. Pick an image model on the Models page.`);
+      const { provider, providerModelId } = registry.resolve(id);
+      if (!provider.generateImage) throw new Error(`${id} does not make images.`);
+      return provider.generateImage({ providerModelId, prompt, width: width ?? 1024, height: height ?? 1024, steps: 20, seed: Math.floor(Math.random() * 2 ** 31) }, signal);
+    },
+    transcribe: async (path) => {
+      const ext = extname(path);
+      const r = await transcribeWith({ whisper, speech: () => config.speech, providers: () => config.providers }, await readFileFs(path), /^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext : ".wav", config.speech.language);
+      return r.text;
+    },
+    notify: async (title, body) => void (await notifier.send({ title, body, path: "#/pipelines", tags: ["gear"] })),
+  });
 }

@@ -5,8 +5,7 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
-import { readFile as readFileFs } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
 import { execFile } from "node:child_process";
@@ -39,12 +38,10 @@ import { apiKeyRoutes } from "./routes/api-keys.js";
 import { ApiKeys } from "./api-keys.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
-import { Pipelines } from "./pipelines.js";
 import { ComfyManager } from "./comfy-manager.js";
 import { ConversationSearch } from "./conversation-search.js";
 import { comfyRoutes } from "./routes/comfy.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
-import { transcribeWith } from "./speech-tools.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { PhonePush } from "./phone-push.js";
 import { inboxRoutes } from "./routes/inbox.js";
@@ -108,7 +105,6 @@ import { resetRoutes } from "./routes/reset.js";
 import { remoteDeviceRoutes } from "./routes/remote-devices.js";
 import { timerRoutes } from "./routes/timers.js";
 import { canvasRoutes } from "./routes/canvas.js";
-import { IMAGE_SUPPORT_FILE } from "./chat-tools-media.js";
 import { CanvasStore } from "./canvas.js";
 import { shareRoutes } from "./routes/shares.js";
 import { ShareStore } from "./shares.js";
@@ -141,7 +137,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
-import { buildGameEngines, buildJournal, buildRoutines, buildSelfWork } from "./server/build-extras.js";
+import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSelfWork } from "./server/build-extras.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -349,36 +345,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     save: persist,
   });
   // Pipelines: chains of model calls and tools, with conditions and loops.
-  const pipelines = new Pipelines(join(paths.root, "pipelines"), join(paths.root, "outputs", "pipelines"), {
-    ask: async ({ prompt, system, model, persona }, signal) => {
-      await personas.load();
-      const p = persona ? (await personas.list()).find((x) => x.id === persona || x.name.toLowerCase() === persona.toLowerCase()) : undefined;
-      const id = model || p?.modelId || config.activeModels.chat;
-      if (!id) throw new Error("No chat model is active. Pick one on the Models page.");
-      const sys = [p?.instructions, system].filter(Boolean).join("\n\n");
-      const r = await modelTurnFor(registry, id)({ messages: [...(sys ? [{ role: "system" as const, content: sys }] : []), { role: "user" as const, content: prompt }], tools: [] }, signal, () => undefined);
-      return r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
-    },
-    knowledge: async (query, base) => {
-      const hits = await knowledge.search(query, base);
-      return hits.map((h) => `[${h.source}${/^https?:/.test(h.source) ? "" : `, p. ${h.page}`}] ${h.text}`).join("\n\n") || "(nothing found)";
-    },
-    image: async ({ prompt, width, height }, signal) => {
-      const id = config.activeModels.image;
-      if (!id) throw new Error("No image model is active. Pick one on the Models page.");
-      // A support file saved as the image model (found on the PC: a VAE): say so instead of a failed ComfyUI run.
-      if (IMAGE_SUPPORT_FILE.test(id)) throw new Error(`The active image model (${id.split(/[\\/]/).pop()}) is part of a model, not one. Pick an image model on the Models page.`);
-      const { provider, providerModelId } = registry.resolve(id);
-      if (!provider.generateImage) throw new Error(`${id} does not make images.`);
-      return provider.generateImage({ providerModelId, prompt, width: width ?? 1024, height: height ?? 1024, steps: 20, seed: Math.floor(Math.random() * 2 ** 31) }, signal);
-    },
-    transcribe: async (path) => {
-      const ext = extname(path);
-      const r = await transcribeWith({ whisper, speech: () => config.speech, providers: () => config.providers }, await readFileFs(path), /^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext : ".wav", config.speech.language);
-      return r.text;
-    },
-    notify: async (title, body) => void (await notifier.send({ title, body, path: "#/pipelines", tags: ["gear"] })),
-  });
+  const pipelines = buildPipelines({ paths, config, registry, personas, knowledge, whisper, notifier });
   const comfy = new ComfyManager(join(paths.engines, "comfyui"), {
     downloads,
     runtimes,

@@ -161,7 +161,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const [menu, setMenu] = useState<Menu | null>(null);
   /** Right-click on a pin, as in Unreal: Break Link(s), Promote to Variable. */
   /** Over a pin while dragging a wire: whether it connects (shown by the mouse, as in Unreal). */
-  const [over, setOver] = useState<{ x: number; y: number; ok: boolean; why: string; touch?: boolean; at?: { x: number; y: number } } | null>(null);
+  const [over, setOver] = useState<{ x: number; y: number; ok: boolean; why: string; touch?: boolean; at?: { x: number; y: number }; hint?: boolean } | null>(null);
   /** A variable dropped on empty space: Get or Set (as in Unreal). */
   const [varMenu, setVarMenu] = useState<{ left: number; top: number; name: string; x: number; y: number } | null>(null);
   const [pinMenu, setPinMenu] = useState<{ left: number; top: number; node: string; pin: string; dir: "in" | "out"; type: string; wx: number; wy: number } | null>(null);
@@ -272,27 +272,36 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
    * The pin a dragged wire would go to: the one under the pointer, else (a finger is wide) the nearest pin of another
    * node within reach. "self": only the wire's own node is there.
    */
-  const pinNear = (e: { clientX: number; clientY: number; pointerType?: string }, fromNode: string): { node: string; pin: string; dir: "in" | "out"; type: string } | "self" | undefined => {
+  const pinNear = (e: { clientX: number; clientY: number; pointerType?: string }, fromNode: string, w?: { dir: "in" | "out"; type: string; moveLinks?: boolean }): { node: string; pin: string; dir: "in" | "out"; type: string } | "self" | undefined => {
     const el = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest("[data-pin]") as SVGElement | null;
     const d = el?.dataset;
-    if (d?.node && d.pin && d.node !== fromNode) return { node: d.node, pin: d.pin, dir: d.dir as "in" | "out", type: d.type ?? "" };
+    const hit = d?.node && d.pin && d.node !== fromNode ? { node: d.node, pin: d.pin, dir: d.dir as "in" | "out", type: d.type ?? "" } : undefined;
+    if (hit && (!w || wireJudge(w, hit).ok)) return hit;
     const at = local(e);
     const reach = e.pointerType === "mouse" ? 14 : 40;
+    // A pin the wire can go to wins over a nearer one it cannot (pins of the next node sit close together).
     let best: { node: string; pin: string; dir: "in" | "out"; type: string } | undefined;
     let bestD = reach;
+    let fit: typeof best;
+    let fitD = reach;
     for (const b of boxes) {
       if (b.n.id === fromNode) continue;
       for (const p of [...b.ins, ...b.outs]) {
-        const w = pinAt.get(`${b.n.id}:${p.name}`);
-        if (!w) continue;
-        const dist = Math.hypot(w.x * view.k + view.x - at.x, w.y * view.k + view.y - at.y);
+        const pt = pinAt.get(`${b.n.id}:${p.name}`);
+        if (!pt) continue;
+        const dist = Math.hypot(pt.x * view.k + view.x - at.x, pt.y * view.k + view.y - at.y);
+        const pin = { node: b.n.id, pin: p.name, dir: p.dir as "in" | "out", type: p.type };
         if (dist < bestD) {
           bestD = dist;
-          best = { node: b.n.id, pin: p.name, dir: p.dir as "in" | "out", type: p.type };
+          best = pin;
+        }
+        if (w && dist < fitD && wireJudge(w, pin).ok) {
+          fitD = dist;
+          fit = pin;
         }
       }
     }
-    if (best) return best;
+    if (fit ?? best) return fit ?? best;
     return d?.node === fromNode || (el ?? document.elementFromPoint(e.clientX, e.clientY))?.closest(`[data-node="${CSS.escape(fromNode)}"]`) ? "self" : undefined;
   };
   /** Whether a dragged wire can go to a pin, and in words why (or why not). */
@@ -488,13 +497,13 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     else if (drag.kind === "wire") {
       const w = world(now);
       const touch = e.pointerType !== "mouse";
-      const t = pinNear(e, drag.node);
+      const t = pinNear(e, drag.node, drag);
       if (t === "self") {
         setDrag({ ...drag, ex: w.x, ey: w.y });
         setOver({ x: now.x, y: now.y, ok: false, why: L("לא מחברים צומת לעצמו", "A node does not connect to itself"), touch });
       } else if (!t) {
         setDrag({ ...drag, ex: w.x, ey: w.y });
-        setOver(touch ? { x: now.x, y: now.y, ok: true, why: L("גררו לנקודה של צומת אחר", "Drag to a pin of another node"), touch } : null);
+        setOver(touch ? { x: now.x, y: now.y, ok: true, why: L("גררו לנקודה של צומת אחר", "Drag to a pin of another node"), touch, hint: true } : null);
       } else {
         // The wire's end snaps to the pin it would go to, which lights up (green: it connects; red: it does not).
         const at = pinAt.get(`${t.node}:${t.pin}`) ?? w;
@@ -528,7 +537,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       setSelected((s) => new Set(d.remove ? [...s].filter((x) => !inside.includes(x)) : d.add ? [...s, ...inside] : inside));
     } else if (d.kind === "wire") {
       if (e.type === "pointercancel") return;
-      const t = pinNear(e, d.node);
+      const t = pinNear(e, d.node, d);
       if (t === "self") return toast(L("✗ לא מחברים צומת לעצמו: גררו לנקודה של צומת אחר.", "✗ A node does not connect to itself: drag to a pin of another node."));
       if (t) {
         const judged = wireJudge(d, t);
@@ -1133,7 +1142,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       )}
       {over && (
         <div className={`bp-wire-tip ${over.ok ? "ok" : "bad"}`} style={over.touch ? { left: Math.max(4, over.x - 70), top: Math.max(4, over.y - 64) } : { left: over.x + 14, top: over.y + 14 }} role="status" dir="auto">
-          {over.ok ? "✓" : "✗"} {over.why}
+          {over.hint ? "" : over.ok ? "✓ " : "✗ "}{over.why}
         </div>
       )}
       {varMenu && (
