@@ -2500,3 +2500,8 @@ html.handheld .palette-list button { min-height: 44px; }
 /* PC health → Storage: speed up (caches and temporary files). */
 .speed-up { border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); padding: 12px 14px; background: var(--panel-2); }
 .speed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* App lock (inside the phone app): covers everything until the phone's own lock opens it. */
+.app-lock { position: fixed; inset: 0; z-index: 2147483647; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+.app-lock-icon { font-size: 44px; }
+.app-lock button { min-height: 48px; padding: 0 22px; }

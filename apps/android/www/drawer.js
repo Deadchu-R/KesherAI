@@ -141,6 +141,34 @@
   };
   paintWeb();
   add(web);
+  // App lock (F14): the phone's own fingerprint, face or screen lock opens KesherAI (after a minute away).
+  const LLM = window.Capacitor?.Plugins?.KesherLlm;
+  if (LLM?.lockState) {
+    const lock = document.createElement("button");
+    lock.type = "button";
+    lock.className = "kd-item";
+    const paintLock = async () => {
+      const st = await LLM.lockState().catch(() => ({ on: false, available: false }));
+      lock.innerHTML = `<span class="kd-ico" aria-hidden="true">🔒</span><span><span class="kd-label"></span><small></small></span><span class="kd-switch ${st.on ? "on" : ""}" aria-hidden="true"></span>`;
+      lock.querySelector(".kd-label").textContent = T("נעילה בטביעת אצבע", "Fingerprint lock");
+      lock.querySelector("small").textContent = !st.available ? T("צריך נעילת מסך בטלפון", "Needs a screen lock on the phone") : st.on ? T("פועל: נפתח בטביעת אצבע", "On: opens with your fingerprint") : T("כבוי", "Off");
+      lock.setAttribute("aria-pressed", String(!!st.on));
+      lock.disabled = !st.available;
+      lock.dataset.on = st.on ? "1" : "0";
+    };
+    lock.onclick = async () => {
+      try {
+        // Turning it on or off needs the lock itself first, so someone else holding the phone cannot turn it off.
+        await LLM.unlock();
+        await LLM.setLock({ on: lock.dataset.on !== "1" });
+      } catch {
+        /* cancelled */
+      }
+      void paintLock();
+    };
+    void paintLock();
+    add(lock);
+  }
   item("🔗", T("המחשבים שלי", "My computers"), computers.length ? T(`${computers.length} שמורים`, `${computers.length} saved`) : "", "index.html?switch=1", here === "index.html" ? "on" : "");
   item("⬆", T("בדוק עדכונים", "Check for updates"), "", "index.html?switch=1&update=1");
   const foot = document.createElement("div");

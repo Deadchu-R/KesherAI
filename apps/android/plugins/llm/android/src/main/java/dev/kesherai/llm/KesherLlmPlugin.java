@@ -669,6 +669,77 @@ public class KesherLlmPlugin extends Plugin {
         }
     }
 
+    // ---------- App lock (audit F14): the phone's own fingerprint, face or screen lock opens the app ----------
+
+    private static long unlockedAt = 0;
+    private static long pausedAt = 0;
+
+    private android.content.SharedPreferences lockPrefs() {
+        return getContext().getSharedPreferences("kesher-lock", android.content.Context.MODE_PRIVATE);
+    }
+
+    @Override
+    protected void handleOnPause() {
+        pausedAt = System.currentTimeMillis();
+    }
+
+    /** Whether the lock is on, and whether it must be opened now (first time, or after a minute away from the app). */
+    @PluginMethod
+    public void lockState(PluginCall call) {
+        boolean on = lockPrefs().getBoolean("on", false);
+        long now = System.currentTimeMillis();
+        boolean needed = on && (unlockedAt == 0 || (pausedAt > unlockedAt && now - pausedAt > 60_000));
+        android.app.KeyguardManager km = (android.app.KeyguardManager) getContext().getSystemService(android.content.Context.KEYGUARD_SERVICE);
+        JSObject out = new JSObject();
+        out.put("on", on);
+        out.put("needed", needed);
+        out.put("available", android.os.Build.VERSION.SDK_INT >= 29 && km != null && km.isDeviceSecure());
+        call.resolve(out);
+    }
+
+    /** Asks for the fingerprint, face or screen lock (Android's own window); resolves when it is right. */
+    @PluginMethod
+    public void unlock(PluginCall call) {
+        if (android.os.Build.VERSION.SDK_INT < 29) {
+            unlockedAt = System.currentTimeMillis();
+            call.resolve();
+            return;
+        }
+        boolean he = java.util.Locale.getDefault().getLanguage().equals("iw") || java.util.Locale.getDefault().getLanguage().equals("he");
+        android.hardware.biometrics.BiometricPrompt.Builder b = new android.hardware.biometrics.BiometricPrompt.Builder(getContext())
+            .setTitle(he ? "פתיחת KesherAI" : "Open KesherAI")
+            .setSubtitle(he ? "טביעת אצבע, פנים או נעילת המסך" : "Fingerprint, face or screen lock");
+        if (android.os.Build.VERSION.SDK_INT >= 30) b.setAllowedAuthenticators(android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_WEAK | android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+        else b.setDeviceCredentialAllowed(true);
+        android.os.CancellationSignal cancel = new android.os.CancellationSignal();
+        ((android.app.Activity) getContext()).runOnUiThread(() -> b.build().authenticate(cancel, getContext().getMainExecutor(), new android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+            @Override
+            public void onAuthenticationSucceeded(android.hardware.biometrics.BiometricPrompt.AuthenticationResult result) {
+                unlockedAt = System.currentTimeMillis();
+                call.resolve();
+            }
+
+            @Override
+            public void onAuthenticationError(int code, CharSequence msg) {
+                call.reject(String.valueOf(msg));
+            }
+        }));
+    }
+
+    /** Turns the lock on or off; both need the lock opened first (so someone holding the phone cannot just turn it off). */
+    @PluginMethod
+    public void setLock(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        if (System.currentTimeMillis() - unlockedAt > 120_000) {
+            call.reject("unlock-first");
+            return;
+        }
+        lockPrefs().edit().putBoolean("on", on).apply();
+        JSObject out = new JSObject();
+        out.put("on", on);
+        call.resolve(out);
+    }
+
     @Override
     protected void handleOnDestroy() {
         closeModel();

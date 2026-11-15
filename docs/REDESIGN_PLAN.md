@@ -34,6 +34,9 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
 - Stage 1 is in (0.6.238–0.6.243). Android phone health already existed in the phone app (Health page).
 - Stage 2: 13–16 and 18 are in (0.6.240–0.6.244); 17 for computers in 0.6.245; 19 already existed.
 
+## Later (asked by Roee)
+- Synced cloud keys ("My devices") encrypted with a password the user sets, entered once on each new computer.
+
 ## Throughout
 - A security and performance scan every 5 changes.
 - Each step checked on the computer through KesherAI, at 390px and through remote.

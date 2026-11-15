@@ -15,6 +15,7 @@ import { installSlideMenus } from "./slideMenus";
 import { loadAppearance } from "./appearance";
 import { startPlacement } from "./placement";
 import { startPhoneNotify } from "./phoneNotify";
+import { startAppLock } from "./appLock";
 
 setLocale(getLocale());
 // Pages refresh themselves every few seconds; in a hidden tab (or the phone app in the background)
@@ -59,6 +60,7 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 startPhoneShare();
 // The Android app's own notifications: open the page a tapped notification asked for.
 startPhoneNotify();
+startAppLock();
 // Press a menu button, slide to an item, let go to choose it.
 installSlideMenus();
 
