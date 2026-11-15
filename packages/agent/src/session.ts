@@ -837,7 +837,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         } catch (err) {
           // Too long for the model after all (the estimate is in characters; a local server may share its context between
           // chats): take the server's own numbers, make the window smaller and send a shorter conversation once.
-          let over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|exceeds? (?:the )?(?:maximum )?context (?:length|size|window)/i.exec((err as Error).message);
+          // llama.cpp also answers just "Context size has been exceeded." (found on the PC: a chat from Lichii, after two web searches).
+          let over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|exceeds? (?:the )?(?:maximum )?context (?:length|size|window)|context (?:size|length|window) (?:has been |was )?exceeded/i.exec((err as Error).message);
           if (over && !abort.signal.aborted && this.contextTokens > 2000) {
             let sentChars = sizeOf(conversation) + JSON.stringify(this.specs()).length;
             // Up to two tries: learn the model's real characters per token from its own count, then fit again.
@@ -856,7 +857,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
                 );
                 over = null;
               } catch (again) {
-                over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/i.exec((again as Error).message);
+                over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)|context (?:size|length|window) (?:has been |was )?exceeded/i.exec((again as Error).message);
                 if (!over || attempt === 1) throw again;
               }
             }

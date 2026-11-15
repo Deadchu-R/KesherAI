@@ -406,6 +406,21 @@ test("a request too long for the model's context is shortened and sent again, no
   assert.ok(session.contextTokens < 24_576, `window is now ${session.contextTokens}`);
 });
 
+test("llama.cpp's short \"Context size has been exceeded.\" is retried shorter too", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-ctx2-"));
+  let calls = 0;
+  const model: ModelTurn = async () => {
+    calls++;
+    if (calls === 1) throw new Error('500 Internal Server Error: {"error":{"code":500,"message":"Context size has been exceeded."}}');
+    return { text: "done", toolCalls: [] };
+  };
+  const session = new AgentSession({ id: "c2", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", contextTokens: 16_000 });
+  session.send("hello");
+  await waitFor(session, (e) => e.type === "status" && e.status !== "running");
+  assert.ok(session.events.some((e) => e.type === "assistant" && e.text === "done"));
+  assert.ok(session.contextTokens < 16_000, `window is now ${session.contextTokens}`);
+});
+
 test("one huge tool output inside a long run is cut down so the request fits a small context", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "kesher-big-"));
   await writeFile(join(workspace, "big.ts"), "x".repeat(200_000));
