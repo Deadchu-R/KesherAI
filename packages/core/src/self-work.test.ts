@@ -237,3 +237,32 @@ test("a real change is committed and its short hash returned", async () => {
   };
   assert.equal(await commitItem(git, "/repo", { subject: "self-work: the change", body: "Goal: go" }), "abc1234");
 });
+
+test("an item still going 20 minutes past the run's end is stopped, and the run ends (its changes not committed)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "selfwork-"));
+  const repo = join(root, "repo");
+  await mkdir(join(repo, ".git"), { recursive: true });
+  // The run's end is measured from the real clock: the fake one starts there.
+  let clock = Date.now();
+  const stopped: string[] = [];
+  const git: string[][] = [];
+  const sw = new SelfWork(join(root, "selfwork.json"), {
+    createChat: async () => "c1",
+    send: async () => undefined,
+    // One long item that keeps moving (new events), so it is not a stall.
+    state: async () => ({ status: "running", last: "", events: Math.floor(clock / 1000) }),
+    stopTurn: (id) => void stopped.push(id),
+    git: async (_r, args) => (git.push(args), { code: 0, out: args[0] === "rev-parse" ? "abc\n" : "" }),
+    check: async () => ({ code: 0, out: "" }),
+    notify: async () => undefined,
+    sleep: async () => void (clock += 60_000),
+    now: () => clock,
+  });
+  await sw.start({ repo, goal: "x", hours: 0.25 });
+  await sw.settled();
+  assert.deepEqual(stopped, ["c1"]);
+  assert.equal(sw.current?.status, "stopped");
+  assert.match(sw.current?.note ?? "", /20 minutes/);
+  assert.ok(!git.some((a) => a[0] === "commit"), "nothing was committed");
+  assert.ok(clock - Date.now() < 60 * 60_000, "about 15 minutes of run and 20 past it, not two hours");
+});

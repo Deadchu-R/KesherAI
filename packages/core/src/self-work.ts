@@ -94,6 +94,9 @@ const L_SKIP = "Skipped an item";
 /** A turn that still moves (new steps keep coming) may run this long; a stuck one is caught sooner by STALL_MS. A slow
  * local model can need most of an hour for one item (found on the PC: Qwen3.6 at 18 tokens/s), so this is only a cap. */
 const STEP_MS = 120 * 60_000;
+/** How long past its end time a run may go on with the item it is in (found on the PC: items ran 45+ minutes past it,
+ *  holding back an update that waited for self-work to finish). */
+const OVERRUN_MS = 20 * 60_000;
 const WAIT_MS = 30 * 60_000;
 /** A turn with no new step (no tool call, no answer) for this long is stuck: it is stopped and the item resumed. */
 const STALL_MS = 12 * 60_000;
@@ -352,6 +355,13 @@ export class SelfWork {
       await this.sleep(2000);
       if (this.stopRequested) return undefined;
       const st = await this.d.state(r.convId);
+      // Well past the run's end: stop the item in progress and end the run. Its changes stay in the worktree,
+      // unchecked and not committed (a later run can look at them).
+      if (this.now() > r.until + OVERRUN_MS && (st.status === "running" || st.status === "waiting")) {
+        this.d.stopTurn?.(r.convId);
+        await this.end("stopped", "The time limit was reached: the item in progress was stopped 20 minutes after it (its changes are in the worktree, not committed).");
+        return undefined;
+      }
       if (head0 && st.status === "running" && ++polls % 15 === 0) {
         const head = await headOf();
         if (head && head !== head0) {
