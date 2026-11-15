@@ -533,7 +533,7 @@ public class KesherLlmPlugin extends Plugin {
         }
         try {
             android.content.Intent i = new android.content.Intent(android.os.storage.StorageManager.ACTION_CLEAR_APP_CACHE);
-            getActivity().startActivityForResult(i, 4711);
+            ((android.app.Activity) getContext()).startActivityForResult(i, 4711);
             out.put("result", "asked");
         } catch (Exception e) {
             out.put("result", "failed");
@@ -661,7 +661,7 @@ public class KesherLlmPlugin extends Plugin {
         }
         try {
             android.app.PendingIntent pi = android.provider.MediaStore.createDeleteRequest(getContext().getContentResolver(), uris);
-            getActivity().startIntentSenderForResult(pi.getIntentSender(), 4712, null, 0, 0, 0);
+            ((android.app.Activity) getContext()).startIntentSenderForResult(pi.getIntentSender(), 4712, null, 0, 0, 0);
             out.put("asked", true);
             call.resolve(out);
         } catch (Exception e) {
