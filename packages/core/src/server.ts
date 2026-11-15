@@ -5,7 +5,7 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
-import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
+import { mkdir, readFile as readFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
@@ -53,13 +53,10 @@ import { personaRoutes } from "./routes/personas.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { librariesRoutes } from "./routes/libraries.js";
 import { Libraries } from "./libraries.js";
-import { findEngines, readProject } from "./unreal-install.js";
-import { engineFor, runProgram } from "./unreal-tools.js";
+import { findEngines } from "./unreal-install.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
 import { ComfyUIProvider } from "@kesher/providers";
-import { UnrealBridge } from "./unreal-bridge.js";
-import { UnityCli } from "./unity-cli.js";
 import { Copilot, copilotProvider } from "./copilot.js";
 import { managedPolicy, policyCheck } from "./business.js";
 import { copilotRoutes } from "./routes/copilot.js";
@@ -147,7 +144,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
-import { buildRoutines } from "./server/build-extras.js";
+import { buildGameEngines, buildRoutines } from "./server/build-extras.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -440,45 +437,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void chatTimers.start();
   const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram });
   void routines.start();
-  // Unity's CLI: the Unity page and the chat's Unity tools share it.
-  UnityCli.setLogFile(join(paths.root, "logs", "unity-cli.log"));
-  const unityCli = new UnityCli(config.unity, persist);
-  // Look for the CLI now, so the first chat already has the Unity tools.
-  unityCli.cliKnown();
-  const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));
-  const editorOpenOn = async (uproject: string): Promise<boolean> => {
-    const name = uproject.split(/[\\/]/).pop()!.toLowerCase();
-    const r =
-      process.platform === "win32"
-        ? await runProgram("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='UnrealEditor.exe'\" | ForEach-Object { $_.CommandLine }"], { timeoutMs: 15_000 }).catch(() => ({ code: 1, out: "" }))
-        : await runProgram("ps", ["-eo", "args"], { timeoutMs: 10_000 }).catch(() => ({ code: 1, out: "" }));
-    return r.out.split(/\r?\n/).some((l) => /UnrealEditor(?!-Cmd)/i.test(l) && l.toLowerCase().includes(name));
-  };
-  // With Unreal closed, graph commands run in a headless editor (the plugin's KesherBridge commandlet).
-  unrealBridge.setHeadless(async (projectFile, commands) => {
-    const p = await readProject(projectFile);
-    const e = engineFor(await findEngines(), p.engine);
-    if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
-    const win = process.platform === "win32";
-    // Unreal open on this project without the plugin connected: a second editor saving the same assets could lose
-    // work, so the change waits for the plugin instead.
-    if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
-    const cmd = join(e.path, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux", win ? "UnrealEditor-Cmd.exe" : "UnrealEditor-Cmd");
-    const dir = join(p.dir, "Saved", "KesherAI");
-    await mkdir(dir, { recursive: true });
-    const request = join(dir, "bridge-request.json");
-    const response = join(dir, "bridge-response.json");
-    await rmFs(response, { force: true });
-    await writeFileFs(request, JSON.stringify({ commands }));
-    const r = await runProgram(cmd, [p.file, "-run=KesherBridge", "-unattended", "-nop4", "-nosplash", "-NullRHI", "-stdout"], { env: { ...process.env, KESHER_BRIDGE_REQUEST: request, KESHER_BRIDGE_RESPONSE: response }, timeoutMs: 900_000 });
-    const text = await readFileFs(response, "utf8").catch(() => "");
-    if (!text) {
-      const why = /Commandlet KesherBridge|KesherBridgeCommandlet|Could not find.*commandlet/i.test(r.out) ? "The KesherAI Bridge plugin in this project is older than 0.1.13: update it from the Unreal page (Update the plugin), then try again." : r.out.split(/\r?\n/).filter((l) => /Error/i.test(l)).slice(-5).join("\n") || `The headless Unreal editor stopped (exit ${r.code}).`;
-      throw new Error(why);
-    }
-    const j = JSON.parse(text) as { answers?: Array<{ ok: boolean; result?: unknown; error?: string }>; ok?: boolean; result?: unknown; error?: string };
-    return j.answers ?? [j as { ok: boolean; result?: unknown; error?: string }];
-  });
+  const { unityCli, unrealBridge } = buildGameEngines(paths, config, persist);
   // The task board self-work shares with Claude: a file on this computer only.
   const sharedDir = join(worker ? worker.mainRoot : paths.root, "self-work");
   const taskBoard = new TaskBoard(join(sharedDir, "board.json"));
