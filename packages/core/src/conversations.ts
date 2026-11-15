@@ -10,7 +10,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { AgentSession, CODE_TOOLS, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
+import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
 import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
@@ -616,6 +616,11 @@ export class ConversationManager {
         // ~1,600 tokens of Unity tools plus its guide (found on the PC: 8,300 tokens before the first word).
         const unityHere = this.unityInChat(id);
         return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.available ? UNREAL_GRAPH_TOOLS : [])];
+      },
+      // Smart auto approvals (F10): the chat's own model reviews a plain command first, when turned on in Settings.
+      reviewer: () => {
+        const model = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
+        return this.deps.config.autoReview && !model.startsWith("agent/") ? modelReviewer(modelTurnFor(this.deps.registry, model)) : undefined;
       },
       isAlwaysAllowed: (tool, modelId, command, scope) =>
         scope?.startsWith("site:")

@@ -1274,3 +1274,16 @@ Stopped at: building (store and public page first, then the chat menu and the se
   restart"; here the signal is KesherAI's own work: chats, self-work, downloads) waits and installs by itself.
 - **Not yet:** the phone app from a computer (its APK is built only on GitHub; a local Android build needs the SDK on
   the PC). Next: serve the APK through the same feed when a computer has one.
+
+## Smart auto approvals, F10 (2026-11-15, evening)
+- **Claude Code auto mode** (Anthropic engineering post): reads and in-project edits skip the classifier; everything
+  else goes to it. It sees only the user's messages and the call, never tool output ("reasoning-blind"), so planted
+  text cannot argue with it; it errs toward blocking; 3 denials in a row or 20 in total hand back to the person.
+- **Codex auto-review (guardian subagent):** low and medium risk run, high needs the user's authorisation, critical is
+  always denied; 3 denials in a row trip a breaker; denials go back to the agent with an anti-circumvention note.
+- **Built (0.6.247):** in "auto-edit" chats, a plain command that would ask goes to the chat's own model first
+  (ALLOW/ASK, 30 s, temperature as the chat). It sees the person's last three messages (without attachments) and the
+  command, never tool output. Our reviewer never denies: its "no", an error or a timeout just asks the person as
+  before, so no breaker is needed. Commands on the always-ask list never reach it. Each yes is a note in the chat.
+  Off by default; turned on only from the computer (Settings → Privacy); off from anywhere; not settable from a chat.
+- **Stopped at:** done. Possible later: a second, smaller model as the reviewer when F19's "beside" model is loaded.

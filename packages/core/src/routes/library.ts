@@ -693,6 +693,15 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
 
   // ---------- Permanent approvals ----------
   app.get("/api/permissions", async () => s.config.permissions);
+  // Smart auto approvals: turned on only from this computer (it lets commands run without asking); off from anywhere.
+  app.get("/api/permissions/auto-review", async () => ({ on: s.config.autoReview === true }));
+  app.put<{ Body: { on?: boolean } }>("/api/permissions/auto-review", async (req, reply) => {
+    const on = req.body?.on === true;
+    if (on && !isLocalRequest(req)) return reply.code(403).send({ error: "Turn this on from the computer itself." });
+    s.config.autoReview = on;
+    await s.saveConfig();
+    return { on };
+  });
   app.delete<{ Params: { index: string } }>("/api/permissions/:index", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Approvals can only be changed on this computer." });
     const i = Number(req.params.index);

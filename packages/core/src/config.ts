@@ -143,6 +143,8 @@ export const KesherConfigSchema = z.object({
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */
   figma: z.object({ token: z.string().max(200).optional() }).prefault({}),
+  /** Smart auto approvals (F10): in "auto-edit" chats, the chat's model reviews a plain command before you are asked. */
+  autoReview: z.boolean().default(false),
   /** Tool search for local models (only everyday tools in full; the rest loaded on demand). On unless false. */
   toolSearch: z.boolean().optional(),
   /**

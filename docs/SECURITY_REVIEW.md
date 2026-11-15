@@ -488,6 +488,14 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Notes for scan 81 (0.6.247)
+
+- Smart auto approvals: only `exec` tools with a command, only in "auto-edit", never for the always-ask list or a
+  tool that insists on asking; the reviewer sees the person's typed messages and the command only (no tool output, no
+  attachments), so a prompt injection in a file or page cannot reach it; anything but a clear ALLOW asks the person.
+  Turning it on needs a request from this computer; `change_setting` cannot touch it. A model that writes its own
+  user message cannot: the asked text comes from the session's user turns only.
+
 ## Scan 80 (2026-11-15, 0.6.246)
 
 - Checked on the PC: the feed serves only names its feed lists (`../../config.json` → 404), ranges work (206), and

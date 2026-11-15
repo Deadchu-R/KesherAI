@@ -12,7 +12,8 @@ import type {
   TeamRole,
   ToolSpec,
 } from "@kesher/shared";
-import { decide } from "./permissions.js";
+import { dangerReason, decide } from "./permissions.js";
+import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
 import { ASK_USER_TOOL, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
 
@@ -92,6 +93,11 @@ export interface AgentSessionOptions {
    */
   /** Whether a saved rule allows this tool (for a command: its text, matched against command rules). */
   isAlwaysAllowed?(tool: string, modelId: string, command?: string, scope?: string): boolean;
+  /**
+   * Smart auto approvals (F10): in "auto-edit", a command that would ask goes to this reviewer first; read on each
+   * call, so turning it on or off applies at once. Undefined: the person is asked, as before.
+   */
+  reviewer?: () => Reviewer | undefined;
   /** "Always" given for a scope (a web site): the app keeps it (Settings lists it and can take it back). */
   onAlwaysScope?(scope: string): void;
   /** Environment variables for the session's commands (read on each command). */
@@ -203,6 +209,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly maxSteps: number;
   private readonly onChange?: (s: AgentSession) => void;
   private statusValue: AgentStatus = "idle";
+  private readonly reviewerOf?: () => Reviewer | undefined;
   private abort?: AbortController;
   private turn = 0;
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
@@ -256,6 +263,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.maxSteps = opts.maxSteps ?? 60;
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
+    this.reviewerOf = opts.reviewer;
     this.onAlwaysScope = opts.onAlwaysScope;
     this.envOf = opts.env;
     this.webOf = opts.web;
@@ -1088,6 +1096,21 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // A call the tool says the person must agree to (a download of several GB): asked every time, in every mode.
     const mustAsk = tool.askFirst?.(call.arguments);
     if (mustAsk && verdict.action !== "deny") verdict = { action: "ask", reason: mustAsk };
+    // Smart auto approvals: a plain command in "auto-edit" (not on the always-ask list, not one the tool insists on
+    // asking about) goes to the reviewer, which sees only what the person asked and the command. "No", an error or a
+    // slow answer leaves the question to the person, as before.
+    const command = tool.commandOf?.(call.arguments);
+    const reviewer = this.reviewerOf?.();
+    if (reviewer && verdict.action === "ask" && !mustAsk && this.mode === "auto-edit" && tool.risk === "exec" && command && !dangerReason(command)) {
+      const asked = this.messages.filter((m) => m.role === "user" && typeof m.content === "string").slice(-3).map((m) => String(m.content).split("\n\n---\n")[0]!.trim());
+      const review = await reviewer({ tool: tool.spec.name, command, input: call.arguments, asked, ...(this.workspace ? { folder: this.workspace } : {}) }, signal).catch(() => undefined);
+      if (review?.allow) {
+        this.push({ type: "note", text: `✓ Approved by the reviewer: ${command.slice(0, 120)}${review.reason ? ` (${review.reason})` : ""}` });
+        verdict = { action: "allow" };
+      } else if (review) {
+        verdict = { action: "ask", reason: `${verdict.reason}${review.reason ? ` The reviewer left it to you: ${review.reason}` : ""}` };
+      }
+    }
     if (verdict.action === "deny") return fail(verdict.reason);
     if (verdict.action === "ask") {
       let preview = "";

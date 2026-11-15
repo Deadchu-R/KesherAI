@@ -30,6 +30,31 @@ function left(until?: string): string {
 }
 
 /**
+ * Smart auto approvals (F10): in chats set to "auto-edit", the chat's model reviews a plain command first and lets
+ * it run when it clearly fits what you asked; anything else is still asked. Turned on only from the computer.
+ */
+export function AutoReviewSection() {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    void api<{ on: boolean }>("/api/permissions/auto-review").then((r) => setOn(r.on), () => setOn(null));
+  }, []);
+  if (on === null) return null;
+  const set = (value: boolean) => void api<{ on: boolean }>("/api/permissions/auto-review", { method: "PUT", body: { on: value } }).then((r) => setOn(r.on), (e: Error) => toast(e.message));
+  return (
+    <section className="card stack">
+      <h2>{L("אישורים אוטומטיים חכמים", "Smart auto approvals")}</h2>
+      <label className="row"><input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />{L("המודל של הצ'אט בודק פקודות לפני שהן מגיעות אליי", "The chat's model checks commands before they reach me")}</label>
+      <p className="muted small">
+        {L(
+          "בצ'אטים במצב \"עריכה אוטומטית\", המודל של הצ'אט בודק כל פקודה לפני שהיא מגיעה אליך: בנייה, בדיקות או git status שמתאימים למה שביקשת רצים לבד, וכל השאר עדיין נשאלים. הבודק רואה רק מה שכתבת ואת הפקודה, לא תוצאות של כלים. פקודות מסוכנות (מחיקה, push, התקנה) תמיד נשאלות. מדליקים רק מהמחשב.",
+          "In chats set to \"auto-edit\", the chat's model checks each command before it reaches you: a build, tests or git status that fit what you asked run by themselves, and everything else is still asked. The reviewer sees only what you wrote and the command, never tool output. Dangerous commands (deleting, push, installing) always ask. Turned on only from the computer.",
+        )}
+      </p>
+    </section>
+  );
+}
+
+/**
  * The approvals the user gave (what runs without asking, where, and for how long): in Settings → Privacy all of
  * them; in a chat's "Approvals" only those that apply to that chat. Each can get a time limit (15 minutes, an
  * hour…) or be removed. Loaded from /api/permissions.
