@@ -395,3 +395,16 @@ This review went through the code part by part. Each finding is listed with what
 - A folder routine ignores changes while it runs and for a minute after (its own writes do not start it again);
   changes are gathered for 20 s (up to 200 names).
 - "What fits?" second run (`--fit-print on`) uses the plan's own arguments; nothing from a request reaches it.
+
+## Scan 67 (2026-11-15, after 0.6.209–0.6.210 and the night's last changes)
+- Keyboard (0.6.209): saved combinations are cleaned (known ids, real keys); a global key must hold Ctrl, Cmd or Alt,
+  so no setting can take plain typing away from other programs; the desktop's `kesher:keys` IPC answers only the
+  app's own pages; a key another program holds is reported, never forced.
+- Pictures in Knowledge (0.6.210): read only from the folders the user put in a knowledge base, up to 8 MB; described
+  only by the local chat model with its own vision file, never a cloud model; they wait while a chat is working (the
+  card stays the user's), 12 per pass.
+- A model server that is not running is now named as such (the model id only; no address or key in the message).
+- Chat line icons: static drawings. Training and reset routes moved to their own files unchanged (reset stays
+  local-only).
+- Self-work: a run that asked for a path outside its folder was left waiting (approvals are Roee's), then stopped and
+  started again told to use only its board tool. Nothing was approved on his behalf.

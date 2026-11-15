@@ -1115,3 +1115,8 @@ Stopped at: videos (a few frames each), and showing the picture itself in the se
      diamonds, notes, text, arrows tied to elements; a `canvas` tool (add / move / change / link / delete / read, with
      an automatic layout so a small model need not place things); export SVG, PNG and .excalidraw JSON. No new package.
 Stopped at: the decision (A is faster and fuller; B keeps the app small and matches KesherAI's look).
+
+## 2026-11-15 (night): server.ts split, first step (board t49)
+- The training routes (routes/training.ts) and the reset routes (routes/reset.ts) moved out of createKesherServer,
+  unchanged; server.ts 1,402 → 1,342 lines. The rest of t49 (remote/device keys, self-work wiring, the many service
+  constructions) needs a context object passed to each area; next steps: remote and device keys, then self-work.

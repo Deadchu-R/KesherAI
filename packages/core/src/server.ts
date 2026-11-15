@@ -110,9 +110,9 @@ import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes, setAppearance } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
-import { Training, slug } from "./training.js";
-import { CHAT_BASES, ChatTrainer } from "./chat-trainer.js";
-import { applyPendingReset, cancelFullReset, fullResetPending, listBackups, requestFullReset, requestSettingsReset } from "./reset.js";
+import { Training } from "./training.js";
+import { ChatTrainer } from "./chat-trainer.js";
+import { applyPendingReset } from "./reset.js";
 import { DeviceKeys, type DeviceKey } from "./device-keys.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
@@ -126,6 +126,8 @@ import { computerRoutes } from "./routes/computer.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { journalRoutes } from "./routes/journal.js";
 import { gameRoutes } from "./routes/game.js";
+import { trainingRoutes } from "./routes/training.js";
+import { resetRoutes } from "./routes/reset.js";
 import { textHelperRoutes } from "./routes/text-helper.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
@@ -1053,71 +1055,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     modelsDir: () => paths.models,
   });
-  app.get("/api/training/chat", async () => ({ ...chatTrainer.status(), bases: CHAT_BASES, vramGb: Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) }));
-  app.post("/api/training/chat/install", async () => {
-    void chatTrainer.install();
-    return chatTrainer.status();
-  });
-  app.post<{ Body: { name?: string; dataset?: string; base?: string; steps?: number; rank?: number } }>("/api/training/chat", async (req, reply) => {
-    const ds = (await training.datasets()).find((d) => d.name === req.body?.dataset);
-    if (!ds) return reply.code(400).send({ error: "Choose a dataset." });
-    try {
-      await chatTrainer.train({ name: slug(String(req.body?.name ?? ds.name)), dataset: ds.file, base: String(req.body?.base ?? ""), ...(typeof req.body?.steps === "number" ? { steps: req.body.steps } : {}), ...(typeof req.body?.rank === "number" ? { rank: req.body.rank } : {}) });
-      return chatTrainer.status();
-    } catch (e) {
-      return reply.code(400).send({ error: (e as Error).message });
-    }
-  });
-  app.get("/api/training/datasets", async () => training.datasets());
-  app.post<{ Body: { name?: string; chats?: string[]; documents?: boolean } }>("/api/training/datasets", async (req, reply) => {
-    try {
-      return await training.buildChatDataset({ name: String(req.body?.name ?? "my-texts"), chats: Array.isArray(req.body?.chats) ? req.body.chats.filter((x) => typeof x === "string") : [], documents: req.body?.documents === true });
-    } catch (e) {
-      return reply.code(400).send({ error: (e as Error).message });
-    }
-  });
-  app.get("/api/training", async () => ({ kinds: await training.kinds(), jobs: training.list() }));
-  app.post<{ Body: { name?: string; trigger?: string; base?: string; steps?: number; rank?: number; images?: Array<{ data?: string; mimeType?: string }> } }>("/api/training/image-lora", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
-    const b = req.body ?? {};
-    const images = (b.images ?? []).filter((i) => typeof i.data === "string" && /^image\/(png|jpeg|webp)$/.test(i.mimeType ?? "")).map((i) => ({ data: Buffer.from(i.data!, "base64"), mimeType: i.mimeType! }));
-    try {
-      return await training.startImageLora({ name: String(b.name ?? ""), trigger: String(b.trigger ?? ""), base: String(b.base ?? ""), images, ...(typeof b.steps === "number" ? { steps: b.steps } : {}), ...(typeof b.rank === "number" ? { rank: b.rank } : {}) });
-    } catch (e) {
-      return reply.code(400).send({ error: (e as Error).message });
-    }
-  });
-  app.post("/api/training/stop", async () => {
-    training.stop();
-    return { ok: true };
-  });
+  await trainingRoutes(app, { training, chatTrainer, vramGb: async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) });
   // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
-  app.get("/api/reset", async () => ({ ...(await listBackups(paths.root)), pending: fullResetPending(paths.root), ...(resetBackup ? { justReset: resetBackup } : {}), canRestart: !!options.restartApp, canReinstall: !!options.updates }));
-  app.post<{ Body: { kind?: "settings" | "everything" | "reinstall" | "cancel"; keepModels?: boolean } }>("/api/reset", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Reset is done on the computer that runs KesherAI." });
-    const kind = req.body?.kind;
-    if (kind === "settings") {
-      await requestSettingsReset(paths.root);
-      if (options.restartApp) setTimeout(() => options.restartApp?.(), 600);
-      return { ok: true, restarting: !!options.restartApp };
-    }
-    if (kind === "everything") {
-      await requestFullReset(paths.root, req.body?.keepModels !== false);
-      if (options.restartApp) setTimeout(() => options.restartApp?.(), 600);
-      return { ok: true, restarting: !!options.restartApp };
-    }
-    if (kind === "cancel") {
-      await cancelFullReset(paths.root);
-      return { ok: true };
-    }
-    if (kind === "reinstall") {
-      try {
-        return await updater.reinstall();
-      } catch (e) {
-        return reply.code(400).send({ error: (e as Error).message });
-      }
-    }
-    return reply.code(400).send({ error: "Say what to reset: settings, everything, reinstall." });
-  });
+  await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
   // Who came in from outside (and who was refused), for Settings → Phone.
   const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));
   const deviceKeys = new DeviceKeys(() => config.remote.devices, persist);
