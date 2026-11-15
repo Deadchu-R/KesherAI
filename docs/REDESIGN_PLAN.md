@@ -28,10 +28,10 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
 18. F3 side chat.
 19. F6 previews of Word, Excel and 3D.
 20. F10 smart auto approvals.
-21. F1 a model on the phone itself (turns on the "on the phone" side of the toggle).
+21. F1 a model on the phone itself: already in the phone app ("On this phone": GGUF through wllama, Gemma 4 through LiteRT, models from the computer); the toggle's "on the phone" side opens it.
 
 ## Status (2026-11-15 evening)
-- Stage 1 is in (0.6.238–0.6.243), except Android phone health (native code).
+- Stage 1 is in (0.6.238–0.6.243). Android phone health already existed in the phone app (Health page).
 - Stage 2: 13–16 and 18 are in (0.6.240–0.6.244); 17 for computers in 0.6.245; 19 already existed.
 
 ## Throughout

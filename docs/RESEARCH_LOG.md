@@ -1299,8 +1299,8 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - **Recommendation:** llama.cpp (GGUF), the same model files as the computer, so a model can be copied from the PC
   over the device link instead of downloaded again; LiteRT-LM later as a "fast Gemma" option. Phone side: a small
   model (1–4B, Q4) chosen by the phone's RAM; the computer/phone switch's "on the phone" side turns on when one is loaded.
-- **Needs Roee:** a new dependency (the plugin, native code in the Android app) and a GitHub build of the APK.
-- **Stopped at:** research done, waiting for his yes on the dependency.
+- **Found after:** the phone app already has it (`apps/android/www/local.html`, "On this phone"): GGUF models through wllama, Gemma 4 E2B/E4B through LiteRT on the GPU (`plugins/llm`), and models copied from the computer (`/api/models/phone`). No new dependency is needed; the audit's F1 note was out of date.
+- **Stopped at:** done; nothing to build.
 
 ## Persona builder with web research (2026-11-15, evening; asked by Roee)
 - **LobeHub** (agent market, "generate assistant"): a description becomes a system prompt, avatar and opening
