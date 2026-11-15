@@ -14,13 +14,13 @@ test("the model adds shapes and arrows by id; KesherAI places them; the page dra
   const [tool] = canvasTools(s, "c1", () => "Login flow");
   const out = await tool!.run({ action: "add", shapes: [{ id: "start", text: "Open app" }, { id: "login", kind: "diamond", text: "Signed in?", color: "blue" }, { id: "home", text: "Home" }], arrows: [{ from: "start", to: "login" }, { from: "login", to: "home", text: "yes" }] }, {} as never);
   assert.match(String(out.output), /rectangle start at 0,0: "Open app" \(not drawn yet\)/);
-  assert.match(String(out.output), /diamond login at 300,0/);
-  assert.match(String(out.output), /rectangle home at 600,0/);
+  assert.match(String(out.output), /diamond login at 0,170/);
+  assert.match(String(out.output), /rectangle home at 0,340/);
   assert.match(String(out.output), /arrow login-to-home: login -> home "yes"/);
   const doc = (await s.get("chat-c1"))!;
   assert.equal(doc.title, "Login flow");
   assert.equal(doc.pending.length, 5);
-  assert.deepEqual(doc.pending.find((p) => p.id === "login"), { type: "diamond", id: "login", x: 300, y: 0, width: 200, height: 100, label: { text: "Signed in?" }, strokeColor: "#1971c2", backgroundColor: "#a5d8ff" });
+  assert.deepEqual(doc.pending.find((p) => p.id === "login"), { type: "diamond", id: "login", x: 0, y: 170, width: 200, height: 100, label: { text: "Signed in?" }, strokeColor: "#1971c2", backgroundColor: "#a5d8ff" });
   await assert.rejects(tool!.run({ action: "add", shapes: [{ id: "home", text: "again" }] }, {} as never), /already a shape "home"/);
   await assert.rejects(tool!.run({ action: "add", arrows: [{ from: "home", to: "nowhere" }] }, {} as never), /two shapes that exist/);
 
@@ -38,7 +38,7 @@ test("the model adds shapes and arrows by id; KesherAI places them; the page dra
   // New shapes go in a row under what is there.
   await tool!.run({ action: "add", shapes: [{ id: "next", kind: "note", text: "Later" }] }, {} as never);
   const n = (await s.get("chat-c1"))!.pending.find((p) => p.id === "next")!;
-  assert.deepEqual([n.x, n.y, n.backgroundColor], [0, 180, "#ffec99"]);
+  assert.deepEqual([n.x, n.y, n.backgroundColor], [0, 350, "#ffec99"]);
 
   // Change a drawn shape's text and color: a higher version, so it wins the page's merge.
   await tool!.run({ action: "change", id: "start", text: "Launch", color: "green" }, {} as never);
@@ -85,15 +85,18 @@ test("canvas routes: a chat's canvas, saving with revisions, bad ids, sizes", as
   }
 });
 
-test("new shapes are laid out as a left-to-right flowchart along the arrows; arrows run edge to edge", async () => {
+test("new shapes are laid out as a top-to-bottom flowchart along the arrows; arrows run edge to edge", async () => {
   const at = layoutShapes(["a", "b", "c", "d", "lone"], [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "b", to: "d" }, { from: "a", to: "d" }], 40);
-  assert.deepEqual([...at.entries()], [["a", { x: 0, y: 40 }], ["b", { x: 300, y: 40 }], ["c", { x: 600, y: 40 }], ["d", { x: 600, y: 200 }], ["lone", { x: 0, y: 200 }]]);
+  assert.deepEqual([...at.entries()], [["a", { x: 0, y: 40 }], ["b", { x: 0, y: 210 }], ["c", { x: 0, y: 380 }], ["d", { x: 280, y: 380 }], ["lone", { x: 280, y: 40 }]]);
+  // The tea case: "no" skips "add sugar" straight down, so "add sugar" moves aside.
+  const tea = layoutShapes(["q", "sugar", "drink"], [{ from: "q", to: "sugar" }, { from: "sugar", to: "drink" }, { from: "q", to: "drink" }], 0);
+  assert.deepEqual([...tea.entries()], [["q", { x: 0, y: 0 }], ["sugar", { x: 280, y: 170 }], ["drink", { x: 0, y: 340 }]]);
   // A cycle does not loop for ever.
   assert.equal(layoutShapes(["x", "y"], [{ from: "x", to: "y" }, { from: "y", to: "x" }], 0).size, 2);
   const s = await store();
   const [tool] = canvasTools(s, "c2", () => "Flow");
   await tool!.run({ action: "add", shapes: [{ id: "a", text: "A" }, { id: "b", text: "B" }], arrows: [{ from: "a", to: "b" }] }, {} as never);
   const arrow = (await s.get("chat-c2"))!.pending.find((p) => p.type === "arrow")!;
-  // From A's right edge (x 200) to B's left edge (x 300), with a small gap each side, at the boxes' middle height.
-  assert.deepEqual([Math.round(arrow.x), Math.round(arrow.y), Math.round(arrow.width!), Math.round(arrow.height!)], [208, 50, 84, 0]);
+  // From A's bottom edge (y 100) to B's top edge (y 170), with a small gap each side, at the boxes' middle.
+  assert.deepEqual([Math.round(arrow.x), Math.round(arrow.y), Math.round(arrow.width!), Math.round(arrow.height!)], [100, 108, 0, 54]);
 });

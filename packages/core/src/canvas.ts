@@ -239,9 +239,11 @@ function bottomOf(doc: CanvasDoc): number {
 }
 
 /**
- * Places new shapes that came without a position as a left-to-right flowchart: a shape an arrow points to goes one
- * column after the shape it comes from (the longest path decides), shapes in a column one under another. Shapes with
- * no arrows among the new ones form the first column. Everything goes under what is already on the canvas.
+ * Places new shapes that came without a position as a top-to-bottom flowchart (it reads on a phone and keeps a long
+ * chain from shrinking to a thin row): a shape an arrow points to goes one row under the shape it comes from (the
+ * longest path decides), shapes in a row side by side. A shape that sits in the way of an arrow skipping rows moves
+ * one column aside, so no arrow runs through it. Shapes with no arrows among the new ones form the first row.
+ * Everything goes under what is already on the canvas.
  *
  * @param ids - The new shapes to place, in the order given.
  * @param arrows - Arrows between shapes (only those between two of `ids` count).
@@ -264,15 +266,24 @@ export function layoutShapes(ids: string[], arrows: Array<{ from: string; to: st
     }
     if (!moved) break;
   }
-  const rows = new Map<number, number>();
-  const out = new Map<string, { x: number; y: number }>();
+  const cols = new Map<number, number>();
+  const col = new Map<string, number>();
   for (const id of ids) {
-    const col = level.get(id)!;
-    const row = rows.get(col) ?? 0;
-    rows.set(col, row + 1);
-    out.set(id, { x: col * 300, y: top + row * 160 });
+    const row = level.get(id)!;
+    const c = cols.get(row) ?? 0;
+    cols.set(row, c + 1);
+    col.set(id, c);
   }
-  return out;
+  // An arrow skipping rows in a straight column would cross the shapes between: move those aside.
+  for (const e of edges) {
+    const [a, b] = [level.get(e.from)!, level.get(e.to)!];
+    if (b - a < 2 || col.get(e.from) !== col.get(e.to)) continue;
+    for (const id of ids) {
+      const l = level.get(id)!;
+      if (l > a && l < b && col.get(id) === col.get(e.from)) col.set(id, col.get(id)! + 1);
+    }
+  }
+  return new Map(ids.map((id) => [id, { x: col.get(id)! * 280, y: top + level.get(id)! * 170 }]));
 }
 
 /** Where an arrow between two boxes starts and ends: on their edges, along the line between their centres. */
@@ -307,7 +318,7 @@ export function canvasTools(store: CanvasStore, convId: string, title: () => str
       spec: {
         name: "canvas",
         description:
-          "This chat's Canvas: a whiteboard the user sees and edits with you (diagrams, flows, architecture, mockups, mind maps). action 'read' lists what is on it (ids, text, arrows). 'add' adds shapes (each with your own short id, a kind: rectangle, ellipse, diamond, note or text, and its text; x and y are optional: KesherAI lays shapes out as a left-to-right flowchart along your arrows) and arrows (from and to are shape ids, optional text). 'change' sets a shape's text or color. 'delete' removes shapes (and their arrows). Colors: black, red, green, blue, yellow, purple, gray. Read first when the user may have drawn on it.",
+          "This chat's Canvas: a whiteboard the user sees and edits with you (diagrams, flows, architecture, mockups, mind maps). action 'read' lists what is on it (ids, text, arrows). 'add' adds shapes (each with your own short id, a kind: rectangle, ellipse, diamond, note or text, and its text; x and y are optional: KesherAI lays shapes out as a top-to-bottom flowchart along your arrows) and arrows (from and to are shape ids, optional text). 'change' sets a shape's text or color. 'delete' removes shapes (and their arrows). Colors: black, red, green, blue, yellow, purple, gray. Read first when the user may have drawn on it.",
         inputSchema: {
           type: "object",
           properties: {
