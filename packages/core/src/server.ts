@@ -23,7 +23,7 @@ import { branding, cleanAppearance, features } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
-import { LlamaEngine, findMmproj } from "./llamacpp.js";
+import { findMmproj } from "./llamacpp.js";
 import { Library } from "./library.js";
 import { ConversationManager, modelTurnFor, onModelSpeed } from "./conversations.js";
 import { Speeds } from "./speeds.js";
@@ -88,7 +88,7 @@ import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
-import { SdEngine, ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
+import { ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
 import { BrowserBridge, browserTools } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
@@ -136,10 +136,9 @@ import { Devices } from "./devices.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { Journal } from "./journal.js";
 import { McpManager, mcpResultText } from "./mcp.js";
-import { bySpeed, planGpus, type Gpu } from "./gpus.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
-import { detectHardwareCached, freeSpace } from "@kesher/downloads";
+import { freeSpace } from "@kesher/downloads";
 import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes, TERMINATED_FILE } from "./routes/system.js";
@@ -157,6 +156,9 @@ import { onedriveRoutes } from "./routes/onedrive.js";
 import { loadModel } from "./routes/engine.js";
 import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 import { openDataDir } from "./server/data-dir.js";
+import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
+
+export { amdCardOnLinux } from "./server/build-engines.js";
 
 export { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 
@@ -191,20 +193,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Stops conversations through a late-bound reference: the manager is created below.
   let stopConversation: (id: string) => void = () => undefined;
   const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)));
-  /** NVIDIA cards with their PCI-order index. */
-  const nvidiaGpus = async (): Promise<Gpu[]> =>
-    (await detectHardwareCached()).gpus
-      .filter((g) => /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name))
-      .map((g, i) => ({ index: g.index ?? i, name: g.name, vramTotal: g.vramTotal, vramFree: g.vramFree, ...(g.computeCap ? { computeCap: g.computeCap } : {}) }));
   const browser = new BrowserBridge();
   const speakers = new Speakers(join(paths.engines, "speakers"), downloads);
-  const sd = new SdEngine(join(paths.engines, "sdcpp"), () => paths.models, downloads, async () => {
-    const nv = await nvidiaGpus();
-    // The image engine uses one card: the fastest allowed one (or the chosen leader).
-    const pool = nv.filter((g) => !config.engines.gpus.use || config.engines.gpus.use.includes(g.index));
-    const card = pool.find((g) => g.index === config.engines.gpus.main) ?? bySpeed(pool)[0];
-    return { nvidia: nv.length > 0, ...(card ? { vramGb: card.vramFree / 1024 ** 3, cudaIndex: card.index } : {}) };
-  });
+  const sd = buildSdEngine(paths, downloads, config);
   registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });
   registry.add({ id: "sdcpp", type: "sdcpp", name: "KesherAI image engine", location: "local" });
   // The worker's models are the main app's (one copy on the graphics card), reached over its local API.
@@ -252,19 +243,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   // When each model was last loaded (PC Health's "Fix it for me": models nobody used for 30 days).
   const modelUse = new ModelUse(join(paths.root, "model-use.json"));
-  const engine = new LlamaEngine({
-    dir: paths.engines,
-    ...(config.engines.llamaServerPath ? { binaryPath: config.engines.llamaServerPath } : {}),
-    ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}),
-    port: config.engines.llamaServerPort,
-    args: config.engines.llamaServerArgs,
-    parallel: config.engines.parallel,
-    ...(config.engines.mtpDraft !== undefined ? { mtpDraft: config.engines.mtpDraft } : {}),
-    ...(config.engines.fitTargetMiB !== undefined ? { fitTargetMiB: config.engines.fitTargetMiB } : {}),
-    ...(config.engines.kvType !== undefined ? { kvType: config.engines.kvType } : {}),
-    gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
-    onLoad: (modelPath) => void modelUse.used(modelPath),
-  });
+  const engine = buildLlamaEngine(paths, config, modelUse);
   downloads.limit = config.downloadLimitMBps * 1024 * 1024;
   const assets = new AssetStore(paths.assets);
   // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.
@@ -1157,35 +1136,4 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       await plugins.deactivateAll();
     },
   };
-}
-
-/**
- * @param modelPath - A GGUF file (the first part of a split model).
- * @returns Its size in bytes, adding the other parts of a split model.
- */
-async function modelSize(modelPath: string): Promise<number> {
-  const { stat, readdir } = await import("node:fs/promises");
-  const { basename, dirname, join } = await import("node:path");
-  const split = /^(.*)-00001-of-(\d{5})\.gguf$/i.exec(basename(modelPath));
-  if (!split) return (await stat(modelPath).catch(() => ({ size: 0 }))).size;
-  const files = (await readdir(dirname(modelPath)).catch(() => [])).filter((f) => f.startsWith(`${split[1]}-`) && f.endsWith(`-of-${split[2]}.gguf`));
-  const sizes = await Promise.all(files.map((f) => stat(join(dirname(modelPath), f)).then((x) => x.size, () => 0)));
-  return sizes.reduce((a, b) => a + b, 0);
-}
-
-/**
- * An AMD graphics card with at least 4 GB of its own memory, on Linux (its driver's files in /sys).
- *
- * @param root - The sysfs folder (tests pass their own).
- */
-export async function amdCardOnLinux(root = "/sys/class/drm"): Promise<boolean> {
-  if (process.platform !== "linux") return false;
-  const { readdir, readFile } = await import("node:fs/promises");
-  for (const c of await readdir(root).catch(() => [] as string[])) {
-    if (!/^card\d+$/.test(c)) continue;
-    const vendor = (await readFile(`${root}/${c}/device/vendor`, "utf8").catch(() => "")).trim();
-    const vram = Number((await readFile(`${root}/${c}/device/mem_info_vram_total`, "utf8").catch(() => "0")).trim());
-    if (vendor === "0x1002" && vram >= 4 * 1024 ** 3) return true;
-  }
-  return false;
 }

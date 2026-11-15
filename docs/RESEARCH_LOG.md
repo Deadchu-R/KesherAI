@@ -1123,7 +1123,10 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
 - 2026-11-15 morning (Roee approved continuing): B1 done — `server/options.ts` holds `KesherServerOptions`,
   `KesherServer` and `WEB_CSP` (re-exported from server.ts, so no other file changed); server.ts 1,279 → 1,205.
   B2 done too: `server/data-dir.ts` (`openDataDir`: "start over", the config, the paths, worker mode); 1,191 lines.
-  Stopped at: B3 (`server/build-engines.ts`: llama.cpp, the image engine, ComfyUI, the guard) is next.
+  B3, first part: `server/build-engines.ts` (nvidiaGpus, buildLlamaEngine, buildSdEngine, modelSize, amdCardOnLinux),
+  same construction order; 1,139 lines.
+  Stopped at: the rest of B3 — ComfyUI and the GPU guard need the notifier, runtimes and registry, so they move once
+  B4/B5 give those a home; then B4 (`server/build-chat.ts`).
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
