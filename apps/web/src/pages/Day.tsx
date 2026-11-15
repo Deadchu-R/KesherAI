@@ -133,7 +133,7 @@ export function DayPage() {
       {info.status.error && <p className="error small">{L("הצילום האחרון נכשל: ", "The last capture failed: ")}{info.status.error}</p>}
       {showSettings && <JournalSettingsCard info={info} save={save} />}
 
-      <div className="day-tabs" role="tablist">
+      <div className="tabs day-tabs" role="tablist">
         {tabs.map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{label}</button>
         ))}

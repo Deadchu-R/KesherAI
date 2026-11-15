@@ -14,7 +14,6 @@ import { NEW_CODE_EVENT } from "./AppBar";
 import { usePluginUi } from "./plugins";
 import { pageHidden, simpleHidden } from "@kesher/shared";
 import { useParts } from "./parts";
-import { QuickMenu } from "./QuickMenu";
 import { AccountButton } from "./AccountButton";
 import { Select } from "./ui/Select";
 import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
@@ -388,8 +387,8 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   return (
     <nav className={`sidebar${menuOpen ? " open" : ""}`} aria-label="Main">
       <SidebarGrip />
-      <QuickMenu />
-      <ConversationSearch />
+      {/* The redesign (2026-11): the "new" button first, then search; the "Jump to" menu is gone (it repeated what
+          the sidebar already shows: new chat, models, pictures, settings and the recent chats). */}
       {!searching && <div className="sidebar-actions">
         {/* The same main actions as every other menu (useAppMenu). One "new" button, for the side you are on (the
             top bar's Chat / Code switch goes to the other): "New chat" in a chat, "New code session" in code. */}
@@ -418,6 +417,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           </div>
         )}
       </div>}
+      <ConversationSearch />
 
       <div className="sidebar-scroll">
         {!searching && editing && <SidebarEdit onDone={() => setEditing(false)} />}

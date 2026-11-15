@@ -26,7 +26,7 @@ export function CommunityPage() {
   const he = getLocale() === "he";
   const [kind, setKind] = useState<"plugins" | "prompts" | "skills">("plugins");
   const kinds = (
-    <div className="store-kinds row seg" role="tablist">
+    <div className="tabs store-kinds" role="tablist">
       {([["plugins", he ? "תוספים ומודים" : "Plugins and mods"], ["prompts", he ? "פרומפטים ופרסונות" : "Prompts and personas"], ["skills", he ? "מיומנויות" : "Skills"]] as const).map(([k, label]) => (
         <button key={k} type="button" role="tab" aria-selected={kind === k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>{label}</button>
       ))}

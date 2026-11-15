@@ -748,9 +748,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .rec-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .rec-pill.on { color: var(--text); }
 .rec-pill.on::before { background: #f06a6a; box-shadow: 0 0 0 3px rgb(240 106 106 / .18); }
-.day-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 18px; overflow-x: auto; }
-.day-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 14px; color: var(--muted); white-space: nowrap; }
-.day-tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.day-tabs { margin-bottom: 18px; }
 .day-empty { padding: 40px 0; text-align: center; }
 .day-intro { max-width: 640px; margin: 40px auto; display: flex; flex-direction: column; gap: 16px; }
 .day-intro h1 { font-size: 34px; letter-spacing: -.02em; margin: 0; }
@@ -856,7 +854,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 
 /* Personas */
 .persona-card { display: flex; flex-direction: column; gap: 6px; }
-.persona-mark { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--border); font-size: 16px; }
+.persona-mark { width: 44px; height: 44px; flex: none; border-radius: 50%; display: inline-grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 18px; font-weight: 700; }
 .persona-text { margin: 0; white-space: pre-wrap; }
 .persona-icon input { width: 64px; text-align: center; }
 .persona-templates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
