@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import { relative } from "node:path";
 import { makeDiff, type ExternalAgent, type ExternalIO } from "@kesher/agent";
 import { AcpAgent, type AcpHandlers, type AcpOption, type AcpPermission, type AcpUpdate } from "./acp.js";
-import { agyPath } from "./routes/terminal.js";
+import { agyPath } from "./agy-path.js";
 
 /**
  * Outside coding agents a code conversation can run on instead of a model: KesherAI starts the agent's own CLI
