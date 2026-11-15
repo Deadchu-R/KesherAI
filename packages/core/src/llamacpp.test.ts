@@ -124,3 +124,22 @@ test("the memory check gets the server's arguments without the server-only check
   assert.deepEqual(LlamaEngine.fitArgs(["-c", "32768", "--checkpoint-min-step", "1024", "-ngl", "99", "-cms", "512"]), ["-c", "32768", "-ngl", "99"]);
   assert.deepEqual(LlamaEngine.fitArgs(["-c", "8192"]), ["-c", "8192"]);
 });
+
+test("llama-server gets its own key, and KesherAI's own provider sends it (no other website can use the model)", async () => {
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { createKesherServer } = await import("./server.js");
+  const a = new LlamaEngine({ dir: "/nowhere", port: 1 });
+  const b = new LlamaEngine({ dir: "/nowhere", port: 2 });
+  assert.match(a.apiKey, /^[0-9a-f]{48}$/);
+  assert.notEqual(a.apiKey, b.apiKey);
+  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-llama-key-")), autodetect: false, pluginRoots: [] });
+  try {
+    server.services.registerEngineProvider();
+    const own = server.services.registry.list().find((p) => p.config.id === "llamacpp");
+    assert.equal(own?.config.apiKey, server.services.engine.apiKey);
+  } finally {
+    await server.app.close();
+  }
+});

@@ -913,7 +913,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     saveConfig: persist,
     registerEngineProvider: () => {
       if (!registry.get("llamacpp")) {
-        registry.add({ id: "llamacpp", type: "openai-compatible", name: "KesherAI engine (llama.cpp)", location: "local", baseUrl: engine.baseUrl });
+        registry.add({ id: "llamacpp", type: "openai-compatible", name: "KesherAI engine (llama.cpp)", location: "local", baseUrl: engine.baseUrl, apiKey: engine.apiKey });
       }
     },
   };

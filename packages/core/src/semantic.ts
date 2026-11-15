@@ -85,7 +85,7 @@ export class Semantic {
     // (found on the PC: with this model, Unreal and Unity on a 24 GB card, Qwen3 Coder read prompts at 20 tokens/s).
     this.engine ??= new LlamaEngine({ dir: this.d.enginesDir, binaryPath: await this.d.binary(), ...(this.d.config.engines.llamaVersion ? { version: this.d.config.engines.llamaVersion } : {}), port: 8082, args: ["--embedding", "-ngl", "0", "-c", "8192", "-ub", "8192", "-b", "8192"] });
     await this.engine.load(path, 180_000);
-    if (!this.d.registry.get(EMBED_PROVIDER)) this.d.registry.add({ id: EMBED_PROVIDER, type: "openai-compatible", name: "KesherAI embeddings (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl });
+    if (!this.d.registry.get(EMBED_PROVIDER)) this.d.registry.add({ id: EMBED_PROVIDER, type: "openai-compatible", name: "KesherAI embeddings (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl, apiKey: this.engine.apiKey });
     const id = `${EMBED_PROVIDER}/${basename(path).replace(/\.gguf$/i, "")}`;
     this.d.config.activeModels.embedding = id;
     this.d.config.engines.embedModel = path;

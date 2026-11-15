@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -302,6 +303,12 @@ export class LlamaEngine {
   private modelPath?: string;
   private readonly log: string[] = [];
   private job?: EngineStatus["job"];
+  /**
+   * The key llama-server asks of every request (not /health). Without one it answers any website open in a browser
+   * on this computer (it allows every origin), which could use the model and read its answers. Only KesherAI knows it;
+   * it goes to the server in its environment, not on its command line.
+   */
+  readonly apiKey = randomBytes(24).toString("hex");
 
   /**
    * @param opts.dir - Folder engines are installed into.
@@ -772,7 +779,7 @@ export class LlamaEngine {
     const proc = spawn(binary, ["-m", modelPath, "--host", "127.0.0.1", "--port", String(this.opts.port), "--alias", alias, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
-      ...(env ? { env: { ...process.env, ...env } } : {}),
+      env: { ...process.env, ...(env ?? {}), LLAMA_API_KEY: this.apiKey },
     });
     this.proc = proc;
     this.modelPath = modelPath;
