@@ -31,6 +31,24 @@ public class NotifyPlugin extends Plugin {
         Notes.foreground = true;
         // A crash anywhere in the app is written down first, so the next start can say what it was.
         Crashes.install(getContext());
+        // The page's renderer can die (memory, a GPU driver): by default the whole app then closes with no trace.
+        // Instead it is written down (shown on the home screen and sent to the computer) and the app starts again.
+        try {
+            getBridge().setWebViewClient(new com.getcapacitor.BridgeWebViewClient(getBridge()) {
+                @Override
+                public boolean onRenderProcessGone(android.webkit.WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                    boolean crashed = android.os.Build.VERSION.SDK_INT >= 26 && detail != null && detail.didCrash();
+                    Crashes.note(getContext(), "webview: " + (view != null && view.getUrl() != null ? String.valueOf(android.net.Uri.parse(view.getUrl()).getPath()) : ""), new RuntimeException(crashed ? "The page's renderer crashed" : "The page's renderer was stopped by Android (memory)"));
+                    try {
+                        android.app.Activity a = (android.app.Activity) getContext();
+                        a.runOnUiThread(a::recreate);
+                    } catch (Throwable ignored) {}
+                    return true;
+                }
+            });
+        } catch (Throwable ignored) {
+            // an older Capacitor: the default handling stays
+        }
         try {
             Notes.channels(getContext());
             remember(getActivity() != null ? getActivity().getIntent() : null);
