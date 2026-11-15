@@ -1,6 +1,6 @@
 import { addSample, batteryWear, chargingHabits, patchAgeDays, phoneItems as phoneRules, type PhoneReading, type PhoneSample } from "../phone-health";
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, appHome } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
@@ -152,7 +152,11 @@ export function HealthPage() {
       {device === "pc" && tab === "storage" && <StorageSection />}
       {device === "phone" && phone && (
         <section className="card stack">
-          <h2>{L(`הטלפון${phone.model ? ` (${phone.model})` : ""}`, `This phone${phone.model ? ` (${phone.model})` : ""}`)}</h2>
+          <div className="row wrap">
+            <h2 className="grow">{L(`הטלפון${phone.model ? ` (${phone.model})` : ""}`, `This phone${phone.model ? ` (${phone.model})` : ""}`)}</h2>
+            {/* Apps and games, cleaning and memory live on the phone's own page (they work without the computer too). */}
+            {appHome() && <a className="button" href={`${appHome()!.replace(/\/$/, "")}/local.html?tab=health`}>{L("אפליקציות וניקוי", "Apps and cleaning")}</a>}
+          </div>
           <ul className="health-items">
             {phoneItems(phone).map((i, k) => (
               <li key={k} className={`health-item ${i.level}`}>

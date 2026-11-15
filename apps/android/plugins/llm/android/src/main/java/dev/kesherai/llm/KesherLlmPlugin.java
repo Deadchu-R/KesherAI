@@ -406,6 +406,269 @@ public class KesherLlmPlugin extends Plugin {
         });
     }
 
+    // ---------- Phone Health: apps and games, cleaning, memory (as on the computer, within what Android allows) ----------
+
+    /** Whether the person gave "Usage access" (needed for apps' sizes and last use). */
+    private boolean usageAccess() {
+        try {
+            android.app.AppOpsManager ops = (android.app.AppOpsManager) getContext().getSystemService(android.content.Context.APP_OPS_SERVICE);
+            int mode = android.os.Build.VERSION.SDK_INT >= 29
+                ? ops.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getContext().getPackageName())
+                : ops.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getContext().getPackageName());
+            return mode == android.app.AppOpsManager.MODE_ALLOWED;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * The apps the person installed (and updated system apps), with games marked, their sizes (app, data, cache) and
+     * last use when "Usage access" is on. Read only.
+     */
+    @PluginMethod
+    public void apps(PluginCall call) {
+        work.execute(() -> {
+            JSObject out = new JSObject();
+            boolean usage = usageAccess();
+            out.put("usageAccess", usage);
+            JSArray list = new JSArray();
+            try {
+                android.content.pm.PackageManager pm = getContext().getPackageManager();
+                java.util.Map<String, Long> lastUsed = new java.util.HashMap<>();
+                if (usage) {
+                    android.app.usage.UsageStatsManager um = (android.app.usage.UsageStatsManager) getContext().getSystemService(android.content.Context.USAGE_STATS_SERVICE);
+                    long now = System.currentTimeMillis();
+                    java.util.Map<String, android.app.usage.UsageStats> stats = um.queryAndAggregateUsageStats(now - 90L * 24 * 3600 * 1000, now);
+                    for (java.util.Map.Entry<String, android.app.usage.UsageStats> e : stats.entrySet()) lastUsed.put(e.getKey(), e.getValue().getLastTimeUsed());
+                }
+                for (android.content.pm.ApplicationInfo ai : pm.getInstalledApplications(0)) {
+                    boolean system = (ai.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0;
+                    boolean updated = (ai.flags & android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+                    if (system && !updated) continue;
+                    if (pm.getLaunchIntentForPackage(ai.packageName) == null) continue;
+                    JSObject a = new JSObject();
+                    a.put("package", ai.packageName);
+                    a.put("name", String.valueOf(pm.getApplicationLabel(ai)));
+                    boolean game = android.os.Build.VERSION.SDK_INT >= 26 ? ai.category == android.content.pm.ApplicationInfo.CATEGORY_GAME : (ai.flags & android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0;
+                    a.put("game", game);
+                    a.put("system", system);
+                    if (usage && android.os.Build.VERSION.SDK_INT >= 26) {
+                        try {
+                            android.app.usage.StorageStatsManager ssm = (android.app.usage.StorageStatsManager) getContext().getSystemService(android.content.Context.STORAGE_STATS_SERVICE);
+                            android.app.usage.StorageStats st = ssm.queryStatsForPackage(ai.storageUuid, ai.packageName, android.os.Process.myUserHandle());
+                            a.put("appBytes", st.getAppBytes());
+                            a.put("dataBytes", st.getDataBytes());
+                            a.put("cacheBytes", st.getCacheBytes());
+                        } catch (Exception ignored) {}
+                    }
+                    Long used = lastUsed.get(ai.packageName);
+                    if (used != null && used > 0) a.put("lastUsed", used);
+                    list.put(a);
+                }
+            } catch (Exception e) {
+                out.put("error", e.getMessage());
+            }
+            out.put("apps", list);
+            call.resolve(out);
+        });
+    }
+
+    /** Opens a settings page the person uses themselves: usage access, all-files access, or one app's info page. */
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        String what = call.getString("what", "");
+        String pkg = call.getString("package", getContext().getPackageName());
+        android.content.Intent i;
+        if ("usage".equals(what)) i = new android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS);
+        else if ("files".equals(what) && android.os.Build.VERSION.SDK_INT >= 30) i = new android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, android.net.Uri.parse("package:" + getContext().getPackageName()));
+        else if ("app".equals(what)) i = new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + pkg));
+        else if ("storage".equals(what)) i = new android.content.Intent(android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS);
+        else {
+            call.reject("Unknown page.");
+            return;
+        }
+        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    /** Android's own uninstall window for one app (the person confirms there). */
+    @PluginMethod
+    public void uninstall(PluginCall call) {
+        String pkg = call.getString("package", "");
+        if (pkg == null || !pkg.matches("[A-Za-z0-9_.]{1,200}") || pkg.equals(getContext().getPackageName())) {
+            call.reject("Not an app.");
+            return;
+        }
+        android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_DELETE, android.net.Uri.parse("package:" + pkg));
+        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    /**
+     * Android's own "clear all apps' cache" window (Android 11+). It needs "All files access" once: without it, the
+     * answer says so and the page opens that setting.
+     */
+    @PluginMethod
+    public void clearAllCaches(PluginCall call) {
+        JSObject out = new JSObject();
+        if (android.os.Build.VERSION.SDK_INT < 30) {
+            out.put("result", "old-android");
+            call.resolve(out);
+            return;
+        }
+        if (!android.os.Environment.isExternalStorageManager()) {
+            out.put("result", "needs-files-access");
+            call.resolve(out);
+            return;
+        }
+        try {
+            android.content.Intent i = new android.content.Intent(android.os.storage.StorageManager.ACTION_CLEAR_APP_CACHE);
+            getActivity().startActivityForResult(i, 4711);
+            out.put("result", "asked");
+        } catch (Exception e) {
+            out.put("result", "failed");
+            out.put("error", e.getMessage());
+        }
+        call.resolve(out);
+    }
+
+    /** KesherAI's own cache on the phone (pictures and pages it kept), emptied; the models stay. */
+    @PluginMethod
+    public void clearOwnCache(PluginCall call) {
+        long freed = 0;
+        freed += emptyDir(getContext().getCacheDir());
+        File ext = getContext().getExternalCacheDir();
+        if (ext != null) freed += emptyDir(ext);
+        JSObject out = new JSObject();
+        out.put("freed", freed);
+        call.resolve(out);
+    }
+
+    /** Deletes a folder's contents (not following links), and returns the bytes freed. */
+    private long emptyDir(File d) {
+        long freed = 0;
+        File[] kids = d == null ? null : d.listFiles();
+        if (kids == null) return 0;
+        for (File f : kids) {
+            // A link is not followed (its target may be anywhere).
+            try {
+                if (!f.getCanonicalPath().equals(new File(d.getCanonicalFile(), f.getName()).getPath())) continue;
+            } catch (Exception e) {
+                continue;
+            }
+            if (f.isDirectory()) {
+                freed += emptyDir(f);
+                f.delete();
+            } else {
+                long n = f.length();
+                if (f.delete()) freed += n;
+            }
+        }
+        return freed;
+    }
+
+    /**
+     * Frees memory: the phone model out of memory, and apps waiting in the background closed (Android lets an app
+     * end only background ones; the app on screen and its own services stay).
+     */
+    @PluginMethod
+    public void freeMemory(PluginCall call) {
+        work.execute(() -> {
+            JSObject out = new JSObject();
+            android.app.ActivityManager am = (android.app.ActivityManager) getContext().getSystemService(android.content.Context.ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo before = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(before);
+            closeModel();
+            int closed = 0;
+            try {
+                for (android.content.pm.ApplicationInfo ai : getContext().getPackageManager().getInstalledApplications(0)) {
+                    if ((ai.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 && (ai.flags & android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) continue;
+                    if (ai.packageName.equals(getContext().getPackageName())) continue;
+                    am.killBackgroundProcesses(ai.packageName);
+                    closed++;
+                }
+            } catch (Exception ignored) {}
+            try { Thread.sleep(1200); } catch (InterruptedException ignored) {}
+            android.app.ActivityManager.MemoryInfo after = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(after);
+            out.put("freed", Math.max(0, after.availMem - before.availMem));
+            out.put("ramFree", after.availMem);
+            out.put("checked", closed);
+            call.resolve(out);
+        });
+    }
+
+    /** The phone's trash (Android 11+: deleted photos, videos and files kept for 30 days): count and size. */
+    @PluginMethod
+    public void trash(PluginCall call) {
+        JSObject out = new JSObject();
+        if (android.os.Build.VERSION.SDK_INT < 30) {
+            out.put("supported", false);
+            call.resolve(out);
+            return;
+        }
+        out.put("supported", true);
+        out.put("filesAccess", android.os.Environment.isExternalStorageManager());
+        long bytes = 0;
+        int count = 0;
+        android.os.Bundle q = new android.os.Bundle();
+        q.putInt(android.provider.MediaStore.QUERY_ARG_MATCH_TRASHED, android.provider.MediaStore.MATCH_ONLY);
+        try (android.database.Cursor c = getContext().getContentResolver().query(android.provider.MediaStore.Files.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL), new String[] { android.provider.MediaStore.MediaColumns._ID, android.provider.MediaStore.MediaColumns.SIZE }, q, null)) {
+            if (c != null) while (c.moveToNext()) {
+                count++;
+                bytes += c.getLong(1);
+            }
+        } catch (Exception e) {
+            out.put("error", e.getMessage());
+        }
+        out.put("items", count);
+        out.put("bytes", bytes);
+        call.resolve(out);
+    }
+
+    /** Empties the phone's trash: Android shows its own confirmation for the items (Android 11+). */
+    @PluginMethod
+    public void emptyTrash(PluginCall call) {
+        if (android.os.Build.VERSION.SDK_INT < 30) {
+            call.reject("Android 11 or newer.");
+            return;
+        }
+        java.util.ArrayList<android.net.Uri> uris = new java.util.ArrayList<>();
+        android.os.Bundle q = new android.os.Bundle();
+        q.putInt(android.provider.MediaStore.QUERY_ARG_MATCH_TRASHED, android.provider.MediaStore.MATCH_ONLY);
+        android.net.Uri base = android.provider.MediaStore.Files.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL);
+        try (android.database.Cursor c = getContext().getContentResolver().query(base, new String[] { android.provider.MediaStore.MediaColumns._ID }, q, null)) {
+            if (c != null) while (c.moveToNext()) uris.add(android.content.ContentUris.withAppendedId(base, c.getLong(0)));
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+            return;
+        }
+        JSObject out = new JSObject();
+        out.put("items", uris.size());
+        if (uris.isEmpty()) {
+            call.resolve(out);
+            return;
+        }
+        try {
+            android.app.PendingIntent pi = android.provider.MediaStore.createDeleteRequest(getContext().getContentResolver(), uris);
+            getActivity().startIntentSenderForResult(pi.getIntentSender(), 4712, null, 0, 0, 0);
+            out.put("asked", true);
+            call.resolve(out);
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
     @Override
     protected void handleOnDestroy() {
         closeModel();

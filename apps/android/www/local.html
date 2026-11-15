@@ -108,7 +108,16 @@
     #modelsView[data-tab="chat"] [data-cat]:not([data-cat="chat"]),
     #modelsView[data-tab="images"] [data-cat]:not([data-cat="images"]),
     #modelsView[data-tab="voice"] [data-cat]:not([data-cat="voice"]),
-    #modelsView[data-tab="api"] [data-cat]:not([data-cat="api"]) { display: none !important; }
+    #modelsView[data-tab="api"] [data-cat]:not([data-cat="api"]),
+    #modelsView[data-tab="health"] [data-cat]:not([data-cat="health"]) { display: none !important; }
+    #modelsView[data-tab="health"] > .intro:not([data-cat]) { display: none; }
+    .ph-numbers { margin: 0; padding-inline-start: 18px; line-height: 1.9; }
+    .ph-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .ph-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .ph-row button, .ph-btns button { min-height: 40px; flex: none; }
+    .ph-btns { display: flex; gap: 6px; flex: none; }
+    .ph-filter { display: flex; gap: 8px; }
+    .ph-filter input { flex: 1; min-width: 0; }
     #modelsView[data-tab="images"] #imgSection:not([hidden]) ~ #imgNone, #modelsView[data-tab="images"] #imgNone:has(~ #imgSection:not([hidden])) { display: none !important; }
   </style>
 </head>
@@ -130,6 +139,7 @@
       <button type="button" data-tab="images" data-he="🖼 תמונות" data-en="🖼 Pictures">🖼 תמונות</button>
       <button type="button" data-tab="voice" data-he="🎙 שיחה קולית" data-en="🎙 Voice">🎙 שיחה קולית</button>
       <button type="button" data-tab="api" data-he="🌐 דרך האינטרנט" data-en="🌐 Online">🌐 דרך האינטרנט</button>
+      <button type="button" data-tab="health" data-he="🩺 בריאות" data-en="🩺 Health">🩺 בריאות</button>
     </nav>
     <section class="api fast" id="fastSection" data-cat="chat" hidden>
       <h2 data-he="מהיר במיוחד: המנוע של Google לטלפונים" data-en="Extra fast: Google's engine for phones">מהיר במיוחד: המנוע של Google לטלפונים</h2>
@@ -150,6 +160,7 @@
       <p class="intro" data-he="יוצר תמונות על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה), עם Stable Diffusion 1.5. לוקח כמה דקות לתמונה; קטן יותר = מהיר יותר." data-en="Makes pictures on the phone itself, with no computer and no internet (after the download), with Stable Diffusion 1.5. A picture takes a few minutes; smaller is faster.">יוצר תמונות על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה), עם Stable Diffusion 1.5. לוקח כמה דקות לתמונה; קטן יותר = מהיר יותר.</p>
       <div id="imgBody"></div>
     </section>
+    <section class="api" id="healthSection" data-cat="health"></section>
     <section class="api" id="apiSection" data-cat="api">
       <h2 data-he="מודלים דרך האינטרנט (API)" data-en="Models over the internet (API)">מודלים דרך האינטרנט (API)</h2>
       <p class="intro" data-he="חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב." data-en="Connect Claude, Gemini, OpenAI and more with an API key. Connections sync with your computer: what you connected there shows here, and what you add here goes there.">חבר Claude, ‏Gemini, ‏OpenAI ועוד עם מפתח API. החיבורים מסונכרנים עם המחשב שלך: מה שחיברת שם מופיע כאן, ומה שתחבר כאן יעבור למחשב.</p>
@@ -354,7 +365,16 @@
     localStorage.setItem("kesherai-phone-cat", tab);
   }
   document.querySelectorAll("#cats [data-tab]").forEach((b) => (b.onclick = () => setCat(b.dataset.tab)));
-  setCat(localStorage.getItem("kesherai-phone-cat") || "chat");
+  // Phone health (the phone's own, no computer needed): drawn the first time its tab opens.
+  let healthDrawn = false;
+  const drawHealth = () => {
+    if (healthDrawn || $("modelsView").dataset.tab !== "health") return;
+    healthDrawn = true;
+    void import("./phone-health.js").then((m) => m.renderPhoneHealth($("healthSection")));
+  };
+  document.querySelectorAll("#cats [data-tab]").forEach((b) => b.addEventListener("click", drawHealth));
+  setCat(new URLSearchParams(location.search).get("tab") === "health" ? "health" : localStorage.getItem("kesherai-phone-cat") || "chat");
+  drawHealth();
 
   function renderVoice() {
     const body = $("voiceBody");

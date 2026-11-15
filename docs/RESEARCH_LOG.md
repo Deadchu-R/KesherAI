@@ -1349,3 +1349,15 @@ Stopped at: building (store and public page first, then the chat menu and the se
   by memory, grouped, Windows parts and KesherAI never listed; Close asks the program first, force only after a
   second yes), and startup programs (listed; changed in Windows' own settings page).
 - **Stopped at:** done; checked by tests, to be checked on the PC after the release.
+
+## Phone health on the phone itself (2026-11-15, night; asked by Roee)
+- **What Android allows an app:** list installed apps (QUERY_ALL_PACKAGES, a side-loaded app), games by
+  `ApplicationInfo.category`, sizes and last use with StorageStatsManager / UsageStatsManager after the person turns
+  on "Usage access"; uninstall only through Android's own window (ACTION_DELETE); other apps' caches only through
+  Android's own "clear all caches" window (StorageManager.ACTION_CLEAR_APP_CACHE, Android 11+, needs "All files
+  access"); ending only background apps (killBackgroundProcesses); the trash through MediaStore (Android 11+), emptied
+  with Android's own confirmation (createDeleteRequest). Startup apps cannot be read.
+- **Built:** a 🩺 Health tab on the phone's own screen (no computer needed): the numbers, Speed up (free memory, all
+  apps' cache, KesherAI's cache, trash) and every app and game with size, cache and last use, Info and Remove. From the
+  computer's PC health on the phone, "Apps and cleaning" opens it.
+- **Stopped at:** written; checked with a mock at 390 px; the APK builds on GitHub; Roee installs it.
