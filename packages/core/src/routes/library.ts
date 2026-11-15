@@ -25,6 +25,7 @@ import { readProject } from "../unreal-install.js";
 import { findGameProjects, findScripts } from "../game-projects.js";
 import { SideChats } from "../side-chat.js";
 import { modelTurnFor } from "../model-turn.js";
+import { localCall } from "../local-call.js";
 
 const MODES: PermissionMode[] = ["plan", "ask", "auto-edit", "auto"];
 
@@ -842,7 +843,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
 
   // "Install when the computer is free": waits for no chat, no self-work, no download, then installs.
   const freeState = async (): Promise<FreeState> => {
-    const run = (await app.inject({ method: "GET", url: "/api/self-work", remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } }).then((r) => r.json() as { run?: { status?: string } | null }, () => ({ run: null }))).run;
+    const run = (await localCall<{ run?: { status?: string } | null }>(s.config.port, "GET", "/api/self-work").catch(() => ({ json: { run: null } }))).json.run;
     return {
       chats: Object.keys(s.conversations.activity()).length,
       selfWork: run?.status === "running",

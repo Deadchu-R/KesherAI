@@ -28,6 +28,7 @@ import { UnityCli } from "../unity-cli.js";
 import { UnrealBridge } from "../unreal-bridge.js";
 import { findEngines, readProject } from "../unreal-install.js";
 import { engineFor, runProgram } from "../unreal-tools.js";
+import { localCall } from "../local-call.js";
 
 /** The server, once made: a routine starts self-work through its route (same checks as the panel's Start). */
 export interface InjectRef {
@@ -53,9 +54,9 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
     // The same checks as the panel's Start (through the route, so a worker is used when there is one).
     startSelfWork: async (o) => {
       if (!injectRef.app) return { ok: false, message: "KesherAI is still starting.", link: "#/code" };
-      const r = await injectRef.app.inject({ method: "POST", url: "/api/self-work/start", payload: o, remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } });
-      const body = r.json() as { run?: { branch?: string; convId?: string }; error?: string };
-      return r.statusCode === 200 && body.run ? { ok: true, message: `Self-work started on ${body.run.branch ?? "a new branch"}.`, link: "#/code" } : { ok: false, message: body.error ?? `It did not start (${r.statusCode}).`, link: "#/code" };
+      const r = await localCall<{ run?: { branch?: string; convId?: string }; error?: string }>(config.port, "POST", "/api/self-work/start", o).catch((err: Error) => ({ status: 0, json: { error: err.message } as { run?: { branch?: string; convId?: string }; error?: string } }));
+      const body = r.json;
+      return r.status === 200 && body.run ? { ok: true, message: `Self-work started on ${body.run.branch ?? "a new branch"}.`, link: "#/code" } : { ok: false, message: body.error ?? `It did not start (${r.status}).`, link: "#/code" };
     },
     runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
       // The engine log says who sent a request no chat on screen asked for.

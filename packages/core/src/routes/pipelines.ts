@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { PIPELINE_TEMPLATES, type Pipeline } from "../pipelines.js";
 import type { Routine } from "../routines.js";
+import { localCall } from "../local-call.js";
 
 /**
  * Pipelines: list (with templates), save, delete, run, follow a run, stop
@@ -60,7 +61,7 @@ export async function pipelineRoutes(app: FastifyInstance, s: KesherServices): P
     // A self-work routine runs its check command on this computer (scan 39): set on this computer, or from the phone
     // only with the same project and check as the last run (the rule of the panel's Start).
     if (b.action?.type === "self-work" && !isLocalRequest(req)) {
-      const last = (await app.inject({ method: "GET", url: "/api/self-work", remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } }).then((r) => r.json() as { run?: { repo?: string; check?: string } | null }, () => ({ run: null }))).run;
+      const last = (await localCall<{ run?: { repo?: string; check?: string } | null }>(s.config.port, "GET", "/api/self-work").catch(() => ({ json: { run: null } }))).json.run;
       if (!last || resolve(String(b.action.repo)) !== last.repo || b.action.check !== last.check) {
         return reply.code(403).send({ error: "Choose the project and its check on the computer first; from the phone you can save a routine with the same ones." });
       }
