@@ -479,6 +479,25 @@ This review went through the code part by part. Each finding is listed with what
   connection was removed from this computer's settings (the code keeps LM Studio support; it is found again only if it
   is running at start-up, for that session).
 
+## Scan 76 (2026-11-15, 0.6.234)
+
+- Chat tool groups (`chat-tool-groups.ts`, `chat-tools-games.ts`): the same tools and notes; the Telegram rule (no
+  screen, browser or engine code for a chat written from Telegram) is unchanged in what it removes and now has its
+  own test.
+- Song covers (`songCover`): the style and title go to the active image model only, cut to 300 and 80 characters;
+  no file path or user data beyond the song's own words; a failure leaves the song without a cover.
+- ACE-Step 1.5 XL (`folderNames`): ComfyUI's `/models/<folder>` is asked only for the fixed folders a ready-made flow
+  names (diffusion_models, text_encoders, vae), never a folder from a request. The 19.9 GB download ran only after
+  Roee's yes.
+- Meeting recordings: `PUT /api/journal/recordings` takes `days` only as an integer 1–3650 (else 400);
+  `pruneRecordings` deletes only folders it lists inside `journal/recordings` (ids from the listing, not from a
+  request), by the age of `recording.wav`; a meeting being recorded has a fresh folder and stays. Kept recordings
+  were never deleted before (a privacy gap: found and fixed here, 30 days by default).
+- Outside commit 150f0f86 (llama.cpp's short "Context size has been exceeded."): a wider pattern for the existing
+  shorten-and-retry path, which still runs at most twice and only above 2,000 tokens of context. Nothing to fix.
+- Performance: songs take ~20 s with turbo or XL on the PC, ~50 s more with a cover from Qwen-Image; recording
+  cleanup reads the meetings only when something was deleted.
+
 ## Scan 75 (2026-11-15, 0.6.231)
 
 - server.ts split B3 (ComfyUI), B7 (`server/routes.ts`) and B8 (`server/start-engines.ts`): the same calls in the same
