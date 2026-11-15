@@ -493,6 +493,10 @@ S5 an outside scanner's rules for Electron.
 - Speed up (pc-clean.ts): only fixed folders inside the user's own profile (and Steam's shader cache); contents only,
   never the folder itself; symbolic links and junctions are not followed; files newer than a day are kept in temp;
   a browser or Steam that is running keeps its cache. The page asks before deleting, and says it is permanent.
+- Boost (pc-boost.ts): emptying the Recycle Bin and closing a program each need a yes on the page; Close sends a
+  normal close first (the program may ask to save) and forces only after a second yes; Windows parts, security,
+  drivers and KesherAI's own processes are never listed or closed (allow-list of names, `[\w .()+-]` only). Windows
+  Update's cache runs only through Windows' own administrator prompt (UAC), with a fixed encoded command.
 - Games (pc-games.ts): read-only; removal only opens the store's own page from three fixed link shapes.
 
 - CivitAI (F5): the download address, size and SHA-256 come from CivitAI's API by version id (never from the page),

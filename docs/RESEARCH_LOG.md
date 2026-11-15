@@ -1344,6 +1344,8 @@ Stopped at: building (store and public page first, then the chat menu and the se
   played); removing a game opens the store's own removal (steam://uninstall/<id>, Epic, Windows settings; fixed links
   only). "Speed up" measures temp files (older than a day), Chrome/Edge caches (only when closed), shader caches
   (NVIDIA, AMD, D3D, Steam), crash reports; cleans only what is ticked, skips files in use, keeps the folders.
-- **Not built (needs Roee):** emptying the Recycle Bin, Windows Update's cache (needs administrator), closing running
-  programs to free memory, startup programs.
+- **Then built (Roee asked, 23:06):** emptying the Recycle Bin (size first), Windows Update's download cache
+  (Windows' own administrator prompt; services stopped and started again), free memory (KesherAI's models; programs
+  by memory, grouped, Windows parts and KesherAI never listed; Close asks the program first, force only after a
+  second yes), and startup programs (listed; changed in Windows' own settings page).
 - **Stopped at:** done; checked by tests, to be checked on the PC after the release.

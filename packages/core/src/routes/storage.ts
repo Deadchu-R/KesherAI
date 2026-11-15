@@ -7,6 +7,8 @@ import { ensureFfmpeg } from "../ffmpeg.js";
 import { moveToTrash, Storage, type StorageFile } from "../storage.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
 import { cleanSpotsNow, measureSpots } from "../pc-clean.js";
+import { clearUpdateCache, closeProgram, emptyRecycleBin, memoryPrograms, recycleBin, startupPrograms, updateCacheBytes } from "../pc-boost.js";
+import { localCall } from "../local-call.js";
 
 /** A video being made smaller, and the ones done. */
 interface CompressState {
@@ -37,9 +39,23 @@ export async function storageRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** Opens a store's own page for removing a game (it asks the person itself). Only these fixed links. */
   app.post<{ Body: { url?: string } }>("/api/storage/games/open", async (req, reply) => {
     const url = String(req.body?.url ?? "");
-    if (!/^(steam:\/\/uninstall\/\d{1,10}|ms-settings:appsfeatures|com\.epicgames\.launcher:\/\/store)$/.test(url)) return reply.code(400).send({ error: "Not a store link." });
+    if (!/^(steam:\/\/uninstall\/\d{1,10}|ms-settings:appsfeatures|ms-settings:startupapps|com\.epicgames\.launcher:\/\/store)$/.test(url)) return reply.code(400).send({ error: "Not a store link." });
     if (process.platform !== "win32") return reply.code(400).send({ error: "Only on Windows." });
     spawn("cmd.exe", ["/d", "/c", "start", '""', url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return { ok: true };
+  });
+  /** Speed up, the rest: the Recycle Bin, Windows Update's cache, programs holding memory, and startup programs. */
+  app.get("/api/storage/boost", async () => {
+    const [bin, updates, programs, startup] = await Promise.all([recycleBin(), updateCacheBytes(), memoryPrograms(), startupPrograms()]);
+    return { bin, ...(updates !== undefined ? { updateCache: updates } : {}), programs, startup };
+  });
+  app.post("/api/storage/recycle-bin/empty", async () => ({ ok: await emptyRecycleBin() }));
+  /** Windows shows its own administrator prompt on the computer; nothing runs unless the person accepts it there. */
+  app.post("/api/storage/update-cache/clear", async () => clearUpdateCache());
+  app.post<{ Body: { name?: string; force?: boolean } }>("/api/storage/close", async (req) => closeProgram(String(req.body?.name ?? ""), req.body?.force === true));
+  /** KesherAI's own models out of memory and the graphics card (they load again when a chat needs them). */
+  app.post("/api/storage/free-models", async () => {
+    await Promise.all([localCall(s.config.port, "POST", "/api/engines/llamacpp/stop").catch(() => undefined), localCall(s.config.port, "POST", "/api/engines/beside/stop").catch(() => undefined)]);
     return { ok: true };
   });
   /** Performance boost: caches and temporary files, measured; cleaned only where the person ticked. */

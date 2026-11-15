@@ -160,6 +160,96 @@ function SpeedUp() {
   );
 }
 
+/**
+ * Speed up, the rest (Windows): empty the Recycle Bin, Windows Update's download cache (Windows asks for the
+ * administrator itself), free memory (KesherAI's models, and programs closed one by one), and startup programs.
+ */
+function Boost() {
+  type Data = { bin: { bytes: number; items: number }; updateCache?: number; programs: Array<{ pid: number; name: string; bytes: number; title?: string }>; startup: Array<{ name: string; where: string }> };
+  const [d, setD] = useState<Data | null>(null);
+  const [busy, setBusy] = useState("");
+  const [showStartup, setShowStartup] = useState(false);
+  const load = () => {
+    setBusy("load");
+    void api<Data>("/api/storage/boost").then(setD, (e: Error) => toast(e.message)).finally(() => setBusy(""));
+  };
+  const act = async (key: string, ask: string, path: string, body?: unknown, done?: (r: { ok?: boolean; message?: string }) => string) => {
+    if (ask && !window.confirm(ask)) return;
+    setBusy(key);
+    try {
+      const r = await api<{ ok?: boolean; message?: string }>(path, { method: "POST", ...(body ? { body } : {}) });
+      toast(done ? done(r) : L("בוצע.", "Done."));
+      load();
+    } catch (e) {
+      toast((e as Error).message);
+      setBusy("");
+    }
+  };
+  const close = async (p: Data["programs"][number]) => {
+    if (!window.confirm(L(`לסגור את ${p.title || p.name}? אם יש בו עבודה שלא נשמרה, הוא ישאל.`, `Close ${p.title || p.name}? If it has unsaved work, it will ask.`))) return;
+    setBusy(p.name);
+    try {
+      const r = await api<{ ok: boolean; message: string }>("/api/storage/close", { method: "POST", body: { name: p.name } });
+      if (!r.ok && window.confirm(L(`${p.name} לא נסגר מעצמו. לסגור בכוח? עבודה שלא נשמרה תאבד.`, `${p.name} did not close by itself. Force it? Unsaved work is lost.`))) await api("/api/storage/close", { method: "POST", body: { name: p.name, force: true } });
+      setTimeout(load, 1500);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="stack speed-up">
+      <div className="row wrap">
+        <strong className="grow">{L("פינוי זיכרון, סל המיחזור ועדכוני Windows", "Free memory, Recycle Bin and Windows updates")}</strong>
+        <button type="button" className={d ? "" : "primary"} disabled={busy === "load"} onClick={load}>{busy === "load" ? L("בודק…", "Checking…") : d ? L("בדוק שוב", "Check again") : L("בדוק", "Check")}</button>
+      </div>
+      {d && (
+        <>
+          <div className="row wrap">
+            <span className="grow" dir="auto">{L("סל המיחזור", "Recycle Bin")} <span className="muted" dir="ltr">{size(d.bin.bytes)}</span> <span className="muted small">{L(`(${d.bin.items} פריטים)`, `(${d.bin.items} items)`)}</span></span>
+            <button type="button" disabled={!d.bin.items || !!busy} onClick={() => void act("bin", L(`לרוקן את סל המיחזור (${size(d.bin.bytes)})? אי אפשר לשחזר אחר כך.`, `Empty the Recycle Bin (${size(d.bin.bytes)})? It cannot be undone.`), "/api/storage/recycle-bin/empty")}>{L("רוקן", "Empty")}</button>
+          </div>
+          <div className="row wrap">
+            <span className="grow stack" style={{ gap: 2 }}>
+              <span dir="auto">{L("קאש של Windows Update", "Windows Update cache")} <span className="muted" dir="ltr">{d.updateCache !== undefined ? size(d.updateCache) : L("גודל לא ידוע", "size unknown")}</span></span>
+              <span className="muted small" dir="auto">{L("עדכונים שכבר הותקנו. Windows יבקש אישור מנהל במחשב.", "Updates already installed. Windows asks for the administrator on the computer.")}</span>
+            </span>
+            <button type="button" disabled={!!busy || d.updateCache === 0} onClick={() => void act("wu", L("לנקות את הקאש של Windows Update? Windows יקפיץ חלון אישור מנהל במחשב.", "Clear the Windows Update cache? Windows shows an administrator prompt on the computer."), "/api/storage/update-cache/clear", undefined, (r) => (r.ok ? L("נוקה.", "Cleared.") : r.message ?? ""))}>{busy === "wu" ? L("ממתין לאישור במחשב…", "Waiting for the prompt on the computer…") : L("נקה", "Clear")}</button>
+          </div>
+          <div className="row wrap">
+            <span className="grow" dir="auto">{L("המודלים של KesherAI (זיכרון וכרטיס מסך)", "KesherAI's models (memory and graphics card)")}</span>
+            <button type="button" disabled={!!busy} onClick={() => void act("models", L("לשחרר את המודלים של KesherAI? הם ייטענו שוב כשצ׳אט יצטרך אותם.", "Free KesherAI's models? They load again when a chat needs them."), "/api/storage/free-models")}>{L("שחרר", "Free")}</button>
+          </div>
+          {d.programs.length > 0 && (
+            <details>
+              <summary dir="auto">{L(`תוכנות שתופסות זיכרון (${d.programs.length})`, `Programs holding memory (${d.programs.length})`)}</summary>
+              <ul className="speed-list">
+                {d.programs.map((p) => (
+                  <li key={p.name} className="row">
+                    <span className="grow stack" style={{ gap: 2 }}>
+                      <span dir="auto">{p.title || p.name} <span className="muted" dir="ltr">{size(p.bytes)}</span></span>
+                      {p.title && <span className="muted small" dir="ltr">{p.name}</span>}
+                    </span>
+                    <button type="button" disabled={!!busy} onClick={() => void close(p)}>{busy === p.name ? "…" : L("סגור", "Close")}</button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {d.startup.length > 0 && (
+            <div className="row wrap">
+              <button type="button" className="as-link grow" style={{ textAlign: "start" }} onClick={() => setShowStartup(!showStartup)}>{L(`עולות עם המחשב (${d.startup.length})`, `Start with Windows (${d.startup.length})`)}</button>
+              <button type="button" onClick={() => void api("/api/storage/games/open", { method: "POST", body: { url: "ms-settings:startupapps" } }).then(() => toast(L("ההגדרות נפתחו במחשב.", "Settings opened on the computer.")), (e: Error) => toast(e.message))}>{L("נהל ב־Windows", "Manage in Windows")}</button>
+            </div>
+          )}
+          {showStartup && <ul className="small">{d.startup.map((x) => <li key={`${x.name}${x.where}`} dir="auto">{x.name}</li>)}</ul>}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Every program on the computer, biggest first, with its own uninstaller. */
 function AppsDialog({ onClose }: { onClose: () => void }) {
   const [apps, setApps] = useState<App[] | null>(null);
@@ -276,6 +366,7 @@ export function StorageSection() {
         <button type="button" className={scan ? "" : "primary"} disabled={busy} onClick={() => load(!!scan)}>{busy ? L("סורק…", "Scanning…") : scan ? L("סרוק שוב", "Scan again") : L("סרוק את הקבצים שלי", "Scan my files")}</button>
       </div>
       <SpeedUp />
+      <Boost />
       {!scan && !busy && <p className="muted small">{L("סריקה של התיקיות שלכם (מסמכים, הורדות, תמונות, סרטונים, מוזיקה, שולחן העבודה): מה תופס מקום, ומה אפשר לנקות בלחיצה. שום דבר לא נמחק בלי שתבחרו.", "A scan of your folders (Documents, Downloads, Pictures, Videos, Music, Desktop): what takes the space and what can be cleaned in one press. Nothing is deleted unless you choose it.")}</p>}
       {busy && !scan && <p className="muted small">{L("סורק… זה יכול לקחת עד דקה.", "Scanning… this can take up to a minute.")}</p>}
       {comp && (comp.running || comp.queue.length > 0 || comp.done.length > 0 || comp.failed.length > 0) && (
