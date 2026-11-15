@@ -32,3 +32,11 @@ test("parts: off ones hide their pages, chat-only and everything presets", async
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("a VAE or other support file saved as the image model is not used: the image tool falls back", async () => {
+  const { IMAGE_SUPPORT_FILE } = await import("./chat-tools-media.js");
+  assert.equal(IMAGE_SUPPORT_FILE.test("comfyui/image-support\\Comfy-Org\\Wan_2.1_ComfyUI_repackaged\\split_files\\vae\\wan_2.1_vae.safetensors"), true);
+  assert.equal(IMAGE_SUPPORT_FILE.test("comfyui/loras/style.safetensors"), true);
+  assert.equal(IMAGE_SUPPORT_FILE.test("sdcpp/unsloth/Qwen-Image-2512-GGUF/qwen-image-2512-Q4_K_M.gguf"), false);
+  assert.equal(IMAGE_SUPPORT_FILE.test("comfyui/sdxl/juggernautXL.safetensors"), false);
+});

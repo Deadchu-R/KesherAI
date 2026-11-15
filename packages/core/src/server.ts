@@ -125,6 +125,7 @@ import { resetRoutes } from "./routes/reset.js";
 import { remoteDeviceRoutes } from "./routes/remote-devices.js";
 import { timerRoutes } from "./routes/timers.js";
 import { canvasRoutes } from "./routes/canvas.js";
+import { IMAGE_SUPPORT_FILE } from "./chat-tools-media.js";
 import { CanvasStore, canvasTools } from "./canvas.js";
 import { shareRoutes } from "./routes/shares.js";
 import { ShareStore } from "./shares.js";
@@ -441,6 +442,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     image: async ({ prompt, width, height }, signal) => {
       const id = config.activeModels.image;
       if (!id) throw new Error("No image model is active. Pick one on the Models page.");
+      // A support file saved as the image model (found on the PC: a VAE): say so instead of a failed ComfyUI run.
+      if (IMAGE_SUPPORT_FILE.test(id)) throw new Error(`The active image model (${id.split(/[\\/]/).pop()}) is part of a model, not one. Pick an image model on the Models page.`);
       const { provider, providerModelId } = registry.resolve(id);
       if (!provider.generateImage) throw new Error(`${id} does not make images.`);
       return provider.generateImage({ providerModelId, prompt, width: width ?? 1024, height: height ?? 1024, steps: 20, seed: Math.floor(Math.random() * 2 ** 31) }, signal);

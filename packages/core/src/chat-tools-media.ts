@@ -13,6 +13,9 @@ import type { ConversationDeps } from "./conversation-deps.js";
 const WAIT_NOTE =
   "Tell the user the image model is downloading and that they can follow it in the downloads circle, then stop. Do not try to make the image another way (no torch/diffusers installs, no drawing code).";
 
+/** Files that help an image model but are not one (ComfyUI's model folders and the usual names). */
+export const IMAGE_SUPPORT_FILE = /(^|[\\/])(vae|text_encoders?|clip|clip_vision|loras?|upscale(rs|_models)?|image-support|embeddings)[\\/]|(^|[\\/])[^\\/]*(_vae|-vae|\bvae)[^\\/]*\.(safetensors|ckpt|pt|gguf)$|umt5|t5xxl/i;
+
 /**
  * Tools for the active non-chat models. Today that is `generate_image`
  * for the active image model; video, speech and music follow the same
@@ -26,6 +29,9 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
   const notes: string[] = [];
   const usable = (id: string | undefined): id is string => {
     if (!id || /(^|[-_./ ])mlx([-_./ ]|$)/i.test(id)) return false;
+    // A support file of an image model (a VAE, a text encoder, a LoRA, an upscaler) cannot make a picture on its own.
+    // Found on the PC: the active image model was wan_2.1_vae.safetensors (saved before ComfyUI's list left those out).
+    if (IMAGE_SUPPORT_FILE.test(id)) return false;
     try {
       return !!deps.registry.resolve(id).provider.generateImage;
     } catch {
