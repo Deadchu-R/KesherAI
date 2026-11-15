@@ -33,6 +33,7 @@ import { NoctaliaSection } from "../settings/NoctaliaSection";
 import { PhoneSection } from "../settings/PhoneSection";
 import { KeyboardSection } from "../settings/KeyboardSection";
 import { TextActionsSection } from "../settings/TextActionsSection";
+import { Glyph } from "../ui/Glyph";
 import { useEffect, useState } from "react";
 import { isRemote } from "../api";
 import { getLocale, t } from "../i18n";
@@ -89,7 +90,7 @@ export function SettingsPage() {
             {found.length === 0 && <p className="muted small">{he ? "לא נמצאה הגדרה כזו. נסו מילה אחרת." : "No setting matches. Try another word."}</p>}
             {found.map((c) => (
               <a key={c.id} role="listitem" href={`#/settings/${c.id}`} onClick={() => setQ("")}>
-                <span aria-hidden="true">{c.icon}</span> {he ? c.he : c.en}
+                <span aria-hidden="true"><Glyph of={c.icon} /></span> {he ? c.he : c.en}
               </a>
             ))}
           </div>
@@ -99,7 +100,7 @@ export function SettingsPage() {
         <nav className="settings-cats" aria-label={t("settings")}>
           {SETTINGS_CATS.map((c) => (
             <a key={c.id} href={`#/settings/${c.id}`} aria-current={c.id === current.id ? "page" : undefined}>
-              <span aria-hidden="true">{c.icon}</span> {he ? c.he : c.en}
+              <span aria-hidden="true"><Glyph of={c.icon} /></span> {he ? c.he : c.en}
             </a>
           ))}
         </nav>

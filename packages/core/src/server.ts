@@ -1261,14 +1261,18 @@ async function modelSize(modelPath: string): Promise<number> {
   return sizes.reduce((a, b) => a + b, 0);
 }
 
-/** An AMD graphics card with at least 4 GB of its own memory, on Linux (its driver's files in /sys). */
-async function amdCardOnLinux(): Promise<boolean> {
+/**
+ * An AMD graphics card with at least 4 GB of its own memory, on Linux (its driver's files in /sys).
+ *
+ * @param root - The sysfs folder (tests pass their own).
+ */
+export async function amdCardOnLinux(root = "/sys/class/drm"): Promise<boolean> {
   if (process.platform !== "linux") return false;
   const { readdir, readFile } = await import("node:fs/promises");
-  for (const c of await readdir("/sys/class/drm").catch(() => [] as string[])) {
+  for (const c of await readdir(root).catch(() => [] as string[])) {
     if (!/^card\d+$/.test(c)) continue;
-    const vendor = (await readFile(`/sys/class/drm/${c}/device/vendor`, "utf8").catch(() => "")).trim();
-    const vram = Number((await readFile(`/sys/class/drm/${c}/device/mem_info_vram_total`, "utf8").catch(() => "0")).trim());
+    const vendor = (await readFile(`${root}/${c}/device/vendor`, "utf8").catch(() => "")).trim();
+    const vram = Number((await readFile(`${root}/${c}/device/mem_info_vram_total`, "utf8").catch(() => "0")).trim());
     if (vendor === "0x1002" && vram >= 4 * 1024 ** 3) return true;
   }
   return false;
