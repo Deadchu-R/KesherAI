@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { tokens } from "../CoachPanel";
 import { useModels } from "../useModels";
-import { ModelMenu } from "../ModelMenu";
+import { ModelMenu, shortModelName } from "../ModelMenu";
 import { getLocale, t } from "../i18n";
 
 interface UsageReport {
@@ -60,7 +60,7 @@ export function UsagePage() {
           <ul className="hbars">
             {models_.map(([m, n]) => (
               <li key={m}>
-                <span dir="ltr" className="hbar-label">{m.split("/").slice(-2).join("/")}</span>
+                <span dir="ltr" className="hbar-label" title={m}>{shortModelName(m)}</span>
                 <span className="hbar"><span style={{ width: `${(n / maxModel) * 100}%` }} /></span>
                 <span className="muted small">{tokens(n)}</span>
               </li>
