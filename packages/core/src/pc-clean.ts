@@ -52,22 +52,32 @@ export function cleanSpots(env: NodeJS.ProcessEnv = process.env, platform = proc
   ];
 }
 
-/** Size of a folder's contents (only files old enough, when asked), with a cap on how many files are counted. */
-async function measure(dir: string, olderThanMs: number, cap = { files: 300_000 }): Promise<number> {
+/**
+ * Size of a folder's contents (only files old enough, when asked): 16 folders read at once, so a temp folder with
+ * a hundred thousand files is measured in seconds, not minutes; at most 300,000 files are counted.
+ */
+async function measure(dir: string, olderThanMs: number): Promise<number> {
   let total = 0;
+  let files = 0;
   const now = Date.now();
-  const walk = async (d: string): Promise<void> => {
-    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
-      if (cap.files-- <= 0) return;
-      const p = join(d, e.name);
-      if (e.isDirectory()) await walk(p);
-      else if (e.isFile()) {
-        const st = await stat(p).catch(() => undefined);
-        if (st && now - st.mtimeMs >= olderThanMs) total += st.size;
-      }
+  const queue = [dir];
+  const worker = async () => {
+    for (let d = queue.pop(); d !== undefined; d = queue.pop()) {
+      const entries = await readdir(d, { withFileTypes: true }).catch(() => []);
+      await Promise.all(
+        entries.map(async (e) => {
+          const p = join(d!, e.name);
+          if (e.isDirectory()) queue.push(p);
+          else if (e.isFile() && files++ < 300_000) {
+            const st = await stat(p).catch(() => undefined);
+            if (st && now - st.mtimeMs >= olderThanMs) total += st.size;
+          }
+        }),
+      );
     }
   };
-  await walk(dir);
+  // Workers start as folders appear: keep going while there is work.
+  while (queue.length) await Promise.all(Array.from({ length: Math.min(16, queue.length) }, worker));
   return total;
 }
 
