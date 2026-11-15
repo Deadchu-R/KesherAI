@@ -24,11 +24,15 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
 14. F21 usage heatmap of 12 weeks, top models and tools.
 15. F11 model benchmark ("8/10 right") beside the speed.
 16. F19 two models loaded at once.
-17. A local update source: updates without GitHub, for computers and the phone.
+17. A local update source: updates without GitHub. Done for computers (0.6.245); the phone is next.
 18. F3 side chat.
 19. F6 previews of Word, Excel and 3D.
 20. F10 smart auto approvals.
 21. F1 a model on the phone itself (turns on the "on the phone" side of the toggle).
+
+## Status (2026-11-15 evening)
+- Stage 1 is in (0.6.238–0.6.243), except Android phone health (native code).
+- Stage 2: 13–16 and 18 are in (0.6.240–0.6.244); 17 for computers in 0.6.245; 19 already existed.
 
 ## Throughout
 - A security and performance scan every 5 changes.
