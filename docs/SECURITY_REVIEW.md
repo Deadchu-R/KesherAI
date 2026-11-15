@@ -488,6 +488,20 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 78 (2026-11-15, 0.6.240)
+
+- Side chat (`/api/conversations/:id/side`): the question is cut to 4,000 characters; it answers only for a chat that
+  exists (so threads are bounded by the chats), with no tools, and never writes the chat (a test checks the events
+  are unchanged). The thread is in memory, 20 turns at most per chat. Same access as sending a message (the phone
+  with its token). A chat answered by an outside agent (`agent/…`) is refused.
+- Model test questions (`/api/models/benchmark`): the same allowed-path and GGUF checks as before; ten fixed
+  questions to the local engine only, 120 s each at most; answers are matched by pattern, nothing is stored.
+- The @ menu: reads the same lists the + menu reads (knowledge, pages); a model pick goes through the chat's normal
+  PATCH. The phone app's computer/phone switch links to the app's own page (its address is the app's, not a page's).
+- Inbox: "Watch and approve" became a tab; the screen still needs computer control on, as before.
+- Performance: the usage map is drawn from the existing `/api/usage` totals (no new reads).
+- typecheck, lint and tests pass (590). Nothing to fix.
+
 ## Scan 77 (2026-11-15, 0.6.238)
 
 - Character cards (`characterCard`, `cardFromPng`): the PNG is read in the browser and only the card's JSON is sent;
