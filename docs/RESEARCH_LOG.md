@@ -1219,5 +1219,9 @@ Stopped at: building (store and public page first, then the chat menu and the se
   in Latin letters.
 - **Built (0.6.231):** a ready-made ACE-Step 1.5 flow (first on the Nodes page); make_music uses it (language, length
   up to 10 min, optional bpm and key), and falls back to v1 only when v1 is already downloaded and 1.5 is not.
-- **Stopped at:** not yet tried on the PC (needs the 10 GB download, which is Roee's yes). Later: the 4B planner
-  (`split_llm` template) for better songs, and cover art for a song with the image model.
+- **Tried on the PC (0.6.231):** a 40-second Hebrew pop song from a chat, about a minute including loading; the
+  model wrote the lyrics in Hebrew and set language, tempo and length itself; the player works at phone width.
+- **Cover art (0.6.232):** Gemini's songs come with AI cover art (Nano Banana), and so do Suno's. make_music now makes
+  a square cover with the active image model (no words on it: image models misspell them), shown with the song;
+  without a usable image model, or if it fails, the song comes alone.
+- **Stopped at:** the 4B planner (`split_llm` template) for better songs: later, if Roee finds the songs weak.

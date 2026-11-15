@@ -255,6 +255,28 @@ export function musicKey(v: unknown): string | undefined {
 }
 
 /**
+ * A square cover picture for a song, with the active image model (none: undefined).
+ *
+ * @param deps - The chat's dependencies.
+ * @param tags - The song's style.
+ * @param title - Its title.
+ * @param signal - Stops it.
+ * @returns The picture's asset id.
+ */
+export async function songCover(deps: ConversationDeps, tags: string, title: string | undefined, signal?: AbortSignal): Promise<string | undefined> {
+  const id = deps.config.activeModels.image;
+  if (!id || IMAGE_SUPPORT_FILE.test(id) || deps.config.parts?.images === false) return undefined;
+  const { provider, providerModelId } = deps.registry.resolve(id);
+  if (!provider.generateImage) return undefined;
+  // No words on the picture: image models misspell them (and a Hebrew title in letters they cannot draw).
+  const prompt = `Album cover art for a ${tags.slice(0, 300)} song${title ? ` called "${title.slice(0, 80)}"` : ""}. Striking, simple composition, rich colors, square. No text, no letters, no words.`;
+  const files = await provider.generateImage({ providerModelId, prompt, width: 768, height: 768, steps: 0, seed: randomInt(2 ** 31) }, signal);
+  const f = files[0];
+  if (!f) return undefined;
+  return (await deps.assets.save(f.data, f.mimeType, { sourceModelId: id, meta: { use: "song-cover" } })).id;
+}
+
+/**
  * make_music and make_3d: the ready-made ComfyUI flows, from the chat.
  * A missing model (several GB) is downloaded only after the user agrees.
  */
@@ -300,6 +322,8 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
           seconds: { type: "number", description: "Length in seconds, 10–600 (default 60)." },
           bpm: { type: "number", description: "Tempo, 40–220 (optional)." },
           key: { type: "string", description: "Key, like 'A minor' or 'F# major' (optional)." },
+          title: { type: "string", description: "The song's title (for its cover picture)." },
+          cover: { type: "boolean", description: "Also make a cover picture with the image model (default true; false when the user does not want one)." },
           download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing." },
         },
         required: ["tags"],
@@ -330,7 +354,13 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       }, ctx.signal);
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
-      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: String(input.tags ?? "").slice(0, 1000), lyrics: String(input.lyrics ?? "").slice(0, 8000) } })));
+      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: String(input.tags ?? "").slice(0, 1000), lyrics: String(input.lyrics ?? "").slice(0, 8000), ...(input.title ? { title: String(input.title).slice(0, 200) } : {}) } })));
+      // A cover picture, like Gemini's and Suno's songs: with the active image model, when there is one that runs
+      // here; a failure leaves the song without one.
+      const cover = input.cover === false ? undefined : await songCover(deps, String(input.tags ?? ""), input.title ? String(input.title) : undefined, ctx.signal).catch(() => undefined);
+      if (cover) {
+        return { output: `Made the song (${seconds} s) and its cover picture; the user can play and download them.`, audioIds: assets.map((a) => a.id), assetIds: [cover] };
+      }
       return { output: `Made the song (${seconds} s${v15 ? "" : ", with the first ACE-Step: ACE-Step 1.5 sings in more languages, on the Nodes page"}); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
     },
   };
