@@ -1179,3 +1179,18 @@ saving**. The choice is made in KesherAI, so the editor never shows a dialog (th
 the phone). Saving stops if the game is playing in the editor or a file cannot be saved (the editor stays open). The
 answer comes only once the editor process has really gone. Needs plugin 0.1.18 / Unity package 0.2.7; older ones say so.
 Stopped at: done; nothing open.
+
+## 2026-11-15: Share links (COMPETITORS item 10; board t74), Roee approved building it
+- ChatGPT (help.openai.com 7943621): a personal account's link is a snapshot of the chat when made; later messages
+  join only after "Update link" (same URL); links are anonymous; supported images and files can appear; all links are
+  listed in Settings → Data controls → Shared links, deleted one by one or all at once; deleting the chat deletes the link.
+- LibreChat (librechat.ai shareable links): a read-only snapshot up to the latest message; "Update link" republishes to
+  the same URL; the user's name and custom instructions are left out; files only with a switch; visitors cannot reply.
+- Open WebUI (docs chatshare): "Clone only" snapshot by default, sign-in required unless the admin allows "Open"
+  sharing; a Shared Chats dashboard lists, re-copies and revokes links.
+- KesherAI (designed earlier, COMPETITORS item 10, now confirmed): the user shares from the chat's ⋯ menu (never the
+  model); a snapshot of the chat's messages (user and answers only: no tool steps, approvals or system text, files by
+  name only, no paths) at `/s/<128-bit token>`, served as plain HTML with no app script, a strict CSP and noindex,
+  reachable over "Access from anywhere"; 7 days by default (1, 7, 30 days or until revoked), "Update" refreshes the
+  same link, a view count, and the list with revoke in Settings → Phone (remote).
+Stopped at: building (store and public page first, then the chat menu and the settings list).
