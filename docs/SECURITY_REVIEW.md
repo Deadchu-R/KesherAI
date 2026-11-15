@@ -488,6 +488,18 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 79 (2026-11-15, 0.6.244)
+
+- Settings from the chat (`change_setting`): only the listed keys can change, each value is checked, and every change
+  waits for an approval card showing old → new. Never from Telegram.
+- Model beside (`/api/engines/beside/*`): the same allowed-folder and GGUF checks as the main load; the main model
+  can't be loaded twice; the engine listens on 127.0.0.1 only, on a free port; it stops when KesherAI closes and is
+  not remembered.
+- Loaded now, connections as rows, the new look (Heebo, tabs, cards): display only, no new reads or writes.
+- No personal paths, names or emails in the tree (one test uses a made-up `/Users/me`).
+- Performance: the beside engine is made on first use; nothing loads until asked.
+- typecheck, lint and tests passed at the release commit. Nothing to fix.
+
 ## Scan 78 (2026-11-15, 0.6.240)
 
 - Side chat (`/api/conversations/:id/side`): the question is cut to 4,000 characters; it answers only for a chat that
