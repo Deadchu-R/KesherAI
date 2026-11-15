@@ -223,7 +223,7 @@ export function AppearanceSection() {
       <div className="look-grid">
         <label>
           {L("גופן", "Font")}
-          <Select value={look.font ?? "rubik"} onChange={(e) => patch({ font: e.target.value }, true)}>
+          <Select value={look.font ?? "heebo"} onChange={(e) => patch({ font: e.target.value }, true)}>
             {APPEARANCE_FONTS.map((f) => <option key={f.id} value={f.id}>{f.title}{f.hebrew ? "" : L(" (בלי אותיות עבריות)", "")}</option>)}
           </Select>
         </label>

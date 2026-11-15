@@ -25,7 +25,7 @@
   --radius-sm: calc(10px * var(--r-scale, 1));
   --shadow-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.22);
   --shadow-2: 0 2px 6px rgb(0 0 0 / 0.35), 0 24px 64px rgb(0 0 0 / 0.45);
-  font-family: Rubik, system-ui, sans-serif;
+  font-family: Heebo, Rubik, system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   color: var(--text);
@@ -63,7 +63,7 @@ body { margin: 0; min-height: 100vh; background: var(--bg); }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .page { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; max-width: 1100px; width: 100%; }
-h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.015em; }
 h2 { margin: 0; font-size: 17px; font-weight: 600; }
 
 /* Buttons as Claude's and Linear's: calm surfaces, a hairline border, medium weight, a hover that only lightens;
@@ -339,8 +339,11 @@ button.on { border-color: var(--accent); }
 .code-recent ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .code-recent a { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
 .code-recent a:hover { background: var(--panel-2); }
-.ideas { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: min(720px, 100%); }
-.ideas button { height: 34px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 13px; color: var(--text-2); background: transparent; }
+/* Ideas under the start screen's box (redesign 2026-11): calm cards in a grid, two per row on a phone. */
+.ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; width: min(720px, 100%); }
+.ideas button { height: auto; min-height: 52px; padding: 12px 16px; border-radius: var(--radius); font-size: 14px; font-weight: 400; color: var(--text); background: var(--panel); border: 1px solid var(--border-strong); text-align: start; justify-content: flex-start; white-space: normal; line-height: 1.4; }
+.ideas button:hover { background: var(--panel-2); }
+@media (max-width: 480px) { .ideas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .sidebar-actions { display: flex; flex-direction: column; gap: 2px; padding: 0 0 8px; }
 .nav-link.as-link { text-align: start; height: auto; width: 100%; border: 0; background: none; font-size: 14px; }
 .nav-link .plus { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; margin-inline-end: 6px; font-size: 14px; }
@@ -617,13 +620,13 @@ button:active:not(:disabled) { transform: translateY(0.5px); }
 button.primary { box-shadow: 0 1px 0 rgb(255 255 255 / 0.16) inset; }
 input, select, textarea { transition: border-color .12s, box-shadow .12s; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
-.composer .box, .home-composer .box { border-radius: calc(20px * var(--r-scale, 1)); background: var(--panel-2); border-color: var(--border-strong); box-shadow: var(--shadow-1); }
+.composer .box, .home-composer .box { border-radius: calc(20px * var(--r-scale, 1)); background: var(--panel); border-color: var(--border-strong); box-shadow: var(--shadow-1); }
 .composer .box:focus-within, .home-composer .box:focus-within { border-color: rgb(152 163 255 / 0.45); box-shadow: var(--shadow-1), 0 0 0 4px var(--accent-soft); }
 .msg.user { background: var(--raised); border-radius: calc(18px * var(--r-scale, 1)); }
 .bar-pop, .model-pop, .team-pop, .hub-pop { background: color-mix(in srgb, var(--panel-2) calc(0.985 * 100%), transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: var(--shadow-2); }
 /* Inside the app bar, which is blurred itself, a second blur fails in Chrome and the page reads through: the menus there are solid. */
 .appbar .bar-pop, .appbar .hub-pop { background: var(--panel-2); backdrop-filter: none; -webkit-backdrop-filter: none; }
-.greeting { font-weight: 400; letter-spacing: -0.025em; }
+.greeting { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
 .pill { border-color: var(--border-strong); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.09); border-radius: calc(10px * var(--r-scale, 1)); border: 2px solid transparent; background-clip: padding-box; }
@@ -2431,3 +2434,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .side-chat-box { display: flex; gap: 8px; }
 .side-chat-box input { flex: 1; min-width: 0; height: 40px; }
 @media (max-width: 760px) { .side-chat { inset: auto 0 0 0; width: auto; height: 70vh; border-radius: var(--radius) var(--radius) 0 0; } }
+@media (max-width: 480px) { h1 { font-size: 22px; } }

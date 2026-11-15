@@ -10,7 +10,7 @@ import { api, withToken } from "./api";
 
 /** Each font's files, loaded only when that font is picked (they ship with the app). */
 const FONT_FILES: Record<string, () => Promise<unknown>> = {
-  heebo: () => Promise.all([import("@fontsource/heebo/400.css"), import("@fontsource/heebo/500.css"), import("@fontsource/heebo/700.css")]),
+  rubik: () => Promise.all([import("@fontsource/rubik/400.css"), import("@fontsource/rubik/500.css"), import("@fontsource/rubik/600.css")]),
   assistant: () => Promise.all([import("@fontsource/assistant/400.css"), import("@fontsource/assistant/600.css")]),
   "varela-round": () => import("@fontsource/varela-round/400.css"),
   "secular-one": () => import("@fontsource/secular-one/400.css"),
@@ -97,7 +97,7 @@ export function applyAppearance(input: Appearance, local = true): void {
     if (!saved.colors?.accent && matchMedia("(dynamic-range: high)").matches) st.setProperty("--accent", "color(display-p3 0.56 0.6 1)");
   }
   const font = APPEARANCE_FONTS.find((f) => f.id === a.font);
-  if (font && font.id !== "rubik") {
+  if (font && font.id !== "heebo") {
     void FONT_FILES[font.id]?.().catch(() => undefined);
     st.setProperty("font-family", font.stack);
   }

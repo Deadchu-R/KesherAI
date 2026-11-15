@@ -3,9 +3,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { getLocale, setLocale } from "./i18n";
-import "@fontsource/rubik/400.css";
-import "@fontsource/rubik/500.css";
-import "@fontsource/rubik/600.css";
+// The default font (redesign 2026-11): Heebo. Rubik and the others load only when picked in Appearance.
+import "@fontsource/heebo/400.css";
+import "@fontsource/heebo/500.css";
+import "@fontsource/heebo/600.css";
+import "@fontsource/heebo/700.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "./styles.css";
 import { startPhoneShare } from "./phone";

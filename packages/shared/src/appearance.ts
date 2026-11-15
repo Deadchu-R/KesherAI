@@ -13,8 +13,8 @@ export type AppearanceColor = (typeof APPEARANCE_COLORS)[number];
 
 /** Fonts that ship with KesherAI (no download, work offline). The first is the default. */
 export const APPEARANCE_FONTS: Array<{ id: string; title: string; stack: string; hebrew: boolean }> = [
-  { id: "rubik", title: "Rubik", stack: "Rubik, system-ui, sans-serif", hebrew: true },
   { id: "heebo", title: "Heebo", stack: "Heebo, Rubik, system-ui, sans-serif", hebrew: true },
+  { id: "rubik", title: "Rubik", stack: "Rubik, system-ui, sans-serif", hebrew: true },
   { id: "assistant", title: "Assistant", stack: "Assistant, Rubik, system-ui, sans-serif", hebrew: true },
   { id: "varela-round", title: "Varela Round", stack: "'Varela Round', Rubik, system-ui, sans-serif", hebrew: true },
   { id: "secular-one", title: "Secular One", stack: "'Secular One', Rubik, system-ui, sans-serif", hebrew: true },
