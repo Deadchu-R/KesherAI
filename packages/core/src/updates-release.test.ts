@@ -48,6 +48,7 @@ test("an installed copy finds a newer release, downloads the installer and runs 
   for (let i = 0; i < 50 && u.status().running; i++) await new Promise((r) => setTimeout(r, 20));
   assert.equal(u.status().step, "Done");
   assert.equal(await readFile(installed, "utf8"), "hello");
+  await assert.rejects(u.apply(), /being installed/, "no second installer while the first one runs");
   // Up to date: nothing to install.
   const same = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.2", repo: "o/r", api, install: async () => undefined });
   const sameCheck = await same.check();

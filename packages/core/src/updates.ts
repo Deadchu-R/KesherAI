@@ -98,6 +98,8 @@ export function installerFor(names: string[], platform = process.platform, arch 
 export class Updater {
   private packagedProgress: UpdateProgress = { running: false, log: [] };
   private pending?: { url: string; name: string; size: number; feedUrl?: string };
+  /** When an installer was started (ms): until the app restarts, a second one must not start beside it. */
+  private installerStartedAt = 0;
 
   /**
    * @param root - The repository folder (defaults to three levels above this file).
@@ -269,6 +271,7 @@ export class Updater {
         line(`Downloaded in ${((Date.now() - t0) / 1000).toFixed(0)} s; starting the installer`);
         prog("Installing");
         await installer.install(file);
+        this.installerStartedAt = Date.now();
         line("The installer started; the app restarts when it finishes");
         this.packagedProgress = { ...this.packagedProgress, running: false, step: "Done", finishedAt: new Date().toISOString() } as UpdateProgress;
       } catch (err) {
@@ -312,6 +315,9 @@ export class Updater {
    */
   async reinstall(): Promise<UpdateProgress> {
     if (this.status().running) throw new Error("An update is already running.");
+    // The installer runs for a minute or two before it closes the app: a second "Update" in that time started a
+    // second installer beside it, and the app did not come back (found on the PC, 2026-11-15, 0.6.237).
+    if (Date.now() - this.installerStartedAt < 10 * 60_000) throw new Error("An update is being installed; KesherAI restarts when it finishes.");
     const info = await this.version();
     if (info.install === "git") throw new Error("This copy runs from the source code: use git to get a fresh copy.");
     await this.checkRelease(info, true);
@@ -327,6 +333,9 @@ export class Updater {
    */
   async apply(): Promise<UpdateProgress> {
     if (this.status().running) throw new Error("An update is already running.");
+    // The installer runs for a minute or two before it closes the app: a second "Update" in that time started a
+    // second installer beside it, and the app did not come back (found on the PC, 2026-11-15, 0.6.237).
+    if (Date.now() - this.installerStartedAt < 10 * 60_000) throw new Error("An update is being installed; KesherAI restarts when it finishes.");
     const info = await this.version();
     if (info.install !== "git") return this.applyRelease();
     writeFileSync(this.statusFile, JSON.stringify({ running: true, step: "Starting", log: [] }));
