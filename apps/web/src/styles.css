@@ -306,10 +306,12 @@ button.on { border-color: var(--accent); }
 /* Models screen */
 .page-head { display: flex; flex-direction: column; gap: 4px; }
 .hw-line { margin: 0; }
-.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border); padding-bottom: 0; scrollbar-width: none; }
-.tabs button { background: none; border: 0; border-radius: 0; height: 42px; padding: 0 14px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
-.tabs button:hover { color: var(--text); background: none; }
-.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+/* Tabs (redesign 2026-11): calm pills in a row; the chosen one sits on a lighter surface with a hairline. One look
+   for every page's tabs (models, inbox, health, customize, images…). */
+.tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.tabs button, .tabs a { background: none; border: 1px solid transparent; border-radius: var(--radius-sm); height: 40px; padding: 0 14px; color: var(--text-2); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; text-decoration: none; font-size: 14px; font-weight: 400; }
+.tabs button:hover, .tabs a:hover { color: var(--text); background: var(--panel); }
+.tabs button.on, .tabs a.on { color: var(--text); background: var(--panel-2); border-color: var(--border-strong); font-weight: 500; }
 .tab-count { font-size: 12px; background: var(--raised); border-radius: calc(999px * var(--r-scale, 1)); padding: 0 7px; }
 .plan { background: var(--panel-2); border-color: var(--border-strong); margin-top: 8px; }
 .plan-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -2371,9 +2373,6 @@ html.handheld .palette-list button { min-height: 44px; }
 
 /* Customize: one row of tabs over Connections, Plugins and Parts (each its own page below). */
 .customize-tabs { padding: 8px 28px 0; }
-.customize-tabs a { height: 42px; padding: 0 14px; display: inline-flex; align-items: center; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; }
-.customize-tabs a:hover { color: var(--text); }
-.customize-tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
 @media (max-width: 760px) { .customize-tabs { padding: 4px 16px 0; } }
 
 /* Short screens (a laptop at 860 px): the recent chats keep at least 40% of the sidebar, and the pinned tools above
@@ -2382,3 +2381,30 @@ html.handheld .palette-list button { min-height: 44px; }
   .sidebar .sidebar-actions { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
   .sidebar .sidebar-scroll { flex: 1 0 40%; }
 }
+
+/* Inbox (one page with "Watch and approve"): where an approval comes from, with the amber "waiting" dot. */
+.inbox-src { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.waiting-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); display: inline-block; }
+.inbox-approval { border-color: var(--border-strong); }
+.inbox-preview { font-size: 12.5px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+
+/* A segmented control (redesign 2026-11): a second, smaller choice under tabs, the computer/phone toggle, and two-way
+   switches. One track, the chosen part on a lighter surface. */
+.seg-pills { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: calc(12px * var(--r-scale, 1)); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg-pills button { height: 32px; padding: 0 14px; border: 0; border-radius: calc(9px * var(--r-scale, 1)); background: transparent; color: var(--text-2); font-size: 13px; font-weight: 400; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.seg-pills button:hover { background: var(--raised); color: var(--text); }
+.seg-pills button.on { background: var(--raised); color: var(--text); font-weight: 500; box-shadow: inset 0 0 0 1px var(--border-strong); }
+@media (pointer: coarse) { .seg-pills button { height: 36px; } }
+
+/* PC and phone health: the score on top (redesign 2026-11). */
+.health-score { display: flex; flex-direction: row; align-items: center; gap: 16px; border-color: var(--border-strong); }
+.score-ring { width: 60px; height: 60px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 18px; border: 5px solid var(--good); }
+.score-ring.warn { border-color: var(--warn); }
+.score-ring.bad { border-color: var(--bad); }
+
+/* The @ menu (redesign 2026-11): grouped lines, the keys at the bottom. */
+.at-menu { gap: 0; }
+.at-item { display: flex; flex-direction: column; }
+.at-item button { width: 100%; min-height: 40px; align-items: center; }
+.at-group { padding: 8px 10px 2px; }
+.at-keys { padding: 8px 10px 4px; border-top: 1px solid var(--border); margin-top: 4px; }

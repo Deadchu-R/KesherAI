@@ -48,7 +48,7 @@ function EngineUpdate({ onStarted }: { onStarted: (s: EngineStatus) => void }) {
 }
 
 /** "Start here": the built-in engine and one-click models. */
-function StartHere({ onChange }: { onChange: () => void }) {
+function StartHere({ onChange, code }: { onChange: () => void; code?: boolean }) {
   const [models, setModels] = useState<Recommended[]>([]);
   const [engine, setEngine] = useState<EngineStatus | null>(null);
   const [error, setError] = useState("");
@@ -125,7 +125,7 @@ function StartHere({ onChange }: { onChange: () => void }) {
       )}
       {error && <p className="error">{error}</p>}
       <div className="rec-grid">
-        {models.map((m) => (
+        {models.filter((m) => !code || m.goodForCode).map((m) => (
           <div key={m.id} className="card rec">
             <div className="row">
               <strong className="grow">{m.name}</strong>
@@ -350,25 +350,33 @@ export function ModelsPage() {
     }
   };
   useEffect(refreshDisk, [doneCount]);
-  const tabs: Array<{ id: string; label: string; engine?: string }> = [
-    { id: "chat", label: categoryLabel("chat") },
-    { id: "image", label: categoryLabel("image") },
-    { id: "video", label: categoryLabel("video") },
-    { id: "speech-to-text", label: categoryLabel("speech-to-text") },
-    { id: "text-to-speech", label: categoryLabel("text-to-speech") },
-    { id: "embedding", label: categoryLabel("embedding") },
-    { id: "music", label: categoryLabel("music") },
-    { id: "3d", label: categoryLabel("3d") },
-    { id: "storage", label: t("storage") },
+  // The redesign's groups (2026-11): code gets its own tab (chat models that are good at code), speech joins
+  // dictation and reading aloud, and the rarely used kinds sit under "More". `tab` stays the category the page
+  // works with; a group with two kinds shows a second, smaller choice.
+  const groups: Array<{ id: string; label: string; kinds: string[] }> = [
+    { id: "chat", label: categoryLabel("chat"), kinds: ["chat"] },
+    { id: "code", label: L("קוד", "Code"), kinds: ["code"] },
+    { id: "image", label: categoryLabel("image"), kinds: ["image"] },
+    { id: "video", label: categoryLabel("video"), kinds: ["video"] },
+    { id: "music", label: categoryLabel("music"), kinds: ["music"] },
+    { id: "speech", label: L("דיבור", "Speech"), kinds: ["speech-to-text", "text-to-speech"] },
+    { id: "more", label: L("עוד", "More"), kinds: ["embedding", "3d"] },
+    { id: "storage", label: t("storage"), kinds: ["storage"] },
   ];
+  const group = groups.find((g) => g.kinds.includes(tab)) ?? groups[0]!;
+  const tabs: Array<{ id: string; label: string; engine?: string }> = groups.flatMap((g) => g.kinds.map((k) => ({ id: k, label: k === "code" ? g.label : categoryLabel(k) })));
   const current = tabs.find((x) => x.id === tab) ?? tabs[0]!;
   const IMAGE_NAME = /qwen[-_ ]?image|flux|sdxl|sd[-_]?xl|stable[-_]?diffusion|z[-_]?image/i;
+  const CODE_NAME = /coder|devstral|codestral|code[-_ ]?llama|starcoder|deepseek[-_ ]?code/i;
   const ofTab = (f: LocalFile): boolean => {
     const p = f.path.replace(/\\/g, "/");
     if (tab === "image") return p.includes("/image/") || (p.includes("/other/") && IMAGE_NAME.test(p));
     if (tab === "chat") return !!f.gguf && !p.includes("/image/") && !IMAGE_NAME.test(p);
+    if (tab === "code") return !!f.gguf && CODE_NAME.test(p);
     return p.includes(`/${tab}/`);
   };
+  // The engine's category for a tab ("code" models are chat models).
+  const kindOf = (id: string) => (id === "code" ? "chat" : id);
 
   return (
     <div className="page models-page">
@@ -384,17 +392,24 @@ export function ModelsPage() {
       </header>
 
       <nav className="tabs" role="tablist" aria-label={t("models")}>
-        {tabs.map((x) => (
-          <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} className={tab === x.id ? "on" : ""} onClick={() => setTab(x.id)}>
-            {x.label}
-            {x.id === "storage" && local.length > 0 && <span className="tab-count">{local.length}</span>}
+        {groups.map((g) => (
+          <button key={g.id} type="button" role="tab" aria-selected={group.id === g.id} className={group.id === g.id ? "on" : ""} onClick={() => setTab(g.kinds[0]!)}>
+            {g.label}
+            {g.id === "storage" && local.length > 0 && <span className="tab-count">{local.length}</span>}
           </button>
         ))}
       </nav>
+      {group.kinds.length > 1 && (
+        <div className="seg-pills" role="group" aria-label={group.label}>
+          {group.kinds.map((k) => (
+            <button key={k} type="button" aria-pressed={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{categoryLabel(k)}</button>
+          ))}
+        </div>
+      )}
 
       {error && <p className="error">{error}</p>}
 
-      {tab === "chat" && <StartHere onChange={refreshLocal} />}
+      {(tab === "chat" || tab === "code") && <StartHere onChange={refreshLocal} code={tab === "code"} />}
       {tab === "image" && <ImageStartHere />}
       {tab === "image" && <ComfySection />}
       {(tab === "video" || tab === "speech-to-text" || tab === "text-to-speech" || tab === "embedding") && <ModelKindCard kind={tab} />}
@@ -414,17 +429,17 @@ export function ModelsPage() {
                     {f.source && f.source !== "KesherAI" && <span className="pill">{f.source}</span>}
                     <span className="muted mono" dir="ltr">{gb(f.size)}</span>
                     {f.estimate && f.gguf && <RatingBadge e={f.estimate} measured={f.measured} />}
-                    {tab === "chat" && f.gguf && <BenchButton path={f.path} onDone={refreshLocal} />}
+                    {kindOf(tab) === "chat" && f.gguf && <BenchButton path={f.path} onDone={refreshLocal} />}
                     {f.parts && f.parts.have < f.parts.of && <span className="pill warn" title={getLocale() === "he" ? "ההורדה לא הסתיימה. מצאו את המודל למטה ולחצו שוב על הורדה: היא ממשיכה מאיפה שנעצרה." : "The download did not finish. Find the model below and press Download again: it continues where it stopped."}>{getLocale() === "he" ? `חסרים חלקים (${f.parts.have}/${f.parts.of})` : `Parts missing (${f.parts.have}/${f.parts.of})`}</span>}
-                    {tab === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <FitButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
-                    {tab === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <CalibrateButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
-                    {tab === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && loadButton(f)}
+                    {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <FitButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
+                    {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <CalibrateButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
+                    {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && loadButton(f)}
                   </div>
                 ))}
               </div>
             </section>
           )}
-          <HubBrowser key={tab} fixedCategory={tab} onDownloaded={refreshLocal} />
+          <HubBrowser key={tab} fixedCategory={kindOf(tab)} {...(tab === "code" ? { initialQuery: "coder" } : {})} onDownloaded={refreshLocal} />
         </>
       )}
 

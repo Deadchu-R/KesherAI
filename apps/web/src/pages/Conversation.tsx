@@ -14,6 +14,7 @@ import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
+import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
 import { useWebSearch } from "../WebToggle";
 import { UnityChip } from "../UnityChip";
@@ -921,6 +922,7 @@ export function ConversationPage({ id }: { id: string }) {
               placeholder={conv.kind === "code" ? t("codePlaceholder") : t("messagePlaceholder")}
               aria-label={t("messagePlaceholder")}
               onValue={setInput}
+              at={{ models: modelOptions.filter((m) => !m.id.startsWith("agent/")).map((m) => ({ id: m.id, name: shortModelName(m.name || m.id) })), onModel: (mid) => void patch({ modelId: mid }) }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

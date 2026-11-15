@@ -68,7 +68,6 @@ const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default:
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
-const WatchPage = lazy(() => import("./pages/WatchPage").then((m) => ({ default: m.WatchPage })));
 const UpdatesPage = lazy(() => import("./pages/UpdatesPage").then((m) => ({ default: m.UpdatesPage })));
 
 function useHash(): string {
@@ -281,7 +280,7 @@ export function App() {
   else if (hash === "#/libraries") page = <LibrariesPage />;
   else if (hash === "#/personas") page = <PersonasPage />;
   else if (hash === "#/prompts") page = <PromptsPage />;
-  else if (hash === "#/watch") page = <WatchPage />;
+  else if (hash === "#/watch") page = <InboxPage tab="screen" />;
   else if (hash === "#/inbox") page = <InboxPage />;
   else if (hash === "#/pipelines") page = <PipelinesPage />;
   else if (hash === "#/compare") page = <ComparePage />;

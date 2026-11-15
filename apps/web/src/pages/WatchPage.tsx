@@ -26,16 +26,13 @@ export function usePending(every = 4000): Pending[] {
 }
 
 /**
- * Watch and approve: everything agents wait for you to approve, from any
- * device, and — while computer control is on — the computer's screen live,
- * what the agent did, and Stop.
+ * The computer's screen while computer control is on: live, what the agent did, and Stop. A tab of the inbox
+ * (redesign 2026-11: "Watch and approve" was a second page for the same approvals).
  */
-export function WatchPage() {
-  const pending = usePending(2000);
+export function ComputerScreen() {
   const [st, setSt] = useState<Status | null>(null);
   const [live, setLive] = useState(true);
   const [frame, setFrame] = useState(0);
-  const [busy, setBusy] = useState("");
   useEffect(() => {
     const tick = () => api<Status>("/api/computer/status").then(setSt, () => undefined);
     void tick();
@@ -47,71 +44,34 @@ export function WatchPage() {
     const id = setInterval(() => !document.hidden && setFrame((n) => n + 1), 1500);
     return () => clearInterval(id);
   }, [live, st?.enabled]);
-  const answer = async (p: Pending, decision: "allow" | "deny") => {
-    setBusy(p.requestId);
-    try {
-      await api("/api/inbox/answer", { method: "POST", body: { kind: p.kind ?? "chat", conversationId: p.conversationId, requestId: p.requestId, decision } });
-    } catch (e) {
-      toast((e as Error).message);
-    } finally {
-      setBusy("");
-    }
-  };
   const width = Math.min(1280, Math.round(window.innerWidth * (window.devicePixelRatio || 1)));
   return (
-    <div className="page watch">
-      <div className="page-head">
-        <h1>{L("מעקב ואישור", "Watch and approve")}</h1>
-        <p className="muted">{L("כל מה שסוכנים מחכים שתאשרו — מכל מכשיר. כששליטה במחשב פעילה, רואים כאן גם את המסך בזמן אמת ואפשר לעצור.", "Everything agents wait for you to approve, from any device. While computer control is on you also see the screen live here, and can stop it.")}</p>
-      </div>
-      <section className="stack">
-        <h2>{pending.length ? L(`מחכה לאישור (${pending.length})`, `Waiting for approval (${pending.length})`) : L("אין מה לאשר כרגע", "Nothing to approve now")}</h2>
-        {pending.map((p) => (
-          <article key={p.requestId} className="card watch-item">
-            <div className="row">
-              <a href={`#/c/${p.conversationId}`} dir="auto"><strong>{p.title || L("שיחה", "Chat")}</strong></a>
-              <span className="pill" dir="ltr">{p.tool}</span>
-              <span className="grow" />
-              <span className="muted small">{new Date(p.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined, { hour: "2-digit", minute: "2-digit" })}</span>
-            </div>
-            {p.purpose && <p dir="auto">{p.purpose}</p>}
-            <p className="muted small" dir="auto">{p.reason}</p>
-            <pre className="ctx-text" dir="auto">{p.preview}</pre>
-            <div className="row">
-              <button type="button" className="primary" disabled={busy === p.requestId} onClick={() => void answer(p, "allow")}>{L("אישור", "Allow")}</button>
-              <button type="button" disabled={busy === p.requestId} onClick={() => void answer(p, "deny")}>{L("דחייה", "Deny")}</button>
-              <a className="muted small" href={`#/c/${p.conversationId}`}>{L("לשיחה", "Open the chat")}</a>
-            </div>
-          </article>
-        ))}
-      </section>
-      <section className="stack">
-        <div className="row">
-          <h2>{L("המסך של המחשב", "The computer's screen")}</h2>
-          <span className="grow" />
-          {st?.enabled && (
-            <>
-              <label className="check"><input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> {L("חי", "Live")}</label>
-              <button type="button" className="danger-btn" onClick={() => void api("/api/computer/stop", { method: "POST" }).then(() => toast(L("נעצר.", "Stopped.")))}>■ {L("עצור את השליטה", "Stop control")}</button>
-            </>
-          )}
-        </div>
-        {!st?.enabled ? (
-          <p className="muted">{L("שליטה במחשב כבויה. אפשר להפעיל אותה בהגדרות ← שליטה במחשב.", "Computer control is off. Turn it on in Settings → Computer control.")}</p>
-        ) : (
+    <section className="stack">
+      <div className="row">
+        <h2>{L("המסך של המחשב", "The computer's screen")}</h2>
+        <span className="grow" />
+        {st?.enabled && (
           <>
-            <img className="watch-screen" alt={L("המסך של המחשב", "The computer's screen")} src={withToken(`/api/computer/screen?w=${width}&f=${frame}`)} />
-            {st.active && <p className="muted small">{L(`הסוכן עובד ב-${st.app}`, `The agent is working in ${st.app}`)}</p>}
-            {st.log.length > 0 && (
-              <ol className="watch-log small" reversed>
-                {[...st.log].reverse().slice(0, 12).map((a, i) => (
-                  <li key={i} className={a.ok ? "" : "bad"}><span className="muted">{new Date(a.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined)}</span> <span dir="auto">{a.action}</span>{a.app ? <span className="muted"> · {a.app}</span> : null}{a.note ? <span className="muted"> — {a.note}</span> : null}</li>
-                ))}
-              </ol>
-            )}
+            <label className="check"><input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> {L("חי", "Live")}</label>
+            <button type="button" className="danger-btn" onClick={() => void api("/api/computer/stop", { method: "POST" }).then(() => toast(L("נעצר.", "Stopped.")))}>■ {L("עצור את השליטה", "Stop control")}</button>
           </>
         )}
-      </section>
-    </div>
+      </div>
+      {!st?.enabled ? (
+        <p className="muted">{L("שליטה במחשב כבויה. אפשר להפעיל אותה בהגדרות ← שליטה במחשב.", "Computer control is off. Turn it on in Settings → Computer control.")}</p>
+      ) : (
+        <>
+          <img className="watch-screen" alt={L("המסך של המחשב", "The computer's screen")} src={withToken(`/api/computer/screen?w=${width}&f=${frame}`)} />
+          {st.active && <p className="muted small">{L(`הסוכן עובד ב-${st.app}`, `The agent is working in ${st.app}`)}</p>}
+          {st.log.length > 0 && (
+            <ol className="watch-log small" reversed>
+              {[...st.log].reverse().slice(0, 12).map((a, i) => (
+                <li key={i} className={a.ok ? "" : "bad"}><span className="muted">{new Date(a.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined)}</span> <span dir="auto">{a.action}</span>{a.app ? <span className="muted"> · {a.app}</span> : null}{a.note ? <span className="muted"> — {a.note}</span> : null}</li>
+              ))}
+            </ol>
+          )}
+        </>
+      )}
+    </section>
   );
 }

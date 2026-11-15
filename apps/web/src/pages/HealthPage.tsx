@@ -92,18 +92,46 @@ export function HealthPage() {
       .finally(() => setThinking(false));
   };
   const r = data?.reading;
+  // The redesign (2026-11): one page in tabs (overview, storage and programs), a score on top, and in the phone app
+  // a computer/phone switch: the same page for the phone's own health.
+  const [device, setDevice] = useState<"pc" | "phone">("pc");
+  const [tab, setTab] = useState<"overview" | "storage">("overview");
+  const items = device === "phone" && phone ? phoneItems(phone) : (data?.items ?? []);
+  const score = Math.max(0, 100 - items.filter((i) => i.level === "warn").length * 8 - items.filter((i) => i.level === "bad").length * 25);
+  const todo = items.filter((i) => i.level !== "ok").length;
   return (
     <div className="page health-page">
       {reporting && <ReportDialog onClose={() => setReporting(false)} />}
       {fixing && <FixDialog onClose={() => setFixing(false)} onDone={() => load(true)} />}
+      {phone && (
+        <div className="seg-pills" role="tablist" aria-label={L("איזה מכשיר", "Which device")}>
+          <button type="button" role="tab" aria-selected={device === "pc"} className={device === "pc" ? "on" : ""} onClick={() => setDevice("pc")}>{L("המחשב", "The computer")}</button>
+          <button type="button" role="tab" aria-selected={device === "phone"} className={device === "phone" ? "on" : ""} onClick={() => setDevice("phone")}>{L("הטלפון", "This phone")}</button>
+        </div>
+      )}
       <div className="row">
-        <h1 className="grow">{L("בריאות המחשב", "PC Health")}</h1>
+        <h1 className="grow">{device === "phone" ? L("בריאות הטלפון", "Phone health") : L("בריאות המחשב", "PC Health")}</h1>
         <button type="button" className="primary" onClick={() => setFixing(true)}>{L("🛠 תקן לי", "🛠 Fix it for me")}</button>
         <button type="button" disabled={busy} onClick={() => load(true)}>{busy ? L("בודק…", "Checking…") : L("בדוק שוב", "Check again")}</button>
       </div>
       <p className="muted">{L("מה חסר למחשב ומה לעשות. \"תקן לי\" עושה בעצמו את מה שבטוח, רק בדברים של KesherAI ורק אחרי שתאשרו. כל השאר הם צעדים שאתם עושים.", "What the computer is short of and what to do. \"Fix it for me\" does the safe part itself, only with KesherAI's own things and only after you confirm; the rest are steps you take.")}</p>
-      {!data && <p className="muted">{L("בודק את המחשב…", "Checking the computer…")}</p>}
-      {data && (
+      {(device === "phone" ? !!phone : !!data) && (
+        <section className="card health-score">
+          <span className={`score-ring ${score >= 85 ? "good" : score >= 60 ? "warn" : "bad"}`} aria-hidden="true">{score}</span>
+          <div className="stack">
+            <strong>{todo === 0 ? L("הכל תקין", "All good") : todo === 1 ? L("דבר אחד כדאי לעשות", "One thing worth doing") : L(`${todo} דברים כדאי לעשות`, `${todo} things worth doing`)}</strong>
+            <span className="muted small">{L(`ציון ${score} מתוך 100`, `Score ${score} of 100`)}</span>
+          </div>
+        </section>
+      )}
+      {device === "pc" && (
+        <nav className="tabs" role="tablist" aria-label={L("בריאות המחשב", "PC Health")}>
+          <button type="button" role="tab" aria-selected={tab === "overview"} className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>{L("סקירה", "Overview")}</button>
+          <button type="button" role="tab" aria-selected={tab === "storage"} className={tab === "storage" ? "on" : ""} onClick={() => setTab("storage")}>{L("אחסון ותוכנות", "Storage and programs")}</button>
+        </nav>
+      )}
+      {device === "pc" && tab === "overview" && !data && <p className="muted">{L("בודק את המחשב…", "Checking the computer…")}</p>}
+      {device === "pc" && tab === "overview" && data && (
         <section className="card stack">
           <h2>{L("מה לעשות", "What to do")}</h2>
           <ul className="health-items">
@@ -121,8 +149,8 @@ export function HealthPage() {
           )}
         </section>
       )}
-      <StorageSection />
-      {phone && (
+      {device === "pc" && tab === "storage" && <StorageSection />}
+      {device === "phone" && phone && (
         <section className="card stack">
           <h2>{L(`הטלפון${phone.model ? ` (${phone.model})` : ""}`, `This phone${phone.model ? ` (${phone.model})` : ""}`)}</h2>
           <ul className="health-items">
@@ -140,7 +168,7 @@ export function HealthPage() {
           <PhoneHabits list={samples} />
         </section>
       )}
-      {r && (
+      {device === "pc" && tab === "overview" && r && (
         <>
           <section className="card stack">
             <h2>{L("מקום בכוננים", "Drive space")}</h2>

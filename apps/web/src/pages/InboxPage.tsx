@@ -3,6 +3,7 @@ import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { BarPopover } from "../ui/BarPopover";
+import { ComputerScreen } from "./WatchPage";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -171,12 +172,22 @@ const time = (at: number | string) => {
   return d.toLocaleString(getLocale() === "he" ? "he-IL" : undefined, today ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
+/** The inbox's tabs: what waits for you, the notifications, the computer's screen (once "Watch and approve"). */
+export type InboxTab = "waiting" | "notes" | "screen";
+
 /**
- * Notifications: everything that waits for your approval (chats and self-work), answered right here with
- * Allow / Deny, and the latest notifications KesherAI sent. From the phone too.
+ * The inbox: everything that waits for your approval (chats and self-work), answered right here with Allow / Deny,
+ * the latest notifications KesherAI sent, and the computer's screen while the agent uses it. One page for what
+ * used to be two ("Notifications" and "Watch and approve"; redesign 2026-11). From the phone too.
+ *
+ * @param p.tab - The tab to open (#/watch opens the screen).
  */
-export function InboxPage() {
+export function InboxPage({ tab: first }: { tab?: InboxTab }) {
   const [box, refresh] = useInbox(3000);
+  const [tab, setTab] = useState<InboxTab>(first ?? "waiting");
+  useEffect(() => {
+    setTab(first ?? "waiting");
+  }, [first]);
   const [busy, setBusy] = useState("");
   const [seen, setSeen] = useState(seenAt);
   const newestNote = box.notes[0]?.at ?? 0;
@@ -210,35 +221,43 @@ export function InboxPage() {
   return (
     <div className="page inbox">
       <div className="page-head">
-        <h1>{L("התראות", "Notifications")}</h1>
-        <p className="muted">{L("מה שמחכה לאישור שלך, מכל שיחה ומהעבודה העצמית, וההתראות האחרונות.", "What waits for your approval, from every chat and self-work, and the latest notifications.")}</p>
+        <h1>{L("תיבת דואר", "Inbox")}</h1>
+        <p className="muted">{L("מה שמחכה לאישור שלך מכל שיחה ומהעבודה העצמית, ההתראות האחרונות, והמסך של המחשב כשסוכן משתמש בו.", "What waits for your approval from every chat and self-work, the latest notifications, and the computer's screen while an agent uses it.")}</p>
       </div>
+      <nav className="tabs" role="tablist" aria-label={L("תיבת דואר", "Inbox")}>
+        {([["waiting", L("מחכה לך", "Waiting for you"), box.approvals.length], ["notes", L("הודעות", "Notifications"), box.notes.filter((n) => n.at > seen && !n.resolved).length], ["screen", L("מסך המחשב", "The computer's screen"), 0]] as const).map(([id, label, n]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
+            {label}{n > 0 && <span className="tab-count">{n}</span>}
+          </button>
+        ))}
+      </nav>
+      {tab === "waiting" && (
       <section className="stack">
-        <h2>{box.approvals.length ? L(`מחכה לאישור (${box.approvals.length})`, `Waiting for approval (${box.approvals.length})`) : L("אין מה לאשר כרגע", "Nothing to approve now")}</h2>
+        {box.approvals.length === 0 && <p className="muted">{L("אין מה לאשר כרגע. כשסוכן יחכה לך, זה יופיע כאן ובפעמון.", "Nothing to approve now. When an agent waits for you, it shows here and on the bell.")}</p>}
         {box.approvals.map((p) => (
           <article key={p.requestId} className="card inbox-approval">
             <div className="row wrap">
-              <span className="pill">{p.kind === "self-work" ? L("🤖 עבודה עצמית", "🤖 Self-work") : L("💬 שיחה", "💬 Chat")}</span>
-              {p.kind === "chat" ? <a href={`#/c/${p.conversationId}`} dir="auto"><strong>{p.title || L("שיחה", "Chat")}</strong></a> : <a href="#/code" dir="auto"><strong>{L("עבודה עצמית", "Self-work")}</strong></a>}
+              <span className="inbox-src"><span className="waiting-dot" aria-hidden="true" />{p.kind === "self-work" ? L("עבודה עצמית", "Self-work") : L("שיחה", "Chat")}</span>
+              {p.kind === "chat" ? <a href={`#/c/${p.conversationId}`} dir="auto"><strong>{p.title || L("שיחה", "Chat")}</strong></a> : <a href="#/self-work" dir="auto"><strong>{L("עבודה עצמית", "Self-work")}</strong></a>}
               <span className="grow" />
               <span className="muted small">{time(p.at)}</span>
             </div>
             <div className="row wrap"><code dir="ltr">{p.tool}</code>{p.purpose && <span dir="auto">{p.purpose}</span>}</div>
             {p.reason && <p className="muted small" dir="auto">{p.reason}</p>}
-            <details>
-              <summary>{L("מה בדיוק", "Details")}</summary>
-              <pre className="ctx-text" dir="ltr">{p.preview}</pre>
-            </details>
+            <pre className="ctx-text inbox-preview" dir="ltr">{p.preview}</pre>
             <div className="row inbox-actions">
-              <button type="button" className="primary" disabled={busy === p.requestId} onClick={() => void answer(p, "allow")}>{L("אשר", "Allow")}</button>
-              <button type="button" disabled={busy === p.requestId} onClick={() => void answer(p, "deny")}>{L("דחה", "Deny")}</button>
+              <button type="button" className="primary" disabled={busy === p.requestId} onClick={() => void answer(p, "allow")}>{L("אישור", "Allow")}</button>
+              <button type="button" disabled={busy === p.requestId} onClick={() => void answer(p, "deny")}>{L("דחייה", "Deny")}</button>
+              <span className="grow" />
+              <a className="small" href={p.kind === "chat" ? `#/c/${p.conversationId}` : "#/self-work"}>{p.kind === "chat" ? L("פתח את הצ׳אט", "Open the chat") : L("לעבודה העצמית", "Open self-work")}</a>
             </div>
           </article>
         ))}
       </section>
+      )}
+      {tab === "notes" && (
       <section className="stack">
         <div className="row">
-          <h2>{L("התראות אחרונות", "Latest notifications")}</h2>
           <span className="grow" />
           {newestNote > seen && (
             <button type="button" className="link-btn" onClick={markAllRead}>
@@ -259,6 +278,8 @@ export function InboxPage() {
         </ul>
         <p className="muted small"><a href="#/settings/notifications">{L("הגדרות התראות (טלפון ומחשב)", "Notification settings (phone and computer)")}</a></p>
       </section>
+      )}
+      {tab === "screen" && <ComputerScreen />}
     </div>
   );
 }
