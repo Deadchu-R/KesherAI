@@ -87,6 +87,11 @@ The goal: `createKesherServer` reads like a table of contents.
 | B7 | `server/register-routes.ts`: the 49 `…Routes(app, services)` calls and the hooks |
 | B8 | `server/lifecycle.ts`: what starts after listening, and `close` |
 
+**Done (0.6.215–0.6.230):** B1–B8 moved. B6 also took self-work and pipelines; B7 became `server/routes.ts`
+(`registerRoutes`, the same order, after the key check); B8 became `server/start-engines.ts` (the guard, closing
+left-over engines, the start-up load; `close` stays in `server.ts` with what it closes). `server.ts`: 1,279 → 544 lines.
+Unit tests (573) and the smoke test pass after each step.
+
 Each builder takes what it needs and returns the services it made plus a `close` function. `createKesherServer` then calls eight functions and merges the results into `KesherServices`.
 
 **How to do it safely:** move one builder at a time, top to bottom in the order the code already runs, so no service is built before what it needs. After each one, run the smoke test (`scripts/smoke.mjs`) as well as the unit tests: it starts the real server.

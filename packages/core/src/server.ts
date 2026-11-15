@@ -8,7 +8,6 @@
 import { join } from "node:path";
 import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
-import { execFile } from "node:child_process";
 import cors from "@fastify/cors";
 import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
@@ -42,7 +41,7 @@ import { ComfyUIProvider } from "@kesher/providers";
 import { Copilot, copilotProvider } from "./copilot.js";
 import { managedPolicy, policyCheck } from "./business.js";
 import { ProjectFacts } from "./project-facts.js";
-import { closeLeftOverEngines, ModelUse, parseGpuApps, processParent } from "./pc-fix.js";
+import { ModelUse } from "./pc-fix.js";
 import { TaskBoard } from "./task-board.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { sdProvider } from "./sdcpp.js";
@@ -70,13 +69,13 @@ import { McpManager } from "./mcp.js";
 import { allowedOrigin, isLocalRequest } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { TERMINATED_FILE } from "./routes/system.js";
-import { loadModel } from "./routes/engine.js";
 import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 import { openDataDir } from "./server/data-dir.js";
 import { buildComfy, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
 import { registerRoutes } from "./server/routes.js";
+import { startEngines } from "./server/start-engines.js";
 import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSelfWork } from "./server/build-extras.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
@@ -508,61 +507,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Find the user's other computers (same Google account) and keep their connections in step.
   devices.start();
 
-  // Protect the graphics card: hold local work while it is too hot or paused, unload idle models.
-  /** The last model's load at start-up, while it runs. */
-  let startLoad: Promise<unknown> | undefined;
-  let comfyUsed = false;
-  guard.add({
-    name: "chat model",
-    providers: ["llamacpp"],
-    // While the start-up load is still going, a message waits for it instead of failing.
-    loaded: () => engine.status().running && !startLoad,
-    unload: () => engine.stop("unused for a while (Settings → graphics card: unload after)"),
-    reload: async () => {
-      if (startLoad) return void (await startLoad);
-      const path = config.engines.lastModel;
-      if (path && existsSync(path) && engine.status().installed) await loadModel(services, path, undefined, "a request needed the model");
-    },
-    pids: () => (engine.pid ? [engine.pid] : []),
-  });
-  guard.add({
-    name: "ComfyUI models",
-    providers: ["comfyui"],
-    loaded: () => comfyUsed && comfy.status().running,
-    // Frees ComfyUI's memory without stopping it; the next flow loads what it needs.
-    unload: async () => {
-      comfyUsed = false;
-      await fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) });
-    },
-    used: () => void (comfyUsed = true),
-    pids: () => (comfy.pid ? [comfy.pid] : []),
-  });
-  registry.setGate(guard);
-  // KesherAI's own engines left running (an update or a crash) are closed before the card is used, and at start.
-  const closeStale = async () => {
-    const closed = await closeLeftOverEngines({
-      ownPids: guard.ownPids(),
-      parentOf: processParent,
-      gpuApps: () => new Promise((done) => execFile("nvidia-smi", ["--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"], { windowsHide: true, timeout: 8000 }, (err, out) => done(err ? [] : parseGpuApps(String(out))))),
-    });
-    if (closed.length) faults.add({ kind: "engine", where: "left-over engines", message: `Closed ${closed.length} KesherAI engine(s) left running: ${closed.map((c) => `${c.name.split(/[\\/]/).pop()} (${Math.round(c.bytes / 1024 ** 3)} GB)`).join(", ")}` });
-  };
-  guard.beforeUse = closeStale;
-  setTimeout(() => void closeStale().catch(() => undefined), 5_000).unref();
-  guard.start();
-  app.addHook("onClose", async () => guard.stop());
-
-  // Bring back the model that was loaded last time, without delaying start-up.
-  const last = config.engines.lastModel;
-  // The engine is chosen from the start, so a message sent while the model loads (or after Terminate, when it is
-  // not loaded) waits for it through the guard instead of failing with "No provider llamacpp" (found on the phone,
-  // and on the PC half a minute after an update).
-  if (last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
-  if (config.engines.autoLoadLast && !afterTerminate && last && existsSync(last) && engine.status().installed) {
-    startLoad = loadModel(services, last, undefined, "the last model, at start-up")
-      .catch((err) => engine.fail(err))
-      .finally(() => (startLoad = undefined));
-  }
+  // Protect the graphics card, close left-over engines, and bring back the last model (server/start-engines.ts).
+  startEngines({ app, services, guard, engine, comfy, config, faults, registry, afterTerminate });
 
   return {
     app,
