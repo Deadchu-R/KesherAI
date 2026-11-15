@@ -17,7 +17,7 @@ import cors from "@fastify/cors";
 import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
-import { BUILT_IN_FACTORIES, PROVIDER_PRESETS, ProviderRegistry } from "@kesher/providers";
+import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
 import { branding, cleanAppearance, features } from "@kesher/shared";
 import { saveConfig } from "./config.js";
@@ -157,6 +157,7 @@ import { loadModel } from "./routes/engine.js";
 import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
+import { addProviders } from "./server/build-chat.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -213,24 +214,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const plugins = new PluginHost(registry, config, paths.root);
   if (features.plugins) await plugins.loadAll([paths.plugins, ...(options.pluginRoots ?? [])]);
 
-  for (const p of config.providers) {
-    try {
-      registry.add(p);
-    } catch (err) {
-      console.warn(`[providers] skipping "${p.id}": ${(err as Error).message}`);
-    }
-  }
-
-  const autodetected = new Set<string>();
-  if (options.autodetect ?? features.autodetectLocalServers) {
-    await Promise.all(
-      PROVIDER_PRESETS.filter((preset) => preset.autodetect && !registry.get(preset.config.id)).map(async (preset) => {
-        const provider = registry.add(preset.config);
-        if (await provider.checkHealth(AbortSignal.timeout(1500))) autodetected.add(preset.config.id);
-        else registry.remove(preset.config.id);
-      }),
-    );
-  }
+  const autodetected = await addProviders(registry, config, options.autodetect ?? features.autodetectLocalServers);
 
   const library = new Library(paths.library, () => config.syncFolder);
   try {

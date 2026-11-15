@@ -1127,6 +1127,8 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
   same construction order; 1,139 lines.
   Stopped at: the rest of B3 — ComfyUI and the GPU guard need the notifier, runtimes and registry, so they move once
   B4/B5 give those a home; then B4 (`server/build-chat.ts`).
+  B4, first part: `server/build-chat.ts` `addProviders` (the settings' providers, then auto-detected local servers);
+  1,123 lines. Stopped at: personas, skills, MCP and the conversation manager (the `services` object) are next.
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
