@@ -263,7 +263,11 @@ What they added since the third review, and what KesherAI already has:
 7. Automatic descriptions and tags for attachments and Knowledge files, read before the whole file (Msty Dynamic Mode) ◐ (checked 2026-11-15: Knowledge already finds the exact passage by meaning, with its page, which is finer than reading descriptions first; pictures in a knowledge folder are now described by the local vision model and searched like text, 0.6.210; Excel and PowerPoint files are read there too; videos still are not) ✅
 8. Routines on an event: a file changed, a page changed, a download finished (ChatGPT scheduled tasks) ✅ (0.6.208: page checked without a model and run only on a change, folder watcher, download finished)
 9. A shared Canvas the agent draws on (boxes, arrows, notes), exported to PNG/SVG/Excalidraw (Bionic) ⬜
-10. Share a page or a result as a web page over the user's own link (Tailscale), read-only (ChatGPT Sites) ⬜
+10. Share a page or a result as a web page over the user's own link (Tailscale), read-only (ChatGPT Sites) ⬜ (designed 2026-11-15, waits for Roee's OK because it puts a chat on the internet):
+    a share is a capability link `/s/<128-bit token>` that shows one chat or page read-only, through "Access from
+    anywhere" only; made by the user from the chat's menu (never by the model), 7 days by default, revocable in
+    Settings → Phone with a view count; the page is plain HTML with no app script, a strict CSP and noindex; attached
+    files show by name only (no paths, which hold the Windows user name), tool steps and approvals are left out.
 11. As-you-type suggestions in any app (Magic Tab), later: heavy, needs a small fast model always loaded ⬜
 
 Sources: lmstudio.ai/changelog; openwebui.com/blog/v0-11-0-the-interface-reorganized; msty.ai/blog/msty-studio-2.9.0;
