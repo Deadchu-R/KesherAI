@@ -1148,6 +1148,10 @@ Stopped at: building step 1 (server store and tool).
   Stopped at: the conversation manager takes ~30 local services (search, Google, browser, speech, knowledge,
   computer control, Unreal…), so the next step is a typed context object built once and passed to the area
   builders (B4 rest, B5, B6) — design it first, then move the areas one by one.
+  2026-11-15 late morning: the conversation manager moved to `server/build-conversations.ts` (`buildConversations`
+  with a typed `ConversationParts`: 35 services, found with the TypeScript checker, the body unchanged; `mainSlot`,
+  which a timer updates, passes as a function). server.ts 1,115 → 989 lines.
+  Stopped at: B5 (`server/build-remote.ts`: auth, device keys, access log, tunnels, phone push, notifications).
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.

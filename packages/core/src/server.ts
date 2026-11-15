@@ -5,8 +5,6 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
-import { ensureFfmpeg } from "./ffmpeg.js";
-import type { AgentTool } from "@kesher/agent";
 import { htmlToText } from "@kesher/agent";
 import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -19,24 +17,22 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { branding, cleanAppearance, features } from "@kesher/shared";
+import { branding, features } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
 import { findMmproj } from "./llamacpp.js";
 import { Library } from "./library.js";
-import { ConversationManager, modelTurnFor, onModelSpeed } from "./conversations.js";
+import { modelTurnFor, onModelSpeed } from "./conversations.js";
 import { Speeds } from "./speeds.js";
 import { Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS } from "./google.js";
-import { googleTools } from "./google-tools.js";
-import { Knowledge, knowledgeTools } from "./knowledge.js";
+import { Knowledge } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
 import { ensureEngine } from "./routes/engine.js";
 import { Prompts } from "./prompts.js";
 import { Notifier } from "./notify.js";
-import { speechTools } from "./speech-tools.js";
 import { mcpServerRoutes } from "./routes/mcp-server.js";
 import { phoneRoutes } from "./routes/phones.js";
 import { anthropicRoutes } from "./routes/anthropic.js";
@@ -64,7 +60,6 @@ import { engineFor, runProgram } from "./unreal-tools.js";
 import { DriveSync } from "./drive-sync.js";
 import { GpuGuard } from "./gpu-guard.js";
 import { ComfyUIProvider } from "@kesher/providers";
-import { flowState, readyFlows, setupFlow, withCheckpoints } from "./comfy-flows.js";
 import { UnrealBridge } from "./unreal-bridge.js";
 import { UnityCli } from "./unity-cli.js";
 import { Copilot, copilotProvider } from "./copilot.js";
@@ -85,24 +80,23 @@ import { TaskBoard } from "./task-board.js";
 import { runIn } from "./run-in.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { Tunnel } from "./tunnel.js";
-import { ensureImageModel, ensureVideoModel, sdProvider } from "./sdcpp.js";
-import { BrowserBridge, browserTools } from "./browser-bridge.js";
+import { sdProvider } from "./sdcpp.js";
+import { BrowserBridge } from "./browser-bridge.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
-import { memoryTools } from "./memory-tools.js";
-import { ChatTimers, timerTools } from "./chat-timers.js";
+import { ChatTimers } from "./chat-timers.js";
 import { MemoryStore } from "./memory-store.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { healthRoutes } from "./routes/health.js";
 import { storageRoutes } from "./routes/storage.js";
 import { ideRoutes } from "./routes/ide.js";
 import { Tor } from "./tor.js";
-import { FaultLog, redact } from "./fault-log.js";
+import { FaultLog } from "./fault-log.js";
 import { torRoutes } from "./routes/tor.js";
 import { remoteDesktopRoutes } from "./routes/remote-desktop.js";
 import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
-import { partsRoutes, setAppearance } from "./routes/parts.js";
+import { partsRoutes } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
 import { AccessLog } from "./access-log.js";
 import { Training } from "./training.js";
@@ -126,18 +120,17 @@ import { remoteDeviceRoutes } from "./routes/remote-devices.js";
 import { timerRoutes } from "./routes/timers.js";
 import { canvasRoutes } from "./routes/canvas.js";
 import { IMAGE_SUPPORT_FILE } from "./chat-tools-media.js";
-import { CanvasStore, canvasTools } from "./canvas.js";
+import { CanvasStore } from "./canvas.js";
 import { shareRoutes } from "./routes/shares.js";
 import { ShareStore } from "./shares.js";
 import { textHelperRoutes } from "./routes/text-helper.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
 import { Runtimes } from "./runtimes.js";
-import { Checkpoints } from "./checkpoints.js";
 import { Devices } from "./devices.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { Journal } from "./journal.js";
-import { McpManager, mcpResultText } from "./mcp.js";
+import { McpManager } from "./mcp.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { freeSpace } from "@kesher/downloads";
@@ -160,6 +153,7 @@ import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/o
 import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
+import { buildConversations } from "./server/build-conversations.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -603,145 +597,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: new ConversationManager({
-      board: taskBoard,
-      registry,
-      library,
-      assets,
-      plugins,
-      config,
-      outputsDir: join(paths.root, "outputs"),
-      checkpoints: new Checkpoints(join(paths.root, "checkpoints")),
-      undoDir: join(paths.root, "undo"),
-      personas,
-      skills,
-      projectFacts,
-      // A self-work worker uses the main app's engine (main/llamacpp/…): its share comes from there.
-      engineSlotTokens: () => (worker ? mainSlot : engine.slotContext()),
-      saveConfig: () => persist(),
-      browserPane: () => browser.status().pane,
-      tor,
-      faults,
-      doctorState: async () => {
-        const [listing, upd, torSt] = await Promise.all([registry.listAllModels().catch((e: Error) => ({ models: [], errors: [{ providerId: "all", message: e.message }] })), updater.version().catch(() => undefined), tor.status()]);
-        const g = guard.status();
-        return {
-          version: upd?.version,
-          platform: `${process.platform} ${process.arch}`,
-          activeModels: config.activeModels,
-          models: listing.models.length,
-          providersNotAnswering: listing.errors,
-          guard: { paused: g.paused, cooling: g.cooling, systemHold: g.systemHold, waiting: g.waiting, running: g.running, cards: g.cards.map((c) => `${c.name} ${c.temp}°C ${Math.round(c.memUsed / 2 ** 30)}/${Math.round(c.memTotal / 2 ** 30)} GB`), ramPercent: g.system.ramTotal ? Math.round((g.system.ramUsed / g.system.ramTotal) * 100) : undefined },
-          tor: { installed: torSt.installed, running: torSt.running, ...(torSt.job ? { job: torSt.job } : {}) },
-          // The image engine's last run (its command and the end of its output), for failed pictures.
-          imageEngineLastRun: await readFileFs(sd.logFile, "utf8").then((t: string) => redact(t.split("\n").slice(-30).join("\n").slice(-1900)), () => undefined),
-        };
-      },
-      onEvent: (convId, e, title, lastAnswer) => {
-        notifier.onConversationEvent(convId, title, e, lastAnswer);
-        telegram.onConversationEvent(convId, e);
-      },
-      ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
-      // Parts the user turned off (Settings → Parts) give no tools.
-      computerTools: (id) => (config.parts.watch === false ? [] : computer.tools(id)),
-      mcpTools: () => [
-        ...googleTools(google),
-        ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
-        ...(config.parts.browser === false ? [] : browserTools(browser)),
-        ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) })),
-        ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
-          spec,
-          // Tools that only read run without asking; the rest ask, like any command.
-          risk: tool.annotations?.readOnlyHint && !tool.annotations.destructiveHint ? ("read" as const) : ("exec" as const),
-          preview: async (input) => `${server.name} → ${tool.annotations?.title ?? tool.name}\n${JSON.stringify(input, null, 2)}`,
-          run: async (input, ctx) => {
-            const r = await mcp.call(server.id, tool.name, input, ctx.signal);
-            const { text, images } = mcpResultText(r);
-            if (r.isError) throw new Error(text);
-            return { output: text, ...(images.length ? { images } : {}) };
-          },
-        })),
-      ],
-      // change_look: the chat changes how the app looks (the same as Settings → Appearance).
-      unity: unityCli,
-      unreal: unrealBridge,
-      look: {
-        get: () => cleanAppearance(config.appearance),
-        set: async (next) => {
-          setAppearance({ config }, next);
-          await persist();
-        },
-        undo: async () => {
-          const prev = config.appearanceHistory.pop();
-          if (prev === undefined) return false;
-          config.appearance = prev;
-          await persist();
-          return true;
-        },
-      },
-      // Music and 3D from the chat: the ready-made ComfyUI flows (comfy-flows.ts).
-      flows: {
-        state: (id: string) => {
-          const flow = readyFlows().find((f) => f.id === id);
-          if (!flow) throw new Error(`No flow ${id}`);
-          return { ...flowState(flow, paths.models, downloads), installed: comfy.status().installed, allowed: registry.permitted("comfyui") };
-        },
-        setup: async (id: string) => {
-          const flow = readyFlows().find((f) => f.id === id)!;
-          await setupFlow(flow, paths.models, downloads);
-        },
-        run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal) => {
-          if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
-          const flow = readyFlows().find((f) => f.id === id)!;
-          if (!comfy.status().running) {
-            const up = await fetch(`${comfy.status().url}/system_stats`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
-            if (!up) await comfy.start();
-          }
-          const names = await fetch(`${comfy.status().url}/models/checkpoints`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
-          const graph = withCheckpoints(flow, names);
-          const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
-          await edit(graph, (data, name) => provider.uploadImage(data, name));
-          await guard.before("comfyui", signal);
-          try {
-            return await provider.runFlow(graph, signal);
-          } finally {
-            guard.after();
-            // A chat model is loaded too: ComfyUI gives the card back at once (found on the PC: after a song, both
-            // shared 24 GB and the chat model answered in minutes, not seconds). The next song loads what it needs.
-            if (engine.status().running) void fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
-          }
-        },
-      },
-      video: {
-        // A video model from a connection (ComfyUI's Wan) when that is the active one, else the built-in engine.
-        ensure: async () => {
-          const active = config.activeModels.video;
-          if (active && !existsSync(active)) {
-            try {
-              if (registry.resolve(active).provider.generateVideo) return { path: active };
-            } catch {
-              // that connection is gone: fall back to the built-in engine
-            }
-          }
-          return ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist });
-        },
-        generate: async (path, req) => {
-          if (!existsSync(path)) {
-            const target = registry.resolve(path);
-            const [file] = (await target.provider.generateVideo?.({ providerModelId: target.providerModelId, ...req })) ?? [];
-            if (!file) throw new Error("The video model made no video.");
-            return file;
-          }
-          return sd.generateVideo(path, req);
-        },
-      },
-      userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
-      memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
-      // None in an incognito chat: a timer is written to disk (scan 65).
-      canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : canvasTools(canvases, convId, () => library.summary(convId)?.title ?? "")),
-      timerTools: (convId) => (library.summary(convId)?.incognito ? [] : timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined))),
-      memory,
-    }),
+    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot }),
     coach,
     memory,
     computer,
