@@ -20,17 +20,29 @@ const SIZES: Record<number, number> = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4
  *
  * @param path - A `.gguf` file.
  * @param maxBytes - Stop after reading this much.
+ * @param stopAt - Stop at the first key this returns true for (e.g. the tokenizer, which comes after the model's settings).
  * @returns Key → value, or undefined when the file is not GGUF.
  */
-export async function readGgufHeader(path: string, maxBytes = 64 * 1024 ** 2): Promise<Map<string, GgufValue> | undefined> {
+export async function readGgufHeader(path: string, maxBytes = 64 * 1024 ** 2, stopAt?: (key: string) => boolean): Promise<Map<string, GgufValue> | undefined> {
   const fh = await open(path, "r");
   try {
     let pos = 0;
-    const buf = Buffer.alloc(8);
-    const read = async (n: number): Promise<Buffer> => {
-      const b = n <= 8 ? buf.subarray(0, n) : Buffer.alloc(n);
-      const { bytesRead } = await fh.read(b, 0, n, pos);
+    // Read in 1 MB pieces, not a system call per value (a tokenizer has ~150,000 strings; read one by one, a big
+    // model's header took tens of seconds).
+    let chunk = Buffer.alloc(0);
+    let chunkAt = 0;
+    const ensure = async (n: number) => {
+      if (pos >= chunkAt && pos + n <= chunkAt + chunk.length) return;
+      const size = Math.max(n, 1024 * 1024);
+      const b = Buffer.alloc(size);
+      const { bytesRead } = await fh.read(b, 0, size, pos);
+      chunk = b.subarray(0, bytesRead);
+      chunkAt = pos;
       if (bytesRead < n) throw new Error("short read");
+    };
+    const read = async (n: number): Promise<Buffer> => {
+      await ensure(n);
+      const b = chunk.subarray(pos - chunkAt, pos - chunkAt + n);
       pos += n;
       return b;
     };
@@ -48,12 +60,19 @@ export async function readGgufHeader(path: string, maxBytes = 64 * 1024 ** 2): P
     const out = new Map<string, GgufValue>();
     for (let i = 0; i < kvs && pos < maxBytes; i++) {
       const key = await str();
+      if (stopAt?.(key)) break;
       const type = await u32();
       if (type === 9) {
-        // An array: skip it (strings one by one, numbers in one step).
+        // An array: skip it (strings by their lengths, numbers in one step).
         const t = await u32();
         const n = Number(await u64());
-        if (t === 8) for (let j = 0; j < n && pos < maxBytes; j++) pos += 8 + Number((await read(8)).readBigUInt64LE(0));
+        if (t === 8) {
+          for (let j = 0; j < n && pos < maxBytes; j++) {
+            // The length first, then the jump: "pos += await …" would add to the old position.
+            const len = Number(await u64());
+            pos += len;
+          }
+        }
         else pos += n * (SIZES[t] ?? 0);
         continue;
       }
@@ -120,7 +139,8 @@ const fractions = new Map<string, number | undefined>();
 export async function activeFractionOf(path: string, size: number, mtimeMs: number): Promise<number | undefined> {
   const key = `${path}|${size}|${mtimeMs}`;
   if (fractions.has(key)) return fractions.get(key);
-  const h = path.toLowerCase().endsWith(".gguf") ? await readGgufHeader(path).catch(() => undefined) : undefined;
+  // The model's own settings come before the tokenizer: stop there (a few KB instead of megabytes).
+  const h = path.toLowerCase().endsWith(".gguf") ? await readGgufHeader(path, 4 * 1024 ** 2, (k) => k.startsWith("tokenizer.")).catch(() => undefined) : undefined;
   const f = h ? activeFractionFrom(h) : undefined;
   fractions.set(key, f);
   return f;

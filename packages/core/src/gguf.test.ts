@@ -16,7 +16,7 @@ function gguf(kv: Array<[string, "str" | "u32" | "strs", unknown]>): Buffer {
     parts.push(str(k));
     if (t === "str") parts.push(u32(8), str(v as string));
     if (t === "u32") parts.push(u32(4), u32(v as number));
-    if (t === "strs") parts.push(u32(9), u32(8), u64((v as string[]).length), ...(v as string[]).map(str));
+    if (t === "strs") parts.push(u32(9), u32(8), u64((v as string[]).length), Buffer.concat((v as string[]).map(str)));
   }
   return Buffer.concat(parts);
 }
@@ -57,4 +57,18 @@ test("mixture-of-experts: the share read per token comes from the expert counts"
   // Dense models: none.
   assert.equal(activeFractionFrom(new Map([["llama.block_count", 32]])), undefined);
   assert.equal(activeFractionFrom(new Map([["x.expert_count", 8], ["x.expert_used_count", 8]])), undefined);
+});
+
+test("a big tokenizer is read quickly, and reading can stop before it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gguf-"));
+  const big = join(dir, "big.gguf");
+  const tokens = Array.from({ length: 150_000 }, (_, i) => `tok${i}`);
+  await writeFile(big, gguf([["general.architecture", "str", "qwen3moe"], ["qwen3moe.expert_count", "u32", 128], ["tokenizer.ggml.tokens", "strs", tokens], ["qwen3moe.after", "u32", 7]]));
+  const t0 = Date.now();
+  const h = await readGgufHeader(big);
+  assert.equal(h?.get("qwen3moe.after"), 7, "values after the tokenizer are read right");
+  assert.ok(Date.now() - t0 < 3000, `read in ${Date.now() - t0} ms`);
+  const early = await readGgufHeader(big, 4 * 1024 ** 2, (k) => k.startsWith("tokenizer."));
+  assert.equal(early?.get("qwen3moe.expert_count"), 128);
+  assert.equal(early?.has("qwen3moe.after"), false);
 });
