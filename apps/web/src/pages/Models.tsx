@@ -391,6 +391,7 @@ export function ModelsPage() {
         {hw && <GpuCheck />}
       </header>
 
+      <LoadedNow local={local} />
       <nav className="tabs" role="tablist" aria-label={t("models")}>
         {groups.map((g) => (
           <button key={g.id} type="button" role="tab" aria-selected={group.id === g.id} className={group.id === g.id ? "on" : ""} onClick={() => setTab(g.kinds[0]!)}>
@@ -469,6 +470,35 @@ export function ModelsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * "Loaded now" on top of every tab (redesign 2026-11): the chat model the engine has in the graphics card, its
+ * measured speed, and Unload. Nothing when no model is loaded.
+ *
+ * @param p.local - The files on this computer (for the measured speed).
+ */
+function LoadedNow({ local }: { local: LocalFile[] }) {
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
+  useEffect(() => {
+    const tick = () => void api<EngineStatus>("/api/engines/llamacpp").then(setEngine, () => undefined);
+    tick();
+    const id = setInterval(tick, 10_000);
+    return () => clearInterval(id);
+  }, []);
+  if (!engine?.running || !engine.modelPath) return null;
+  const name = engine.modelPath.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "");
+  const measured = local.find((f) => f.path === engine.modelPath)?.measured;
+  return (
+    <section className="loaded-now" aria-label={L("טעון עכשיו", "Loaded now")}>
+      <span className="loaded-dot" aria-hidden="true" />
+      <div className="grow">
+        <strong dir="ltr">{name}</strong>
+        <span className="muted small">{L("טעון עכשיו בכרטיס המסך", "Loaded in the graphics card now")}{measured ? ` · ${Math.round(measured.tps)} ${L("טוקנים/שנ׳", "tokens/s")}` : ""}</span>
+      </div>
+      <button type="button" className="small" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine, (e: Error) => toast(e.message))}>{L("פרוק", "Unload")}</button>
+    </section>
   );
 }
 

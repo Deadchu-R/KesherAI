@@ -2447,3 +2447,9 @@ html.handheld .palette-list button { min-height: 44px; }
 .conn-state { font-size: 12px; white-space: nowrap; }
 .conn-state.good { color: var(--good); }
 .conn-state.bad { color: var(--bad); }
+
+/* Models: what is loaded now, on top of every tab (redesign 2026-11). */
+.loaded-now { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.loaded-now > div { display: flex; flex-direction: column; min-width: 0; }
+.loaded-now strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loaded-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
