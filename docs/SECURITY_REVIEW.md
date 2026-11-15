@@ -490,6 +490,11 @@ S5 an outside scanner's rules for Electron.
 
 ## Notes for scan 82 (0.6.252)
 
+- Speed up (pc-clean.ts): only fixed folders inside the user's own profile (and Steam's shader cache); contents only,
+  never the folder itself; symbolic links and junctions are not followed; files newer than a day are kept in temp;
+  a browser or Steam that is running keeps its cache. The page asks before deleting, and says it is permanent.
+- Games (pc-games.ts): read-only; removal only opens the store's own page from three fixed link shapes.
+
 - CivitAI (F5): the download address, size and SHA-256 come from CivitAI's API by version id (never from the page),
   only `https://civitai.com`; the file name is cleaned to `[\w.-]` and lands in the LoRA folder; the picture proxy
   fetches only `https://image.civitai.com`, images only, 3 MB at most; adult models are off unless asked, and their

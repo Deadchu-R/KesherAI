@@ -13,7 +13,9 @@ type Kind = "video" | "image" | "audio" | "document" | "archive" | "other";
 interface SFile { id: string; name: string; folder: string; bytes: number; kind: Kind; mtime: number }
 interface Card { id: "large" | "old-downloads" | "installers" | "duplicates" | "screenshots" | "compress-videos"; files: SFile[]; bytes: number }
 interface Scan { at: string; kinds: Record<Kind, number>; folders: Array<{ name: string; bytes: number }>; top: Record<Kind, SFile[]>; cards: Card[]; partial: boolean }
-interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string }
+interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string; uninstallUrl?: string; lastPlayed?: string }
+interface Game { name: string; source: "steam" | "epic" | "store" | "xbox"; bytes?: number; folder?: string; uninstallUrl?: string; lastPlayed?: string }
+const SOURCE_NAME: Record<string, string> = { steam: "Steam", epic: "Epic", store: "Microsoft Store", xbox: "Xbox" };
 interface Compress { running?: { id: string; name: string; percent: number }; queue: string[]; done: Array<{ original: SFile; result: SFile; saved: number }>; failed: Array<{ name: string; error: string }> }
 
 const KINDS: Kind[] = ["video", "image", "audio", "document", "archive", "other"];
@@ -96,15 +98,97 @@ function FilesDialog({ title, files, compress, onClose, onChanged }: { title: st
   );
 }
 
+/**
+ * Speed up: caches and temporary files, like Android's cleaner. Each place shows its size; only ticked places are
+ * cleaned, files in use are skipped, and an open browser keeps its cache (close it first).
+ */
+function SpeedUp() {
+  type Spot = { id: string; he: string; en: string; noteHe: string; noteEn: string; bytes: number; closeFirst?: string[] };
+  const [spots, setSpots] = useState<Spot[] | null>(null);
+  const [pick, setPick] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const he = getLocale() === "he";
+  const measure = () => {
+    setBusy(true);
+    void api<{ spots: Spot[] }>("/api/storage/clean")
+      .then((r) => {
+        setSpots(r.spots);
+        setPick(new Set(r.spots.filter((x) => x.bytes > 0 && !x.closeFirst).map((x) => x.id)));
+      }, (e: Error) => toast(e.message))
+      .finally(() => setBusy(false));
+  };
+  const clean = async () => {
+    const chosen = spots?.filter((x) => pick.has(x.id)) ?? [];
+    const sum = chosen.reduce((n, x) => n + x.bytes, 0);
+    if (!chosen.length || !window.confirm(L(`לנקות ${chosen.length} מקומות (כ־${size(sum)})? הקבצים נמחקים לצמיתות (לא לסל המיחזור).`, `Clean ${chosen.length} places (about ${size(sum)})? The files are deleted for good (not to the Recycle Bin).`))) return;
+    setBusy(true);
+    try {
+      const r = await api<{ freed: number; skipped: number }>("/api/storage/clean", { method: "POST", body: { ids: [...pick] } });
+      toast(L(`התפנו ⁦${size(r.freed)}⁩${r.skipped ? ` · ${r.skipped} קבצים בשימוש נשארו` : ""}`, `${size(r.freed)} freed${r.skipped ? ` · ${r.skipped} files in use were left` : ""}`));
+      measure();
+    } catch (e) {
+      toast((e as Error).message);
+      setBusy(false);
+    }
+  };
+  const total = (spots ?? []).filter((x) => pick.has(x.id)).reduce((n, x) => n + x.bytes, 0);
+  return (
+    <div className="stack speed-up">
+      <div className="row wrap">
+        <strong className="grow">{L("שיפור ביצועים: קאש וקבצים זמניים", "Speed up: caches and temporary files")}</strong>
+        <button type="button" className={spots ? "" : "primary"} disabled={busy} onClick={measure}>{busy && !spots ? L("בודק…", "Checking…") : spots ? L("בדוק שוב", "Check again") : L("בדוק מה אפשר לנקות", "See what can be cleaned")}</button>
+      </div>
+      {spots && (
+        <>
+          <ul className="speed-list">
+            {spots.filter((x) => x.bytes > 0 || x.closeFirst).map((x) => (
+              <li key={x.id}>
+                <label className="row check-row">
+                  <input type="checkbox" checked={pick.has(x.id)} disabled={!!x.closeFirst} onChange={(e) => setPick((p) => { const n = new Set(p); if (e.target.checked) n.add(x.id); else n.delete(x.id); return n; })} />
+                  <span className="grow stack" style={{ gap: 2 }}>
+                    <span dir="auto">{he ? x.he : x.en} <span className="muted" dir="ltr">{size(x.bytes)}</span></span>
+                    <span className="muted small" dir="auto">{x.closeFirst ? L(`סגרו קודם את ${x.closeFirst.join(", ")}`, `Close ${x.closeFirst.join(", ")} first`) : he ? x.noteHe : x.noteEn}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {spots.every((x) => !x.bytes) ? <p className="muted small">{L("הכל נקי.", "All clean.")}</p> : <button type="button" className="primary" style={{ alignSelf: "flex-start" }} disabled={busy || !pick.size} onClick={() => void clean()}>{busy ? "…" : L(`נקה ⁦${size(total)}⁩`, `Clean ${size(total)}`)}</button>}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Every program on the computer, biggest first, with its own uninstaller. */
 function AppsDialog({ onClose }: { onClose: () => void }) {
   const [apps, setApps] = useState<App[] | null>(null);
+  const [games, setGames] = useState<App[] | null>(null);
   const [q, setQ] = useState("");
+  const [only, setOnly] = useState<"all" | "games" | "programs" | "store">("all");
   useEffect(() => {
     void api<App[]>("/api/storage/apps").then(setApps, (e: Error) => toast(e.message));
+    // Games (Steam, Epic) and Store/Xbox apps: Windows' own program list leaves them out.
+    void api<Game[]>("/api/storage/games").then((g) => setGames(g.map((x, i) => ({ id: `g${i}`, name: x.name, ...(x.bytes ? { bytes: x.bytes } : {}), canUninstall: !!x.uninstallUrl, source: x.source, ...(x.uninstallUrl ? { uninstallUrl: x.uninstallUrl } : {}), ...(x.lastPlayed ? { lastPlayed: x.lastPlayed } : {}) }))), () => setGames([]));
   }, []);
-  const shown = useMemo(() => (apps ?? []).filter((a) => !q || a.name.toLowerCase().includes(q.toLowerCase()) || a.publisher?.toLowerCase().includes(q.toLowerCase())), [apps, q]);
+  const all = useMemo(() => {
+    // A game Steam or Epic knows may also be in Windows' list: shown once, with the store's size.
+    const names = new Set((games ?? []).map((g) => g.name.toLowerCase()));
+    return [...(games ?? []), ...(apps ?? []).filter((a) => !names.has(a.name.toLowerCase()))].sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0));
+  }, [apps, games]);
+  const kindOf = (a: App) => (a.source === "steam" || a.source === "epic" || a.source === "xbox" ? "games" : a.source === "store" ? "store" : "programs");
+  const shown = useMemo(() => all.filter((a) => (only === "all" || kindOf(a) === only) && (!q || a.name.toLowerCase().includes(q.toLowerCase()) || a.publisher?.toLowerCase().includes(q.toLowerCase()))), [all, q, only]);
   const remove = async (a: App) => {
+    if (a.uninstallUrl) {
+      if (!window.confirm(L(`לפתוח את ההסרה של ${a.name} ב־${SOURCE_NAME[a.source] ?? a.source}? שם תאשרו בעצמכם.`, `Open ${a.name}'s removal in ${SOURCE_NAME[a.source] ?? a.source}? You confirm it there.`))) return;
+      try {
+        await api("/api/storage/games/open", { method: "POST", body: { url: a.uninstallUrl } });
+        toast(L("נפתח במחשב.", "Opened on the computer."));
+      } catch (e) {
+        toast((e as Error).message);
+      }
+      return;
+    }
     if (!window.confirm(L(`להפעיל את מסיר ההתקנה של ${a.name}? הוא ישאל אתכם בעצמו.`, `Start ${a.name}'s uninstaller? It will ask you itself.`))) return;
     try {
       await api("/api/storage/apps/uninstall", { method: "POST", body: { id: a.id } });
@@ -117,9 +201,17 @@ function AppsDialog({ onClose }: { onClose: () => void }) {
     <div className="dialog-backdrop on-top" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog card stack storage-dialog" role="dialog" aria-modal="true" aria-label={L("תוכנות", "Programs")} onKeyDown={(e) => e.key === "Escape" && onClose()}>
         <div className="row wrap">
-          <strong className="grow">{L(`תוכנות במחשב${apps ? ` (${apps.length})` : ""}`, `Programs on the computer${apps ? ` (${apps.length})` : ""}`)}</strong>
+          <strong className="grow">{L(`תוכנות ומשחקים${apps ? ` (${all.length})` : ""}`, `Programs and games${apps ? ` (${all.length})` : ""}`)}</strong>
           <input type="search" dir="auto" placeholder={L("חיפוש…", "Search…")} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
+        <div className="seg-pills" role="tablist">
+          {(["all", "games", "programs", "store"] as const).map((k) => (
+            <button key={k} type="button" role="tab" aria-selected={only === k} className={only === k ? "on" : ""} onClick={() => setOnly(k)}>
+              {{ all: L("הכל", "All"), games: L("משחקים", "Games"), programs: L("תוכנות", "Programs"), store: "Store" }[k]}
+            </button>
+          ))}
+        </div>
+        {games === null && <p className="muted small">{L("מחפש משחקים ב־Steam, ‏Epic ו־Xbox…", "Looking for games in Steam, Epic and Xbox…")}</p>}
         {!apps ? (
           <p className="muted">{L("קורא את רשימת התוכנות…", "Reading the programs…")}</p>
         ) : (
@@ -128,7 +220,7 @@ function AppsDialog({ onClose }: { onClose: () => void }) {
               <li key={a.id} className="row">
                 <span className="stack grow storage-file">
                   <span dir="auto" className="storage-name">{a.name}</span>
-                  <span className="muted small">{a.bytes ? <span dir="ltr">{size(a.bytes)}</span> : L("גודל לא ידוע", "size unknown")}{a.publisher ? ` · ${a.publisher}` : ""}{a.installed ? ` · ${a.installed}` : ""}</span>
+                  <span className="muted small">{a.bytes ? <span dir="ltr">{size(a.bytes)}</span> : L("גודל לא ידוע", "size unknown")}{SOURCE_NAME[a.source] ? ` · ${SOURCE_NAME[a.source]}` : ""}{a.publisher ? ` · ${a.publisher}` : ""}{a.installed ? ` · ${a.installed}` : ""}{a.lastPlayed ? L(` · שוחק ${a.lastPlayed}`, ` · played ${a.lastPlayed}`) : ""}</span>
                 </span>
                 {a.canUninstall ? <button type="button" onClick={() => void remove(a)}>{L("הסר", "Uninstall")}</button> : a.source === "dpkg" ? <span className="muted small" dir="ltr">sudo apt remove</span> : null}
               </li>
@@ -183,6 +275,7 @@ export function StorageSection() {
         <button type="button" onClick={() => setApps(true)}>{L("תוכנות", "Programs")}</button>
         <button type="button" className={scan ? "" : "primary"} disabled={busy} onClick={() => load(!!scan)}>{busy ? L("סורק…", "Scanning…") : scan ? L("סרוק שוב", "Scan again") : L("סרוק את הקבצים שלי", "Scan my files")}</button>
       </div>
+      <SpeedUp />
       {!scan && !busy && <p className="muted small">{L("סריקה של התיקיות שלכם (מסמכים, הורדות, תמונות, סרטונים, מוזיקה, שולחן העבודה): מה תופס מקום, ומה אפשר לנקות בלחיצה. שום דבר לא נמחק בלי שתבחרו.", "A scan of your folders (Documents, Downloads, Pictures, Videos, Music, Desktop): what takes the space and what can be cleaned in one press. Nothing is deleted unless you choose it.")}</p>}
       {busy && !scan && <p className="muted small">{L("סורק… זה יכול לקחת עד דקה.", "Scanning… this can take up to a minute.")}</p>}
       {comp && (comp.running || comp.queue.length > 0 || comp.done.length > 0 || comp.failed.length > 0) && (

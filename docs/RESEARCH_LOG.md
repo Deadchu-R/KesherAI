@@ -1333,3 +1333,17 @@ Stopped at: building (store and public page first, then the chat menu and the se
   the prompt. Stacking with a strength per LoRA already existed. An optional CivitAI key (set on the computer only,
   stored encrypted) is used when a LoRA needs it.
 - **Stopped at:** done; a key field in Settings is still to add (the route exists).
+
+## PC health: every program and game, and speed up (2026-11-15, night; asked by Roee)
+- **Android cleaners / CCleaner / Windows Storage Sense:** temporary files (older than a day), browser caches,
+  graphics-card shader caches, crash dumps; browsers must be closed for their cache. **Playnite / GOG Galaxy** find
+  games from each store's own files: Steam `libraryfolders.vdf` + `appmanifest_*.acf` (SizeOnDisk, LastPlayed), Epic
+  `ProgramData\Epic\EpicGamesLauncher\Data\Manifests\*.item` (InstallSize), Store/Xbox `Get-AppxPackage` (Xbox PC games
+  in `XboxGames` measured on disk; WindowsApps cannot be read).
+- **Built:** Programs shows games and Store apps with Windows' list (filters: all, games, programs, Store; last
+  played); removing a game opens the store's own removal (steam://uninstall/<id>, Epic, Windows settings; fixed links
+  only). "Speed up" measures temp files (older than a day), Chrome/Edge caches (only when closed), shader caches
+  (NVIDIA, AMD, D3D, Steam), crash reports; cleans only what is ticked, skips files in use, keeps the folders.
+- **Not built (needs Roee):** emptying the Recycle Bin, Windows Update's cache (needs administrator), closing running
+  programs to free memory, startup programs.
+- **Stopped at:** done; checked by tests, to be checked on the PC after the release.

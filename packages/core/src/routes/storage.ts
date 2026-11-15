@@ -5,6 +5,8 @@ import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import { moveToTrash, Storage, type StorageFile } from "../storage.js";
+import { findGamesAndStoreApps } from "../pc-games.js";
+import { cleanSpotsNow, measureSpots } from "../pc-clean.js";
 
 /** A video being made smaller, and the ones done. */
 interface CompressState {
@@ -30,6 +32,23 @@ export async function storageRoutes(app: FastifyInstance, s: KesherServices): Pr
     return storage.remove(ids, moveToTrash);
   });
   app.get("/api/storage/apps", async () => storage.listApps());
+  /** Games (Steam, Epic) and Microsoft Store / Xbox apps, which Windows' program list leaves out. */
+  app.get("/api/storage/games", async () => findGamesAndStoreApps());
+  /** Opens a store's own page for removing a game (it asks the person itself). Only these fixed links. */
+  app.post<{ Body: { url?: string } }>("/api/storage/games/open", async (req, reply) => {
+    const url = String(req.body?.url ?? "");
+    if (!/^(steam:\/\/uninstall\/\d{1,10}|ms-settings:appsfeatures|com\.epicgames\.launcher:\/\/store)$/.test(url)) return reply.code(400).send({ error: "Not a store link." });
+    if (process.platform !== "win32") return reply.code(400).send({ error: "Only on Windows." });
+    spawn("cmd.exe", ["/d", "/c", "start", '""', url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return { ok: true };
+  });
+  /** Performance boost: caches and temporary files, measured; cleaned only where the person ticked. */
+  app.get("/api/storage/clean", async () => ({ spots: await measureSpots() }));
+  app.post<{ Body: { ids?: unknown } }>("/api/storage/clean", async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map(String).slice(0, 20) : [];
+    if (!ids.length) return reply.code(400).send({ error: "Nothing chosen." });
+    return cleanSpotsNow(ids);
+  });
   app.post<{ Body: { id?: string } }>("/api/storage/apps/uninstall", async (req, reply) => {
     try {
       await storage.uninstall(String(req.body?.id ?? ""));

@@ -2496,3 +2496,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .civitai-card b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
 .civitai-card button { align-self: flex-start; height: 36px; }
 .civitai select { height: 40px; max-width: 160px; }
+
+/* PC health → Storage: speed up (caches and temporary files). */
+.speed-up { border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); padding: 12px 14px; background: var(--panel-2); }
+.speed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
