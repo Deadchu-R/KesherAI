@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Menu, MenuItem, MenuNote, MenuSeparator } from "./ui/Menu";
 import { api } from "./api";
 import { getLocale } from "./i18n";
+import { LineIcon } from "./ui/Glyph";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -45,11 +46,11 @@ export function PersonaChip({ value, onChange }: { value?: string | undefined; o
       triggerClassName={`model-chip${current ? " on" : ""}`}
       title={L("פרסונה: הוראות, מודל ומאגר ידע שמורים", "Persona: saved instructions, model and knowledge base")}
       aria-label={L("פרסונה", "Persona")}
-      trigger={current ? `${current.icon ?? "🎭"} ${current.name}` : `🎭 ${L("פרסונה", "Persona")}`}
+      trigger={current ? <>{current.icon ? `${current.icon} ` : <LineIcon name="person" size={15} />}{current.name}</> : <><LineIcon name="person" size={15} />{L("פרסונה", "Persona")}</>}
     >
       <MenuItem kind="radio" checked={!current} onSelect={() => onChange(null)}>{L("ללא פרסונה", "No persona")}</MenuItem>
       {personas.map((p) => (
-        <MenuItem key={p.id} kind="radio" checked={p.id === value} icon={p.icon ?? "🎭"} dir="auto" onSelect={() => onChange(p)} title={p.instructions?.replace(/\s+/g, " ").slice(0, 200)}>
+        <MenuItem key={p.id} kind="radio" checked={p.id === value} icon={p.icon ?? <LineIcon name="person" size={15} />} dir="auto" onSelect={() => onChange(p)} title={p.instructions?.replace(/\s+/g, " ").slice(0, 200)}>
           {p.name}
           {p.instructions && <span className="muted small persona-hint" dir="auto"> {p.instructions.replace(/\s+/g, " ").slice(0, 60)}</span>}
         </MenuItem>

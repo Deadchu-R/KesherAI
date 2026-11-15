@@ -462,6 +462,7 @@ html, body { overflow-x: hidden; }
 /* ---------- composer model menu: grouped by provider, searchable ---------- */
 .model-menu { position: relative; min-width: 0; }
 .model-menu .model-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; }
+.model-chip > .glyph { margin: 0; }
 .model-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; }
 .where-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
 .where-dot.cloud { background: var(--accent); }
