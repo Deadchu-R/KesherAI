@@ -47,3 +47,19 @@ test("ACE-Step 1.5's flow matches ComfyUI's node (every input it needs) and its 
   assert.deepEqual([f.flow["8"]!.inputs.steps, f.flow["8"]!.inputs.cfg, f.flow["5"]!.inputs.shift], [8, 1, 3]);
   assert.equal(readyFlows()[0]!.id, "music-ace-step-15", "the newer one comes first on the Nodes page");
 });
+
+test("the XL flow's loaders get ComfyUI's own names from each folder (sub-folders, Windows separators)", async () => {
+  const { folderNames } = await import("./comfy-flows.js");
+  const xl = readyFlows().find((f) => f.id === "music-ace-step-15-xl")!;
+  const lists: Record<string, string[]> = { diffusion_models: ["music\\acestep_v1.5_xl_turbo_bf16.safetensors", "wan.safetensors"], text_encoders: ["qwen_0.6b_ace15.safetensors", "qwen_4b_ace15.safetensors"], vae: ["ace_1.5_vae.safetensors"] };
+  const asked: string[] = [];
+  const names = await folderNames(xl, async (f) => (asked.push(f), lists[f] ?? []));
+  assert.deepEqual(asked.sort(), ["diffusion_models", "text_encoders", "vae"]);
+  const g = withCheckpoints(xl, [], names);
+  assert.equal(g["1"]!.inputs.unet_name, "music\\acestep_v1.5_xl_turbo_bf16.safetensors");
+  assert.equal(g["11"]!.inputs.clip_name2, "qwen_4b_ace15.safetensors");
+  assert.deepEqual(g["9"]!.inputs.vae, ["12", 0]);
+  // Every file it downloads lands in a folder ComfyUI reads for that loader (comfy-manager's extra_model_paths).
+  const base: Record<string, string> = { diffusion_models: "video/", text_encoders: "text_encoders/", vae: "vae/" };
+  for (const n of xl.names!) assert.ok(xl.files.some((f) => f.rel.startsWith(base[n.folder]!) && f.rel.endsWith(n.file)), n.file);
+});

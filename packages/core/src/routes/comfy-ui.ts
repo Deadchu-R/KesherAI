@@ -7,7 +7,7 @@ import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editFlow, type ApiFlow, type NodeInfo } from "../comfy-edit.js";
 import { modelTurnFor } from "../conversations.js";
-import { flowState, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
+import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
 
 /**
  * ComfyUI's own node editor inside KesherAI (the Nodes page): ComfyUI is
@@ -82,10 +82,11 @@ export async function comfyUiRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get<{ Params: { id: string } }>("/api/comfy-ui/flows/:id", async (req, reply) => {
     const flow = readyFlows().find((f) => f.id === req.params.id);
     if (!flow) return reply.code(404).send({ error: "No such flow." });
-    const names = await fetch(`${s.comfy.status().url}/models/checkpoints`, { signal: AbortSignal.timeout(10_000) })
-      .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
-      .catch(() => [] as string[]);
-    return { name: flow.title.en, flow: withCheckpoints(flow, names) };
+    const list = (folder: string) =>
+      fetch(`${s.comfy.status().url}/models/${folder}`, { signal: AbortSignal.timeout(10_000) })
+        .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
+        .catch(() => [] as string[]);
+    return { name: flow.title.en, flow: withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list)) };
   });
 
   const guard = async (req: FastifyRequest, reply: FastifyReply) => {

@@ -303,10 +303,12 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     return st.ready || st.downloading ? undefined : `Downloads a model of about ${st.missingGb} GB.`;
   };
   notes.push(
-    "make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI, and make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
+    "make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI; check the lyrics' spelling and rhythm before calling it (a song sung from clumsy lyrics sounds clumsy). make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
   );
-  // ACE-Step 1.5; the first ACE-Step only when it is already here and 1.5 is not (no second download needed).
-  const musicFlow = () => (!flows.state("music-ace-step-15").ready && flows.state("music-ace-step").ready ? "music-ace-step" : "music-ace-step-15");
+  // ACE-Step 1.5 XL when it is here (better, above all in languages it saw less), else 1.5; the first ACE-Step only
+  // when it is already here and 1.5 is not (no second download needed).
+  const musicFlow = () =>
+    flows.state("music-ace-step-15-xl").ready ? "music-ace-step-15-xl" : !flows.state("music-ace-step-15").ready && flows.state("music-ace-step").ready ? "music-ace-step" : "music-ace-step-15";
   const music: AgentTool = {
     risk: "safe",
     askFirst: (input) => askDownload(musicFlow())(input),
@@ -317,7 +319,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
         type: "object",
         properties: {
           tags: { type: "string", description: "Style in English: genre, mood, instruments, voice, production. E.g. 'pop, upbeat, female vocals, piano, warm'." },
-          lyrics: { type: "string", description: "Lyrics with [Verse], [Chorus], [Bridge] markers, in the song's language and its own letters (Hebrew in Hebrew letters). For music without singing use [Instrumental]." },
+          lyrics: { type: "string", description: "Lyrics with [Verse], [Chorus], [Bridge] markers, in the song's language and its own letters (Hebrew in Hebrew letters). Write them to be sung: short lines of about the same length (6-9 syllables), simple everyday words spelled correctly, a chorus that repeats, rhymes at line ends; no long or rare words. For music without singing use [Instrumental]." },
           language: { type: "string", description: "The lyrics' language code: en, he, ar, es, fr, de, ru, ja, ko, zh… (default en)." },
           seconds: { type: "number", description: "Length in seconds, 10–600 (default 60)." },
           bpm: { type: "number", description: "Tempo, 40–220 (optional)." },
@@ -333,7 +335,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       const id = musicFlow();
       const blocked = gate(id, input.download);
       if (blocked) return { output: blocked };
-      const v15 = id === "music-ace-step-15";
+      const v15 = id.startsWith("music-ace-step-15");
       const seconds = Math.min(v15 ? 600 : 240, Math.max(10, Number(input.seconds ?? 60) || 60));
       const files = await flows.run(id, (flow) => {
         const enc = flow["2"]!.inputs;
@@ -354,7 +356,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       }, ctx.signal);
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
-      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: String(input.tags ?? "").slice(0, 1000), lyrics: String(input.lyrics ?? "").slice(0, 8000), ...(input.title ? { title: String(input.title).slice(0, 200) } : {}) } })));
+      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: id === "music-ace-step-15-xl" ? "comfyui/ace-step-1.5-xl" : v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: String(input.tags ?? "").slice(0, 1000), lyrics: String(input.lyrics ?? "").slice(0, 8000), ...(input.title ? { title: String(input.title).slice(0, 200) } : {}) } })));
       // A cover picture, like Gemini's and Suno's songs: with the active image model, when there is one that runs
       // here; a failure leaves the song without one.
       const cover = input.cover === false ? undefined : await songCover(deps, String(input.tags ?? ""), input.title ? String(input.title) : undefined, ctx.signal).catch(() => undefined);

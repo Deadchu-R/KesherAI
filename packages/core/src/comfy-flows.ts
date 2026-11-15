@@ -44,6 +44,8 @@ export interface ReadyFlow {
   files: FlowFile[];
   /** Node ids whose `ckpt_name` is set to the file with this name. */
   checkpoints: Record<string, string>;
+  /** Other loaders' inputs (a diffusion model, text encoders, a VAE): set to the name ComfyUI lists in that folder. */
+  names?: Array<{ node: string; input: string; folder: "diffusion_models" | "text_encoders" | "vae"; file: string }>;
   flow: Record<string, ApiNode>;
 }
 
@@ -101,6 +103,63 @@ export function readyFlows(): ReadyFlow[] {
         "5": { class_type: "ModelSamplingAuraFlow", inputs: { model: ["1", 0], shift: 3 } },
         "8": { class_type: "KSampler", inputs: { model: ["5", 0], positive: ["2", 0], negative: ["3", 0], latent_image: ["4", 0], seed: seed(), steps: 8, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1 } },
         "9": { class_type: "VAEDecodeAudio", inputs: { samples: ["8", 0], vae: ["1", 2] } },
+        "10": { class_type: "SaveAudioMP3", inputs: { audio: ["9", 0], filename_prefix: "audio/KesherAI", quality: "V0" } },
+      },
+    },
+    {
+      // ACE-Step 1.5 XL with the 4B planner, as in ComfyUI's template audio_ace_step1_5_xl_turbo: a bigger music model
+      // and a bigger language model that plans the song before it is sung; better in languages it saw less, slower.
+      id: "music-ace-step-15-xl",
+      icon: "🎼",
+      title: { en: "Music from words, higher quality (ACE-Step 1.5 XL)", he: "מוזיקה ממילים, איכות גבוהה (ACE-Step 1.5 XL)" },
+      description: {
+        en: "The bigger ACE-Step 1.5: an XL music model and a 4B planner. Better songs, especially in languages like Hebrew; slower, and a bigger download.",
+        he: "ACE-Step 1.5 הגדול: מודל מוזיקה XL ומתכנן 4B. שירים טובים יותר, במיוחד בשפות כמו עברית; איטי יותר, והורדה גדולה יותר.",
+      },
+      license: { name: "MIT", url: "https://github.com/ace-step/ACE-Step-1.5/blob/main/LICENSE" },
+      files: [
+        { label: "ACE-Step 1.5 XL turbo", repo: "Comfy-Org/ace_step_1.5_ComfyUI_files", path: "split_files/diffusion_models/acestep_v1.5_xl_turbo_bf16.safetensors", rel: "video/music/acestep_v1.5_xl_turbo_bf16.safetensors", gb: 10 },
+        { label: "ACE-Step 1.5 planner (Qwen 4B)", repo: "Comfy-Org/ace_step_1.5_ComfyUI_files", path: "split_files/text_encoders/qwen_4b_ace15.safetensors", rel: "text_encoders/qwen_4b_ace15.safetensors", gb: 8 },
+        { label: "ACE-Step 1.5 text encoder (Qwen 0.6B)", repo: "Comfy-Org/ace_step_1.5_ComfyUI_files", path: "split_files/text_encoders/qwen_0.6b_ace15.safetensors", rel: "text_encoders/qwen_0.6b_ace15.safetensors", gb: 1.2 },
+        { label: "ACE-Step 1.5 VAE", repo: "Comfy-Org/ace_step_1.5_ComfyUI_files", path: "split_files/vae/ace_1.5_vae.safetensors", rel: "vae/ace_1.5_vae.safetensors", gb: 0.3 },
+      ],
+      checkpoints: {},
+      names: [
+        { node: "1", input: "unet_name", folder: "diffusion_models", file: "acestep_v1.5_xl_turbo_bf16.safetensors" },
+        { node: "11", input: "clip_name1", folder: "text_encoders", file: "qwen_0.6b_ace15.safetensors" },
+        { node: "11", input: "clip_name2", folder: "text_encoders", file: "qwen_4b_ace15.safetensors" },
+        { node: "12", input: "vae_name", folder: "vae", file: "ace_1.5_vae.safetensors" },
+      ],
+      flow: {
+        "1": { class_type: "UNETLoader", inputs: { unet_name: "acestep_v1.5_xl_turbo_bf16.safetensors", weight_dtype: "default" }, _meta: { title: "ACE-Step 1.5 XL" } },
+        "11": { class_type: "DualCLIPLoader", inputs: { clip_name1: "qwen_0.6b_ace15.safetensors", clip_name2: "qwen_4b_ace15.safetensors", type: "ace", device: "default" }, _meta: { title: "Text encoder and planner" } },
+        "12": { class_type: "VAELoader", inputs: { vae_name: "ace_1.5_vae.safetensors" } },
+        "2": {
+          class_type: "TextEncodeAceStepAudio1.5",
+          inputs: {
+            clip: ["11", 0],
+            tags: "pop, upbeat, female vocals, piano, guitar, drums, catchy, bright",
+            lyrics: "[Verse]\nMorning light on the window\nCoffee warm in my hands\n\n[Chorus]\nSing it loud, sing it free\nThis is where I want to be\n",
+            seed: seed(),
+            bpm: 120,
+            duration: 60,
+            timesignature: "4",
+            language: "en",
+            keyscale: "C major",
+            generate_audio_codes: true,
+            cfg_scale: 2,
+            temperature: 0.85,
+            top_p: 0.9,
+            top_k: 0,
+            min_p: 0,
+          },
+          _meta: { title: "Style and lyrics" },
+        },
+        "3": { class_type: "ConditioningZeroOut", inputs: { conditioning: ["2", 0] } },
+        "4": { class_type: "EmptyAceStep1.5LatentAudio", inputs: { seconds: 60, batch_size: 1 }, _meta: { title: "Length (seconds)" } },
+        "5": { class_type: "ModelSamplingAuraFlow", inputs: { model: ["1", 0], shift: 3 } },
+        "8": { class_type: "KSampler", inputs: { model: ["5", 0], positive: ["2", 0], negative: ["3", 0], latent_image: ["4", 0], seed: seed(), steps: 8, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1 } },
+        "9": { class_type: "VAEDecodeAudio", inputs: { samples: ["8", 0], vae: ["12", 0] } },
         "10": { class_type: "SaveAudioMP3", inputs: { audio: ["9", 0], filename_prefix: "audio/KesherAI", quality: "V0" } },
       },
     },
@@ -250,11 +309,29 @@ export async function setupFlow(flow: ReadyFlow, modelsDir: string, downloads: D
  * @param available - Checkpoint names ComfyUI offers, e.g. `music\\ace_step_v1_3.5b.safetensors`.
  * @returns A copy with `ckpt_name` filled in; names not found stay as they were.
  */
-export function withCheckpoints(flow: ReadyFlow, available: readonly string[]): Record<string, ApiNode> {
+export function withCheckpoints(flow: ReadyFlow, available: readonly string[], inFolder: Partial<Record<string, readonly string[]>> = {}): Record<string, ApiNode> {
   const out = structuredClone(flow.flow);
+  const named = (list: readonly string[], file: string) => list.find((a) => a.split(/[\\/]/).pop() === file);
   for (const [id, file] of Object.entries(flow.checkpoints)) {
-    const found = available.find((a) => a.split(/[\\/]/).pop() === file);
+    const found = named(available, file);
     if (found && out[id]) out[id].inputs.ckpt_name = found;
   }
+  for (const n of flow.names ?? []) {
+    const found = named(inFolder[n.folder] ?? [], n.file);
+    const node = out[n.node];
+    if (found && node) node.inputs[n.input] = found;
+  }
   return out;
+}
+
+/**
+ * The names ComfyUI lists in each folder a flow's loaders read (its /models/<folder>), for withCheckpoints.
+ *
+ * @param flow - The flow.
+ * @param list - Lists one folder (ComfyUI's /models/<folder>; empty when it fails).
+ * @returns The names by folder.
+ */
+export async function folderNames(flow: ReadyFlow, list: (folder: string) => Promise<string[]>): Promise<Record<string, string[]>> {
+  const folders = [...new Set((flow.names ?? []).map((n) => n.folder))];
+  return Object.fromEntries(await Promise.all(folders.map(async (f) => [f, await list(f).catch(() => [])] as const)));
 }

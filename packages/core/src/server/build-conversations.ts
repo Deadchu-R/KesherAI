@@ -9,7 +9,7 @@ import { browserTools } from "../browser-bridge.js";
 import { canvasTools } from "../canvas.js";
 import { timerTools } from "../chat-timers.js";
 import { Checkpoints } from "../checkpoints.js";
-import { flowState, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
+import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
 import { redact } from "../fault-log.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import { googleTools } from "../google-tools.js";
@@ -199,8 +199,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
           const up = await fetch(`${comfy.status().url}/system_stats`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
           if (!up) await comfy.start();
         }
-        const names = await fetch(`${comfy.status().url}/models/checkpoints`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
-        const graph = withCheckpoints(flow, names);
+        const list = (folder: string) => fetch(`${comfy.status().url}/models/${folder}`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
+        const graph = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
         const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
         await edit(graph, (data, name) => provider.uploadImage(data, name));
         await guard.before("comfyui", signal);
