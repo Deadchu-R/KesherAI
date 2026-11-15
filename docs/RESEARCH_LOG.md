@@ -1128,7 +1128,10 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
   Stopped at: the rest of B3 — ComfyUI and the GPU guard need the notifier, runtimes and registry, so they move once
   B4/B5 give those a home; then B4 (`server/build-chat.ts`).
   B4, first part: `server/build-chat.ts` `addProviders` (the settings' providers, then auto-detected local servers);
-  1,123 lines. Stopped at: personas, skills, MCP and the conversation manager (the `services` object) are next.
+  1,123 lines. Personas and skills moved too (`openPersonasAndSkills`); 1,115 lines.
+  Stopped at: the conversation manager takes ~30 local services (search, Google, browser, speech, knowledge,
+  computer control, Unreal…), so the next step is a typed context object built once and passed to the area
+  builders (B4 rest, B5, B6) — design it first, then move the areas one by one.
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
