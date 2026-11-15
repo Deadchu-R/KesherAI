@@ -11,8 +11,26 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 interface Turn { seq: number; role: "user" | "assistant"; text: string }
 
+/** How often each model was picked "best" here (this browser only; a small arena of your own). */
+function readWins(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem("kesher-compare-wins") ?? "{}") as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+function addWin(model: string): void {
+  try {
+    const w = readWins();
+    w[model] = (w[model] ?? 0) + 1;
+    localStorage.setItem("kesher-compare-wins", JSON.stringify(w));
+  } catch {
+    /* fine: the tally is a convenience */
+  }
+}
+
 /** One pane: a conversation, live. */
-function Pane({ id, model, onRemove }: { id: string; model: string; onRemove?: () => void }) {
+function Pane({ id, model, onRemove, best, onBest }: { id: string; model: string; onRemove?: () => void; best: boolean; onBest: () => void }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [live, setLive] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,6 +74,12 @@ function Pane({ id, model, onRemove }: { id: string; model: string; onRemove?: (
         {live && <div className="msg streaming"><RichText text={live} /></div>}
         <div ref={end} />
       </div>
+      {turns.some((t) => t.role === "assistant") && (
+        <div className="cmp-foot">
+          <button type="button" className={best ? "on" : ""} aria-pressed={best} onClick={onBest}>{best ? "✓ " : ""}{L("הכי טוב", "Best")}</button>
+          <a className="button" href={`#/c/${id}`}>{L("המשך כאן", "Continue here")}</a>
+        </div>
+      )}
     </div>
   );
 }
@@ -76,6 +100,14 @@ export function ComparePage() {
   });
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [best, setBest] = useState<string>("");
+  const [wins, setWins] = useState(readWins);
+  const pickBest = (p: { id: string; model: string }) => {
+    if (best === p.id) return;
+    setBest(p.id);
+    addWin(p.model);
+    setWins(readWins());
+  };
   useEffect(() => {
     try {
       sessionStorage.setItem("kesher-compare", JSON.stringify(panes));
@@ -113,7 +145,7 @@ export function ComparePage() {
     <div className="page compare">
       <div className="row">
         <h1 className="grow">{L("השוואת מודלים", "Compare models")}</h1>
-        {panes.length > 0 && <button type="button" onClick={() => setPanes([])}>{L("השוואה חדשה", "New comparison")}</button>}
+        {panes.length > 0 && <button type="button" onClick={() => { setPanes([]); setBest(""); }}>{L("השוואה חדשה", "New comparison")}</button>}
       </div>
       {!panes.length && (
         <section className="card stack">
@@ -122,6 +154,7 @@ export function ComparePage() {
             {picked.map((m, i) => (
               <span key={i} className="row cmp-pick">
                 <ModelMenu models={models} value={m} onChange={(id) => setPicked(picked.map((x, j) => (j === i ? id : x)))} />
+                {wins[m] ? <span className="muted small" title={L("כמה פעמים בחרת בו כהכי טוב כאן", "How often you picked it as best here")}>🏆 {wins[m]}</span> : null}
                 {picked.length > 2 && <button type="button" className="as-link" onClick={() => setPicked(picked.filter((_, j) => j !== i))}>✕</button>}
               </span>
             ))}
@@ -131,13 +164,13 @@ export function ComparePage() {
       )}
       {panes.length > 0 && (
         <div className={`cmp-grid n${panes.length}`}>
-          {panes.map((p) => <Pane key={p.id} id={p.id} model={p.model} {...(panes.length > 2 ? { onRemove: () => setPanes(panes.filter((x) => x.id !== p.id)) } : {})} />)}
+          {panes.map((p) => <Pane key={p.id} id={p.id} model={p.model} best={best === p.id} onBest={() => pickBest(p)} {...(panes.length > 2 ? { onRemove: () => setPanes(panes.filter((x) => x.id !== p.id)) } : {})} />)}
         </div>
       )}
       <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <div className="box">
           <PromptTextarea rows={2} value={text} onValue={setText} placeholder={L("שאלה לכל המודלים…", "A question for all the models…")} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
-          <div className="box-bar"><span className="grow" /><button type="submit" className="primary send" disabled={!text.trim() || busy || picked.length < 2} aria-label={L("שליחה", "Send")}>↑</button></div>
+          <div className="box-bar"><span className="grow muted small">{L(`נשלח ל־${panes.length || picked.length} מודלים`, `Goes to ${panes.length || picked.length} models`)}</span><button type="submit" className="primary send" disabled={!text.trim() || busy || picked.length < 2} aria-label={L("שליחה", "Send")}>↑</button></div>
         </div>
       </form>
     </div>
