@@ -89,3 +89,26 @@ test("an installer with no fingerprint in the release's feed is deleted, not run
   srv.closeAllConnections();
   srv.close();
 });
+
+test("what's new: releases newest first with their bullet points; drafts and pre-releases left out", async () => {
+  const srv = createServer((req, res) => {
+    if (req.url === "/repos/o/r/releases?per_page=30") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify([
+        { tag_name: "v0.4.1", body: "- Old fix", published_at: "2026-01-01T00:00:00Z" },
+        { tag_name: "v0.4.10", body: "### New\n- **Big:** thing\n- Small\nnot a bullet", published_at: "2026-02-01T00:00:00Z" },
+        { tag_name: "v0.5.0-beta", body: "- beta" },
+        { tag_name: "v0.4.9", draft: true, body: "- draft" },
+      ]));
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const api = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+  const u = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.1", repo: "o/r", api, install: async () => undefined });
+  const h = await u.history();
+  assert.deepEqual(h.map((r) => r.version), ["0.4.10", "0.4.1"]);
+  assert.deepEqual(h[0]?.notes, ["Big: thing", "Small"]);
+  srv.closeAllConnections();
+  srv.close();
+});

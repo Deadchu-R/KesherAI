@@ -218,6 +218,33 @@ export class Updater {
     return best;
   }
 
+  private historyCache?: { at: number; list: Array<{ version: string; date?: string; notes: string[] }> };
+
+  /**
+   * What's new: the last releases with their notes (the release's bullet points), newest first. From GitHub,
+   * remembered for ten minutes; an empty list when GitHub cannot be reached.
+   *
+   * @param count - How many releases (default 8).
+   */
+  async history(count = 8): Promise<Array<{ version: string; date?: string; notes: string[] }>> {
+    if (!this.packaged) return [];
+    if (this.historyCache && Date.now() - this.historyCache.at < 600_000) return this.historyCache.list.slice(0, count);
+    type Release = { tag_name: string; body?: string | null; draft?: boolean; prerelease?: boolean; published_at?: string | null };
+    const res = await fetchRetrying(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases?per_page=30`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) }).catch(() => undefined);
+    if (!res?.ok) return this.historyCache?.list.slice(0, count) ?? [];
+    const list = ((await res.json()) as Release[])
+      .filter((r) => !r.draft && !r.prerelease && /^v?\d+\.\d+\.\d+$/.test(r.tag_name))
+      .sort((a, b) => compareVersions(b.tag_name, a.tag_name))
+      .slice(0, 20)
+      .map((r) => ({
+        version: r.tag_name.replace(/^v/, ""),
+        ...(r.published_at ? { date: r.published_at } : {}),
+        notes: (r.body ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.replace(/^[-*] /, "").replace(/\*\*/g, "")).slice(0, 8),
+      }));
+    this.historyCache = { at: Date.now(), list };
+    return list.slice(0, count);
+  }
+
   /** Installed copies: is there a newer release on GitHub, with an installer for this system? */
   private async checkGitHub(info: VersionInfo, force = false): Promise<UpdateCheck> {
     if (!this.packaged) throw new Error("This copy was not installed with git, so it cannot update itself here.");

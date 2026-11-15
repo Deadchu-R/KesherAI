@@ -13,6 +13,7 @@ export function UpdatesPage() {
     <div className="page">
       <h1>{t("updatesNav")}</h1>
       <Updates />
+      <WhatsNew />
       <UpdateFeed />
       <PhoneAppUpdates />
     </div>
@@ -215,6 +216,34 @@ function Updates() {
   );
 }
 
+
+/** What's new: the last releases and their notes, the installed one marked (as in the redesign). */
+function WhatsNew() {
+  const he = getLocale() === "he";
+  const [list, setList] = useState<Array<{ version: string; date?: string; notes: string[] }> | null>(null);
+  const [mine, setMine] = useState("");
+  useEffect(() => {
+    void api<{ releases: Array<{ version: string; date?: string; notes: string[] }> }>("/api/updates/history").then((r) => setList(r.releases), () => setList([]));
+    void api<{ version: string }>("/api/version").then((v) => setMine(v.version), () => undefined);
+  }, []);
+  if (!list?.length) return null;
+  return (
+    <section className="card stack">
+      <h2>{he ? "מה חדש" : "What's new"}</h2>
+      <div className="releases">
+        {list.map((r) => (
+          <div key={r.version} className="release">
+            <h3>
+              {r.version}
+              <small>{r.date ? new Date(r.date).toLocaleDateString(he ? "he-IL" : undefined) : ""}{r.version === mine ? (he ? " · מותקנת" : " · installed") : ""}</small>
+            </h3>
+            {r.notes.length > 0 && <ul dir="auto">{r.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /**
  * Updates without GitHub: what this computer passes on to my other computers (the installer it last downloaded and

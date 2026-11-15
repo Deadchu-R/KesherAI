@@ -811,6 +811,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
   app.get("/api/updates/progress", async () => s.updater.status());
+  /** What's new: the last releases and their notes (the updates screen's list). */
+  app.get("/api/updates/history", async () => ({ releases: await s.updater.history() }));
   /** Long builds running now (they keep going through an update; the chat joins them again after the restart). */
   app.get("/api/jobs", async () => ({
     running: (await s.conversations.jobs().running()).map((j) => ({ id: j.id, key: j.key, startedAt: j.startedAt })),
