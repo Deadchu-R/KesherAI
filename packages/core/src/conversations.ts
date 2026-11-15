@@ -30,6 +30,7 @@ import { filingPrompt, parseFiling, worthFiling } from "./memory-store.js";
 import { createSessionWorktree, removeSessionWorktree, worktreeName, worktreeWork, type Git, type SessionWorktree } from "./session-worktrees.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 import { lookTools, mediaTools } from "./chat-tools-media.js";
+import { settingsTool } from "./chat-tools-settings.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
@@ -179,7 +180,7 @@ export class ConversationManager {
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
-    const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...learnTools(this.deps)];
+    const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...learnTools(this.deps), ...(this.deps.saveConfig ? [settingsTool(this.deps.config, () => this.deps.saveConfig!())] : [])];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
     const split = splitTools(this.deps, () => this.defaultChatModel(), media.notes, id);
     // The numbers of an exported chat between people (the relationship analyst persona uses it).

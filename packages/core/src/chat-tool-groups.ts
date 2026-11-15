@@ -27,7 +27,7 @@ export function computerGroup(tools: AgentTool[]): ToolGroup {
 }
 
 /** Tools a chat written from Telegram never gets: the screen, the browser, and what runs code in a game engine. */
-export const NOT_FROM_TELEGRAM = /^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor|port_plugin)$|android_run_on_phone$)/;
+export const NOT_FROM_TELEGRAM = /^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor|port_plugin)$|android_run_on_phone$|change_setting$)/;
 
 /**
  * A chat written from Telegram (someone with the bot's chat, away from the computer): it never controls the screen
