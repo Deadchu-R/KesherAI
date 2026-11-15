@@ -1123,3 +1123,17 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
 - Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
   Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
   this app" and an agent mode with tools.
+
+## 2026-11-15 (night): As-you-type suggestions in any app (COMPETITORS fourth review, item 11)
+- AnythingLLM Magic Tab (docs.anythingllm.com/pro/magic-tab): after a typing pause (750 ms recommended) a ghost
+  suggestion appears by the cursor in any app; Tab accepts, typing on dismisses; "chaining" offers the next one; a
+  model tier (default, lightweight, balanced, intelligent) downloaded in the background; ignored apps (terminal,
+  games); macOS needs Accessibility and Input Monitoring (Screen Recording for on-focus suggestions); Windows needs no
+  permission.
+- What KesherAI would need: a low-level keyboard hook in every app (on Windows a resident helper with
+  SetWindowsHookEx or UI Automation to read the text around the caret), a caret-anchored overlay window, and a small
+  fast model always loaded next to the chat model (on the 3090 that takes card memory from Qwen). It reads everything
+  the user types everywhere, so it needs its own clear on/off, ignored apps, and never a cloud model.
+Stopped at: this assessment. Proposed order for Roee: (1) a small fast model's speed on the 3090 next to Qwen,
+(2) UI Automation around the caret in Notepad, Word and Chrome, (3) only then the overlay. Not before the Canvas
+and share-link decisions.
