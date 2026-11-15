@@ -54,6 +54,15 @@ add to the drawing yourself; the model sees your changes when it reads the canva
 open. **Export** saves a PNG, an SVG or an `.excalidraw` file. Every canvas is listed under **Create → Canvas**, where
 you can also start one without a chat (or open one from a chat's ⋯ menu). Incognito chats have no canvas.
 
+## Sharing a chat as a page
+
+In a chat's **⋯** menu, **Share…** makes a read-only web page of the chat as it is now: what you wrote and the
+answers, without tool steps, without paths from this computer and without your name. Copy the link and send it.
+**Update to the chat now** puts later messages on the same link; **Stop sharing** closes it at once. A link works
+for a day, a week, 30 days or until you stop it, and people outside your home network can open it only while
+**Access from anywhere** is on (Settings → Phone, where every shared chat is listed with how often it was opened).
+Incognito chats cannot be shared.
+
 ## Files in the chat
 
 Attached files show as chips in your message; a tap opens a preview: a table for Excel, CSV and TSV (with sheet

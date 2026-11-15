@@ -23,12 +23,12 @@ export async function shareRoutes(app: FastifyInstance, store: ShareStore, readC
   });
 
   /** Shares the chat as it is now, or updates its share (same link). */
-  app.post<{ Params: { id: string }; Body: { days?: number } }>("/api/conversations/:id/share", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { days?: number; lang?: string } }>("/api/conversations/:id/share", async (req, reply) => {
     const chat = await readChat(req.params.id);
     if (!chat) return reply.code(404).send({ error: "This chat cannot be shared." });
     const days = [0, 1, 7, 30].includes(Number(req.body?.days)) ? Number(req.body?.days) : 7;
     try {
-      const s = await store.share(req.params.id, chat.title, snapshotOf(chat.events), days);
+      const s = await store.share(req.params.id, chat.title, snapshotOf(chat.events), days, Date.now(), req.body?.lang === "he" ? "he" : "en");
       return { share: { id: s.id, title: s.title, messages: s.messages.length, expiresAt: s.expiresAt, views: s.views, path: `/s/${s.token}` } };
     } catch (err) {
       const e = err as Error & { code?: number };

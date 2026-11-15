@@ -32,6 +32,8 @@ export interface Share {
   /** When the link stops working (none: until revoked). */
   expiresAt: string | null;
   views: number;
+  /** The sharer's interface language: the page's labels and direction. */
+  lang?: "he" | "en";
 }
 
 /** What the share list shows (no messages). */
@@ -122,17 +124,18 @@ export class ShareStore {
    * @param messages - The snapshot.
    * @param days - How long the link works (0: until revoked).
    * @param now - The time (tests pass their own).
+   * @param lang - The sharer's interface language (the page's labels).
    * @returns The share.
    */
-  async share(convId: string, title: string, messages: SharedMessage[], days: number, now = Date.now()): Promise<Share> {
+  async share(convId: string, title: string, messages: SharedMessage[], days: number, now = Date.now(), lang: "he" | "en" = "en"): Promise<Share> {
     if (!messages.length) throw Object.assign(new Error("There is nothing to share in this chat yet."), { code: 400 });
     const list = await this.all();
     const at = new Date(now).toISOString();
     const expiresAt = days > 0 ? new Date(now + Math.min(days, 365) * 86_400_000).toISOString() : null;
     let s = list.find((x) => x.convId === convId);
-    if (s) Object.assign(s, { title: cleanForShare(title).slice(0, 200), messages, updatedAt: at, expiresAt });
+    if (s) Object.assign(s, { title: cleanForShare(title).slice(0, 200), messages, updatedAt: at, expiresAt, lang });
     else {
-      s = { id: randomBytes(6).toString("hex"), token: randomBytes(16).toString("base64url"), convId, title: cleanForShare(title).slice(0, 200), messages, createdAt: at, updatedAt: at, expiresAt, views: 0 };
+      s = { id: randomBytes(6).toString("hex"), token: randomBytes(16).toString("base64url"), convId, title: cleanForShare(title).slice(0, 200), messages, createdAt: at, updatedAt: at, expiresAt, views: 0, lang };
       list.push(s);
     }
     await this.save();
@@ -181,11 +184,14 @@ export class ShareStore {
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
+/** Bold and inline code inside escaped text (nothing else: no links, no pictures). */
+const inline = (t: string) => t.replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+
 /** A message's text as safe HTML: code blocks as <pre>, the rest as paragraphs (no links, no pictures, no scripts). */
 function body(text: string): string {
   return text
     .split(/```[^\n]*\n?/)
-    .map((part, i) => (i % 2 ? `<pre>${esc(part.replace(/\n$/, ""))}</pre>` : part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p dir="auto">${esc(p).replace(/\n/g, "<br>")}</p>`).join("")))
+    .map((part, i) => (i % 2 ? `<pre>${esc(part.replace(/\n$/, ""))}</pre>` : part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p dir="auto">${inline(esc(p)).replace(/\n/g, "<br>")}</p>`).join("")))
     .join("");
 }
 
@@ -206,11 +212,13 @@ export const SHARE_HEADERS: Record<string, string> = {
  * @returns The page.
  */
 export function sharePage(s: Share | undefined): string {
-  const css = `body{margin:0;background:#141414;color:#e8e8e8;font:16px/1.6 system-ui,sans-serif}main{max-width:760px;margin:0 auto;padding:24px 16px 64px}h1{font-size:20px;margin:0 0 4px}.meta{color:#999;font-size:13px;margin:0 0 24px}.m{margin:0 0 20px}.user{background:#262626;border-radius:12px;padding:10px 14px;margin-inline-start:15%}.who{font-size:12px;color:#999;margin:0 0 4px}pre{background:#0b101a;border:1px solid #333;border-radius:8px;padding:10px;overflow-x:auto;white-space:pre;direction:ltr;text-align:left;font:13px ui-monospace,monospace}.files{font-size:13px;color:#bbb}p{margin:0 0 8px;overflow-wrap:anywhere}@media(prefers-color-scheme:light){body{background:#fff;color:#1b1b1b}.user{background:#f1f1f1}pre{background:#f6f8fa;border-color:#ddd}}`;
-  const head = (title: string) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title><style>${css}</style></head>`;
+  const css = `body{margin:0;background:#141414;color:#e8e8e8;font:16px/1.6 system-ui,sans-serif}main{max-width:760px;margin:0 auto;padding:24px 16px 64px}h1{font-size:20px;margin:0 0 4px}.meta{color:#999;font-size:13px;margin:0 0 24px}.m{margin:0 0 20px}.user{background:#262626;border-radius:12px;padding:10px 14px;margin-inline-start:15%}.who{font-size:12px;color:#999;margin:0 0 4px}pre{background:#0b101a;border:1px solid #333;border-radius:8px;padding:10px;overflow-x:auto;white-space:pre;direction:ltr;text-align:left;font:13px ui-monospace,monospace}.files{font-size:13px;color:#bbb}code{font:13px ui-monospace,monospace;background:rgba(127,127,127,.18);border-radius:4px;padding:1px 4px}p{margin:0 0 8px;overflow-wrap:anywhere}@media(prefers-color-scheme:light){body{background:#fff;color:#1b1b1b}.user{background:#f1f1f1}pre{background:#f6f8fa;border-color:#ddd}}`;
+  const he = s?.lang === "he";
+  const T = (h: string, e: string) => (he ? h : e);
+  const head = (title: string) => `<!doctype html><html lang="${he ? "he" : "en"}" dir="${he ? "rtl" : "ltr"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title><style>${css}</style></head>`;
   if (!s) return `${head("Not shared")}<body><main><h1>This link is no longer shared</h1><p class="meta">It was revoked or it expired. Ask the person who sent it for a new one.</p></main></body></html>`;
   const msgs = s.messages
-    .map((m) => `<section class="m ${m.role}"><p class="who">${m.role === "user" ? "Question" : "Answer"}</p>${m.files?.length ? `<p class="files">📎 ${m.files.map(esc).join(", ")}</p>` : ""}${body(m.text)}</section>`)
+    .map((m) => `<section class="m ${m.role}"><p class="who">${m.role === "user" ? T("שאלה", "Question") : T("תשובה", "Answer")}</p>${m.files?.length ? `<p class="files">📎 ${m.files.map(esc).join(", ")}</p>` : ""}${body(m.text)}</section>`)
     .join("");
-  return `${head(s.title)}<body><main><h1 dir="auto">${esc(s.title)}</h1><p class="meta">Shared from KesherAI · ${esc(s.updatedAt.slice(0, 10))} · read-only</p>${msgs}</main></body></html>`;
+  return `${head(s.title)}<body><main><h1 dir="auto">${esc(s.title)}</h1><p class="meta">${T("שותף מקשר", "Shared from KesherAI")} · ${esc(s.updatedAt.slice(0, 10))} · ${T("לקריאה בלבד", "read-only")}</p>${msgs}</main></body></html>`;
 }

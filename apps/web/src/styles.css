@@ -2350,3 +2350,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .canvas-head > .canvas-title { flex: 1 1 auto; }
 /* A chip with words (the plain .chip is a 32px icon square). */
 .chip.text-chip { width: auto; min-width: 32px; padding: 0 10px; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text); text-decoration: none; }
+.share-warn { color: #fbbf24; }
+.shares-list { list-style: none; padding: 0; margin: 0; }
+.shares-list li { gap: 8px; flex-wrap: wrap; }

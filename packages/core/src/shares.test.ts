@@ -42,7 +42,11 @@ test("share, update with the same link, expiry, views, revoke; the page is escap
   assert.doesNotMatch(page, /<script>|<b>/);
   assert.match(page, /Plan &lt;b&gt;/);
   assert.match(page, /<pre>x &lt; 1<\/pre>/);
-  assert.equal((await store.list()).length, 2);
+  const heb = sharePage({ ...(await store.share("c3", "טיול", [{ role: "assistant", text: "**חשוב** ו-`code` <i>" }], 7, t0, "he")), views: 0 });
+  assert.match(heb, /dir="rtl"/);
+  assert.match(heb, /<strong>חשוב<\/strong> ו-<code>code<\/code> &lt;i&gt;/);
+  assert.match(heb, />תשובה</);
+  assert.equal((await store.list()).length, 3);
   assert.equal(await store.revoke(b.id), true);
   assert.equal(await store.open(a.token), undefined, "revoked at once");
   assert.match(sharePage(undefined), /no longer shared/);

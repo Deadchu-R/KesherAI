@@ -1,3 +1,4 @@
+import { SharesSection } from "./SharesSection";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { api, isRemote } from "../api";
@@ -143,6 +144,7 @@ export function PhoneSection() {
           <a href={APK_URL} target="_blank" rel="noreferrer">{t("downloadApk")}</a>
         </figure>
       )}
+      <SharesSection />
     </section>
   );
 }

@@ -37,6 +37,7 @@ import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../Blueprin
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
+import { ShareDialog } from "../chat/ShareDialog";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
 import { splitAttachments } from "../attach-lines";
@@ -365,6 +366,7 @@ export function ConversationPage({ id }: { id: string }) {
     return after.map((g) => groupSummary(g.steps)).filter(Boolean).slice(-8);
   }, [blocks, versions.lastUser]);
   const [stepsOpen, setStepsOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
   // An answer's sources (the seq of that answer), shown in the pane column.
   const [sourcesFor, setSourcesFor] = useState<number | null>(null);
@@ -599,12 +601,14 @@ export function ConversationPage({ id }: { id: string }) {
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "md")}>{getLocale() === "he" ? "ייצוא ל-Markdown" : "Export as Markdown"}</MenuItem>
             <MenuItem icon="⬇" onSelect={() => exportChat(conv.id, "pdf")}>{getLocale() === "he" ? "ייצוא ל-PDF" : "Export as PDF"}</MenuItem>
             {!conv.incognito && <MenuItem icon="🎨" onSelect={() => openChatCanvas(conv.id)}>{getLocale() === "he" ? "קנבס" : "Canvas"}</MenuItem>}
+            {!conv.incognito && <MenuItem icon="🔗" onSelect={() => setSharing(true)}>{getLocale() === "he" ? "שיתוף…" : "Share…"}</MenuItem>}
             <MenuSeparator />
             <MenuItem icon="🗑" danger onSelect={() => void remove()}>{t("delete")}</MenuItem>
           </Menu>
         ),
         slot,
       )}
+      {sharing && <ShareDialog convId={conv.id} onClose={() => setSharing(false)} />}
       <div className="topbar conv-tools" data-conv-kind={conv.kind}>
         <ChatBarButton kind={conv.kind} bar={conv.bar} onChange={(bar) => void patch({ bar: bar ?? {} })} />
         {show("team", (conv.team ?? []).length > 0) && <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />}
