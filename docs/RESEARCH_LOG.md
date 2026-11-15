@@ -1245,3 +1245,25 @@ Stopped at: building (store and public page first, then the chat menu and the se
   wires; a toolbar menu in every graph (Unreal Blueprints, Unity graphs, C# as nodes), saved in the look so the phone
   matches. Tests in `wire-style.test.ts`.
 - **Stopped at / later:** routing around node bodies (UltraWire's A*), crossing markers, a minimap.
+
+## Night of the redesign (2026-11-15)
+
+- **@ menu (F17):** Claude, Cursor and Open WebUI open one list on `@` (models, files, knowledge). Built (0.6.239):
+  models, knowledge bases and pages, 4 per group, keys at the bottom; a model pick switches the chat (one-turn
+  model is later: the server's `send` has no per-message model yet).
+- **Side chat (F3):** Claude's `/btw`, Open WebUI's `/side`: an aside that never enters the chat. Built (0.6.240):
+  `/side` or `/btw`, or the chat's menu; read-only context, no tools, kept in memory only.
+- **Model test (F11):** PocketPal and Locally Uncensored show speed and a small quality test. Built: 10 fixed
+  questions at temperature 0 after the speed test ("8 of 10 right"). Not kept yet: shown once on the button.
+- **Usage picture (F21):** Open WebUI 0.11 and GitHub: a grid of days. Built: 12 weeks, streak, days used.
+- **Settings from the chat (F12):** Locally Uncensored 3.0.8 changes its settings from the chat with a confirmation.
+  Built: `change_setting`, a short allow-list (meetings, notifications, dictation language, active models), always a
+  card with old → new; remote access, keys and permissions never.
+- **Updates without GitHub (asked 2026-11-15):** electron-builder's "generic" provider is a plain folder (or any web
+  server) with `latest.yml`, the installer and its sha512; KesherAI's updater already reads exactly that from
+  GitHub. Plan: a computer that builds (`pnpm dist` in the repo) serves that folder read-only at
+  `/api/updates/feed/*` (latest.yml, the installer, the phone's APK; fixed names, no paths from a request), and other
+  computers and the phone get a "where updates come from" setting (GitHub, or that computer through the existing
+  device link). The sha512 check stays as it is.
+- **Stopped at:** the local update source is planned, not built (it needs builds on the PC; GitHub works for the
+  public repo: the minutes Roee ran out of were another repo's). Next: Roee's decision in the morning.
