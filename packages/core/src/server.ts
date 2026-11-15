@@ -97,10 +97,8 @@ import { browserRoutes } from "./routes/browser.js";
 import { comfyUiRoutes } from "./routes/comfy-ui.js";
 import { partsRoutes } from "./routes/parts.js";
 import { TelegramBridge } from "./telegram.js";
-import { AccessLog } from "./access-log.js";
 import { Training } from "./training.js";
 import { ChatTrainer } from "./chat-trainer.js";
-import { DeviceKeys, type DeviceKey } from "./device-keys.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { Pages } from "./pages.js";
@@ -132,7 +130,7 @@ import { Journal } from "./journal.js";
 import { McpManager } from "./mcp.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
-import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
+import { allowedOrigin, isLocalRequest } from "./auth.js";
 import type { KesherServices } from "./services.js";
 import { systemRoutes, TERMINATED_FILE } from "./routes/system.js";
 import { shortcutRoutes } from "./routes/shortcuts.js";
@@ -152,7 +150,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
-import { buildTunnel, watchDisk } from "./server/build-remote.js";
+import { buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -771,17 +769,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await trainingRoutes(app, { training, chatTrainer, vramGb: async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) });
   // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
   await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
-  // Who came in from outside (and who was refused), for Settings → Phone.
-  const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));
-  const deviceKeys = new DeviceKeys(() => config.remote.devices, persist);
-  if (features.remote) {
-    registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally }, (r) => accessLog.note(r), {
-      find: (k) => deviceKeys.find(k),
-      seen: (d, a) => deviceKeys.seen(d as DeviceKey, a),
-      devicesOnly: () => config.remote.anywhereDevicesOnly,
-      idleDays: () => config.remote.anywhereIdleDays,
-    });
-  }
+  const { accessLog, deviceKeys } = setupRemoteAccess(app, { paths, config, persist, notifier, apiKeys });
   services.deviceKeys = deviceKeys;
   // Paired devices (their own keys) and how the internet link lets them in: Settings → Phone.
   await remoteDeviceRoutes(app, services, deviceKeys, accessLog);

@@ -4,6 +4,12 @@
  * the notifier still start in server.ts (they need the chats, made later).
  */
 import { join } from "node:path";
+import type { FastifyInstance } from "fastify";
+import { features } from "@kesher/shared";
+import { AccessLog } from "../access-log.js";
+import type { ApiKeys } from "../api-keys.js";
+import { registerRemoteAuth } from "../auth.js";
+import { DeviceKeys, type DeviceKey } from "../device-keys.js";
 import { freeSpace, type DownloadManager } from "@kesher/downloads";
 import type { DataPaths, KesherConfig } from "../config.js";
 import type { Notifier } from "../notify.js";
@@ -52,4 +58,28 @@ export function watchDisk(paths: DataPaths, notifier: Notifier): void {
   };
   setTimeout(() => void checkDisk(), 60_000).unref();
   setInterval(() => void checkDisk(), 30 * 60_000).unref();
+}
+
+/**
+ * Who may come in from elsewhere: the remote token, each paired device's own key, and an API key for the model API;
+ * every refused or outside request goes to the access log (Settings → Phone), which warns about a stranger. Called
+ * where it always was in createKesherServer (the auth hook's place among the routes is the same).
+ *
+ * @param app - The server.
+ * @param p - The paths, settings and their saving, the notifier (for the access log's warnings) and the API keys.
+ * @returns The access log and the device keys (the routes for paired devices use both).
+ */
+export function setupRemoteAccess(app: FastifyInstance, p: { paths: DataPaths; config: KesherConfig; persist: () => Promise<void>; notifier: Notifier; apiKeys: ApiKeys }): { accessLog: AccessLog; deviceKeys: DeviceKeys } {
+  const { paths, config, persist, notifier, apiKeys } = p;
+  const accessLog = new AccessLog(join(paths.root, "access-log.json"), (title, body) => void notifier.send({ title, body, path: "#/settings/phone", tags: ["rotating_light"], priority: 4 }).catch(() => undefined));
+  const deviceKeys = new DeviceKeys(() => config.remote.devices, persist);
+  if (features.remote) {
+    registerRemoteAuth(app, () => config.remote.token, { verify: (k) => apiKeys.verify(k), requireLocally: () => config.apiAuth.requireKeyLocally }, (r) => accessLog.note(r), {
+      find: (k) => deviceKeys.find(k),
+      seen: (d, a) => deviceKeys.seen(d as DeviceKey, a),
+      devicesOnly: () => config.remote.anywhereDevicesOnly,
+      idleDays: () => config.remote.anywhereIdleDays,
+    });
+  }
+  return { accessLog, deviceKeys };
 }
