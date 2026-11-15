@@ -29,7 +29,7 @@ test("parts: off ones hide their pages, chat-only and everything presets", async
     assert.deepEqual(server.services.config.parts, {});
   } finally {
     await server.close();
-    await rm(dataDir, { recursive: true, force: true });
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
 
