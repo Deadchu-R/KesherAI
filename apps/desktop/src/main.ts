@@ -616,8 +616,13 @@ async function toggleDictation(coreUrl: string): Promise<void> {
     dictWin.webContents.on("will-navigate", (event, target) => {
       if (!target.startsWith(`${base}/`)) event.preventDefault();
     });
-  } else dictWin.setBounds(bounds);
-  await dictWin.loadURL(`${base}/#/dictate`);
+    // The first time: load the bar (it starts listening as it opens). Later presses reuse it, already loaded, so
+    // listening starts at once and the first words are not lost (a reload took about a second).
+    await dictWin.loadURL(`${base}/#/dictate`);
+  } else {
+    dictWin.setBounds(bounds);
+    dictWin.webContents.send("kesher:dictate-start");
+  }
   dictWin.showInactive();
 }
 

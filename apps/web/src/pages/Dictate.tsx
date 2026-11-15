@@ -24,9 +24,22 @@ export function Dictate() {
   const finish = useRef<(keep: boolean) => void>(() => undefined);
   const bridge = desktop();
 
-  useEffect(() => {
+  // The current listening, so a new one (the key pressed again while the bar is hidden) ends it first.
+  const endCurrent = useRef<() => void>(() => undefined);
+
+  /** Starts listening: when the bar opens, and each time the key is pressed again later (the bar stays loaded). */
+  const begin = () => {
+    endCurrent.current();
+    setState("starting");
+    setSecs(0);
+    setLevel(0);
+    setError("");
     let stopped = false;
     let cleanup = () => undefined as void;
+    endCurrent.current = () => {
+      stopped = true;
+      cleanup();
+    };
     const close = (text = "") => void bridge?.dictateDone?.(text);
     void (async () => {
       let stream: MediaStream;
@@ -37,6 +50,8 @@ export function Dictate() {
         setState("error");
         return;
       }
+      // Ended (a new press) while the microphone was opening: let it go.
+      if (stopped) return stream.getTracks().forEach((t) => t.stop());
       const ctx = new AudioContext({ sampleRate: 16000 });
       const src = ctx.createMediaStreamSource(stream);
       const node = ctx.createScriptProcessor(4096, 1, 1);
@@ -90,12 +105,18 @@ export function Dictate() {
         })();
       };
     })();
-    const off = bridge?.onDictateStop?.(() => finish.current(true));
+  };
+
+  useEffect(() => {
+    begin();
+    const offStop = bridge?.onDictateStop?.(() => finish.current(true));
+    const offStart = bridge?.onDictateStart?.(() => begin());
     return () => {
-      off?.();
-      cleanup();
+      offStop?.();
+      offStart?.();
+      endCurrent.current();
     };
-    // Once, when the bar opens (it loads again for each dictation).
+    // Once: the bar stays loaded, and `begin` runs again on each new press.
   }, []);
 
   const mm = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
