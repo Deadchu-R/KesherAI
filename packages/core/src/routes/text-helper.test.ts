@@ -18,3 +18,10 @@ test("no more than 30 selections wait at once", () => {
   for (let i = 0; i < 30; i++) keepSelection(`s${i}`, t0);
   assert.equal(selectionOf(first, t0), undefined);
 });
+
+test("the user's own quick actions: a name and an instruction, cut, at most 12", async () => {
+  const { cleanTextActions } = await import("./text-helper.js");
+  assert.deepEqual(cleanTextActions([{ label: " Formal email ", prompt: "Rewrite as a formal email." }, { label: "", prompt: "x" }, { label: "x" }, 5, null]), [{ label: "Formal email", prompt: "Rewrite as a formal email." }]);
+  assert.equal(cleanTextActions(Array.from({ length: 20 }, (_, i) => ({ label: `a${i}`, prompt: "p" }))).length, 12);
+  assert.equal(cleanTextActions([{ label: "x".repeat(99), prompt: "p" }])[0]!.label.length, 40);
+});

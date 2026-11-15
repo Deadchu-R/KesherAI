@@ -299,6 +299,8 @@ export const KesherConfigSchema = z.object({
   keyboardShortcuts: z.record(z.string(), z.string().nullable()).default({}),
   /** Turn off KesherAI's in-app shortcuts (global ones are turned off one by one). */
   keyboardOff: z.boolean().default(false),
+  /** The Text Helper's own quick actions (Settings → Keyboard and helpers): a button's name and what it asks. */
+  textActions: z.array(z.object({ label: z.string(), prompt: z.string() })).default([]),
   /** Code environments by folder (setup command, actions, variables), set on the Code page. */
   codeEnvironments: z.record(z.string(), z.any()).default({}),
   /** Named code environments (any folder), picked when a code session starts: { id, name, setup, actions, env }. */

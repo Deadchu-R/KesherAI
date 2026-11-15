@@ -22,6 +22,11 @@ export function TextHelper({ hash }: { hash: string }) {
   const [answer, setAnswer] = useState("");
   const [question, setQuestion] = useState("");
   const inWindow = !!desktop()?.textPaste;
+  // The user's own quick actions (Settings → Keyboard and helpers).
+  const [mine, setMine] = useState<Array<{ label: string; prompt: string }>>([]);
+  useEffect(() => {
+    void api<{ actions: Array<{ label: string; prompt: string }> }>("/api/text-helper/actions").then((r) => setMine(r.actions), () => undefined);
+  }, []);
 
   useEffect(() => {
     void api<{ text: string }>(`/api/text-helper/${encodeURIComponent(selId)}`)
@@ -107,6 +112,12 @@ export function TextHelper({ hash }: { hash: string }) {
           {actions.map((a) => (
             <button key={a.kind} type="button" disabled={busy} onClick={() => void ask(actionPrompt(a.kind, t, getLocale()))}>
               <LineIcon name={a.icon} size={16} />
+              {a.label}
+            </button>
+          ))}
+          {mine.map((a, i) => (
+            <button key={`mine-${i}`} type="button" disabled={busy} title={a.prompt} onClick={() => void ask(`${a.prompt}\n\n"""\n${t}\n"""`)} dir="auto">
+              <LineIcon name="star" size={16} />
               {a.label}
             </button>
           ))}

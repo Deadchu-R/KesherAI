@@ -46,6 +46,22 @@ export function selectionOf(id: string, now = Date.now()): string | undefined {
 }
 
 /**
+ * Only valid quick actions: a name (1–40 characters) and an instruction (1–1,000), at most 12.
+ *
+ * @param list - Anything (a request body).
+ */
+export function cleanTextActions(list: unknown[]): Array<{ label: string; prompt: string }> {
+  return list
+    .flatMap((a) => {
+      const o = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+      const label = typeof o.label === "string" ? o.label.trim().slice(0, 40) : "";
+      const prompt = typeof o.prompt === "string" ? o.prompt.trim().slice(0, 1000) : "";
+      return label && prompt ? [{ label, prompt }] : [];
+    })
+    .slice(0, 12);
+}
+
+/**
  * Routes for the Text Helper.
  *
  * @param app - Fastify instance.
@@ -67,6 +83,16 @@ export async function textHelperRoutes(app: FastifyInstance, s: KesherServices):
       await writeFile(mapFile, JSON.stringify({ chatId: chat.id }));
     }
     return { chatId: chat.id, id: keepSelection(text), chars: Math.min(text.length, TEXT_HELPER_MAX), cut: text.length > TEXT_HELPER_MAX };
+  });
+
+  /** The user's own quick actions (as Magic Beacon's custom actions): up to 12, a short name and an instruction. */
+  app.get("/api/text-helper/actions", async () => ({ actions: s.config.textActions ?? [] }));
+  app.put<{ Body: { actions?: unknown } }>("/api/text-helper/actions", async (req, reply) => {
+    const list = Array.isArray(req.body?.actions) ? req.body.actions : null;
+    if (!list) return reply.code(400).send({ error: "Send the list of actions." });
+    s.config.textActions = cleanTextActions(list);
+    await s.saveConfig();
+    return { actions: s.config.textActions };
   });
 
   /** The selection, for the helper's window. */

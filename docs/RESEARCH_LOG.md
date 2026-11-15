@@ -1120,3 +1120,6 @@ Stopped at: the decision (A is faster and fuller; B keeps the app small and matc
 - The training routes (routes/training.ts) and the reset routes (routes/reset.ts) moved out of createKesherServer,
   unchanged; server.ts 1,402 → 1,342 lines. The rest of t49 (remote/device keys, self-work wiring, the many service
   constructions) needs a context object passed to each area; next steps: remote and device keys, then self-work.
+- Text Helper, later the same night: the user's own quick actions (as Magic Beacon's custom actions): Settings →
+  Keyboard and helpers, a name and an instruction, up to 12, shown after the built-in ones. Still not built: "ignore
+  this app" and an agent mode with tools.
