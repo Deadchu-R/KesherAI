@@ -408,3 +408,13 @@ This review went through the code part by part. Each finding is listed with what
   local-only).
 - Self-work: a run that asked for a path outside its folder was left waiting (approvals are Roee's), then stopped and
   started again told to use only its board tool. Nothing was approved on his behalf.
+
+## Scan 68 (2026-11-15, after 0.6.211–0.6.213 and the git panel push)
+- Fixed: the git panel's Push ran a plain `git push` when the branch had an upstream. Self-work branches follow
+  origin/main, so with `push.default=upstream` a Push in such a chat would have gone to main. Push now goes only to a
+  branch of the same name (origin/<branch>), with a test against a real bare repository.
+- Dictation bar kept loaded (0.6.212): the microphone is closed at the end of each dictation (the tracks are stopped);
+  the hidden window holds no stream. A new press while the microphone is still opening lets the old one go.
+- Text Helper actions (0.6.213): cleaned (names up to 40 characters, instructions up to 1,000, 12 at most); they go
+  only into the user's own prompts.
+- Chat timer routes and the persona icon: moved / static, no new input.

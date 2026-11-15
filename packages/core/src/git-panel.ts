@@ -202,8 +202,12 @@ export async function gitCommit(repo: string, message: string): Promise<GitResul
  * @param repo - The project folder.
  */
 export async function gitPush(repo: string): Promise<GitResult> {
+  const branch = (await git(repo, ["branch", "--show-current"])).out.trim();
   const up = await git(repo, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
-  return git(repo, up.ok ? ["push"] : ["push", "-u", "origin", "HEAD"], 180_000);
+  // Only to a branch of the same name. A self-work branch follows origin/main, and a plain `git push` could then go to
+  // main under some git settings (push.default=upstream): it goes to origin/<its own name> instead (2026-11-15).
+  if (up.ok && branch && up.out.trim().replace(/^[^/]+\//, "") === branch) return git(repo, ["push"], 180_000);
+  return git(repo, ["push", "-u", "origin", branch ? `HEAD:refs/heads/${branch}` : "HEAD"], 180_000);
 }
 
 /**
