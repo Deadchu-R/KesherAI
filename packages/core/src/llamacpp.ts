@@ -769,7 +769,10 @@ export class LlamaEngine {
 
   private async start(binary: string, modelPath: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<void> {
     await this.stop();
+    // A fresh log for this load, keeping the line that says who asked for it (see note()).
+    const why = this.log.filter((l) => l.startsWith("KesherAI: loading ")).slice(-1);
     this.log.length = 0;
+    this.log.push(...why);
     // Another app (another llama-server, a dev server…) may already hold the port: then the health check talks to it and
     // the load never finishes. Move to a free port and say so.
     if (await portTaken(this.opts.port)) {
