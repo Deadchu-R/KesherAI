@@ -100,6 +100,8 @@ export function PadHints() {
       {hint("LB RB", "lr", L("עמודים", "Pages"))}
       {hint("≡", "m", L("תפריט", "Menu"))}
       {hint("⧉", "m", L("לתיבת הצ'אט", "Chat box"))}
+      {hint("R3", "m", L("דיבור", "Speak"))}
+      {hint("L3", "m", L("עצור", "Stop"))}
     </div>
     </>
   );

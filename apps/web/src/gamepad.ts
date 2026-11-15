@@ -5,12 +5,14 @@
  * - A: press · B: back (closes a menu or dialog, otherwise the previous page) · X: right-click (more options);
  * - Y: search and commands (the palette) · LB / RB: previous / next page of the menu;
  * - Menu (≡): open or close the side menu · View (⧉): to the chat box;
- * - right stick: scroll · LT / RT: a page up / down.
+ * - right stick: scroll · LT / RT: a page up / down;
+ * - right stick pressed (R3): the microphone (speak the message instead of typing it; press again to finish);
+ * - left stick pressed (L3): stop (the answer being written, or the reading aloud).
  * Read with the browser's Gamepad API (standard mapping), only while a controller is connected; the mouse, touch and
  * keyboard work as before, and the controller's look (a bold focus ring, the button hints) shows only after it is used.
  */
 
-const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, VIEW = 8, MENU = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
+const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, VIEW = 8, MENU = 9, L3 = 10, R3 = 11, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
 const FIRST_REPEAT = 380;
 const REPEAT = 110;
 const DEAD = 0.5;
@@ -369,6 +371,9 @@ export function startGamepad(): void {
       const box = document.querySelector<HTMLElement>("main textarea, main input[type='text']");
       if (box) focus(box);
     });
+    // Writing without a keyboard: R3 is the chat box's microphone (dictation), L3 stops the answer or the voice.
+    act(R3, false, () => document.querySelector<HTMLElement>("main .box-bar .chip.mic")?.click());
+    act(L3, false, () => document.querySelector<HTMLElement>("main .send.stop, button.stop-speaking")?.click());
     act(LT, true, () => canvasTakes({ action: "zoom", factor: 0.85 }) || scrollNear(document.activeElement, -innerHeight * 0.8));
     act(RT, true, () => canvasTakes({ action: "zoom", factor: 1.18 }) || scrollNear(document.activeElement, innerHeight * 0.8));
     // The right stick scrolls smoothly, faster the further it is pushed.
