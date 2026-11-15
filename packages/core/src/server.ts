@@ -126,6 +126,8 @@ import { remoteDeviceRoutes } from "./routes/remote-devices.js";
 import { timerRoutes } from "./routes/timers.js";
 import { canvasRoutes } from "./routes/canvas.js";
 import { CanvasStore, canvasTools } from "./canvas.js";
+import { shareRoutes } from "./routes/shares.js";
+import { ShareStore } from "./shares.js";
 import { textHelperRoutes } from "./routes/text-helper.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
@@ -974,6 +976,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await textHelperRoutes(app, services);
   await timerRoutes(app, chatTimers);
   await canvasRoutes(app, canvases, (convId) => library.summary(convId)?.title);
+  // Share links: a chat as a read-only page at /s/<token> (never an incognito chat).
+  await shareRoutes(app, new ShareStore(join(paths.root, "shares.json")), async (convId) => {
+    const summary = library.summary(convId);
+    if (!summary || summary.incognito) return undefined;
+    const opened = await services.conversations.open(convId);
+    return opened ? { title: summary.title ?? "Chat", events: opened.session.events } : undefined;
+  });
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);

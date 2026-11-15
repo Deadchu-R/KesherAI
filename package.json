@@ -37,7 +37,11 @@
   "pnpm": {
     "overrides": {
       "content-disposition@3": "file:./vendor/content-disposition",
-      "dompurify": "^3.4.17"
+      "dompurify": "^3.4.17",
+      "nanoid@<3.3.18": "^3.3.18",
+      "nanoid@>=4.0.0 <5.1.16": "^5.1.16",
+      "lodash-es@<4.18.0": "^4.18.0",
+      "katex@<0.18.2": "^0.18.2"
     }
   }
 }
