@@ -458,3 +458,23 @@ This review went through the code part by part. Each finding is listed with what
   An `.excalidraw` file the user exports is plain JSON; opening files in the page is turned off for now.
 - server.ts B3/B4 moves and the engine log line: no behaviour change. ui-check passes at both widths, including the
   Canvas page; speed numbers unchanged (0.3 s / 8 ms / 3 ms).
+
+## Scan 72 (2026-11-15, 0.6.222–0.6.224)
+
+- **Share links (new):** `/s/<token>` is outside `/api`, so the auth hook lets it through and the route itself is
+  the check: a 128-bit random token (22 characters, base64url) compared by exact match; anything else is 404, and an
+  expired or revoked share is 404 at once. The page sends `default-src 'none'` (no script, no picture, no request),
+  `frame-ancestors 'none'`, `noindex, nofollow`, `no-referrer`, `no-store`. Its content is escaped HTML; only bold and
+  inline code are turned back into tags, after escaping. The snapshot keeps the user's words and the answers only (no
+  tool calls, results, approvals or instructions), files by name, and hides the home folder, any `C:\Users\<name>` or
+  `/home/<name>` path, and key-like strings (sk-, ghp_, kd_, Bearer, token=, user:password@). The owner's routes stay
+  under `/api` with the usual key; the share list never returns the token apart from the link's path. Tested from a
+  non-local address: `/api/shares` 401, `/s/…` reaches the route. Incognito chats cannot be shared; sharing is always
+  the user's action (the model has no tool for it).
+- **pnpm audit (0.6.221 build):** 7 high findings came in with Excalidraw (nanoid, lodash-es) and a low one (katex):
+  pinned to patched versions with pnpm overrides; `pnpm audit --prod --audit-level high` is clean again.
+- **Image model:** a support file (VAE, LoRA, text encoder) saved as the active image model is no longer used; the
+  chat tool falls back, pipelines say so.
+- On the PC (Roee's request): the feature-research routine now uses KesherAI's active model, and the LM Studio
+  connection was removed from this computer's settings (the code keeps LM Studio support; it is found again only if it
+  is running at start-up, for that session).
