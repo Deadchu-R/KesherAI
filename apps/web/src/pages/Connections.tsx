@@ -57,19 +57,18 @@ export function ConnectionsPage() {
       <h1>{t("connections")}</h1>
       {error && <p className="error">{error}</p>}
 
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+      {/* Rows like the design (2026-11): a mark, the name and where it is, its state, and what to do. */}
+      <div className="conn-grid">
         {providers.map((p) => (
-          <div key={p.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div className="row">
-              <strong className="grow">{p.name ?? p.id}</strong>
-              <span className={`pill ${p.healthy ? "good" : "bad"}`}>{p.healthy ? t("connected") : t("offline")}</span>
+          <div key={p.id} className="conn-row">
+            <span className="conn-mark" aria-hidden="true">{(p.name ?? p.id).slice(0, 1).toUpperCase()}</span>
+            <div className="conn-text">
+              <strong>{p.name ?? p.id}</strong>
+              <span className="muted small mono" dir="ltr">{p.baseUrl ?? p.type}</span>
+              <span className="muted small">{p.location ?? "server"}{p.autodetected ? ` · ${t("autodetected")}` : ""}</span>
             </div>
-            <span className="mono muted" dir="ltr" style={{ textAlign: "start" }}>{p.baseUrl ?? p.type}</span>
-            <div className="row">
-              <span className="pill">{p.location ?? "server"}</span>
-              {p.autodetected && <span className="pill">{t("autodetected")}</span>}
-              <button type="button" style={{ marginInlineStart: "auto" }} onClick={() => void remove(p.id)}>{t("remove")}</button>
-            </div>
+            <span className={`conn-state ${p.healthy ? "good" : "bad"}`}>{p.healthy ? t("connected") : t("offline")}</span>
+            <button type="button" className="small" onClick={() => void remove(p.id)}>{t("remove")}</button>
           </div>
         ))}
       </div>

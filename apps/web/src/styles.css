@@ -2433,3 +2433,14 @@ html.handheld .palette-list button { min-height: 44px; }
 .side-chat-box input { flex: 1; min-width: 0; height: 40px; }
 @media (max-width: 760px) { .side-chat { inset: auto 0 0 0; width: auto; height: 70vh; border-radius: var(--radius) var(--radius) 0 0; } }
 @media (max-width: 480px) { h1 { font-size: 22px; } }
+
+/* Connections as rows (redesign 2026-11). */
+.conn-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+@media (max-width: 480px) { .conn-grid { grid-template-columns: 1fr; } }
+.conn-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius); min-width: 0; }
+.conn-mark { width: 40px; height: 40px; flex: none; border-radius: var(--radius-sm); background: var(--raised); color: var(--accent); display: grid; place-items: center; font-weight: 700; }
+.conn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.conn-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn-state { font-size: 12px; white-space: nowrap; }
+.conn-state.good { color: var(--good); }
+.conn-state.bad { color: var(--bad); }
