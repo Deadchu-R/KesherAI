@@ -13,6 +13,8 @@ test("search results and page text", () => {
   const html = '<a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.python.org%2F3%2F&amp;rut=x">Python <b>docs</b></a><a class="result__snippet" href="x">The official <b>Python</b> documentation.</a>';
   assert.deepEqual(parseSearchResults(html), [{ title: "Python docs", url: "https://docs.python.org/3/", snippet: "The official Python documentation." }]);
   assert.equal(htmlToText("<html><script>x()</script><h1>Title</h1><p>Hello &amp; welcome</p></html>"), "Title\n Hello & welcome");
+  // Numbered entities (DuckDuckGo's titles), and "&amp;lt;" stays the text "&lt;".
+  assert.equal(htmlToText("Carlsen&#x27;s style &#8212; a &amp;lt;b&amp;gt; tag"), "Carlsen's style — a &lt;b&gt; tag");
 });
 
 test("web_fetch refuses this computer and the home network", async () => {

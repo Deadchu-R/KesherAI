@@ -488,7 +488,16 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
-## Notes for scan 81 (0.6.247)
+## Scan 81 (2026-11-15, 0.6.249)
+
+- Checked on the PC (0.6.248): smart auto approvals is off by default and its toggle shows at 390 px; the persona
+  builder with web search wrote a full draft in about 70 s with 5 sources; nothing was saved by itself.
+- Page text: numbered HTML entities (`&#x27;`) are decoded, and `&amp;` is decoded last, so `&amp;lt;` stays the
+  text `&lt;` and never becomes markup. Display only.
+- Performance: the persona research is at most 3 searches and 2 page reads (20 s and 30 s timeouts each).
+- Notes below still hold. typecheck, lint and tests pass.
+
+### Notes (0.6.247–0.6.248)
 
 - Persona builder research (0.6.248): web pages are read with `web_fetch`'s rules (public addresses only, the user's
   blocked sites and safe search) and reach the writer inside `<web_notes>` as data; the result is only a draft the

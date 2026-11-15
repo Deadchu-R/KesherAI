@@ -127,7 +127,7 @@ export function PersonasPage() {
         <form className="card stack builder" onSubmit={(e) => { e.preventDefault(); void build(); }}>
           <strong>{L("תאר עוזר במילים", "Describe an assistant in words")}</strong>
           <textarea rows={3} dir="auto" value={describe} onChange={(e) => setDescribe(e.target.value)} placeholder={L("למשל: עוזר שעובר על קוד Unreal C++ שלי, מסביר באגים בעברית ומציע תיקונים קצרים", "e.g. An assistant that reviews my Unreal C++ code, explains bugs simply and suggests short fixes")} />
-          <label className="row small"><input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} />{L("לחפש קודם באינטרנט (סגנון, מונחים, עובדות) ולהשתמש במה שנמצא", "Search the web first (style, terms, facts) and use what it finds")}</label>
+          <label className="row small check-row"><input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} /><span className="grow">{L("לחפש קודם באינטרנט (סגנון, מונחים, עובדות) ולהשתמש במה שנמצא", "Search the web first (style, terms, facts) and use what it finds")}</span></label>
           <div className="row">
             <span className="muted small grow">{L("מודל הצ'אט כותב שם, הוראות, טמפרטורה והצעות פתיחה, ובוחר מודל ומאגר ידע מתאימים. תראה הכול ותוכל לשנות לפני שמירה.", "The chat model writes a name, instructions, a temperature and opening suggestions, and picks a fitting model and knowledge base. You see it all and can change it before saving.")}</span>
             <button type="submit" className="primary" disabled={building || !describe.trim()}>{building ? (web ? L("מחפש וכותב…", "Searching and writing…") : L("בונה…", "Building…")) : L("בנה עוזר", "Build it")}</button>

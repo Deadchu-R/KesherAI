@@ -43,7 +43,7 @@ export function AutoReviewSection() {
   return (
     <section className="card stack">
       <h2>{L("אישורים אוטומטיים חכמים", "Smart auto approvals")}</h2>
-      <label className="row"><input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />{L("המודל של הצ'אט בודק פקודות לפני שהן מגיעות אליי", "The chat's model checks commands before they reach me")}</label>
+      <label className="row check-row"><input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} /><span className="grow">{L("המודל של הצ'אט בודק פקודות לפני שהן מגיעות אליי", "The chat's model checks commands before they reach me")}</span></label>
       <p className="muted small">
         {L(
           "בצ'אטים במצב \"עריכה אוטומטית\", המודל של הצ'אט בודק כל פקודה לפני שהיא מגיעה אליך: בנייה, בדיקות או git status שמתאימים למה שביקשת רצים לבד, וכל השאר עדיין נשאלים. הבודק רואה רק מה שכתבת ואת הפקודה, לא תוצאות של כלים. פקודות מסוכנות (מחיקה, push, התקנה) תמיד נשאלות. מדליקים רק מהמחשב.",

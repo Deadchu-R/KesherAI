@@ -2463,3 +2463,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .ready-checks span { display: inline-flex; align-items: center; gap: 8px; }
 .ready-checks span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
 .ready-checks span.busy::before { background: var(--live); }
+
+/* A checkbox with its text: they stay on one line, the text wraps beside the box. */
+.row.check-row { flex-wrap: nowrap; align-items: flex-start; }
+.row.check-row input[type="checkbox"] { margin-top: 3px; flex: none; }

@@ -113,11 +113,15 @@ export function htmlToText(html: string): string {
     .replace(/<li[^>]*>/gi, "• ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
+    // Numbered entities (&#x27; in DuckDuckGo's titles, &#8217;…); "&amp;" last, so "&amp;lt;" stays "&lt;".
+    .replace(/&#(x[0-9a-f]{1,6}|\d{1,7});/gi, (e, n: string) => {
+      const code = n[0] === "x" || n[0] === "X" ? Number.parseInt(n.slice(1), 16) : Number(n);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : e;
+    })
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s*\n+/g, "\n\n")
     .trim();
