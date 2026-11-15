@@ -1102,3 +1102,16 @@ Stopped at: more in-app shortcuts (new chat, settings) to remap; they are added 
   rest ten minutes later; "Picture <file>: <description>" is indexed and found like text, with the file as its source.
   .xlsx and .pptx are indexed too.
 Stopped at: videos (a few frames each), and showing the picture itself in the search result.
+
+## 2026-11-15 (night): A shared Canvas (COMPETITORS fourth review, item 9; board t73)
+- LM Studio Bionic 1.1.6–1.1.7 (alphasignal.ai; lmstudio.ai changelog): an Excalidraw-based infinite board inside a
+  project; shapes, arrows, text, freehand; stored as JSON so the agent creates, reads and changes single elements and
+  their links; the user and the agent edit the same diagram live; export to PNG, SVG and editable .excalidraw; uses:
+  mockups, architecture diagrams, process maps, a codebase drawn out, then "turn it into a plan or code".
+- Two ways for KesherAI, a decision for Roee:
+  A. Excalidraw itself (@excalidraw/excalidraw, MIT, ~2 MB, a new dependency: needs Roee's OK): the full editor at once;
+     the agent's tool writes Excalidraw elements.
+  B. Our own board on the BlueprintCanvas base (pan, zoom, drag, select already exist): rectangles, ellipses,
+     diamonds, notes, text, arrows tied to elements; a `canvas` tool (add / move / change / link / delete / read, with
+     an automatic layout so a small model need not place things); export SVG, PNG and .excalidraw JSON. No new package.
+Stopped at: the decision (A is faster and fuller; B keeps the app small and matches KesherAI's look).
