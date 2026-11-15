@@ -3,8 +3,9 @@ import "@fastify/websocket";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { stat, writeFile, mkdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { resolveInWorkspace } from "@kesher/agent";
+import { agyPath } from "../agy-path.js";
 import type { KesherServices } from "../services.js";
 
 /**
@@ -37,11 +38,6 @@ function loadPty(): PtyModule | null {
     }
   }
   return ptyModule;
-}
-
-/** Where Antigravity CLI's Windows installer puts `agy` (KesherAI's own PATH is older than the install). */
-export function agyPath(): string | undefined {
-  return process.platform === "win32" && process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "agy", "bin", "agy.exe") : undefined;
 }
 
 /**
