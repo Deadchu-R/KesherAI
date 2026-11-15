@@ -53,12 +53,64 @@ const seed = () => Math.floor(Math.random() * 2 ** 48);
 export function readyFlows(): ReadyFlow[] {
   return [
     {
+      // ACE-Step 1.5 (January 2026), as in ComfyUI's own template (audio_ace_step_1_5_checkpoint): the turbo model in
+      // one file, 8 steps; 10 seconds to 10 minutes; lyrics in 50+ languages in their own letters, Hebrew among them.
+      id: "music-ace-step-15",
+      icon: "🎵",
+      title: { en: "Music from words (ACE-Step 1.5)", he: "מוזיקה ממילים (ACE-Step 1.5)" },
+      description: {
+        en: "Write the style and the lyrics, in any of 50+ languages (Hebrew too); ACE-Step 1.5 makes a song of up to 10 minutes, in seconds to a minute on a gaming graphics card.",
+        he: "כותבים סגנון ומילים, באחת מ-50+ שפות (גם בעברית), ו-ACE-Step 1.5 יוצר שיר של עד 10 דקות, תוך שניות עד דקה בכרטיס גרפי של גיימינג.",
+      },
+      license: { name: "MIT", url: "https://github.com/ace-step/ACE-Step-1.5/blob/main/LICENSE" },
+      files: [
+        {
+          label: "ACE-Step 1.5 turbo (all in one)",
+          repo: "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          path: "checkpoints/ace_step_1.5_turbo_aio.safetensors",
+          rel: "music/ace_step_1.5_turbo_aio.safetensors",
+          gb: 10,
+        },
+      ],
+      checkpoints: { "1": "ace_step_1.5_turbo_aio.safetensors" },
+      flow: {
+        "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "ace_step_1.5_turbo_aio.safetensors" }, _meta: { title: "ACE-Step 1.5" } },
+        "2": {
+          class_type: "TextEncodeAceStepAudio1.5",
+          inputs: {
+            clip: ["1", 1],
+            tags: "pop, upbeat, female vocals, piano, guitar, drums, catchy, bright",
+            lyrics: "[Verse]\nMorning light on the window\nCoffee warm in my hands\nEvery road that I follow\nLeads me back where I stand\n\n[Chorus]\nSing it loud, sing it free\nThis is where I want to be\n",
+            seed: seed(),
+            bpm: 120,
+            duration: 60,
+            timesignature: "4",
+            language: "en",
+            keyscale: "C major",
+            generate_audio_codes: true,
+            cfg_scale: 2,
+            temperature: 0.85,
+            top_p: 0.9,
+            top_k: 0,
+            min_p: 0,
+          },
+          _meta: { title: "Style and lyrics" },
+        },
+        "3": { class_type: "ConditioningZeroOut", inputs: { conditioning: ["2", 0] } },
+        "4": { class_type: "EmptyAceStep1.5LatentAudio", inputs: { seconds: 60, batch_size: 1 }, _meta: { title: "Length (seconds)" } },
+        "5": { class_type: "ModelSamplingAuraFlow", inputs: { model: ["1", 0], shift: 3 } },
+        "8": { class_type: "KSampler", inputs: { model: ["5", 0], positive: ["2", 0], negative: ["3", 0], latent_image: ["4", 0], seed: seed(), steps: 8, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1 } },
+        "9": { class_type: "VAEDecodeAudio", inputs: { samples: ["8", 0], vae: ["1", 2] } },
+        "10": { class_type: "SaveAudioMP3", inputs: { audio: ["9", 0], filename_prefix: "audio/KesherAI", quality: "V0" } },
+      },
+    },
+    {
       id: "music-ace-step",
       icon: "🎵",
-      title: { en: "Music from words (ACE-Step)", he: "מוזיקה ממילים (ACE-Step)" },
+      title: { en: "Music from words (ACE-Step v1, older)", he: "מוזיקה ממילים (ACE-Step v1, הישן)" },
       description: {
-        en: "Write the style (tags) and the lyrics; ACE-Step makes a song up to 4 minutes long. Lyrics in English letters work best ([verse], [chorus]…).",
-        he: "כותבים סגנון (תגיות) ומילים, ו-ACE-Step יוצר שיר של עד 4 דקות. מילים באותיות אנגליות עובדות הכי טוב ([verse], [chorus]…).",
+        en: "The first ACE-Step (2025): a song up to 4 minutes, lyrics in English letters. ACE-Step 1.5 above is better and faster; this stays for those who already downloaded it.",
+        he: "ACE-Step הראשון (2025): שיר של עד 4 דקות, מילים באותיות אנגליות. ACE-Step 1.5 שלמעלה טוב ומהיר יותר; זה נשאר למי שכבר הוריד אותו.",
       },
       license: { name: "Apache-2.0", url: "https://github.com/ace-step/ACE-Step/blob/main/LICENSE" },
       files: [

@@ -1203,3 +1203,21 @@ Stopped at: done; nothing open.
   reachable over "Access from anywhere"; 7 days by default (1, 7, 30 days or until revoked), "Update" refreshes the
   same link, a view count, and the list with revoke in Settings → Phone (remote).
 Stopped at: building (store and public page first, then the chat menu and the settings list).
+
+## Music in the chat: ACE-Step 1.5 (2026-11-15)
+
+- **Gemini (Lyria 3, Feb 2026):** "Create music" in the chat: a prompt (genre, era, instruments, vocals), optional
+  photo or video for the mood, lyrics of your own ("Lyrics:") or written for you; a 30-second track to play, download
+  (MP3/MP4) and share. Lyria 3.5 later made full-length songs. Takeaway: one request in the chat, lyrics written by
+  the model when not given, a player and a download; no separate music screen needed.
+- **ACE-Step 1.5 (StepFun/ACE Studio, Jan 2026, MIT):** built into ComfyUI (`TextEncodeAceStepAudio1.5`,
+  `EmptyAceStep1.5LatentAudio`); the turbo model in one file (`Comfy-Org/ace_step_1.5_ComfyUI_files`,
+  `checkpoints/ace_step_1.5_turbo_aio.safetensors`), 8 steps, cfg 1, AuraFlow shift 3 (ComfyUI's template
+  `audio_ace_step_1_5_checkpoint`); 10 s to 10 min; under 4 GB of VRAM; lyrics in 50+ languages in their own
+  letters, Hebrew included (`he` in the node's list); bpm, key and time signature are inputs.
+- **What KesherAI had:** make_music with the first ACE-Step (v1 3.5B, 2025): up to 4 minutes, 50 steps, lyrics only
+  in Latin letters.
+- **Built (0.6.231):** a ready-made ACE-Step 1.5 flow (first on the Nodes page); make_music uses it (language, length
+  up to 10 min, optional bpm and key), and falls back to v1 only when v1 is already downloaded and 1.5 is not.
+- **Stopped at:** not yet tried on the PC (needs the 10 GB download, which is Roee's yes). Later: the 4B planner
+  (`split_llm` template) for better songs, and cover art for a song with the image model.

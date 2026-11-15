@@ -36,3 +36,14 @@ test("flowState sees downloaded files", async () => {
   await writeFile(join(dir, "3d", "hunyuan3d-dit-v2.safetensors"), "x");
   assert.deepEqual(flowState(flow, dir, dm), { ready: true, downloading: false, missingGb: 0 });
 });
+
+test("ACE-Step 1.5's flow matches ComfyUI's node (every input it needs) and its template's settings", () => {
+  const f = readyFlows().find((x) => x.id === "music-ace-step-15")!;
+  const enc = f.flow["2"]!;
+  assert.equal(enc.class_type, "TextEncodeAceStepAudio1.5");
+  // The inputs of comfy_extras/nodes_ace.py TextEncodeAceStepAudio15 (a missing one fails the whole run).
+  for (const k of ["clip", "tags", "lyrics", "seed", "bpm", "duration", "timesignature", "language", "keyscale", "generate_audio_codes", "cfg_scale", "temperature", "top_p", "top_k", "min_p"]) assert.ok(k in enc.inputs, k);
+  assert.equal(f.flow["4"]!.class_type, "EmptyAceStep1.5LatentAudio");
+  assert.deepEqual([f.flow["8"]!.inputs.steps, f.flow["8"]!.inputs.cfg, f.flow["5"]!.inputs.shift], [8, 1, 3]);
+  assert.equal(readyFlows()[0]!.id, "music-ace-step-15", "the newer one comes first on the Nodes page");
+});

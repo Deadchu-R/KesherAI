@@ -165,7 +165,7 @@ function VideoChoice({ k, onChange, setup }: { k: Kind; onChange: () => void; se
 export function ComfyOnlyKind({ kind }: { kind: "music" | "3d" }) {
   const he = getLocale() === "he";
   const t = kind === "music"
-    ? [["מוזיקה", "Music"], ["מנוע מוזיקה מובנה (ACE-Step) עוד לא נכנס: אין לו גרסה יציבה, והוא כ-7.7 GB. בינתיים: ACE-Step רץ ב-ComfyUI. התקן את ComfyUI למטה, טען את זרימת ACE-Step בעמוד הנודים, וזה עובד.", "A built-in music engine (ACE-Step) is not in yet: it has no stable release and is about 7.7 GB. Meanwhile ACE-Step runs in ComfyUI: install ComfyUI below, load the ACE-Step flow on the Nodes page, and it works."]]
+    ? [["מוזיקה", "Music"], ["מוזיקה נוצרת עם ACE-Step 1.5 ב-ComfyUI (כ-10 GB, גם שירים בעברית): התקינו את ComfyUI למטה, ואז בקשו שיר בכל צ'אט או טענו את זרימת ACE-Step 1.5 בעמוד הנודים.", "Music is made with ACE-Step 1.5 in ComfyUI (about 10 GB, songs in Hebrew too): install ComfyUI below, then ask for a song in any chat or load the ACE-Step 1.5 flow on the Nodes page."]]
     : [["תלת-ממד", "3D"], ["אין עדיין מנוע תלת-ממד מובנה. ComfyUI מריץ מודלי תלת-ממד (כמו Hunyuan3D) בעזרת נודים נוספים: התקן את ComfyUI למטה ועבוד איתם בעמוד הנודים.", "There is no built-in 3D engine yet. ComfyUI runs 3D models (such as Hunyuan3D) with extra nodes: install ComfyUI below and work with them on the Nodes page."]];
   return (
     <section className="card stack">

@@ -223,6 +223,37 @@ export function lookTools(deps: Pick<ConversationDeps, "look" | "assets">, notes
   ];
 }
 
+/** The languages ACE-Step 1.5 sings in (ComfyUI's TextEncodeAceStepAudio1.5). */
+const MUSIC_LANGUAGES = new Set("ar az bg bn ca cs da de el en es fa fi fr he hi hr ht hu id is it ja ko la lt ms ne nl no pa pl pt ro ru sa sk sr sv sw ta te th tl tr uk ur vi yue zh".split(" "));
+
+/**
+ * A song's language for ACE-Step 1.5.
+ *
+ * @param v - A language code or name from the model ("he", "Hebrew", "iw").
+ * @returns A code ACE-Step 1.5 knows ("en" when unknown).
+ */
+export function musicLanguage(v: unknown): string {
+  const t = String(v ?? "").trim().toLowerCase();
+  const named: Record<string, string> = { hebrew: "he", iw: "he", english: "en", arabic: "ar", spanish: "es", french: "fr", german: "de", russian: "ru", japanese: "ja", korean: "ko", chinese: "zh", cantonese: "yue", italian: "it", portuguese: "pt" };
+  const code = named[t] ?? t.slice(0, 3).replace(/[^a-z]/g, "");
+  return MUSIC_LANGUAGES.has(code) ? code : MUSIC_LANGUAGES.has(code.slice(0, 2)) ? code.slice(0, 2) : "en";
+}
+
+/**
+ * A key for ACE-Step 1.5 ("C major" … "B minor", with sharps or flats).
+ *
+ * @param v - A key from the model ("a minor", "F#", "Bb maj").
+ * @returns The key as the node lists it, or undefined.
+ */
+export function musicKey(v: unknown): string | undefined {
+  const m = /^\s*([A-Ga-g])\s*([#b♯♭]?)\s*(maj(?:or)?|min(?:or)?|m)?\s*$/.exec(String(v ?? ""));
+  if (!m) return undefined;
+  const acc = m[2] === "♯" ? "#" : m[2] === "♭" ? "b" : m[2];
+  const root = m[1]!.toUpperCase() + acc;
+  if (["E#", "B#", "Fb", "Cb"].includes(root)) return undefined;
+  return `${root} ${m[3] && /^m(in)?/.test(m[3]) && !/^maj/.test(m[3]) ? "minor" : "major"}`;
+}
+
 /**
  * make_music and make_3d: the ready-made ComfyUI flows, from the chat.
  * A missing model (several GB) is downloaded only after the user agrees.
@@ -250,38 +281,56 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     return st.ready || st.downloading ? undefined : `Downloads a model of about ${st.missingGb} GB.`;
   };
   notes.push(
-    "make_music writes a song (style tags and lyrics) with ACE-Step in ComfyUI, and make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
+    "make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI, and make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
   );
+  // ACE-Step 1.5; the first ACE-Step only when it is already here and 1.5 is not (no second download needed).
+  const musicFlow = () => (!flows.state("music-ace-step-15").ready && flows.state("music-ace-step").ready ? "music-ace-step" : "music-ace-step-15");
   const music: AgentTool = {
     risk: "safe",
-    askFirst: askDownload("music-ace-step"),
+    askFirst: (input) => askDownload(musicFlow())(input),
     spec: {
       name: "make_music",
-      description: "Make a song or a piece of music from style tags and lyrics (ACE-Step in ComfyUI). The user gets a player. Slow (minutes).",
+      description: "Make a song or a piece of music from style tags and lyrics (ACE-Step 1.5 in ComfyUI), 10 seconds to 10 minutes. The user gets a player. Takes from seconds to a few minutes.",
       inputSchema: {
         type: "object",
         properties: {
-          tags: { type: "string", description: "Style, comma-separated English words: genre, mood, instruments, voice, tempo. E.g. 'pop, upbeat, female vocals, piano, 120 bpm'." },
-          lyrics: { type: "string", description: "Lyrics with [verse], [chorus], [bridge] markers, in English letters (other languages written in Latin letters, with [he] or [ja] at the start of the line). For music without singing use [instrumental]." },
-          seconds: { type: "number", description: "Length in seconds, 10–240 (default 60)." },
+          tags: { type: "string", description: "Style in English: genre, mood, instruments, voice, production. E.g. 'pop, upbeat, female vocals, piano, warm'." },
+          lyrics: { type: "string", description: "Lyrics with [Verse], [Chorus], [Bridge] markers, in the song's language and its own letters (Hebrew in Hebrew letters). For music without singing use [Instrumental]." },
+          language: { type: "string", description: "The lyrics' language code: en, he, ar, es, fr, de, ru, ja, ko, zh… (default en)." },
+          seconds: { type: "number", description: "Length in seconds, 10–600 (default 60)." },
+          bpm: { type: "number", description: "Tempo, 40–220 (optional)." },
+          key: { type: "string", description: "Key, like 'A minor' or 'F# major' (optional)." },
           download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing." },
         },
         required: ["tags"],
       },
     },
     run: async (input, ctx) => {
-      const blocked = gate("music-ace-step", input.download);
+      const id = musicFlow();
+      const blocked = gate(id, input.download);
       if (blocked) return { output: blocked };
-      const files = await flows.run("music-ace-step", (flow) => {
-        flow["2"]!.inputs.tags = String(input.tags ?? "");
-        flow["2"]!.inputs.lyrics = String(input.lyrics ?? "[instrumental]");
-        flow["4"]!.inputs.seconds = Math.min(240, Math.max(10, Number(input.seconds ?? 60) || 60));
+      const v15 = id === "music-ace-step-15";
+      const seconds = Math.min(v15 ? 600 : 240, Math.max(10, Number(input.seconds ?? 60) || 60));
+      const files = await flows.run(id, (flow) => {
+        const enc = flow["2"]!.inputs;
+        enc.tags = String(input.tags ?? "");
+        enc.lyrics = String(input.lyrics ?? (v15 ? "[Instrumental]" : "[instrumental]"));
+        flow["4"]!.inputs.seconds = seconds;
         flow["8"]!.inputs.seed = randomInt(2 ** 31);
+        if (v15) {
+          enc.duration = seconds;
+          enc.seed = randomInt(2 ** 31);
+          enc.language = musicLanguage(input.language);
+          const bpm = Number(input.bpm);
+          if (bpm >= 40 && bpm <= 220) enc.bpm = Math.round(bpm);
+          const key = musicKey(input.key);
+          if (key) enc.keyscale = key;
+        }
       }, ctx.signal);
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
-      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: "comfyui/ace-step", meta: { tags: input.tags, lyrics: input.lyrics } })));
-      return { output: "Made the song; the user can play and download it.", audioIds: assets.map((a) => a.id) };
+      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: input.tags, lyrics: input.lyrics } })));
+      return { output: `Made the song (${seconds} s${v15 ? "" : ", with the first ACE-Step: ACE-Step 1.5 sings in more languages, on the Nodes page"}); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
     },
   };
   const model3d: AgentTool = {
