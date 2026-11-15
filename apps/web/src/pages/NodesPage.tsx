@@ -134,6 +134,35 @@ export function NodesPage() {
       setBusy(false);
     }
   };
+  // Opened from a picture ("Animate" under a result on the Pictures page): load that flow with the picture in it, once
+  // the editor is up. A flow whose models are missing shows the offer to download them.
+  useEffect(() => {
+    if (state !== "ready" || !flows.length) return;
+    let want: { flow?: string; asset?: string } | null = null;
+    try {
+      want = JSON.parse(sessionStorage.getItem("kesher-nodes-open") ?? "null") as { flow?: string; asset?: string } | null;
+    } catch {
+      want = null;
+    }
+    const f = flows.find((x) => x.id === want?.flow);
+    if (!f) return;
+    const asset = want?.asset;
+    const timer = setInterval(() => {
+      const app = comfy();
+      if (!app) return;
+      clearInterval(timer);
+      try {
+        sessionStorage.removeItem("kesher-nodes-open");
+      } catch {
+        /* fine */
+      }
+      if (!f.ready) return setOffer(f);
+      void api<{ name: string; flow: Record<string, unknown> }>(`/api/comfy-ui/flows/${f.id}${asset ? `?asset=${encodeURIComponent(asset)}` : ""}`)
+        .then((r) => app.loadApiJson(r.flow, r.name))
+        .then(() => toast(L("הזרימה מוכנה עם התמונה: תאר את התנועה ולחץ Run.", "The flow is ready with the picture: describe the motion and press Run.")), (e: Error) => toast(e.message));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [state, flows.length]);
   /** Loads a ready-made flow, or offers to download its models first. */
   const chooseFlow = async (f: ReadyFlow) => {
     setFlowMenu(false);

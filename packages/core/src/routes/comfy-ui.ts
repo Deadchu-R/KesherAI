@@ -79,14 +79,29 @@ export async function comfyUiRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
 
   /** A ready-made flow in ComfyUI's API format, with the checkpoint names ComfyUI uses on this computer. */
-  app.get<{ Params: { id: string } }>("/api/comfy-ui/flows/:id", async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { asset?: string } }>("/api/comfy-ui/flows/:id", async (req, reply) => {
     const flow = readyFlows().find((f) => f.id === req.params.id);
     if (!flow) return reply.code(404).send({ error: "No such flow." });
     const list = (folder: string) =>
       fetch(`${s.comfy.status().url}/models/${folder}`, { signal: AbortSignal.timeout(10_000) })
         .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
         .catch(() => [] as string[]);
-    return { name: flow.title.en, flow: withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list)) };
+    const out = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
+    // A picture of KesherAI's (a result on the Pictures page): sent to ComfyUI's inputs and set in the flow's
+    // LoadImage, so "Animate" under a picture opens the video flow ready to run.
+    const assetId = req.query.asset;
+    if (assetId) {
+      const found = /^[\w-]{1,80}$/.test(assetId) ? await s.assets.get(assetId) : undefined;
+      if (!found || !found.asset.mimeType.startsWith("image/")) return reply.code(404).send({ error: "No such picture." });
+      const ext = found.asset.mimeType === "image/jpeg" ? "jpg" : found.asset.mimeType === "image/webp" ? "webp" : "png";
+      const form = new FormData();
+      form.append("image", new Blob([new Uint8Array(found.data)], { type: found.asset.mimeType }), `kesher_${assetId}.${ext}`);
+      form.append("overwrite", "true");
+      const up = await fetch(`${s.comfy.status().url}/upload/image`, { method: "POST", body: form, signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? (r.json() as Promise<{ name?: string }>) : undefined), () => undefined);
+      if (!up?.name) return reply.code(503).send({ error: "ComfyUI did not take the picture. Is it running?" });
+      for (const node of Object.values(out)) if (node.class_type === "LoadImage") node.inputs.image = up.name;
+    }
+    return { name: flow.title.en, flow: out };
   });
 
   const guard = async (req: FastifyRequest, reply: FastifyReply) => {

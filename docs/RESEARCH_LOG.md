@@ -1361,3 +1361,15 @@ Stopped at: building (store and public page first, then the chat menu and the se
   apps' cache, KesherAI's cache, trash) and every app and game with size, cache and last use, Info and Remove. From the
   computer's PC health on the phone, "Apps and cleaning" opens it.
 - **Stopped at:** written; checked with a mock at 390 px; the APK builds on GitHub; Roee installs it.
+
+## Picture lanes and video from a picture, F4 (2026-11-15, night; Roee approved the download)
+- **Locally Uncensored (Create)** puts actions on each picture: inpaint, remove background, upscale, to video.
+  **ComfyUI's template** `video_wan2_2_5B_ti2v`: UNETLoader (wan2.2_ti2v_5B), CLIPLoader umt5 (type wan), Wan 2.2 VAE,
+  Wan22ImageToVideoLatent (1280x704, 121 frames), ModelSamplingSD3 shift 8, KSampler uni_pc 20 steps cfg 5,
+  CreateVideo 24 fps, SaveVideo. The 14B I2V needs two 14 GB models (high and low noise): too big for one 24 GB card
+  without offload; the 5B does picture-to-video and text-to-video in one.
+- **Built:** under every result on the Pictures page: Remove background, Make 4x larger (the batch tools, ready to
+  run) and Animate (the Nodes page opens the Wan 2.2 5B flow with the picture already in it). The flow is also in the
+  Nodes page's ready-made list. Downloaded tonight: the 5B model (10 GB) and the Wan 2.2 VAE (1.4 GB); the text
+  encoder was already there.
+- **Stopped at:** built; to check on the PC once the download ends (one short video at a smaller size first).

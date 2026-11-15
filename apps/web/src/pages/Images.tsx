@@ -6,7 +6,7 @@ import { MaskEditor, type StartImage } from "../MaskEditor";
 import { pickModel } from "../ModelPicker";
 import { api, withToken, type Asset } from "../api";
 import { useModels } from "../useModels";
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 import { Select } from "../ui/Select";
 
 /** Text-to-image with any image provider (ComfyUI today; cloud APIs through plugins). */
@@ -169,6 +169,7 @@ export function ImagesPage() {
               {/* Picture lanes (F4): one press sends this picture to the tool, ready to run. */}
               <button type="button" className="chip" onClick={() => { try { sessionStorage.setItem("kesher-batch-in", JSON.stringify({ assets: [a.id], action: "remove-bg" })); } catch { /* fine */ } location.hash = "#/batch"; }}>{t("batchRemoveBg")}</button>
               <button type="button" className="chip" onClick={() => { try { sessionStorage.setItem("kesher-batch-in", JSON.stringify({ assets: [a.id], action: "upscale" })); } catch { /* fine */ } location.hash = "#/batch"; }}>{t("batchUpscale")}</button>
+              <button type="button" className="chip" onClick={() => { try { sessionStorage.setItem("kesher-nodes-open", JSON.stringify({ flow: "video-wan22-ti2v", asset: a.id })); } catch { /* fine */ } location.hash = "#/nodes"; }}>{getLocale() === "he" ? "🎬 הנפש" : "🎬 Animate"}</button>
             </figcaption>
           </figure>
         ))}

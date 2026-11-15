@@ -237,6 +237,43 @@ export function readyFlows(): ReadyFlow[] {
       },
     },
     {
+      // Wan 2.2 TI2V 5B (Alibaba, Apache-2.0), as in ComfyUI's own template (video_wan2_2_5B_ti2v): one model for
+      // picture-to-video and text-to-video, 24 fps, fits a 24 GB card at 1280x704 (smaller is faster).
+      id: "video-wan22-ti2v",
+      icon: "🎬",
+      title: { en: "Video from a picture (Wan 2.2 5B)", he: "וידאו מתמונה (Wan 2.2 5B)" },
+      description: {
+        en: "Load a picture and describe the motion (\"the camera slowly moves in, leaves blow in the wind\"); Wan 2.2 makes a 5-second video at 24 frames a second. Without a picture it makes the video from the description alone.",
+        he: "טוענים תמונה ומתארים את התנועה (\"המצלמה מתקרבת לאט, עלים נעים ברוח\"), ו-Wan 2.2 יוצר סרטון של 5 שניות ב-24 פריימים לשנייה. בלי תמונה הוא יוצר וידאו מהתיאור בלבד.",
+      },
+      license: { name: "Apache-2.0 (Wan 2.2)", url: "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B" },
+      files: [
+        { label: "Wan 2.2 TI2V 5B", repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", path: "split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors", rel: "video/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors", gb: 10 },
+        { label: "Wan 2.2 VAE", repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", path: "split_files/vae/wan2.2_vae.safetensors", rel: "vae/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/split_files/vae/wan2.2_vae.safetensors", gb: 1.4 },
+        { label: "Wan text encoder (umt5 xxl)", repo: "Comfy-Org/Wan_2.1_ComfyUI_repackaged", path: "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", rel: "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", gb: 6.7 },
+      ],
+      checkpoints: {},
+      names: [
+        { node: "1", input: "unet_name", folder: "diffusion_models", file: "wan2.2_ti2v_5B_fp16.safetensors" },
+        { node: "2", input: "clip_name", folder: "text_encoders", file: "umt5_xxl_fp8_e4m3fn_scaled.safetensors" },
+        { node: "3", input: "vae_name", folder: "vae", file: "wan2.2_vae.safetensors" },
+      ],
+      flow: {
+        "1": { class_type: "UNETLoader", inputs: { unet_name: "wan2.2_ti2v_5B_fp16.safetensors", weight_dtype: "default" }, _meta: { title: "Wan 2.2 TI2V 5B" } },
+        "2": { class_type: "CLIPLoader", inputs: { clip_name: "umt5_xxl_fp8_e4m3fn_scaled.safetensors", type: "wan", device: "default" } },
+        "3": { class_type: "VAELoader", inputs: { vae_name: "wan2.2_vae.safetensors" } },
+        "4": { class_type: "LoadImage", inputs: { image: "example.png" }, _meta: { title: "Start picture" } },
+        "5": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 0], text: "the camera slowly moves in, gentle natural motion, cinematic, detailed" }, _meta: { title: "The motion you want" } },
+        "6": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 0], text: "blurry, low quality, static, distorted, text, watermark, extra limbs" }, _meta: { title: "What to avoid" } },
+        "7": { class_type: "Wan22ImageToVideoLatent", inputs: { vae: ["3", 0], start_image: ["4", 0], width: 1280, height: 704, length: 121, batch_size: 1 }, _meta: { title: "Size and length (121 frames = 5 s)" } },
+        "8": { class_type: "ModelSamplingSD3", inputs: { model: ["1", 0], shift: 8 } },
+        "9": { class_type: "KSampler", inputs: { model: ["8", 0], positive: ["5", 0], negative: ["6", 0], latent_image: ["7", 0], seed: seed(), steps: 20, cfg: 5, sampler_name: "uni_pc", scheduler: "simple", denoise: 1 } },
+        "10": { class_type: "VAEDecode", inputs: { samples: ["9", 0], vae: ["3", 0] } },
+        "11": { class_type: "CreateVideo", inputs: { images: ["10", 0], fps: 24 } },
+        "12": { class_type: "SaveVideo", inputs: { video: ["11", 0], filename_prefix: "video/KesherAI", format: "auto", codec: "auto" } },
+      },
+    },
+    {
       id: "styled-frame",
       icon: "🎞️",
       title: { en: "A styled game frame (keeps the scene's shapes)", he: "פריים מעוצב מהמשחק (שומר על הצורות של הסצנה)" },
