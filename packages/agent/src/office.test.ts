@@ -93,3 +93,12 @@ test("not a zip, and an entry that unpacks bigger than it says, are refused safe
   const out = openZip(z).read("a.xml");
   assert.ok(out === undefined || out.length <= 10);
 });
+
+test("CSV and TSV rows: quotes, commas and line breaks inside a field, and the limit", async () => {
+  const { csvRows } = await import("./office.js");
+  assert.deepEqual(csvRows('name,note\r\n"Smith, J","said ""hi""\nthen left"\nשרה,ok\n').rows, [["name", "note"], ["Smith, J", 'said "hi"\nthen left'], ["שרה", "ok"]]);
+  assert.deepEqual(csvRows("a\tb\n1\t2").rows, [["a", "b"], ["1", "2"]]);
+  const many = csvRows("x\n".repeat(20), 5);
+  assert.equal(many.rows.length, 5);
+  assert.equal(many.more, 15);
+});

@@ -38,6 +38,8 @@ import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
 import { GroupButton, TeamButton, TimersButton, exportChat } from "../chat/ChatHeaderTools";
+import { AttachmentChips } from "../chat/Attachments";
+import { splitAttachments } from "../attach-lines";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -728,7 +730,11 @@ export function ConversationPage({ id }: { id: string }) {
                   </form>
                 ) : (
                   <div key={e.seq} className="msg user" dir="auto">
-                    {e.text}
+                    {(() => {
+                      // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
+                      const { body, files } = splitAttachments(e.text);
+                      return files.length ? <>{body}<AttachmentChips convId={id} files={files} /></> : e.text;
+                    })()}
                     {!busy && <span className="msg-tools"><button type="button" className="msg-tool" title={t("editMessage")} aria-label={t("editMessage")} onClick={() => { setEditingSeq(e.seq); setEditText(e.text.replace(/\n*\[[^\]\n]+: [^\]\n]+\]\s*$/g, "")); }}>✎</button></span>}
                   </div>
                 );

@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, join, relative, sep } from "node:path";
+import { basename, extname, join, relative, sep } from "node:path";
 import { zipSync } from "fflate";
-import { buildExecutableTool, resolveInWorkspace } from "@kesher/agent";
+import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -75,6 +75,47 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       .header("content-length", st.size)
       .header("content-disposition", `attachment; filename="${name.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`)
       .send(createReadStream(full));
+  });
+
+  /**
+   * A file shown in the chat (an attachment chip, as LM Studio Bionic and Claude preview them): a table for Excel,
+   * CSV and TSV, the slides' text for PowerPoint, a page for Word and HTML (the page draws them in a frame with no
+   * scripts), text for the rest. Only files in the chat's folder, up to 50 MB.
+   */
+  app.get<{ Params: { id: string }; Querystring: { path?: string } }>("/api/conversations/:id/files/preview", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    let full: string;
+    try {
+      full = await resolveInWorkspace(root, (req.query.path ?? "").replace(/^\[?(?:Attached|קובץ מצורף|מצורף)\s*:\s*/i, "").replace(/\]$/, "").trim());
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    const st = await stat(full).catch(() => undefined);
+    if (!st?.isFile()) return reply.code(404).send({ error: "File not found" });
+    if (st.size > 50 * 1024 ** 2) return reply.code(413).send({ error: "This file is too big to show here (over 50 MB). Download it instead." });
+    const name = basename(full);
+    const ext = extname(name).toLowerCase();
+    const rel = relative(root, full).split(sep).join("/");
+    try {
+      if (/^\.(png|jpe?g|webp|gif|bmp)$/.test(ext)) return { kind: "image", name, path: rel };
+      const data = await readFile(full);
+      if (ext === ".xlsx") return { kind: "table", name, sheets: xlsxSheets(data, 300) };
+      if (ext === ".csv" || ext === ".tsv") {
+        const { rows, more } = csvRows(data.toString("utf8"), 300, ext === ".tsv" ? "\t" : undefined);
+        return { kind: "table", name, sheets: [{ name, rows, more }] };
+      }
+      if (ext === ".pptx") return { kind: "slides", name, slides: pptxSlides(data) };
+      if (ext === ".docx") return { kind: "html", name, html: await docxHtml(data) };
+      if (ext === ".html" || ext === ".htm") return { kind: "html", name, html: data.toString("utf8").slice(0, 2_000_000) };
+      if (ext === ".pdf") return { kind: "text", name, text: (await documentText(data, name)).pages.map((p, i) => `— ${i + 1} —\n${p}`).join("\n\n").slice(0, 300_000) };
+      // Text, or a file with no preview (binary).
+      const sample = data.subarray(0, 8000);
+      if (sample.includes(0)) return { kind: "none", name, path: rel };
+      return { kind: "text", name, text: data.toString("utf8").slice(0, 300_000) };
+    } catch (err) {
+      return reply.code(422).send({ error: `This file could not be read: ${(err as Error).message}` });
+    }
   });
 
   /**

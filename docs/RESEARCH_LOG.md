@@ -1073,4 +1073,4 @@ Stopped at: Smart cleanup with the chat model, vocabulary and voice-command snip
   .xlsx (shared strings, sheets as tab-separated rows, capped) and .pptx (each slide's text), used by attachments and
   read_document; (2) attachment chips in the bubble that open a preview: table (xlsx/csv/tsv), slides (pptx), Word as a
   page (mammoth's HTML in a sandboxed frame), HTML in a sandboxed frame without scripts, pictures, PDF.
-Stopped at: building step 1.
+Built (0.6.207): office.ts (zip reader with limits, xlsxSheets, pptxSlides, docxHtml, csvRows), the preview route, and chips in the message with a preview dialog. Not yet: PDF as pages (shown as text), editing a sheet in place.

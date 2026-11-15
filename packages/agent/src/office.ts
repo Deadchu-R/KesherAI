@@ -164,3 +164,56 @@ export function sheetText(s: Sheet): string {
   const lines = s.rows.map((r) => r.map((c) => c.replace(/[\t\r\n]+/g, " ")).join("\t").replace(/\t+$/, ""));
   return `Sheet "${s.name}"\n${lines.join("\n")}${s.more ? `\n… ${s.more} more rows` : ""}`;
 }
+
+/**
+ * A Word document as HTML (headings, lists, tables, bold), for the chat's preview. The page shows it in a frame with
+ * no scripts; mammoth writes no scripts or outside links of its own, and pictures stay inside as data.
+ *
+ * @param data - The .docx bytes.
+ */
+export async function docxHtml(data: Uint8Array): Promise<string> {
+  const mammoth = await import("mammoth");
+  const { value } = await mammoth.convertToHtml({ buffer: Buffer.from(data) });
+  return value;
+}
+
+/**
+ * Rows of a CSV or TSV file (quoted fields with commas, quotes and line breaks inside).
+ *
+ * @param text - The file's text.
+ * @param maxRows - Rows at most.
+ * @param sep - "," or "\t" (guessed from the first line when not given).
+ */
+export function csvRows(text: string, maxRows = 500, sep?: string): { rows: string[][]; more: number } {
+  const d = sep ?? ((text.split("\n", 1)[0] ?? "").includes("\t") ? "\t" : ",");
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  let more = 0;
+  const end = () => {
+    row.push(cell);
+    cell = "";
+  };
+  const endRow = () => {
+    end();
+    if (rows.length < maxRows) rows.push(row);
+    else more++;
+    row = [];
+  };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"' && cell === "") quoted = true;
+    else if (ch === d) end();
+    else if (ch === "\n") endRow();
+    else if (ch !== "\r") cell += ch;
+  }
+  if (cell || row.length) endRow();
+  return { rows, more };
+}
