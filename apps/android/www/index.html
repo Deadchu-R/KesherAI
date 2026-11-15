@@ -426,7 +426,7 @@
 
   /** The app's last crash, written down by its native part (shown here, sent to the computer on the next connect). */
   let lastCrash = null;
-  (async () => {
+  const crashChecked = (async () => {
     try {
       const c = await window.Capacitor?.Plugins?.KesherNotify?.takeCrash?.();
       if (!c || !c.error) return;
@@ -753,6 +753,10 @@
     }
     const cameBack = sessionStorage.getItem("kesherai-connected") === "1" || new URLSearchParams(location.search).has("switch");
     const recent = loadComputers().sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || ""))[0];
+    // Just after a crash, do not connect by itself (the crash could repeat in a loop): the crash shows here, and
+    // the person connects with one tap, which also sends its details to the computer.
+    await crashChecked;
+    if (lastCrash) return;
     if (launch) connect(launch);
     else if (!cameBack && recent) connectComputer(recent);
     else if (!cameBack && saved) connect(saved);
