@@ -261,7 +261,7 @@ What they added since the third review, and what KesherAI already has:
 5. A chat's preview on hover in the sidebar (Open WebUI) ⬜
 6. Remappable keyboard shortcuts with conflict warnings (Open WebUI) ⬜
 7. Automatic descriptions and tags for attachments and Knowledge files, read before the whole file (Msty Dynamic Mode) ⬜
-8. Routines on an event: a file changed, a page changed, a download finished (ChatGPT scheduled tasks) ⬜
+8. Routines on an event: a file changed, a page changed, a download finished (ChatGPT scheduled tasks) ✅ (0.6.208: page checked without a model and run only on a change, folder watcher, download finished)
 9. A shared Canvas the agent draws on (boxes, arrows, notes), exported to PNG/SVG/Excalidraw (Bionic) ⬜
 10. Share a page or a result as a web page over the user's own link (Tailscale), read-only (ChatGPT Sites) ⬜
 11. As-you-type suggestions in any app (Magic Tab), later: heavy, needs a small fast model always loaded ⬜

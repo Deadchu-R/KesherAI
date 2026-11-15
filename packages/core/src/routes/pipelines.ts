@@ -49,6 +49,14 @@ export async function pipelineRoutes(app: FastifyInstance, s: KesherServices): P
       if (!isAbsolute(folder) || !(abs + sep).startsWith(home + sep) || abs === home) return reply.code(400).send({ error: "The folder must be inside your home folder (not the home folder itself)." });
       b.action = { ...b.action, folder: abs } as typeof b.action;
     }
+    // A watched folder (scan 66): as a routine's folder, set on this computer only, inside the home folder.
+    if (b.schedule?.kind === "folder") {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Choose the folder to watch on the computer that runs KesherAI." });
+      const home = resolve(homedir());
+      const abs = resolve(String(b.schedule.path ?? ""));
+      if (!isAbsolute(String(b.schedule.path ?? "")) || !(abs + sep).startsWith(home + sep) || abs === home) return reply.code(400).send({ error: "The folder must be inside your home folder (not the home folder itself)." });
+      b.schedule = { kind: "folder", path: abs };
+    }
     // A self-work routine runs its check command on this computer (scan 39): set on this computer, or from the phone
     // only with the same project and check as the last run (the rule of the panel's Start).
     if (b.action?.type === "self-work" && !isLocalRequest(req)) {

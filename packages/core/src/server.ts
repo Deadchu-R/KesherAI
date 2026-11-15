@@ -7,6 +7,7 @@
  */
 import { ensureFfmpeg } from "./ffmpeg.js";
 import type { AgentTool } from "@kesher/agent";
+import { htmlToText } from "@kesher/agent";
 import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -457,7 +458,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     // The notifications page lists them after a restart too (only the main app; the worker sends through it).
     ...(worker ? {} : { history: join(paths.root, "notifications.json") }),
   });
-  downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => notifier.onDownload(job));
+  downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => {
+    notifier.onDownload(job);
+    // "When a download finishes" routines (once, when it is done).
+    if (job.status === "done") {
+      try {
+        routines.onDownload(job.label);
+      } catch {
+        // KesherAI is still starting (the routines come a moment later)
+      }
+    }
+  });
   // A nearly full drive (found on the PC: 27 MB left) breaks downloads, self-work and Windows itself: say so, once a day.
   let diskWarned = 0;
   const checkDisk = async () => {
@@ -629,6 +640,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       if (id) await services.conversations.delete(id);
     },
     telegram: async (text) => telegram.broadcast(text),
+    // Page routines: the page's readable text (20 s, 3 MB at most; http and https only, checked when saved).
+    pageText: async (url) => {
+      const res = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { "user-agent": "KesherAI page check" }, redirect: "follow" });
+      if (!res.ok) throw new Error(`The page answered ${res.status}.`);
+      const body = (await res.text()).slice(0, 3_000_000);
+      return /html/i.test(res.headers.get("content-type") ?? "") ? htmlToText(body) : body;
+    },
     busy: () => Object.keys(services.conversations.activity()).length > 0,
   });
   void routines.start();

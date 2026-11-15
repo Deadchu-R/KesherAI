@@ -7,7 +7,7 @@ import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number } | { kind: "startup"; delayMinutes?: number };
+type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number } | { kind: "startup"; delayMinutes?: number } | { kind: "page"; url: string; minutes: number } | { kind: "folder"; path: string } | { kind: "download"; match?: string };
 type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean; web?: boolean; folder?: string; background?: boolean } | { type: "self-work"; repo: string; goal: string; hours: number; check: string; modelId?: string };
 interface Routine { id?: string; name: string; enabled: boolean; schedule: Schedule; action: Action; notify: boolean; telegram?: boolean; lastRun?: string; lastStatus?: string; lastMessage?: string; lastLink?: string; nextRun?: string | null; running?: boolean }
 
@@ -40,7 +40,10 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
     }
   };
   const describe = (s: Schedule) =>
-    s.kind === "startup" ? L(`בכל הפעלה (+${s.delayMinutes ?? 3} דק׳)`, `each start (+${s.delayMinutes ?? 3} min)`) : s.kind === "every" ? L(`כל ${s.minutes} דקות`, `every ${s.minutes} min`) : `${s.days?.length && s.days.length < 7 ? s.days.map((d) => L(...DAYS[d]!)).join(" ") : L("כל יום", "daily")} ${s.time}`;
+    s.kind === "page" ? L(`כשהעמוד משתנה (בדיקה כל ${s.minutes} דק׳)`, `when the page changes (checked every ${s.minutes} min)`)
+    : s.kind === "folder" ? L(`כשקבצים משתנים ב-${s.path}`, `when files change in ${s.path}`)
+    : s.kind === "download" ? L(`כשהורדה מסתיימת${s.match ? ` (${s.match})` : ""}`, `when a download finishes${s.match ? ` (${s.match})` : ""}`)
+    : s.kind === "startup" ? L(`בכל הפעלה (+${s.delayMinutes ?? 3} דק׳)`, `each start (+${s.delayMinutes ?? 3} min)`) : s.kind === "every" ? L(`כל ${s.minutes} דקות`, `every ${s.minutes} min`) : `${s.days?.length && s.days.length < 7 ? s.days.map((d) => L(...DAYS[d]!)).join(" ") : L("כל יום", "daily")} ${s.time}`;
   return (
     <section className="card stack">
       <div className="row">
@@ -52,17 +55,35 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
           </button>
         )}
       </div>
-      <p className="muted small">{L("עבודה שרצה לבד לפי לוח זמנים — צינור או שאלה למודל — עם התראה כשהיא מסתיימת. רצה כש-KesherAI פועל (אפשר להפעיל אותו עם המחשב, בהגדרות).", "Work that runs by itself on a schedule — a pipeline or a question to a model — with a notification when done. Runs while KesherAI runs (it can start with the computer, in Settings).")}</p>
+      <p className="muted small">{L("עבודה שרצה לבד לפי לוח זמנים או כשמשהו קורה (עמוד שהשתנה, קבצים בתיקייה, הורדה שהסתיימה) — צינור או שאלה למודל — עם התראה כשהיא מסתיימת. רצה כש-KesherAI פועל (אפשר להפעיל אותו עם המחשב, בהגדרות).", "Work that runs by itself on a schedule or when something happens (a page changed, files in a folder, a download finished) — a pipeline or a question to a model — with a notification when done. Runs while KesherAI runs (it can start with the computer, in Settings).")}</p>
       {draft && (
         <form className="stack pl-inputs" onSubmit={(e) => { e.preventDefault(); void save(draft); }}>
           <label className="pl-field">{L("שם", "Name")}<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={L("למשל: סיכום בוקר", "e.g. Morning summary")} autoFocus /></label>
           <div className="row">
-            <Select value={draft.schedule.kind} onChange={(e) => setDraft({ ...draft, schedule: e.target.value === "every" ? { kind: "every", minutes: 60 } : e.target.value === "startup" ? { kind: "startup", delayMinutes: 3 } : { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] } })}>
+            <Select value={draft.schedule.kind} onChange={(e) => {
+              const k = e.target.value;
+              setDraft({ ...draft, schedule: k === "every" ? { kind: "every", minutes: 60 } : k === "startup" ? { kind: "startup", delayMinutes: 3 } : k === "page" ? { kind: "page", url: "", minutes: 60 } : k === "folder" ? { kind: "folder", path: "" } : k === "download" ? { kind: "download" } : { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] } });
+            }}>
               <option value="daily">{L("בשעה קבועה", "At a time")}</option>
               <option value="every">{L("כל כמה דקות", "Every few minutes")}</option>
               <option value="startup">{L("בכל הפעלה של KesherAI", "Each time KesherAI starts")}</option>
+              <option value="page">{L("כשעמוד אינטרנט משתנה", "When a web page changes")}</option>
+              <option value="folder">{L("כשקבצים משתנים בתיקייה", "When files change in a folder")}</option>
+              <option value="download">{L("כשהורדה מסתיימת", "When a download finishes")}</option>
             </Select>
-            {draft.schedule.kind === "startup" ? (
+            {draft.schedule.kind === "page" ? (
+              <>
+                <input className="grow" type="url" dir="ltr" placeholder="https://…" value={draft.schedule.url} onChange={(e) => setDraft({ ...draft, schedule: { ...(draft.schedule as Extract<Schedule, { kind: "page" }>), url: e.target.value } })} aria-label={L("כתובת העמוד", "The page's address")} />
+                <label className="row">{L("בדיקה כל", "Check every")}<input type="number" min={15} value={draft.schedule.minutes} onChange={(e) => setDraft({ ...draft, schedule: { ...(draft.schedule as Extract<Schedule, { kind: "page" }>), minutes: Number(e.target.value) } })} style={{ width: 80 }} />{L("דקות", "minutes")}</label>
+              </>
+            ) : draft.schedule.kind === "folder" ? (
+              <>
+                <input className="grow" dir="ltr" placeholder={L("נתיב תיקייה במחשב", "A folder on this computer")} value={draft.schedule.path} onChange={(e) => setDraft({ ...draft, schedule: { kind: "folder", path: e.target.value } })} aria-label={L("התיקייה", "The folder")} />
+                {desktop()?.pickFolder && <button type="button" onClick={() => void desktop()!.pickFolder().then((f) => f && setDraft({ ...draft, schedule: { kind: "folder", path: f } }))}>{L("בחירה…", "Choose…")}</button>}
+              </>
+            ) : draft.schedule.kind === "download" ? (
+              <input className="grow" dir="auto" placeholder={L("רק כשהשם מכיל… (לא חובה, למשל gguf)", "Only when the name has… (optional, e.g. gguf)")} value={draft.schedule.match ?? ""} onChange={(e) => setDraft({ ...draft, schedule: e.target.value ? { kind: "download", match: e.target.value } : { kind: "download" } })} />
+            ) : draft.schedule.kind === "startup" ? (
               <label className="row">{L("אחרי", "After")}<input type="number" min={0} max={120} value={draft.schedule.delayMinutes ?? 3} onChange={(e) => setDraft({ ...draft, schedule: { kind: "startup", delayMinutes: Number(e.target.value) } })} style={{ width: 80 }} />{L("דקות", "minutes")}</label>
             ) : draft.schedule.kind === "daily" ? (
               <>
@@ -82,7 +103,7 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
                 </div>
               </>
             ) : (
-              <label className="row">{L("כל", "Every")}<input type="number" min={5} value={draft.schedule.minutes} onChange={(e) => setDraft({ ...draft, schedule: { kind: "every", minutes: Number(e.target.value) } })} style={{ width: 90 }} />{L("דקות", "minutes")}</label>
+              <label className="row">{L("כל", "Every")}<input type="number" min={5} value={(draft.schedule as Extract<Schedule, { kind: "every" }>).minutes} onChange={(e) => setDraft({ ...draft, schedule: { kind: "every", minutes: Number(e.target.value) } })} style={{ width: 90 }} />{L("דקות", "minutes")}</label>
             )}
           </div>
           <div className="row">

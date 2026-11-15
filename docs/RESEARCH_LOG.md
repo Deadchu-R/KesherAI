@@ -1074,3 +1074,12 @@ Stopped at: Smart cleanup with the chat model, vocabulary and voice-command snip
   read_document; (2) attachment chips in the bubble that open a preview: table (xlsx/csv/tsv), slides (pptx), Word as a
   page (mammoth's HTML in a sandboxed frame), HTML in a sandboxed frame without scripts, pictures, PDF.
 Built (0.6.207): office.ts (zip reader with limits, xlsxSheets, pptxSlides, docxHtml, csvRows), the preview route, and chips in the message with a preview dialog. Not yet: PDF as pages (shown as text), editing a sheet in place.
+
+## 2026-11-15 (night): Routines on an event (COMPETITORS fourth review, item 8)
+- ChatGPT's scheduled tasks (itbrief.co.uk, 2026): one-off, recurring and "monitoring" tasks, at most once an hour,
+  that notify only when there is something to report; a Scheduled page to pause, edit, delete; no webhooks or real
+  event triggers. KesherAI already had "quiet" heartbeats (the same idea as monitoring).
+- Built (0.6.208), beyond it: "when a web page changes" (its text is read every N ≥ 15 minutes with no model; the
+  routine runs only when it changed, with the lines added and removed), "when files change in a folder" (a watcher,
+  20 s to gather, the names go with the routine), "when a download finishes" (optionally by name).
+Stopped at: a timers list on the Routines page (the chat header shows them), and a run history per routine.

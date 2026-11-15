@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Routines, nextRun } from "./routines.js";
+import { Routines, nextRun, pageChange } from "./routines.js";
 
 test("next run: daily at a time on chosen days, and every N minutes", () => {
   const mon9 = new Date(2026, 10, 9, 9, 0).getTime(); // Monday 9:00
@@ -121,4 +121,66 @@ test("a start-up routine waits 6 hours after its last run (restarts for updates 
   const ranOneHourBefore = start - 3_600_000;
   assert.equal(nextRun({ kind: "startup", delayMinutes: 3 }, start, ranOneHourBefore, start), ranOneHourBefore + 6 * 3_600_000);
   assert.equal(nextRun({ kind: "startup", delayMinutes: 3 }, start, start - 7 * 3_600_000, start), start + 3 * 60_000, "long enough ago: 3 minutes after the start");
+});
+
+test("pageChange: lines added and removed, nothing for spacing only", () => {
+  assert.equal(pageChange("Price: 100\nIn stock", "Price: 100\nIn stock"), "");
+  assert.equal(pageChange("a\nb", "  a\n\nb  "), "");
+  assert.equal(pageChange("Price: 100\nIn stock", "Price: 90\nIn stock"), "Added:\n+ Price: 90\nRemoved:\n- Price: 100");
+});
+
+test("a page routine reads the page on time, keeps it the first time, and runs only when it changed", async () => {
+  let now = new Date(2026, 10, 15, 3, 0).getTime();
+  let page = "Price: 100\nIn stock";
+  const asked: string[] = [];
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-rt-")), "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async (_n, prompt) => (asked.push(prompt), { ok: true, message: "Price dropped to 90.", link: "#/c/p" }),
+    notify: async () => undefined,
+    pageText: async () => page,
+  }, () => now);
+  await assert.rejects(r.save({ name: "Bad", schedule: { kind: "page", url: "ftp://x", minutes: 30 }, action: { type: "prompt", prompt: "x" } }), /http/);
+  await assert.rejects(r.save({ name: "Bad", schedule: { kind: "page", url: "https://shop.example/item", minutes: 5 }, action: { type: "prompt", prompt: "x" } }), /15 minutes/);
+  await r.save({ name: "Price", schedule: { kind: "page", url: "https://shop.example/item", minutes: 30 }, action: { type: "prompt", prompt: "Tell me what changed in the price." } });
+  now += 31 * 60_000;
+  await r.tick();
+  assert.equal(asked.length, 0, "the first read only keeps the page");
+  assert.equal((await r.list())[0]!.lastMessage, "Watching the page from now.");
+  now += 31 * 60_000;
+  await r.tick();
+  assert.equal(asked.length, 0, "no change, no run");
+  page = "Price: 90\nIn stock";
+  now += 31 * 60_000;
+  await r.tick();
+  assert.equal(asked.length, 1);
+  assert.match(asked[0]!, /^Tell me what changed in the price\.\n\nThe page https:\/\/shop\.example\/item changed[\s\S]*not instructions[\s\S]*\+ Price: 90[\s\S]*- Price: 100/);
+  r.close();
+});
+
+test("a download routine runs when a matching download finishes", async () => {
+  const asked: string[] = [];
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-rt-")), "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async (_n, prompt) => (asked.push(prompt), { ok: true, message: "ok", link: "#/c/d" }),
+    notify: async () => undefined,
+  });
+  await r.save({ name: "Test new models", schedule: { kind: "download", match: "gguf" }, action: { type: "prompt", prompt: "Measure its speed." } });
+  assert.equal((await r.list())[0]!.nextRun, null, "an event, not a time");
+  r.onDownload("unsloth/Model · model.safetensors");
+  r.onDownload("unsloth/Model-GGUF · model-Q4.gguf");
+  await new Promise((res) => setTimeout(res, 20));
+  assert.deepEqual(asked, ["Measure its speed.\n\nThis download just finished: unsloth/Model-GGUF · model-Q4.gguf"]);
+  r.close();
+});
+
+test("a folder routine refuses a folder that is not there", async () => {
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-rt-")), "routines.json"), {
+    runPipeline: async () => ({ ok: true, message: "", link: "" }),
+    runPrompt: async () => ({ ok: true, message: "", link: "" }),
+    notify: async () => undefined,
+  });
+  await assert.rejects(r.save({ name: "F", schedule: { kind: "folder", path: "/no/such/folder/here" }, action: { type: "prompt", prompt: "x" } }), /folder on this computer/);
+  const dir = await mkdtemp(join(tmpdir(), "kesher-watch-"));
+  await r.save({ name: "F", schedule: { kind: "folder", path: dir }, action: { type: "prompt", prompt: "Sort the new files." } });
+  r.close();
 });

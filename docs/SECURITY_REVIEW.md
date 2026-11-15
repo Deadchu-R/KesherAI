@@ -382,3 +382,16 @@ This review went through the code part by part. Each finding is listed with what
 - Unreal bridge race (0.6.204): a disconnect during hello no longer throws (unhandled rejection in the server).
 - Performance: the dictation bar loads the app again for each use (about a second); acceptable now, a kept-warm bar
   is a later improvement.
+
+## Scan 66 (2026-11-15, after 0.6.205–0.6.207 and event routines)
+- Office files (0.6.207): a small zip reader with limits (4,000 entries, 64 MB unpacked in all, each entry no more
+  than its header says, so a crafted "zip bomb" stops); previews only inside the chat's folder, up to 50 MB; Word
+  and HTML are shown in a frame with `sandbox=""` (no scripts, forms or same origin) and a CSP of no outside loads.
+- Event routines: page routines read only http/https addresses the user gave (20 s, 3 MB), and a run happens only
+  when the text changed. Fixed: the page's change and the changed file names reach the model quoted, as data, not
+  instructions. Fixed: a watched folder is set only on this computer and only inside the home folder (the rule of a
+  routine's own folder; from the phone a folder could otherwise be watched anywhere). The model has no tool that
+  makes routines; only the user's own requests do.
+- A folder routine ignores changes while it runs and for a minute after (its own writes do not start it again);
+  changes are gathered for 20 s (up to 200 names).
+- "What fits?" second run (`--fit-print on`) uses the plan's own arguments; nothing from a request reaches it.
