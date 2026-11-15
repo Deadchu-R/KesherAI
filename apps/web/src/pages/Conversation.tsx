@@ -973,11 +973,13 @@ export function ConversationPage({ id }: { id: string }) {
               {...(conv.kind === "chat" ? { persona: { value: conv.personaId, onChange: (p: { id: string } | null) => void patch({ personaId: p?.id ?? null }) } } : {})}
               model={{ models: modelOptions, value: conv.modelId, onChange: (mid) => void patch({ modelId: mid }) }}
               mode={{ value: info?.mode ?? conv.mode, onChange: (m) => void patch({ mode: m }) }}
+              modeInMenu={conv.kind !== "code"}
               extra={
                 <>
                   {/* Web search's own settings (depth, sites) only while web search is on, or this chat changed them: one ⚙ less otherwise. */}
                   {(web || !!conv.web) && <WebPrefsChip value={conv.web} onChange={(w) => void patch({ web: w })} />}
-                  <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
+                  {/* Unity's project chip in code sessions; a chat adds a project from the + menu (one place each). */}
+                  {conv.kind === "code" && <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />}
                   {voicePart && (
                     <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
                       <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>

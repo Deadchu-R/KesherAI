@@ -166,7 +166,7 @@ export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typ
   { id: "create", icon: "🎨", label: "navCreate", items: [["#/images", "images"], ["#/canvas", "canvasNav"], ["#/batch", "batchNav"], ["#/nodes", "nodesNav"], ["#/unreal", "unrealNav"], ["#/unity", "unityNav"], ["#/training", "trainingNav"]] },
   { id: "work", icon: "🧠", label: "navWork", items: [["#/pages", "pagesNav"], ["#/knowledge", "knowledgeNav"], ["#/libraries", "librariesNav"], ["#/day", "dayNav"], ["#/compare", "compareNav"], ["#/pipelines", "pipelinesNav"], ["#/inbox", "inboxNav"], ["#/watch", "watchNav"], ["#/self-work", "selfWorkNav"]] },
   { id: "assistant", icon: "🤖", label: "navAssistant", items: [["#/personas", "personasNav"], ["#/memory", "memoryNav"], ["#/prompts", "promptsNav"], ["#/community", "communityNav"], ["#/usage", "usageNav"]] },
-  { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "connections"], ["#/plugins", "pluginsNav"], ["#/parts", "partsNav"], ["#/health", "healthNav"], ["#/remote", "remoteNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
+  { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "customizeNav"], ["#/health", "healthNav"], ["#/remote", "remoteNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
 
 export { NAV_ICONS };

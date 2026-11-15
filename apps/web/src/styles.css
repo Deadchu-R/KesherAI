@@ -2368,3 +2368,10 @@ html.handheld .palette-list button { min-height: 44px; }
 .bp-wire-menu .seg button { flex: 1; height: 32px; padding: 0 8px; font-size: 13px; }
 .bp-wire-menu input[type="range"] { flex: 1; }
 .ue-zoom button.on { color: var(--accent); }
+
+/* Customize: one row of tabs over Connections, Plugins and Parts (each its own page below). */
+.customize-tabs { padding: 8px 28px 0; }
+.customize-tabs a { height: 42px; padding: 0 14px; display: inline-flex; align-items: center; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+.customize-tabs a:hover { color: var(--text); }
+.customize-tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+@media (max-width: 760px) { .customize-tabs { padding: 4px 16px 0; } }

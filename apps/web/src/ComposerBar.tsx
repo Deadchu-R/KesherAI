@@ -28,6 +28,8 @@ export function ComposerBar(p: {
   persona?: { value: string | undefined; onChange: (p: Persona | null) => void };
   model?: { models: Parameters<typeof ModelMenu>[0]["models"]; value: string; onChange: (id: string) => void };
   mode?: { value: PermissionMode; onChange: (m: PermissionMode) => void };
+  /** The approvals mode in the + menu instead of a chip (a plain chat: Claude shows it only in code). */
+  modeInMenu?: boolean;
   extra?: ReactNode;
   /** The send button(s); default: one ↑ that is off while empty or busy. */
   send?: ReactNode;
@@ -35,15 +37,15 @@ export function ComposerBar(p: {
 }) {
   return (
     <div className="box-bar">
-      {/* The approvals mode is the chip in this row (always in sight), so the + menu does not repeat it. */}
-      <AddMenu {...p.attach} onInsert={p.onInsert} web={p.web} onWeb={p.onWeb} />
+      {/* The approvals mode is in one place: a chip in code chats (always in sight), the + menu in plain chats. */}
+      <AddMenu {...p.attach} onInsert={p.onInsert} web={p.web} onWeb={p.onWeb} {...(p.mode && p.modeInMenu ? { mode: p.mode.value, onMode: p.mode.onChange } : {})} />
       <WebToggle on={p.web} onChange={p.onWeb} />
       {p.extra}
       {p.onDictate && <Mic onText={p.onDictate} />}
       {p.persona && <PersonaChip value={p.persona.value} onChange={p.persona.onChange} />}
       {/* A chat answered by an outside agent (Antigravity) keeps it: it is not a model to switch. */}
       {p.model && (p.model.value.startsWith("agent/") ? <AgentChip modelId={p.model.value} {...(p.attach.convId ? { convId: p.attach.convId } : {})} /> : <ModelMenu models={p.model.models} value={p.model.value} onChange={p.model.onChange} />)}
-      {p.mode && (
+      {p.mode && !p.modeInMenu && (
         <Select className="model-chip" value={p.mode.value} onChange={(e) => p.mode!.onChange(e.target.value as PermissionMode)} aria-label={t("mode")}>
           <option value="plan">{t("modePlan")}</option>
           <option value="ask">{t("modeAsk")}</option>

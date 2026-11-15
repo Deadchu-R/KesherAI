@@ -24,7 +24,7 @@ const PAGE_LINES: Record<string, { he: string; en: string }> = {
   "#/prompts": { he: "בקשות שמורות לשימוש חוזר, עם פקודת /.", en: "Saved requests to use again, with a / command." },
   "#/usage": { he: "כמה השתמשת בכל מודל, ועצות לשימוש טוב יותר.", en: "How much each model was used, and tips for using them better." },
   "#/models": { he: "הורדה, טעינה והשוואה של מודלים לכל סוג עבודה.", en: "Download, load and compare models for every kind of work." },
-  "#/connections": { he: "שירותי ענן, שרתים מקומיים, MCP והמכשירים שלך.", en: "Cloud services, local servers, MCP and your devices." },
+  "#/connections": { he: "חיבורים (ענן, שרתים, MCP, המכשירים שלך), פלאגינים ומודים, וחלקי KesherAI שפועלים.", en: "Connections (cloud, servers, MCP, your devices), plugins and mods, and which parts of KesherAI are on." },
   "#/plugins": { he: "תוספות שמרחיבות את KesherAI, ושינויי מראה.", en: "Add-ons that extend KesherAI, and changes to its look." },
   "#/parts": { he: "הפעלה וכיבוי של חלקים שלמים, כדי שיישאר רק מה שצריך.", en: "Turn whole parts on and off, to keep only what you need." },
   "#/health": { he: "מצב הזיכרון, הדיסק וכרטיס המסך, ומה אפשר לשחרר.", en: "Memory, disk and graphics card, and what can be freed." },

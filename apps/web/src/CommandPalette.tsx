@@ -134,7 +134,7 @@ export function CommandPalette() {
     // The menu's own pages (without parts that are off, or what simple mode leaves out), plus All tools.
     const groupOf = (id: string) => NAV_GROUPS.find((g) => g.id === id);
     const pages: Entry[] = [
-      ...nav.map((n) => ({ id: `page:${n.href}`, icon: NAV_ICONS[n.href] ?? "•", title: n.label, also: `${n.href.slice(2)} ${groupOf(n.group) ? t(groupOf(n.group)!.label) : ""}`, group: "page" as const, run: go(n.href) })),
+      ...nav.map((n) => ({ id: `page:${n.href}`, icon: NAV_ICONS[n.href] ?? "•", title: n.label, also: `${n.href.slice(2)} ${groupOf(n.group) ? t(groupOf(n.group)!.label) : ""}${n.href === "#/connections" ? ` ${t("connections")} ${t("pluginsNav")} ${t("partsNav")} plugins mods parts` : ""}`, group: "page" as const, run: go(n.href) })),
       { id: "page:#/apps", icon: "▦", title: t("allTools"), also: "apps tools כלים", group: "page" as const, run: go("#/apps") },
     ];
     const chats: Entry[] = [...conversations]

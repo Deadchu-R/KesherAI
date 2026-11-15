@@ -51,10 +51,10 @@ const PersonasPage = lazy(() => import("./pages/PersonasPage").then((m) => ({ de
 const PromptsPage = lazy(() => import("./pages/PromptsPage").then((m) => ({ default: m.PromptsPage })));
 const PipelinesPage = lazy(() => import("./pages/PipelinesPage").then((m) => ({ default: m.PipelinesPage })));
 const ComparePage = lazy(() => import("./pages/ComparePage").then((m) => ({ default: m.ComparePage })));
-const PluginsPage = lazy(() => import("./pages/Plugins").then((m) => ({ default: m.PluginsPage })));
 const CommunityPage = lazy(() => import("./pages/Community").then((m) => ({ default: m.CommunityPage })));
 const PluginPage = lazy(() => import("./pages/PluginPage").then((m) => ({ default: m.PluginPage })));
 const ConversationPage = lazy(() => import("./pages/Conversation").then((m) => ({ default: m.ConversationPage })));
+const CustomizePage = lazy(() => import("./pages/Customize").then((m) => ({ default: m.CustomizePage })));
 const ImagesPage = lazy(() => import("./pages/Images").then((m) => ({ default: m.ImagesPage })));
 const BatchImagesPage = lazy(() => import("./pages/BatchImages").then((m) => ({ default: m.BatchImagesPage })));
 const MemoryPage = lazy(() => import("./pages/MemoryPage").then((m) => ({ default: m.MemoryPage })));
@@ -64,10 +64,8 @@ const CanvasPage = lazy(() => import("./pages/CanvasPage").then((m) => ({ defaul
 const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
-const PartsPage = lazy(() => import("./pages/PartsPage").then((m) => ({ default: m.PartsPage })));
 const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
-const ConnectionsPage = lazy(() => import("./pages/Connections").then((m) => ({ default: m.ConnectionsPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
 const WatchPage = lazy(() => import("./pages/WatchPage").then((m) => ({ default: m.WatchPage })));
@@ -271,12 +269,11 @@ export function App() {
   else if (hash === "#/self-work") page = <SelfWorkPage />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/training") page = <TrainingPage />;
-  else if (hash === "#/parts") page = <PartsPage />;
+  else if (hash === "#/parts" || hash === "#/connections" || hash === "#/plugins") page = <CustomizePage hash={hash} />;
   else if (hash === "#/apps") page = <AppsPage />;
   else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
-  else if (hash === "#/connections") page = <ConnectionsPage />;
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;
   else if (hash === "#/usage") page = <UsagePage />;
   else if (hash === "#/day") page = <DayPage />;
@@ -288,7 +285,6 @@ export function App() {
   else if (hash === "#/inbox") page = <InboxPage />;
   else if (hash === "#/pipelines") page = <PipelinesPage />;
   else if (hash === "#/compare") page = <ComparePage />;
-  else if (hash === "#/plugins") page = <PluginsPage />;
   else if (hash === "#/community") page = <CommunityPage />;
   else if (hash.startsWith("#/p/")) page = <PluginPage key={hash} route={hash.slice(4)} />;
   else page = <Home />;

@@ -94,6 +94,9 @@ export class PluginHost {
       return;
     }
     if (this.config.plugins[manifest.id]?.enabled === false) return;
+    // The example plugins ship for developers to copy; they stay off until someone turns them on (they put an English
+    // "Summary" button in every chat and a "Notes" tool in front of every user: audit 2026-11).
+    if (/^example-/.test(manifest.id) && this.config.plugins[manifest.id]?.enabled !== true) return;
     if (manifest.kesher.apiVersion !== PLUGIN_API_VERSION) {
       record.status = "error";
       record.error = `Built for plugin API v${manifest.kesher.apiVersion}, this app has v${PLUGIN_API_VERSION}`;
