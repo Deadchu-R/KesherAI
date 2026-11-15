@@ -20,6 +20,7 @@ import { projectAgents, type AgentDef } from "./agents.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { gameTools } from "./chat-tools-games.js";
+import { computerGroup, forTelegram } from "./chat-tool-groups.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
@@ -173,12 +174,8 @@ export class ConversationManager {
 
   private toolsFor(kind: ConversationKind, id?: string): { tools: AgentTool[]; notes: string[] } {
     const media = this.mediaTools();
-    const computer = id ? (this.deps.computerTools?.(id) ?? []) : [];
-    if (computer.length) {
-      media.notes.push(
-        "You can see and control this computer: first computer_use_app (the user approves each app), computer_open_app to bring it to the front, then computer_screenshot → act → check. When you can predict several steps (click a field, type, press enter), send them in one computer_batch, which returns one screenshot at the end; use computer_zoom to read small text. Never assume an action worked: look. Prefer your other tools (files, run_command, build_executable) when they can do the job; use the screen for apps that have no other way in (Unity, Blender, Office, settings dialogs). Browsers are view-only, terminals click-only, and you never type passwords or payment details.",
-      );
-    }
+    const { tools: computer, notes: computerNotes } = computerGroup(id ? (this.deps.computerTools?.(id) ?? []) : []);
+    media.notes.push(...computerNotes);
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
     const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
@@ -205,15 +202,9 @@ export class ConversationManager {
     if (id) all.push(this.delegateFor(id, all));
     // Its own problems: the model can look into KesherAI's state and fault log.
     if (this.deps.faults && this.deps.doctorState) all.push(doctorTool({ faults: this.deps.faults, state: this.deps.doctorState, ...(id ? { chatId: id } : {}) }));
-    // A chat written from Telegram never controls the screen or the browser, whatever else is on.
-    const telegram = id ? this.deps.library.summary(id)?.source === "telegram" : false;
-    if (telegram) {
-      return {
-        tools: all.filter((t) => !/^(computer_|browser_|unity_script_eval$|unity_write_script$|unreal_(write_source|python|compile|package|create_project|open_editor|port_plugin)$|android_run_on_phone$)/.test(t.spec.name)),
-        notes: [...media.notes.filter((n) => !n.startsWith("You can see and control this computer")), ...group.notes, "This chat is written from Telegram: you cannot control the screen or the browser here, and every change asks the user first."],
-      };
-    }
-    return { tools: all, notes: [...media.notes, ...group.notes] };
+    const result = { tools: all, notes: [...media.notes, ...group.notes] };
+    // A chat written from Telegram never controls the screen or the browser, whatever else is on (chat-tool-groups.ts).
+    return id && this.deps.library.summary(id)?.source === "telegram" ? forTelegram(result) : result;
   }
 
   /** Chat models seen on the last listing, for the helpers' description (refreshed in the background). */

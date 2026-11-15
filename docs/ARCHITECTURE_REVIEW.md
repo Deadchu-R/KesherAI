@@ -103,6 +103,12 @@ Each builder takes what it needs and returns the services it made plus a `close`
 | C1 | A `ToolGroup` type: `{ id, appliesTo(chat), tools(chat), notes(chat) }` |
 | C2 | Each family becomes a group in its own file: media and work (already split in t7), Unreal, Unity, phone, board, memory, skills, MCP, plugins |
 | C3 | `toolsFor` loops over the registered groups. `ConversationDeps` loses the fields that only one group needed |
+
+**Progress (0.6.232):** C1 as `ToolGroup` (`{ tools, notes }`, in `chat-tool-groups.ts`): each group decides its
+tools and their prompt lines together. Moved: the game engines (`chat-tools-games.ts`), computer control and the
+Telegram rule (`forTelegram`, with a test that a Telegram chat never gets the screen, the browser or engine code).
+Media were already in `chat-tools-media.ts`. Left: memory, timers, canvas, skills and plugins are already one call
+each; C3 (a loop over registered groups) waits until a third group needs per-chat state.
 | C4 | The plugin SDK gets `registerToolGroup`, so a plugin adds a family the same way |
 
 This is the change that makes the core modular in the sense a modder cares about. It should come after B4, when the chat services are built in one place.
