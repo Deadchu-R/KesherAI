@@ -488,7 +488,17 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
-## Notes for scan 80 (0.6.245)
+## Scan 80 (2026-11-15, 0.6.246)
+
+- Checked on the PC: the feed serves only names its feed lists (`../../config.json` → 404), ranges work (206), and
+  "is the computer free" answers. Notes below still hold.
+- Found and fixed: Fastify's `inject` fails in the packaged app (an ES-module cookie helper), so three internal calls
+  answered 500 (busy checks, starting self-work from a routine, saving a self-work routine from the phone). They call
+  the route over 127.0.0.1 now (`local-call.ts`); the rules each route applies are the same (from 127.0.0.1 a call is
+  local, as before with inject).
+- Phone rows: text beside a button in a card keeps 180 px; CSS only.
+- typecheck, lint and tests pass (597).
+
 
 - Update feed (`/api/updates/feed/:file`): read-only; only a plain file name (no folders, no `..`) that the feed
   itself lists, or the feed file; behind the same token as every other route from another device. The build folder
