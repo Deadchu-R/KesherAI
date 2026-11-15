@@ -488,7 +488,18 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
-## Notes for scan 82 (0.6.252)
+## Scan 82 (2026-11-15, 0.6.255)
+
+- Reviewed the ten changes since scan 81 (MoE estimate, Compare, What's new, charts, keys at rest, CivitAI, the GGUF
+  reader, answer timing, games and cleaning, boost). Notes below hold.
+- Found and fixed (performance): the GGUF header reader read a tokenizer one string at a time (the models list took
+  89 s on the PC); it reads in 1 MB pieces and stops before the tokenizer (0.6.253). A `pos += await …` ordering trap
+  in the array skip was found by a new test and fixed.
+- Charts: SVG drawn from numbers only (labels as text nodes, no HTML from the model); bad JSON shows as code.
+- What's new: release notes are shown as text (bullets), never as HTML.
+- typecheck, lint and tests pass (619).
+
+### Notes (0.6.252–0.6.255)
 
 - Speed up (pc-clean.ts): only fixed folders inside the user's own profile (and Steam's shader cache); contents only,
   never the folder itself; symbolic links and junctions are not followed; files newer than a day are kept in temp;
