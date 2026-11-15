@@ -104,7 +104,7 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post<{ Body: { where?: string; error?: string; stack?: string; device?: string; at?: number } }>("/api/faults/phone", async (req, reply) => {
     const b = req.body ?? {};
     if (typeof b.error !== "string" || !b.error) return reply.code(400).send({ error: "No crash to report." });
-    const when = typeof b.at === "number" ? new Date(b.at).toISOString() : "unknown time";
+    const when = typeof b.at === "number" && Number.isFinite(b.at) && Math.abs(b.at) < 8.64e15 ? new Date(b.at).toISOString() : "unknown time";
     s.faults.add({ kind: "phone", where: `${String(b.device ?? "phone").slice(0, 80)} · ${String(b.where ?? "").slice(0, 80)} · ${when}`, message: `${b.error.slice(0, 500)}\n${String(b.stack ?? "").slice(0, 1400)}` });
     return { ok: true };
   });

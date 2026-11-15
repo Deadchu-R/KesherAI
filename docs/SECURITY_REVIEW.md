@@ -479,6 +479,20 @@ This review went through the code part by part. Each finding is listed with what
   connection was removed from this computer's settings (the code keeps LM Studio support; it is found again only if it
   is running at start-up, for that session).
 
+## Scan 74 (2026-11-15, 0.6.228)
+
+- Phone app crash capture (Android `Crashes`, `POST /api/faults/phone`): the app keeps only the error, the stack,
+  the thread and the phone model and Android version (no messages, keys or addresses), and sends it only after the
+  health check with the computer's key. The route is behind the key from outside like every `/api` route, and cuts
+  each field (80/500/1400 characters). Found: a non-finite or out-of-range time (`at`) threw in `toISOString()` and
+  answered 500; now it is ignored ("unknown time"), with a test.
+- The live service's `startForeground` and every `startForegroundService` are caught: Android refusing the
+  foreground service no longer closes the app (the likely cause of "the app closes on connect").
+- Graph wires by finger (`pinNear`): the nearest pin within 40 px is found by a loop over the drawn pins on each
+  pointer move: linear in the pins on screen (hundreds at most), no allocation beyond one array per node; the
+  node-id selector is built with `CSS.escape`.
+- Self-work setup moved to `server/build-extras.ts`: the same calls, the worker's upgrade and idle exit unchanged.
+
 ## Scan 73 (2026-11-15, 0.6.226)
 
 - server.ts split B4–B6 (conversation manager, remote access, notifier, Telegram, routines moved to `server/`): no

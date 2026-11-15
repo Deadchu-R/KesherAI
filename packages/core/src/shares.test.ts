@@ -95,6 +95,7 @@ test("the phone app's crash report goes to the fault log (behind the key from ou
   try {
     assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: { error: "x" }, remoteAddress: "203.0.113.9" })).statusCode, 401);
     assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: {} })).statusCode, 400);
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: { error: "y", at: 1e300 } })).statusCode, 200, "a bad time is ignored, not a server error");
     const ok = await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: { error: "java.lang.IllegalStateException: boom", stack: "at dev.kesherai.notify.LiveService.onStartCommand", where: "thread main", device: "OPPO CPH2653, Android 16", at: 1794700000000 } });
     assert.equal(ok.statusCode, 200);
     await new Promise((r) => setTimeout(r, 200));
