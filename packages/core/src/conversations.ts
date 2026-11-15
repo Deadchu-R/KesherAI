@@ -242,7 +242,7 @@ export class ConversationManager {
     // "Check my change" (like Claude's browser pane): in a code chat with KesherAI's own browser, look at the result.
     const hasBrowserPane = [...media.tools, ...computer].some((t) => t.spec.name === "browser_open") && this.deps.browserPane?.() === true;
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
-    const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])];
+    const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
     if (id) all.push(this.delegateFor(id, all));
     // Its own problems: the model can look into KesherAI's state and fault log.

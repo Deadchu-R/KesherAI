@@ -124,6 +124,8 @@ import { trainingRoutes } from "./routes/training.js";
 import { resetRoutes } from "./routes/reset.js";
 import { remoteDeviceRoutes } from "./routes/remote-devices.js";
 import { timerRoutes } from "./routes/timers.js";
+import { canvasRoutes } from "./routes/canvas.js";
+import { CanvasStore, canvasTools } from "./canvas.js";
 import { textHelperRoutes } from "./routes/text-helper.js";
 import { githubRoutes } from "./routes/github.js";
 import { GitHubAuth } from "./github.js";
@@ -483,6 +485,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void semantic.resume().catch(() => undefined);
   // Routines: pipelines and prompts on a schedule.
   // The model's timers ("check the build in an hour") and its notifications (chat-timers.ts).
+  // Canvases: an Excalidraw board each chat (or the Canvas page) shares with the model.
+  const canvases = new CanvasStore(join(paths.root, "canvases"));
   const chatTimers = new ChatTimers(join(paths.root, "timers.json"), {
     send: (convId, text) => services.conversations.send(convId, text),
     exists: async (convId) => !!library.summary(convId),
@@ -729,6 +733,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
       memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
       // None in an incognito chat: a timer is written to disk (scan 65).
+      canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : canvasTools(canvases, convId, () => library.summary(convId)?.title ?? "")),
       timerTools: (convId) => (library.summary(convId)?.incognito ? [] : timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined))),
       memory,
     }),
@@ -968,6 +973,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await gameRoutes(app, services);
   await textHelperRoutes(app, services);
   await timerRoutes(app, chatTimers);
+  await canvasRoutes(app, canvases, (convId) => library.summary(convId)?.title);
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);

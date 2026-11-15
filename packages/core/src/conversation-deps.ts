@@ -73,6 +73,8 @@ export interface ConversationDeps {
   memoryTools?(convId?: string): AgentTool[];
   /** set_timer and notify_user for a chat (chat-timers.ts). */
   timerTools?(convId: string): AgentTool[];
+  /** The `canvas` tool for a chat (canvas.ts). */
+  canvasTools?(convId: string): AgentTool[];
   /** The user's memory by topic: read into prompts, filled after turns. */
   memory?: MemoryStore;
   /** Saved personas. */
