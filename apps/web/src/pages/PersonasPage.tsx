@@ -8,7 +8,7 @@ import { useModels } from "../useModels";
 import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
-type Draft = Omit<Persona, "id"> & { id?: string };
+type Draft = Omit<Persona, "id"> & { id?: string; sources?: Array<{ title: string; url: string }> };
 const HE_NAMES: Record<string, string> = { "Unity mentor": "מנטור Unity", "Code reviewer": "סוקר קוד", Translator: "מתרגם", Editor: "עורך לשון", Teacher: "מורה" };
 const localName = (n: string) => (getLocale() === "he" ? HE_NAMES[n] ?? n : n);
 
@@ -21,12 +21,13 @@ export function PersonasPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [describe, setDescribe] = useState("");
   const [building, setBuilding] = useState(false);
+  const [web, setWeb] = useState(true);
   // Agent Builder: the chat model writes the assistant from a description; you review it before saving.
   const build = async () => {
     if (!describe.trim()) return;
     setBuilding(true);
     try {
-      setDraft(await api<Draft>("/api/personas/build", { method: "POST", body: { description: describe } }));
+      setDraft(await api<Draft>("/api/personas/build", { method: "POST", body: { description: describe, web } }));
       setDescribe("");
     } catch (e) {
       toast((e as Error).message);
@@ -41,7 +42,8 @@ export function PersonasPage() {
   const save = async () => {
     if (!draft) return;
     try {
-      await api("/api/personas", { method: "POST", body: draft });
+      const { sources: _sources, ...persona } = draft;
+      await api("/api/personas", { method: "POST", body: persona });
       setDraft(null);
       await refreshPersonas();
     } catch (e) {
@@ -65,6 +67,12 @@ export function PersonasPage() {
       </div>
       {draft ? (
         <form className="card kb-form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+          {draft.sources?.length ? (
+            <details className="small">
+              <summary>{L(`נכתב בעזרת ${draft.sources.length} מקורות מהאינטרנט`, `Written with ${draft.sources.length} web sources`)}</summary>
+              <ul>{draft.sources.map((x) => <li key={x.url}><a href={x.url} target="_blank" rel="noreferrer noopener" dir="auto">{x.title || x.url}</a></li>)}</ul>
+            </details>
+          ) : null}
           <div className="row">
             <label className="persona-icon">{L("סמל", "Icon")}<input value={draft.icon ?? ""} onChange={(e) => setDraft({ ...draft, icon: e.target.value })} maxLength={4} /></label>
             <label className="grow">{L("שם", "Name")}<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus /></label>
@@ -119,9 +127,10 @@ export function PersonasPage() {
         <form className="card stack builder" onSubmit={(e) => { e.preventDefault(); void build(); }}>
           <strong>{L("תאר עוזר במילים", "Describe an assistant in words")}</strong>
           <textarea rows={3} dir="auto" value={describe} onChange={(e) => setDescribe(e.target.value)} placeholder={L("למשל: עוזר שעובר על קוד Unreal C++ שלי, מסביר באגים בעברית ומציע תיקונים קצרים", "e.g. An assistant that reviews my Unreal C++ code, explains bugs simply and suggests short fixes")} />
+          <label className="row small"><input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} />{L("לחפש קודם באינטרנט (סגנון, מונחים, עובדות) ולהשתמש במה שנמצא", "Search the web first (style, terms, facts) and use what it finds")}</label>
           <div className="row">
-            <span className="muted small grow">{L("מודל הצ'אט כותב שם, הוראות, ובוחר מודל ומאגר ידע מתאימים. תראה הכול ותוכל לשנות לפני שמירה.", "The chat model writes a name and instructions, and picks a fitting model and knowledge base. You see it all and can change it before saving.")}</span>
-            <button type="submit" className="primary" disabled={building || !describe.trim()}>{building ? L("בונה…", "Building…") : L("בנה עוזר", "Build it")}</button>
+            <span className="muted small grow">{L("מודל הצ'אט כותב שם, הוראות, טמפרטורה והצעות פתיחה, ובוחר מודל ומאגר ידע מתאימים. תראה הכול ותוכל לשנות לפני שמירה.", "The chat model writes a name, instructions, a temperature and opening suggestions, and picks a fitting model and knowledge base. You see it all and can change it before saving.")}</span>
+            <button type="submit" className="primary" disabled={building || !describe.trim()}>{building ? (web ? L("מחפש וכותב…", "Searching and writing…") : L("בונה…", "Building…")) : L("בנה עוזר", "Build it")}</button>
           </div>
         </form>
         <div className="row"><button type="button" className="primary" onClick={() => setDraft({ name: "", instructions: "" })}>{L("+ פרסונה חדשה", "+ New persona")}</button></div>

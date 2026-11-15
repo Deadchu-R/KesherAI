@@ -1301,3 +1301,14 @@ Stopped at: building (store and public page first, then the chat menu and the se
   model (1–4B, Q4) chosen by the phone's RAM; the computer/phone switch's "on the phone" side turns on when one is loaded.
 - **Needs Roee:** a new dependency (the plugin, native code in the Android app) and a GitHub build of the APK.
 - **Stopped at:** research done, waiting for his yes on the dependency.
+
+## Persona builder with web research (2026-11-15, evening; asked by Roee)
+- **LobeHub** (agent market, "generate assistant"): a description becomes a system prompt, avatar and opening
+  questions. **Character.AI / SillyTavern** card generators: name, persona, greeting, examples. None of them search the
+  web first; for a real person, a game or a field, that is where the facts come from.
+- **Built (0.6.248):** the builder already wrote name, icon, instructions, model and knowledge base. Now it can search
+  first (on by default): the chat model picks up to three searches, KesherAI runs them with the user's web filter and
+  reads the two best pages (3,000 characters each), and the notes go to the writer as data in a tag. It also writes a
+  temperature and three opening suggestions. The draft shows the sources; nothing is saved until the user saves.
+- **Stopped at:** done.
+

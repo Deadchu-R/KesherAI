@@ -490,6 +490,10 @@ S5 an outside scanner's rules for Electron.
 
 ## Notes for scan 81 (0.6.247)
 
+- Persona builder research (0.6.248): web pages are read with `web_fetch`'s rules (public addresses only, the user's
+  blocked sites and safe search) and reach the writer inside `<web_notes>` as data; the result is only a draft the
+  user reviews, never saved or run by itself; sources are dropped before saving.
+
 - Smart auto approvals: only `exec` tools with a command, only in "auto-edit", never for the always-ask list or a
   tool that insists on asking; the reviewer sees the person's typed messages and the command only (no tool output, no
   attachments), so a prompt injection in a file or page cannot reach it; anything but a clear ALLOW asks the person.
