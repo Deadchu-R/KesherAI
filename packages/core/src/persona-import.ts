@@ -117,8 +117,43 @@ export async function findPersonas(home = homedir(), env: NodeJS.ProcessEnv = pr
   return out;
 }
 
+/**
+ * A character card (the SillyTavern format: `chara_card_v2` / `chara_card_v3` with the fields under `data`, or V1
+ * with them at the top) as a persona: who the character is, its scenario, example lines and greeting become the
+ * instructions. `{{char}}` and `{{user}}` are filled in. The card's words describe the character, like any persona
+ * the user writes.
+ *
+ * @param o - One object from the file.
+ * @returns The persona, or undefined when this is not a card.
+ */
+export function characterCard(o: Record<string, unknown>): (Omit<FoundPersona, "app"> & { icon?: string }) | undefined {
+  const spec = typeof o.spec === "string" ? o.spec : "";
+  const d = (/^chara_card_v[23]$/.test(spec) && o.data && typeof o.data === "object" ? o.data : o) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const name = text(d.name) || text(d.char_name);
+  const description = text(d.description) || text(d.char_persona);
+  // V1 has no spec: a card is something with a name and a first message or a personality (not any JSON with a name).
+  if (!name || (!spec && !("first_mes" in d) && !("char_greeting" in d) && !("personality" in d))) return undefined;
+  if (!description && !text(d.personality) && !text(d.system_prompt)) return undefined;
+  const fill = (t: string) => t.replace(/\{\{char\}\}|<BOT>/gi, name).replace(/\{\{user\}\}|<USER>/gi, "the user");
+  const scenario = text(d.scenario) || text(d.world_scenario);
+  const examples = text(d.mes_example) || text(d.example_dialogue);
+  const greeting = text(d.first_mes) || text(d.char_greeting);
+  const parts = [
+    text(d.system_prompt),
+    `You are ${name}. Stay in character.`,
+    description && `About ${name}:\n${description}`,
+    text(d.personality) && `Personality: ${text(d.personality)}`,
+    scenario && `Scenario: ${scenario}`,
+    examples && `Examples of how ${name} talks:\n${examples}`,
+    greeting && `When the conversation starts (the user greets you or sends their first message), open in this spirit:\n${greeting}`,
+    text(d.post_history_instructions),
+  ].filter((x): x is string => !!x);
+  return { name: name.slice(0, 60), instructions: fill(parts.join("\n\n")).slice(0, 20_000), icon: "🎭" };
+}
+
 /** A persona file from LobeHub (an agent) or Open WebUI (exported workspace models). */
-export type PersonaFileSource = "LobeHub" | "Open WebUI";
+export type PersonaFileSource = "LobeHub" | "Open WebUI" | "a character card";
 
 /**
  * Reads personas from an exported file: a LobeHub agent (`{ meta, config:
@@ -136,6 +171,9 @@ export function personasFromFile(json: unknown): { source: PersonaFileSource; pe
   const isLobe = objs.some((o) => o.config && typeof o.config === "object" && typeof (o.config as Record<string, unknown>).systemRole === "string");
   const isOwui = objs.some((o) => o.params && typeof o.params === "object" && typeof (o.params as Record<string, unknown>).system === "string");
   const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  // Character cards (SillyTavern, Backyard, chub.ai): V2/V3 keep the fields under `data`, V1 at the top.
+  const cards = objs.map(characterCard).filter((c): c is NonNullable<typeof c> => !!c);
+  if (cards.length) return { source: "a character card", personas: cards };
   if (isLobe) {
     const personas = objs.flatMap((o) => {
       const config = (o.config ?? {}) as Record<string, unknown>;

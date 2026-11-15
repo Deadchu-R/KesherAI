@@ -51,3 +51,20 @@ test("a LobeHub agent and Open WebUI's exported models become personas; other JS
   assert.equal(personasFromFile({ mapping: {} }), undefined);
   assert.equal(personasFromFile("text"), undefined);
 });
+
+test("a character card (SillyTavern V2, and V1) becomes a persona; other JSON with a name does not", async () => {
+  const { personasFromFile } = await import("./persona-import.js");
+  const v2 = { spec: "chara_card_v2", spec_version: "2.0", data: { name: "Mira", description: "{{char}} is a ship's engineer who teases {{user}}.", personality: "dry, kind", scenario: "A long flight.", first_mes: "Oh, {{user}}. You again.", mes_example: "<START>\n{{char}}: Hand me that wrench.", system_prompt: "", alternate_greetings: ["Hey."] } };
+  const r = personasFromFile(v2)!;
+  assert.equal(r.source, "a character card");
+  const p = r.personas[0]!;
+  assert.equal(p.name, "Mira");
+  assert.equal(p.icon, "🎭");
+  assert.match(p.instructions, /^You are Mira\. Stay in character\./);
+  assert.match(p.instructions, /Mira is a ship's engineer who teases the user\./);
+  assert.match(p.instructions, /Personality: dry, kind[\s\S]*Scenario: A long flight\.[\s\S]*Mira: Hand me that wrench\.[\s\S]*open in this spirit:\nOh, the user\. You again\./);
+  assert.doesNotMatch(p.instructions, /\{\{/);
+  const v1 = personasFromFile({ name: "Bo", description: "A quiet fisherman.", personality: "calm", first_mes: "Morning." })!;
+  assert.equal(v1.personas[0]!.name, "Bo");
+  assert.equal(personasFromFile({ name: "just a thing", description: "not a card" }), undefined);
+});

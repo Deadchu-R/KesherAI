@@ -217,6 +217,33 @@ function FoundPersonas() {
  * Personas from an exported file: a LobeHub agent or Open WebUI's exported
  * models (.json). Works from the phone too (the file is uploaded).
  */
+/**
+ * The character card inside a PNG (SillyTavern's format): a text chunk named "ccv3" or "chara" holding the card's
+ * JSON in base64. Read here, in the browser, so only the card's JSON is sent.
+ *
+ * @param png - The file's bytes.
+ * @returns The card's JSON, or undefined when the picture has none.
+ */
+export function cardFromPng(png: Uint8Array): unknown {
+  const found: Record<string, string> = {};
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  for (let at = 8; at + 12 <= png.length; ) {
+    const size = view.getUint32(at);
+    const type = String.fromCharCode(...png.subarray(at + 4, at + 8));
+    if (type === "tEXt") {
+      const body = png.subarray(at + 8, at + 8 + size);
+      const zero = body.indexOf(0);
+      const key = new TextDecoder("latin1").decode(body.subarray(0, zero));
+      if (key === "chara" || key === "ccv3") found[key] = new TextDecoder("latin1").decode(body.subarray(zero + 1));
+    }
+    if (type === "IEND") break;
+    at += 12 + size;
+  }
+  const b64 = found.ccv3 ?? found.chara;
+  if (!b64) return undefined;
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))));
+}
+
 function PersonaFile() {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -225,10 +252,12 @@ function PersonaFile() {
     try {
       let data: unknown;
       try {
-        data = JSON.parse(await file.text());
+        // A character card is often a picture (PNG) with the card inside it as text.
+        data = /\.png$/i.test(file.name) || file.type === "image/png" ? cardFromPng(new Uint8Array(await file.arrayBuffer())) : JSON.parse(await file.text());
       } catch {
         throw new Error(L("הקובץ אינו JSON.", "The file is not JSON."));
       }
+      if (data === undefined) throw new Error(L("בתמונה הזו אין כרטיס דמות.", "This picture holds no character card."));
       const r = await api<{ source: string; added: string[] }>("/api/personas/import-file", { method: "POST", body: { data } });
       toast(L(`נוספו ${r.added.length} פרסונות מ-${r.source}.`, `Added ${r.added.length} personas from ${r.source}.`));
       await refreshPersonas();
@@ -241,9 +270,9 @@ function PersonaFile() {
   };
   return (
     <section className="card row">
-      <span className="grow muted small">{L("יש לכם סוכן מ-LobeHub או מודלים שייצאתם מ-Open WebUI? ייבאו אותם כפרסונות, עם ההוראות, ההגדרות וההצעות שלהם.", "Have an agent from LobeHub, or models exported from Open WebUI? Import them as personas, with their instructions, settings and suggestions.")}</span>
+      <span className="grow muted small">{L("יש לכם סוכן מ-LobeHub, מודלים שייצאתם מ-Open WebUI, או כרטיס דמות (SillyTavern, קובץ PNG או JSON)? ייבאו אותם כפרסונות, עם ההוראות וההגדרות שלהם.", "Have an agent from LobeHub, models you exported from Open WebUI, or a character card (SillyTavern, a PNG or JSON file)? Import them as personas, with their instructions and settings.")}</span>
       <button type="button" disabled={busy} onClick={() => input.current?.click()}>{busy ? L("מייבא…", "Importing…") : L("ייבוא מקובץ", "Import a file")}</button>
-      <input ref={input} type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
+      <input ref={input} type="file" accept=".json,application/json,.png,image/png" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
     </section>
   );
 }

@@ -118,9 +118,9 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         <button type="button" data-pad="B" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
         <button type="button" className="bar-btn hist" aria-label={t("forward")} title={t("forward")} onClick={() => history.forward()}>{Icon.forward}</button>
         <div className="bar-seg" role="group" aria-label={t("chatOrCode")}>
-          <a href="#/" className={!inCode ? "on" : ""} aria-label={t("newChat")} title={t("newChat")}>{Icon.chat}</a>
+          <a href="#/" className={!inCode ? "on" : ""} aria-label={t("chatSide")} title={t("chatSide")}>{Icon.chat}</a>
           {/* Code, like the Claude app's Code side: its own start screen, the folder chosen in the message box (no dialog). */}
-          {!simple && <a href="#/code" className={inCode ? "on" : ""} aria-label={t("newCode")} title={t("newCode")}>{Icon.code}</a>}
+          {!simple && <a href="#/code" className={inCode ? "on" : ""} aria-label={t("codeSide")} title={t("codeSide")}>{Icon.code}</a>}
         </div>
       </div>
       <div className="appbar-main">

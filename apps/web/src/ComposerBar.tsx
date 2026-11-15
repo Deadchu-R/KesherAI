@@ -35,7 +35,8 @@ export function ComposerBar(p: {
 }) {
   return (
     <div className="box-bar">
-      <AddMenu {...p.attach} onInsert={p.onInsert} web={p.web} onWeb={p.onWeb} {...(p.mode ? { mode: p.mode.value, onMode: p.mode.onChange } : {})} />
+      {/* The approvals mode is the chip in this row (always in sight), so the + menu does not repeat it. */}
+      <AddMenu {...p.attach} onInsert={p.onInsert} web={p.web} onWeb={p.onWeb} />
       <WebToggle on={p.web} onChange={p.onWeb} />
       {p.extra}
       {p.onDictate && <Mic onText={p.onDictate} />}

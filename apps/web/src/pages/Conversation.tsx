@@ -975,7 +975,8 @@ export function ConversationPage({ id }: { id: string }) {
               mode={{ value: info?.mode ?? conv.mode, onChange: (m) => void patch({ mode: m }) }}
               extra={
                 <>
-                  <WebPrefsChip value={conv.web} onChange={(w) => void patch({ web: w })} />
+                  {/* Web search's own settings (depth, sites) only while web search is on, or this chat changed them: one ⚙ less otherwise. */}
+                  {(web || !!conv.web) && <WebPrefsChip value={conv.web} onChange={(w) => void patch({ web: w })} />}
                   <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
                   {voicePart && (
                     <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
