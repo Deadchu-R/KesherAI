@@ -10,7 +10,7 @@ import { dirname } from "node:path";
 /** One fault. */
 export interface Fault {
   at: string;
-  kind: "server" | "chat" | "engine" | "other";
+  kind: "server" | "chat" | "engine" | "phone" | "other";
   /** Where: a route, a chat's title, an engine. */
   where: string;
   message: string;

@@ -29,6 +29,8 @@ public class NotifyPlugin extends Plugin {
     public void load() {
         // Nothing here may stop the plugin from loading (then the app would have no notifications at all).
         Notes.foreground = true;
+        // A crash anywhere in the app is written down first, so the next start can say what it was.
+        Crashes.install(getContext());
         try {
             Notes.channels(getContext());
             remember(getActivity() != null ? getActivity().getIntent() : null);
@@ -171,7 +173,7 @@ public class NotifyPlugin extends Plugin {
         if (Prefs.live(c)) {
             try {
                 // Already running: starting it again would post the fixed notification again.
-                if (!LiveService.alive) ContextCompat.startForegroundService(c, live);
+                if (!LiveService.alive) Crashes.startLive(c, live);
             } catch (Exception e) {
                 call.reject("Android did not let the live connection start: " + e.getMessage());
                 return;
@@ -232,7 +234,7 @@ public class NotifyPlugin extends Plugin {
         Prefs.of(c).edit().putBoolean("live", live).putBoolean("chosen", true).apply();
         Intent service = new Intent(c, LiveService.class);
         try {
-            if (live && !Prefs.base(c).isEmpty() && !Prefs.key(c).isEmpty()) { if (!LiveService.alive) ContextCompat.startForegroundService(c, service); }
+            if (live && !Prefs.base(c).isEmpty() && !Prefs.key(c).isEmpty()) { if (!LiveService.alive) Crashes.startLive(c, service); }
             else if (!live) c.stopService(service);
         } catch (Exception e) {
             call.reject("Android did not let the live connection start: " + e.getMessage());
@@ -252,6 +254,12 @@ public class NotifyPlugin extends Plugin {
         String id = call.getString("id");
         if (id != null) Notes.cancel(getContext(), id);
         call.resolve();
+    }
+
+    /** The last crash, once: { at, where, error, stack } (empty when there was none). */
+    @PluginMethod
+    public void takeCrash(PluginCall call) {
+        call.resolve(Crashes.take(getContext()));
     }
 
     /** The page a tapped notification asked for, once. */

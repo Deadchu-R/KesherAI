@@ -88,3 +88,21 @@ test("over the network, /s/<token> needs no key but the share list does", async 
     await server.app.close();
   }
 });
+
+test("the phone app's crash report goes to the fault log (behind the key from outside)", async () => {
+  const { createKesherServer } = await import("./server.js");
+  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-phone-crash-")), autodetect: false, pluginRoots: [] });
+  try {
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: { error: "x" }, remoteAddress: "203.0.113.9" })).statusCode, 401);
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: {} })).statusCode, 400);
+    const ok = await server.app.inject({ method: "POST", url: "/api/faults/phone", payload: { error: "java.lang.IllegalStateException: boom", stack: "at dev.kesherai.notify.LiveService.onStartCommand", where: "thread main", device: "OPPO CPH2653, Android 16", at: 1794700000000 } });
+    assert.equal(ok.statusCode, 200);
+    await new Promise((r) => setTimeout(r, 200));
+    const faults = (await server.app.inject({ method: "GET", url: "/api/faults" })).json() as Array<{ kind: string; where: string; message: string }>;
+    const f = faults.find((x) => x.kind === "phone")!;
+    assert.match(f.where, /CPH2653, Android 16 · thread main · 2026-11-14T23:46:40/);
+    assert.match(f.message, /IllegalStateException: boom[\s\S]*LiveService/);
+  } finally {
+    await server.app.close();
+  }
+});

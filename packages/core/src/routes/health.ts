@@ -96,6 +96,18 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
 
   // KesherAI's own recent faults (already cleaned of secrets and home paths), for the Health page.
   app.get("/api/faults", async () => s.faults.recent({ limit: 15 }));
+  /**
+   * The phone app's last crash, sent when it connects again (its native part writes it down: found when the app
+   * closed on connect with nothing to read). Behind the usual key, like every /api route; the error and its stack
+   * only, through the fault log's redaction.
+   */
+  app.post<{ Body: { where?: string; error?: string; stack?: string; device?: string; at?: number } }>("/api/faults/phone", async (req, reply) => {
+    const b = req.body ?? {};
+    if (typeof b.error !== "string" || !b.error) return reply.code(400).send({ error: "No crash to report." });
+    const when = typeof b.at === "number" ? new Date(b.at).toISOString() : "unknown time";
+    s.faults.add({ kind: "phone", where: `${String(b.device ?? "phone").slice(0, 80)} · ${String(b.where ?? "").slice(0, 80)} · ${when}`, message: `${b.error.slice(0, 500)}\n${String(b.stack ?? "").slice(0, 1400)}` });
+    return { ok: true };
+  });
 
   // "Report a problem" (asked for: no GitHub account needed): the person sees exactly what goes (version, system,
   // the faults already cleaned of keys, tokens and home paths, and their own words), then it goes to the project's

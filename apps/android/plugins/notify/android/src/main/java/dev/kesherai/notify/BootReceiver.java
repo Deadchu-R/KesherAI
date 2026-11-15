@@ -14,7 +14,7 @@ public class BootReceiver extends BroadcastReceiver {
         if (!Intent.ACTION_BOOT_COMPLETED.equals(a) && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) return;
         if (!Prefs.live(context) || Prefs.base(context).isEmpty()) return;
         try {
-            ContextCompat.startForegroundService(context, new Intent(context, LiveService.class));
+            Crashes.startLive(context, new Intent(context, LiveService.class));
         } catch (Exception e) {
             // Android refused to start it now; it starts the next time the app opens.
         }

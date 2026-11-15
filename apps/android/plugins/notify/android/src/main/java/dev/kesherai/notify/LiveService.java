@@ -39,10 +39,19 @@ public class LiveService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Notes.channels(this);
-        Notification n = note();
-        if (Build.VERSION.SDK_INT >= 34) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING);
-        else startForeground(ID, n);
+        // Android can refuse a foreground service (the phone's rules, a missing permission): then the live connection
+        // is off and UnifiedPush delivers, but the app must never close over it.
+        try {
+            Notes.channels(this);
+            Notification n = note();
+            if (Build.VERSION.SDK_INT >= 34) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING);
+            else startForeground(ID, n);
+        } catch (Throwable t) {
+            Crashes.note(this, "LiveService.startForeground", t);
+            alive = false;
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         if (thread == null) {
             running = true;
             alive = true;

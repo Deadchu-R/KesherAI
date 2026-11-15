@@ -108,6 +108,7 @@
   <div id="found" class="found" hidden></div>
   <button id="local" type="button" class="local" data-he="בלי מחשב: מודל על הטלפון" data-en="No computer: a model on this phone">בלי מחשב: מודל על הטלפון</button>
   <p id="status"></p>
+  <details id="crash" hidden><summary></summary><pre id="crashText" dir="ltr" style="white-space:pre-wrap;font-size:11px;max-height:40vh;overflow:auto"></pre></details>
   <section id="notify" class="notify" hidden>
     <strong data-he="התראות" data-en="Notifications">התראות</strong>
     <p id="notifyState" class="small"></p>
@@ -423,6 +424,20 @@
   // Keep the addresses fresh in the background.
   void syncGoogleComputers(true).catch(() => undefined);
 
+  /** The app's last crash, written down by its native part (shown here, sent to the computer on the next connect). */
+  let lastCrash = null;
+  (async () => {
+    try {
+      const c = await window.Capacitor?.Plugins?.KesherNotify?.takeCrash?.();
+      if (!c || !c.error) return;
+      lastCrash = c;
+      const box = $("crash");
+      box.hidden = false;
+      box.querySelector("summary").textContent = lang === "he" ? "האפליקציה נסגרה בפעם הקודמת. הפרטים יישלחו למחשב בחיבור הבא." : "The app closed last time. The details go to the computer on the next connect.";
+      $("crashText").textContent = `${c.device}\n${c.where}\n${c.error}\n\n${c.stack}`;
+    } catch { /* an older app without it */ }
+  })();
+
   async function connect(link) {
     let url;
     try { url = new URL(link.trim()); } catch { $("status").textContent = tr.bad[lang]; $("status").className = "error"; return; }
@@ -437,6 +452,13 @@
       if (!res.ok) throw new Error(String(res.status));
       if (cancelled) return;
       localStorage.setItem(KEY, url.href);
+      // The last crash (if any) goes to the computer's fault log, so it can be fixed from there.
+      if (lastCrash) {
+        try {
+          await fetch(`${url.origin}/api/faults/phone`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(lastCrash), signal: AbortSignal.timeout(5000) });
+          lastCrash = null;
+        } catch { /* it stays shown here */ }
+      }
       if (token) await rememberComputer(url, token);
       // Coming back here with the Back button shows this screen instead of connecting again.
       sessionStorage.setItem("kesherai-connected", "1");
