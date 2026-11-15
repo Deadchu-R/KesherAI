@@ -83,6 +83,9 @@ export async function loadModel(s: KesherServices, modelPath: string, name?: str
   s.guard.touch("llamacpp");
   s.registerEngineProvider();
   const modelId = `llamacpp/${(name ?? basename(modelPath)).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}`;
+  // Another load finished after this one began (found on the PC: an automatic reload of the old model raced the user's
+  // own load; the engine ended on the user's model but the settings said the old one, which came back after a restart).
+  if (s.engine.status().modelPath !== modelPath) return modelId;
   s.config.engines.lastModel = modelPath;
   if (!s.config.activeModels.chat || s.config.activeModels.chat.startsWith("llamacpp/")) s.config.activeModels.chat = modelId;
   await s.saveConfig();

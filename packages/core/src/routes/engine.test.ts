@@ -54,3 +54,21 @@ test("/api/models/fit and /api/models/calibrate refuse a file inside the models 
     await app.close();
   }
 });
+
+test("a load that another load overtook does not write its model into the settings", async () => {
+  const { loadModel } = await import("./engine.js");
+  let current = "";
+  const config = { engines: { lastModel: "/m/new.gguf" }, activeModels: { chat: "llamacpp/new" } };
+  const s = {
+    guard: { touch: () => undefined },
+    engine: { load: async (p: string) => void (p === "/m/old.gguf" ? (current = "/m/new.gguf") : (current = p)), status: () => ({ modelPath: current }) },
+    registerEngineProvider: () => undefined,
+    config,
+    saveConfig: async () => undefined,
+  } as unknown as Parameters<typeof loadModel>[0];
+  await loadModel(s, "/m/old.gguf");
+  assert.deepEqual(config, { engines: { lastModel: "/m/new.gguf" }, activeModels: { chat: "llamacpp/new" } });
+  await loadModel(s, "/m/other.gguf", "Other");
+  assert.equal(config.engines.lastModel, "/m/other.gguf");
+  assert.equal(config.activeModels.chat, "llamacpp/Other");
+});
