@@ -1,0 +1,180 @@
+{
+ "as": "claude",
+ "changes": [
+  {
+   "op": "add",
+   "title": "[Audit step 0] Release 0.6.238: no second installer while one runs",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). Fix is in main (Updater.installerStartedAt, test in updates-release.test.ts). Bump, push main+release, install once, check KesherAI comes back.",
+   "size": "small",
+   "category": "fix"
+  },
+  {
+   "op": "add",
+   "title": "[Audit step 0] Check 0.6.237 on the PC and at 390px",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). Sidebar: one \"new\" button per side, \"From routines\" group; Home without recents/pins when the sidebar shows; All tools lines; model name; R3/L3 on a real pad.",
+   "size": "small",
+   "category": "test"
+  },
+  {
+   "op": "add",
+   "title": "[Audit U7] One microphone button (dictate + voice conversation)",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). ComposerBar.tsx, Mic.tsx, Conversation.tsx voice-chip.",
+   "size": "small",
+   "category": "ui"
+  },
+  {
+   "op": "add",
+   "title": "[Audit U11] English leftovers in the Hebrew interface",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). ChatHeaderTools.tsx \"Summary\" and others: wrap in L(he,en).",
+   "size": "small",
+   "category": "ui"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F20] One \"Customize\" page: connections, plugins, skills as tabs",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). pages/Customize.tsx; old hashes open the right tab.",
+   "size": "small",
+   "category": "ui"
+  },
+  {
+   "op": "add",
+   "title": "[Audit C4] Controller: a short rumble when an answer is ready or an approval waits",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). gamepad.ts vibrationActuator; a setting.",
+   "size": "small",
+   "category": "ui"
+  },
+  {
+   "op": "add",
+   "title": "[Audit C5] Controller: on-screen keyboard for fields other than the chat box",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). big",
+   "size": "big",
+   "category": "ui"
+  },
+  {
+   "op": "add",
+   "title": "[Audit C6] ui-check walks the screens with a simulated pad",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). scripts/ui-check.mjs.",
+   "size": "small",
+   "category": "test"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F17] \"@\" menu in the message box",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). chat/AtMenu.tsx beside the / commands in PromptTextarea.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F12] The chat changes KesherAI settings, with an approval card",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). change_setting tool, whitelist of keys, never remote/permissions/keys.",
+   "size": "small",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F21] Usage as a picture: heatmap, top models and tools",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). GET /api/usage/days; SVG, no library.",
+   "size": "small",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F11] Benchmark: right answers beside speed",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). bench-set.ts, 10 fixed questions after /api/models/benchmark.",
+   "size": "small",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F7] Git panel in code chats",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). routes/git.ts + chat/GitPanel.tsx; no force push, no reset --hard.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F18] Charts inside the answer (```chart block as SVG)",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). RichText; one line in the system prompt.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F10] \"Auto\" approvals with a reviewer model",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). PermissionMode \"auto-review\"; the reviewer never sees tool output.",
+   "size": "big",
+   "category": "security"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F4] Picture lanes without nodes: upscale and inpaint first",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). comfy-flows.ts ready-made flows; needs Roee's yes for downloads.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F19] Two local models at once (a helper beside the main one)",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). second LlamaEngine, guard entry, VRAM plan.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F5] LoRA browser (CivitAI search, trigger words, strength)",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). big",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F8] Voice: stop the answer by speaking",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). VoiceMode barge-in.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F13] Two cards: chat on one, ComfyUI on the other",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). config per engine GPU; planGpus.",
+   "size": "small",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F14] Phone: share pictures/files into KesherAI, a home widget, fingerprint lock",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). apps/android plugins.",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F15] MCP Apps: a tool's own view inside the chat",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). big",
+   "size": "big",
+   "category": "feature"
+  },
+  {
+   "op": "add",
+   "title": "[Audit F23] Phone: one \"Tasks\" view of what runs on the computer",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). chats working + self-work + routines + downloads.",
+   "size": "small",
+   "category": "ui"
+  },
+  {
+   "op": "add",
+   "title": "[Audit S5] Semgrep rules for Electron in CI",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). .github/workflows/ci.yml.",
+   "size": "small",
+   "category": "security"
+  },
+  {
+   "op": "add",
+   "title": "[Audit S4] Signed installer and signed update feed (waits on SignPath)",
+   "details": "See docs/AUDIT_2026-11.md section 7 (how to build it). docs/CODE_SIGNING.md.",
+   "size": "big",
+   "category": "security"
+  }
+ ]
+}
