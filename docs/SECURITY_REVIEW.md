@@ -418,3 +418,16 @@ This review went through the code part by part. Each finding is listed with what
 - Text Helper actions (0.6.213): cleaned (names up to 40 characters, instructions up to 1,000, 12 at most); they go
   only into the user's own prompts.
 - Chat timer routes and the persona icon: moved / static, no new input.
+
+## Scan 69 (2026-11-15, 0.6.217)
+
+- **Found on the PC, fixed:** llama-server ran with no API key and allowed every origin ("CORS allows all origins"), so
+  any website open in a browser on this computer could use the local model and read its answers. Each engine now
+  makes a random key, passes it in llama-server's environment (`LLAMA_API_KEY`, not visible on the command line), and
+  KesherAI's own providers send it. The key never reaches the interface (providers are listed with `hasApiKey` only).
+- New `POST /api/{unreal,unity}/close`: same authentication as every API route (this computer or a paired device);
+  "without saving" loses work, so it needs the explicit choice in the page's menu, and the editor plugin refuses it
+  with the editor closed (headless) or, when saving, while the game plays.
+- Model listing: split GGUFs now get an estimate for their full size (was the ~10 MB first part: "fits, 55,000 t/s").
+- To check next: ComfyUI on 127.0.0.1:8188 has no key either (it does not send CORS headers by default, so pages cannot
+  read its answers, but a simple POST could still queue work).
