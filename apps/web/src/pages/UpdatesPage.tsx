@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, isRemote } from "../api";
 import { desktop } from "../library";
 import { reconnect } from "../Reconnect";
 import { getLocale, t } from "../i18n";
@@ -13,6 +13,7 @@ export function UpdatesPage() {
     <div className="page">
       <h1>{t("updatesNav")}</h1>
       <Updates />
+      <UpdateFeed />
       <PhoneAppUpdates />
     </div>
   );
@@ -214,6 +215,52 @@ function Updates() {
   );
 }
 
+
+/**
+ * Updates without GitHub: what this computer passes on to my other computers (the installer it last downloaded and
+ * checked, or one it built), and the folder of a build made here.
+ */
+function UpdateFeed() {
+  const he = getLocale() === "he";
+  const [st, setSt] = useState<{ serving: { version: string; built: boolean } | null; buildFolder: string | null } | null>(null);
+  const [folder, setFolder] = useState("");
+  const [msg, setMsg] = useState("");
+  const load = () => void api<NonNullable<typeof st>>("/api/updates/feed-status").then((x) => { setSt(x); setFolder(x.buildFolder ?? ""); }, () => undefined);
+  useEffect(load, []);
+  const save = async (value: string) => {
+    setMsg("");
+    try {
+      await api("/api/updates/build-folder", { method: "POST", body: { folder: value } });
+      load();
+      setMsg(he ? "נשמר" : "Saved");
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+  if (!st) return null;
+  return (
+    <section className="card stack">
+      <h2>{he ? "עדכונים בלי GitHub" : "Updates without GitHub"}</h2>
+      <p className="muted small">{he ? "כשמחשב אחר שלי (ב\"המכשירים שלי\") מחזיק גרסה חדשה יותר מ־GitHub, העדכון מגיע ממנו, ונבדק באותה טביעת sha512." : "When another of my computers (in My devices) has a newer version than GitHub, the update comes from it, checked with the same sha512."}</p>
+      <p className="small">
+        {st.serving
+          ? he ? `המחשב הזה מעביר הלאה את ${st.serving.version} (${st.serving.built ? "בנייה מהמחשב הזה" : "ההתקנה האחרונה שהורדה"}).` : `This computer passes on ${st.serving.version} (${st.serving.built ? "a build made here" : "the last installer it downloaded"}).`
+          : he ? "למחשב הזה אין עדיין גרסה להעביר הלאה. אחרי העדכון הבא מ־GitHub היא תישמר כאן." : "This computer has no version to pass on yet. After the next update from GitHub it is kept here."}
+      </p>
+      {!isRemote() && (
+        <div className="stack">
+          <label className="small" htmlFor="build-folder">{he ? "תיקיית בנייה במחשב הזה (הפלט של pnpm dist, עם latest.yml)" : "A build folder on this computer (pnpm dist's output, with latest.yml)"}</label>
+          <div className="row">
+            <input id="build-folder" className="grow" dir="ltr" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="…\KesherAI\apps\desktop\out" />
+            <button type="button" onClick={() => void save(folder)}>{he ? "שמור" : "Save"}</button>
+            {st.buildFolder && <button type="button" onClick={() => void save("")}>{he ? "הסר" : "Remove"}</button>}
+          </div>
+        </div>
+      )}
+      {msg && <p className="muted small">{msg}</p>}
+    </section>
+  );
+}
 
 type PhoneUpdater = {
   check(o: { url: string }): Promise<{ available: boolean; currentName: string; latestName: string; apkUrl?: string; changes?: Array<{ subject: string; he?: string }> }>;

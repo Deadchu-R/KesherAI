@@ -488,6 +488,16 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Notes for scan 80 (0.6.245)
+
+- Update feed (`/api/updates/feed/:file`): read-only; only a plain file name (no folders, no `..`) that the feed
+  itself lists, or the feed file; behind the same token as every other route from another device. The build folder
+  is set only from this computer and must hold a complete feed. Another computer's installer is run only after its
+  sha512 matches the feed that computer served, as with GitHub; the trust is the device link (my own computers, same
+  Google account, their token).
+- Install when free: in memory only; installs only a version the normal check found; never while a chat, self-work,
+  a download or another update runs.
+
 ## Scan 79 (2026-11-15, 0.6.244)
 
 - Settings from the chat (`change_setting`): only the listed keys can change, each value is checked, and every change

@@ -233,7 +233,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const nv = await nvidiaGpus();
     return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
   });
-  const updater = new Updater(undefined, options.updates, join(paths.root, "logs"));
+  const updater = new Updater(undefined, options.updates ? { ...options.updates, feedDir: join(paths.root, "update-feed") } : undefined, join(paths.root, "logs"));
   if (!config.notifications.ntfy.topic) {
     config.notifications.ntfy.topic = Notifier.newTopic();
     void persist().catch(() => undefined);
@@ -283,6 +283,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     version: async () => (await updater.version()).version,
     save: persist,
   });
+  // Updates without GitHub: my other computers that are online, and pass on the installer they have.
+  updater.setPeers(() => devices.peers().filter((p) => p.online && p.urls[0]).map((p) => ({ name: p.name, url: p.urls[0]!, token: p.token })));
   // Pipelines: chains of model calls and tools, with conditions and loops.
   const pipelines = buildPipelines({ paths, config, registry, personas, knowledge, whisper, notifier });
   const comfy = buildComfy({ paths, downloads, runtimes, config, registry });

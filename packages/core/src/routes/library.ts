@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { takeGameShot } from "./game.js";
 import { cloudFolders } from "../cloud-folders.js";
-import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { createReadStream, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } from "@kesher/shared";
@@ -18,6 +18,8 @@ import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { InstallWhenFree, type FreeState } from "../install-when-free.js";
+import { feedName, newestFeed, parseRange, safeFeedFile } from "../update-feed.js";
+import { compareVersions } from "../updates.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
 import { readProject } from "../unreal-install.js";
 import { findGameProjects, findScripts } from "../game-projects.js";
@@ -803,6 +805,41 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get("/api/jobs", async () => ({
     running: (await s.conversations.jobs().running()).map((j) => ({ id: j.id, key: j.key, startedAt: j.startedAt })),
   }));
+  // Updates without GitHub: this computer passes on the newest installer it has (one it built, or the one it last
+  // downloaded and checked) to my other computers, in electron-builder's feed shape. Read-only, fixed names only.
+  const feedFolders = () => [join(s.paths.root, "update-feed"), ...(s.config.updateBuildFolder ? [s.config.updateBuildFolder] : [])];
+  app.get("/api/updates/feed-status", async () => {
+    const f = newestFeed(feedFolders(), compareVersions);
+    return { serving: f ? { version: f.feed.version, built: f.folder === s.config.updateBuildFolder } : null, buildFolder: s.config.updateBuildFolder ?? null };
+  });
+  app.post<{ Body: { folder?: string | null } | undefined }>("/api/updates/build-folder", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only this computer can choose the folder." });
+    const folder = typeof req.body?.folder === "string" ? req.body.folder.trim() : "";
+    if (!folder) {
+      delete s.config.updateBuildFolder;
+    } else {
+      if (!newestFeed([folder], compareVersions)) return reply.code(400).send({ error: `No complete build in that folder (it needs ${feedName()} and the installer it names).` });
+      s.config.updateBuildFolder = folder;
+    }
+    await s.saveConfig();
+    return { buildFolder: s.config.updateBuildFolder ?? null };
+  });
+  app.get<{ Params: { file: string } }>("/api/updates/feed/:file", async (req, reply) => {
+    const f = newestFeed(feedFolders(), compareVersions);
+    const name = req.params.file;
+    if (!f || !safeFeedFile(name) || (name !== feedName() && !f.feed.files.some((x) => x.name === name))) return reply.code(404).send({ error: "Not here." });
+    const full = join(f.folder, name);
+    const size = (await stat(full)).size;
+    reply.header("accept-ranges", "bytes").header("cache-control", "no-store");
+    const range = parseRange(req.headers.range, size);
+    if (range) {
+      reply.code(206).header("content-range", `bytes ${range.start}-${range.end}/${size}`).header("content-length", String(range.end - range.start + 1));
+      return reply.type("application/octet-stream").send(createReadStream(full, { start: range.start, end: range.end }));
+    }
+    reply.header("content-length", String(size));
+    return reply.type(name.endsWith(".yml") ? "text/yaml" : "application/octet-stream").send(createReadStream(full));
+  });
+
   // "Install when the computer is free": waits for no chat, no self-work, no download, then installs.
   const freeState = async (): Promise<FreeState> => {
     const run = (await app.inject({ method: "GET", url: "/api/self-work", remoteAddress: "127.0.0.1", headers: { host: "127.0.0.1" } }).then((r) => r.json() as { run?: { status?: string } | null }, () => ({ run: null }))).run;

@@ -230,6 +230,8 @@ export const KesherConfigSchema = z.object({
     .prefault({}),
   /** A cloud-synced folder (Google Drive for desktop, OneDrive, Dropbox) to mirror projects and conversations to. */
   syncFolder: z.string().optional(),
+  /** A folder with an installer this computer built (electron-builder's output: latest.yml and the installer), passed on to my other computers. */
+  updateBuildFolder: z.string().optional(),
   remote: z
     .object({
       /** Listen on all interfaces and accept other devices that present the token. */

@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { feedName, keepForFeed, parseFeed } from "./update-feed.js";
 
 const exec = promisify(execFile);
 
@@ -62,6 +63,15 @@ export interface PackagedUpdates {
   install(file: string): Promise<void>;
   /** The GitHub API base (tests pass a fake server). */
   api?: string;
+  /** Where a checked installer is kept, to pass on to the user's other computers (updates without GitHub). */
+  feedDir?: string;
+}
+
+/** Another of the user's computers that may have a newer installer. */
+export interface UpdatePeer {
+  name: string;
+  url: string;
+  token: string;
 }
 
 /**
@@ -97,7 +107,17 @@ export function installerFor(names: string[], platform = process.platform, arch 
 /** Updates KesherAI: a git checkout in place, or an installed copy from GitHub releases. */
 export class Updater {
   private packagedProgress: UpdateProgress = { running: false, log: [] };
-  private pending?: { url: string; name: string; size: number; feedUrl?: string };
+  private pending?: { url: string; name: string; size: number; feedUrl?: string; headers?: Record<string, string>; from?: string };
+  /** The user's other computers that are online now (set once "My devices" is ready). */
+  private peers: () => UpdatePeer[] = () => [];
+
+  /**
+   * Lets updates come from the user's other computers too, when one has a newer installer than GitHub.
+   * @param peers - The other computers online now, with their address and token.
+   */
+  setPeers(peers: () => UpdatePeer[]): void {
+    this.peers = peers;
+  }
   /** When an installer was started (ms): until the app restarts, a second one must not start beside it. */
   private installerStartedAt = 0;
 
@@ -154,8 +174,52 @@ export class Updater {
     return { ...info, newCommits, ...(latestVersion ? { latestVersion } : {}), localChanges, checkedAt: new Date().toISOString() };
   }
 
-  /** Installed copies: is there a newer release on GitHub, with an installer for this system? */
+  /**
+   * Installed copies: the newest installer for this system, from GitHub or from one of the user's
+   * other computers (one that built it, or already downloaded it), whichever is newer.
+   */
   private async checkRelease(info: VersionInfo, force = false): Promise<UpdateCheck> {
+    let gh: UpdateCheck | undefined;
+    let ghError: Error | undefined;
+    try {
+      gh = await this.checkGitHub(info, force);
+    } catch (err) {
+      ghError = err as Error;
+    }
+    const peer = await this.checkPeers().catch(() => undefined);
+    const have = gh?.latestVersion && gh.newCommits.length ? gh.latestVersion : info.version;
+    if (peer && (compareVersions(peer.version, have) > 0 || (force && !gh?.newCommits.length && compareVersions(peer.version, info.version) >= 0))) {
+      this.pending = peer.pending;
+      const { building, ...rest } = gh ?? { ...info, newCommits: [], localChanges: [], checkedAt: new Date().toISOString() };
+      void building;
+      return { ...rest, newCommits: [{ hash: `v${peer.version}`, subject: `KesherAI ${peer.version} (from ${peer.pending.from})` }], latestVersion: peer.version, checkedAt: new Date().toISOString() };
+    }
+    if (gh) return gh;
+    throw ghError ?? new Error("No update source answered.");
+  }
+
+  /** The newest installer for this system on the user's other computers that are online. */
+  private async checkPeers(): Promise<{ version: string; pending: NonNullable<Updater["pending"]> } | undefined> {
+    let best: { version: string; pending: NonNullable<Updater["pending"]> } | undefined;
+    await Promise.all(
+      this.peers().map(async (p) => {
+        const base = `${p.url.replace(/\/$/, "")}/api/updates/feed`;
+        const headers = { authorization: `Bearer ${p.token}`, "user-agent": "KesherAI" };
+        const res = await fetch(`${base}/${feedName()}`, { headers, signal: AbortSignal.timeout(5000) }).catch(() => undefined);
+        if (!res?.ok) return;
+        const feed = parseFeed(await res.text().catch(() => ""));
+        const name = feed && installerFor(feed.files.map((f) => f.name));
+        const file = feed?.files.find((f) => f.name === name);
+        if (!feed || !file?.sha512) return;
+        if (best && compareVersions(feed.version, best.version) <= 0) return;
+        best = { version: feed.version, pending: { url: `${base}/${encodeURIComponent(file.name)}`, name: file.name, size: file.size, feedUrl: `${base}/${feedName()}`, headers, from: p.name } };
+      }),
+    );
+    return best;
+  }
+
+  /** Installed copies: is there a newer release on GitHub, with an installer for this system? */
+  private async checkGitHub(info: VersionInfo, force = false): Promise<UpdateCheck> {
     if (!this.packaged) throw new Error("This copy was not installed with git, so it cannot update itself here.");
     type Release = { tag_name: string; name?: string; body?: string; draft?: boolean; prerelease?: boolean; assets: Array<{ name: string; browser_download_url: string; size: number }> };
     const res = await fetchRetrying(`${this.packaged.api ?? "https://api.github.com"}/repos/${this.packaged.repo}/releases?per_page=10`, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) });
@@ -232,14 +296,14 @@ export class Updater {
       }
     };
     this.packagedProgress = { running: true, step: "Downloading", log: [] };
-    line(`Updating to ${p.name} (${(p.size / 1048576).toFixed(0)} MB) from GitHub`);
+    line(`Updating to ${p.name} (${(p.size / 1048576).toFixed(0)} MB) from ${p.from ?? "GitHub"}`);
     void (async () => {
       try {
         const file = join(tmpdir(), p.name);
         let lastLogged = 0;
         await fastDownload(p.url, file, {
           size: p.size,
-          headers: { "user-agent": "KesherAI" },
+          headers: p.headers ?? { "user-agent": "KesherAI" },
           log: line,
           onProgress: (got, total, bps) => {
             const pct = Math.floor((got / total) * 100);
@@ -253,7 +317,7 @@ export class Updater {
         });
         // Integrity: the file must match the sha512 the release published for it.
         const feedUrl = p.feedUrl ?? `https://github.com/${installer.repo}/releases/latest/download/${process.platform === "darwin" ? "latest-mac.yml" : process.platform === "linux" ? "latest-linux.yml" : "latest.yml"}`;
-        const yml = await fetchRetrying(feedUrl, { headers: { "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) }).then((r) => (r.ok ? r.text() : ""), () => "");
+        const yml = await fetchRetrying(feedUrl, { headers: p.headers ?? { "user-agent": "KesherAI" }, signal: AbortSignal.timeout(20_000) }).then((r) => (r.ok ? r.text() : ""), () => "");
         const want = expectedSha512(yml, p.name);
         if (want) {
           const have = createHash("sha512").update(await readFile(file)).digest("base64");
@@ -262,6 +326,8 @@ export class Updater {
             throw new Error("The downloaded installer does not match the release's fingerprint (sha512), so it was deleted and not run. Try again.");
           }
           line("Checked the installer's sha512 against the release: it matches");
+          // Keep a copy to pass on to the user's other computers (updates without GitHub).
+          if (installer.feedDir) await keepForFeed(installer.feedDir, file, yml).catch(() => undefined);
         } else {
           // No fingerprint to check against (the feed did not load, or it is for another file): never run an
           // installer unchecked (audit 2026-11, S1).

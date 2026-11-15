@@ -1265,5 +1265,12 @@ Stopped at: building (store and public page first, then the chat menu and the se
   `/api/updates/feed/*` (latest.yml, the installer, the phone's APK; fixed names, no paths from a request), and other
   computers and the phone get a "where updates come from" setting (GitHub, or that computer through the existing
   device link). The sha512 check stays as it is.
-- **Stopped at:** the local update source is planned, not built (it needs builds on the PC; GitHub works for the
-  public repo: the minutes Roee ran out of were another repo's). Next: Roee's decision in the morning.
+- **Stopped at:** the local update source was planned; Roee said yes (2026-11-15 20:03, "keep GitHub too").
+- **Built (0.6.245):** every computer keeps the last installer it downloaded and checked (`update-feed/`), and can
+  also serve a build made on it (a folder with `latest.yml`, set on the updates screen, this computer only). It serves
+  them read-only at `/api/updates/feed/<file>` (only names its feed lists, with ranges for the parallel download).
+  Checking for updates asks GitHub and my other online computers (with their device token) and takes the newest; the
+  sha512 check is the same. "Install when the computer is free" (Windows' active hours, VS Code's "update on
+  restart"; here the signal is KesherAI's own work: chats, self-work, downloads) waits and installs by itself.
+- **Not yet:** the phone app from a computer (its APK is built only on GitHub; a local Android build needs the SDK on
+  the PC). Next: serve the APK through the same feed when a computer has one.
