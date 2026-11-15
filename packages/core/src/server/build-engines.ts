@@ -6,7 +6,10 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { detectHardwareCached, type DownloadManager } from "@kesher/downloads";
+import type { ProviderRegistry } from "@kesher/providers";
+import { ComfyManager } from "../comfy-manager.js";
 import type { DataPaths, KesherConfig } from "../config.js";
+import type { Runtimes } from "../runtimes.js";
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { LlamaEngine } from "../llamacpp.js";
 import type { ModelUse } from "../pc-fix.js";
@@ -86,4 +89,29 @@ export async function amdCardOnLinux(root = "/sys/class/drm"): Promise<boolean> 
     if (vendor === "0x1002" && vram >= 4 * 1024 ** 3) return true;
   }
   return false;
+}
+
+/**
+ * ComfyUI, KesherAI's image and node engine (not started here): installed into the engines folder, on the NVIDIA
+ * card, ROCm (Linux with an AMD card) or the processor; once it runs, its checkpoints become image models.
+ *
+ * @param p - The data folders, downloads, Python runtimes, the settings and the models.
+ * @returns ComfyUI's manager.
+ */
+export function buildComfy(p: { paths: DataPaths; downloads: DownloadManager; runtimes: Runtimes; config: KesherConfig; registry: ProviderRegistry }): ComfyManager {
+  const { paths, downloads, runtimes, config, registry } = p;
+  return new ComfyManager(join(paths.engines, "comfyui"), {
+    downloads,
+    runtimes,
+    modelsDir: () => paths.models,
+    port: () => config.comfyui.port,
+    folder: () => config.comfyui.folder,
+    nvidia: async () => (await nvidiaGpus()).length > 0,
+    // Linux with an AMD card (RDNA 2 or newer has enough memory to matter): ComfyUI on ROCm.
+    amd: async () => amdCardOnLinux(),
+    onReady: (url) => {
+      // ComfyUI's checkpoints become image models.
+      if (!registry.get("comfyui")) registry.add({ id: "comfyui", type: "comfyui", name: "ComfyUI (KesherAI)", location: "local", baseUrl: url });
+    },
+  });
 }

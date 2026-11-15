@@ -38,7 +38,6 @@ import { apiKeyRoutes } from "./routes/api-keys.js";
 import { ApiKeys } from "./api-keys.js";
 import { skillRoutes } from "./routes/skills.js";
 import { libraryStoreRoutes } from "./routes/library-store.js";
-import { ComfyManager } from "./comfy-manager.js";
 import { ConversationSearch } from "./conversation-search.js";
 import { comfyRoutes } from "./routes/comfy.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
@@ -134,7 +133,7 @@ import { onedriveRoutes } from "./routes/onedrive.js";
 import { loadModel } from "./routes/engine.js";
 import { WEB_CSP, type KesherServer, type KesherServerOptions } from "./server/options.js";
 import { openDataDir } from "./server/data-dir.js";
-import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
+import { buildComfy, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
 import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSelfWork } from "./server/build-extras.js";
@@ -346,20 +345,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   // Pipelines: chains of model calls and tools, with conditions and loops.
   const pipelines = buildPipelines({ paths, config, registry, personas, knowledge, whisper, notifier });
-  const comfy = new ComfyManager(join(paths.engines, "comfyui"), {
-    downloads,
-    runtimes,
-    modelsDir: () => paths.models,
-    port: () => config.comfyui.port,
-    folder: () => config.comfyui.folder,
-    nvidia: async () => (await nvidiaGpus()).length > 0,
-    // Linux with an AMD card (RDNA 2 or newer has enough memory to matter): ComfyUI on ROCm.
-    amd: async () => amdCardOnLinux(),
-    onReady: (url) => {
-      // ComfyUI's checkpoints become image models.
-      if (!registry.get("comfyui")) registry.add({ id: "comfyui", type: "comfyui", name: "ComfyUI (KesherAI)", location: "local", baseUrl: url });
-    },
-  });
+  const comfy = buildComfy({ paths, downloads, runtimes, config, registry });
   // After Terminate (see routes/system.ts) this start stays light: no ComfyUI, no model, until asked.
   const terminatedFile = join(paths.root, TERMINATED_FILE);
   const afterTerminate = existsSync(terminatedFile) && Date.now() - statSync(terminatedFile).mtimeMs < 10 * 60_000;
