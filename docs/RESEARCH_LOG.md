@@ -1320,3 +1320,16 @@ Stopped at: building (store and public page first, then the chat menu and the se
   with a legend, hover values and "The numbers" as a table; while it is still being written, or if it is not a valid
   chart, it shows as code. One line in the system prompt tells every model about it. No new dependency.
 - **Stopped at:** done; Mermaid only if Roee asks.
+
+## LoRA browser, F5 (2026-11-15, night)
+- **Locally Uncensored** has a LoRA browser; **ComfyUI-Lora-Auto-Trigger-Words** reads trigger words from CivitAI and
+  the file's own metadata; LoRA stacks chain several with a strength each. CivitAI's public API: `/api/v1/models`
+  (types=LORA, query, baseModels, nsfw, sort) and `/api/v1/model-versions/{id}` (files with SHA-256, `trainedWords`);
+  some downloads need the user's key (`Authorization: Bearer`).
+- **Built (0.6.252):** Images → Find LoRAs has a CivitAI tab (default) beside Hugging Face: search, base model, adult
+  content off by default (and its pictures never shown), cards with a preview (through KesherAI, only from
+  image.civitai.com), base model, size and trigger words. Download looks the version up again on CivitAI (never the
+  page's address), checks the SHA-256, and keeps the trigger words beside the file; choosing the LoRA puts them in
+  the prompt. Stacking with a strength per LoRA already existed. An optional CivitAI key (set on the computer only,
+  stored encrypted) is used when a LoRA needs it.
+- **Stopped at:** done; a key field in Settings is still to add (the route exists).

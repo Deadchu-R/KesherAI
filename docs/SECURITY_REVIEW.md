@@ -490,6 +490,11 @@ S5 an outside scanner's rules for Electron.
 
 ## Notes for scan 82 (0.6.252)
 
+- CivitAI (F5): the download address, size and SHA-256 come from CivitAI's API by version id (never from the page),
+  only `https://civitai.com`; the file name is cleaned to `[\w.-]` and lands in the LoRA folder; the picture proxy
+  fetches only `https://image.civitai.com`, images only, 3 MB at most; adult models are off unless asked, and their
+  pictures are never shown. The CivitAI key is set from this computer only, never returned, and stored encrypted.
+
 - Keys at rest (S2): provider keys and the Telegram, Figma and GitHub tokens are written to config.json as
   `enc:v1:<base64>`, encrypted with Electron's safeStorage (DPAPI on Windows: only this Windows account can read them),
   in the main app and the worker. Plain configs still load and are encrypted on the next save. A secret that cannot be

@@ -1,6 +1,7 @@
 import { ImageTabs } from "./ImageTabs";
 import { useEffect, useState } from "react";
 import { HubBrowser } from "../HubBrowser";
+import { CivitaiLoras } from "../CivitaiLoras";
 import { MaskEditor, type StartImage } from "../MaskEditor";
 import { pickModel } from "../ModelPicker";
 import { api, withToken, type Asset } from "../api";
@@ -24,11 +25,31 @@ export function ImagesPage() {
   const [loras, setLoras] = useState<Array<{ name: string; size: number }>>([]);
   const [chosen, setChosen] = useState<Record<string, number>>({});
   const [findLoras, setFindLoras] = useState(false);
+  const [findFrom, setFindFrom] = useState<"civitai" | "hf">("civitai");
+  // Trigger words of LoRAs from CivitAI, added to the prompt when the LoRA is chosen.
+  const [triggers, setTriggers] = useState<Record<string, { triggers: string[] }>>({});
   const [start, setStart] = useState<StartImage | undefined>();
-  const loadLoras = () => void api<{ loras: Array<{ name: string; size: number }> }>("/api/loras").then((r) => setLoras(r.loras)).catch(() => undefined);
+  const loadLoras = () => {
+    void api<{ loras: Array<{ name: string; size: number }> }>("/api/loras").then((r) => setLoras(r.loras)).catch(() => undefined);
+    void api<Record<string, { triggers: string[] }>>("/api/civitai/triggers").then(setTriggers).catch(() => undefined);
+  };
   useEffect(loadLoras, []);
-  // The local engine reads LoRAs from the prompt, as <lora:name:weight>.
-  const withLoras = (p: string) => [p, ...Object.entries(chosen).map(([n, w]) => `<lora:${n}:${w}>`)].join(" ");
+  // A LoRA downloading from CivitAI shows up in the list when it is done: look again for a few minutes.
+  const [watching, setWatching] = useState(0);
+  useEffect(() => {
+    if (!watching) return;
+    const timer = setInterval(loadLoras, 10_000);
+    const stop = setTimeout(() => setWatching(0), 10 * 60_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [watching]);
+  // The local engine reads LoRAs from the prompt, as <lora:name:weight>; each chosen LoRA's trigger words come first.
+  const withLoras = (p: string) => {
+    const words = Object.keys(chosen).flatMap((n) => triggers[n]?.triggers ?? []).filter((w) => !p.toLowerCase().includes(w.toLowerCase()));
+    return [words.length ? `${words.join(", ")}, ${p}` : p, ...Object.entries(chosen).map(([n, w]) => `<lora:${n}:${w}>`)].join(" ");
+  };
 
   async function generate() {
     let use = selected;
@@ -108,7 +129,7 @@ export function ImagesPage() {
                   <span key={l.name} className={`chip-text lora-chip${on ? " on" : ""}`}>
                     <label className="row" style={{ gap: 4 }}>
                       <input type="checkbox" checked={on} onChange={(e) => setChosen((c) => { const n = { ...c }; if (e.target.checked) n[l.name] = 0.8; else delete n[l.name]; return n; })} />
-                      <span dir="ltr">{l.name}</span>
+                      <span dir="ltr" title={triggers[l.name]?.triggers.length ? triggers[l.name]!.triggers.join(", ") : undefined}>{l.name}{triggers[l.name]?.triggers.length ? " ✦" : ""}</span>
                     </label>
                     {on && <input type="number" min={-2} max={2} step={0.1} value={chosen[l.name]} aria-label={t("loraWeight")} title={t("loraWeight")} style={{ width: 58 }} onChange={(e) => setChosen((c) => ({ ...c, [l.name]: Number(e.target.value) }))} />}
                     <button type="button" className="as-link" aria-label={t("remove")} title={t("remove")} onClick={() => void api(`/api/loras/${encodeURIComponent(l.name)}`, { method: "DELETE" }).then(() => { setChosen((c) => { const n = { ...c }; delete n[l.name]; return n; }); loadLoras(); })}>✕</button>
@@ -129,7 +150,15 @@ export function ImagesPage() {
           </button>
         </div>
       </form>
-      {findLoras && <HubBrowser fixedCategory="image" initialQuery="lora" onDownloaded={loadLoras} />}
+      {findLoras && (
+        <>
+          <div className="tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={findFrom === "civitai"} className={findFrom === "civitai" ? "on" : ""} onClick={() => setFindFrom("civitai")}>CivitAI</button>
+            <button type="button" role="tab" aria-selected={findFrom === "hf"} className={findFrom === "hf" ? "on" : ""} onClick={() => setFindFrom("hf")}>Hugging Face</button>
+          </div>
+          {findFrom === "civitai" ? <CivitaiLoras onDownloaded={() => setWatching((w) => w + 1)} /> : <HubBrowser fixedCategory="image" initialQuery="lora" onDownloaded={loadLoras} />}
+        </>
+      )}
       {error && <p className="error">{error}</p>}
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
         {results.map((a) => (

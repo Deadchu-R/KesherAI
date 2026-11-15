@@ -26,6 +26,7 @@ import { notificationRoutes } from "../routes/notifications.js";
 import { inboxRoutes } from "../routes/inbox.js";
 import { promptRoutes } from "../routes/prompts.js";
 import { personaRoutes } from "../routes/personas.js";
+import { civitaiRoutes } from "../routes/civitai.js";
 import { knowledgeRoutes } from "../routes/knowledge.js";
 import { librariesRoutes } from "../routes/libraries.js";
 import { copilotRoutes } from "../routes/copilot.js";
@@ -123,6 +124,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);
+  if (features.images && features.downloads) await civitaiRoutes(app, services);
   await promptRoutes(app, services);
   await skillRoutes(app, services);
   await libraryStoreRoutes(app, services);

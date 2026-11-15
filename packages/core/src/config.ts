@@ -141,6 +141,8 @@ export const KesherConfigSchema = z.object({
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
   appearance: z.record(z.string(), z.unknown()).prefault({}),
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
+  /** CivitAI: the user's own key, for LoRAs that need one to download (Images → Find LoRAs); never sent to a page. */
+  civitai: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */
   figma: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Smart auto approvals (F10): in "auto-edit" chats, the chat's model reviews a plain command before you are asked. */
@@ -440,7 +442,7 @@ const unreadable = new Map<string, string>();
 function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, unknown>; key: string; slot: string }> {
   const slots: Array<{ obj: Record<string, unknown>; key: string; slot: string }> = [];
   for (const p of Array.isArray(c.providers) ? (c.providers as Array<Record<string, unknown>>) : []) if (p && typeof p === "object") slots.push({ obj: p, key: "apiKey", slot: `provider:${String(p.id)}` });
-  for (const k of ["telegram", "figma", "github"]) {
+  for (const k of ["telegram", "figma", "github", "civitai"]) {
     const o = c[k];
     if (o && typeof o === "object") slots.push({ obj: o as Record<string, unknown>, key: "token", slot: k });
   }

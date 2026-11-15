@@ -2488,3 +2488,11 @@ html.handheld .palette-list button { min-height: 44px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .chart-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* LoRAs from CivitAI: cards with a preview, base model and trigger words; one column on a phone. */
+.civitai-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.civitai-card { display: grid; grid-template-columns: 88px 1fr; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); align-items: start; }
+.civitai-card img, .civitai-noimg { width: 88px; height: 88px; object-fit: cover; border-radius: 8px; background: var(--panel); display: grid; place-items: center; font-size: 28px; }
+.civitai-card b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.civitai-card button { align-self: flex-start; height: 36px; }
+.civitai select { height: 40px; max-width: 160px; }
