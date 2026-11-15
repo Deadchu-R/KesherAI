@@ -10,7 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
-import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, screen as displays } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, safeStorage, screen as displays } from "electron";
 import { join, resolve, sep } from "node:path";
 import { chmod, copyFile, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -98,6 +98,8 @@ async function startCore(): Promise<string> {
         return { png: img.toPNG(), jpeg: small.toJPEG(55), tiny: img.resize({ width: 32, height: 18 }).toBitmap() };
       },
     },
+    // Keys at rest (S2): connection keys and tokens in config.json are encrypted with Windows' own protection (DPAPI).
+    ...(secretBox() ? { secrets: secretBox()! } : {}),
     // Self-work runs in the worker (an installed copy only), so an update never stops it.
     ...(host ? { workerHost: host } : {}),
     // An installed copy updates from the project's GitHub releases: download the installer, run it, quit.
@@ -270,6 +272,18 @@ function autoUpdate(): void {
   };
   setTimeout(() => void run(), 60_000);
   setInterval(() => void run(), 4 * 60 * 60_000);
+}
+
+/**
+ * Electron's safeStorage as a box for secrets, when the system offers it (after the app is ready; on Linux only
+ * with a keyring).
+ */
+function secretBox(): { seal(text: string): string; unseal(text: string): string } | undefined {
+  if (!safeStorage.isEncryptionAvailable()) return undefined;
+  return {
+    seal: (text) => safeStorage.encryptString(text).toString("base64"),
+    unseal: (text) => safeStorage.decryptString(Buffer.from(text, "base64")),
+  };
 }
 
 /** `--worker`: the window-less self-work KesherAI (see worker.ts); it has its own profile, so it is not "another window". */
@@ -889,7 +903,7 @@ app.whenReady().then(async () => {
       if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(mainUrl)) throw new Error("The worker only works with the KesherAI on this computer.");
       const { createKesherServer } = await import("@kesher/core");
       const mainRoot = process.env.KESHER_MAIN_ROOT ?? join(app.getPath("home"), `.${branding.appId}`);
-      server = await createKesherServer({ port: WORKER_PORT, autodetect: false, worker: { mainUrl, mainRoot, version: app.getVersion() } });
+      server = await createKesherServer({ port: WORKER_PORT, autodetect: false, worker: { mainUrl, mainRoot, version: app.getVersion() }, ...(secretBox() ? { secrets: secretBox()! } : {}) });
       await server.listen();
     } catch {
       app.exit(1);

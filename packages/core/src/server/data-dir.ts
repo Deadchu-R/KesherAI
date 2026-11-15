@@ -3,7 +3,7 @@
  * and what the options and worker mode change in them.
  */
 import { mkdir } from "node:fs/promises";
-import { dataPaths, loadConfig, type DataPaths, type KesherConfig } from "../config.js";
+import { dataPaths, loadConfig, useSecretBox, type DataPaths, type KesherConfig } from "../config.js";
 import { applyPendingReset } from "../reset.js";
 import type { KesherServerOptions } from "./options.js";
 
@@ -17,6 +17,8 @@ export async function openDataDir(options: KesherServerOptions): Promise<{ paths
   const paths = dataPaths(options.dataDir);
   // "Start over" (Settings → General): the old data folder moves aside before anything uses it.
   const resetBackup = await applyPendingReset(paths.root).catch(() => undefined);
+  // Keys at rest (S2): read and written through the system's protection when the desktop app gives it.
+  if (options.secrets) useSecretBox(options.secrets);
   const config = await loadConfig(paths);
   if (config.modelsDir) {
     paths.models = config.modelsDir;

@@ -488,6 +488,16 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Notes for scan 82 (0.6.252)
+
+- Keys at rest (S2): provider keys and the Telegram, Figma and GitHub tokens are written to config.json as
+  `enc:v1:<base64>`, encrypted with Electron's safeStorage (DPAPI on Windows: only this Windows account can read them),
+  in the main app and the worker. Plain configs still load and are encrypted on the next save. A secret that cannot be
+  read (another account, a run without the desktop app) is kept as it was, not lost or used. Without safeStorage
+  (Linux without a keyring, `pnpm dev`) keys stay as before.
+- Not changed: "My devices" settings sync sends cloud provider keys to the user's own Google Drive app folder, as
+  before (a separate question for Roee).
+
 ## Scan 81 (2026-11-15, 0.6.249)
 
 - Checked on the PC (0.6.248): smart auto approvals is off by default and its toggle shows at 390 px; the persona

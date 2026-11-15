@@ -414,6 +414,81 @@ export function dataPaths(root = process.env.KESHER_DATA_DIR ?? join(homedir(), 
   };
 }
 
+/** Encrypts and decrypts short secrets with the system's own protection (Electron's safeStorage: DPAPI, Keychain). */
+export interface SecretBox {
+  seal(text: string): string;
+  unseal(text: string): string;
+}
+
+const SEALED = "enc:v1:";
+let secretBox: SecretBox | undefined;
+
+/**
+ * Keys at rest (audit S2): from now on, connection keys and tokens are written encrypted with this box, and read back
+ * through it. Without a box (a run without the desktop app) they stay as they are.
+ *
+ * @param box - The system's protection, or undefined to stop using one.
+ */
+export function useSecretBox(box: SecretBox | undefined): void {
+  secretBox = box;
+}
+
+/** Encrypted secrets this run could not read, kept as they were so a save does not lose them (by slot). */
+const unreadable = new Map<string, string>();
+
+/** The secrets in a config: provider keys and the Telegram, Figma and GitHub tokens. */
+function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, unknown>; key: string; slot: string }> {
+  const slots: Array<{ obj: Record<string, unknown>; key: string; slot: string }> = [];
+  for (const p of Array.isArray(c.providers) ? (c.providers as Array<Record<string, unknown>>) : []) if (p && typeof p === "object") slots.push({ obj: p, key: "apiKey", slot: `provider:${String(p.id)}` });
+  for (const k of ["telegram", "figma", "github"]) {
+    const o = c[k];
+    if (o && typeof o === "object") slots.push({ obj: o as Record<string, unknown>, key: "token", slot: k });
+  }
+  return slots;
+}
+
+/**
+ * A copy of the config with its secrets encrypted (for writing), or the read config with them decrypted.
+ *
+ * @param c - The config as plain JSON.
+ * @param way - "seal" to encrypt, "unseal" to decrypt.
+ * @param box - The box to use (by default the one set with {@link useSecretBox}).
+ * @returns The changed copy; a secret that cannot be decrypted is left out (the user enters it again).
+ */
+export function withSecrets(c: Record<string, unknown>, way: "seal" | "unseal", box: SecretBox | undefined = secretBox): Record<string, unknown> {
+  const copy = JSON.parse(JSON.stringify(c)) as Record<string, unknown>;
+  for (const { obj, key, slot } of secretSlots(copy)) {
+    const v = obj[key];
+    // A secret this run could not read: written back unchanged, unless the user entered a new one.
+    if (way === "seal" && (typeof v !== "string" || !v) && unreadable.has(slot)) {
+      obj[key] = unreadable.get(slot);
+      continue;
+    }
+    if (typeof v !== "string" || !v) continue;
+    if (way === "seal") {
+      unreadable.delete(slot);
+      if (box && !v.startsWith(SEALED)) {
+        try {
+          obj[key] = SEALED + box.seal(v);
+        } catch {
+          // The system cannot encrypt right now: keep it as it was rather than lose it.
+        }
+      }
+    } else if (v.startsWith(SEALED)) {
+      try {
+        if (!box) throw new Error("no box");
+        obj[key] = box.unseal(v.slice(SEALED.length));
+      } catch {
+        // Encrypted on another computer or user account, or no desktop app: it cannot be read here. Kept aside, so
+        // a save writes it back as it was (the desktop app reads it again next time).
+        unreadable.set(slot, v);
+        delete obj[key];
+      }
+    }
+  }
+  return copy;
+}
+
 /**
  * Loads the config, creating folders, the file and the remote token on
  * first run.
@@ -426,7 +501,7 @@ export async function loadConfig(paths: DataPaths): Promise<KesherConfig> {
     await mkdir(dir, { recursive: true });
   }
   const raw = await readFile(paths.config, "utf8").catch(() => "{}");
-  const config = KesherConfigSchema.parse(JSON.parse(raw));
+  const config = KesherConfigSchema.parse(withSecrets(JSON.parse(raw) as Record<string, unknown>, "unseal"));
   if (!config.remote.token || !config.browserKey) {
     config.remote.token ||= randomBytes(24).toString("base64url");
     config.browserKey ||= randomBytes(12).toString("base64url");
@@ -446,7 +521,8 @@ export function saveConfig(paths: DataPaths, config: KesherConfig): Promise<void
   // each other and left text after the JSON, so the next start could not read the settings (found in CI).
   const run = configWrites.then(async () => {
     const tmp = `${paths.config}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    // Keys at rest (S2): written encrypted when the desktop app gave a box; the config in memory stays readable.
+    await writeFile(tmp, `${JSON.stringify(withSecrets(config as unknown as Record<string, unknown>, "seal"), null, 2)}\n`, { mode: 0o600 });
     for (let i = 0; ; i++) {
       try {
         await rename(tmp, paths.config);

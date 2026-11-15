@@ -36,6 +36,8 @@ export interface KesherServerOptions {
   screen?: ScreenSource;
   /** Shows a notification on this computer (desktop app); returns false when the window is in front. */
   notify?: (n: Note) => boolean | Promise<boolean>;
+  /** Keys at rest (S2): the system's protection for connection keys and tokens in config.json (Electron safeStorage). */
+  secrets?: import("../config.js").SecretBox;
   /** Brings the desktop window to the front. */
   focusApp?: () => void;
   /** Restarts the desktop app (installing a downloaded update first, if there is one). */
