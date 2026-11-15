@@ -6,7 +6,10 @@
 import { mkdir, readFile as readFileFs, rm as rmFs, writeFile as writeFileFs } from "node:fs/promises";
 import { join } from "node:path";
 import { htmlToText } from "@kesher/agent";
+import type { ProviderRegistry } from "@kesher/providers";
 import type { DataPaths, KesherConfig } from "../config.js";
+import { Journal, type ScreenSource } from "../journal.js";
+import { modelTurnFor } from "../model-turn.js";
 import type { ConversationManager } from "../conversations.js";
 import type { Notifier } from "../notify.js";
 import type { Pipelines } from "../pipelines.js";
@@ -135,4 +138,29 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     return j.answers ?? [j as { ok: boolean; result?: unknown; error?: string }];
   });
   return { unityCli, unrealBridge };
+}
+
+/**
+ * "My day": off until the user turns it on; never leaves this computer. Its model is the one asked for, or the chat
+ * model; it knows whether that model is local.
+ *
+ * @param paths - The data folders.
+ * @param config - The active models.
+ * @param registry - The providers.
+ * @param screen - The desktop app's screen capture (no PowerShell, which antivirus programs block).
+ * @returns The journal (loading in the background).
+ */
+export function buildJournal(paths: DataPaths, config: KesherConfig, registry: ProviderRegistry, screen?: ScreenSource): Journal {
+  const journal = new Journal(join(paths.root, "journal"), (modelId) => {
+    const id = modelId ?? config.activeModels.chat;
+    if (!id) return undefined;
+    try {
+      const { provider } = registry.resolve(id);
+      return { id, local: (provider as { location?: string }).location !== "cloud", turn: modelTurnFor(registry, id) };
+    } catch {
+      return undefined;
+    }
+  }, undefined, screen);
+  void journal.load();
+  return journal;
 }

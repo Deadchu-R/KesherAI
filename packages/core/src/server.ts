@@ -120,7 +120,6 @@ import { GitHubAuth } from "./github.js";
 import { Runtimes } from "./runtimes.js";
 import { Devices } from "./devices.js";
 import { deviceRoutes } from "./routes/devices.js";
-import { Journal } from "./journal.js";
 import { McpManager } from "./mcp.js";
 import { coachRoutes } from "./routes/coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
@@ -144,7 +143,7 @@ import { openDataDir } from "./server/data-dir.js";
 import { amdCardOnLinux, buildLlamaEngine, buildSdEngine, nvidiaGpus } from "./server/build-engines.js";
 import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
-import { buildGameEngines, buildRoutines } from "./server/build-extras.js";
+import { buildGameEngines, buildJournal, buildRoutines } from "./server/build-extras.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -224,18 +223,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const runtimes = new Runtimes(join(paths.engines, "runtimes"), downloads);
   const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"), (cfg) => (cfg.preset === "github" || /api\.githubcopilot\.com/.test(cfg.url ?? "") ? github.token() : undefined), (env) => runtimes.env(env));
   void mcp.load();
-  // "My day": off until the user turns it on; never leaves this computer.
-  const journal = new Journal(join(paths.root, "journal"), (modelId) => {
-    const id = modelId ?? config.activeModels.chat;
-    if (!id) return undefined;
-    try {
-      const { provider } = registry.resolve(id);
-      return { id, local: (provider as { location?: string }).location !== "cloud", turn: modelTurnFor(registry, id) };
-    } catch {
-      return undefined;
-    }
-  }, undefined, options.screen);
-  void journal.load();
+  const journal = buildJournal(paths, config, registry, options.screen);
   // Knowledge bases: the user's folders and web pages, searchable by the models, with sources.
   // Search by meaning: an embedding model (KesherAI's own in a second llama.cpp server, or one the user made active).
   // Assigned below, once the engine exists; the knowledge bases ask for it when they search.
