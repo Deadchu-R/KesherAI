@@ -2,6 +2,8 @@
 
 | Guide | Read it to |
 | --- | --- |
+| [HELPERS.md](HELPERS.md) | use the Text Helper, dictation, timers, event routines and file previews |
+| [GAME_HELPER.md](GAME_HELPER.md) | get help while playing a game |
 | [VISION.md](VISION.md) | understand what KesherAI is meant to become, and the roadmap |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | find your way around the code |
 | [PLUGINS.md](PLUGINS.md) | write a plugin |
