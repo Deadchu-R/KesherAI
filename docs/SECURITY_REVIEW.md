@@ -488,6 +488,22 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 84 (2026-11-16, after 0.6.257 + APK 465)
+
+- `GET /api/conversations/:id/peek` (sidebar preview): behind the key like every `/api` route; reads the saved chat
+  from disk without opening a session (no model, no tools); returns at most three messages of 240 characters, code
+  blocks replaced by "[code]". Unknown ids answer 404. Tested.
+- `logs/main.log`: written only on this computer, cut back past 1 MB; holds start lines, exit codes and stack traces
+  (file paths of the app, no keys or messages). The uncaught-error handler logs and keeps the app running, as
+  Electron's own dialog did, without the dialog.
+- Phone live connection: after 10 minutes without the computer it retries every 15 minutes (battery), and at once
+  when the app opens (`LiveService.poke`, only while not connected). A page renderer crashing three times in five
+  minutes closes the app instead of restarting it in a loop.
+- Text Helper: the `cut` flag is a boolean kept with the selection; nothing new leaves the computer.
+- `/status`, tab arrow keys, `<Code>`/`<Path>`, grouped and Hebrew notification titles: client-side only.
+- Lint: no module-level listeners in apps/web; nothing below `routes/` imports from it (A6).
+- `pnpm audit --prod --audit-level high`: no known vulnerabilities.
+
 ## Scan 83 (2026-11-16, 0.6.256 + APK 464)
 
 - Animate (`/api/comfy-ui/flows/:id?asset=`): the asset id must match `[\w-]{1,80}`, must exist and be a picture;
