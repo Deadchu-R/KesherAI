@@ -307,8 +307,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
   );
   // ACE-Step 1.5 XL when it is here (better, above all in languages it saw less), else 1.5; the first ACE-Step only
   // when it is already here and 1.5 is not (no second download needed).
-  const musicFlow = () =>
-    flows.state("music-ace-step-15-xl").ready ? "music-ace-step-15-xl" : !flows.state("music-ace-step-15").ready && flows.state("music-ace-step").ready ? "music-ace-step" : "music-ace-step-15";
+  const musicFlow = () => pickMusicFlow((id) => flows.state(id).ready);
   const music: AgentTool = {
     risk: "safe",
     askFirst: (input) => askDownload(musicFlow())(input),
@@ -405,4 +404,17 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     },
   };
   return [music, model3d];
+}
+
+/**
+ * Which song model to use: ACE-Step 1.5 XL when it is here, else 1.5; the first ACE-Step only when it is already here
+ * and 1.5 is not (no second download needed). With none here, 1.5 (the one to download).
+ *
+ * @param ready - Whether a flow's model is downloaded.
+ * @returns The flow id.
+ */
+export function pickMusicFlow(ready: (id: string) => boolean): string {
+  if (ready("music-ace-step-15-xl")) return "music-ace-step-15-xl";
+  if (!ready("music-ace-step-15") && ready("music-ace-step")) return "music-ace-step";
+  return "music-ace-step-15";
 }
