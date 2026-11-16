@@ -308,6 +308,25 @@ export class WhisperEngine {
     return speechParts(await this.raw(wav, language, ".wav", true));
   }
 
+  private recentLangs: string[] = [];
+  private skipDetect = 0;
+
+  /**
+   * The language for an "auto" piece: detected each time until three pieces in a row agree, then trusted for the
+   * next four (a lecture keeps its language), then checked again.
+   */
+  private async autoLanguage(detect: () => Promise<string>): Promise<string> {
+    const last = this.recentLangs.at(-1);
+    if (this.skipDetect > 0 && last && last !== "auto") {
+      this.skipDetect--;
+      return last;
+    }
+    const lang = await detect();
+    this.recentLangs = [...this.recentLangs, lang].slice(-3);
+    if (this.recentLangs.length === 3 && this.recentLangs.every((l) => l === lang) && lang !== "auto") this.skipDetect = 4;
+    return lang;
+  }
+
   /** Which language a recording is in (whisper's -dl: the encoder only, no text). */
   private async detect(exe: string, model: string, wav: Buffer, ext: string): Promise<string> {
     const file = join(tmpdir(), `kesher-lang-${randomUUID()}${/^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext.toLowerCase() : ".wav"}`);
@@ -332,7 +351,7 @@ export class WhisperEngine {
     const general = (await Promise.all((Object.keys(MODELS) as ModelKey[]).filter((k) => k !== "he").map(async (k) => ((await stat(this.modelPath(k)).catch(() => undefined))?.size ? this.modelPath(k) : undefined)))).find(Boolean);
     // "auto" with the Hebrew model here: whisper first tells which language is spoken (one quick pass of the
     // general model), then Hebrew goes to the Hebrew model and anything else stays on the general one.
-    if (language === "auto" && hasHe && general) language = await this.detect(exe, general, wav, ext).catch(() => "auto");
+    if (language === "auto" && hasHe && general) language = await this.autoLanguage(() => this.detect(exe, general, wav, ext).catch(() => "auto"));
     const modelFile = language === "he" && hasHe ? heModel : general ?? st.model;
     const file = join(tmpdir(), `kesher-stt-${randomUUID()}${/^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext.toLowerCase() : ".wav"}`);
     await writeFile(file, wav);
