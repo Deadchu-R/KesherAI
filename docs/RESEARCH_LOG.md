@@ -1581,3 +1581,19 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - Stopped at: design written (docs/REDESIGN_PLAN.md, "Avatar lip sync"); one choice is Roee's: hold the voice back
   through a virtual audio cable (VB-Cable: another install and Windows prompt, lips exactly in time) or not (nothing
   more to install, lips ~0.3 s behind the voice).
+
+## Students, part 9: what competitors give students that KesherAI does not yet (2026-11-16)
+
+- Sources: fast.io "Best AI study tools 2026" (Anki, Knowt, Gemini Notebook, RemNote, Quizlet, ChatGPT Study Mode,
+  Studdy, Speechify…), YouLearn and Dupple round-ups.
+- Already in KesherAI: flashcards from her material on FSRS, auto-graded practice tests (licensing style), a tutor
+  answering only from her lectures, summaries, terms, a diagram, camera/photo input, PDF/PowerPoint/Word, an exam
+  plan, "what works for me" by format.
+- Gaps, by value for a nursing student who commutes:
+  1. Audio overviews (Gemini Notebook, Speechify): a short spoken review of a lecture, to listen to on the bus.
+  2. Sharing with classmates (Quizlet sets, Knowt imports): send a course or its cards as one file; open it on her
+     phone or another student's KesherAI.
+  3. Study mode / Socratic questioning (ChatGPT Study Mode, Khanmigo): the tutor asks her, waits, then corrects.
+  4. Explanations for missed cards (RemNote): after "again", a one-line why.
+- Decided: build 1 and 2 now (both work on the computer, in remote and in the phone app), then 3 and 4.
+- Stopped at: decided; building.
