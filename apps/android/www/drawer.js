@@ -4,7 +4,7 @@
 // Open it with ☰, or swipe in from the right edge. Like Apple's menus you can
 // also press ☰ and keep your finger down, slide to an item (it lights up) and
 // let go to open it.
-/* global window, document, localStorage, sessionStorage, location, MutationObserver, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event, setInterval, setTimeout, fetch, AbortSignal */
+/* global requestAnimationFrame, cancelAnimationFrame, window, document, localStorage, sessionStorage, location, MutationObserver, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event, setInterval, setTimeout, fetch, AbortSignal */
 (() => {
   const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const he = lang === "he";
@@ -149,6 +149,8 @@
     add(rs);
   }
 
+  // Updates before the chats (asked for 2026-11-16: it was lost at the bottom under a long list).
+  item("⬆", T("בדיקת עדכונים", "Check for updates"), "", here === "local.html" || !localStorage.getItem("kesherai-server") ? "local.html?tab=settings" : "index.html?switch=1&update=1");
   // The phone's chats, newest first.
   if (chats.length) {
     head(T("צ'אטים בטלפון", "Chats on this phone"));
@@ -209,7 +211,6 @@
     add(lock);
   }
   item("🔗", T("המחשבים שלי", "My computers"), computers.length ? T(`${computers.length} שמורים`, `${computers.length} saved`) : "", "index.html?switch=1", here === "index.html" ? "on" : "");
-  item("⬆", T("בדיקת עדכונים", "Check for updates"), "", here === "local.html" || !localStorage.getItem("kesherai-server") ? "local.html?tab=settings" : "index.html?switch=1&update=1");
   const foot = document.createElement("div");
   foot.className = "kd-foot";
   panel.append(foot);
@@ -255,12 +256,31 @@
     button.style.userSelect = "none";
     button.setAttribute("draggable", "false");
     let active = null;
+    // Holding the finger near the menu's top or bottom edge scrolls it (faster closer to the edge), like iOS.
+    const EDGE = 64;
+    const scroll = () => {
+      if (!active) return;
+      const r = panel.getBoundingClientRect();
+      const { lx: x, ly: y } = active;
+      const down = y - (r.bottom - EDGE);
+      const up = r.top + EDGE - y;
+      const step = down > 0 ? Math.min(18, 2 + down / 4) : up > 0 ? -Math.min(18, 2 + up / 4) : 0;
+      if (step && x >= r.left - 40 && x <= r.right + 40) {
+        const before = panel.scrollTop;
+        panel.scrollTop += step;
+        if (panel.scrollTop !== before) track(x, y);
+      }
+      active.raf = requestAnimationFrame(scroll);
+    };
     const begin = (x, y) => {
-      active = { x, y, moved: false, wasOpen: isOpen() };
+      active = { x, y, lx: x, ly: y, moved: false, wasOpen: isOpen() };
       open();
+      active.raf = requestAnimationFrame(scroll);
     };
     const track = (x, y) => {
       if (!active) return;
+      active.lx = x;
+      active.ly = y;
       if (Math.hypot(x - active.x, y - active.y) > 8) active.moved = true;
       const hit = itemAt(x, y);
       panel.querySelectorAll(".hot").forEach((el) => el !== hit && el.classList.remove("hot"));
@@ -271,7 +291,8 @@
     };
     const end = (x, y) => {
       if (!active) return;
-      const { moved, wasOpen } = active;
+      const { moved, wasOpen, raf } = active;
+      cancelAnimationFrame(raf);
       active = null;
       const hit = moved ? itemAt(x, y) : null;
       panel.querySelectorAll(".hot").forEach((el) => el.classList.remove("hot"));
