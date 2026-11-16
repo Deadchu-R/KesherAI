@@ -71,6 +71,17 @@ interface EventBase {
   at: string;
 }
 
+/** One question in a card of questions (ask_user with `questions`). */
+export interface AskItem {
+  /** A short label (a few words), shown as a chip. */
+  header?: string;
+  question: string;
+  /** 2–4 answers; the recommended one first. */
+  options: Array<{ label: string; description?: string }>;
+  /** She may pick several. */
+  multiSelect?: boolean;
+}
+
 /**
  * Everything that happens in a session, in order. Clients replay the list
  * to draw the conversation and follow new events live over SSE.
@@ -111,6 +122,8 @@ export type AgentEvent = EventBase &
         questionId: string;
         question: string;
         options?: string[];
+        /** Several questions in one card (up to 4), each with options that may carry a line of explanation. */
+        items?: AskItem[];
         /** `access`: the agent asks for a folder or file outside its own; the answer is a path, or empty to refuse. */
         kind?: "access";
         /** For `access`: the path the agent suggested. */

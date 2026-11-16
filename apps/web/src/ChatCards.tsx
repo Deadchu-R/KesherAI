@@ -254,6 +254,7 @@ export function QuestionCard({ convId, ev, pending, answer }: { convId: string; 
       </div>
     );
   }
+  if (ev.items?.length) return <QuestionsCard ev={ev} pending={pending} answer={answer} send={send} />;
   return (
     <div className={`card question ${pending ? "" : "done"}`}>
       <strong>{ev.question}</strong>
@@ -274,6 +275,61 @@ export function QuestionCard({ convId, ev, pending, answer }: { convId: string; 
       ) : (
         <p className="muted">{answer?.text}</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * A card of up to four questions (ask_user with `questions`): each with a header, options with a line of
+ * explanation (the recommended one first), several picks where allowed, and her own answer. One "Send" answers all;
+ * "Decide yourself" lets the model choose.
+ */
+function QuestionsCard({ ev, pending, answer, send }: { ev: Ev<"question">; pending: boolean; answer?: Ev<"answer">; send: (text: string) => void }) {
+  const items = ev.items ?? [];
+  const [picked, setPicked] = useState<string[][]>(() => items.map(() => []));
+  const [other, setOther] = useState<string[]>(() => items.map(() => ""));
+  const he = getLocale() === "he";
+  const answers = items.map((_, i) => [...picked[i]!, ...(other[i]!.trim() ? [other[i]!.trim()] : [])]);
+  const done = answers.filter((a) => a.length).length;
+  const toggle = (i: number, label: string, multi?: boolean) =>
+    setPicked((p) => p.map((x, j) => (j !== i ? x : multi ? (x.includes(label) ? x.filter((y) => y !== label) : [...x, label]) : [label])));
+  if (!pending)
+    return (
+      <div className="card question done">
+        {items.map((q, i) => <p key={i} className="small"><span className="muted">{q.question}</span></p>)}
+        <p className="muted" dir="auto">{answer?.text}</p>
+      </div>
+    );
+  return (
+    <div className="card question questions" role="group" aria-label={ev.question}>
+      <div className="row q-top">
+        <strong>{he ? `${items.length} שאלות` : `${items.length} question${items.length > 1 ? "s" : ""}`}</strong>
+        <span className="muted small">{he ? `${done} מתוך ${items.length} נענו` : `${done} of ${items.length} answered`}</span>
+      </div>
+      {items.map((q, i) => (
+        <fieldset key={i} className="q-item">
+          <legend className="sr-only">{q.question}</legend>
+          <div className="row">
+            {q.header && <span className="q-chip">{q.header}</span>}
+            {q.multiSelect && <span className="muted small">{he ? "אפשר לסמן כמה" : "Pick any"}</span>}
+          </div>
+          <strong className="q-text" dir="auto">{q.question}</strong>
+          {q.options.map((o) => {
+            const on = picked[i]!.includes(o.label);
+            return (
+              <button key={o.label} type="button" role={q.multiSelect ? "checkbox" : "radio"} aria-checked={on} className={`q-opt ${on ? "on" : ""}`} onClick={() => toggle(i, o.label, q.multiSelect)}>
+                <span className="q-mark" aria-hidden>{q.multiSelect ? (on ? "☑" : "☐") : on ? "◉" : "○"}</span>
+                <span className="q-label"><span dir="auto">{o.label}</span>{o.description && <span className="muted small" dir="auto">{o.description}</span>}</span>
+              </button>
+            );
+          })}
+          <input value={other[i]} dir="auto" placeholder={he ? "תשובה אחרת…" : "Another answer…"} aria-label={he ? "תשובה אחרת" : "Another answer"} onChange={(e) => setOther((x) => x.map((y, j) => (j === i ? e.target.value : y)))} />
+        </fieldset>
+      ))}
+      <div className="row">
+        <button type="button" className="primary" disabled={!done} onClick={() => send(items.map((q, i) => `"${q.question}" = "${answers[i]!.join(", ") || (he ? "(בלי תשובה: תחליט אתה)" : "(no answer: decide yourself)")}"`).join("\n"))}>{he ? "שליחה" : "Send"}</button>
+        <button type="button" className="ghost" onClick={() => send(he ? "(תחליט אתה, ותגיד מה בחרת)" : "(Decide yourself and say what you chose)")}>{he ? "דלג, תחליט אתה" : "Skip, you decide"}</button>
+      </div>
     </div>
   );
 }

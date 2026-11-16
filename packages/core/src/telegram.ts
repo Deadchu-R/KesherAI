@@ -530,7 +530,13 @@ export class TelegramBridge {
       return;
     }
     if (e.type === "question") {
-      const options = (e.options ?? []).slice(0, 8);
+      // A card of several questions: written out, answered in one text message (one plain question keeps its buttons).
+      if (e.items && (e.items.length > 1 || e.items[0]?.multiSelect)) {
+        const text = e.items.map((q, i) => `${i + 1}. ${q.question}\n${q.options.map((o) => `   • ${o.label}${o.description ? ` — ${o.description}` : ""}`).join("\n")}`).join("\n\n");
+        send(this.say(chat, `${text}\n\n(Reply with your answers in one message.)`, {}));
+        return;
+      }
+      const options = (e.items?.[0]?.options.map((o) => o.label) ?? e.options ?? []).slice(0, 8);
       send(
         this.say(chat, e.question, options.length ? { reply_markup: { inline_keyboard: options.map((o) => [{ text: o.slice(0, 60), callback_data: this.button(convId, "question", e.questionId, o) }]) } } : {}),
       );

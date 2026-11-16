@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import type {
   AgentEvent,
+  AskItem,
   AgentMessage,
   AgentSessionInfo,
   AgentStatus,
@@ -1017,13 +1018,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       return output;
     }
     if (call.name === ASK_USER_TOOL) {
-      const question = typeof call.arguments.question === "string" ? call.arguments.question : "";
-      if (!question) return fail('ask_user needs a "question".');
+      const items = askItems(call.arguments.questions);
+      const question = typeof call.arguments.question === "string" && call.arguments.question.trim() ? call.arguments.question : items[0]?.question ?? "";
+      if (!question) return fail('ask_user needs a "question" (or "questions").');
       const options = Array.isArray(call.arguments.options) ? call.arguments.options.filter((o): o is string => typeof o === "string") : undefined;
       const questionId = randomUUID();
       const answer = await new Promise<string>((resolve) => {
         this.questions.set(questionId, resolve);
-        this.push({ type: "question", questionId, question, ...(options?.length ? { options } : {}) });
+        this.push({ type: "question", questionId, question, ...(options?.length && !items.length ? { options } : {}), ...(items.length ? { items } : {}) });
         this.setStatus("waiting");
       });
       this.push({ type: "answer", questionId, text: answer });
@@ -1216,4 +1218,31 @@ export function failureKey(tool: string, output: string): string | undefined {
     .replace(/\d+/g, "#")
     .slice(0, 160);
   return `${tool}|${norm}`;
+}
+
+
+/**
+ * The questions of an ask_user call with `questions`, checked: 1–4, each with a question and 2–4 options (labels
+ * trimmed, a line of description at most), so a model's odd arguments still show as a usable card.
+ *
+ * @param x - The `questions` argument.
+ */
+export function askItems(x: unknown): AskItem[] {
+  if (!Array.isArray(x)) return [];
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  return x
+    .map((q): AskItem | undefined => {
+      const o = q as { header?: unknown; question?: unknown; options?: unknown; multiSelect?: unknown };
+      const question = text(o?.question, 400);
+      const options = (Array.isArray(o?.options) ? o.options : [])
+        .map((v) => (typeof v === "string" ? { label: text(v, 120) } : { label: text((v as { label?: unknown })?.label, 120), description: text((v as { description?: unknown })?.description, 200) }))
+        .filter((v) => v.label)
+        .map((v) => (v.description ? v : { label: v.label }))
+        .slice(0, 4);
+      if (!question || !options.length) return undefined;
+      const header = text(o.header, 24);
+      return { ...(header ? { header } : {}), question, options, ...(o.multiSelect === true ? { multiSelect: true } : {}) };
+    })
+    .filter((q): q is AskItem => !!q)
+    .slice(0, 4);
 }

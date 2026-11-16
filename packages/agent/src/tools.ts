@@ -450,14 +450,27 @@ export const ASK_USER_TOOL = "ask_user";
 export const askUserSpec: ToolSpec = {
   name: ASK_USER_TOOL,
   description:
-    "Ask the user a question and wait for the answer. Use it when the request is ambiguous, when there are real choices to make (e.g. which library, which file), or before something large. Offer short options when you can.",
+    "Ask the user and wait for the answer. Use it when the request is ambiguous, when a choice is really theirs (e.g. which library, which style), or before something large or costly to redo. Ask up to 4 questions at once with `questions`: each a short header, the question, 2–4 options (the recommended one first, its label ending with \"(recommended)\"), a one-line description of what each option leads to, and multiSelect when several can be picked. The user can always type their own answer. Never ask what you can find out yourself.",
   inputSchema: {
     type: "object",
     properties: {
-      question: { type: "string", description: "The question, one or two sentences." },
-      options: { type: "array", items: { type: "string" }, description: "2–4 suggested answers. The user can still type their own." },
+      question: { type: "string", description: "One question, one or two sentences (or use questions)." },
+      options: { type: "array", items: { type: "string" }, description: "2–4 suggested answers to question. The user can still type their own." },
+      questions: {
+        type: "array",
+        description: "1–4 questions shown together in one card.",
+        items: {
+          type: "object",
+          properties: {
+            header: { type: "string", description: "A label of a few words, e.g. Style." },
+            question: { type: "string" },
+            options: { type: "array", items: { type: "object", properties: { label: { type: "string" }, description: { type: "string", description: "One line: what choosing it leads to." } }, required: ["label"] } },
+            multiSelect: { type: "boolean" },
+          },
+          required: ["question", "options"],
+        },
+      },
     },
-    required: ["question"],
   },
 };
 

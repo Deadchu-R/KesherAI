@@ -92,6 +92,12 @@
     .sheet-list button.on { background: var(--raised); }
     .sheet-list button small { color: var(--muted); font-size: 12px; }
     .attach-row { display: flex; gap: 6px; overflow-x: auto; margin: 0 2px 8px; }
+    .q-card { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--accent); background: var(--raised); }
+    .q-item { display: flex; flex-direction: column; gap: 6px; }
+    .q-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+    .q-opts .chip { min-height: 40px; padding: 0 12px; border-radius: 20px; border: 1px solid var(--line, #2a2a2e); background: transparent; color: inherit; font: inherit; font-size: 14px; }
+    .q-opts .chip[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+    .q-item input { min-height: 40px; border-radius: 10px; }
     .attach-row .chip { position: relative; flex: none; height: 56px; min-width: 56px; border-radius: 12px; background: var(--raised); display: grid; place-items: center; font-size: 12px; padding: 0 8px; overflow: hidden; }
     .attach-row .chip img { width: 56px; height: 56px; object-fit: cover; }
     .attach-row .chip button { position: absolute; top: 2px; right: 2px; min-height: 20px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / .6); font-size: 11px; }
@@ -2322,7 +2328,9 @@
         $("status").textContent = T("חושב…", "Thinking…");
       }
       const hebrew = /[\u0590-\u05FF]/.test(text);
-      const system = { role: "system", content: (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + aboutMe() + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
+      // Guiding questions (like the computer's question cards): only before a big, unclear task.
+      const QUESTIONS_RULE = "\nIf the user asks for something big (a plan, a long text, a project) and important details are missing, do not guess: reply with one short sentence and then a block\n```questions\n[{\"question\":\"...\",\"options\":[\"recommended answer\",\"another\"],\"multi\":false}]\n```\nwith 1-4 questions and 2-4 short options each. For small or clear requests, just answer.";
+      const system = { role: "system", content: (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + QUESTIONS_RULE + aboutMe() + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
       // Reasoning models think first; show only the answer (DeepSeek's format starts thinking without an opening tag).
       const thinks = current.item.native?.family === "deepseek";
       const visible = (r) => {
@@ -2343,7 +2351,7 @@
       } else if (current.item.native) {
         // Small phone models: a short context works much better than a long one.
         // Small models follow the user's turn far better than the system part, so search results go there.
-        const baseSystem = (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + aboutMe();
+        const baseSystem = (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + aboutMe() + QUESTIONS_RULE;
         const turns = recent.slice(-6);
         if (found && turns.length) {
           const last = turns[turns.length - 1];
@@ -2380,7 +2388,10 @@
     let clean = reply.includes("</think>") ? reply.slice(reply.lastIndexOf("</think>") + 8) : reply;
     clean = clean.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
     if (!clean && reply.trim()) clean = T("(המודל חשב ולא הספיק לענות. נסה שאלה קצרה יותר.)", "(The model thought but did not get to an answer. Try a shorter question.)");
-    out.textContent = clean;
+    // A ```questions block becomes a card of questions; picking answers sends them as her next message.
+    const asked = questionsIn(clean);
+    out.textContent = asked ? asked.text : clean;
+    if (asked) out.append(questionsCard(asked.items));
     messages.push({ role: "assistant", content: clean });
     if (live?.onAnswer) { live.onAnswer(clean); live.onAnswer = null; }
     if (clean) out.append(answerActions(clean, out));
@@ -2390,6 +2401,51 @@
     stoppedByUser = false;
     saveChat();
   };
+
+  /** The model's ```questions block, if it wrote one: the text without it, and 1–4 questions with 2–4 options. */
+  function questionsIn(text) {
+    const m = /```questions\s*([\s\S]*?)```/.exec(text);
+    if (!m) return undefined;
+    let list;
+    try { list = JSON.parse(m[1].trim()); } catch { return undefined; }
+    const items = (Array.isArray(list) ? list : []).map((q) => ({ question: String(q?.question ?? "").slice(0, 300), options: (Array.isArray(q?.options) ? q.options : []).map((o) => String(o?.label ?? o).slice(0, 100)).filter(Boolean).slice(0, 4), multi: q?.multi === true || q?.multiSelect === true })).filter((q) => q.question && q.options.length).slice(0, 4);
+    return items.length ? { text: text.replace(m[0], "").trim(), items } : undefined;
+  }
+  /** A card of the model's questions: tap answers (several where allowed), or write your own; Send answers all. */
+  function questionsCard(items) {
+    const card = Object.assign(document.createElement("div"), { className: "q-card" });
+    const picked = items.map(() => new Set());
+    const others = [];
+    items.forEach((q, i) => {
+      const box = Object.assign(document.createElement("div"), { className: "q-item" });
+      box.append(Object.assign(document.createElement("b"), { textContent: q.question, dir: "auto" }));
+      if (q.multi) box.append(Object.assign(document.createElement("small"), { className: "muted", textContent: T("אפשר לסמן כמה", "Pick any") }));
+      const row = Object.assign(document.createElement("div"), { className: "q-opts" });
+      q.options.forEach((o) => {
+        const b = Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: o, dir: "auto" });
+        b.setAttribute("aria-pressed", "false");
+        b.onclick = () => {
+          if (!q.multi) { picked[i].clear(); row.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false")); }
+          if (picked[i].has(o)) picked[i].delete(o); else picked[i].add(o);
+          b.setAttribute("aria-pressed", String(picked[i].has(o)));
+        };
+        row.append(b);
+      });
+      const other = Object.assign(document.createElement("input"), { placeholder: T("תשובה אחרת…", "Another answer…"), dir: "auto" });
+      others.push(other);
+      box.append(row, other);
+      card.append(box);
+    });
+    const send = Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: T("שליחה", "Send") });
+    send.onclick = () => {
+      const lines = items.map((q, i) => `${q.question} — ${[...picked[i], ...(others[i].value.trim() ? [others[i].value.trim()] : [])].join(", ") || T("תחליט אתה", "you decide")}`);
+      card.querySelectorAll("button, input").forEach((x) => (x.disabled = true));
+      $("input").value = lines.join("\n");
+      $("composer").requestSubmit();
+    };
+    card.append(send);
+    return card;
+  }
 
   const autosize = () => { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * 0.3) + "px"; };
   $("input").addEventListener("input", autosize);

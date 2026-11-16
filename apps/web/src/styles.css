@@ -2822,3 +2822,14 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-rec-ask { display: flex; flex-direction: column; gap: 8px; }
 .study-rec-ask p { margin: 0; }
 .study-rec-ask .row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* A card of questions from the model (ask_user with questions): options with a line each, several picks, her own answer. */
+.questions { gap: 14px; }
+.questions .q-top { justify-content: space-between; align-items: center; }
+.q-item { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.q-chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.q-text { line-height: 1.5; }
+.q-opt { display: flex; gap: 10px; align-items: flex-start; text-align: start; height: auto; min-height: 44px; padding: 10px 12px; border-radius: calc(10px * var(--r-scale, 1)); border: 1px solid var(--border); background: var(--panel-2); color: var(--text); white-space: normal; }
+.q-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+.q-mark { color: var(--accent); }
+.q-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.q-item input { height: 40px; }

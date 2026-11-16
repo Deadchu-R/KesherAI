@@ -108,6 +108,37 @@ test("ask_user waits for the answer and passes it to the model", async () => {
   assert.equal(seen[1]?.messages.at(-1)?.content, "Unreal");
 });
 
+test("ask_user with several questions shows one card (options with a line each) and passes the answers on", async () => {
+  const { session, seen } = await makeSession([
+    {
+      calls: [
+        {
+          name: "ask_user",
+          arguments: {
+            questions: [
+              { header: "Style", question: "Which style?", options: [{ label: "Clean (recommended)", description: "white space" }, "Dark"] },
+              { question: "Which pages?", multiSelect: true, options: ["Projects", "CV", "Blog"] },
+              { question: "", options: ["x"] },
+            ],
+          },
+        },
+      ],
+    },
+    { text: "Building it." },
+  ]);
+  session.send("make my portfolio site");
+  const q = await waitFor(session, (e) => e.type === "question");
+  assert.ok(q.type === "question" && q.items);
+  if (q.type !== "question" || !q.items) return;
+  assert.equal(q.items.length, 2);
+  assert.deepEqual(q.items[0], { header: "Style", question: "Which style?", options: [{ label: "Clean (recommended)", description: "white space" }, { label: "Dark" }] });
+  assert.equal(q.items[1]?.multiSelect, true);
+  assert.equal(q.question, "Which style?");
+  session.answer(q.questionId, '"Which style?" = "Dark"\n"Which pages?" = "Projects, CV"');
+  await waitFor(session, (e) => e.type === "assistant");
+  assert.match(String(seen[1]?.messages.at(-1)?.content), /Projects, CV/);
+});
+
 test("auto mode runs safe commands but still asks for dangerous ones", async () => {
   const { session } = await makeSession(
     [
