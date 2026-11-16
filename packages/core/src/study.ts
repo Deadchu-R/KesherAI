@@ -8,7 +8,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, pictureQuery, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQuery, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -76,19 +76,7 @@ Answer with JSON only: [{"name": "generic name", "brands": "", "drugClass": "", 
 const LICENSING = "Write the questions like the Israeli nursing licensing exam (בחינת רישוי): multiple choice with four options, mostly short patient cases that ask what the nurse should do first or what is most important, with plausible distractors.";
 
 /** What each field's material needs from the model. */
-const FIELD_HINT: Record<string, string> = {
-  nursing: "This is nursing: favour what the nurse assesses, does and teaches, and patient safety.",
-  medicine: "This is medicine: favour mechanisms, diagnosis and treatment, as the material states them.",
-  law: "This is law: give section numbers, statute and case names exactly as the material writes them, and the rule or holding of each.",
-  engineering: "This is engineering: keep formulas with their units and the conditions they hold under; a worked example shows each step.",
-  cs: "This is computer science: short code in ``` blocks, the complexity of algorithms, and when to use each data structure.",
-  math: "This is mathematics or physics: state definitions and theorems exactly; worked problems show each step; keep formulas as plain text.",
-  psychology: "This is psychology: name the theory and its researcher, and the study and finding behind it, as the material gives them.",
-  economics: "This is economics or management: definitions, models and what moves each curve or figure, with the formulas as written.",
-  biology: "This is biology or chemistry: processes in order, structures and their functions, reactions as written.",
-  education: "This is education: theories, their thinkers and how each is used in class.",
-  humanities: "This is the humanities or social sciences: thinkers, ideas, dates and arguments as the material gives them.",
-};
+const FIELD_HINT: Record<string, string> = STUDY_FIELD_HINTS;
 
 const FORMAT_HINT: Record<StudyFormat, string> = {
   text: "",

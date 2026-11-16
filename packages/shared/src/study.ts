@@ -494,7 +494,24 @@ export const STUDY_FIELDS: StudyField[] = [
   { id: "biology", he: "ביולוגיה וכימיה", en: "Biology and chemistry", words: ["ביולוגיה", "כימיה", "תא", "גנטיקה", "ביוכימיה", "biology", "chemistry", "cell", "genetics", "biochemistry", "אורגנית", "organic"] },
   { id: "education", he: "חינוך", en: "Education", words: ["חינוך", "הוראה", "פדגוגיה", "education", "teaching", "pedagogy", "תלמידים", "בית ספר"] },
   { id: "humanities", he: "מדעי הרוח והחברה", en: "Humanities and social sciences", words: ["היסטוריה", "פילוסופיה", "ספרות", "סוציולוגיה", "מדע המדינה", "history", "philosophy", "literature", "sociology", "political science"] },
+  { id: "gamedev", he: "פיתוח משחקים", en: "Game development", words: ["פיתוח משחקים", "עיצוב משחקים", "מנוע משחק", "unity", "unreal", "godot", "game design", "game dev", "level design", "blueprint", "shader", "gameplay", "c#"] },
 ];
+
+/** A line for the model about each field: what to favour in its answers (the computer's and the phone's). */
+export const STUDY_FIELD_HINTS: Record<string, string> = {
+  nursing: "This is nursing: favour what the nurse assesses, does and teaches, and patient safety.",
+  medicine: "This is medicine: favour mechanisms, diagnosis and treatment, as the material states them.",
+  law: "This is law: give section numbers, statute and case names exactly as the material writes them, and the rule or holding of each.",
+  engineering: "This is engineering: keep formulas with their units and the conditions they hold under; a worked example shows each step.",
+  cs: "This is computer science: short code in ``` blocks, the complexity of algorithms, and when to use each data structure.",
+  math: "This is mathematics or physics: state definitions and theorems exactly; worked problems show each step; keep formulas as plain text.",
+  psychology: "This is psychology: name the theory and its researcher, and the study and finding behind it, as the material gives them.",
+  economics: "This is economics or management: definitions, models and what moves each curve or figure, with the formulas as written.",
+  biology: "This is biology or chemistry: processes in order, structures and their functions, reactions as written.",
+  education: "This is education: theories, their thinkers and how each is used in class.",
+  humanities: "This is the humanities or social sciences: thinkers, ideas, dates and arguments as the material gives them.",
+  gamedev: "This is game development: the engine's own names (Unity: GameObject, Component, Prefab, C#; Unreal: Actor, Blueprint, C++), the game loop and performance, and short code in ``` blocks.",
+};
 
 /** A tool for one field of study: it works on text she pastes, or on the course's lectures. */
 export interface StudyTool {
@@ -513,13 +530,13 @@ const TOOL_LANG = "Write in Hebrew unless the student's own text is in another l
 
 /** The tools for each field (the same on the computer and the phone). */
 export const STUDY_TOOLS: StudyTool[] = [
-  { id: "formulas", he: "דף נוסחאות מהקורס", en: "Formula sheet from the course", fields: ["engineering", "math", "cs", "economics", "biology"], input: "course",
+  { id: "formulas", he: "דף נוסחאות מהקורס", en: "Formula sheet from the course", fields: ["engineering", "math", "cs", "economics", "biology", "gamedev"], input: "course",
     prompt: `Make a formula sheet from these lectures: every formula, law and rule written in them, grouped by topic (## heading per topic). For each: the formula (plain text, like F = m * a, no LaTeX), what each symbol means with its units, and when to use it, in one line. Then the lecture it came from in brackets. ${TOOL_LANG}` },
   { id: "brief", he: "תקציר פסק דין (IRAC)", en: "Case brief (IRAC)", fields: ["law"], input: "text", placeholder: ["הדביקי את פסק הדין או חלק ממנו", "Paste the ruling or part of it"],
     prompt: `Write a case brief of this ruling: ## העובדות (short), ## השאלה המשפטית, ## הכלל (statutes and precedents exactly as cited, with section numbers), ## היישום (the court's reasoning), ## ההכרעה, and ## דעות נוספות (minority or concurring opinions, if any). ${TOOL_LANG}` },
   { id: "statute", he: "פירוק סעיף לרכיבים", en: "A section broken into elements", fields: ["law"], input: "text", placeholder: ["הדביקי את סעיף החוק", "Paste the section"],
     prompt: `Break this statutory section into its elements: the conditions that must all hold (numbered), the exceptions, the result or remedy, and the defined terms it uses. Then one short example that meets every element, and one that misses one, saying which. ${TOOL_LANG}` },
-  { id: "trace", he: "הסבר קוד ומעקב", en: "Explain and trace code", fields: ["cs"], input: "text", placeholder: ["הדביקי קוד", "Paste code"],
+  { id: "trace", he: "הסבר קוד ומעקב", en: "Explain and trace code", fields: ["cs", "gamedev"], input: "text", placeholder: ["הדביקי קוד", "Paste code"],
     prompt: `Explain this code for a student: what it does in two sentences, then line by line (short), then a trace table of the variables for a small example input (a markdown table, one row per step, at most 15 rows), then its time and space complexity with the reason, and any bug or edge case it misses. Write code in code blocks. ${TOOL_LANG}` },
   { id: "research", he: "ניתוח מאמר מחקר", en: "Analyze a research paper", fields: ["psychology", "education", "humanities", "biology", "medicine", "nursing", "economics"], input: "text", placeholder: ["הדביקי את התקציר או המאמר", "Paste the abstract or paper"],
     prompt: `Analyze this study for a student: ## שאלת המחקר והשערות, ## משתנים (independent, dependent, controlled, with how each was measured), ## מערך המחקר (design, sample and size, how it was chosen), ## ממצאים (with the numbers given: effect sizes, p values), ## מגבלות (as the paper states them, then others a reader would raise, marked as such), ## במשפט אחד. ${TOOL_LANG}` },
@@ -533,6 +550,10 @@ export const STUDY_TOOLS: StudyTool[] = [
     prompt: `Write a reflective journal entry by Gibbs' cycle from her notes: ## תיאור, ## רגשות ומחשבות, ## הערכה (what went well and what did not), ## ניתוח (why, linked to what the course teaches, only where her notes allow), ## מסקנות, ## תוכנית פעולה (what she will do next time). First person, her voice, honest and short. If her notes include a name, ID number or other identifying detail of a patient or pupil, leave it out and write [הוסר]. ${TOOL_LANG}` },
   { id: "sbar", he: "העברת משמרת (SBAR)", en: "Handoff (SBAR)", fields: ["nursing", "medicine"], input: "text", placeholder: ["הערות על המטופל לתרגול, בלי שם ומספר זהות", "Notes on the patient, for practice, with no name or ID"],
     prompt: `Turn these practice notes into an SBAR handoff: ## S – מצב (now, in one or two lines), ## B – רקע, ## A – הערכה (vital signs and findings as given, what she thinks is going on), ## R – המלצה (what the next shift should do and watch). Short lines, numbers exactly as given. Leave out any name, ID number or address and write [הוסר]. This is practice for a student, not a real handoff. ${TOOL_LANG}` },
+  { id: "gdd", he: "מסמך עיצוב משחק (GDD)", en: "Game design document (GDD)", fields: ["gamedev"], input: "text", placeholder: ["רעיון המשחק, הפלטפורמה, כמה זמן יש לפרויקט וכמה אנשים", "The game idea, platform, how long the project has and how many people"],
+    prompt: `Write a one-page game design document for a student project from her idea: ## הרעיון במשפט, ## לולאת המשחק (core loop), ## מכניקות ושליטה, ## התקדמות ואתגר, ## סגנון אמנותי וסאונד, ## היקף (what fits the time and team she gave, and what to cut first), ## אבני דרך (a prototype first). Use only her idea and the course's terms; where something is open, write [חסר] as a question for her. ${TOOL_LANG}` },
+  { id: "playtest", he: "סיכום משוב בודקים", en: "Playtest feedback summary", fields: ["gamedev"], input: "text", placeholder: ["ההערות מהבודקים, כמו שנכתבו", "The playtesters' notes, as written"],
+    prompt: `Turn these playtest notes into: ## מה עבד, ## בעיות לפי חומרה (what blocks play first, with how many testers raised each), ## הצעות לתיקון (one per problem, smallest change first), ## מה לבדוק בסבב הבא. Quote only what the notes say; do not invent testers or numbers. ${TOOL_LANG}` },
   { id: "case", he: "תוכנית טיפול למקרה", en: "Care plan for a case", fields: ["nursing", "medicine", "psychology"], input: "text", placeholder: ["תיאור המקרה", "The case"],
     prompt: `From this case, write: ## בעיות עיקריות (by priority, with the findings that show each), ## מטרות, ## התערבויות (with the reason for each), ## מה לעקוב ולהעריך. Base everything on the case and on standard principles the course would teach; mark anything that needs a doctor's order or the ward's protocol. This is practice for a student, not care for a real patient. ${TOOL_LANG}` },
 ];

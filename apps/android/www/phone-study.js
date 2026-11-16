@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, pictureQuery, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQuery, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -45,17 +45,8 @@ function el(tag, attrs = {}, ...kids) {
 
 const LANG = "Write in the same language as the material (usually Hebrew). Keep English medical and scientific terms in English.";
 const ONLY = "Use only what the material says.";
-const FIELD_HINT = {
-  nursing: "This is nursing: favour what the nurse assesses, does and teaches, and patient safety.",
-  medicine: "This is medicine: mechanisms, diagnosis and treatment as the material states them.",
-  law: "This is law: section numbers, statute and case names exactly as written, and each rule or holding.",
-  engineering: "This is engineering: formulas with units; worked examples step by step.",
-  cs: "This is computer science: short code, complexity, when to use each structure.",
-  math: "This is mathematics or physics: exact definitions and theorems; worked problems step by step.",
-  psychology: "This is psychology: theory, researcher, study and finding.",
-  economics: "This is economics: definitions, models, what moves each curve.",
-  biology: "This is biology or chemistry: processes in order, structures and functions.",
-};
+// One list with the computer's (shared).
+const FIELD_HINT = STUDY_FIELD_HINTS;
 const hint = (c) => (c && FIELD_HINT[c.field] ? ` ${FIELD_HINT[c.field]}` : "");
 const DRUG_KEYS = [["brands", "שמות מסחריים", "Brand names"], ["drugClass", "קבוצה", "Class"], ["action", "מנגנון פעולה", "How it works"], ["uses", "התוויות", "Uses"], ["sideEffects", "תופעות לוואי", "Side effects"], ["contraindications", "התוויות נגד", "Contraindications"], ["nursing", "תפקיד האחות", "Nursing"], ["teaching", "הדרכת המטופל", "Patient teaching"]];
 

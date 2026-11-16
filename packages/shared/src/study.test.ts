@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pictureQuery, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -315,7 +315,7 @@ test("field tools: each field gets its own tools, unknown fields get all, course
   assert.ok(!toolsFor("law").some((t) => t.id === "trace"));
   assert.ok(toolsFor("cs").some((t) => t.id === "trace") && toolsFor("cs").some((t) => t.id === "formulas"));
   assert.equal(toolsFor(undefined).length, STUDY_TOOLS.length);
-  for (const f of ["nursing", "medicine", "law", "engineering", "cs", "math", "psychology", "economics", "biology", "education", "humanities"]) assert.ok(toolsFor(f).length > 0, f);
+  for (const f of ["nursing", "medicine", "law", "engineering", "cs", "math", "psychology", "economics", "biology", "education", "humanities", "gamedev"]) assert.ok(toolsFor(f).length > 0, f);
   const m = toolMaterial([{ id: "a", title: "א", date: "", text: "x".repeat(90_000) }, { id: "b", title: "ב", date: "", text: "t", summary: "סיכום" }], 10_000);
   assert.ok(m.length <= 10_000 && m.includes("### ב\nסיכום"));
 });
@@ -373,4 +373,11 @@ test("Commons animations and videos: GIFs keep moving, videos come with their fi
   const g = parseCommonsPictures(json, 8, "gif");
   assert.deepEqual(g.map((x) => x.src), ["https://upload.wikimedia.org/z/beat.gif"]);
   assert.equal(parseCommonsPictures(json, 8, "image").length, 0);
+});
+
+test("game development is a field of study: found from the course, with its own tools and hint", () => {
+  assert.equal(detectField("פיתוח משחקים ב-Unity", "GameObject Prefab C# blueprint"), "gamedev");
+  assert.ok(toolsFor("gamedev").some((t) => t.id === "gdd") && toolsFor("gamedev").some((t) => t.id === "trace"));
+  assert.match(STUDY_FIELD_HINTS.gamedev ?? "", /Unity/);
+  for (const f of STUDY_FIELDS) assert.ok(STUDY_FIELD_HINTS[f.id], `hint for ${f.id}`);
 });
