@@ -742,3 +742,24 @@ S5 an outside scanner's rules for Electron.
 - Student benefits are fixed text and links in the app (no network lookups, nothing sent).
 - Performance: the speech engine on NVIDIA computers was the processor build (whisper.cpp renamed its CUDA download);
   fixed in the picker, with an upgrade for engines already installed.
+
+## Scan 89 (2026-11-16, 0.6.275 – 0.6.279: course sync, hardware fit, execFile fix, phone connect crash, version watch, lecture files, exam plan, course tutor)
+
+- Course sync (`POST /api/study/sync`, 80 MB): every course from the phone passes `cleanCourseData` (course ids
+  `[a-z0-9-]{8,40}` before they become a path, other ids `[\w-]{1,80}`, texts and lists capped as on the computer,
+  unknown fields dropped, FSRS state and quizzes size-capped). A traversal id is refused (tested). Deleted courses are
+  kept in `_removed.json`, which can never be read as a course (its name fails the id check).
+- Lecture files (`POST /api/study/extract`, 70 MB of base64): the size is checked again after decoding (50 MB); only
+  the extension decides the reader (PDF, PowerPoint, Word, text, or a picture to the chat model); nothing is written
+  to disk. The file name is used only for its extension and the suggested title.
+- Course tutor (`POST /api/study/courses/:id/ask`): the history is cut to 6 turns, roles other than user/assistant
+  and non-text content are dropped, each turn is capped at 4000 characters, the question at 2000. Lecture text can
+  steer the answer (prompt injection), but the tutor has no tools: it can only write text.
+- Graphics detection: the log's child-process wrapper kept `util.promisify.custom`, so every `promisify(execFile)`
+  (hardware, updates, firewall, ffmpeg) reads stdout again. Found because the RTX 3090 was not detected.
+- Phone app: the bridge call is answered before its message channel is replaced (the native crash when connecting);
+  native crash reports are decoded on the phone (signal, cause, frames: no memory contents, no addresses beyond the
+  fault address).
+- Version watch: reads only `/api/version`; it never reloads during a lecture recording.
+- Performance: passage search is one pass over the course's words per question (fine for hundreds of lectures);
+  the exam plan is computed per course in the course list (one pass over its cards).
