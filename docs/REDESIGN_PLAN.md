@@ -71,6 +71,11 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
     nursing student needs, where and how to book them, documents for clinical practice — always with the official
     source and the date it was checked, and "check with your programme" where rules differ.
   - Ask the course: answers from all its lectures and files, with the minute in the recording.
+  - "What works for me" (Roee, 2026-11-16): not a learning-styles label (the matching claim has no evidence), but
+    her own results: each topic in several formats (diagram, text, audio recap, worked example, explain it back),
+    each card and question remembers the format it was studied from, and spaced-repetition recall per format and per
+    kind of material shows which mix helps her most, once there are enough answers. Retrieval practice, spacing and
+    words-plus-picture stay on for everyone. Research: docs/RESEARCH_LOG.md "Students, part 5".
   - Live captions and translation (Hebrew ↔ English) during a lecture.
   - Exam plan from the syllabus and the calendar; practice from past exams.
   - A tutor mode that guides through homework step by step instead of giving the answer.

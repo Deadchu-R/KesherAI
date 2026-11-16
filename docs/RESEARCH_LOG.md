@@ -1483,3 +1483,36 @@ Stopped at: building (store and public page first, then the chat menu and the se
   work, (3) a cloud key when she has one. Needs a native speech engine in the app (whisper.cpp or Qualcomm's
   runtime): a new dependency, to ask Roee. Test phone: Roee's OnePlus 13 (Snapdragon 8 Elite, 16 GB).
 - Stopped at: no hands-on test; Hebrew accuracy of small vs turbo on a real lecture is the open question.
+
+### Students, part 5: "how do I learn best?" and how the competitors personalise (2026-11-16)
+
+- Learning styles (VARK and the like): people do have preferences, but the "meshing" claim — teach each person in
+  their preferred style and they learn more — has failed every proper test since Pashler et al. 2008. Reviews:
+  Frontiers in Psychology 2018 (fpsyg.2018.01538), Frontiers in Education 2023 (feduc.2023.1147498), Frontiers in
+  Psychology 2024 (fpsyg.2024.1428732). So a quiz that labels her "visual" and then shows only pictures would not
+  help, and could make her skip what works.
+- What does work for everyone (Dunlosky et al. 2013, Psychological Science in the Public Interest): practice testing
+  and distributed (spaced) practice rate high; elaborative questioning, self-explanation and mixing topics rate
+  moderate; highlighting, rereading and summarising alone rate low. Mayer's multimedia principles: words + a matching
+  picture beat words alone (dual coding), for everyone.
+- What the competitors personalise (none of them sorts people by style; all measure answers):
+  - Duolingo Birdbrain: predicts whether this learner gets this exercise right, from everyone's answers; the
+    session generator picks exercises at the right difficulty; A/B tests showed more learning and engagement.
+  - Quizlet Learn: a memory model (logistic regression → "recurrent power law") over answer history and time
+    between answers decides what comes next; works offline.
+  - Anki (FSRS) and Brainscape (self-rated confidence 1–5): scheduling by how well each card is remembered.
+  - NotebookLM (now Gemini Notebook): many formats from the same sources — audio and video overviews, mind maps,
+    flashcards with "got it / missed it" reruns, quizzes (multiple choice, short answer, fill in), infographics,
+    slides, study guides; the learner chooses the format, nothing measures which works.
+  - YouLearn: weak spots from quiz and test results; StudyFetch: live lecture notes, a tutor (Spark.E) from her
+    material, an AI study calendar; Mindgrasp: live lecture recording, flashcards, quizzes; Khanmigo: Socratic
+    tutoring; Osmosis (nursing/medicine): videos + flashcards + question bank.
+  - Gap nobody fills: measuring, for this student, which format (diagram, text, audio, worked example, explaining
+    back in her own words) leads to better recall on the later quiz — and doing it on her own devices.
+- Our design ("what works for me", evidence-based): every topic is offered in several formats; each card and quiz
+  question remembers which format she studied it from; FSRS recall later (1, 3, 7… days) is compared per format and
+  per kind of material (anatomy, drugs, processes, calculations), with enough answers before saying anything (at
+  least ~20 per format, shown with how sure it is). It suggests a mix ("for drug mechanisms, diagrams + explaining
+  back helped you most") but never drops retrieval practice, spacing or words-plus-picture. A short start-up
+  questionnaire records what she prefers — used only for the first suggestion, then replaced by her own results.
+- Stopped at: design only; the format comparison needs weeks of her real answers before it says anything.
