@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
@@ -56,6 +56,7 @@ async function call<T>(p: Promise<T>): Promise<T | undefined> {
 export function StudyPage({ hash }: { hash: string }) {
   const parts = hash.split("/").slice(2);
   if (parts[0] === "avatar") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("מצלמת אווטאר", "Avatar camera")}</h1><AvatarCamera /></div>;
+  if (parts[0] === "benefits") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("הטבות לסטודנטים", "Student benefits")}</h1><Benefits /></div>;
   if (parts[0] === "labs") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("ערכי מעבדה", "Lab values")}</h1><LabValues /></div>;
   if (parts[0] === "calc") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("חישובי תרופות", "Medication calculations")}</h1><CalcPractice /></div>;
   if (!parts[0]) return <StudyHome />;
@@ -98,6 +99,7 @@ function StudyHome() {
           {LIFE.filter(([, , clinical]) => !clinical || courses?.some((c) => clinicalField(c.field))).map(([he, en]) => <button key={en} type="button" className="study-life-q" onClick={() => askChat(`${L(he, en)}\n\n${LIFE_RULE}`)}>{L(he, en)}</button>)}
         </div>
       </section>
+      <a className="study-avatar-link" href="#/study/benefits">{L("הטבות לסטודנטים: הנחה בתחבורה, תוכנות ו-AI בחינם", "Student benefits: transport discount, free software and AI")}</a>
       <a className="study-avatar-link" href="#/study/avatar">{L("מצלמת אווטאר לשיעורים בזום", "Avatar camera for Zoom lessons")}</a>
       <h2>{L("הקורסים שלי", "My courses")}</h2>
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
@@ -129,6 +131,35 @@ const fieldName = (id: string | undefined) => {
 
 /** Tabs only a clinical course has. */
 const CLINICAL_TABS = new Set(["calc", "drugs", "labs"]);
+
+/** Student benefits, the ones for her fields first, each with how to turn it on and its official page. */
+function Benefits() {
+  const [fields, setFields] = useState<Array<string | undefined>>([]);
+  useEffect(() => void api<{ courses: CourseRow[] }>("/api/study").then((r) => setFields(r.courses.map((c) => c.field)), () => undefined), []);
+  const list = benefitsFor(fields);
+  const check = () => askChat(L(
+    `חפש ברשת אילו הטבות לסטודנטים בישראל קיימות עכשיו (תחבורה ציבורית, תוכנות, AI כמו Gemini, טלפון ואינטרנט, תרבות, טיסות, בנקים) ומה צריך כדי להפעיל כל אחת. לכל הטבה: למי היא, איך מפעילים, וקישור לעמוד הרשמי. ציין אם היא זמינה בישראל ומתי בדקת. התחומים שלי: ${fields.filter(Boolean).join(", ") || "לא ידוע"}.`,
+    `Search the web for the student benefits available in Israel now (public transport, software, AI like Gemini, phone and internet, culture, flights, banks) and what each needs to turn it on. For each: who it is for, how to turn it on, and a link to the official page. Say whether it is available in Israel and when you checked. My fields: ${fields.filter(Boolean).join(", ") || "unknown"}.`,
+  ));
+  return (
+    <section className="study-benefits">
+      <p className="muted small">{L("הטבות משתנות: בכל אחת כתוב מתי נבדקה, ותמיד כדאי לאשר בעמוד הרשמי לפני שמפעילים.", "Benefits change: each says when it was checked; always confirm on the official page before turning it on.")}</p>
+      <button type="button" className="primary" onClick={check}>{L("בדוק מה חדש עכשיו (חיפוש ברשת)", "Check what is new now (web search)")}</button>
+      <ul className="study-list">
+        {list.map((b) => (
+          <li key={b.id}>
+            <details className="study-benefit">
+              <summary><b>{L(b.name.he, b.name.en)}</b><small>{L(b.what.he, b.what.en)}</small></summary>
+              <ol>{(getLocale() === "he" ? b.how.he : b.how.en).map((h, i) => <li key={i}>{h}</li>)}</ol>
+              {b.note && <p className="warn small">{L(b.note.he, b.note.en)}</p>}
+              <p className="small"><a href={b.url} target="_blank" rel="noreferrer">{L("לעמוד הרשמי", "Official page")}</a> · <span className="muted">{L(`נבדק ${b.checked.split("-").reverse().join(".")}`, `Checked ${b.checked}`)}</span></p>
+            </details>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 const TABS: Array<[string, [string, string]]> = [
   ["lectures", ["הרצאות", "Lectures"]],

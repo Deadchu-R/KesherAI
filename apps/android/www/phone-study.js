@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -125,6 +125,7 @@ export function renderPhoneStudy(root, ask, search, speech) {
     else if (view.at === "progress") progress();
     else if (view.at === "life") life();
     else if (view.at === "record") record();
+    else if (view.at === "benefits") benefits();
   }
 
   const back = (to) => el("button", { type: "button", class: "link", onclick: () => go(to) }, L("› חזרה", "‹ Back"));
@@ -139,6 +140,7 @@ export function renderPhoneStudy(root, ask, search, speech) {
       db.courses.some((c) => clinicalField(c.field)) && el("div", { class: "ph-btns" },
         el("button", { type: "button", onclick: () => go({ at: "calc" }) }, L("חישובי תרופות", "Medication calculations")),
         el("button", { type: "button", onclick: () => go({ at: "labs" }) }, L("ערכי מעבדה", "Lab values"))),
+      el("button", { type: "button", onclick: () => go({ at: "benefits" }) }, L("הטבות לסטודנטים", "Student benefits")),
       search && el("button", { type: "button", onclick: () => go({ at: "life" }) }, L("שאלה על הלימודים (עם מקורות מהרשת)", "A question about your studies (sources from the web)"))));
     const name = el("input", { placeholder: L("שם קורס חדש", "New course name"), "aria-label": L("שם קורס", "Course name"), dir: "auto" });
     root.append(el("section", { class: "api" },
@@ -306,6 +308,7 @@ export function renderPhoneStudy(root, ask, search, speech) {
   function life() {
     const qs = [["אילו חיסונים צריך סטודנט/ית לסיעוד בישראל לפני התנסות קלינית, ואיפה קובעים תור?", "Which vaccinations does a nursing student in Israel need before clinical practice, and where to book?"], ["אילו מסמכים צריך לפני התנסות קלינית בבית חולים?", "Which documents are needed before clinical practice at a hospital?"], ["איך מגישים בקשה למועד מיוחד בבחינה?", "How do I apply for a special exam date?"]];
     const input = el("textarea", { rows: "3", dir: "auto", "aria-label": L("השאלה", "The question") });
+    if (view.ask) input.value = view.ask;
     const out = el("div", {});
     const btn = el("button", { type: "button", class: "primary" }, L("חפש וענה", "Search and answer"));
     btn.onclick = async () => {
@@ -437,6 +440,17 @@ export function renderPhoneStudy(root, ask, search, speech) {
       };
       startBtn.replaceWith(el("div", { class: "ph-btns" }, star, stop));
     };
+  }
+
+  function benefits() {
+    root.append(back({ at: "home" }), el("p", { class: "muted" }, L("הטבות משתנות: בכל אחת כתוב מתי נבדקה. תמיד לאשר בעמוד הרשמי.", "Benefits change: each says when it was checked. Always confirm on the official page.")));
+    if (search) root.append(el("button", { type: "button", class: "primary", onclick: () => go({ at: "life", ask: L("אילו הטבות לסטודנטים בישראל קיימות עכשיו, ואיך מפעילים כל אחת?", "Which student benefits exist in Israel now, and how is each turned on?") }) }, L("בדוק מה חדש עכשיו", "Check what is new now")));
+    for (const b of benefitsFor(db.courses.map((c) => c.field))) {
+      root.append(el("details", { class: "api" }, el("summary", {}, el("b", {}, he() ? b.name.he : b.name.en), el("br"), el("small", { class: "muted" }, he() ? b.what.he : b.what.en)),
+        el("ol", {}, ...(he() ? b.how.he : b.how.en).map((h) => el("li", {}, h))),
+        b.note && el("p", { class: "muted" }, he() ? b.note.he : b.note.en),
+        el("p", {}, el("a", { href: b.url, target: "_blank", rel: "noreferrer" }, L("לעמוד הרשמי", "Official page")), " · ", el("small", { class: "muted" }, L(`נבדק ${b.checked.split("-").reverse().join(".")}`, `Checked ${b.checked}`)))));
+    }
   }
 
   function review() {

@@ -2672,3 +2672,21 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-remote-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .study-remote-btns button { min-height: 64px; font-size: 17px; }
 .avatar-feed video.live { transition: opacity 0.4s linear; z-index: 1; }
+.study-benefits { display: flex; flex-direction: column; gap: 12px; }
+.study-benefits > button { align-self: flex-start; }
+.study-benefit { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+.study-benefit summary { cursor: pointer; display: flex; flex-direction: column; gap: 3px; list-style: none; }
+.study-benefit summary small { color: var(--muted); }
+.study-benefit ol { margin: 10px 0 6px; padding-inline-start: 20px; line-height: 1.6; }
+.avatar-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; overflow-x: auto; }
+.avatar-steps button { height: 36px; padding: 0 12px; white-space: nowrap; font-size: 13px; }
+.avatar-steps button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.avatar-steps button.done { color: var(--good); }
+.avatar-checklist { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.6; }
+.avatar-frame { position: relative; width: 100%; max-width: 640px; }
+.avatar-guide { position: absolute; inset: 0; pointer-events: none; }
+.avatar-guide-head { position: absolute; left: 50%; top: 14%; width: 30%; height: 56%; transform: translateX(-50%); border: 2px dashed rgb(255 255 255 / 0.7); border-radius: 50% 50% 45% 45%; }
+.avatar-guide-eyes { position: absolute; left: 25%; right: 25%; top: 36%; border-top: 2px dashed rgb(152 163 255 / 0.85); }
+.avatar-count { position: absolute; inset: 0; display: grid; place-items: center; font-size: 96px; font-weight: 800; color: #fff; text-shadow: 0 2px 12px rgb(0 0 0 / 0.6); }
+.avatar-hint { position: absolute; inset-inline: 8px; bottom: 8px; padding: 8px 12px; border-radius: 10px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 15px; text-align: center; }
+.study-avatar progress { width: 100%; max-width: 640px; height: 6px; }

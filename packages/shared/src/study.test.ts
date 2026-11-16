@@ -63,3 +63,10 @@ test("a course's field is recognised from its name and lectures", async () => {
   assert.equal(detectField("קורס", "שלום"), undefined);
   assert.equal(detectField("מבוא", "לפי החוק והסעיף, ובפסק הדין"), "law");
 });
+
+test("benefits for a student's fields come first", async () => {
+  const { benefitsFor, STUDENT_BENEFITS } = await import("./study.js");
+  assert.equal(benefitsFor(["engineering"])[0]!.fields?.includes("engineering"), true);
+  assert.equal(benefitsFor(["nursing"]).length, STUDENT_BENEFITS.length);
+  assert.ok(STUDENT_BENEFITS.every((b) => /^https:\/\//.test(b.url) && b.how.he.length && b.checked));
+});

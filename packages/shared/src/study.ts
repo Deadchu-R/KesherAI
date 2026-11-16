@@ -437,3 +437,83 @@ export function detectField(name: string, text: string): string | undefined {
 
 /** Whether a field gets the nursing tools (drug cards, lab values, medication calculations). */
 export const clinicalField = (field: string | undefined): boolean => field === "nursing" || field === "medicine";
+
+// ── Student benefits ──────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A student benefit: what it gives and how to turn it on, with its official page. Offers change: each says when
+ *  it was checked, and the page asks the web for what is current before relying on it. */
+export interface StudentBenefit {
+  id: string;
+  group: "transport" | "ai" | "software" | "design" | "dev" | "money";
+  name: { he: string; en: string };
+  what: { he: string; en: string };
+  how: { he: string[]; en: string[] };
+  url: string;
+  /** Fields of study it matters most for (empty: everyone). */
+  fields?: string[];
+  checked: string;
+  note?: { he: string; en: string };
+}
+
+export const STUDENT_BENEFITS: StudentBenefit[] = [
+  {
+    id: "transit", group: "transport", checked: "2026-11-16", url: "https://www.kolzchut.org.il/he/%D7%94%D7%A0%D7%97%D7%94_%D7%9C%D7%A1%D7%98%D7%95%D7%93%D7%A0%D7%98_%D7%91%D7%A0%D7%A1%D7%99%D7%A2%D7%94_%D7%91%D7%90%D7%95%D7%98%D7%95%D7%91%D7%95%D7%A1",
+    name: { he: "הנחה בתחבורה ציבורית", en: "Public transport discount" },
+    what: { he: "סטודנטים זכאים ל-33%–50% הנחה בנסיעות, לפי סוג הלימודים.", en: "Students get 33%–50% off fares, by type of studies." },
+    how: { he: ["מבקשים מהמוסד אישור לימודים או מעדכנים פרופיל סטודנט ברב-קו.", "טוענים את הפרופיל בעמדת רב-קו, באתר או באפליקציה של רב-קו.", "באפליקציות תשלום (מוביט, פנגו ועוד) בוחרים פרופיל סטודנט."], en: ["Get a study certificate from your school, or update the student profile on your Rav-Kav.", "Load the profile at a Rav-Kav station, the Rav-Kav site or app.", "In payment apps (Moovit, Pango and others) choose the student profile."] },
+  },
+  {
+    id: "gemini", group: "ai", checked: "2026-11-16", url: "https://support.google.com/gemini/answer/16417758",
+    name: { he: "Google Gemini לסטודנטים", en: "Google Gemini for students" },
+    what: { he: "שנה של מנוי Gemini בתשלום בחינם לסטודנטים, עם NotebookLM.", en: "A free year of a paid Gemini plan for students, with NotebookLM." },
+    how: { he: ["נכנסים ל-Google One מהחשבון האישי.", "מאמתים סטודנטיות דרך SheerID (מייל של המוסד או אישור לימודים).", "בוחרים את מבצע הסטודנטים ומוסיפים אמצעי תשלום (בלי חיוב בשנה הראשונה). לבטל לפני החידוש אם לא רוצים להמשיך."], en: ["Open Google One with your personal account.", "Verify you are a student with SheerID (school email or certificate).", "Pick the student offer and add a payment method (no charge in the first year). Cancel before it renews if you do not want to continue."] },
+    note: { he: "בבדיקה ב-16.11.2026: לפי עמוד העזרה של Google ההצעה החדשה מוגבלת כרגע לסטודנטים בארה\"ב; מקורות אחרים מזכירים גרסה מצומצמת ב-140 מדינות. לבדוק מה זמין בישראל עכשיו.", en: "Checked 16.11.2026: Google's help page says new claims are limited to US students for now; other sources mention a smaller plan in 140 countries. Check what Israel gets now." },
+  },
+  {
+    id: "m365", group: "software", checked: "2026-11-16", url: "https://www.microsoft.com/education/products/office",
+    name: { he: "Microsoft 365 (Word, Excel, Teams)", en: "Microsoft 365 (Word, Excel, Teams)" },
+    what: { he: "לרוב חינם דרך המוסד.", en: "Usually free through your school." },
+    how: { he: ["נכנסים עם המייל של המוסד באתר של Microsoft 365.", "אם לא עובד, שואלים את מחלקת המחשוב של המוסד."], en: ["Sign in with your school email on the Microsoft 365 site.", "If that does not work, ask your school's IT."] },
+  },
+  {
+    id: "github", group: "dev", checked: "2026-11-16", url: "https://education.github.com/pack", fields: ["cs", "engineering", "math"],
+    name: { he: "GitHub Student Developer Pack", en: "GitHub Student Developer Pack" },
+    what: { he: "עשרות כלי פיתוח בחינם: JetBrains, קרדיט לענן, דומיין ועוד.", en: "Dozens of free developer tools: JetBrains, cloud credit, a domain and more." },
+    how: { he: ["נרשמים ב-education.github.com/pack.", "מאמתים עם המייל של המוסד או צילום של כרטיס/אישור סטודנט."], en: ["Sign up at education.github.com/pack.", "Verify with your school email or a photo of your student card or certificate."] },
+  },
+  {
+    id: "notion", group: "software", checked: "2026-11-16", url: "https://www.notion.com/product/notion-for-education",
+    name: { he: "Notion לחינוך", en: "Notion for education" },
+    what: { he: "תוכנית Plus בחינם לסטודנטים.", en: "The Plus plan free for students." },
+    how: { he: ["נרשמים עם המייל של המוסד.", "בהגדרות: מעבר לתוכנית Education."], en: ["Sign up with your school email.", "In settings: switch to the Education plan."] },
+  },
+  {
+    id: "canva", group: "design", checked: "2026-11-16", url: "https://www.canva.com/education/",
+    name: { he: "Canva לחינוך", en: "Canva for education" },
+    what: { he: "Canva Pro בחינם לסטודנטים מאומתים (לרוב דרך המוסד).", en: "Canva Pro free for verified students (often through the school)." },
+    how: { he: ["בודקים באתר Canva Education אם המוסד שלך רשום.", "מאמתים לפי ההוראות שם."], en: ["Check on Canva Education whether your school is listed.", "Verify as it explains."] },
+  },
+  {
+    id: "figma", group: "design", checked: "2026-11-16", url: "https://www.figma.com/education/", fields: ["cs", "engineering", "humanities"],
+    name: { he: "Figma לחינוך", en: "Figma for education" },
+    what: { he: "Figma ו-FigJam בחינם לסטודנטים.", en: "Figma and FigJam free for students." },
+    how: { he: ["נכנסים ל-figma.com/education.", "מאמתים סטודנטיות."], en: ["Go to figma.com/education.", "Verify you are a student."] },
+  },
+  {
+    id: "autodesk", group: "software", checked: "2026-11-16", url: "https://www.autodesk.com/education/edu-software/overview", fields: ["engineering"],
+    name: { he: "Autodesk (AutoCAD, Fusion, Revit)", en: "Autodesk (AutoCAD, Fusion, Revit)" },
+    what: { he: "רישיונות חינוך בחינם.", en: "Free education licences." },
+    how: { he: ["נרשמים באתר Autodesk Education.", "מאמתים עם אישור לימודים."], en: ["Sign up on Autodesk Education.", "Verify with a study certificate."] },
+  },
+];
+
+/**
+ * The benefits that matter for these fields first, then everyone's.
+ *
+ * @param fields - The student's courses' fields.
+ */
+export function benefitsFor(fields: Array<string | undefined>): StudentBenefit[] {
+  const set = new Set(fields.filter(Boolean));
+  const score = (b: StudentBenefit) => (b.fields?.some((f) => set.has(f)) ? 0 : b.fields?.length ? 2 : 1);
+  return [...STUDENT_BENEFITS].sort((a, b) => score(a) - score(b));
+}

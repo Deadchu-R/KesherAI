@@ -7,44 +7,85 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 interface AvatarInfo { accepted: boolean; clip: { size: number; at: number } | null }
 
+/** Tips shown while recording, one every 30 seconds, so the video has the small movements of someone listening. */
+const RECORD_HINTS: Array<[string, string]> = [
+  ["הסתכלי למסך כאילו את מקשיבה למרצה.", "Look at the screen as if listening to the lecturer."],
+  ["הנהני קצת, כאילו את מסכימה.", "Nod a little, as if you agree."],
+  ["הורידי מבט לשנייה, כאילו את כותבת משהו, וחזרי למסך.", "Look down for a second as if writing, then back to the screen."],
+  ["שבי קצת אחרת: זוזי מעט בכיסא.", "Shift a little in your chair."],
+  ["חייכי קלות, כאילו המרצה אמר משהו מצחיק.", "Smile a little, as if the lecturer said something funny."],
+  ["הזיזי שיער או גרדי בלחי, פעם אחת, בעדינות.", "Touch your hair or cheek once, gently."],
+  ["חזרי להקשבה רגילה, בלי לזוז הרבה.", "Back to plain listening, little movement."],
+  ["הטי את הראש מעט, כאילו את חושבת.", "Tilt your head a little, as if thinking."],
+  ["מצמוץ רגיל ונשימה רגילה. כמעט סיימנו.", "Blink and breathe normally. Almost done."],
+];
+
+/** The steps of the first setup. */
+const STEPS: Array<[string, string]> = [["הכנה", "Get ready"], ["הקלטה", "Record"], ["בדיקה", "Check"], ["מצלמה ב-Zoom", "Camera in Zoom"]];
+
 /**
- * The avatar camera (students): a few minutes of the student's own "listening" video, looped as her camera in
- * Zoom or Teams through OBS (a browser source + OBS Virtual Camera). A warning comes first. The feed itself is
- * `#/avatar-feed` (AvatarFeed below).
+ * The avatar camera (students), as a guided first setup: get ready (light, framing, clothes), record 3–5 minutes of
+ * listening with a framing guide and prompts for natural movement, check the loop, then make it a camera in Zoom or
+ * Teams (softcam or OBS), with the remote control. A warning comes first. The feed itself is `#/avatar-feed`.
  */
 export function AvatarCamera() {
   const [info, setInfo] = useState<AvatarInfo | null>(null);
+  const [step, setStep] = useState(0);
   const [rec, setRec] = useState<{ secs: number } | null>(null);
+  const [count, setCount] = useState(0);
+  const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const live = useRef<HTMLVideoElement>(null);
+  const cam = useRef<MediaStream | null>(null);
   const stop = useRef<() => void>(() => undefined);
-  const load = () => void api<AvatarInfo>("/api/study/avatar").then(setInfo, (e: Error) => toast(e.message));
+  const load = () => void api<AvatarInfo>("/api/study/avatar").then((r) => { setInfo(r); if (r.clip) setStep((s) => (s === 0 ? 2 : s)); }, (e: Error) => toast(e.message));
   useEffect(load, []);
-  useEffect(() => () => stop.current(), []);
+  useEffect(() => () => { stop.current(); cam.current?.getTracks().forEach((t) => t.stop()); }, []);
+
+  /** The camera picture with the framing guide, before and while recording. */
+  const openCamera = async () => {
+    if (cam.current) return cam.current;
+    try {
+      cam.current = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 }, audio: false });
+    } catch {
+      toast(L("אין גישה למצלמה. בדקי שהיא מחוברת ושאישרת גישה.", "No access to the camera. Check it is connected and allowed."));
+      return null;
+    }
+    if (live.current) live.current.srcObject = cam.current;
+    setPreview(true);
+    return cam.current;
+  };
 
   const record = async () => {
-    let cam: MediaStream;
-    try {
-      cam = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 }, audio: false });
-    } catch {
-      return toast(L("אין גישה למצלמה.", "No access to the camera."));
+    const stream = await openCamera();
+    if (!stream) return;
+    for (let i = 3; i > 0; i--) {
+      setCount(i);
+      await new Promise((r) => setTimeout(r, 1000));
     }
-    if (live.current) live.current.srcObject = cam;
+    setCount(0);
     const type = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
-    const mr = new MediaRecorder(cam, { mimeType: type, videoBitsPerSecond: 2_500_000 });
+    const mr = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 2_500_000 });
     const chunks: Blob[] = [];
     mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const t0 = Date.now();
-    const tick = setInterval(() => setRec({ secs: Math.round((Date.now() - t0) / 1000) }), 500);
+    const tick = setInterval(() => {
+      const secs = Math.round((Date.now() - t0) / 1000);
+      setRec({ secs });
+      if (secs >= 300 && mr.state === "recording") mr.stop();
+    }, 500);
     mr.onstop = async () => {
       clearInterval(tick);
-      cam.getTracks().forEach((t) => t.stop());
+      stream.getTracks().forEach((t) => t.stop());
+      cam.current = null;
+      setPreview(false);
       setRec(null);
       setBusy(true);
       try {
         const res = await fetch(withToken("/api/study/avatar/clip"), { method: "PUT", headers: { "content-type": "video/webm" }, body: new Blob(chunks, { type: "video/webm" }) });
         if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? String(res.status));
         toast(L("הסרטון נשמר", "The video is saved"));
+        setStep(2);
         load();
       } catch (e) {
         toast((e as Error).message);
@@ -69,37 +110,102 @@ export function AvatarCamera() {
       </section>
     );
   const feed = `${location.origin}/#/avatar-feed`;
+  const secs = rec?.secs ?? 0;
   return (
     <div className="study-avatar">
-      <section className="card">
-        <h2>{L("1. הסרטון שלך", "1. Your video")}</h2>
-        <p className="muted small">{L("הקליטי 3–5 דקות שבהן את יושבת מול המצלמה ומקשיבה: מבט למסך, תזוזות קטנות וטבעיות, אור כמו בשיעור. אל תדברי ואל תקומי. הסרטון נשמר רק במחשב הזה.", "Record 3–5 minutes of yourself sitting at the camera and listening: eyes on the screen, small natural movement, the light you have in class. Don't talk or get up. The video stays on this computer.")}</p>
-        <video ref={live} className="study-avatar-video" autoPlay muted playsInline hidden={!rec} />
-        {!rec && info.clip && <video className="study-avatar-video" src={withToken(`/api/study/avatar/clip?at=${info.clip.at}`)} autoPlay muted loop playsInline />}
-        <div className="study-actions">
-          {rec ? <button type="button" className="danger" onClick={() => stop.current()}>{L(`סיים הקלטה (${Math.floor(rec.secs / 60)}:${String(rec.secs % 60).padStart(2, "0")})`, `Finish (${Math.floor(rec.secs / 60)}:${String(rec.secs % 60).padStart(2, "0")})`)}</button>
-            : <button type="button" className="primary" disabled={busy} onClick={() => void record()}>{busy ? L("שומר…", "Saving…") : info.clip ? L("הקלט מחדש", "Record again") : L("הקלט סרטון", "Record the video")}</button>}
-          {info.clip && !rec && <button type="button" className="ghost" onClick={async () => { if (confirm(L("למחוק את הסרטון?", "Delete the video?"))) { await api("/api/study/avatar/clip", { method: "DELETE" }); load(); } }}>{L("מחק", "Delete")}</button>}
-        </div>
-      </section>
-      {info.clip && <CameraMode />}
-      {info.clip && <DirectCamera />}
-      <section className="card">
-        <h2>{L("או: מצלמה דרך OBS", "Or: a camera through OBS")}</h2>
-        <ol className="study-avatar-steps">
-          <li>{L("ב-OBS: מקורות ← + ← דפדפן, ובכתובת:", "In OBS: Sources → + → Browser, with the address:")} <code dir="ltr">{feed}</code> <button type="button" className="small" onClick={() => void navigator.clipboard.writeText(feed).then(() => toast(L("הועתק", "Copied")))}>{L("העתק", "Copy")}</button></li>
-          <li>{L("רוחב 1280, גובה 720.", "Width 1280, height 720.")}</li>
-          <li>{L("ב-OBS: \"התחל מצלמה וירטואלית\".", "In OBS: \"Start Virtual Camera\".")}</li>
-          <li>{L("ב-Zoom או ב-Teams: מצלמה ← OBS Virtual Camera.", "In Zoom or Teams: camera → OBS Virtual Camera.")}</li>
-        </ol>
-        <p className="muted small">{L("כשאת רוצה לדבר: עברי ב-Zoom למצלמה האמיתית. מעבר לבד כשאת מול המצלמה, וסנכרון שפתיים כשאת לא, ייכנסו בהמשך, וגם מצלמה ישירה בלי OBS.", "To talk: switch Zoom to your real camera. Switching by itself when you are at the camera, lip sync when you are not, and a direct camera without OBS come next.")}</p>
-        <a className="button" href="#/avatar-feed" target="_blank" rel="noreferrer">{L("תצוגה מקדימה של המצלמה", "Preview the camera")}</a>
-      </section>
+      <ol className="avatar-steps" aria-label={L("שלבי ההגדרה", "Setup steps")}>
+        {STEPS.map(([h, e], i) => (
+          <li key={e}><button type="button" className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined} disabled={!!rec || (i > 1 && !info.clip)} onClick={() => setStep(i)}>{i < step ? "✓ " : `${i + 1}. `}{L(h, e)}</button></li>
+        ))}
+      </ol>
+
+      {step === 0 && (
+        <section className="card">
+          <h2>{L("לפני שמקליטים: 2 דקות של הכנה", "Before recording: 2 minutes to get ready")}</h2>
+          <p className="muted small">{L("הסרטון יוצג בשיעורים במקומך, אז כדאי שייראה בדיוק כמו שאת נראית בשיעור רגיל.", "The video stands in for you in class, so it should look exactly like you do in a normal lesson.")}</p>
+          <ul className="avatar-checklist">
+            <li><b>{L("אותו מקום", "The same place")}</b> — {L("שבי איפה שאת יושבת בשיעורים, עם אותו רקע.", "sit where you sit for lessons, with the same background.")}</li>
+            <li><b>{L("אור מלפנים", "Light in front")}</b> — {L("חלון או מנורה מולך, לא מאחורייך. בלי שמש שזזה על הפנים.", "a window or lamp facing you, not behind. No moving sunlight on your face.")}</li>
+            <li><b>{L("מצלמה בגובה העיניים", "Camera at eye level")}</b> — {L("הניחי את הלפטופ על כמה ספרים אם צריך.", "put the laptop on a few books if needed.")}</li>
+            <li><b>{L("בגדים רגילים לשיעור", "Normal lesson clothes")}</b> — {L("אם ההקלטה בחולצה מסוימת, עדיף ללבוש אותה גם בשיעורים עם האווטאר. אפשר להקליט כמה סרטונים.", "if you record in one top, wear it for avatar lessons too. You can record more than one video.")}</li>
+            <li><b>{L("שקט ולבד", "Quiet and alone")}</b> — {L("שאף אחד לא ייכנס לפריים. הקול לא מוקלט.", "nobody walks into the picture. No sound is recorded.")}</li>
+          </ul>
+          <div className="study-actions">
+            <button type="button" className="primary" onClick={() => { setStep(1); void openCamera(); }}>{L("פתחי מצלמה וממשיכים", "Open the camera and continue")}</button>
+          </div>
+        </section>
+      )}
+
+      {step === 1 && (
+        <section className="card">
+          <h2>{L("הקלטה: 3–5 דקות של הקשבה", "Record: 3–5 minutes of listening")}</h2>
+          <p className="muted small">{L("שימי את הראש והכתפיים בתוך המסגרת, והעיניים על הקו. בזמן ההקלטה יופיעו רמזים קטנים לתזוזות טבעיות. לא מדברים ולא קמים.", "Keep head and shoulders inside the frame, eyes on the line. Small hints for natural movement show while recording. Don't talk or get up.")}</p>
+          <div className="avatar-frame">
+            <video ref={live} className="study-avatar-video" autoPlay muted playsInline />
+            {preview && <div className="avatar-guide" aria-hidden="true"><span className="avatar-guide-head" /><span className="avatar-guide-eyes" /></div>}
+            {count > 0 && <div className="avatar-count" aria-live="assertive">{count}</div>}
+            {rec && <div className="avatar-hint" aria-live="polite">{L(...RECORD_HINTS[Math.min(RECORD_HINTS.length - 1, Math.floor(secs / 30))]!)}</div>}
+          </div>
+          {rec && <progress max={300} value={secs} aria-label={L("זמן הקלטה", "Recording time")} />}
+          <div className="study-actions">
+            {rec ? (
+              <button type="button" className={secs >= 180 ? "primary" : "danger"} onClick={() => stop.current()}>
+                {secs >= 180 ? L(`סיימתי (${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")})`, `Done (${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")})`) : L(`עצור (עוד ${Math.ceil((180 - secs) / 60)} דק׳ למינימום)`, `Stop (${Math.ceil((180 - secs) / 60)} min to the minimum)`)}
+              </button>
+            ) : (
+              <>
+                {!preview && <button type="button" onClick={() => void openCamera()}>{L("פתחי מצלמה", "Open the camera")}</button>}
+                <button type="button" className="primary" disabled={busy || count > 0} onClick={() => void record()}>{busy ? L("שומר…", "Saving…") : L("התחילי הקלטה (ספירה לאחור 3 שניות)", "Start recording (3-second countdown)")}</button>
+              </>
+            )}
+          </div>
+          <p className="muted small">{L("ההקלטה נעצרת לבד אחרי 5 דקות. הסרטון נשמר רק במחשב הזה.", "It stops by itself after 5 minutes. The video stays on this computer.")}</p>
+        </section>
+      )}
+
+      {step === 2 && info.clip && (
+        <section className="card">
+          <h2>{L("בדיקה: ככה זה ייראה", "Check: this is how it will look")}</h2>
+          <video className="study-avatar-video" src={withToken(`/api/study/avatar/clip?at=${info.clip.at}`)} autoPlay muted loop playsInline />
+          <ul className="avatar-checklist">
+            <li>{L("רואים את כל הפנים, באור טוב?", "Is your whole face visible, in good light?")}</li>
+            <li>{L("אין רגע שבו את מדברת, קמה או מסתכלת הצידה הרבה זמן?", "No moment of talking, getting up or looking away for long?")}</li>
+            <li>{L("הרקע נראה כמו בשיעורים שלך?", "Does the background look like your lessons?")}</li>
+          </ul>
+          <div className="study-actions">
+            <button type="button" className="primary" onClick={() => setStep(3)}>{L("נראה טוב, ממשיכים", "Looks good, continue")}</button>
+            <button type="button" onClick={() => { setStep(1); void openCamera(); }}>{L("הקלטה מחדש", "Record again")}</button>
+            <button type="button" className="ghost" onClick={async () => { if (confirm(L("למחוק את הסרטון?", "Delete the video?"))) { await api("/api/study/avatar/clip", { method: "DELETE" }); setStep(0); load(); } }}>{L("מחק", "Delete")}</button>
+          </div>
+        </section>
+      )}
+
+      {step === 3 && info.clip && (
+        <>
+          <DirectCamera />
+          <section className="card">
+            <h2>{L("ב-Teams, ב-Meet או בדפדפן: דרך OBS", "In Teams, Meet or a browser: through OBS")}</h2>
+            <p className="muted small">{L("דפדפנים ו-Teams החדש לא רואים את המצלמה הישירה; OBS כן.", "Browsers and the new Teams do not see the direct camera; OBS works there.")}</p>
+            <ol className="study-avatar-steps">
+              <li>{L("פתחי את OBS. בתיבה \"מקורות\" למטה: + ← דפדפן ← אישור.", "Open OBS. In \"Sources\" at the bottom: + → Browser → OK.")}</li>
+              <li>{L("בכתובת הדביקי:", "For the address, paste:")} <code dir="ltr">{feed}</code> <button type="button" className="small" onClick={() => void navigator.clipboard.writeText(feed).then(() => toast(L("הועתק", "Copied")))}>{L("העתק", "Copy")}</button></li>
+              <li>{L("רוחב 1280, גובה 720 ← אישור.", "Width 1280, height 720 → OK.")}</li>
+              <li>{L("מימין למטה: \"התחל מצלמה וירטואלית\".", "Bottom right: \"Start Virtual Camera\".")}</li>
+              <li>{L("ב-Teams או ב-Meet: הגדרות ← וידאו ← מצלמה ← OBS Virtual Camera.", "In Teams or Meet: settings → video → camera → OBS Virtual Camera.")}</li>
+            </ol>
+          </section>
+          <CameraMode />
+          <section className="card">
+            <h2>{L("ניסיון לפני השיעור הראשון", "A try before the first lesson")}</h2>
+            <p className="muted small">{L("פתחי פגישת ניסיון ב-Zoom לבד (\"פגישה חדשה\"), בחרי את המצלמה, והחליפי כמה פעמים בין \"אווטאר\" ל\"מצלמה אמיתית\" כאן או מהטלפון.", "Start a test meeting in Zoom on your own (\"New meeting\"), choose the camera, and switch a few times between \"Avatar\" and \"Real camera\" here or from the phone.")}</p>
+            <a className="button" href="#/avatar-feed" target="_blank" rel="noreferrer">{L("תצוגה מקדימה של המצלמה", "Preview the camera")}</a>
+          </section>
+        </>
+      )}
     </div>
   );
 }
 
-/** The camera without OBS (the Windows app): add it to Windows once, then on and off. */
 /** The remote control (from the phone or the computer): what the camera shows now. */
 function CameraMode() {
   const [mode, setMode] = useState<"avatar" | "live">("avatar");
@@ -141,8 +247,12 @@ function DirectCamera() {
   };
   return (
     <section className="card">
-      <h2>{L("2. להפוך אותו למצלמה (ישירות, בלי OBS)", "2. Make it a camera (directly, no OBS)")}</h2>
-      <p className="muted small">{L("ב-Zoom או ב-Teams תופיע מצלמה בשם \"DirectShow Softcam\". בפעם הראשונה Windows ישאל אם לאשר להוסיף אותה.", "Zoom and Teams show a camera called \"DirectShow Softcam\". The first time, Windows asks whether to allow adding it.")}</p>
+      <h2>{L("ב-Zoom: מצלמה ישירה (בלי OBS)", "In Zoom: a direct camera (no OBS)")}</h2>
+      <ol className="study-avatar-steps">
+        <li>{L("פעם ראשונה: \"הוסף את המצלמה ל-Windows\" ואשרי בחלון של Windows.", "First time: \"Add the camera to Windows\" and allow it in Windows' window.")}</li>
+        <li>{L("\"הפעל את מצלמת האווטאר\".", "\"Turn the avatar camera on\".")}</li>
+        <li>{L("ב-Zoom: הגדרות ← וידאו ← מצלמה ← DirectShow Softcam.", "In Zoom: Settings → Video → Camera → DirectShow Softcam.")}</li>
+      </ol>
       <div className="study-actions">
         {!st.installed ? <button type="button" className="primary" disabled={busy} onClick={() => void act("install")}>{L("הוסף את המצלמה ל-Windows", "Add the camera to Windows")}</button>
           : st.running ? <button type="button" className="danger" disabled={busy} onClick={() => void act("stop")}>{L("כבה את מצלמת האווטאר", "Turn the avatar camera off")}</button>
