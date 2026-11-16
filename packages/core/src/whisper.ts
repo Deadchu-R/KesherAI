@@ -185,9 +185,19 @@ export class WhisperEngine {
     return process.platform === "win32" || process.platform === "darwin" || existsSync("/usr/local/bin/whisper-cli") || existsSync("/usr/bin/whisper-cli");
   }
 
+  /** A program from the engine folder: the NVIDIA engine's when both are here (the old one is removed when it can be). */
+  private async engineFile(exe: string): Promise<string | undefined> {
+    const dirs = (await readdir(this.dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name);
+    for (const d of dirs.sort((a, b) => Number(b.endsWith("-cuda")) - Number(a.endsWith("-cuda")))) {
+      const f = await findFile(join(this.dir, d), exe);
+      if (f) return f;
+    }
+    return findFile(this.dir, exe);
+  }
+
   private async binary(): Promise<string | undefined> {
     const exe = process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli";
-    const local = await findFile(this.dir, exe);
+    const local = await this.engineFile(exe);
     if (local) return local;
     for (const p of ["/opt/homebrew/bin/whisper-cli", "/usr/local/bin/whisper-cli", "/usr/bin/whisper-cli"]) if (existsSync(p)) return p;
     return undefined;
@@ -216,6 +226,24 @@ export class WhisperEngine {
   }
 
   private upgrading?: Promise<void>;
+  private fitTimer?: ReturnType<typeof setInterval>;
+
+  /**
+   * Keeps the engine fitting this computer's hardware without asking: on a computer with an NVIDIA card, a
+   * processor-only engine is replaced by the NVIDIA one (checked 2 minutes after start, then every 6 hours, never
+   * while a lecture is being transcribed). Other computers keep the processor engine, which picks the fastest code
+   * for their processor (Intel or AMD) by itself.
+   */
+  keepFitting(): void {
+    if (this.fitTimer || process.platform !== "win32") return;
+    const check = () => {
+      const busy = [...this.servers.values()].some((v) => Date.now() - v.used < 5 * 60_000);
+      if (!busy && !this.state.busy) void this.upgradeGpu().catch(() => undefined);
+    };
+    setTimeout(check, 2 * 60_000).unref?.();
+    this.fitTimer = setInterval(check, 6 * 3600_000);
+    this.fitTimer.unref?.();
+  }
 
   /**
    * Replaces a processor-only engine with whisper.cpp's CUDA build (the NVIDIA card makes each half minute several
@@ -380,7 +408,7 @@ export class WhisperEngine {
 
   private async serverBinary(): Promise<string | undefined> {
     const exe = process.platform === "win32" ? "whisper-server.exe" : "whisper-server";
-    return findFile(this.dir, exe);
+    return this.engineFile(exe);
   }
 
   /** A loaded model, ready for pieces (started on first use; closed after 10 idle minutes). */

@@ -58,7 +58,7 @@ export function SpeechSection() {
       {ready && !info.local.busy && info.local.gpuUpgrade && (
         <p className="small">
           {t("spGpuUpgrade", { gb: info.local.gpuUpgrade.toFixed(2) })}{" "}
-          <button type="button" className="link-btn" onClick={() => void api("/api/speech/stt/upgrade-gpu", { method: "POST" }).then(load)}>{t("micDownload")}</button>
+          <button type="button" className="link-btn" onClick={() => void api("/api/speech/stt/upgrade-gpu", { method: "POST" }).then(load)}>{t("spGpuNow")}</button>
         </p>
       )}
       {info.local.error && <p className="error small">{info.local.error}</p>}

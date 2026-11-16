@@ -246,6 +246,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
   });
   whisper.language = () => config.speech.language ?? "auto";
+  whisper.keepFitting();
   const updater = new Updater(undefined, options.updates ? { ...options.updates, feedDir: join(paths.root, "update-feed") } : undefined, join(paths.root, "logs"));
   if (!config.notifications.ntfy.topic) {
     config.notifications.ntfy.topic = Notifier.newTopic();
