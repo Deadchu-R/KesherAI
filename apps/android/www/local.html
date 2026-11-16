@@ -382,7 +382,7 @@
   const drawStudy = () => {
     if (studyDrawn || $("modelsView").dataset.tab !== "study") return;
     studyDrawn = true;
-    void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs)));
+    void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs), webSearch));
   };
   document.querySelectorAll("#cats [data-tab]").forEach((b) => b.addEventListener("click", drawStudy));
   { const t = new URLSearchParams(location.search).get("tab"); setCat(t === "health" || t === "study" ? t : localStorage.getItem("kesherai-phone-cat") || "chat"); }
