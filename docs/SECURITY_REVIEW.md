@@ -817,3 +817,19 @@ S5 an outside scanner's rules for Electron.
   activation still works.
 - Performance: the chat list is drawn from the phone's stored list (100 chats at most) on each search keystroke;
   the menu panel's position is measured on open and on resize only.
+
+## Scan 93 (2026-11-16, 0.6.301 – 0.6.304: focus timer, homework help, "explain this", live translation)
+
+- Focus sessions (`POST /api/study/courses/:id/focus`): minutes clamped to 1–600, 5000 sessions per course at most;
+  from the phone they pass the same course cleaning as the rest of a sync (numbers only).
+- The phone's "time's up" alarm: a receiver that is not exported, an immutable pending intent, title and text cut
+  to 120 and 300 characters; an inexact alarm, so no special alarm permission is asked for.
+- Homework help, "explain this" and live translation only add prompts: the selection is cut to 3000 characters,
+  a translated piece to 4000, the homework exercise to 3000 in each turn; none has tools, and their answers are
+  shown as text. Other scripts are removed from Hebrew answers.
+- Live translation runs beside the transcript (not awaited), so a slow model never holds the recording.
+- Performance: the streak looks back at most ten years of days once per Study page load; the week is one pass over
+  the focus sessions.
+- Found on the PC (not a code issue): after a restart the 80B chat model, with its experts in system memory and the
+  file mapped from disk, processed prompts at under 1 token a second until warm. Left as is: loading it fully into
+  memory instead needs the RAM to hold it; to be measured with Roee.
