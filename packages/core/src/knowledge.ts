@@ -31,8 +31,10 @@ interface Passage {
   /** Page (PDF) or part number. */
   page: number;
   text: string;
-  /** Its meaning as a vector, from the embedding model in `Index.vecModel`. */
-  vec?: number[];
+  /** Its meaning as a vector, from the embedding model in `Index.vecModel` (kept on disk in `<id>.vec`). */
+  vec?: Float32Array;
+  /** Where its vector is in `<id>.vec` (on disk only). */
+  vi?: number;
 }
 
 interface FileEntry {
@@ -43,6 +45,8 @@ interface FileEntry {
 
 interface Index {
   files: Record<string, FileEntry>;
+  /** The vectors' length, when they are kept in `<id>.vec` (float32, one after another). */
+  dim?: number;
   /** The embedding model the vectors come from. */
   vecModel?: string;
   indexedAt?: string;
@@ -180,10 +184,71 @@ function normalize(v: number[]): number[] {
   return v.map((x) => x / n);
 }
 
-function dot(a: number[], b: number[]): number {
+function dot(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let s = 0;
   for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i]! * b[i]!;
   return s;
+}
+
+/**
+ * Writes an index: the text in `<id>.json`, the vectors as float32 in `<id>.vec` (a base with tens of thousands of
+ * passages used to be a JSON file of half a gigabyte, and every base was read at start: the app ran out of memory).
+ *
+ * @param dir - The knowledge folder.
+ * @param id - The base.
+ * @param ix - Its index.
+ */
+export async function writeIndex(dir: string, id: string, ix: Index): Promise<void> {
+  let dim = 0;
+  let count = 0;
+  for (const f of Object.values(ix.files)) for (const p of f.passages) if (p.vec?.length) {
+    dim ||= p.vec.length;
+    if (p.vec.length === dim) count++;
+  }
+  const vecs = new Float32Array(count * dim);
+  let n = 0;
+  const files: Record<string, FileEntry> = {};
+  for (const [key, f] of Object.entries(ix.files)) {
+    files[key] = {
+      ...f,
+      passages: f.passages.map(({ vec, vi: _old, ...rest }) => {
+        if (!vec?.length || vec.length !== dim) return rest;
+        vecs.set(vec, n * dim);
+        return { ...rest, vi: n++ };
+      }),
+    };
+  }
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, `${id}.vec`), Buffer.from(vecs.buffer, vecs.byteOffset, vecs.byteLength));
+  await writeFile(join(dir, `${id}.json`), JSON.stringify({ ...ix, files, ...(dim ? { dim } : {}) }));
+}
+
+/**
+ * Reads an index written by {@link writeIndex}, or an old one with its vectors inside the JSON (made smaller as it is
+ * read, and written again in the new shape).
+ *
+ * @returns The index, and whether it was the old shape.
+ */
+export async function readIndex(dir: string, id: string): Promise<{ ix: Index; old: boolean }> {
+  const ix = JSON.parse(await readFile(join(dir, `${id}.json`), "utf8")) as Omit<Index, "files"> & { files: Record<string, { mtime: number; size: number; passages: Array<Omit<Passage, "vec"> & { vec?: number[] | Float32Array }> }> };
+  let old = false;
+  let all: Float32Array | undefined;
+  if (ix.dim) {
+    const buf = await readFile(join(dir, `${id}.vec`)).catch(() => undefined);
+    if (buf) all = new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  }
+  for (const f of Object.values(ix.files)) {
+    for (const p of f.passages) {
+      if (Array.isArray(p.vec)) {
+        old = true;
+        p.vec = Float32Array.from(p.vec);
+      } else if (all && ix.dim && typeof p.vi === "number" && (p.vi + 1) * ix.dim <= all.length) {
+        p.vec = all.subarray(p.vi * ix.dim, (p.vi + 1) * ix.dim);
+      }
+      delete p.vi;
+    }
+  }
+  return { ix: ix as Index, old };
 }
 
 /** Keeps the knowledge bases and their indexes. */
@@ -221,13 +286,19 @@ export class Knowledge {
       }
       for (const b of this.bases) {
         try {
-          this.indexes.set(b.id, JSON.parse(await readFile(join(this.dir, `${b.id}.json`), "utf8")) as Index);
+          const { ix, old } = await readIndex(this.dir, b.id);
+          this.indexes.set(b.id, ix);
+          // An old index (vectors inside the JSON): written again in the small shape now.
+          if (old) await writeIndex(this.dir, b.id, ix).catch(() => undefined);
         } catch {
           this.indexes.set(b.id, { files: {} });
         }
         this.watch(b);
-        void this.reindex(b.id).catch(() => undefined);
       }
+      // One base at a time: all of them at once held every big index in memory together.
+      void (async () => {
+        for (const b of this.bases) await this.reindex(b.id).catch(() => undefined);
+      })();
     })();
     return this.loaded;
   }
@@ -283,6 +354,7 @@ export class Knowledge {
     this.indexes.delete(id);
     await this.saveBases();
     await rm(join(this.dir, `${id}.json`), { force: true });
+    await rm(join(this.dir, `${id}.vec`), { force: true });
   }
 
   private unwatch(id: string) {
@@ -392,9 +464,9 @@ export class Knowledge {
           for (let i = 0; i < todo.length; i += 16) {
             const batch = todo.slice(i, i + 16);
             const vecs = await e.embed(batch.map((p) => p.text), "doc");
-            batch.forEach((p, j) => (p.vec = normalize(vecs[j] ?? []).map((x) => Math.round(x * 1e4) / 1e4)));
-            // Save as it goes, so a long first run is not lost.
-            if (i % 320 === 0) await writeFile(join(this.dir, `${id}.json`), JSON.stringify(ix)).catch(() => undefined);
+            batch.forEach((p, j) => (p.vec = Float32Array.from(normalize(vecs[j] ?? []))));
+            // Save as it goes, so a long first run is not lost (every 3,200 passages: each save writes the whole base).
+            if (i > 0 && i % 3200 === 0) await writeIndex(this.dir, id, ix).catch(() => undefined);
           }
         }
         ix.indexedAt = new Date().toISOString();
@@ -410,8 +482,7 @@ export class Knowledge {
         ix.error = (e as Error).message;
       }
       this.indexes.set(id, ix);
-      await mkdir(this.dir, { recursive: true });
-      await writeFile(join(this.dir, `${id}.json`), JSON.stringify(ix));
+      await writeIndex(this.dir, id, ix);
     })().finally(() => this.indexing.delete(id));
     this.indexing.set(id, p);
     return p;

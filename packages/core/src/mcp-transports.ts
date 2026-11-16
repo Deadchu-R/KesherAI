@@ -88,6 +88,8 @@ export class StdioTransport implements Transport {
     this.proc.stdout!.setEncoding("utf8");
     this.proc.stdout!.on("data", (d: string) => {
       this.buf += d;
+      // A program that writes without line ends never grows this without limit (16 MB: far above any message).
+      if (this.buf.length > 16 * 1024 * 1024 && this.buf.indexOf("\n") < 0) this.buf = "";
       let i;
       while ((i = this.buf.indexOf("\n")) >= 0) {
         const line = this.buf.slice(0, i).trim();

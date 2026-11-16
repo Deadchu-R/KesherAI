@@ -112,3 +112,23 @@ test("pictures: described once by the local vision model and found by search; th
   assert.equal(asked.length, 1, "described once (until the file changes)");
   k.close();
 });
+
+test("an index keeps its vectors in a small binary file, and an old index (vectors in the JSON) still reads", async () => {
+  const { mkdtemp, writeFile: write, stat: st } = await import("node:fs/promises");
+  const { tmpdir: tmp } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { readIndex, writeIndex } = await import("./knowledge.js");
+  const dir = await mkdtemp(j(tmp(), "kx-"));
+  // Old shape: vectors as JSON numbers.
+  await write(j(dir, "b.json"), JSON.stringify({ files: { "a.txt": { mtime: 1, size: 2, passages: [{ source: "a.txt", page: 1, text: "hi", vec: [0.6, 0.8] }, { source: "a.txt", page: 2, text: "no vector" }] } } }));
+  const first = await readIndex(dir, "b");
+  assert.equal(first.old, true);
+  assert.ok(first.ix.files["a.txt"]!.passages[0]!.vec instanceof Float32Array);
+  await writeIndex(dir, "b", first.ix);
+  const again = await readIndex(dir, "b");
+  assert.equal(again.old, false);
+  const [p0, p1] = again.ix.files["a.txt"]!.passages;
+  assert.deepEqual([...p0!.vec!].map((x) => Math.round(x * 100) / 100), [0.6, 0.8]);
+  assert.equal(p1!.vec, undefined);
+  assert.equal((await st(j(dir, "b.vec"))).size, 8);
+});
