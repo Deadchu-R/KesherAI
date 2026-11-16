@@ -12,7 +12,6 @@ Runs from MuseTalk's folder (its models are under ./models). Listens on 127.0.0.
 import argparse
 import asyncio
 import collections
-import copy
 import glob
 import hashlib
 import json
@@ -205,8 +204,8 @@ class Clients:
 
 
 @torch.no_grad()
-def make_frames(m, av, audio, idx):
-    """The last STEP frames of `audio` (1.2 s window), lip-synced onto the avatar frames from `idx`."""
+def make_faces(m, av, audio, idx):
+    """The mouths for the last STEP frames of `audio` (1.2 s window), on the avatar frames from `idx` (the card's part)."""
     feats, length = features(m, audio)
     chunks = m.audio.get_whisper_chunk(feats, m.device, m.dtype, m.whisper, length, fps=FPS, audio_padding_length_left=2, audio_padding_length_right=2)
     # The newest frames lack their right context (the next 0.08 s): take the ones just before them.
@@ -215,16 +214,18 @@ def make_frames(m, av, audio, idx):
     lat = torch.cat([av.latents[(idx + i) % av.n] for i in range(STEP)]).to(device=m.device, dtype=m.dtype)
     pred = m.unet.model(lat, m.timesteps, encoder_hidden_states=m.pe(chunks.to(m.device))).sample
     recon = m.vae.decode_latents(pred.to(dtype=m.vae.vae.dtype))
+    return [((idx + i) % av.n, face) for i, face in enumerate(recon)]
+
+
+def blend_encode(av, k, face):
+    """One mouth blended into its full frame, as JPEG (the processor's part; many run at once)."""
     from musetalk.utils.blending import get_image_blending
 
-    out = []
-    for i, face in enumerate(recon):
-        k = (idx + i) % av.n
-        x1, y1, x2, y2 = av.coords[k]
-        face = cv2.resize(face.astype(np.uint8), (x2 - x1, y2 - y1))
-        frame = get_image_blending(copy.deepcopy(av.frames[k]), face, [x1, y1, x2, y2], av.masks[k], av.mask_boxes[k])
-        out.append(frame)
-    return out
+    x1, y1, x2, y2 = av.coords[k]
+    face = cv2.resize(face.astype(np.uint8), (x2 - x1, y2 - y1))
+    frame = get_image_blending(av.frames[k].copy(), face, [x1, y1, x2, y2], av.masks[k], av.mask_boxes[k])
+    ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    return jpg.tobytes() if ok else None
 
 
 def features(m, audio):
@@ -260,6 +261,21 @@ async def main():
         talking_until = 0.0
         was = False
         loop = asyncio.get_running_loop()
+        from concurrent.futures import ThreadPoolExecutor
+
+        gpu = ThreadPoolExecutor(1)
+        cpu = ThreadPoolExecutor(max(2, min(8, (os.cpu_count() or 4) - 2)))
+        out = asyncio.Queue(maxsize=3)
+
+        async def sender():
+            while True:
+                jobs = await out.get()
+                for j in jobs:
+                    jpg = await j
+                    if jpg:
+                        await clients.send(jpg)
+
+        asyncio.create_task(sender())
         tick = time.perf_counter()
         while True:
             tick += STEP / FPS
@@ -277,18 +293,16 @@ async def main():
                 idx = (idx + STEP) % av.n
                 continue
             t0 = time.perf_counter()
-            frames = await loop.run_in_executor(None, make_frames, m, av, mic.last(1.2), idx)
+            faces = await loop.run_in_executor(gpu, make_faces, m, av, mic.last(1.2), idx)
             idx = (idx + STEP) % av.n
+            # Blending and JPEG run on several threads while the card makes the next step; frames go out in order.
+            jobs = [loop.run_in_executor(cpu, blend_encode, av, k, f) for k, f in faces]
+            await out.put(jobs)
             spent = time.perf_counter() - t0
             # The voice is held back by what the frames take (window lag + making them), for the cable.
-            mic.delay = 0.08 + spent + 0.1
-            for f in frames:
-                ok, jpg = cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                if ok:
-                    await clients.send(jpg.tobytes())
+            mic.delay = 0.08 + spent + 0.15
             if spent > STEP / FPS:
                 tick = time.perf_counter()  # behind: skip ahead rather than pile up
-
 
 if __name__ == "__main__":
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
