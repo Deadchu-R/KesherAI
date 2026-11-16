@@ -61,7 +61,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Content and import
 - ✅ WhatsApp and Instagram chats imported, with the relationship-analyst persona (AskBrandon style)
-- ⬜ Stremio plugin (watching patterns, recommendations, Letterboxd)
+- ✅ Films for you (#/stremio): taste from a Letterboxd export and ratings in KesherAI, recommendations by the chat model matched on Stremio's catalogue (Cinemeta), and a Stremio addon row "KesherAI: for you" (its address holds a revocable app key). ⬜ Stremio's own watch history (Stremio gives addons no access to it)
 
 ## Waiting on the owner 👤
 - 👤 SignPath application and 2FA (signed installer)

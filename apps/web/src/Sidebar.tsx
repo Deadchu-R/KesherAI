@@ -215,7 +215,7 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
 export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typeof t>[0]; items: Array<[string, Parameters<typeof t>[0]]> }> = [
   { id: "create", icon: "🎨", label: "navCreate", items: [["#/images", "images"], ["#/canvas", "canvasNav"], ["#/batch", "batchNav"], ["#/nodes", "nodesNav"], ["#/unreal", "unrealNav"], ["#/unity", "unityNav"], ["#/godot", "godotNav"], ["#/training", "trainingNav"]] },
   { id: "work", icon: "🧠", label: "navWork", items: [["#/study", "studyNav"], ["#/pages", "pagesNav"], ["#/knowledge", "knowledgeNav"], ["#/libraries", "librariesNav"], ["#/day", "dayNav"], ["#/compare", "compareNav"], ["#/pipelines", "pipelinesNav"], ["#/inbox", "inboxNav"], ["#/tasks", "tasksNav"], ["#/self-work", "selfWorkNav"]] },
-  { id: "assistant", icon: "🤖", label: "navAssistant", items: [["#/personas", "personasNav"], ["#/memory", "memoryNav"], ["#/prompts", "promptsNav"], ["#/community", "communityNav"], ["#/usage", "usageNav"]] },
+  { id: "assistant", icon: "🤖", label: "navAssistant", items: [["#/personas", "personasNav"], ["#/stremio", "stremioNav"], ["#/memory", "memoryNav"], ["#/prompts", "promptsNav"], ["#/community", "communityNav"], ["#/usage", "usageNav"]] },
   { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "customizeNav"], ["#/health", "healthNav"], ["#/remote", "remoteNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
 

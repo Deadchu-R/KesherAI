@@ -32,6 +32,7 @@ import { librariesRoutes } from "../routes/libraries.js";
 import { copilotRoutes } from "../routes/copilot.js";
 import { unityRoutes, unrealRoutes } from "../routes/unreal.js";
 import { godotRoutes } from "../routes/godot.js";
+import { stremioRoutes } from "../routes/stremio.js";
 import { unrealSourceRoutes } from "../routes/unreal-source.js";
 import { projectFactsRoutes } from "../routes/project-facts.js";
 import { gitRoutes } from "../routes/git.js";
@@ -147,6 +148,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);
   await godotRoutes(app, services);
+  await stremioRoutes(app, services, apiKeys);
   unrealSourceRoutes(app, services);
   await projectFactsRoutes(app, services);
   await gitRoutes(app, services);

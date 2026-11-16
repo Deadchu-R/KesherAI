@@ -2838,3 +2838,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .godot-shot { width: 100%; border-radius: calc(10px * var(--r-scale, 1)); border: 1px solid var(--border); }
 .godot-log { max-height: 280px; overflow: auto; white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; }
 .guard-suggest { padding: 10px 12px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); align-items: center; gap: 10px; }
+/* Films for you (Stremio): posters in a grid. */
+.stremio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+.stremio-pick { display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; min-width: 0; }
+.stremio-pick img, .stremio-noposter { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: calc(8px * var(--r-scale, 1)); background: var(--panel-2); }
+.stremio-pick strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
