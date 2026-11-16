@@ -41,7 +41,15 @@ public class NotifyPlugin extends Plugin {
                     Crashes.note(getContext(), "webview: " + (view != null && view.getUrl() != null ? String.valueOf(android.net.Uri.parse(view.getUrl()).getPath()) : ""), new RuntimeException(crashed ? "The page's renderer crashed" : "The page's renderer was stopped by Android (memory)"));
                     try {
                         android.app.Activity a = (android.app.Activity) getContext();
-                        a.runOnUiThread(a::recreate);
+                        // Started again once or twice; a third crash within five minutes closes the app instead, so a
+                        // page that keeps crashing never loops (and never drains the battery).
+                        android.content.SharedPreferences p = getContext().getSharedPreferences("kesher-renderer", android.content.Context.MODE_PRIVATE);
+                        long now = System.currentTimeMillis();
+                        long first = p.getLong("first", 0);
+                        int count = now - first < 5 * 60_000 ? p.getInt("count", 0) + 1 : 1;
+                        p.edit().putLong("first", count == 1 ? now : first).putInt("count", count).apply();
+                        if (count >= 3) a.runOnUiThread(a::finishAndRemoveTask);
+                        else a.runOnUiThread(a::recreate);
                     } catch (Throwable ignored) {}
                     return true;
                 }
@@ -123,6 +131,7 @@ public class NotifyPlugin extends Plugin {
     protected void handleOnResume() {
         super.handleOnResume();
         Notes.foreground = true;
+        LiveService.poke();
     }
 
     @Override

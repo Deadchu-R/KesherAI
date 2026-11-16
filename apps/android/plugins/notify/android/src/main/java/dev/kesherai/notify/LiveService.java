@@ -22,7 +22,8 @@ import java.nio.charset.StandardCharsets;
  * The live connection (like Home Assistant's "persistent connection"): an event stream from the
  * computer, held by a foreground service, so notifications arrive without any other app. Android
  * requires its fixed notification; its channel is the quietest one and can be hidden. When the
- * computer cannot be reached, it tries again (5 s, growing to 60 s) and UnifiedPush delivers meanwhile.
+ * computer cannot be reached, it tries again (5 s, growing to 60 s; after 10 minutes without it, every 15 minutes, to
+ * spare the battery overnight) and UnifiedPush delivers meanwhile. Opening the app tries again at once.
  */
 public class LiveService extends Service {
     static final int ID = 7422;
@@ -36,6 +37,16 @@ public class LiveService extends Service {
     private volatile boolean running;
     private volatile HttpURLConnection current;
     private Thread thread;
+    /** The running service, so opening the app can wake its wait. */
+    private static volatile LiveService instance;
+    /** When the computer stopped answering (0 while connected). */
+    private long failingSince;
+
+    /** The app came to the screen: a connection that is waiting tries again now. */
+    static void poke() {
+        LiveService s = instance;
+        if (s != null && !connected && s.thread != null) s.thread.interrupt();
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -52,6 +63,7 @@ public class LiveService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        instance = this;
         if (thread == null) {
             running = true;
             alive = true;
@@ -106,6 +118,7 @@ public class LiveService extends Service {
                 working = base;
                 show(true);
                 wait = 5000;
+                failingSince = 0;
                 attempt--;
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(h.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
@@ -131,18 +144,25 @@ public class LiveService extends Service {
             if (!running) break;
             // Try the other address straight away before waiting.
             if (attempt % Math.max(1, bases.size()) != 0) continue;
+            long now = System.currentTimeMillis();
+            if (failingSince == 0) failingSince = now;
             try {
                 Thread.sleep(wait);
             } catch (InterruptedException e) {
-                break;
+                // Opened by the person (poke), or stopping.
+                if (!running) break;
+                wait = 5000;
+                failingSince = 0;
+                continue;
             }
-            wait = Math.min(60000, wait * 2);
+            wait = Math.min(now - failingSince > 10 * 60_000 ? 15 * 60_000 : 60_000, wait * 2);
         }
     }
 
     @Override
     public void onDestroy() {
         running = false;
+        instance = null;
         alive = false;
         connected = false;
         HttpURLConnection h = current;
