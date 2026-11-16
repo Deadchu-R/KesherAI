@@ -289,6 +289,7 @@ function LipSyncCard() {
               </select>
             </label>
           )}
+          {!st.running && <button type="button" onClick={() => void act({ action: "test" })}>{L("בדיקה: האווטאר מדבר הקלטה לדוגמה (20 שניות)", "Test: the avatar speaks a sample recording (20 seconds)")}</button>}
           {st.running && <p className="good small">{L("● פועל: השפתיים יזוזו כשתדברי.", "● On: the lips move when you talk.")}</p>}
           <details>
             <summary>{L("שפתיים בדיוק בזמן (כבל שמע וירטואלי)", "Lips exactly on time (a virtual audio cable)")}</summary>

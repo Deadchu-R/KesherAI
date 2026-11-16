@@ -138,8 +138,12 @@ export class LipSync {
     });
   }
 
-  /** Starts it (the avatar camera is on); resolves when it listens. */
-  async start(): Promise<void> {
+  /**
+   * Starts it (the avatar camera is on); resolves when it listens.
+   *
+   * @param test - The self-test: MuseTalk's sample recording plays instead of the microphone.
+   */
+  async start(test = false): Promise<void> {
     if (this.proc) return;
     const st = await this.status();
     const script = this.script();
@@ -151,6 +155,7 @@ export class LipSync {
     const args = ["kesher_lipsync.py", "--clip", this.clip, "--work", join(this.dir, "avatars"), "--port", String(this.port), "--token", this.token];
     if (st.cable) args.push("--cable", st.cable);
     if (st.mic) args.push("--mic", st.mic);
+    if (test) args.push("--test-audio", join(mt, "data", "audio", "eng.wav"));
     const p = spawn(this.python, args, { cwd: mt, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
     this.proc = p;
     this.error = undefined;

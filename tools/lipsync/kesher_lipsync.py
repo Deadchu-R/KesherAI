@@ -46,6 +46,7 @@ def parse():
     p.add_argument("--threshold", type=float, default=0.012, help="speech level (RMS) that counts as talking")
     p.add_argument("--prepare-only", action="store_true")
     p.add_argument("--list-mics", action="store_true", help="print the microphones as JSON and stop")
+    p.add_argument("--test-audio", default=None, help="a WAV played in a loop instead of the microphone (self-test)")
     return p.parse_args()
 
 
@@ -192,6 +193,33 @@ class Mic:
         return a[-int(seconds * SR):]
 
 
+class FileMic(Mic):
+    """A recording fed in real time instead of the microphone (the self-test: lips move with nobody at the computer)."""
+
+    def __init__(self, path):
+        import soundfile as sf
+
+        data, sr = sf.read(path, dtype="float32", always_2d=True)
+        x = data[:, 0]
+        if sr != SR:
+            x = np.interp(np.arange(0, len(x), sr / SR), np.arange(len(x)), x).astype(np.float32)
+        self.ring = collections.deque(maxlen=SR * 4)
+        self.lock = threading.Lock()
+        self.delay = 0.3
+        self.out = collections.deque()
+        self.cable = None
+
+        def feed():
+            i = 0
+            while True:
+                with self.lock:
+                    self.ring.extend(x[i:i + 320])
+                i = (i + 320) % len(x)
+                time.sleep(0.02)
+
+        threading.Thread(target=feed, daemon=True).start()
+
+
 class Clients:
     def __init__(self):
         self.all = set()
@@ -249,7 +277,7 @@ async def main():
     av = Avatar(m, a.clip, a.work)
     if a.prepare_only:
         return
-    mic = Mic(int(a.mic) if a.mic and a.mic.isdigit() else a.mic, a.cable)
+    mic = FileMic(a.test_audio) if a.test_audio else Mic(int(a.mic) if a.mic and a.mic.isdigit() else a.mic, a.cable)
     clients = Clients()
 
     async def handler(ws):

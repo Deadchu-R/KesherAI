@@ -104,13 +104,18 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   const lip = s.lipSync;
   app.get("/api/study/avatar/lipsync", async () => lip.status());
   app.get("/api/study/avatar/lipsync/mics", async () => ({ mics: await lip.mics() }));
-  app.post<{ Body: { action?: "install" | "start" | "stop" | "set"; enabled?: boolean; cable?: string; mic?: string } }>("/api/study/avatar/lipsync", async (req, reply) => {
+  app.post<{ Body: { action?: "install" | "start" | "test" | "stop" | "set"; enabled?: boolean; cable?: string; mic?: string } }>("/api/study/avatar/lipsync", async (req, reply) => {
     const action = req.body?.action;
     // The 7 GB install happens at the computer; on, off and the settings also from the phone.
     if (action === "install" && !isLocalRequest(req)) return reply.code(403).send({ error: "Install lip sync at the computer." });
     try {
       if (action === "install") void lip.install().catch(() => undefined);
       else if (action === "start") await lip.start();
+      // The self-test: a sample recording instead of the microphone, for 20 seconds.
+      else if (action === "test") {
+        await lip.start(true);
+        setTimeout(() => lip.stop(), 20_000).unref?.();
+      }
       else if (action === "stop") lip.stop();
       else if (action === "set") await lip.set({ ...(typeof req.body?.enabled === "boolean" ? { enabled: req.body.enabled } : {}), ...(typeof req.body?.cable === "string" ? { cable: req.body.cable } : {}), ...(typeof req.body?.mic === "string" ? { mic: req.body.mic } : {}) });
       return await lip.status();
