@@ -45,6 +45,12 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Free pictures from Wikimedia Commons for a lecture's topic (with credit). */
   app.get<L & { Querystring: { kind?: string } }>("/api/study/courses/:id/lectures/:lid/pictures", async (req) => st.lecturePictures(req.params.id, req.params.lid, undefined, req.query.kind === "gif" || req.query.kind === "video" ? req.query.kind : "image"));
   /** Search across all courses: `?q=`. */
+  // The course models: which Hebrew model is on the computer, the models to choose from, and a course waiting for its own.
+  app.get("/api/study/model", async () => (st.modelState ? st.modelState() : { switched: false, models: [] }));
+  app.post("/api/study/model/now", async () => {
+    st.switchNow?.();
+    return { ok: true };
+  });
   app.get<{ Querystring: { q?: string } }>("/api/study/search", async (req) => ({ hits: await st.search(String(req.query.q ?? "").slice(0, 200)) }));
   /** Grows the course's summary by topic from newly summarized lectures. */
   app.post<C>("/api/study/courses/:id/summary", async (req) => st.courseSummary(req.params.id));
@@ -204,8 +210,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       courseSummary: d.courseSummary ?? null,
     };
   });
-  app.patch<C & { Body: { name?: string; field?: string; examDate?: string } }>("/api/study/courses/:id", async (req) => {
+  app.patch<C & { Body: { name?: string; field?: string; examDate?: string; model?: string } }>("/api/study/courses/:id", async (req) => {
     if (typeof req.body?.examDate === "string") return st.setExam(req.params.id, req.body.examDate);
+    if (typeof req.body?.model === "string") return st.setModel(req.params.id, req.body.model);
     return typeof req.body?.field === "string" ? st.setField(req.params.id, req.body.field) : st.renameCourse(req.params.id, String(req.body?.name ?? ""));
   });
   app.delete<C>("/api/study/courses/:id", async (req) => {

@@ -2810,3 +2810,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .pc-tabs > button:not(:disabled):not(.on):hover { color: var(--text); }
 .pc-tabs > button:disabled { opacity: .55; }
 @media (max-width: 640px) { .pc-tabs { max-width: 40vw; } }
+/* A course waiting for its own model (study). */
+.study-wait { border-color: color-mix(in srgb, var(--warn, #e8c46a) 45%, var(--border)); display: flex; flex-direction: column; gap: 8px; margin-block: 8px; }
+.study-wait p { margin: 0; }

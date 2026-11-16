@@ -21,6 +21,8 @@ export interface StudyCourse {
   fieldChosen?: boolean;
   /** The exam's date (YYYY-MM-DD), when she set one. */
   examDate?: string;
+  /** The model that writes for this course (a model id); none = automatic (the best Hebrew model on the computer). */
+  model?: string;
 }
 
 /** A term from a lecture, Hebrew with its English (medical) name. */

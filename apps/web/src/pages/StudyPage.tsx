@@ -373,6 +373,50 @@ const TABS: Array<[string, [string, string]]> = [
   ["progress", ["מה עובד בשבילי", "What works for me"]],
 ];
 
+type ModelState = { waiting?: { want: string; now?: string; why: string; since: number }; switched: boolean; hebrew?: string; models: string[] };
+
+/** Which model writes for the course: automatic (the best Hebrew model on the computer) or one she picks. */
+function CourseModel({ id, model, onChange }: { id: string; model?: string; onChange: () => void }) {
+  const [st, setSt] = useState<ModelState | null>(null);
+  useEffect(() => void api<ModelState>("/api/study/model").then(setSt, () => undefined), []);
+  const short = (m: string) => m.replace(/^llamacpp\//, "");
+  return (
+    <label className="study-field">
+      <span>{L("מודל", "Model")}</span>
+      <select value={model ?? ""} title={L("איזה מודל כותב סיכומים, שאלות ותשובות בקורס הזה", "Which model writes summaries, questions and answers for this course")} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { model: e.target.value } }))) onChange(); }}>
+        <option value="">{st?.hebrew ? L(`אוטומטי: הכי טוב בעברית (${st.hebrew.replace(/\.gguf$/i, "")})`, `Automatic: best in Hebrew (${st.hebrew.replace(/\.gguf$/i, "")})`) : L("אוטומטי: מודל הצ׳אט הפעיל", "Automatic: the active chat model")}</option>
+        {(st?.models ?? []).map((m) => <option key={m} value={m} dir="ltr">{short(m)}</option>)}
+        {model && !(st?.models ?? []).includes(model) && <option value={model} dir="ltr">{short(model)}</option>}
+      </select>
+    </label>
+  );
+}
+
+/** While a course waits for its own model (a chat or self-work uses the loaded one): what it waits for, and "Switch now". */
+function ModelWait() {
+  const [st, setSt] = useState<ModelState | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => void api<ModelState>("/api/study/model").then((r) => alive && setSt(r), () => undefined);
+    tick();
+    const t = setInterval(tick, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  const w = st?.waiting;
+  if (!w) return null;
+  const now = w.now?.replace(/\.gguf$/i, "") ?? L("מודל אחר", "another model");
+  const want = w.want.replace(/\.gguf$/i, "");
+  return (
+    <div className="card study-wait" role="status">
+      <strong>{L("מחכה למודל של הקורס", "Waiting for the course's model")}</strong>
+      <p className="small">{w.why === "chat"
+        ? L(`צ׳אט עונה עכשיו עם ${now}. כשיסיים, ${want} ייטען, ואחר כך המודל הקודם יחזור.`, `A chat is answering with ${now}. When it ends, ${want} loads, and the earlier model comes back after.`)
+        : L(`המחשב משתמש עכשיו ב-${now} לעבודה עצמית. כשיתפנה, ${want} ייטען, ואחר כך המודל הקודם יחזור.`, `The computer is using ${now} for self-work. When it is free, ${want} loads, and the earlier model comes back after.`)}</p>
+      <div className="row"><button type="button" className="primary" onClick={() => void api("/api/study/model/now", { method: "POST" }).then(() => toast(L("מחליף…", "Switching…")), (e: Error) => toast(e.message))}>{L("להחליף עכשיו", "Switch now")}</button></div>
+    </div>
+  );
+}
+
 function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId?: string }) {
   const [info, setInfo] = useState<CourseInfo | null>(null);
   const load = useCallback(() => void api<CourseInfo>(`/api/study/courses/${id}`).then(setInfo, (e: Error) => toast(e.message)), [id]);
@@ -391,6 +435,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
             {STUDY_FIELDS.map((f) => <option key={f.id} value={f.id}>{L(f.he, f.en)}</option>)}
           </select>
         </label>
+        <CourseModel id={id} model={info.course.model} onChange={load} />
         <label className="study-field">
           <span>{L("מבחן", "Exam")}</span>
           <input type="date" value={info.course.examDate ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { examDate: e.target.value } }))) load(); }} />
@@ -413,6 +458,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
       </div>
       {info.plan && !lectureId && <ExamPlanCard id={id} plan={info.plan} />}
       {!lectureId && <SyllabusCard id={id} syllabus={info.syllabus ?? null} onChange={load} />}
+      <ModelWait />
       <div className="seg-pills" role="tablist" aria-label={L("חלקי הקורס", "Course sections")}>
         {TABS.filter(([t]) => clinicalField(info.course.field) || !CLINICAL_TABS.has(t)).map(([t, n]) => (
           <button key={t} type="button" role="tab" aria-selected={on === t} className={on === t ? "on" : ""} onClick={() => go(`#/study/${id}/${t}`)}>

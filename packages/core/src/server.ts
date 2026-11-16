@@ -29,6 +29,9 @@ import { Knowledge } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
 import { ensureEngine } from "./routes/engine.js";
+import { StudyModelSwitch } from "./study-model.js";
+import { localCall } from "./local-call.js";
+import { scanComputer, scanFolder } from "./model-scan.js";
 import { Prompts } from "./prompts.js";
 import { Notifier } from "./notify.js";
 import { ApiKeys } from "./api-keys.js";
@@ -167,18 +170,70 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)),
   );
   let studyRunning = 0;
+  // A course's own model (Roee, 2026-11-16: a Hebrew model for study, chosen per course; "auto" = the best Hebrew model
+  // on this computer). Loaded in the engine when nothing else uses it, and the earlier model put back after.
+  const studySwitch = new StudyModelSwitch({
+    loaded: () => engine.status().modelPath,
+    load: async (path) => {
+      engine.note(`loading ${path.split(/[\\/]/).pop()} (a course's model)`);
+      guard.touch("llamacpp");
+      await engine.load(path);
+      guard.touch("llamacpp");
+      services.registerEngineProvider();
+    },
+    busy: async () => {
+      if (chatsBusy()) return "chat";
+      // Self-work's state is the worker's (asked like "install when free" asks it).
+      const run = (await localCall<{ run?: { status?: string } | null }>(config.port, "GET", "/api/self-work").catch(() => ({ json: { run: null } }))).json.run;
+      return run?.status === "running" ? "self-work" : undefined;
+    },
+  });
+  let ggufs: { at: number; list: Array<{ path: string; name: string; size: number }> } | undefined;
+  const localGgufs = async () => {
+    if (ggufs && Date.now() - ggufs.at < 300_000) return ggufs.list;
+    const own = await scanFolder({ folder: join(paths.models, "chat"), source: "KesherAI" }).catch(() => []);
+    const others = (await scanComputer(config.modelFolders).catch(() => [])).flatMap((f) => f.models);
+    ggufs = { at: Date.now(), list: [...own, ...others].filter((m) => m.format === "gguf" && !/mmproj/i.test(m.name)) };
+    return ggufs.list;
+  };
+  /** The course's model file: "auto" → the largest DictaLM (Dicta's Hebrew models), else the named llamacpp model. */
+  const courseFile = async (modelId: string | undefined): Promise<string | undefined> => {
+    const list = await localGgufs();
+    if (!modelId) return list.filter((m) => /dictalm/i.test(m.name)).sort((a, b) => b.size - a.size)[0]?.path;
+    const name = modelId.slice(modelId.indexOf("/") + 1);
+    return list.find((m) => m.name.replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-") === name)?.path;
+  };
   const study = new Study(join(paths.root, "study"), (modelId) => {
-    const id = modelId ?? config.activeModels.chat;
+    const active = config.activeModels.chat;
+    // A cloud or other provider's model chosen for the course: used as it is.
+    const own = !modelId || modelId.startsWith("llamacpp/");
+    const id = own ? active : modelId;
     if (!id) return undefined;
     try {
       registry.resolve(id);
-      const turn = modelTurnFor(registry, id);
-      // Counted while it runs, so an update waits for a summary or a quiz being written (they are not chats).
-      return { id, turn: (async (...args: Parameters<typeof turn>) => { studyRunning++; try { return await turn(...args); } finally { studyRunning--; } }) as typeof turn };
     } catch {
       return undefined;
     }
+    const counted = <T,>(work: () => Promise<T>) => (async () => { studyRunning++; try { return await work(); } finally { studyRunning--; } })();
+    if (!own) {
+      const turn = modelTurnFor(registry, id);
+      return { id, turn: ((...args: Parameters<typeof turn>) => counted(() => turn(...args))) as typeof turn };
+    }
+    // The course's local model (or the best Hebrew one): loaded when free; without one, the active chat model.
+    const turn: ReturnType<typeof modelTurnFor> = async (req, signal, onText) =>
+      counted(async () => {
+        const file = active?.startsWith("llamacpp/") ? await courseFile(modelId) : undefined;
+        if (!file) return modelTurnFor(registry, id)(req, signal, onText);
+        return studySwitch.use(file, () => modelTurnFor(registry, "llamacpp/" + (file.split(/[\\/]/).pop() ?? "").replace(/\.gguf$/i, ""))(req, signal, onText), signal);
+      });
+    return { id, turn };
   });
+  study.modelState = async () => {
+    const list = await localGgufs();
+    const hebrew = (await courseFile(undefined))?.split(/[\\/]/).pop();
+    return { ...studySwitch.status(), ...(hebrew ? { hebrew } : {}), models: list.map((m) => `llamacpp/${m.name.replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}`) };
+  };
+  study.switchNow = () => studySwitch.now();
   // Knowledge bases: the user's folders and web pages, searchable by the models, with sources.
   // Search by meaning: an embedding model (KesherAI's own in a second llama.cpp server, or one the user made active).
   // Assigned below, once the engine exists; the knowledge bases ask for it when they search.

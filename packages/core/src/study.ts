@@ -125,6 +125,10 @@ export class Study {
 
   /** Called when the computer finished summarizing a lecture by itself (the phone gets "the lecture is ready"). */
   onLectureReady?: (course: StudyCourse, lecture: StudyLecture) => void;
+  /** The course models' state (set by the server): a course waiting for its model, and the models to choose from. */
+  modelState?: () => Promise<{ waiting?: { want: string; now?: string; why: string; since: number }; switched: boolean; hebrew?: string; models: string[] }>;
+  /** "Switch now": load the waiting course's model at once (set by the server). */
+  switchNow?: () => void;
   private later: Promise<void> = Promise.resolve();
 
   /** Summarizes a lecture in the background, one at a time, when a chat model is chosen; then tells the phone. */
@@ -255,6 +259,20 @@ export class Study {
     const d = await this.get(id);
     if (date) d.course.examDate = date;
     else delete d.course.examDate;
+    await this.save(d);
+    return d.course;
+  }
+
+  /**
+   * Which model writes for this course: "auto" (the best Hebrew model on this computer, else the active chat model),
+   * or a model id. Empty goes back to auto.
+   */
+  async setModel(id: string, model: string): Promise<StudyCourse> {
+    const d = await this.get(id);
+    const m = model.trim().slice(0, 300);
+    if (m && m !== "auto" && !/^[\w.-]+\/[^\s]+$/.test(m)) throw Object.assign(new Error("No such model."), { statusCode: 400 });
+    if (!m || m === "auto") delete d.course.model;
+    else d.course.model = m;
     await this.save(d);
     return d.course;
   }
@@ -407,7 +425,7 @@ export class Study {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture (start):\n${l.text.slice(0, 20_000)}` : l.text.slice(0, 40_000);
-    l.audio = (await this.ask(AUDIO_PROMPT, `Lecture: ${l.title}\n\n${material}`, signal, d.course.field)).replace(/[#*_`>|]/g, "").trim().slice(0, 20_000);
+    l.audio = (await this.ask(AUDIO_PROMPT, `Lecture: ${l.title}\n\n${material}`, signal, d.course)).replace(/[#*_`>|]/g, "").trim().slice(0, 20_000);
     await this.save(d);
     return l;
   }
@@ -437,7 +455,7 @@ export class Study {
   async askCourse(id: string, question: string, history: Array<{ role: "user" | "assistant"; content: string }> = [], signal?: AbortSignal, mode: "ask" | "study" | "homework" = "ask"): Promise<{ answer: string; sources: Array<{ lectureId: string; title: string }> }> {
     if (!question.trim() && mode !== "study") throw Object.assign(new Error("Ask a question."), { statusCode: 400 });
     const d = await this.get(id);
-    const m = this.model();
+    const m = this.model(d.course.model);
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     // The same messages as the phone's tutor (shared): answers from her lectures, or study mode asking her.
     const hint = d.course.field ? FIELD_HINT[d.course.field] : undefined;
@@ -538,7 +556,7 @@ export class Study {
   async explainPassage(id: string, lectureId: string, selection: string, kind: "explain" | "simple" | "example", signal?: AbortSignal): Promise<{ text: string }> {
     if (!selection.trim()) throw Object.assign(new Error("Select some text first."), { statusCode: 400 });
     const d = await this.get(id);
-    const m = this.model();
+    const m = this.model(d.course.model);
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     const messages = explainMessages({ selection, lecture: this.lecture(d, lectureId), kind, hint: d.course.field ? FIELD_HINT[d.course.field] : undefined });
     const r = await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(180_000), () => undefined);
@@ -557,7 +575,7 @@ export class Study {
     const card = d.cards.find((c) => c.id === cardId);
     if (!card) throw Object.assign(new Error("No such card."), { statusCode: 404 });
     const passage = findPassages(d.lectures.filter((l) => !card.lectureId || l.id === card.lectureId), `${card.front} ${card.back}`, 2500).map((p) => p.text).join("\n");
-    const text = await this.ask(MISSED_PROMPT, `Card: ${card.front}\nAnswer: ${card.back}${passage ? `\n\nLecture passage:\n${passage}` : ""}`, signal ?? AbortSignal.timeout(120_000), d.course.field);
+    const text = await this.ask(MISSED_PROMPT, `Card: ${card.front}\nAnswer: ${card.back}${passage ? `\n\nLecture passage:\n${passage}` : ""}`, signal ?? AbortSignal.timeout(120_000), d.course);
     return { text: text.trim() };
   }
 
@@ -565,8 +583,10 @@ export class Study {
    * One question to the chat model. `maxChars` stops a model that runs on (found on the PC: a quiz of 4 questions
    * still writing after 10000 tokens) and returns what it wrote so far.
    */
-  private async ask(system: string, user: string, signal?: AbortSignal, field?: string, maxChars = 60_000): Promise<string> {
-    const m = this.model();
+  private async ask(system: string, user: string, signal?: AbortSignal, course?: StudyCourse | string, maxChars = 60_000): Promise<string> {
+    // The course's own model (a Hebrew one, chosen per course), else the active chat model.
+    const field = typeof course === "string" ? course : course?.field;
+    const m = this.model(typeof course === "object" ? course.model : undefined);
     if (field && FIELD_HINT[field]) system = `${system}\n${FIELD_HINT[field]}`;
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     const stop = new AbortController();
@@ -595,10 +615,10 @@ export class Study {
     let material = l.text;
     if (parts.length > 1) {
       const notes: string[] = [];
-      for (const [i, p] of parts.entries()) notes.push(await this.ask(`Write detailed notes of this part of a lecture: every idea, term, number and example. ${LANG} ${ONLY_MATERIAL}`, `Part ${i + 1} of ${parts.length}:\n\n${p}`, signal));
+      for (const [i, p] of parts.entries()) notes.push(await this.ask(`Write detailed notes of this part of a lecture: every idea, term, number and example. ${LANG} ${ONLY_MATERIAL}`, `Part ${i + 1} of ${parts.length}:\n\n${p}`, signal, d.course));
       material = notes.join("\n\n");
     }
-    const raw = await this.ask(SUMMARY_PROMPT, `Lecture: ${l.title}\n\n${material.slice(0, 60_000)}`, signal, d.course.field);
+    const raw = await this.ask(SUMMARY_PROMPT, `Lecture: ${l.title}\n\n${material.slice(0, 60_000)}`, signal, d.course);
     const j = jsonIn(raw) as { summary?: string; terms?: StudyTerm[]; diagram?: string; picture?: string } | undefined;
     l.summary = (j?.summary ?? raw).slice(0, 100_000);
     l.terms = Array.isArray(j?.terms) ? j!.terms.filter((t) => t && t.term && t.explain).slice(0, 80).map((t) => ({ term: String(t.term).slice(0, 120), ...(t.en ? { en: String(t.en).slice(0, 120) } : {}), explain: String(t.explain).slice(0, 400) })) : [];
@@ -624,7 +644,7 @@ export class Study {
       input = text.trim().slice(0, 40_000);
       if (input.length < 10) throw Object.assign(new Error("Paste the text first."), { statusCode: 400 });
     }
-    const out = await this.ask(tool.prompt, input, signal, d.course.field, 40_000);
+    const out = await this.ask(tool.prompt, input, signal, d.course, 40_000);
     // A whole answer wrapped in a ```markdown fence (seen on the PC) showed the fence as text.
     const plain = out.trim().replace(/^```[a-z]*\s*\n([\s\S]*?)\n?```$/i, "$1");
     // The answer's own language decides the cleaning (an English paper gets a Hebrew analysis).
@@ -683,7 +703,7 @@ export class Study {
     const inp = courseSummaryInput(d);
     if (!inp) return { summary: d.courseSummary!, more: false };
     // A summary is about as long as what it is made from; much past that the model is running on (found on the PC).
-    const raw = await this.ask(COURSE_SUMMARY_PROMPT, inp.user, signal, d.course.field, Math.min(120_000, Math.max(6000, Math.round(inp.user.length * 1.6))));
+    const raw = await this.ask(COURSE_SUMMARY_PROMPT, inp.user, signal, d.course, Math.min(120_000, Math.max(6000, Math.round(inp.user.length * 1.6))));
     const s = parseCourseSummary(raw, d.courseSummary, inp.ids);
     if (!s) throw Object.assign(new Error("The model did not write a summary. Try again."), { statusCode: 502 });
     const fresh = await this.get(id);
@@ -699,7 +719,7 @@ export class Study {
     const format: StudyFormat = STUDY_FORMATS.includes(p.format as StudyFormat) ? p.format! : "text";
     const count = Math.max(3, Math.min(40, Number(p.count) || 12));
     const material = (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
-    const raw = await this.ask(`${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course.field);
+    const raw = await this.ask(`${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return cards. Try again, or another model."), { statusCode: 502 });
     const now = new Date();
@@ -794,7 +814,7 @@ export class Study {
     if (p.kind) {
       // Open or case questions: fewer (each is answered in writing), graded later against a model answer.
       const n = Math.min(count, 10);
-      const raw = await this.ask(`${OPEN_QUIZ_PROMPT(p.kind)}${level}`, `Write exactly ${n} questions, then stop.\n\n${material}`, signal, d.course.field, n * 1800 + 2000);
+      const raw = await this.ask(`${OPEN_QUIZ_PROMPT(p.kind)}${level}`, `Write exactly ${n} questions, then stop.\n\n${material}`, signal, d.course, n * 1800 + 2000);
       const questions = parseOpenQuestions(raw, chosen.map((l) => l.id), n);
       if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
       const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, kind: p.kind, ...(p.level ? { level: p.level } : {}) };
@@ -806,7 +826,7 @@ export class Study {
     const past = p.style === "past" ? pastExamStyle(d.pastExams ?? []) : "";
     if (p.style === "past" && !past) throw Object.assign(new Error("Add a past exam first."), { statusCode: 400 });
     // About 1500 characters a question is plenty; past that the model is running on.
-    const raw = await this.ask(`${p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT}${level}`, `Write exactly ${count} questions, then stop.\n\n${material}`, signal, d.course.field, count * 1500 + 2000);
+    const raw = await this.ask(`${p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT}${level}`, `Write exactly ${count} questions, then stop.\n\n${material}`, signal, d.course, count * 1500 + 2000);
     // A list cut off mid-way: keep the questions that were finished.
     const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
@@ -883,7 +903,7 @@ export class Study {
     const d = await this.get(id);
     const z = d.quizzes.find((q) => q.id === quizId);
     if (!z?.kind) throw Object.assign(new Error("No such open quiz."), { statusCode: 404 });
-    const m = this.model();
+    const m = this.model(d.course.model);
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     const he = /[\u0590-\u05ff]/.test(z.questions.map((q) => q.q).join(" "));
     const marks: number[] = [];
