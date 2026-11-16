@@ -2759,3 +2759,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-explain { border: 1px solid var(--border); border-inline-start: 3px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
 .study-explain p { margin: 0; }
 .study-rec-trans { opacity: .85; border-inline-start: 3px solid var(--accent); }
+/* Study: past exams under the quiz setup. */
+.study-past { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.study-past h3 { margin: 0; font-size: 15px; }
+.study-past-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }

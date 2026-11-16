@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -204,4 +204,16 @@ test("explainMessages: the selection with the lecture as context, by kind", () =
   assert.match(m[0]!.content, /very simple words/);
   assert.match(m[1]!.content, /Context from the lecture:\nסיכום קצר/);
   assert.match(m[1]!.content, /The passage she selected:\nמגביר את כוח ההתכווצות$/);
+});
+
+test("past exams: a style note from each, merged by id and removed ones stay removed", () => {
+  const e = (id: string, text: string) => ({ id, title: `מבחן ${id}`, text, t: 1 });
+  assert.equal(pastExamStyle([]), "");
+  const note = pastExamStyle([e("a", "שאלה 1: ".repeat(2000)), e("b", "שאלה פתוחה")], 1000);
+  assert.match(note, /same kinds of questions/);
+  assert.match(note, /--- Past exam: מבחן b\nשאלה פתוחה/);
+  assert.ok(note.length < 1400);
+  const base = { course: { id: "c", name: "x", createdAt: 0 }, lectures: [], cards: [], reviews: [], quizzes: [] };
+  const m = mergeCourseData({ ...base, pastExams: [e("a", "1")], removed: ["b"] }, { ...base, pastExams: [e("a", "1"), e("b", "2"), e("c", "3")] });
+  assert.deepEqual(m.pastExams?.map((x) => x.id), ["a", "c"]);
 });

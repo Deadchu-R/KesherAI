@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -42,7 +42,8 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const drugs = arr<StudyDrug>(d.drugs, 1000).filter((g) => okId(g?.id)).map((g) => JSON.parse(JSON.stringify(g).slice(0, 20_000)) as StudyDrug);
   const removed = arr<string>(d.removed, 5000).filter(okId);
   const focus = arr<StudyFocus>(d.focus, 5000).filter((f) => Number.isFinite(f?.t) && Number.isFinite(f?.minutes)).map((f) => ({ t: Number(f.t), minutes: Math.min(600, Math.max(1, Math.round(Number(f.minutes)))) }));
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}) };
+  const pastExams = arr<StudyPastExam>(d.pastExams, 50).filter((e) => okId(e?.id)).map((e) => ({ id: e.id, title: str(e.title, 200), text: str(e.text, 200_000), t: Number(e.t) || Date.now() }));
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -427,6 +428,31 @@ export class Study {
   }
 
   /**
+   * Keeps a past exam's text for practice tests like it.
+   *
+   * @param id - The course.
+   * @param p - Its title and text (from a file or photo, read by extract).
+   */
+  async addPastExam(id: string, p: { title?: string; text?: string }): Promise<StudyPastExam> {
+    const text = String(p.text ?? "").trim().slice(0, 200_000);
+    if (!text) throw Object.assign(new Error("The past exam has no text."), { statusCode: 400 });
+    const d = await this.get(id);
+    const e = { id: randomUUID(), title: String(p.title ?? "").trim().slice(0, 200) || "Past exam", text, t: Date.now() };
+    (d.pastExams ??= []).push(e);
+    if (d.pastExams.length > 50) d.pastExams.splice(0, d.pastExams.length - 50);
+    await this.save(d);
+    return e;
+  }
+
+  /** Removes a past exam (and keeps it from coming back with a sync). */
+  async removePastExam(id: string, examId: string): Promise<void> {
+    const d = await this.get(id);
+    d.pastExams = (d.pastExams ?? []).filter((e) => e.id !== examId);
+    d.removed = [...(d.removed ?? []), examId].slice(-5000);
+    await this.save(d);
+  }
+
+  /**
    * Translates a piece of a live lecture transcript (live captions in the other language).
    *
    * @param text - Half a minute of transcript.
@@ -569,7 +595,7 @@ export class Study {
   }
 
   /** Makes a multiple-choice quiz from chosen lectures (or the weak ones, or all). */
-  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" }, signal?: AbortSignal): Promise<StudyQuiz> {
+  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past" }, signal?: AbortSignal): Promise<StudyQuiz> {
     const d = await this.get(id);
     let chosen = d.lectures.filter((l) => !p.lectureIds?.length || p.lectureIds.includes(l.id));
     if (p.weak) {
@@ -580,7 +606,9 @@ export class Study {
     const count = Math.max(3, Math.min(p.style === "licensing" ? 60 : 30, Number(p.count) || 10));
     const budget = Math.floor(48_000 / chosen.length);
     const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
-    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal, d.course.field);
+    const past = p.style === "past" ? pastExamStyle(d.pastExams ?? []) : "";
+    if (p.style === "past" && !past) throw Object.assign(new Error("Add a past exam first."), { statusCode: 400 });
+    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal, d.course.field);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
     const questions: StudyQuestion[] = [];

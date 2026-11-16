@@ -13,7 +13,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
-interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null }
+interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }> }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; reviews: number }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
@@ -340,7 +340,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
       </div>
       {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
         : on === "review" ? <Review courseId={id} onChange={load} />
-        : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} onChange={load} />
+        : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
         : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />
@@ -741,7 +741,44 @@ function Review({ courseId, onChange }: { courseId: string; onChange: () => void
   );
 }
 
-function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: LectureRow[]; onChange: () => void }) {
+/** Base64 of a file, for /api/study/extract. */
+async function fileBase64(f: File): Promise<string> {
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/** Past exams of the course: add one from a file or photo, remove one; practice tests can follow their style. */
+function PastExams({ courseId, exams, onChange }: { courseId: string; exams: NonNullable<CourseInfo["pastExams"]>; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const add = async (f: File | undefined) => {
+    if (!f) return;
+    if (f.size > 50 * 1024 * 1024) return toast(L("הקובץ גדול מ-50MB.", "The file is larger than 50 MB."));
+    setBusy(true);
+    const r = await call(api<{ title: string; text: string }>("/api/study/extract", { method: "POST", body: { name: f.name, data: await fileBase64(f) } }));
+    if (r?.text.trim()) await call(api(`/api/study/courses/${courseId}/past-exams`, { method: "POST", body: { title: f.name.replace(/\.[^.]+$/, ""), text: r.text } }));
+    setBusy(false);
+    onChange();
+  };
+  return (
+    <div className="study-past">
+      <h3>{L("מבחנים קודמים", "Past exams")}</h3>
+      {exams.map((e) => (
+        <div key={e.id} className="study-past-row">
+          <span dir="auto">{e.title}</span>
+          <button type="button" className="ghost small" aria-label={L("הסרה", "Remove")} onClick={() => void call(api(`/api/study/courses/${courseId}/past-exams/${e.id}`, { method: "DELETE" })).then(onChange)}>✕</button>
+        </div>
+      ))}
+      <label className="button">{busy ? L("קורא את המבחן…", "Reading the exam…") : L("הוספת מבחן קודם (PDF, Word או צילום)", "Add a past exam (PDF, Word or photo)")}
+        <input type="file" hidden accept=".pdf,.docx,.pptx,.txt,image/*" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void add(f); }} />
+      </label>
+      <p className="muted small">{L("המבחן נקרא פעם אחת. מבחני התרגול נכתבים מההרצאות שלך, באותו סגנון, אורך ורמת קושי.", "The exam is read once. Practice tests are written from your lectures, in the same style, length and difficulty.")}</p>
+    </div>
+  );
+}
+
+function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; lectures: LectureRow[]; pastExams: NonNullable<CourseInfo["pastExams"]>; onChange: () => void }) {
   const only = new URLSearchParams(location.hash.split("?")[1] ?? "").get("l") ?? undefined;
   const [quiz, setQuiz] = useState<StudyQuiz | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -756,15 +793,16 @@ function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: Le
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, [ends]);
-  const make = async (weak: boolean, licensing = false) => {
+  const make = async (weak: boolean, licensing = false, past = false) => {
     setBusy(true);
-    const n = licensing ? 30 : count;
-    const z = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz`, { method: "POST", body: { count: n, weak, ...(licensing ? { style: "licensing" } : {}), ...(only ? { lectureIds: [only] } : {}) } }));
+    const n = licensing ? 30 : past ? 20 : count;
+    const z = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz`, { method: "POST", body: { count: n, weak, ...(licensing ? { style: "licensing" } : past ? { style: "past" } : {}), ...(only ? { lectureIds: [only] } : {}) } }));
     setBusy(false);
     if (z) {
-      setQuiz(z); setAnswers([]); setI(0); setExam(licensing);
-      // The licensing exam: 90 questions in about two hours, so about 80 seconds each.
-      setEnds(licensing ? Date.now() + z.questions.length * 80_000 : 0);
+      setQuiz(z); setAnswers([]); setI(0); setExam(licensing || past);
+      // A timed exam: the licensing exam is 90 questions in about two hours (about 80 seconds each); a past-exam
+      // style test the same pace.
+      setEnds(licensing || past ? Date.now() + z.questions.length * 80_000 : 0);
     }
   };
   const finish = async () => {
@@ -780,7 +818,9 @@ function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: Le
         <button type="button" className="primary" disabled={busy} onClick={() => void make(false)}>{busy ? L("כותב שאלות…", "Writing questions…") : L("התחל בוחן", "Start quiz")}</button>
         {!only && <button type="button" disabled={busy} onClick={() => void make(true)}>{L("על הנושאים החלשים", "On weak topics")}</button>}
         {!only && <button type="button" disabled={busy} onClick={() => void make(false, true)}>{L("מבחן בסגנון בחינת הרישוי (30 שאלות, עם זמן)", "Licensing-exam style (30 questions, timed)")}</button>}
+        {!only && pastExams.length > 0 && <button type="button" disabled={busy} onClick={() => void make(false, false, true)}>{L("מבחן בסגנון המבחנים הקודמים (20 שאלות, עם זמן)", "Like the past exams (20 questions, timed)")}</button>}
       </div>
+      {!only && <PastExams courseId={courseId} exams={pastExams} onChange={onChange} />}
       <p className="muted small">{L("השאלות נכתבות מהחומר שלך בלבד, והבדיקה נעשית בקוד.", "Questions come from your material only; grading is done by code.")}</p>
     </section>
   );

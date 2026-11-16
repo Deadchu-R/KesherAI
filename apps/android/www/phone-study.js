@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -92,12 +92,12 @@ async function shareFile(c) {
 
 /** A phone course (one object) as the computer's course file, for syncing. */
 function toData(c) {
-  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, ...course } = c;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}) };
+  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, ...course } = c;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}) };
 }
 /** The computer's course file as a phone course. */
 function fromData(d) {
-  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}) };
+  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}) };
 }
 
 /**
@@ -845,10 +845,11 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     if (!z) {
       const start = el("button", { type: "button", class: "primary" }, L("כתוב 5 שאלות", "Write 5 questions"));
       const lic = clinicalField(c.field) && c.field === "nursing" && el("button", { type: "button" }, L("בסגנון בחינת הרישוי", "Licensing-exam style"));
-      const make = async (licensing, b) => {
+      const past = (c.pastExams ?? []).length > 0 && el("button", { type: "button" }, L("בסגנון המבחנים הקודמים", "Like the past exams"));
+      const make = async (licensing, b, likePast) => {
         const chosen = c.lectures.slice(-3);
         const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.summary || l.text).slice(0, 2000)}`).join("\n\n");
-        const style = licensing ? " Write them like the Israeli nursing licensing exam: short patient cases asking what the nurse should do first." : "";
+        const style = licensing ? " Write them like the Israeli nursing licensing exam: short patient cases asking what the nurse should do first." : likePast ? `\n${pastExamStyle(c.pastExams, 3000)}\n` : "";
         const r = await need([{ role: "system", content: `Write 5 multiple-choice questions from the material, 4 options each, exactly one right.${style} ${LANG} ${ONLY}${hint(c)} Answer with JSON only: [{"q":"...","options":["...","...","...","..."],"answer":0,"explain":"...","lecture":1}]` }, { role: "user", content: material }], b);
         const list = r && jsonIn(r);
         const qs = Array.isArray(list) ? list.filter((x) => x?.q && Array.isArray(x.options) && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length) : [];
@@ -858,7 +859,36 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       };
       start.onclick = () => make(false, start);
       if (lic) lic.onclick = () => make(true, lic);
-      return root.append(el("section", { class: "api" }, el("p", {}, L("בוחן מההרצאות האחרונות. הבדיקה נעשית בקוד.", "A quiz from the latest lectures. Grading is done by code.")), el("div", { class: "ph-btns" }, start, lic)));
+      if (past) past.onclick = () => make(false, past, true);
+      // Past exams: read on the phone (text, Word, PDF; a photo with a model that sees pictures, or the computer).
+      const note = el("p", { class: "muted small", "aria-live": "polite" });
+      const pick = el("input", { type: "file", hidden: true, accept: ".pdf,.docx,.pptx,.txt,image/*", onchange: async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        note.textContent = L("קורא את המבחן…", "Reading the exam…");
+        let text = "";
+        try {
+          if (/\.(pdf|docx|pptx|txt)$/i.test(f.name)) text = ((await (await import("./vendor/docs-core.js")).phoneDocumentText(new Uint8Array(await f.arrayBuffer()), f.name)) || "").trim();
+          if (!text && extract) {
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            let bin = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            text = ((await extract({ name: f.name, data: btoa(bin) }))?.text || "").trim();
+          }
+        } catch (err) {
+          note.textContent = L("לא הצלחתי לקרוא: ", "Could not read it: ") + (err?.message || err);
+          return;
+        }
+        if (!text) { note.textContent = L("אין במבחן טקסט שאפשר לקרוא כאן.", "The exam has no text that can be read here."); return; }
+        (c.pastExams ??= []).push({ id: uid(), title: f.name.replace(/\.[^.]+$/, "").slice(0, 200), text: text.slice(0, 200000), t: Date.now() });
+        if (commit()) draw();
+      } });
+      const exams = el("section", { class: "api" }, el("h2", {}, L("מבחנים קודמים", "Past exams")),
+        ...(c.pastExams ?? []).map((x) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, x.title), el("button", { type: "button", "aria-label": L("הסרה", "Remove"), onclick: () => { c.pastExams = c.pastExams.filter((y) => y.id !== x.id); c.removed = [...(c.removed ?? []), x.id]; if (commit()) draw(); } }, "✕"))),
+        el("button", { type: "button", onclick: () => pick.click() }, L("הוספת מבחן קודם (PDF, Word או צילום)", "Add a past exam (PDF, Word or photo)")), pick, note,
+        el("p", { class: "muted small" }, L("השאלות נכתבות מההרצאות שלך באותו סגנון, אורך ורמת קושי.", "Questions are written from your lectures in the same style, length and difficulty.")));
+      return root.append(el("section", { class: "api" }, el("p", {}, L("בוחן מההרצאות האחרונות. הבדיקה נעשית בקוד.", "A quiz from the latest lectures. Grading is done by code.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, start, lic, past)), exams);
     }
     if (z.i >= z.questions.length) {
       const score = z.questions.filter((q, k) => z.picked[k] === q.answer).length;

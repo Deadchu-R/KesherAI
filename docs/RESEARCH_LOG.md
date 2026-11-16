@@ -1675,3 +1675,14 @@ Stopped at: building (store and public page first, then the chat menu and the se
   chat model (the computer's, or the phone's own) and shown under the transcript, a few seconds behind; the lecture
   keeps the original. Computer, remote and phone.
 - Stopped at: built (0.6.304).
+
+## Students, part 15: practice from past exams (2026-11-16)
+
+- Sources: YouLearn's 2026 round-ups (practice exams from uploaded material, scored, weak spots), StudyFetch and
+  Knowt reviews.
+- Others make practice tests from course material; none we found takes the course's own past exams as the model
+  for style and difficulty.
+- Ours: "Past exams" under the quiz: add one from a PDF, Word file or photo (read once; on the phone itself when it
+  can); "Like the past exams" writes a timed 20-question test from her lectures in their style, length and
+  difficulty (not copying their questions). Synced between phone and computer.
+- Stopped at: built (0.6.305).

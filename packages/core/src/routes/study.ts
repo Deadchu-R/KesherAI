@@ -31,6 +31,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : req.body?.mode === "homework" ? "homework" : "ask"));
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   app.post<C & { Params: { cid: string } }>("/api/study/courses/:id/cards/:cid/explain", async (req) => st.explainCard(req.params.id, req.params.cid));
+  /** Past exams: `{ title, text }` in (the text from /api/study/extract); practice tests can follow their style. */
+  app.post<C & { Body: { title?: string; text?: string } }>("/api/study/courses/:id/past-exams", { bodyLimit: 4 * 1024 * 1024 }, async (req) => st.addPastExam(req.params.id, req.body ?? {}));
+  app.delete<C & { Params: { pid: string } }>("/api/study/courses/:id/past-exams/:pid", async (req) => { await st.removePastExam(req.params.id, req.params.pid); return { ok: true }; });
   /** Live translation of the lecture recorder's transcript: `{ text, to: he | en }`. */
   app.post<{ Body: { text?: string; to?: string } }>("/api/study/translate", async (req) => st.translate(String(req.body?.text ?? ""), req.body?.to === "he" ? "he" : "en"));
   /** "Explain this": a passage she selected in a lecture, explained (`{ text, kind: explain | simple | example }`). */
@@ -176,6 +179,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       drugs: d.drugs ?? [],
       quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length })).slice(-20),
       plan: examPlan(d, now) ?? null,
+      pastExams: (d.pastExams ?? []).map(({ id, title, t, text }) => ({ id, title, t, chars: text.length })),
     };
   });
   app.patch<C & { Body: { name?: string; field?: string; examDate?: string } }>("/api/study/courses/:id", async (req) => {
@@ -214,7 +218,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get<C>("/api/study/courses/:id/review", async (req) => ({ cards: await st.due(req.params.id) }));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
 
-  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" } }>("/api/study/courses/:id/quiz", async (req) => st.makeQuiz(req.params.id, req.body ?? {}));
+  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past" } }>("/api/study/courses/:id/quiz", async (req) => st.makeQuiz(req.params.id, { ...(req.body ?? {}), style: req.body?.style === "licensing" || req.body?.style === "past" ? req.body.style : undefined }));
   app.post<{ Params: { id: string; qid: string }; Body: { answers?: number[] } }>("/api/study/courses/:id/quiz/:qid/answers", async (req) => st.answerQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.answers) ? req.body.answers : []));
 
   app.get<C>("/api/study/courses/:id/progress", async (req) => {

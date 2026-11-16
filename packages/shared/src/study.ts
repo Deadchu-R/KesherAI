@@ -535,6 +535,23 @@ export interface StudyCourseData {
   removed?: string[];
   /** Finished focus-timer sessions for this course. */
   focus?: StudyFocus[];
+  /** Past exams she added (their text), so practice tests follow their style. */
+  pastExams?: StudyPastExam[];
+}
+
+/** A past exam's text (from a file or photo), kept to write practice tests like it. */
+export interface StudyPastExam {
+  id: string;
+  title: string;
+  text: string;
+  t: number;
+}
+
+/** The style note for a practice test "like the past exams": excerpts of each (questions, format, difficulty). */
+export function pastExamStyle(exams: StudyPastExam[], budget = 8000): string {
+  if (!exams.length) return "";
+  const each = Math.floor(budget / exams.length);
+  return `Write the questions like these past exams of this course: the same kinds of questions, format, length, difficulty and topics they stress (do not copy their questions word for word; write new ones from the lectures):\n\n${exams.map((e) => `--- Past exam: ${e.title}\n${e.text.slice(0, each)}`).join("\n\n")}`;
 }
 
 /** A finished focus-timer session (minutes actually focused). */
@@ -637,6 +654,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     .sort((x, y) => x.t - y.t);
   const field = !a.course.fieldChosen && b.course.fieldChosen ? { field: b.course.field, fieldChosen: true } : {};
   const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
+  const pastExams = byId(a.pastExams ?? [], b.pastExams ?? [], gone, (x) => x);
   const focusSeen = new Set<number>();
   const focus = [...(a.focus ?? []), ...(b.focus ?? [])].filter((f) => !focusSeen.has(f.t) && focusSeen.add(f.t)).sort((x, y) => x.t - y.t).slice(-5000);
   return {
@@ -648,6 +666,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     ...(drugs.length ? { drugs } : {}),
     ...(removed.length ? { removed } : {}),
     ...(focus.length ? { focus } : {}),
+    ...(pastExams.length ? { pastExams } : {}),
   };
 }
 
