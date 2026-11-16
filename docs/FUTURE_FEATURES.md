@@ -27,7 +27,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
 - ✅ Import a look from Figma (variables or styles) — needs the owner's Figma token to try
 - ⬜ Figma-like sharing and collaboration with other users (careful security review first)
-- ⬜ Reinstall from inside the app
+- ✅ Reset to defaults and reinstall the latest version, from Settings
 
 ## Agents and automation
 - ✅ Telegram bot with approval buttons
@@ -55,7 +55,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ⬜ A check on a real controller after each interface change (C6)
 - ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
 - ⬜ A CPU and RAM limit for KesherAI's own engines
-- ⬜ Heavy data (models, self-work copies) in a chosen folder on the 4 TB drive, moved by KesherAI
+- 🔧 Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen; moving what is already there is missing
 - ⬜ As-you-type suggestions in any app (Magic Tab), needs a small model always loaded
 - ⬜ Phone build targets chosen by phone model (OnePlus, Samsung…) for Unity, Unreal and web builds
 
