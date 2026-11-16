@@ -15,6 +15,14 @@ export default tseslint.config(
   { ignores: ["**/dist/**", "**/out/**", "**/node_modules/**", "docs/api/**", "apps/android/www/vendor/**", "vendor/**", ".kesher-self/**"] },
   js.configs.recommended,
   { files: ["scripts/**", "apps/desktop/**"], languageOptions: { globals: globals.node } },
+  // Boundaries (docs/ARCHITECTURE_REVIEW.md A6): the HTTP routes sit on top of everything else, so nothing below
+  // them imports from routes/. Only the server (which registers them) and tests may. The three files listed still
+  // take one helper each from a route file, to be moved out of routes/ later.
+  {
+    files: ["packages/core/src/**/*.ts"],
+    ignores: ["packages/core/src/routes/**", "packages/core/src/server.ts", "packages/core/src/server/routes.ts", "packages/core/src/**/*.test.ts", "packages/core/src/index.ts", "packages/core/src/server/start-engines.ts", "packages/core/src/server/build-conversations.ts"],
+    rules: { "no-restricted-imports": ["error", { patterns: [{ group: ["./routes/*", "../routes/*"], message: "Routes sit on top: move what you need out of routes/ instead." }] }] },
+  },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
   // Hooks in the same order on every render (a hook after an early return crashes the page: React error #310).
   { files: ["apps/web/**/*.tsx", "apps/web/**/*.ts", "plugins/**/*.tsx"], plugins: { "react-hooks": reactHooks }, rules: {
