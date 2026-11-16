@@ -256,13 +256,13 @@
   const multi = !!window.crossOriginIsolated;
   const threads = multi ? Math.max(2, Math.min(cores - 2, 6)) : 1;
   const cpuGain = multi ? Math.min(4, threads * 0.7) : 1;
-  /** The graphics chip, and whether it is strong enough for 3–4B models (recent Adreno, Immortalis, Xclipse). */
+  /** The graphics chip, and whether it is strong enough for 3–4B models (recent Adreno, Immortalis, Xclipse: Samsung's Exynos GPU, AMD-based). */
   let gpu = { name: "", strong: false };
   try {
     const adapter = await navigator.gpu?.requestAdapter();
     const info = adapter?.info ?? (await adapter?.requestAdapterInfo?.());
     const name = [info?.vendor, info?.architecture, info?.description].filter(Boolean).join(" ");
-    gpu = { name, strong: !!adapter && /qualcomm|adreno|immortalis|xclipse|apple/i.test(name) && deviceGb >= 8 };
+    gpu = { name, strong: !!adapter && /qualcomm|adreno|immortalis|xclipse|samsung|exynos|amd|apple/i.test(name) && deviceGb >= 8 };
   } catch {
     // no WebGPU here
   }

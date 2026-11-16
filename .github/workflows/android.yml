@@ -60,14 +60,16 @@ jobs:
           mkdir -p apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a
           "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip -o apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a/libsdcli.so /tmp/sd/build-android/bin/sd-cli
           ls -la apps/android/plugins/image/android/src/main/jniLibs/arm64-v8a
-      # Speech to text on the phone (lectures with no computer): whisper.cpp (MIT) built for Android arm64, shipped
+      # Speech to text on the phone (lectures with no computer): whisper.cpp (MIT) built for Android arm64 with the
+      # dot-product and half-float instructions every recent phone has (Snapdragon 8 Elite Gen 5 and Exynos 2600 in
+      # the Galaxy S26 alike: their CPUs run the same build; no NPU-only path), shipped
       # as a native file like the image engine. Cached per engine version.
       - name: Speech engine for the phone (cache)
         id: whispercache
         uses: actions/cache@v4
         with:
           path: apps/android/plugins/speech/android/src/main/jniLibs/arm64-v8a/libwhispercli.so
-          key: whispercpp-android-arm64-v1.9.5
+          key: whispercpp-android-arm64-v1.9.5-dotprod-fp16
       - name: Build the speech engine for the phone
         if: steps.whispercache.outputs.cache-hit != 'true'
         run: |
@@ -75,7 +77,7 @@ jobs:
           cmake -S /tmp/whisper -B /tmp/whisper/build-android -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
-            -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+            -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
           cmake --build /tmp/whisper/build-android --target whisper-cli -j4
           mkdir -p apps/android/plugins/speech/android/src/main/jniLibs/arm64-v8a
           "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip -o apps/android/plugins/speech/android/src/main/jniLibs/arm64-v8a/libwhispercli.so /tmp/whisper/build-android/bin/whisper-cli
