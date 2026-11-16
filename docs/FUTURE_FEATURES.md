@@ -83,3 +83,7 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - Computer tabs on the phone: at the top of the side menu. Unreal and Unity AI with KesherAI as the provider: tested on a test project.
 - Phone build targets: up to the APK; installing on the phone waits for the weekend (no cable).
 - Morning report at 07:00, here in the chat.
+- Study model switch: when a student asks while the code model is loaded, switch automatically once chats and self-work are idle, then switch back.
+- Recordings move to the computer on sync (kept on the phone until then), playable from both.
+- If something breaks tonight: fix it first without waiting; go back to the previous version only if there is no other way.
+- Self-work: new rounds of small tasks all night, while watching the computer's health (temperatures, memory).
