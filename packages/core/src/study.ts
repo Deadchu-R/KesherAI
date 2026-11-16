@@ -123,6 +123,27 @@ export class Study {
     private readonly model: (modelId?: string) => Model,
   ) {}
 
+  /** Called when the computer finished summarizing a lecture by itself (the phone gets "the lecture is ready"). */
+  onLectureReady?: (course: StudyCourse, lecture: StudyLecture) => void;
+  private later: Promise<void> = Promise.resolve();
+
+  /** Summarizes a lecture in the background, one at a time, when a chat model is chosen; then tells the phone. */
+  private summarizeLater(id: string, lectureId: string): void {
+    this.later = this.later.then(async () => {
+      if (!this.model()) return;
+      const d = await this.get(id).catch(() => undefined);
+      const l = d?.lectures.find((x) => x.id === lectureId);
+      if (!d || !l || l.summary) return;
+      const done = await this.summarize(id, lectureId);
+      this.onLectureReady?.(d.course, done);
+    }).catch(() => undefined);
+  }
+
+  /** Waits for the background summaries (tests). */
+  async idle(): Promise<void> {
+    await this.later;
+  }
+
   private file(id: string) {
     if (!/^[a-z0-9-]{8,40}$/.test(id)) throw Object.assign(new Error("No such course."), { statusCode: 404 });
     return join(this.dir, `${id}.json`);
@@ -283,7 +304,11 @@ export class Study {
       const theirs = cleanCourseData(raw);
       if (!theirs || gone.has(theirs.course.id)) continue;
       const mine = await this.get(theirs.course.id).catch(() => undefined);
-      await this.save(mine ? mergeCourseData(mine, theirs) : theirs);
+      const had = new Set(mine?.lectures.map((l) => l.id) ?? []);
+      const merged = mine ? mergeCourseData(mine, theirs) : theirs;
+      await this.save(merged);
+      // Lectures recorded on the phone and not summarized there: the computer does the heavy work by itself.
+      for (const l of merged.lectures) if (!had.has(l.id) && !l.summary && l.text.length > 200) this.summarizeLater(merged.course.id, l.id);
     }
     const all = [];
     for (const c of await this.list()) all.push(await this.get(c.id));

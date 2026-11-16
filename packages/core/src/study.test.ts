@@ -144,3 +144,25 @@ test("an audio overview, and a course shared and opened by a classmate", async (
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a lecture recorded on the phone is summarized on the computer by itself, then the phone is told", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-"));
+  try {
+    const st = new Study(dir, fake);
+    const ready: string[] = [];
+    st.onLectureReady = (c, l) => ready.push(`${c.name}/${l.title}`);
+    const c = await st.addCourse("פרמקולוגיה");
+    const d = await st.get(c.id);
+    const text = "אינסולין מוריד סוכר בדם. ".repeat(20);
+    await st.sync([{ ...d, lectures: [{ id: "phone-lec-1", title: "הרצאה 1", date: "2026-11-16", text }] }], []);
+    await st.idle();
+    assert.deepEqual(ready, ["פרמקולוגיה/הרצאה 1"]);
+    assert.equal((await st.get(c.id)).lectures[0]?.summary, "סיכום");
+    // Synced again: already summarized, nothing new.
+    await st.sync([await st.get(c.id)], []);
+    await st.idle();
+    assert.equal(ready.length, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

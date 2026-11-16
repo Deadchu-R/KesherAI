@@ -265,6 +265,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // The phone app's own notifications (live connection, or UnifiedPush through ntfy).
   const phonePush = new PhonePush(() => config.remote.devices, persist);
   const notifier = buildNotifier({ config, phonePush, ...(options.notify ? { desktop: options.notify } : {}), tunnel, chats: () => services.conversations, worker, paths });
+  // A lecture from the phone that the computer summarized by itself: "the lecture is ready" on the phone.
+  study.onLectureReady = (course, lecture) => {
+    const he = /[\u0590-\u05ff]/.test(`${course.name} ${lecture.title}`);
+    void notifier.send({ title: he ? `ההרצאה מוכנה: ${lecture.title}` : `Lecture ready: ${lecture.title}`, body: he ? `${course.name}: סיכום, מונחים ותרשים מחכים לך.` : `${course.name}: the summary, terms and diagram are waiting.`, path: `#/study/${course.id}/l/${lecture.id}`, tags: ["books"] }).catch(() => undefined);
+  };
   downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => {
     notifier.onDownload(job);
     // "When a download finishes" routines (once, when it is done).
