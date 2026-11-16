@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { pictureQuery, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -329,4 +329,18 @@ test("passages keep the page of a file's lecture, and the model sees it to cite"
   assert.ok(found.some((p) => p.page === 3 || (p.page !== undefined && p.text.includes("— 3 —"))));
   assert.equal(passageLabel({ lectureId: "l", title: "תאים", text: "", page: 3 }), "[Lecture: תאים, p. 3]");
   assert.equal(findPassages([{ ...lec, text: "המיטוכונדריה מייצרת אנרגיה ".repeat(5) }], "מיטוכונדריה")[0]?.page, undefined);
+});
+
+test("Commons pictures: English terms make the search, only upload.wikimedia.org copies are kept", () => {
+  assert.equal(pictureQuery({ title: "הרצאה על הלב", terms: [{ term: "חדר", en: "Ventricle", explain: "" }, { term: "עלייה", en: "Atrium", explain: "" }] }), "Ventricle Atrium");
+  assert.equal(pictureQuery({ title: "הלב \"שלי\"" }), "הלב שלי");
+  assert.match(commonsSearchUrl("heart"), /^https:\/\/commons\.wikimedia\.org\/w\/api\.php\?.*origin=\*/);
+  const json = { query: { pages: {
+    "1": { index: 2, imageinfo: [{ mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/a/heart.svg.png", descriptionurl: "https://commons.wikimedia.org/wiki/File:Heart.svg", extmetadata: { LicenseShortName: { value: "CC BY-SA 4.0" }, Artist: { value: "<a href='x'>Someone</a>" } } }] },
+    "2": { index: 1, imageinfo: [{ mime: "image/jpeg", thumburl: "https://evil.example/x.jpg" }] },
+    "3": { index: 3, imageinfo: [{ mime: "video/webm", thumburl: "https://upload.wikimedia.org/v.jpg" }] },
+  } } };
+  const got = parseCommonsPictures(json);
+  assert.equal(got.length, 1);
+  assert.deepEqual(got[0], { src: "https://upload.wikimedia.org/a/heart.svg.png", page: "https://commons.wikimedia.org/wiki/File:Heart.svg", license: "CC BY-SA 4.0", artist: "Someone" });
 });

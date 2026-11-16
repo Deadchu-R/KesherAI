@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -834,6 +834,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           : l.diagram ? <FlowView src={l.diagram} /> : <p className="muted">{L("בהרצאה הזאת אין תהליך שמתאים לתרשים.", "This lecture has no process that fits a diagram.")}</p>}
       </div>
       <LectureNotes key={l.id} base={base} notes={l.notes ?? ""} />
+      <LecturePictures key={`p${l.id}`} base={base} />
       {sel && (
         <div className="study-explain" aria-live="polite">
           <p className="muted small" dir="auto">{L("נבחר: ", "Selected: ")}“{sel.length > 140 ? `${sel.slice(0, 140)}…` : sel}”</p>
@@ -871,6 +872,35 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
         }}>{L("מחק הרצאה", "Delete lecture")}</button>
       </div>
     </article>
+  );
+}
+
+/** Free diagrams and photos of the lecture's topic from Wikimedia Commons, each with its licence and author. */
+function LecturePictures({ base }: { base: string }) {
+  const [r, setR] = useState<{ query: string; pictures: StudyPicture[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const find = async () => {
+    setBusy(true);
+    const x = await call(api<{ query: string; pictures: StudyPicture[] }>(`${base}/pictures`));
+    setBusy(false);
+    if (x) setR(x);
+  };
+  return (
+    <details className="study-notes" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && !r && !busy) void find(); }}>
+      <summary>{L("תמונות ותרשימים מוויקישיתוף", "Pictures and diagrams from Wikimedia")}</summary>
+      {busy && <p className="muted small">{L("מחפש…", "Searching…")}</p>}
+      {r && (r.pictures.length ? (
+        <div className="study-pics">
+          {r.pictures.map((p, i) => (
+            <figure key={i}>
+              <img src={p.src} alt={r.query} loading="lazy" />
+              <figcaption className="small muted" dir="auto">{p.page ? <a href={p.page} target="_blank" rel="noreferrer noopener">{p.artist}</a> : p.artist} · {p.license}</figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : <p className="muted small">{L(`לא נמצאו תמונות ל-"${r.query}".`, `No pictures found for "${r.query}".`)}</p>)}
+      {r && <p className="muted small">{L("תמונות חופשיות מוויקישיתוף לפי המונחים של ההרצאה. כדאי לוודא שהן מתאימות לחומר.", "Free pictures from Wikimedia Commons by the lecture's terms. Check they match the material.")}</p>}
+    </details>
   );
 }
 

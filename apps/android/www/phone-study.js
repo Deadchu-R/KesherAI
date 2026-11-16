@@ -1,11 +1,11 @@
-/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, clearTimeout, File, URL */
+/* global fetch, localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, clearTimeout, File, URL */
 /**
  * Study on the phone itself, with no computer: courses, lectures (pasted or typed with the keyboard's voice typing),
  * summaries, flashcards on the FSRS schedule, quizzes graded by code, medication calculations and lab values. The
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, pictureQuery, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -405,6 +405,31 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       el("p", { class: "muted small" }, L("הכלי עובד רק ממה שהדבקת או מההרצאות שלך. מה שחסר מסומן [חסר].", "The tool works only from what you pasted or your lectures; anything missing is marked [missing]."))));
   }
 
+  /** Free pictures of the lecture's topic from Wikimedia Commons (the phone asks Commons itself; needs internet). */
+  function picturesBox(l) {
+    const grid = el("div", { style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px" });
+    const note = el("p", { class: "muted small", "aria-live": "polite" });
+    const box = el("details", { class: "api" }, el("summary", {}, L("תמונות ותרשימים מוויקישיתוף", "Pictures and diagrams from Wikimedia")), note, grid);
+    box.ontoggle = async () => {
+      if (!box.open || box.dataset.done) return;
+      box.dataset.done = "1";
+      const q = pictureQuery(l);
+      note.textContent = L("מחפש…", "Searching…");
+      try {
+        const r = await fetch(commonsSearchUrl(q, 360));
+        const pics = parseCommonsPictures(await r.json(), 8);
+        note.textContent = pics.length ? L("תמונות חופשיות לפי המונחים של ההרצאה. כדאי לוודא שהן מתאימות לחומר.", "Free pictures by the lecture's terms. Check they match the material.") : L(`לא נמצאו תמונות ל-"${q}".`, `No pictures found for "${q}".`);
+        grid.replaceChildren(...pics.map((p) => el("figure", { style: "margin: 0" },
+          el("img", { src: p.src, alt: q, loading: "lazy", style: "width: 100%; height: 120px; object-fit: contain; background: #fff; border-radius: 8px" }),
+          el("figcaption", { class: "muted small", dir: "auto", style: "overflow-wrap: anywhere" }, `${p.artist} · ${p.license}`))));
+      } catch {
+        delete box.dataset.done;
+        note.textContent = L("אין חיבור לאינטרנט כרגע.", "No internet connection right now.");
+      }
+    };
+    return box;
+  }
+
   /** Her own notes beside the lecture's summary, saved as she types. */
   function notesBox(l) {
     const ta = el("textarea", { rows: "4", dir: "auto", "aria-label": L("ההערות שלי", "My notes"), placeholder: L("מה המרצה הדגיש, מה לשאול, מה לא הבנתי…", "What the lecturer stressed, what to ask, what I did not get…") });
@@ -708,6 +733,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), explainBox,
       el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
       notesBox(l),
+      picturesBox(l),
       flowView(l.diagram),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),

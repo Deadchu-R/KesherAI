@@ -7,7 +7,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { downloadPicture } from "./look-pictures.js";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, pictureQuery, commonsSearchUrl, parseCommonsPictures, type StudyPicture, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -610,6 +611,28 @@ export class Study {
     }
     const out = await this.ask(tool.prompt, input, signal, d.course.field, 40_000);
     return { text: cleanScript(out.trim(), /[\u0590-\u05ff]/.test(input)).slice(0, 40_000) };
+  }
+
+  /**
+   * Free pictures (diagrams and photos) from Wikimedia Commons for a lecture's topic, fetched here and sent as data:
+   * copies (the page never loads pictures from another site), each with its licence and author.
+   */
+  async lecturePictures(id: string, lectureId: string, signal?: AbortSignal): Promise<{ query: string; pictures: StudyPicture[] }> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const query = pictureQuery(l);
+    const res = await fetch(commonsSearchUrl(query), { headers: { "user-agent": "KesherAI (https://github.com/Deadchu-R/KesherAI; local app)" }, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(20_000)]) });
+    if (!res.ok) throw Object.assign(new Error(`Wikimedia answered ${res.status}.`), { statusCode: 502 });
+    const found = parseCommonsPictures(await res.json(), 8);
+    const got = await Promise.all(found.map(async (p) => {
+      try {
+        const pic = await downloadPicture({ url: p.src, width: 0, height: 0, page: p.page, license: p.license, artist: p.artist, from: "commons" }, { maxBytes: 1024 * 1024, ...(signal ? { signal } : {}) });
+        return { ...p, src: `data:${pic.mimeType};base64,${Buffer.from(pic.data).toString("base64")}` };
+      } catch {
+        return undefined;
+      }
+    }));
+    return { query, pictures: got.filter((p): p is StudyPicture => !!p) };
   }
 
   /** Searches all her courses (lectures, summaries, notes, cards, terms). */
