@@ -308,17 +308,23 @@ export class Knowledge {
     await writeFile(join(this.dir, "bases.json"), JSON.stringify(this.bases, null, 2));
   }
 
+  /** @returns The size on disk of a base's index (its .json and .vec files; a missing one counts as 0). */
+  async baseSize(id: string): Promise<number> {
+    const size = (f: string) => stat(join(this.dir, f)).then((s) => s.size, () => 0);
+    return (await size(`${id}.json`)) + (await size(`${id}.vec`));
+  }
+
   /** @returns The bases with their status. */
   async list() {
     await this.load();
-    return this.bases.map((b) => {
+    return Promise.all(this.bases.map(async (b) => {
       const ix = this.indexes.get(b.id) ?? { files: {} };
       const files = Object.keys(ix.files).length;
       const passages = Object.values(ix.files).reduce((n, f) => n + f.passages.length, 0);
       const e = this.embedder();
       const embedded = e && ix.vecModel === e.id ? Object.values(ix.files).reduce((n, f) => n + f.passages.filter((p) => p.vec).length, 0) : 0;
-      return { ...b, files, passages, embedded, indexing: this.indexing.has(b.id), indexedAt: ix.indexedAt ?? null, error: ix.error ?? null };
-    });
+      return { ...b, files, passages, embedded, indexing: this.indexing.has(b.id), indexedAt: ix.indexedAt ?? null, error: ix.error ?? null, size: await this.baseSize(b.id) };
+    }));
   }
 
   /**

@@ -3,7 +3,7 @@ import { api } from "./api";
 import { getLocale, t, he$ } from "./i18n";
 import { toast } from "./library";
 
-interface Tool { name: string; description?: string; annotations?: { readOnlyHint?: boolean; title?: string } }
+interface Tool { name: string; description?: string; annotations?: { readOnlyHint?: boolean; title?: string }; _meta?: { ui?: { resourceUri?: string } } }
 interface Server {
   id: string; name: string; transport: "stdio" | "http"; command?: string; args?: string[]; url?: string;
   env?: Record<string, string>; headers?: Record<string, string>; enabled: boolean; preset?: string; disabledTools?: string[];
@@ -86,6 +86,7 @@ export function McpSection() {
                           <input type="checkbox" checked={!off} onChange={() => void save({ ...s, disabledTools: off ? (s.disabledTools ?? []).filter((x) => x !== tool.name) : [...(s.disabledTools ?? []), tool.name] })} />
                           <span className="mono">{tool.name}</span>
                           {tool.annotations?.readOnlyHint && <span className="pill">{t("mcpReadOnly")}</span>}
+                          {tool._meta?.ui?.resourceUri && <span className="pill">{t("mcpHasView")}</span>}
                         </label>
                         {tool.description && <p className="muted small">{tool.description.slice(0, 200)}</p>}
                       </li>

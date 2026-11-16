@@ -6,8 +6,12 @@ import { desktop, toast } from "../library";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Semantic { active: string | null; usable: boolean; builtIn: boolean; phase?: string; message?: string; model: { name: string; sizeGb: number }; found?: { name: string; source: string } }
-interface Base { id: string; name: string; description?: string; folders: string[]; urls: string[]; files: number; passages: number; embedded?: number; indexing: boolean; indexedAt: string | null; error: string | null }
+interface Base { id: string; name: string; description?: string; folders: string[]; urls: string[]; files: number; passages: number; embedded?: number; indexing: boolean; indexedAt: string | null; error: string | null; size?: number }
 interface Hit { base: string; source: string; page: number; text: string; score: number }
+
+/** Bytes as KB/MB/GB. */
+const formatSize = (bytes: number): string =>
+  bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 
 const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
@@ -122,7 +126,7 @@ export function KnowledgePage() {
           <div className="row">
             <strong>{b.name}</strong>
             <span className="muted small">
-              {b.indexing ? L("מאנדקס…", "Indexing…") : L(`${b.files === 1 ? "קובץ אחד" : `${b.files} קבצים`} · ${b.passages} קטעים${b.embedded ? ` · ${b.embedded} לפי משמעות` : ""}`, `${b.files} files · ${b.passages} passages${b.embedded ? ` · ${b.embedded} by meaning` : ""}`)}
+              {b.indexing ? L("מאנדקס…", "Indexing…") : L(`${b.files === 1 ? "קובץ אחד" : `${b.files} קבצים`} · ${b.passages} קטעים${b.embedded ? ` · ${b.embedded} לפי משמעות` : ""}${b.size ? ` · ${formatSize(b.size)}` : ""}`, `${b.files} files · ${b.passages} passages${b.embedded ? ` · ${b.embedded} by meaning` : ""}${b.size ? ` · ${formatSize(b.size)}` : ""}`)}
               {b.indexedAt && !b.indexing ? ` · ${new Date(b.indexedAt).toLocaleTimeString(getLocale() === "he" ? "he-IL" : undefined, { hour: "2-digit", minute: "2-digit" })}` : ""}
             </span>
             <span className="grow" />

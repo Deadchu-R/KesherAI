@@ -132,3 +132,13 @@ test("an index keeps its vectors in a small binary file, and an old index (vecto
   assert.equal(p1!.vec, undefined);
   assert.equal((await st(j(dir, "b.vec"))).size, 8);
 });
+
+test("a base's size counts its index files, and a base without the vectors file still has one", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kb-size-"));
+  await writeFile(join(dir, "a.json"), "x".repeat(100));
+  const k = new Knowledge(dir);
+  assert.equal(await k.baseSize("a"), 100);
+  await writeFile(join(dir, "a.vec"), "y".repeat(50));
+  assert.equal(await k.baseSize("a"), 150);
+  assert.equal(await k.baseSize("none"), 0);
+});
