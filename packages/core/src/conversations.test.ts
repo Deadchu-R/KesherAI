@@ -80,6 +80,12 @@ test("chat conversation: create, send, get the reply, list, rename, delete", asy
     });
     assert.equal(reply.events.find((e) => e.type === "assistant")?.text, "You said: שלום עולם");
     assert.equal(reply.title, "שלום עולם", "first message titles the conversation");
+    // The sidebar's preview reads the last messages from disk, without opening the chat.
+    const peek = await until(async () => {
+      const r = (await app.inject({ method: "GET", url: `/api/conversations/${created.id}/peek` })).json() as { messages?: Array<{ who: string; text: string }> };
+      return r.messages?.length === 2 ? r.messages : undefined;
+    });
+    assert.deepEqual(peek, [{ who: "user", text: "שלום עולם" }, { who: "assistant", text: "You said: שלום עולם" }]);
 
     const list = (await app.inject({ method: "GET", url: "/api/conversations" })).json() as Array<{ id: string }>;
     assert.deepEqual(list.map((c) => c.id), [created.id]);

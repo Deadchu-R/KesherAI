@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { askText } from "./ui/askText";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
@@ -113,9 +113,59 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
   );
 }
 
+/** A chat's last messages, kept while the page is open (the preview on hover asks once per chat and change). */
+const peeks = new Map<string, Array<{ who: string; text: string }>>();
+
+/**
+ * A short read-only look at a chat when the pointer rests on it (desktop only; nothing on touch), like Open WebUI.
+ *
+ * @returns Props for the link and the preview to draw.
+ */
+function useChatPeek(c: ConversationSummary): { props: { onMouseEnter: () => void; onMouseLeave: () => void }; view: ReactNode } {
+  const [shown, setShown] = useState<Array<{ who: string; text: string }> | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const key = `${c.id}@${c.updatedAt}`;
+  const enter = () => {
+    if (!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) return;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const have = peeks.get(key);
+      if (have) return setShown(have);
+      void api<{ messages: Array<{ who: string; text: string }> }>(`/api/conversations/${c.id}/peek`).then(
+        (r) => {
+          peeks.set(key, r.messages);
+          setShown(r.messages);
+        },
+        () => undefined,
+      );
+    }, 400);
+  };
+  const leave = () => {
+    window.clearTimeout(timer.current);
+    setShown(null);
+  };
+  useEffect(() => {
+    return () => window.clearTimeout(timer.current);
+  }, []);
+  const he = getLocale() === "he";
+  const view =
+    shown && shown.length ? (
+      <div className="conv-peek" role="tooltip">
+        {shown.map((m, i) => (
+          <p key={i} dir="auto" className={m.who === "user" ? "you" : ""}>
+            <b>{m.who === "user" ? (he ? "אני: " : "Me: ") : ""}</b>
+            {m.text}
+          </p>
+        ))}
+      </div>
+    ) : null;
+  return { props: { onMouseEnter: enter, onMouseLeave: leave }, view };
+}
+
 function ConversationLink({ c, active }: { c: ConversationSummary; active: boolean }) {
   const state = useActivity()[c.id];
   const he = getLocale() === "he";
+  const peek = useChatPeek(c);
   // Delete a chat from the list (asked for on Linux: there was no way to remove old chats).
   const remove = async () => {
     if (!confirm(he ? `למחוק את הצ'אט "${c.title}"? אי אפשר לבטל את זה.` : `Delete the chat "${c.title}"? This cannot be undone.`)) return;
@@ -142,7 +192,7 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
     await api(`/api/conversations/${c.id}`, { method: "PATCH", body: { title } }).then(() => refreshLibrary(), (e: Error) => toast(e.message));
   };
   return (
-    <div className="conv-row">
+    <div className="conv-row" {...peek.props}>
       <a href={`#/c/${c.id}`} className="nav-link conv-link" aria-current={active ? "page" : undefined} title={c.title}>
         <span className="conv-kind" aria-hidden="true">
           {c.kind === "code" ? "</>" : "•"}
@@ -155,6 +205,7 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
         <MenuSeparator />
         <MenuItem icon="🗑" danger onSelect={() => void remove()}>{he ? "מחיקת הצ'אט" : "Delete the chat"}</MenuItem>
       </Menu>
+      {peek.view}
     </div>
   );
 }

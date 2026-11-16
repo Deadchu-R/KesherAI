@@ -2087,7 +2087,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .gpu-check > summary { cursor: pointer; }
 .gpu-check pre { max-height: 220px; overflow: auto; white-space: pre-wrap; }
 .answer-stats { margin-inline-start: 6px; font-variant-numeric: tabular-nums; opacity: .8; }
-.conv-row { display: flex; align-items: center; }
+.conv-row { display: flex; align-items: center; position: relative; }
 .conv-row > .conv-link { flex: 1; min-width: 0; }
 .conv-row .conv-more { opacity: 0; flex: none; }
 .conv-row:hover .conv-more, .conv-row:focus-within .conv-more { opacity: 1; }
@@ -2511,3 +2511,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .messages > .msg:not(.streaming):not(:nth-last-child(-n + 6)) { content-visibility: auto; contain-intrinsic-size: auto 160px; }
 /* <Code> and <Path>: left to right inside Hebrew text, isolated from the sentence around them. */
 .bidi-iso { unicode-bidi: isolate; }
+/* The sidebar's preview on hover: the chat's last messages under its name (read only, desktop). */
+.conv-peek { position: absolute; z-index: 30; inset-block-start: 100%; inset-inline: 6px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: calc(10px * var(--r-scale, 1)); box-shadow: 0 10px 30px rgb(0 0 0 / 0.35); pointer-events: none; font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.conv-peek p { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.conv-peek p + p { margin-block-start: 6px; }
+.conv-peek p.you { color: var(--text); }

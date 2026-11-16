@@ -324,6 +324,14 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ...summary, session: opened.session.info(), events: opened.session.events, ...(interrupted ? { interruptedAt: interrupted.at } : {}) };
   });
 
+  // The sidebar's preview on hover: the last three messages as plain text, read from disk (no session is opened).
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/peek", async (req, reply) => {
+    const c = await s.library.getConversation(req.params.id);
+    if (!c) return reply.code(404).send({ error: "Conversation not found" });
+    const last = c.events.filter((e): e is Extract<typeof e, { type: "user" | "assistant" }> => (e.type === "user" || e.type === "assistant") && !!e.text.trim()).slice(-3);
+    return { messages: last.map((e) => ({ who: e.type, text: e.text.replace(/```[\s\S]*?```/g, " [code] ").replace(/\s+/g, " ").trim().slice(0, 240) })) };
+  });
+
   // A chat KesherAI stopped by closing (an update, a restart): continue it from where it stopped, or just dismiss.
   app.post<{ Params: { id: string }; Body: { dismiss?: boolean } }>("/api/conversations/:id/resume", async (req, reply) => {
     try {
