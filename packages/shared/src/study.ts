@@ -799,7 +799,7 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
 
 /** The tutor's instructions: answer only from her lectures, say which lecture, and say so when they do not cover it. */
 export const TUTOR_PROMPT =
-  "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
+  "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]; when the passage is a recording's transcript with times (lines starting like 12:30), add the minute, like [Lecture: <title>, 12:30], so she can find it. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
 
 /** Study mode: the tutor asks her about her own lectures, waits, then corrects (Socratic, like ChatGPT's study mode). */
 export const STUDY_MODE_PROMPT =
