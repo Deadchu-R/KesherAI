@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -80,8 +80,52 @@ function pieces(text, size = 6000) {
  * @param root - The section.
  * @param ask - Asks the phone's chosen model: (messages) => Promise<string | undefined> (undefined: no model ready).
  */
-export function renderPhoneStudy(root, ask, search, speech) {
+/** A phone course (one object) as the computer's course file, for syncing. */
+function toData(c) {
+  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, ...course } = c;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}) };
+}
+/** The computer's course file as a phone course. */
+function fromData(d) {
+  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}) };
+}
+
+/**
+ * The Study tab.
+ *
+ * @param root - Where it is drawn.
+ * @param ask - Asks the phone's model (returns undefined when none is chosen).
+ * @param search - A web search, when there is one.
+ * @param speech - On-phone speech to text, when there is one.
+ * @param sync - Sends `{ courses, removedCourses }` to the paired computer and returns its answer (undefined when
+ *   no computer is paired).
+ */
+export function renderPhoneStudy(root, ask, search, speech, sync) {
   let db = load();
+  let syncNote = "";
+  /** Two-way: the computer merges the phone's courses with its own and sends every course back. */
+  const syncNow = async (quiet) => {
+    if (!sync) return;
+    syncNote = L("מסנכרן עם המחשב…", "Syncing with the computer…");
+    if (view.at === "home") draw();
+    try {
+      const r = await sync({ courses: db.courses.map(toData), removedCourses: db.removedCourses || [] });
+      if (!r) {
+        syncNote = quiet ? "" : L("אין מחשב מחובר. התחברי פעם אחת למחשב (לשונית מחשב) כדי לסנכרן.", "No computer paired. Connect to your computer once (Computer tab) to sync.");
+      } else {
+        // Changes made here while the answer was on its way are merged in, not lost.
+        const theirs = new Map(r.courses.map((d) => [d.course.id, d]));
+        const gone = new Set(r.removedCourses || []);
+        const courses = r.courses.map((d) => { const mine = db.courses.find((c) => c.id === d.course.id); return fromData(mine ? mergeCourseData(d, toData(mine)) : d); });
+        for (const c of db.courses) if (!theirs.has(c.id) && !gone.has(c.id)) courses.push(c);
+        db = { ...db, courses, removedCourses: [] };
+        syncNote = save(db) ? L(`מסונכרן עם המחשב · ${db.courses.length} קורסים`, `Synced with the computer · ${db.courses.length} courses`) : "";
+      }
+    } catch (e) {
+      syncNote = quiet ? L("המחשב לא זמין כרגע; הסנכרון יקרה בפעם הבאה.", "The computer is not reachable now; it will sync next time.") : L("הסנכרון נכשל: ", "Sync failed: ") + (e?.message || e);
+    }
+    if (view.at === "home") draw();
+  };
   let view = { at: "home" };
   const go = (v) => {
     view = v;
@@ -141,7 +185,10 @@ export function renderPhoneStudy(root, ask, search, speech) {
         el("button", { type: "button", onclick: () => go({ at: "calc" }) }, L("חישובי תרופות", "Medication calculations")),
         el("button", { type: "button", onclick: () => go({ at: "labs" }) }, L("ערכי מעבדה", "Lab values"))),
       el("button", { type: "button", onclick: () => go({ at: "benefits" }) }, L("הטבות לסטודנטים", "Student benefits")),
-      search && el("button", { type: "button", onclick: () => go({ at: "life" }) }, L("שאלה על הלימודים (עם מקורות מהרשת)", "A question about your studies (sources from the web)"))));
+      search && el("button", { type: "button", onclick: () => go({ at: "life" }) }, L("שאלה על הלימודים (עם מקורות מהרשת)", "A question about your studies (sources from the web)")),
+      sync && el("div", { class: "ph-row" },
+        el("span", { class: "muted small", "aria-live": "polite" }, syncNote || L("הקורסים, ההרצאות והחזרות מסתנכרנים עם המחשב כשהוא מחובר.", "Courses, lectures and reviews sync with the computer when it is connected.")),
+        el("button", { type: "button", onclick: () => void syncNow(false) }, L("סנכרן עכשיו", "Sync now")))));
     const name = el("input", { placeholder: L("שם קורס חדש", "New course name"), "aria-label": L("שם קורס", "Course name"), dir: "auto" });
     root.append(el("section", { class: "api" },
       el("h2", {}, L("הקורסים שלי", "My courses")),
@@ -195,6 +242,7 @@ export function renderPhoneStudy(root, ask, search, speech) {
       el("button", { type: "button", class: "link", onclick: () => {
         if (!confirm(L(`למחוק את "${c.name}" מהטלפון? אי אפשר לבטל.`, `Delete "${c.name}" from the phone? This cannot be undone.`))) return;
         db.courses = db.courses.filter((x) => x.id !== c.id);
+        db.removedCourses = [...(db.removedCourses || []), c.id].slice(-2000);
         if (commit()) go({ at: "home" });
       } }, L("מחק קורס", "Delete course"))));
   }
@@ -553,4 +601,5 @@ export function renderPhoneStudy(root, ask, search, speech) {
   }
 
   draw();
+  void syncNow(true);
 }

@@ -67,3 +67,28 @@ test("long lectures are cut into pieces at line ends", () => {
   assert.ok(ps.every((p) => p.length <= 5000));
   assert.equal(ps.join("\n").replace(/\s+/g, ""), text.replace(/\s+/g, ""));
 });
+
+test("sync with the phone merges courses and keeps deletions", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-study-sync-"));
+  try {
+    const st = new Study(dir, () => undefined);
+    const pc = await st.addCourse("Pharmacology");
+    const lec = await st.addLecture(pc.id, { text: "on the computer" });
+    const phoneCourse = { course: { id: pc.id, name: "Pharma", createdAt: 1 }, lectures: [{ id: "phone-lec-1", title: "p", date: "2026-11-10", text: "on the phone" }], cards: [], reviews: [], quizzes: [] };
+    const fresh = { course: { id: "abcdef12-3456", name: "Anatomy", createdAt: 2 }, lectures: [], cards: [], reviews: [], quizzes: [] };
+    const bad = { course: { id: "../../etc", name: "x", createdAt: 1 }, lectures: [], cards: [], reviews: [], quizzes: [] };
+    const out = await st.sync([phoneCourse, fresh, bad], []);
+    assert.equal(out.courses.length, 2);
+    const merged = out.courses.find((c) => c.course.id === pc.id)!;
+    assert.deepEqual(merged.lectures.map((l) => l.id).sort(), [lec.id, "phone-lec-1"].sort());
+    assert.equal(merged.course.name, "Pharmacology");
+    await st.removeCourse(fresh.course.id);
+    const again = await st.sync([fresh], []);
+    assert.equal(again.courses.length, 1);
+    assert.ok(again.removedCourses.includes(fresh.course.id));
+    await st.sync([], [pc.id]);
+    assert.equal((await st.list()).length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

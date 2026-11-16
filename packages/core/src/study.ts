@@ -7,18 +7,40 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { detectField, jsonIn, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { detectField, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import type { ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
-export interface CourseData {
-  course: StudyCourse;
-  lectures: StudyLecture[];
-  cards: StudyCard[];
-  reviews: StudyReview[];
-  quizzes: StudyQuiz[];
-  /** Drug cards (nursing). */
-  drugs?: StudyDrug[];
+export type CourseData = StudyCourseData;
+
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+const arr = <T>(v: unknown, max: number): T[] => (Array.isArray(v) ? (v.slice(0, max) as T[]) : []);
+const okId = (v: unknown) => typeof v === "string" && /^[\w-]{1,80}$/.test(v);
+
+/**
+ * A course sent by the phone, checked before it is merged: ids are short words, texts and lists have the same caps
+ * as on the computer, and anything else is dropped.
+ */
+export function cleanCourseData(raw: unknown): CourseData | undefined {
+  const d = raw as Partial<CourseData> | undefined;
+  const c = d?.course;
+  if (!c || typeof c.id !== "string" || !/^[a-z0-9-]{8,40}$/.test(c.id)) return undefined;
+  const course: StudyCourse = { id: c.id, name: str(c.name, 120) || "Course", createdAt: Number(c.createdAt) || Date.now(), ...(STUDY_FIELDS.some((f) => f.id === c.field) ? { field: c.field } : {}), ...(c.fieldChosen ? { fieldChosen: true } : {}) };
+  const lectures = arr<StudyLecture>(d.lectures, 2000).filter((l) => okId(l?.id)).map((l) => ({
+    id: l.id, title: str(l.title, 200), date: /^\d{4}-\d{2}-\d{2}$/.test(l.date) ? l.date : new Date().toISOString().slice(0, 10), text: str(l.text, 400_000),
+    ...(l.summary ? { summary: str(l.summary, 100_000) } : {}),
+    ...(Array.isArray(l.terms) ? { terms: arr<StudyTerm>(l.terms, 300).map((t) => ({ term: str(t?.term, 200), ...(t?.en ? { en: str(t.en, 200) } : {}), explain: str(t?.explain, 2000) })) } : {}),
+    ...(l.diagram ? { diagram: str(l.diagram, 20_000) } : {}),
+  }));
+  const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
+    id: k.id, front: str(k.front, 4000), back: str(k.back, 8000), format: STUDY_FORMATS.includes(k.format) ? k.format : "text", ...(k.kind ? { kind: str(k.kind, 40) } : {}),
+    ...(okId(k.lectureId) ? { lectureId: k.lectureId } : {}), createdAt: Number(k.createdAt) || Date.now(), due: str(k.due, 40), fsrs: k.fsrs && typeof k.fsrs === "object" ? JSON.parse(JSON.stringify(k.fsrs).slice(0, 2000)) as Record<string, unknown> : {},
+  }));
+  const reviews = arr<StudyReview>(d.reviews, 200_000).filter((r) => okId(r?.cardId) && Number.isFinite(r.t)).map((r) => ({ cardId: r.cardId, t: r.t, rating: Math.min(4, Math.max(1, Math.round(Number(r.rating) || 3))), format: STUDY_FORMATS.includes(r.format) ? r.format : "text", elapsedDays: Math.max(0, Number(r.elapsedDays) || 0), ...(r.kind ? { kind: str(r.kind, 40) } : {}) }));
+  const quizzes = arr<StudyQuiz>(d.quizzes, 500).filter((q) => okId(q?.id) && Array.isArray(q.questions)).map((q) => JSON.parse(JSON.stringify(q).slice(0, 200_000)) as StudyQuiz);
+  const drugs = arr<StudyDrug>(d.drugs, 1000).filter((g) => okId(g?.id)).map((g) => JSON.parse(JSON.stringify(g).slice(0, 20_000)) as StudyDrug);
+  const removed = arr<string>(d.removed, 5000).filter(okId);
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -191,6 +213,35 @@ export class Study {
   async removeCourse(id: string): Promise<void> {
     await rm(this.file(id), { force: true });
     this.cache.delete(id);
+    const gone = await this.removedCourses();
+    if (!gone.includes(id)) await writeFile(join(this.dir, "_removed.json"), JSON.stringify([...gone, id].slice(-2000)));
+  }
+
+  /** Courses deleted on this computer (a sync from the phone does not bring them back). */
+  private async removedCourses(): Promise<string[]> {
+    return arr<string>(await readFile(join(this.dir, "_removed.json"), "utf8").then((t) => JSON.parse(t) as unknown, () => []), 2000);
+  }
+
+  /**
+   * Two-way sync with the phone: each course it sends is merged with this computer's copy (both kept, minus what
+   * either deleted), and every course here comes back to it.
+   *
+   * @param courses - The phone's courses (checked by cleanCourseData).
+   * @param removedCourses - Courses deleted on the phone.
+   * @returns All courses here after the merge, and the courses deleted on either side.
+   */
+  async sync(courses: unknown[], removedCourses: unknown[]): Promise<{ courses: CourseData[]; removedCourses: string[] }> {
+    for (const id of arr<string>(removedCourses, 2000)) if (typeof id === "string" && /^[a-z0-9-]{8,40}$/.test(id)) await this.removeCourse(id);
+    const gone = new Set(await this.removedCourses());
+    for (const raw of arr<unknown>(courses, 500)) {
+      const theirs = cleanCourseData(raw);
+      if (!theirs || gone.has(theirs.course.id)) continue;
+      const mine = await this.get(theirs.course.id).catch(() => undefined);
+      await this.save(mine ? mergeCourseData(mine, theirs) : theirs);
+    }
+    const all = [];
+    for (const c of await this.list()) all.push(await this.get(c.id));
+    return { courses: all, removedCourses: [...gone] };
   }
 
   /** Adds a lecture's text (typed, pasted, or a transcript). */
@@ -224,6 +275,7 @@ export class Study {
   async removeLecture(id: string, lectureId: string): Promise<void> {
     const d = await this.get(id);
     d.lectures = d.lectures.filter((l) => l.id !== lectureId);
+    d.removed = [...(d.removed ?? []), lectureId].slice(-5000);
     for (const c of d.cards) if (c.lectureId === lectureId) delete c.lectureId;
     await this.save(d);
   }
@@ -302,6 +354,7 @@ export class Study {
   async removeCard(id: string, cardId: string): Promise<void> {
     const d = await this.get(id);
     d.cards = d.cards.filter((c) => c.id !== cardId);
+    d.removed = [...(d.removed ?? []), cardId].slice(-5000);
     await this.save(d);
   }
 
@@ -404,6 +457,7 @@ export class Study {
   async removeDrug(id: string, drugId: string): Promise<void> {
     const d = await this.get(id);
     d.drugs = (d.drugs ?? []).filter((g) => g.id !== drugId);
+    d.removed = [...(d.removed ?? []), drugId].slice(-5000);
     await this.save(d);
   }
 

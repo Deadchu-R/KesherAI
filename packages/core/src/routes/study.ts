@@ -22,6 +22,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   type L = { Params: { id: string; lid: string } };
 
   app.get("/api/study", async () => ({ courses: await st.list() }));
+  /** Two-way sync with the phone's own Study tab: `{ courses, removedCourses }` in, every course here out. */
+  app.post<{ Body: { courses?: unknown[]; removedCourses?: unknown[] } }>("/api/study/sync", { bodyLimit: 80 * 1024 * 1024 }, async (req) => st.sync(req.body?.courses ?? [], req.body?.removedCourses ?? []));
 
   // The avatar camera: the student's own recorded "listening" video, looped as a camera (OBS or softcam).
   const avatarDir = join(s.paths.root, "study", "avatar");

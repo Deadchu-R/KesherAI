@@ -517,3 +517,64 @@ export function benefitsFor(fields: Array<string | undefined>): StudentBenefit[]
   const score = (b: StudentBenefit) => (b.fields?.some((f) => set.has(f)) ? 0 : b.fields?.length ? 2 : 1);
   return [...STUDENT_BENEFITS].sort((a, b) => score(a) - score(b));
 }
+
+/** Everything kept for one course (the computer's file, and what the phone sends when it syncs). */
+export interface StudyCourseData {
+  course: StudyCourse;
+  lectures: StudyLecture[];
+  cards: StudyCard[];
+  reviews: StudyReview[];
+  quizzes: StudyQuiz[];
+  /** Drug cards (nursing). */
+  drugs?: StudyDrug[];
+  /** Ids of lectures, cards and drug cards deleted here, so a sync does not bring them back. */
+  removed?: string[];
+}
+
+const lectureWeight = (l: StudyLecture) => (l.summary ? 4 : 0) + (l.terms?.length ? 2 : 0) + (l.diagram ? 1 : 0);
+const lastReview = (c: StudyCard) => String((c.fsrs as { last_review?: unknown }).last_review ?? "");
+
+function byId<T extends { id: string }>(a: T[], b: T[], gone: Set<string>, pick: (x: T, y: T) => T): T[] {
+  const out = new Map<string, T>();
+  for (const x of a) if (!gone.has(x.id)) out.set(x.id, x);
+  for (const y of b) {
+    if (gone.has(y.id)) continue;
+    const x = out.get(y.id);
+    out.set(y.id, x ? pick(x, y) : y);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Merges two copies of a course (the phone's and the computer's) so studying in either place counts: everything from
+ * both is kept, except what was deleted in either. For the same card, the copy reviewed last wins (its schedule is
+ * newer); for the same lecture, the one with more made from it (summary, terms, diagram), then the longer text.
+ *
+ * @param a - One copy (it wins ties, and gives the name unless only `b`'s field was chosen by the student).
+ * @param b - The other copy.
+ * @returns The merged course.
+ */
+export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCourseData {
+  const removed = [...new Set([...(a.removed ?? []), ...(b.removed ?? [])])].slice(-5000);
+  const gone = new Set(removed);
+  const seen = new Set<string>();
+  const reviews = [...a.reviews, ...b.reviews]
+    .filter((r) => {
+      const k = `${r.cardId}:${r.t}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((x, y) => x.t - y.t);
+  const field = !a.course.fieldChosen && b.course.fieldChosen ? { field: b.course.field, fieldChosen: true } : {};
+  const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
+  return {
+    course: { ...a.course, ...field },
+    lectures: byId(a.lectures, b.lectures, gone, (x, y) => (lectureWeight(y) > lectureWeight(x) || (lectureWeight(y) === lectureWeight(x) && y.text.length > x.text.length) ? y : x)),
+    cards: byId(a.cards, b.cards, gone, (x, y) => (lastReview(y) > lastReview(x) ? y : x)),
+    reviews,
+    quizzes: byId(a.quizzes, b.quizzes, gone, (x, y) => (!x.answers && y.answers ? y : x)).sort((x, y) => x.t - y.t),
+    ...(drugs.length ? { drugs } : {}),
+    ...(removed.length ? { removed } : {}),
+  };
+}

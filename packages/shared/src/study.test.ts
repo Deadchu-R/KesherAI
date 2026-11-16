@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -69,4 +69,20 @@ test("benefits for a student's fields come first", async () => {
   assert.equal(benefitsFor(["engineering"])[0]!.fields?.includes("engineering"), true);
   assert.equal(benefitsFor(["nursing"]).length, STUDENT_BENEFITS.length);
   assert.ok(STUDENT_BENEFITS.every((b) => /^https:\/\//.test(b.url) && b.how.he.length && b.checked));
+});
+
+test("merging a course from the phone and the computer keeps both, minus deletions", () => {
+  const card = (id: string, last?: string) => ({ id, front: id, back: "b", format: "text" as const, createdAt: 1, due: "2026-01-01", fsrs: last ? { last_review: last } : {} });
+  const course = { id: "c1234567", name: "Anatomy", createdAt: 1 };
+  const pc = { course, lectures: [{ id: "l1", title: "1", date: "2026-11-01", text: "short" }], cards: [card("k1", "2026-11-01T00:00:00Z"), card("k2")], reviews: [{ cardId: "k1", t: 5, rating: 3, format: "text" as const, elapsedDays: 0 }], quizzes: [], removed: ["k3"] };
+  const phone = { course: { ...course, name: "Anat", field: "nursing", fieldChosen: true }, lectures: [{ id: "l1", title: "1", date: "2026-11-01", text: "short", summary: "S" }, { id: "l2", title: "2", date: "2026-11-02", text: "x" }], cards: [card("k1", "2026-11-03T00:00:00Z"), card("k3")], reviews: [{ cardId: "k1", t: 5, rating: 3, format: "text" as const, elapsedDays: 0 }, { cardId: "k1", t: 9, rating: 4, format: "text" as const, elapsedDays: 0 }], quizzes: [], removed: ["k2"] };
+  const m = mergeCourseData(pc, phone);
+  assert.equal(m.course.name, "Anatomy");
+  assert.equal(m.course.field, "nursing");
+  assert.deepEqual(m.lectures.map((l) => l.id), ["l1", "l2"]);
+  assert.equal(m.lectures[0]!.summary, "S");
+  assert.deepEqual(m.cards.map((c) => c.id), ["k1"]);
+  assert.equal(String(m.cards[0]!.fsrs.last_review), "2026-11-03T00:00:00Z");
+  assert.equal(m.reviews.length, 2);
+  assert.deepEqual(m.removed?.sort(), ["k2", "k3"]);
 });
