@@ -54,7 +54,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
 - ⬜ A check on a real controller after each interface change (C6)
 - ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
-- ⬜ A CPU and RAM limit for KesherAI's own engines
+- ✅ A CPU and RAM limit for KesherAI's own engines (Settings → Computer: off by default, with a one-tap suggestion of 85% memory and 80% processor)
 - ✅ Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen, and the models already there move over in the background
 - ⬜ As-you-type suggestions in any app (Magic Tab), needs a small model always loaded
 - ⬜ Phone build targets chosen by phone model (OnePlus, Samsung…) for Unity, Unreal and web builds

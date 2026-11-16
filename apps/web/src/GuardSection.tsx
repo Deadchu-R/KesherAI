@@ -137,6 +137,12 @@ export function GuardSection() {
             {[0, 5, 10, 20, 30, 60, 120].map((m) => <option key={m} value={m}>{m ? t("guardMinutes", { n: m }) : t("guardNever")}</option>)}
           </Select>
         </label>
+        {!c.maxRamPercent && !c.maxCpuPercent && (
+          <div className="row wrap guard-suggest">
+            <span className="small grow">{L("הצעה: אם משחקים או עובדים ב-Unreal בזמן ש-KesherAI עובד, להגביל לזיכרון עד 85% ומעבד עד 80%, כדי שהמחשב יישאר מהיר.", "Suggestion: if you game or work in Unreal while KesherAI works, limit memory to 85% and the processor to 80%, so the computer stays quick.")}</span>
+            <button type="button" className="small" onClick={() => set({ maxRamPercent: 85, maxCpuPercent: 80 })}>{L("להפעיל את ההצעה", "Use the suggestion")}</button>
+          </div>
+        )}
         <label className="field">
           <span>{L("הגבלת זיכרון (RAM)", "Memory (RAM) limit")}</span>
           <Select value={c.maxRamPercent ?? 0} onChange={(e) => set({ maxRamPercent: Number(e.target.value) })}>

@@ -2837,3 +2837,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .godot-tree { background: var(--bg); border-radius: calc(10px * var(--r-scale, 1)); padding: 10px 12px; line-height: 1.8; max-height: 360px; overflow: auto; text-align: left; }
 .godot-shot { width: 100%; border-radius: calc(10px * var(--r-scale, 1)); border: 1px solid var(--border); }
 .godot-log { max-height: 280px; overflow: auto; white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; }
+.guard-suggest { padding: 10px 12px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); align-items: center; gap: 10px; }
