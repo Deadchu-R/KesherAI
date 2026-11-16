@@ -35,6 +35,50 @@ public class NotifyPlugin extends Plugin {
         // Instead it is written down (shown on the home screen and sent to the computer) and the app starts again.
         try {
             getBridge().setWebViewClient(new com.getcapacitor.BridgeWebViewClient(getBridge()) {
+                /**
+                 * A link on a paired computer's page that leads to another site opens in the phone's browser, not in
+                 * the app (the app allows any address so it can reach the user's own computer, but a web page must
+                 * never replace the KesherAI interface). The app's own pages still open the computer as before.
+                 */
+                @Override
+                public boolean shouldOverrideUrlLoading(android.webkit.WebView view, android.webkit.WebResourceRequest request) {
+                    try {
+                        if (request != null && request.isForMainFrame()) {
+                            String target = RemoteBridge.origin(request.getUrl().toString());
+                            String here = view != null && view.getUrl() != null ? RemoteBridge.origin(view.getUrl()) : null;
+                            String own = RemoteBridge.origin(getBridge().getLocalUrl());
+                            boolean onComputer = here != null && RemoteBridge.saved(getContext()).contains(here);
+                            if (onComputer && target != null && !target.equals(here) && !target.equals(own)) {
+                                android.content.Intent open = new android.content.Intent(android.content.Intent.ACTION_VIEW, request.getUrl());
+                                open.addCategory(android.content.Intent.CATEGORY_BROWSABLE);
+                                open.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                                getContext().startActivity(open);
+                                return true;
+                            }
+                        }
+                    } catch (Throwable ignored) {
+                        // fall through to Capacitor's own handling
+                    }
+                    return super.shouldOverrideUrlLoading(view, request);
+                }
+
+                /**
+                 * The app's own pages are "cross-origin isolated" (llama.cpp in WebAssembly then uses every core). This
+                 * was the speech plugin's own client; there is one client now (Capacitor keeps only the last one set).
+                 */
+                @Override
+                public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView view, android.webkit.WebResourceRequest request) {
+                    android.webkit.WebResourceResponse r = super.shouldInterceptRequest(view, request);
+                    if (r != null && "localhost".equals(request.getUrl().getHost())) {
+                        java.util.Map<String, String> h = r.getResponseHeaders() == null ? new java.util.HashMap<>() : new java.util.HashMap<>(r.getResponseHeaders());
+                        h.put("Cross-Origin-Opener-Policy", "same-origin");
+                        h.put("Cross-Origin-Embedder-Policy", "require-corp");
+                        h.put("Cross-Origin-Resource-Policy", "same-origin");
+                        r.setResponseHeaders(h);
+                    }
+                    return r;
+                }
+
                 @Override
                 public boolean onRenderProcessGone(android.webkit.WebView view, android.webkit.RenderProcessGoneDetail detail) {
                     boolean crashed = android.os.Build.VERSION.SDK_INT >= 26 && detail != null && detail.didCrash();
@@ -54,6 +98,7 @@ public class NotifyPlugin extends Plugin {
                     return true;
                 }
             });
+            System.setProperty("kesher.webclient", "notify");
         } catch (Throwable ignored) {
             // an older Capacitor: the default handling stays
         }

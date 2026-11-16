@@ -23,6 +23,9 @@ import java.util.Map;
 public class KesherIsolationPlugin extends Plugin {
     @Override
     public void load() {
+        // The notifications plugin's client already adds these headers (with its crash and link handling): one client
+        // only, since Capacitor keeps the last one set.
+        if ("notify".equals(System.getProperty("kesher.webclient"))) return;
         Bridge bridge = getBridge();
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override
