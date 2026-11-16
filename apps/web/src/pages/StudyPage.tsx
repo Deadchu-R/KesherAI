@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ExamPlan, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
-import { api } from "../api";
+import { api, withToken } from "../api";
+import { speak, stopSpeaking } from "../Speak";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
@@ -63,6 +64,23 @@ export function StudyPage({ hash }: { hash: string }) {
   return <CoursePage key={parts[0]} id={parts[0]} tab={parts[1] ?? "lectures"} lectureId={parts[1] === "l" ? parts[2] : undefined} />;
 }
 
+/**
+ * Sends the course as a file to a classmate: the phone's share sheet (WhatsApp, mail…) where there is one, otherwise a
+ * download. Her own reviews and answers stay out of it.
+ */
+async function shareCourseFile(id: string, name: string) {
+  const res = await fetch(withToken(`/api/study/courses/${id}/export`)).catch(() => undefined);
+  if (!res?.ok) return toast(L("לא הצלחתי להכין את הקובץ.", "Could not make the file."));
+  const file = new File([await res.blob()], `${name}.kesherai-course.json`, { type: "application/json" });
+  const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+  if (nav.canShare?.({ files: [file] })) return void navigator.share({ files: [file], title: name }).catch(() => undefined);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
+
 function BackLink({ to }: { to: string }) {
   return <a className="study-back" href={to}>{L("› חזרה", "‹ Back")}</a>;
 }
@@ -113,6 +131,18 @@ function StudyHome() {
       <a className="study-avatar-link" href="#/study/benefits">{L("הטבות לסטודנטים: הנחה בתחבורה, תוכנות ו-AI בחינם", "Student benefits: transport discount, free software and AI")}</a>
       <a className="study-avatar-link" href="#/study/avatar">{L("מצלמת אווטאר לשיעורים בזום", "Avatar camera for Zoom lessons")}</a>
       <h2>{L("הקורסים שלי", "My courses")}</h2>
+      <label className="study-import small">
+        {L("קיבלת קורס מחבר/ה? ", "Got a course from a classmate? ")}<span className="link-btn">{L("לפתוח קובץ קורס", "Open a course file")}</span>
+        <input type="file" accept=".json,application/json" hidden onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          let data: unknown;
+          try { data = JSON.parse(await f.text()); } catch { return toast(L("זה לא קובץ קורס של KesherAI.", "This is not a KesherAI course file.")); }
+          const c = await call(api<StudyCourse>("/api/study/import", { method: "POST", body: data }));
+          if (c) go(`#/study/${c.id}`);
+        }} />
+      </label>
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder={L("שם קורס חדש, למשל פרמקולוגיה", "New course name, e.g. Pharmacology")} aria-label={L("שם קורס", "Course name")} dir="auto" />
         <button type="submit" disabled={!name.trim()}>{L("+ קורס", "+ Course")}</button>
@@ -207,6 +237,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
           <span>{L("מבחן", "Exam")}</span>
           <input type="date" value={info.course.examDate ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { examDate: e.target.value } }))) load(); }} />
         </label>
+        <button type="button" className="small" onClick={() => void shareCourseFile(id, info.course.name)}>{L("שיתוף הקורס", "Share the course")}</button>
         <button type="button" className="small ghost" onClick={async () => {
           if (!confirm(L(`למחוק את הקורס "${info.course.name}" עם כל ההרצאות והכרטיסיות? אי אפשר לבטל.`, `Delete "${info.course.name}" with all its lectures and cards? This cannot be undone.`))) return;
           if (await call(api(`/api/study/courses/${id}`, { method: "DELETE" }))) go("#/study");
@@ -405,6 +436,8 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
   const [format, setFormat] = useState<StudyFormat>("text");
   const base = `/api/study/courses/${courseId}/lectures/${lectureId}`;
   useEffect(() => void api<StudyLecture>(base).then(setL, (e: Error) => toast(e.message)), [base]);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => () => stopSpeaking(), []);
   if (!l) return <p className="muted">…</p>;
   const run = async (what: string, p: () => Promise<unknown>) => {
     setBusy(what);
@@ -415,6 +448,25 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
     const r = await call(api<StudyLecture>(`${base}/summarize`, { method: "POST" }));
     if (r) { setL(r); onChange(); }
   });
+  /** The spoken review: made once by the chat model, then read aloud with her chosen voice. */
+  const listen = async () => {
+    if (playing) {
+      stopSpeaking();
+      setPlaying(false);
+      return;
+    }
+    let text = l.audio;
+    if (!text) {
+      setBusy("audio");
+      const r = await call(api<StudyLecture>(`${base}/audio`, { method: "POST" }));
+      setBusy("");
+      if (!r?.audio) return;
+      setL(r);
+      text = r.audio;
+    }
+    setPlaying(true);
+    void speak(text, () => setPlaying(false));
+  };
   const makeCards = () => run("cards", async () => {
     const r = await call(api<{ cards: StudyCard[] }>(`${base}/cards`, { method: "POST", body: { format, count: 12 } }));
     if (r) { toast(L(`נוצרו ${r.cards.length} כרטיסיות`, `${r.cards.length} cards made`)); onChange(); }
@@ -439,6 +491,9 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           ) : view === "summary" ? <div dir="auto"><RichText text={l.summary} /></div>
           : view === "terms" ? <TermList terms={l.terms ?? []} />
           : l.diagram ? <FlowView src={l.diagram} /> : <p className="muted">{L("בהרצאה הזאת אין תהליך שמתאים לתרשים.", "This lecture has no process that fits a diagram.")}</p>}
+      </div>
+      <div className="study-actions">
+        <button type="button" className={playing ? "primary" : ""} disabled={busy === "audio"} onClick={() => void listen()}>{busy === "audio" ? L("כותב סקירה קולית…", "Writing the audio review…") : playing ? L("⏹ עצירה", "⏹ Stop") : L("🎧 האזנה לסקירה (כ-3 דקות)", "🎧 Listen to a review (about 3 minutes)")}</button>
       </div>
       {l.summary && view !== "text" && <button type="button" className="small ghost" disabled={!!busy} onClick={() => void summarize()}>{busy === "summary" ? "…" : L("סכם מחדש", "Summarize again")}</button>}
       <h3>{L("להפוך לכרטיסיות, בפורמט:", "Make cards, studied as:")}</h3>

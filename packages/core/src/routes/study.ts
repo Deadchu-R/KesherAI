@@ -25,6 +25,15 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get("/api/study", async () => ({ courses: await st.list() }));
   /** The course's tutor: `{ question, history? }` → an answer from her lectures, with the lectures it used. */
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }> } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : []));
+  /** A lecture's spoken review (audio overview), written by the chat model and kept. */
+  app.post<L>("/api/study/courses/:id/lectures/:lid/audio", async (req) => st.audioOverview(req.params.id, req.params.lid));
+  /** The course as a file to share with classmates, and a shared file opened as a new course. */
+  app.get<C>("/api/study/courses/:id/export", async (req, reply) => {
+    const f = await st.exportCourse(req.params.id);
+    const name = encodeURIComponent(`${f.name}.kesherai-course.json`);
+    return reply.header("content-disposition", `attachment; filename*=UTF-8''${name}`).send(f);
+  });
+  app.post<{ Body: unknown }>("/api/study/import", { bodyLimit: 80 * 1024 * 1024 }, async (req) => st.importCourse(req.body));
   /** The text of a file for a new lecture (`{ name, data }`, data in base64): slides, PDF, Word, text or a photo. */
   app.post<{ Body: { name?: string; data?: string } }>("/api/study/extract", { bodyLimit: 70 * 1024 * 1024 }, async (req) => st.extract(String(req.body?.name ?? "file"), Buffer.from(String(req.body?.data ?? ""), "base64")));
   /** Two-way sync with the phone's own Study tab: `{ courses, removedCourses }` in, every course here out. */

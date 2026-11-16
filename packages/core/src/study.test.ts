@@ -10,6 +10,7 @@ const fake = () => ({
   id: "fake",
   turn: (async (req: { messages: Array<{ role: string; content: string }> }) => {
     const sys = req.messages[0]!.content;
+    if (sys.includes("spoken review")) return { text: "## היום למדנו **אינסולין**." };
     if (sys.includes("tutor for a student")) return { text: req.messages.at(-1)!.content.includes("אינסולין") ? "מוריד סוכר [Lecture: אינסולין]" : "לא מכוסה" };
     if (sys.includes("photos of study material")) return { text: (req.messages[1] as { images?: unknown[] }).images?.length ? "לוח: לחץ דם 120/80" : "NO-IMAGE" };
     if (sys.includes("drug cards")) return { text: '[{"name":"Digoxin","drugClass":"Cardiac glycoside","nursing":"Apical pulse a full minute; hold under 60","sideEffects":"Nausea, visual changes"},{"name":""}]' };
@@ -118,6 +119,27 @@ test("the course tutor answers from the lectures and names them", async () => {
     assert.match(r.answer, /אינסולין/);
     assert.deepEqual(r.sources, [{ lectureId: l.id, title: "אינסולין" }]);
     await assert.rejects(st.askCourse(c.id, "  "), /Ask a question/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("an audio overview, and a course shared and opened by a classmate", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-share-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("פרמקולוגיה");
+    const l = await st.addLecture(c.id, { title: "אינסולין", text: "אינסולין מוריד סוכר בדם." });
+    assert.equal((await st.audioOverview(c.id, l.id)).audio, "היום למדנו אינסולין.");
+    await st.addCard(c.id, { front: "מה?", back: "כך", lectureId: l.id });
+    const file = JSON.parse(JSON.stringify(await st.exportCourse(c.id)));
+    const mine = await st.importCourse(file);
+    assert.notEqual(mine.id, c.id);
+    const d = await st.get(mine.id);
+    assert.equal(d.lectures[0]!.audio, "היום למדנו אינסולין.");
+    assert.equal(d.cards[0]!.lectureId, d.lectures[0]!.id);
+    assert.equal(d.reviews.length, 0);
+    await assert.rejects(st.importCourse({ hello: 1 }), /not a shared/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -118,4 +118,28 @@ test("finding the lecture passages for a question", () => {
   assert.deepEqual(findPassages(lectures, "מה עושה הדיגוקסין?").map((p) => p.lectureId), ["a"]);
   assert.equal(findPassages(lectures, "insulin")[0]?.lectureId, "b");
   assert.deepEqual(findPassages(lectures, "מה זה?"), []);
+});
+
+test("a course shared with a classmate keeps its material, not her history, and opens as a new course", () => {
+  const d = {
+    course: { id: "c1234567", name: "פרמקולוגיה", createdAt: 1, field: "nursing" },
+    lectures: [{ id: "l1", title: "לב", date: "2026-11-01", text: "דיגוקסין", summary: "ס", audio: "שמע" }],
+    cards: [{ id: "k1", front: "מה?", back: "כך", format: "text" as const, lectureId: "l1", createdAt: 1, due: "2027-01-01", fsrs: { reps: 9 } }],
+    reviews: [{ cardId: "k1", t: 5, rating: 3, format: "text" as const, elapsedDays: 2 }],
+    quizzes: [{ id: "q1", t: 1, questions: [], answers: [1], score: 1 }],
+  };
+  const f = shareCourse(d);
+  assert.equal(JSON.stringify(f).includes("reps"), false);
+  assert.equal(JSON.stringify(f).includes("q1"), false);
+  assert.equal(f.cards[0]!.lecture, 0);
+  let n = 0;
+  const o = openSharedCourse(JSON.parse(JSON.stringify(f)), () => `new-id-${++n}`, () => ({ fresh: true }), Date.parse("2026-11-16T10:00:00Z"))!;
+  assert.equal(o.course.name, "פרמקולוגיה");
+  assert.equal(o.course.field, "nursing");
+  assert.notEqual(o.course.id, "c1234567");
+  assert.equal(o.cards[0]!.lectureId, o.lectures[0]!.id);
+  assert.deepEqual(o.cards[0]!.fsrs, { fresh: true });
+  assert.equal(o.reviews.length, 0);
+  assert.equal(o.lectures[0]!.audio, "שמע");
+  assert.equal(openSharedCourse({ kind: "other" }, () => "x", () => ({})), undefined);
 });

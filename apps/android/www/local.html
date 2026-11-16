@@ -387,8 +387,11 @@
   const drawStudy = () => {
     if (studyDrawn || $("modelsView").dataset.tab !== "study") return;
     studyDrawn = true;
-    void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs), webSearch, studySpeech, studySync, studyExtract));
+    void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs), webSearch, studySpeech, studySync, studyExtract, studySay));
   };
+  /** Reading a lecture's review aloud with the phone's voice (the app only). */
+  function studySay(text) { return speak(text); }
+  studySay.stop = () => { SPEECH?.stopSpeaking?.(); };
   /** A lecture file read by the paired computer (slides, PDF, Word, photos): undefined when there is none. */
   async function studyExtract(body) {
     const c = computer();

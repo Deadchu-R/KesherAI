@@ -40,6 +40,8 @@ export interface StudyLecture {
   terms?: StudyTerm[];
   /** A Mermaid diagram of the lecture's main process, when it has one. */
   diagram?: string;
+  /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
+  audio?: string;
 }
 
 /** A flashcard. `fsrs` is the scheduler's state (ts-fsrs Card, dates as ISO strings). */
@@ -711,3 +713,73 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
 /** The tutor's instructions: answer only from her lectures, say which lecture, and say so when they do not cover it. */
 export const TUTOR_PROMPT =
   "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
+
+/** The spoken review of a lecture: written to be heard, not read. */
+export const AUDIO_PROMPT =
+  "Write a spoken review of this lecture for a student to listen to on the bus, about 3 minutes long (400-550 words), in the lecture's language. Talk to her directly and warmly, like a good tutor: open with what the lecture is about in one sentence, go through the main ideas in a sensible order with one concrete example, say the key terms clearly (with the English name in brackets the first time, for medical terms), and end with three short questions to think about, each followed by its answer. Plain spoken sentences only: no headings, lists, symbols, tables or markdown. Use only what is in the lecture; never invent numbers, doses or values.";
+
+/** A course as a file to share with classmates: its material, without her own answers and review history. */
+export interface SharedCourse {
+  kind: "kesherai-course";
+  version: 1;
+  name: string;
+  field?: string;
+  lectures: Array<Pick<StudyLecture, "title" | "date" | "text" | "summary" | "terms" | "diagram" | "audio">>;
+  cards: Array<Pick<StudyCard, "front" | "back" | "format" | "kind"> & { lecture?: number }>;
+  drugs?: Array<Omit<StudyDrug, "id">>;
+}
+
+/**
+ * The course as a file to share: the lectures and what was made from them, and the cards (without their schedules:
+ * whoever opens it starts them fresh). Her reviews, quiz answers and progress stay hers.
+ *
+ * @param d - The course.
+ * @returns The shared form.
+ */
+export function shareCourse(d: StudyCourseData): SharedCourse {
+  const index = new Map(d.lectures.map((l, i) => [l.id, i]));
+  return {
+    kind: "kesherai-course",
+    version: 1,
+    name: d.course.name,
+    ...(d.course.field ? { field: d.course.field } : {}),
+    lectures: d.lectures.map(({ title, date, text, summary, terms, diagram, audio }) => ({ title, date, text, ...(summary ? { summary } : {}), ...(terms ? { terms } : {}), ...(diagram ? { diagram } : {}), ...(audio ? { audio } : {}) })),
+    cards: d.cards.map((c) => ({ front: c.front, back: c.back, format: c.format, ...(c.kind ? { kind: c.kind } : {}), ...(c.lectureId && index.has(c.lectureId) ? { lecture: index.get(c.lectureId) } : {}) })),
+    ...(d.drugs?.length ? { drugs: d.drugs.map(({ id: _id, ...g }) => g) } : {}),
+  };
+}
+
+/**
+ * A shared course file as a new course of her own: new ids, every card new on the schedule.
+ *
+ * @param s - The file's content.
+ * @param newId - Makes an id.
+ * @param newCard - A fresh FSRS card for `now` (from the app's scheduler).
+ * @param now - Now (ms).
+ * @returns The course, or undefined when the file is not a shared course.
+ */
+export function openSharedCourse(s: unknown, newId: () => string, newCard: (now: Date) => Record<string, unknown>, now = Date.now()): StudyCourseData | undefined {
+  const f = s as Partial<SharedCourse> | undefined;
+  if (!f || f.kind !== "kesherai-course" || !Array.isArray(f.lectures) || !Array.isArray(f.cards)) return undefined;
+  const lectures: StudyLecture[] = f.lectures.map((l) => ({ ...l, id: newId(), title: String(l.title ?? ""), date: String(l.date ?? ""), text: String(l.text ?? "") }));
+  const at = new Date(now);
+  const cards: StudyCard[] = f.cards.map((c) => ({
+    id: newId(),
+    front: String(c.front ?? ""),
+    back: String(c.back ?? ""),
+    format: STUDY_FORMATS.includes(c.format) ? c.format : "text",
+    ...(c.kind ? { kind: c.kind } : {}),
+    ...(typeof c.lecture === "number" && lectures[c.lecture] ? { lectureId: lectures[c.lecture]!.id } : {}),
+    createdAt: now,
+    due: at.toISOString(),
+    fsrs: newCard(at),
+  }));
+  return {
+    course: { id: newId(), name: String(f.name ?? "Course").slice(0, 120), createdAt: now, ...(f.field ? { field: f.field } : {}) },
+    lectures,
+    cards,
+    reviews: [],
+    quizzes: [],
+    ...(f.drugs?.length ? { drugs: f.drugs.map((g) => ({ ...g, id: newId() })) } : {}),
+  };
+}

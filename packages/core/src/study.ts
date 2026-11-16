@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { cardsToReview, detectField, examPlan, findPassages, TUTOR_PROMPT, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, TUTOR_PROMPT, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -31,6 +31,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(l.summary ? { summary: str(l.summary, 100_000) } : {}),
     ...(Array.isArray(l.terms) ? { terms: arr<StudyTerm>(l.terms, 300).map((t) => ({ term: str(t?.term, 200), ...(t?.en ? { en: str(t.en, 200) } : {}), explain: str(t?.explain, 2000) })) } : {}),
     ...(l.diagram ? { diagram: str(l.diagram, 20_000) } : {}),
+    ...(l.audio ? { audio: str(l.audio, 20_000) } : {}),
   }));
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
     id: k.id, front: str(k.front, 4000), back: str(k.back, 8000), format: STUDY_FORMATS.includes(k.format) ? k.format : "text", ...(k.kind ? { kind: str(k.kind, 40) } : {}),
@@ -337,6 +338,30 @@ export class Study {
     const text = doc.pages.map((p, i) => [i + 1, p.trim()] as const).filter(([, p]) => p).map(([n, p]) => (doc.pages.length > 1 ? `— ${n} —\n${p}` : p)).join("\n\n");
     if (!text.trim()) throw bad(ext === ".pdf" ? "This PDF has no text in it (a scan). Send photos of its pages instead." : "The file has no text.");
     return { title, text: text.slice(0, 400_000) };
+  }
+
+  /** Writes the lecture's spoken review (an audio overview) from its summary, or its text, and keeps it. */
+  async audioOverview(id: string, lectureId: string, signal?: AbortSignal): Promise<StudyLecture> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture (start):\n${l.text.slice(0, 20_000)}` : l.text.slice(0, 40_000);
+    l.audio = (await this.ask(AUDIO_PROMPT, `Lecture: ${l.title}\n\n${material}`, signal, d.course.field)).replace(/[#*_`>|]/g, "").trim().slice(0, 20_000);
+    await this.save(d);
+    return l;
+  }
+
+  /** The course as a file to share with classmates (its material, without her history). */
+  async exportCourse(id: string): Promise<SharedCourse> {
+    return shareCourse(await this.get(id));
+  }
+
+  /** A shared course file opened as a new course of her own (checked like a synced course). */
+  async importCourse(file: unknown): Promise<StudyCourse> {
+    const opened = openSharedCourse(file, () => randomUUID(), (now) => JSON.parse(JSON.stringify(createEmptyCard(now))) as Record<string, unknown>);
+    const d = opened && cleanCourseData(opened);
+    if (!d) throw Object.assign(new Error("This is not a shared KesherAI course file."), { statusCode: 400 });
+    await this.save(d);
+    return d.course;
   }
 
   /**

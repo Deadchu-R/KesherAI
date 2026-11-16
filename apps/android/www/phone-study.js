@@ -1,11 +1,11 @@
-/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval */
+/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, File, URL */
 /**
  * Study on the phone itself, with no computer: courses, lectures (pasted or typed with the keyboard's voice typing),
  * summaries, flashcards on the FSRS schedule, quizzes graded by code, medication calculations and lab values. The
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, TUTOR_PROMPT } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, TUTOR_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -80,6 +80,16 @@ function pieces(text, size = 6000) {
  * @param root - The section.
  * @param ask - Asks the phone's chosen model: (messages) => Promise<string | undefined> (undefined: no model ready).
  */
+/** Sends a course to a classmate as a file: the phone's share sheet, or a download. */
+async function shareFile(c) {
+  const f = new File([JSON.stringify(shareCourse(toData(c)))], `${c.name}.kesherai-course.json`, { type: "application/json" });
+  if (navigator.canShare?.({ files: [f] })) return navigator.share({ files: [f], title: c.name }).catch(() => undefined);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(f);
+  a.download = f.name;
+  a.click();
+}
+
 /** A phone course (one object) as the computer's course file, for syncing. */
 function toData(c) {
   const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, ...course } = c;
@@ -101,8 +111,9 @@ function fromData(d) {
  *   no computer is paired).
  * @param extract - Sends a file (`{ name, data }`, base64) to the paired computer and returns `{ title, text }`
  *   (slides, PDF, Word and photos are read there); undefined when no computer is paired.
+ * @param say - Reads text aloud with the phone's voice (resolves when done); `say.stop()` stops it.
  */
-export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
+export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) {
   let db = load();
   let syncNote = "";
   /** Two-way: the computer merges the phone's courses with its own and sends every course back. */
@@ -192,6 +203,17 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
       sync && el("div", { class: "ph-row" },
         el("span", { class: "muted small", "aria-live": "polite" }, syncNote || L("הקורסים, ההרצאות והחזרות מסתנכרנים עם המחשב כשהוא מחובר.", "Courses, lectures and reviews sync with the computer when it is connected.")),
         el("button", { type: "button", onclick: () => void syncNow(false) }, L("סנכרן עכשיו", "Sync now")))));
+    const imp = el("input", { type: "file", accept: ".json,application/json", hidden: true, onchange: async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      let d;
+      try { d = openSharedCourse(JSON.parse(await f.text()), uid, (now) => JSON.parse(JSON.stringify(createEmptyCard(now)))); } catch { d = undefined; }
+      if (!d) return alert(L("זה לא קובץ קורס של KesherAI.", "This is not a KesherAI course file."));
+      db.courses.unshift(fromData(d));
+      if (commit()) go({ at: "course", course: d.course.id });
+    } });
+    root.append(el("p", { class: "muted small" }, L("קיבלת קורס מחבר/ה? ", "Got a course from a classmate? "), el("button", { type: "button", class: "link", onclick: () => imp.click() }, L("לפתוח קובץ קורס", "Open a course file")), imp));
     if (!db.courses.length) root.append(el("section", { class: "api" },
       el("h2", {}, L("איך זה עובד", "How it works")),
       el("ol", { class: "ph-steps" },
@@ -225,6 +247,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
         el("button", { type: "button", class: "primary", disabled: !due, onclick: () => go({ at: "review", course: c.id }) }, L(`חזרה (${due})`, `Review (${due})`)),
         el("button", { type: "button", disabled: !c.lectures.length, onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן", "Quiz")),
         el("button", { type: "button", disabled: !c.lectures.length, onclick: () => go({ at: "ask", course: c.id }) }, L("שאלי את הקורס", "Ask the course")),
+        el("button", { type: "button", onclick: () => void shareFile(c) }, L("שיתוף הקורס", "Share the course")),
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),
@@ -314,6 +337,22 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
       if (Array.isArray(list)) l.terms = list.filter((x) => x?.term && x?.explain).slice(0, 60).map((x) => ({ term: String(x.term).slice(0, 120), ...(x.en ? { en: String(x.en).slice(0, 120) } : {}), explain: String(x.explain).slice(0, 400) }));
       if (commit()) draw();
     };
+    // The spoken review (audio overview), made once on the phone's model, read with the phone's voice.
+    const listen = say && el("button", { type: "button" }, L("🎧 האזנה לסקירה", "🎧 Listen to a review"));
+    if (listen) listen.onclick = async () => {
+      if (listen.dataset.on) { say.stop?.(); delete listen.dataset.on; listen.textContent = L("🎧 האזנה לסקירה", "🎧 Listen to a review"); return; }
+      if (!l.audio) {
+        const r = await need([{ role: "system", content: `${AUDIO_PROMPT}${hint(c)}` }, { role: "user", content: `Lecture: ${l.title}\n\n${(l.summary || l.text).slice(0, 6000)}` }], listen);
+        if (r === undefined) return;
+        l.audio = String(r).replace(/[#*_`>|]/g, "").trim().slice(0, 20000);
+        commit();
+      }
+      listen.dataset.on = "1";
+      listen.textContent = L("⏹ עצירה", "⏹ Stop");
+      await say(l.audio);
+      delete listen.dataset.on;
+      listen.textContent = L("🎧 האזנה לסקירה", "🎧 Listen to a review");
+    };
     const cards = el("button", { type: "button" }, L("צור 8 כרטיסיות", "Make 8 cards"));
     cards.onclick = async () => {
       const r = await need([{ role: "system", content: `Write 8 flashcards from the lecture. Each tests one fact; the front is a question, the back a short answer. ${LANG} ${ONLY}${hint(c)} Answer with JSON only: [{"front":"...","back":"..."}]` }, { role: "user", content: (l.summary || l.text).slice(0, 6000) }], cards);
@@ -330,7 +369,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
       if (commit()) alert(L(`נוצרו ${n} כרטיסיות`, `${n} cards made`));
     };
     root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title),
-      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, cards, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
+      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),
       el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), el("div", { dir: "auto", style: "white-space: pre-wrap" }, l.text)));
