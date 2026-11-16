@@ -193,7 +193,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       cards: d.cards.length,
       due: d.cards.filter((c) => Date.parse(c.due) <= now).length,
       drugs: d.drugs ?? [],
-      quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length })).slice(-20),
+      quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length, ...(z.kind ? { kind: z.kind } : {}) })).slice(-20),
       plan: examPlan(d, now) ?? null,
       pastExams: (d.pastExams ?? []).map(({ id, title, t, text }) => ({ id, title, t, chars: text.length })),
       syllabus: d.syllabus ?? null,
@@ -236,7 +236,19 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get<C>("/api/study/courses/:id/review", async (req) => ({ cards: await st.due(req.params.id) }));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
 
-  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past" } }>("/api/study/courses/:id/quiz", async (req) => st.makeQuiz(req.params.id, { ...(req.body ?? {}), style: req.body?.style === "licensing" || req.body?.style === "past" ? req.body.style : undefined }));
+  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: string; level?: string } }>("/api/study/courses/:id/quiz", async (req) => {
+    const b = req.body ?? {};
+    return st.makeQuiz(req.params.id, {
+      ...(Array.isArray(b.lectureIds) ? { lectureIds: b.lectureIds.map(String).slice(0, 200) } : {}),
+      ...(b.count ? { count: Number(b.count) } : {}),
+      ...(b.weak ? { weak: true } : {}),
+      ...(b.style === "licensing" || b.style === "past" ? { style: b.style } : {}),
+      ...(b.kind === "open" || b.kind === "case" ? { kind: b.kind } : {}),
+      ...(b.level === "easy" || b.level === "normal" || b.level === "hard" ? { level: b.level } : {}),
+    });
+  });
+  /** Her written answers to an open or case quiz, graded one by one. */
+  app.post<{ Params: { id: string; qid: string }; Body: { texts?: string[] } }>("/api/study/courses/:id/quiz/:qid/open-answers", { bodyLimit: 1024 * 1024 }, async (req) => st.answerOpenQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.texts) ? req.body.texts.map((t) => String(t ?? "")).slice(0, 30) : []));
   app.post<{ Params: { id: string; qid: string }; Body: { answers?: number[] } }>("/api/study/courses/:id/quiz/:qid/answers", async (req) => st.answerQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.answers) ? req.body.answers : []));
 
   app.get<C>("/api/study/courses/:id/progress", async (req) => {

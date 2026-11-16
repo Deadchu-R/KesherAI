@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchStudy, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -293,4 +293,19 @@ test("search across courses finds terms, notes, summaries and cards, with Hebrew
   const m = mergeCourseData({ ...base, lectures: [older] } as unknown as StudyCourseData, { ...base, lectures: [lec] } as unknown as StudyCourseData);
   assert.equal(m.lectures[0]?.notes, "המרצה אמר שזה במבחן");
   assert.equal(m.lectures[0]?.diagram, "graph");
+});
+
+test("open and case quizzes: questions with a model answer, marks from the grader, weak lectures from marks", () => {
+  const qs = parseOpenQuestions('```json\n[{"q":"הסבירי את מחזור הלב","answer":"סיסטולה ודיאסטולה","lecture":2},{"q":"קצר","answer":"x"},{"q":"מה תעשי במקרה של לחץ דם נמוך?","answer":"להשכיב ולהרים רגליים"}]\n```', ["a", "b"], 5);
+  assert.equal(qs.length, 2);
+  assert.equal(qs[0]?.lectureId, "b");
+  assert.equal(qs[0]?.answer, -1);
+  assert.deepEqual(qs[0]?.options, []);
+  assert.deepEqual(openMark('{"verdict":"partly","answer":"חסרה הדיאסטולה"}', true), { mark: 0.5, line: "◐ נכון בחלקו. חסרה הדיאסטולה" });
+  assert.equal(openMark('{"verdict":"right","answer":"x"}', true)?.line, "✓ נכון.");
+  assert.equal(openMark("לא JSON", true), undefined);
+  const msgs = openGradeMessages({ lectures: [{ id: "b", title: "לב", date: "", text: "מחזור הלב כולל סיסטולה ודיאסטולה" }], question: qs[0]!, text: "סיסטולה" });
+  assert.match(msgs[1]!.content, /Model answer: סיסטולה ודיאסטולה/);
+  const w = weakL([{ id: "z", t: 1, kind: "open", questions: [qs[0]!, { ...qs[0]! }], answers: [-1, -1], marks: [0.5, 0] }]);
+  assert.equal(w[0]?.correct, 0.25);
 });

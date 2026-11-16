@@ -77,7 +77,9 @@ export interface StudyReview {
 /** A multiple-choice question (graded by code, not by the model). */
 export interface StudyQuestion {
   q: string;
+  /** Empty for an open or case question (answered in her words). */
   options: string[];
+  /** The right option; -1 for an open or case question. */
   answer: number;
   explain: string;
   lectureId?: string;
@@ -90,6 +92,68 @@ export interface StudyQuiz {
   questions: StudyQuestion[];
   answers?: number[];
   score?: number;
+  /** "open": questions answered in her words; "case": a short case, then a question. Missing: multiple choice. */
+  kind?: "open" | "case";
+  /** How hard she asked for. */
+  level?: StudyLevel;
+  /** Her written answers (open and case quizzes). */
+  texts?: string[];
+  /** Each written answer's mark: 1 right, 0.5 partly, 0 wrong. */
+  marks?: number[];
+  /** What the grader said about each written answer. */
+  feedback?: string[];
+}
+
+/** How hard a quiz is. */
+export type StudyLevel = "easy" | "normal" | "hard";
+
+/** How hard the questions are, as a line for the quiz prompt. */
+export const LEVEL_RULE: Record<StudyLevel, string> = {
+  easy: "Level: easy. Direct recall of the main facts and terms, one idea per question, clear wording.",
+  normal: "Level: medium. Mix recall and understanding: why, compare, what follows.",
+  hard: "Level: hard, like a tough final exam. Apply the material to new situations, combine two ideas, multi-step reasoning; wrong options are close and tempting.",
+};
+
+/** An open quiz (her words) or a case quiz, from lecture material. */
+export const OPEN_QUIZ_PROMPT = (kind: "open" | "case") =>
+  `You write ${kind === "case" ? "case questions: each starts with a short realistic case or scenario from the course's field (a patient, a client, a legal fact pattern, a system, an experiment: 2–4 sentences), then asks what to do, conclude or explain, answered from the lectures" : "open questions a student answers in a few sentences of her own (explain, compare, why, describe a process)"} for a student from lecture material. Write in the same language as the material (usually Hebrew). Use only what the material says. For each question give the model answer in 1–3 sentences: the points a full answer must have. Answer with JSON only: [{"q": "...", "answer": "...", "lecture": 1}] where "lecture" is the number of the lecture it comes from.`;
+
+/** Grading a written answer against the model answer and her lecture. */
+export const OPEN_GRADE_PROMPT =
+  'You grade a student\'s written answer. You get the question, the model answer (the points a full answer has) and passages of her lecture. Judge the meaning, not the wording: "right" when it has the main points, "partly" when some are missing or one is wrong, "wrong" otherwise. Answer with JSON only: {"verdict": "right" | "partly" | "wrong", "answer": "what was missing or wrong, in one or two short sentences in the question\'s language (empty when right)"}';
+
+/** The messages for grading one written answer. */
+export function openGradeMessages(o: { lectures: StudyLecture[]; question: StudyQuestion; text: string; budget?: number }): TutorMessage[] {
+  const pick = o.question.lectureId ? o.lectures.filter((l) => l.id === o.question.lectureId) : o.lectures;
+  const passages = findPassages(pick.length ? pick : o.lectures, `${o.question.q} ${o.question.explain}`.slice(0, 3000), o.budget ?? 4000);
+  const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage matches.)";
+  return [{ role: "system", content: OPEN_GRADE_PROMPT }, { role: "user", content: `Passages:\n\n${material}\n\nQuestion: ${o.question.q.slice(0, 2000)}\nModel answer: ${o.question.explain.slice(0, 1500)}\nHer answer: ${o.text.slice(0, 3000)}` }];
+}
+
+/** A grader's reply as a mark (1, 0.5, 0) and a line to show her, or undefined when it had no verdict. */
+export function openMark(raw: string, he: boolean): { mark: number; line: string } | undefined {
+  const j = jsonIn(raw) as { verdict?: string; answer?: string } | undefined;
+  const v = String(j?.verdict ?? "").toLowerCase();
+  if (!["right", "partly", "wrong"].includes(v)) return undefined;
+  const why = cleanScript(String(j?.answer ?? "").trim(), he).slice(0, 600);
+  const head = v === "right" ? (he ? "✓ נכון." : "✓ Right.") : v === "partly" ? (he ? "◐ נכון בחלקו." : "◐ Partly right.") : he ? "✗ לא בדיוק." : "✗ Not quite.";
+  return { mark: v === "right" ? 1 : v === "partly" ? 0.5 : 0, line: why && v !== "right" ? `${head} ${why}` : head };
+}
+
+/** A model's open or case questions, checked: each has a question and a model answer. */
+export function parseOpenQuestions(raw: string, lectureIds: string[], count: number): StudyQuestion[] {
+  const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
+  if (!Array.isArray(list)) return [];
+  const out: StudyQuestion[] = [];
+  for (const x of list as Array<{ q?: unknown; answer?: unknown; lecture?: unknown }>) {
+    const q = String(x?.q ?? "").trim();
+    const a = String(x?.answer ?? "").trim();
+    if (q.length < 8 || a.length < 4 || a.length > 1200) continue;
+    const lec = lectureIds[Number(x.lecture) - 1] ?? (lectureIds.length === 1 ? lectureIds[0] : undefined);
+    out.push({ q: q.slice(0, 3000), options: [], answer: -1, explain: a, ...(lec ? { lectureId: lec } : {}) });
+    if (out.length >= count) break;
+  }
+  return out;
 }
 
 /**
@@ -128,7 +192,7 @@ export function weakLectures(quizzes: StudyQuiz[]): Array<{ lectureId: string; c
       if (!q.lectureId) return;
       const s = by.get(q.lectureId) ?? { n: 0, ok: 0 };
       s.n++;
-      if (z.answers![i] === q.answer) s.ok++;
+      s.ok += z.marks ? (z.marks[i] ?? 0) : z.answers![i] === q.answer ? 1 : 0;
       by.set(q.lectureId, s);
     });
   }

@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -1071,7 +1071,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       const make = async (licensing, b, likePast) => {
         const chosen = c.lectures.slice(-3);
         const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.summary || l.text).slice(0, 2000)}`).join("\n\n");
-        const style = licensing ? " Write them like the Israeli nursing licensing exam: short patient cases asking what the nurse should do first." : likePast ? `\n${pastExamStyle(c.pastExams, 3000)}\n` : "";
+        const style = levelLine() + (licensing ? " Write them like the Israeli nursing licensing exam: short patient cases asking what the nurse should do first." : likePast ? `\n${pastExamStyle(c.pastExams, 3000)}\n` : "");
         const r = await need([{ role: "system", content: `Write 5 multiple-choice questions from the material, 4 options each, exactly one right.${style} ${LANG} ${ONLY}${hint(c)} Answer with JSON only: [{"q":"...","options":["...","...","...","..."],"answer":0,"explain":"...","lecture":1}]` }, { role: "user", content: material }], b);
         const list = r && jsonIn(r);
         // Calculation questions are checked against their own working (a wrong option marked right is fixed or dropped).
@@ -1080,6 +1080,23 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         for (const q of qs) { const lec = chosen[Number(q.lecture) - 1]; if (lec) q.lectureId = lec.id; }
         go({ at: "quiz", course: c.id, quiz: { questions: qs, i: 0, picked: [] } });
       };
+      // Open and case questions: 3 at a time (a small model), answered in her words and checked one by one.
+      const openBtn = el("button", { type: "button" }, L("3 שאלות פתוחות", "3 open questions"));
+      const caseBtn = el("button", { type: "button" }, L("3 שאלות מקרה", "3 case questions"));
+      const makeOpen = async (kind, b) => {
+        const chosen = c.lectures.slice(-3);
+        const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.summary || l.text).slice(0, 2000)}`).join("\n\n");
+        const r = await need([{ role: "system", content: `${OPEN_QUIZ_PROMPT(kind)}${levelLine()}${hint(c)}` }, { role: "user", content: `Write exactly 3 questions, then stop.\n\n${material}` }], b);
+        const qs = r ? parseOpenQuestions(r, chosen.map((l) => l.id), 3) : [];
+        if (!qs.length) return r !== undefined && alert(L("המודל לא החזיר שאלות. נסי שוב.", "The model returned no questions. Try again."));
+        go({ at: "quiz", course: c.id, quiz: { kind, questions: qs, i: 0, picked: [], texts: [], marks: [], feedback: [] } });
+      };
+      openBtn.onclick = () => makeOpen("open", openBtn);
+      caseBtn.onclick = () => makeOpen("case", caseBtn);
+      const levelSel = el("select", { "aria-label": L("רמת קושי", "Difficulty"), onchange: (e) => { view.level = e.target.value; } },
+        ...[["normal", L("בינוני", "Medium")], ["easy", L("קל", "Easy")], ["hard", L("קשה", "Hard")]].map(([v, n]) => el("option", { value: v }, n)));
+      levelSel.value = view.level || "normal";
+      root.append(el("section", { class: "api" }, el("label", { class: "ph-filter" }, L("רמת קושי: ", "Difficulty: "), levelSel), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, openBtn, caseBtn)));
       start.onclick = () => make(false, start);
       if (lic) lic.onclick = () => make(true, lic);
       if (past) past.onclick = () => make(false, past, true);
@@ -1113,6 +1130,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("p", { class: "muted small" }, L("השאלות נכתבות מההרצאות שלך באותו סגנון, אורך ורמת קושי.", "Questions are written from your lectures in the same style, length and difficulty.")));
       return root.append(el("section", { class: "api" }, el("p", {}, L("בוחן מההרצאות האחרונות. הבדיקה נעשית בקוד.", "A quiz from the latest lectures. Grading is done by code.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, start, lic, past)), exams);
     }
+    if (z.kind) return openQuizView(c, z);
     if (z.i >= z.questions.length) {
       const score = z.questions.filter((q, k) => z.picked[k] === q.answer).length;
       if (!z.saved) {
@@ -1131,6 +1149,47 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       ...q.options.map((o, k) => el("button", { type: "button", dir: "auto", style: "display: block; width: 100%; text-align: start; margin: 6px 0; min-height: 48px; " + (picked === undefined ? "" : k === q.answer ? "border-color: #6fd3a5" : k === picked ? "border-color: #f08a8a" : ""), disabled: picked !== undefined, onclick: () => { z.picked[z.i] = k; draw(); } }, String(o))),
       picked !== undefined && el("p", { dir: "auto" }, (picked === q.answer ? L("✓ נכון. ", "✓ Right. ") : L("לא נכון. ", "Not right. ")) + String(q.explain || "")),
       picked !== undefined && el("button", { type: "button", class: "primary", onclick: () => { z.i++; draw(); } }, L("הבא", "Next"))));
+  }
+
+  /** The quiz's difficulty as a prompt line (medium adds nothing). */
+  function levelLine() {
+    return view.level && view.level !== "normal" ? `\n${LEVEL_RULE[view.level]}` : "";
+  }
+
+  /** An open or case quiz on the phone: her answer in words, checked right away by the phone's model. */
+  function openQuizView(c, z) {
+    if (z.i >= z.questions.length) {
+      const score = z.marks.reduce((a, b) => a + b, 0);
+      if (!z.saved) {
+        z.saved = true;
+        (c.quizzes ??= []).push({ id: uid(), t: Date.now(), kind: z.kind, ...(view.level ? { level: view.level } : {}), questions: z.questions, answers: z.questions.map(() => -1), texts: z.texts, marks: z.marks, feedback: z.feedback, score });
+        commit();
+      }
+      return root.append(el("section", { class: "api" }, el("h2", {}, L(`${score} מתוך ${z.questions.length}`, `${score} of ${z.questions.length}`)), el("button", { type: "button", class: "primary", onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן נוסף", "Another quiz"))));
+    }
+    const q = z.questions[z.i];
+    const done = z.feedback[z.i] !== undefined;
+    const ta = el("textarea", { rows: "5", dir: "auto", "aria-label": L("התשובה שלך", "Your answer"), placeholder: L("התשובה שלך, במילים שלך", "Your answer, in your words") });
+    ta.value = z.texts[z.i] || "";
+    if (done) ta.disabled = true;
+    const check = el("button", { type: "button", class: "primary" }, L("בדיקה", "Check"));
+    check.onclick = async () => {
+      const text = ta.value.trim();
+      if (!text) return;
+      z.texts[z.i] = text;
+      const r = await need(openGradeMessages({ lectures: c.lectures, question: q, text, budget: 2500 }), check);
+      if (r === undefined) return;
+      const m = openMark(r, /[\u0590-\u05ff]/.test(q.q));
+      z.marks[z.i] = m?.mark ?? 0;
+      z.feedback[z.i] = m?.line ?? L("לא הצלחתי לבדוק את התשובה הזאת.", "Could not check this answer.");
+      draw();
+    };
+    root.append(el("section", { class: "api" },
+      el("p", { class: "muted" }, L(`שאלה ${z.i + 1} מתוך ${z.questions.length}`, `Question ${z.i + 1} of ${z.questions.length}`)),
+      el("p", { dir: "auto", style: "font-size: 17px; white-space: pre-wrap" }, q.q), ta,
+      done ? el("p", { dir: "auto" }, z.feedback[z.i]) : "",
+      done ? el("p", { dir: "auto", class: "muted small" }, L("תשובה לדוגמה: ", "Model answer: ") + q.explain) : "",
+      done ? el("button", { type: "button", class: "primary", onclick: () => { z.i++; draw(); } }, L("הבא", "Next")) : check));
   }
 
   function calc() {

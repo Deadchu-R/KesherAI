@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -983,6 +983,9 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
   const [i, setI] = useState(0);
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(10);
+  const [kind, setKind] = useState<"choice" | "open" | "case">("choice");
+  const [level, setLevel] = useState<StudyLevel>("normal");
+  const [texts, setTexts] = useState<string[]>([]);
   const [exam, setExam] = useState(false);
   const [ends, setEnds] = useState(0);
   const [, tick] = useState(0);
@@ -994,24 +997,36 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
   const make = async (weak: boolean, licensing = false, past = false) => {
     setBusy(true);
     const n = licensing ? 30 : past ? 20 : count;
-    const z = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz`, { method: "POST", body: { count: n, weak, ...(licensing ? { style: "licensing" } : past ? { style: "past" } : {}), ...(only ? { lectureIds: [only] } : {}) } }));
+    const open = !licensing && !past && kind !== "choice";
+    const z = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz`, { method: "POST", body: { count: open ? Math.min(n, 10) : n, weak, level, ...(open ? { kind } : {}), ...(licensing ? { style: "licensing" } : past ? { style: "past" } : {}), ...(only ? { lectureIds: [only] } : {}) } }));
     setBusy(false);
     if (z) {
-      setQuiz(z); setAnswers([]); setI(0); setExam(licensing || past);
+      setQuiz(z); setAnswers([]); setTexts([]); setI(0); setExam(licensing || past);
       // A timed exam: the licensing exam is 90 questions in about two hours (about 80 seconds each); a past-exam
       // style test the same pace.
       setEnds(licensing || past ? Date.now() + z.questions.length * 80_000 : 0);
     }
   };
   const finish = async () => {
-    const r = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz/${quiz!.id}/answers`, { method: "POST", body: { answers } }));
+    if (quiz!.kind) setBusy(true);
+    const r = await call(quiz!.kind
+      ? api<StudyQuiz>(`/api/study/courses/${courseId}/quiz/${quiz!.id}/open-answers`, { method: "POST", body: { texts } })
+      : api<StudyQuiz>(`/api/study/courses/${courseId}/quiz/${quiz!.id}/answers`, { method: "POST", body: { answers } }));
+    setBusy(false);
     if (r) { setQuiz(r); onChange(); }
   };
   if (!lectures.length) return <p className="muted">{L("הוסיפי הרצאה כדי לקבל בוחן.", "Add a lecture to get a quiz.")}</p>;
   if (!quiz) return (
     <section className="card study-quiz-setup">
       <h2>{only ? L(`בוחן על "${lectures.find((l) => l.id === only)?.title ?? ""}"`, `Quiz on "${lectures.find((l) => l.id === only)?.title ?? ""}"`) : L("בוחן על כל הקורס", "Quiz on the whole course")}</h2>
-      <label>{L("מספר שאלות", "Questions")} <select value={count} onChange={(e) => setCount(Number(e.target.value))}>{[5, 10, 15, 20].map((n) => <option key={n}>{n}</option>)}</select></label>
+      <div className="study-formats" role="radiogroup" aria-label={L("סוג השאלות", "Question type")}>
+        {([["choice", L("אמריקאיות", "Multiple choice")], ["open", L("פתוחות", "Open")], ["case", L("מקרה", "Case")]] as const).map(([k, n]) => <button key={k} type="button" role="radio" aria-checked={kind === k} className={`chip${kind === k ? " on" : ""}`} onClick={() => setKind(k)}>{n}</button>)}
+      </div>
+      <div className="study-formats" role="radiogroup" aria-label={L("רמת קושי", "Difficulty")}>
+        {([["easy", L("קל", "Easy")], ["normal", L("בינוני", "Medium")], ["hard", L("קשה", "Hard")]] as const).map(([k, n]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={`chip${level === k ? " on" : ""}`} onClick={() => setLevel(k)}>{n}</button>)}
+      </div>
+      <label>{L("מספר שאלות", "Questions")} <select value={count} onChange={(e) => setCount(Number(e.target.value))}>{(kind === "choice" ? [5, 10, 15, 20] : [3, 5, 10]).map((n) => <option key={n}>{n}</option>)}</select></label>
+      {kind !== "choice" && <p className="muted small">{kind === "case" ? L("כל שאלה מתחילה במקרה קצר מהתחום שלך, ואת עונה במילים שלך.", "Each question starts with a short case from your field; you answer in your words.") : L("עונים במילים שלך, והתשובה נבדקת מול ההרצאה.", "Answer in your words; it is checked against the lecture.")}</p>}
       <div className="study-actions">
         <button type="button" className="primary" disabled={busy} onClick={() => void make(false)}>{busy ? L("כותב שאלות…", "Writing questions…") : L("התחל בוחן", "Start quiz")}</button>
         {!only && <button type="button" disabled={busy} onClick={() => void make(true)}>{L("על הנושאים החלשים", "On weak topics")}</button>}
@@ -1019,9 +1034,42 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
         {!only && pastExams.length > 0 && <button type="button" disabled={busy} onClick={() => void make(false, false, true)}>{L("מבחן בסגנון המבחנים הקודמים (20 שאלות, עם זמן)", "Like the past exams (20 questions, timed)")}</button>}
       </div>
       {!only && <PastExams courseId={courseId} exams={pastExams} onChange={onChange} />}
-      <p className="muted small">{L("השאלות נכתבות מהחומר שלך בלבד, והבדיקה נעשית בקוד.", "Questions come from your material only; grading is done by code.")}</p>
+      <p className="muted small">{kind === "choice" ? L("השאלות נכתבות מהחומר שלך בלבד, והבדיקה נעשית בקוד.", "Questions come from your material only; grading is done by code.") : L("השאלות נכתבות מהחומר שלך בלבד. את התשובות בודק המודל מול תשובה לדוגמה ומול ההרצאה.", "Questions come from your material only. The model checks answers against a model answer and the lecture.")}</p>
     </section>
   );
+  if (quiz.kind && quiz.score !== undefined) return (
+    <section className="card study-quiz-done">
+      <h2>{L(`${quiz.score} מתוך ${quiz.questions.length}`, `${quiz.score} of ${quiz.questions.length}`)}</h2>
+      <ol className="study-quiz-review">
+        {quiz.questions.map((q, k) => (
+          <li key={k} className={(quiz.marks?.[k] ?? 0) >= 1 ? "good" : "bad"}>
+            <b dir="auto">{q.q}</b>
+            {quiz.texts?.[k] && <span dir="auto" className="muted">{L("ענית", "You answered")}: {quiz.texts[k]}</span>}
+            <span dir="auto">{quiz.feedback?.[k]}</span>
+            <small dir="auto">{L("תשובה לדוגמה: ", "Model answer: ")}{q.explain}</small>
+          </li>
+        ))}
+      </ol>
+      <button type="button" className="primary" onClick={() => setQuiz(null)}>{L("בוחן נוסף", "Another quiz")}</button>
+    </section>
+  );
+  if (quiz.kind) {
+    const q = quiz.questions[i]!;
+    const last = i + 1 >= quiz.questions.length;
+    return (
+      <section className="card study-quiz">
+        <p className="muted small">{L(`שאלה ${i + 1} מתוך ${quiz.questions.length}`, `Question ${i + 1} of ${quiz.questions.length}`)}</p>
+        <progress max={quiz.questions.length} value={i} aria-hidden="true" />
+        <h2 dir="auto" style={{ whiteSpace: "pre-wrap" }}>{q.q}</h2>
+        <textarea rows={5} dir="auto" value={texts[i] ?? ""} onChange={(e) => setTexts((t) => { const n = [...t]; n[i] = e.target.value; return n; })} placeholder={L("התשובה שלך, במילים שלך", "Your answer, in your words")} aria-label={L("התשובה שלך", "Your answer")} />
+        <div className="study-actions">
+          {i > 0 && <button type="button" onClick={() => setI(i - 1)}>{L("לשאלה הקודמת", "Previous")}</button>}
+          {!last ? <button type="button" className="primary" onClick={() => setI(i + 1)}>{L("לשאלה הבאה", "Next question")}</button>
+            : <button type="button" className="primary" disabled={busy} onClick={() => void finish()}>{busy ? L("בודק את התשובות…", "Checking the answers…") : L("סיום ובדיקה", "Finish and check")}</button>}
+        </div>
+      </section>
+    );
+  }
   if (quiz.score !== undefined) return (
     <section className="card study-quiz-done">
       <h2>{L(`${quiz.score} מתוך ${quiz.questions.length}`, `${quiz.score} of ${quiz.questions.length}`)}</h2>

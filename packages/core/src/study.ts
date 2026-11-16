@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -707,7 +707,7 @@ export class Study {
   }
 
   /** Makes a multiple-choice quiz from chosen lectures (or the weak ones, or all). */
-  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past" }, signal?: AbortSignal): Promise<StudyQuiz> {
+  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: "open" | "case"; level?: StudyLevel }, signal?: AbortSignal): Promise<StudyQuiz> {
     const d = await this.get(id);
     let chosen = d.lectures.filter((l) => !p.lectureIds?.length || p.lectureIds.includes(l.id));
     if (p.weak) {
@@ -718,10 +718,23 @@ export class Study {
     const count = Math.max(3, Math.min(p.style === "licensing" ? 60 : 30, Number(p.count) || 10));
     const budget = Math.floor(48_000 / chosen.length);
     const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
+    const level = p.level && p.level !== "normal" ? `\n${LEVEL_RULE[p.level]}` : "";
+    if (p.kind) {
+      // Open or case questions: fewer (each is answered in writing), graded later against a model answer.
+      const n = Math.min(count, 10);
+      const raw = await this.ask(`${OPEN_QUIZ_PROMPT(p.kind)}${level}`, `Write exactly ${n} questions, then stop.\n\n${material}`, signal, d.course.field, n * 1800 + 2000);
+      const questions = parseOpenQuestions(raw, chosen.map((l) => l.id), n);
+      if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
+      const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, kind: p.kind, ...(p.level ? { level: p.level } : {}) };
+      d.quizzes.push(quiz);
+      if (d.quizzes.length > 200) d.quizzes.splice(0, d.quizzes.length - 200);
+      await this.save(d);
+      return quiz;
+    }
     const past = p.style === "past" ? pastExamStyle(d.pastExams ?? []) : "";
     if (p.style === "past" && !past) throw Object.assign(new Error("Add a past exam first."), { statusCode: 400 });
     // About 1500 characters a question is plenty; past that the model is running on.
-    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT, `Write exactly ${count} questions, then stop.\n\n${material}`, signal, d.course.field, count * 1500 + 2000);
+    const raw = await this.ask(`${p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT}${level}`, `Write exactly ${count} questions, then stop.\n\n${material}`, signal, d.course.field, count * 1500 + 2000);
     // A list cut off mid-way: keep the questions that were finished.
     const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
@@ -739,7 +752,7 @@ export class Study {
       if (questions.length >= count) break;
     }
     if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
-    const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions };
+    const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, ...(p.level ? { level: p.level } : {}) };
     d.quizzes.push(quiz);
     if (d.quizzes.length > 200) d.quizzes.splice(0, d.quizzes.length - 200);
     await this.save(d);
@@ -793,6 +806,36 @@ export class Study {
   }
 
   /** Grades a quiz by code and keeps the answers (for the weak topics). */
+  /** Grades her written answers to an open or case quiz, one by one, against each model answer and her lecture. */
+  async answerOpenQuiz(id: string, quizId: string, texts: string[], signal?: AbortSignal): Promise<StudyQuiz> {
+    const d = await this.get(id);
+    const z = d.quizzes.find((q) => q.id === quizId);
+    if (!z?.kind) throw Object.assign(new Error("No such open quiz."), { statusCode: 404 });
+    const m = this.model();
+    if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
+    const he = /[\u0590-\u05ff]/.test(z.questions.map((q) => q.q).join(" "));
+    const marks: number[] = [];
+    const feedback: string[] = [];
+    for (const [i, q] of z.questions.entries()) {
+      const text = String(texts?.[i] ?? "").trim().slice(0, 3000);
+      if (!text) { marks.push(0); feedback.push(he ? "✗ לא נענתה." : "✗ Not answered."); continue; }
+      const raw = (await m.turn({ messages: openGradeMessages({ lectures: d.lectures, question: q, text }), tools: [] }, signal ?? AbortSignal.timeout(180_000), () => undefined)).text;
+      const r = openMark(raw, he);
+      marks.push(r?.mark ?? 0);
+      feedback.push(r?.line ?? (he ? "לא הצלחתי לבדוק את התשובה הזאת." : "Could not check this answer."));
+    }
+    const fresh = await this.get(id);
+    const fz = fresh.quizzes.find((q) => q.id === quizId) ?? z;
+    fz.texts = z.questions.map((_, i) => String(texts?.[i] ?? "").slice(0, 3000));
+    fz.marks = marks;
+    fz.feedback = feedback;
+    fz.answers = z.questions.map(() => -1);
+    fz.score = marks.reduce((a, b) => a + b, 0);
+    await this.save(fresh);
+    return fz;
+  }
+
+  /** Grades her multiple-choice answers by code. */
   async answerQuiz(id: string, quizId: string, answers: number[]): Promise<StudyQuiz> {
     const d = await this.get(id);
     const z = d.quizzes.find((q) => q.id === quizId);
