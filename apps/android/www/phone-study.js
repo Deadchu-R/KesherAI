@@ -201,8 +201,10 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const streak = studyStreak(studyDays(datas));
     const week = focusWeek(datas);
     const max = Math.max(25, ...week.map((w) => w.minutes));
+    const alarm = globalThis.Capacitor?.Plugins?.KesherNotify;
     const finish = (r, early) => {
       localStorage.removeItem(KEYF);
+      if (early) alarm?.focusAlarmCancel?.().catch?.(() => undefined);
       const done = Math.round((Math.min(Date.now(), r.end) - r.start) / 60000);
       const c = db.courses.find((x) => x.id === r.course);
       if (c && (!early || done >= 5)) {
@@ -237,6 +239,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       sec.append(el("div", { class: "ph-btns" }, pick, ...preset, el("button", { type: "button", onclick: () => {
         const now = Date.now();
         localStorage.setItem(KEYF, JSON.stringify({ course: pick.value, start: now, end: now + minutes * 60000 }));
+        // "Time's up" also with the app closed or the screen off.
+        alarm?.focusAlarm?.({ at: now + minutes * 60000, title: L("הזמן נגמר: הפסקה קצרה", "Time's up: take a short break"), body: L(`${minutes} דקות ריכוז על ${pick.selectedOptions[0]?.textContent ?? ""}. פתחי את KesherAI כדי לרשום אותן.`, `${minutes} minutes of focus on ${pick.selectedOptions[0]?.textContent ?? ""}. Open KesherAI to record them.`) }).catch?.(() => undefined);
         draw();
       } }, L("התחלה", "Start"))));
     }

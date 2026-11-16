@@ -281,6 +281,24 @@ public class NotifyPlugin extends Plugin {
         call.resolve(state());
     }
 
+    /** { at, title, body }: the focus timer's "time's up" notification at `at` (ms), also with the app closed. */
+    @PluginMethod
+    public void focusAlarm(PluginCall call) {
+        Long at = call.getLong("at");
+        if (at == null || at < System.currentTimeMillis()) { call.reject("at"); return; }
+        String title = call.getString("title", "KesherAI");
+        String body = call.getString("body", "");
+        FocusAlarm.set(getContext(), at, title.length() > 120 ? title.substring(0, 120) : title, body.length() > 300 ? body.substring(0, 300) : body);
+        call.resolve();
+    }
+
+    /** The focus timer was stopped: no "time's up" notification. */
+    @PluginMethod
+    public void focusAlarmCancel(PluginCall call) {
+        FocusAlarm.cancel(getContext());
+        call.resolve();
+    }
+
     /** { id }: the app opened this chat, so its notifications go (as in messaging apps). */
     @PluginMethod
     public void clear(PluginCall call) {

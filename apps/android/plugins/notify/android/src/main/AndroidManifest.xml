@@ -18,6 +18,7 @@
             </intent-filter>
         </service>
         <receiver android:name="dev.kesherai.notify.ActionReceiver" android:exported="false" />
+        <receiver android:name="dev.kesherai.notify.FocusAlarm" android:exported="false" />
         <!-- The home-screen widget (ask, speak, tasks, health). -->
         <receiver android:name="dev.kesherai.notify.KesherWidget" android:exported="false" android:label="@string/kesher_widget_label">
             <intent-filter>
