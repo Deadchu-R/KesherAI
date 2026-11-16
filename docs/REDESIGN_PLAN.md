@@ -36,6 +36,23 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
 
 ## Later (asked by Roee)
 - Synced cloud keys ("My devices") encrypted with a password the user sets, entered once on each new computer.
+- **Students (asked 2026-11-16): AI study helpers that run well on a modest laptop** (8 GB RAM, no graphics card):
+  speech with whisper base/small int8 on the CPU (small ≈ 0.85 GB RAM, about 2.5× faster than real time on a laptop
+  i7), a 1–4 B chat model in Q4 (1–3 GB), and a cloud key as the optional faster path. Research: docs/RESEARCH_LOG.md
+  "Students".
+  - Lecture recording and summary: live transcript with timestamps, summary, key terms, slides captured when they
+    change, per course.
+  - Zoom / Teams lectures: record the computer's sound while a meeting app is open (the meeting recorder exists) and
+    summarise it the same way.
+  - Flashcards and quizzes from a lecture or a PDF, spaced repetition, Anki export.
+  - Ask the course: answers from all its lectures and files, with the minute in the recording.
+  - Live captions and translation (Hebrew ↔ English) during a lecture.
+  - Exam plan from the syllabus and the calendar; practice from past exams.
+  - A tutor mode that guides through homework step by step instead of giving the answer.
+  - PDF/article reader: summary, glossary, "explain this paragraph".
+  - Focus timer with study streaks; a short audio recap (text to speech) to listen to on the way.
+  - Avatar in Zoom in place of the camera: open question with Roee (being shown as present while not there may
+    break the course's rules; an honest version: a clearly labelled avatar or "Roee's notes bot").
 
 ## Throughout
 - A security and performance scan every 5 changes.

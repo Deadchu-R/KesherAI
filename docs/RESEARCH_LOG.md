@@ -1393,3 +1393,16 @@ Stopped at: building (store and public page first, then the chat menu and the se
   Menu = Enter (a form is sent), B closes, LB Hebrew/English, RB capitals → symbols. Types through the field's value
   setter + input event so React sees it. Phone width: keys share the row.
 - Stopped at: no caret moving with the triggers; no word suggestions.
+
+## Students: AI study helpers on a modest laptop (2026-11-16)
+
+- Lecture apps students rate (scholarly.so review, 2026): Scholarly (live transcript, notes, flashcards, quizzes,
+  chat over the recording, timestamps), Knowt, StudyFetch, Turbo AI, NotebookLM / Gemini Notebook (cited Q&A over
+  uploads), Otter (transcript, summary, chat), Genio (slides beside the audio, Quiz Me). Valued: live notes,
+  timestamps to jump back, flashcards/quizzes, slide capture, Q&A grounded in the lecture.
+- Speech on a weak laptop (openwhispr model sizes): tiny ~0.27 GB, base ~0.39 GB, small ~0.85 GB RAM; on a laptop
+  i7 small runs about 0.4× real time (fast enough live), medium is slower than real time. Hebrew accuracy must be
+  tested on our own audio.
+- Avatar in Zoom: Pickle (5-minute training video, avatar lip-syncs live to your voice, replaces the camera);
+  HeyGen / Akool live cameras; Zoom's own avatars. Open question: shown as present while not there.
+- Stopped at: no hands-on test yet; next is a 30-minute Hebrew lecture through whisper small int8 on CPU.
