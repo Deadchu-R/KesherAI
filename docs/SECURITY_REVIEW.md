@@ -488,6 +488,19 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 85 (2026-11-16, 0.6.263) and the app that closed after ~20 s
+
+- Cause found (0.6.256–0.6.262): the knowledge indexes kept vectors as JSON numbers (2.4 GB, one base 515 MB) and
+  every base was read and re-indexed together at start; the main process passed V8's 2.2 GB heap and was ended
+  without an exit, a dump or a Windows report. Found with the sampled heap profile in `logs/main.log`
+  (`knowledge.js` held 915 MB at 7 s). Fixed: float32 `<id>.vec` files (JSON 2.4 GB → 300 MB), old indexes read
+  one at a time and rewritten, start-up re-index one base at a time. On the PC: heap 388 MB and steady.
+- `logs/main.log` diagnostics (0.6.259–0.6.262): local only; child process lines are commands KesherAI itself
+  starts (paths and model names, no keys: keys go in headers or env, never in arguments — checked); request lines
+  hold method and path only (no query, no body); the heap profile holds function names and file lines of the app.
+- MCP stdio transport: a program that writes 16 MB without a line end has its buffer dropped (was unbounded).
+- `pnpm audit --prod --audit-level high`: no known vulnerabilities.
+
 ## Scan 84 (2026-11-16, after 0.6.257 + APK 465)
 
 - `GET /api/conversations/:id/peek` (sidebar preview): behind the key like every `/api` route; reads the saved chat
