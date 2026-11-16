@@ -537,6 +537,58 @@ export interface StudyCourseData {
   focus?: StudyFocus[];
   /** Past exams she added (their text), so practice tests follow their style. */
   pastExams?: StudyPastExam[];
+  /** What the course's syllabus says: exams, assignments and the topic of each week (she confirmed it). */
+  syllabus?: StudySyllabus;
+}
+
+/** A course's syllabus, read once from its file and confirmed by her. Dates are YYYY-MM-DD. */
+export interface StudySyllabus {
+  exams: Array<{ title: string; date: string }>;
+  assignments: Array<{ title: string; date: string }>;
+  weeks: Array<{ week: number; topic: string; date?: string }>;
+  t: number;
+}
+
+/** Reading a syllabus: dates of exams and assignments, and the topic of each week. */
+export const SYLLABUS_PROMPT = (today: string) =>
+  `You read a university course syllabus. Today is ${today}. Find the exams (midterm, final, quizzes: moed A/B too), the assignments or papers with their due dates, and the topic of each week or lesson. Dates as YYYY-MM-DD (when the year is missing, use the coming occurrence after today); leave out anything without a clear date, except weekly topics (date optional). Titles and topics in the syllabus's language, short. Answer with JSON only: {"exams":[{"title":"...","date":"YYYY-MM-DD"}],"assignments":[{"title":"...","date":"YYYY-MM-DD"}],"weeks":[{"week":1,"topic":"...","date":"YYYY-MM-DD"}]}`;
+
+const isDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T12:00:00`));
+
+/**
+ * A model's reading of a syllabus, checked: real dates only, short titles, at most 30 of each, sorted by date.
+ *
+ * @param raw - The model's reply (or a syllabus object to clean).
+ * @returns The syllabus, or undefined when nothing usable was found.
+ */
+export function parseSyllabus(raw: unknown, now = Date.now()): StudySyllabus | undefined {
+  const j = (typeof raw === "string" ? jsonIn(raw) : raw) as Partial<Record<"exams" | "assignments" | "weeks", unknown[]>> | undefined;
+  if (!j || typeof j !== "object") return undefined;
+  const dated = (list: unknown) => (Array.isArray(list) ? list : [])
+    .filter((x): x is { title: unknown; date: string } => !!x && typeof x === "object" && isDate((x as { date?: unknown }).date) && !!String((x as { title?: unknown }).title ?? "").trim())
+    .map((x) => ({ title: String(x.title).trim().slice(0, 120), date: x.date }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 30);
+  const weeks = (Array.isArray(j.weeks) ? j.weeks : [])
+    .filter((x): x is { week: unknown; topic: unknown; date?: unknown } => !!x && typeof x === "object" && !!String((x as { topic?: unknown }).topic ?? "").trim())
+    .map((x, i) => ({ week: Math.max(1, Math.min(60, Math.round(Number(x.week)) || i + 1)), topic: String(x.topic).trim().slice(0, 200), ...(isDate(x.date) ? { date: x.date } : {}) }))
+    .slice(0, 30);
+  const out = { exams: dated(j.exams), assignments: dated(j.assignments), weeks, t: now };
+  return out.exams.length || out.assignments.length || out.weeks.length ? out : undefined;
+}
+
+/**
+ * What the syllabus says for now: the next exam and assignments (next 21 days), and this week's topic (the week
+ * whose date is the latest one not after today).
+ */
+export function syllabusNow(s: StudySyllabus | undefined, now = Date.now()): { nextExam?: { title: string; date: string; daysLeft: number }; due: Array<{ title: string; date: string; daysLeft: number }>; week?: { week: number; topic: string } } {
+  if (!s) return { due: [] };
+  const today = dayKey(now);
+  const days = (d: string) => Math.round((Date.parse(`${d}T12:00:00`) - Date.parse(`${today}T12:00:00`)) / 86_400_000);
+  const exam = s.exams.find((e) => e.date >= today);
+  const due = s.assignments.filter((a) => a.date >= today && days(a.date) <= 21).map((a) => ({ ...a, daysLeft: days(a.date) }));
+  const week = [...s.weeks].filter((w) => w.date && w.date <= today).sort((a, b) => b.date!.localeCompare(a.date!))[0];
+  return { ...(exam ? { nextExam: { ...exam, daysLeft: days(exam.date) } } : {}), due, ...(week ? { week: { week: week.week, topic: week.topic } } : {}) };
 }
 
 /** A past exam's text (from a file or photo), kept to write practice tests like it. */
@@ -655,6 +707,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
   const field = !a.course.fieldChosen && b.course.fieldChosen ? { field: b.course.field, fieldChosen: true } : {};
   const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
   const pastExams = byId(a.pastExams ?? [], b.pastExams ?? [], gone, (x) => x);
+  const syllabus = !a.syllabus ? b.syllabus : !b.syllabus ? a.syllabus : b.syllabus.t > a.syllabus.t ? b.syllabus : a.syllabus;
   const focusSeen = new Set<number>();
   const focus = [...(a.focus ?? []), ...(b.focus ?? [])].filter((f) => !focusSeen.has(f.t) && focusSeen.add(f.t)).sort((x, y) => x.t - y.t).slice(-5000);
   return {
@@ -667,6 +720,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     ...(removed.length ? { removed } : {}),
     ...(focus.length ? { focus } : {}),
     ...(pastExams.length ? { pastExams } : {}),
+    ...(syllabus ? { syllabus } : {}),
   };
 }
 
@@ -800,6 +854,25 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
 /** The tutor's instructions: answer only from her lectures, say which lecture, and say so when they do not cover it. */
 export const TUTOR_PROMPT =
   "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]; when the passage is a recording's transcript with times (lines starting like 12:30), add the minute, like [Lecture: <title>, 12:30], so she can find it. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
+
+/**
+ * A calculation question checked against its own working: the last result after "=" in the explanation must be one
+ * of the options (found on the PC: the model worked out 66.7 and then marked 80). The question is fixed when another
+ * option matches its result, and dropped when none does. Questions without numbers pass unchanged.
+ *
+ * @returns The question (maybe with the answer fixed), or undefined to drop it.
+ */
+export function checkCalcQuestion<T extends { options: string[]; answer: number; explain?: string }>(q: T): T | undefined {
+  const nums = [...String(q.explain ?? "").matchAll(/=\s*(-?\d[\d,]*(?:\.\d+)?)/g)].map((m) => Number(m[1]!.replace(/,/g, "")));
+  const result = nums.at(-1);
+  const optNum = q.options.map((o) => { const m = /-?\d[\d,]*(?:\.\d+)?/.exec(o); return m ? Number(m[0].replace(/,/g, "")) : NaN; });
+  // Only when the options are numbers and the explanation worked one out.
+  if (result === undefined || !Number.isFinite(result) || optNum.filter(Number.isFinite).length < 2) return q;
+  const close = (a: number) => Math.abs(a - result) <= Math.max(0.5, Math.abs(result) * 0.01);
+  const hit = optNum.findIndex((n) => Number.isFinite(n) && close(n));
+  if (hit < 0) return undefined;
+  return hit === q.answer ? q : { ...q, answer: hit };
+}
 
 /** Study mode: the tutor asks her about her own lectures, waits, then corrects (Socratic, like ChatGPT's study mode). */
 export const STUDY_MODE_PROMPT =

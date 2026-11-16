@@ -1686,3 +1686,15 @@ Stopped at: building (store and public page first, then the chat menu and the se
   can); "Like the past exams" writes a timed 20-question test from her lectures in their style, length and
   difficulty (not copying their questions). Synced between phone and computer.
 - Stopped at: built (0.6.305).
+
+## Students, part 16: the syllabus (2026-11-16)
+
+- Sources: DormWay's syllabus-to-calendar guide and planner round-up; App Store syllabus scanners (Sylly, Semora,
+  SyllySync, CourseLink).
+- They read exams, assignments and recurring items from the syllabus (OCR for scans), show a review screen before
+  saving, and sync a calendar; a one-time import goes stale when dates move (re-import).
+- Ours: "Syllabus" on the course: from a PDF, Word file or photo; the model finds exams, assignments and each
+  week's topic; she sees them and can remove wrong ones before saving; the next exam becomes the course's exam
+  date when none is set; the course then shows this week's topic, the next exam and what is due in three weeks.
+  A new syllabus replaces the old one. Computer, remote and phone.
+- Stopped at: built (0.6.308). Next: phone reminders the day before an assignment or exam.

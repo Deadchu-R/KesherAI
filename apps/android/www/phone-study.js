@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -92,12 +92,12 @@ async function shareFile(c) {
 
 /** A phone course (one object) as the computer's course file, for syncing. */
 function toData(c) {
-  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, ...course } = c;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}) };
+  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, syllabus, ...course } = c;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}) };
 }
 /** The computer's course file as a phone course. */
 function fromData(d) {
-  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}) };
+  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}), ...(d.syllabus ? { syllabus: d.syllabus } : {}) };
 }
 
 /**
@@ -249,6 +249,71 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     return sec;
   }
 
+  /**
+   * The course's syllabus: what is next (exam, assignments, this week's topic), or add it from a file or photo; the
+   * phone's model reads it, she confirms, and the next exam becomes the exam date when none is set.
+   */
+  function syllabusCard(c) {
+    const fmt = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(he() ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" });
+    const sec = el("section", { class: "api" }, el("h2", {}, L("סילבוס", "Syllabus")));
+    const draft = view.syllabusDraft;
+    if (draft) {
+      const list = (title, items, line) => items.length ? [el("b", {}, title), ...items.map(line)] : [];
+      sec.append(el("p", {}, L("זה מה שמצאתי בסילבוס. נכון?", "This is what I found in the syllabus. Right?")),
+        ...list(L("מבחנים", "Exams"), draft.exams, (e) => el("div", { dir: "auto" }, `${fmt(e.date)} · ${e.title}`)),
+        ...list(L("מטלות", "Assignments"), draft.assignments, (e) => el("div", { dir: "auto" }, `${fmt(e.date)} · ${e.title}`)),
+        ...list(L("נושאים לפי שבוע", "Topics by week"), draft.weeks, (w) => el("div", { dir: "auto" }, `${L(`שבוע ${w.week}`, `Week ${w.week}`)}${w.date ? ` (${fmt(w.date)})` : ""} · ${w.topic}`)),
+        el("div", { class: "ph-btns", style: "margin-top: 8px" },
+          el("button", { type: "button", class: "primary", onclick: () => {
+            c.syllabus = draft;
+            const next = draft.exams.find((e) => e.date >= dayKey(Date.now()));
+            if (next && (!c.examDate || c.examDate < dayKey(Date.now()))) c.examDate = next.date;
+            delete view.syllabusDraft;
+            if (commit()) draw();
+          } }, L("שמירה", "Save")),
+          el("button", { type: "button", onclick: () => { delete view.syllabusDraft; draw(); } }, L("ביטול", "Cancel"))));
+      return sec;
+    }
+    const now = syllabusNow(c.syllabus);
+    if (c.syllabus) {
+      if (now.week) sec.append(el("p", { dir: "auto" }, L(`השבוע (שבוע ${now.week.week}): `, `This week (week ${now.week.week}): `), el("b", {}, now.week.topic)));
+      if (now.nextExam) sec.append(el("p", { dir: "auto" }, L(`המבחן הבא: ${now.nextExam.title} · ${fmt(now.nextExam.date)} (בעוד ${now.nextExam.daysLeft} ימים)`, `Next exam: ${now.nextExam.title} · ${fmt(now.nextExam.date)} (in ${now.nextExam.daysLeft} days)`)));
+      for (const a of now.due) sec.append(el("p", { class: "small", dir: "auto" }, L(`להגשה: ${a.title} · ${fmt(a.date)}`, `Due: ${a.title} · ${fmt(a.date)}`)));
+      if (!now.week && !now.nextExam && !now.due.length) sec.append(el("p", { class: "muted" }, L("אין משהו קרוב בסילבוס.", "Nothing coming up in the syllabus.")));
+    } else sec.append(el("p", { class: "muted" }, L("הוסיפי את הסילבוס ותקבלי את המבחנים, המטלות ונושא כל שבוע.", "Add the syllabus to get its exams, assignments and each week's topic.")));
+    const note = el("p", { class: "muted small", "aria-live": "polite" });
+    const pick = el("input", { type: "file", hidden: true, accept: ".pdf,.docx,.pptx,.txt,image/*", onchange: async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      note.textContent = L("קורא את הסילבוס…", "Reading the syllabus…");
+      let text = "";
+      try {
+        if (/\.(pdf|docx|pptx|txt)$/i.test(f.name)) text = ((await (await import("./vendor/docs-core.js")).phoneDocumentText(new Uint8Array(await f.arrayBuffer()), f.name)) || "").trim();
+        if (!text && extract) {
+          const bytes = new Uint8Array(await f.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+          text = ((await extract({ name: f.name, data: btoa(bin) }))?.text || "").trim();
+        }
+      } catch (err) {
+        note.textContent = L("לא הצלחתי לקרוא: ", "Could not read it: ") + (err?.message || err);
+        return;
+      }
+      if (!text) { note.textContent = L("אין בקובץ טקסט שאפשר לקרוא כאן.", "The file has no text that can be read here."); return; }
+      note.textContent = L("מחפש מבחנים, מטלות ונושאים… (בטלפון זה לוקח זמן)", "Finding exams, assignments and topics… (this takes a while on a phone)");
+      const r = await ask([{ role: "system", content: SYLLABUS_PROMPT(dayKey(Date.now())) }, { role: "user", content: text.slice(0, 12000) }]);
+      const s = r && parseSyllabus(r);
+      if (!s) { note.textContent = r === undefined ? L("קודם בחרי מודל בלשונית צ'אט.", "First pick a model in the Chat tab.") : L("לא נמצאו תאריכים או נושאים.", "No dates or topics were found."); return; }
+      view.syllabusDraft = s;
+      draw();
+    } });
+    sec.append(el("div", { class: "ph-btns", style: "flex-wrap: wrap" },
+      el("button", { type: "button", onclick: () => pick.click() }, c.syllabus ? L("סילבוס חדש", "A new syllabus") : L("הוספת סילבוס", "Add the syllabus")),
+      c.syllabus && el("button", { type: "button", onclick: () => { delete c.syllabus; if (commit()) draw(); } }, L("הסרה", "Remove"))), pick, note);
+    return sec;
+  }
+
   function home() {
     if (db.courses.length) root.append(focusCard());
     const now = Date.now();
@@ -322,6 +387,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       })()));
     const exam = el("input", { type: "date", value: c.examDate || "", "aria-label": L("תאריך המבחן", "Exam date"), onchange: (e) => { const v = e.target.value; if (v) c.examDate = v; else delete c.examDate; if (commit()) draw(); } });
     root.append(el("label", { class: "ph-filter" }, L("מבחן: ", "Exam: "), exam));
+    root.append(syllabusCard(c));
     if (plan) root.append(el("section", { class: "api" },
       el("h2", {}, plan.daysLeft === 0 ? L("המבחן היום", "The exam is today") : plan.daysLeft === 1 ? L("המבחן מחר", "The exam is tomorrow") : L(`המבחן בעוד ${plan.daysLeft} ימים`, `The exam is in ${plan.daysLeft} days`)),
       el("p", {}, plan.perDay ? L(`${plan.perDay} כרטיסיות ביום עד המבחן.`, `${plan.perDay} cards a day until the exam.`) : L("אין כרטיסיות לחזרה עד המבחן.", "No cards to review before the exam.")),
@@ -852,7 +918,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         const style = licensing ? " Write them like the Israeli nursing licensing exam: short patient cases asking what the nurse should do first." : likePast ? `\n${pastExamStyle(c.pastExams, 3000)}\n` : "";
         const r = await need([{ role: "system", content: `Write 5 multiple-choice questions from the material, 4 options each, exactly one right.${style} ${LANG} ${ONLY}${hint(c)} Answer with JSON only: [{"q":"...","options":["...","...","...","..."],"answer":0,"explain":"...","lecture":1}]` }, { role: "user", content: material }], b);
         const list = r && jsonIn(r);
-        const qs = Array.isArray(list) ? list.filter((x) => x?.q && Array.isArray(x.options) && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length) : [];
+        // Calculation questions are checked against their own working (a wrong option marked right is fixed or dropped).
+        const qs = Array.isArray(list) ? list.filter((x) => x?.q && Array.isArray(x.options) && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length).map((x) => checkCalcQuestion({ ...x, options: x.options.map(String) })).filter(Boolean) : [];
         if (!qs.length) return r !== undefined && alert(L("המודל לא החזיר שאלות. נסי שוב.", "The model returned no questions. Try again."));
         for (const q of qs) { const lec = chosen[Number(q.lecture) - 1]; if (lec) q.lectureId = lec.id; }
         go({ at: "quiz", course: c.id, quiz: { questions: qs, i: 0, picked: [] } });

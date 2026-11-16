@@ -31,6 +31,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : req.body?.mode === "homework" ? "homework" : "ask"));
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   app.post<C & { Params: { cid: string } }>("/api/study/courses/:id/cards/:cid/explain", async (req) => st.explainCard(req.params.id, req.params.cid));
+  /** A syllabus: `{ text }` → what it says (exams, assignments, weekly topics) for her to confirm; then PUT keeps it. */
+  app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/syllabus/read", { bodyLimit: 4 * 1024 * 1024 }, async (req) => st.readSyllabus(String(req.body?.text ?? "")));
+  app.put<C & { Body: { syllabus?: unknown } }>("/api/study/courses/:id/syllabus", async (req) => ({ syllabus: await st.setSyllabus(req.params.id, req.body?.syllabus ?? null) }));
   /** Past exams: `{ title, text }` in (the text from /api/study/extract); practice tests can follow their style. */
   app.post<C & { Body: { title?: string; text?: string } }>("/api/study/courses/:id/past-exams", { bodyLimit: 4 * 1024 * 1024 }, async (req) => st.addPastExam(req.params.id, req.body ?? {}));
   app.delete<C & { Params: { pid: string } }>("/api/study/courses/:id/past-exams/:pid", async (req) => { await st.removePastExam(req.params.id, req.params.pid); return { ok: true }; });
@@ -180,6 +183,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length })).slice(-20),
       plan: examPlan(d, now) ?? null,
       pastExams: (d.pastExams ?? []).map(({ id, title, t, text }) => ({ id, title, t, chars: text.length })),
+      syllabus: d.syllabus ?? null,
     };
   });
   app.patch<C & { Body: { name?: string; field?: string; examDate?: string } }>("/api/study/courses/:id", async (req) => {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -217,4 +217,28 @@ test("past exams: a style note from each, merged by id and removed ones stay rem
   const base = { course: { id: "c", name: "x", createdAt: 0 }, lectures: [], cards: [], reviews: [], quizzes: [] };
   const m = mergeCourseData({ ...base, pastExams: [e("a", "1")], removed: ["b"] }, { ...base, pastExams: [e("a", "1"), e("b", "2"), e("c", "3")] });
   assert.deepEqual(m.pastExams?.map((x) => x.id), ["a", "c"]);
+});
+
+test("syllabus: real dates only, sorted; what is next and this week's topic", () => {
+  const raw = '```json\n{"exams":[{"title":"מועד א","date":"2027-01-20"},{"title":"בוחן","date":"2026-12-01"},{"title":"x","date":"2026-13-40"}],"assignments":[{"title":"עבודה 1","date":"2026-11-25"},{"title":"","date":"2026-11-26"}],"weeks":[{"week":1,"topic":"מבוא","date":"2026-11-02"},{"week":3,"topic":"לב","date":"2026-11-16"},{"week":4,"topic":"ריאות"}]}\n```';
+  const s = parseSyllabus(raw, 5)!;
+  assert.deepEqual(s.exams.map((e) => e.title), ["בוחן", "מועד א"]);
+  assert.equal(s.assignments.length, 1);
+  assert.equal(s.weeks.length, 3);
+  assert.equal(s.t, 5);
+  const now = syllabusNow(s, new Date(2026, 10, 18, 12).getTime());
+  assert.deepEqual(now.week, { week: 3, topic: "לב" });
+  assert.equal(now.nextExam?.title, "בוחן");
+  assert.equal(now.nextExam?.daysLeft, 13);
+  assert.deepEqual(now.due.map((a) => [a.title, a.daysLeft]), [["עבודה 1", 7]]);
+  assert.equal(parseSyllabus('{"exams":[]}'), undefined);
+});
+
+test("checkCalcQuestion: the option must equal the explanation's own result", () => {
+  const q = (options: string[], answer: number, explain: string) => ({ q: "?", options, answer, explain });
+  assert.equal(checkCalcQuestion(q(["60", "70", "80", "90"], 2, "(600 × 20) / 180 = 12,000 / 180 = 66.67")), undefined);
+  assert.equal(checkCalcQuestion(q(["20 טיפות", "25", "30 טיפות לדקה", "35"], 2, "= 10,800 / 360 = 30 טיפות לדקה"))?.answer, 2);
+  assert.equal(checkCalcQuestion(q(["41.7", "50", "30", "20"], 1, "1000 × 20 ÷ 480 = 41.67"))?.answer, 0);
+  const words = q(["כן", "לא"], 0, "כי כך כתוב");
+  assert.equal(checkCalcQuestion(words), words);
 });

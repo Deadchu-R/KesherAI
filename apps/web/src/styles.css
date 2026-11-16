@@ -2763,3 +2763,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-past { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
 .study-past h3 { margin: 0; font-size: 15px; }
 .study-past-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }
+/* Study: the course's syllabus (what is next) and its review before saving. */
+.study-syllabus h3 { margin: 8px 0 2px; font-size: 14px; }
+.study-syllabus ul { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 2px; }
+.study-syllabus p { margin: 4px 0; }

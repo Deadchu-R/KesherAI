@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, dayKey, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -42,8 +42,9 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const drugs = arr<StudyDrug>(d.drugs, 1000).filter((g) => okId(g?.id)).map((g) => JSON.parse(JSON.stringify(g).slice(0, 20_000)) as StudyDrug);
   const removed = arr<string>(d.removed, 5000).filter(okId);
   const focus = arr<StudyFocus>(d.focus, 5000).filter((f) => Number.isFinite(f?.t) && Number.isFinite(f?.minutes)).map((f) => ({ t: Number(f.t), minutes: Math.min(600, Math.max(1, Math.round(Number(f.minutes)))) }));
+  const syllabus = d.syllabus ? parseSyllabus(d.syllabus, Number((d.syllabus as { t?: number }).t) || Date.now()) : undefined;
   const pastExams = arr<StudyPastExam>(d.pastExams, 50).filter((e) => okId(e?.id)).map((e) => ({ id: e.id, title: str(e.title, 200), text: str(e.text, 200_000), t: Number(e.t) || Date.now() }));
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}) };
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -428,6 +429,34 @@ export class Study {
   }
 
   /**
+   * Reads a syllabus's text (from /api/study/extract) with the chat model: exams, assignments and weekly topics, for
+   * her to confirm. Nothing is saved here.
+   */
+  async readSyllabus(text: string, signal?: AbortSignal): Promise<StudySyllabus> {
+    const t = text.trim().slice(0, 60_000);
+    if (!t) throw Object.assign(new Error("The syllabus has no text."), { statusCode: 400 });
+    const raw = await this.ask(SYLLABUS_PROMPT(dayKey(Date.now())), t, signal ?? AbortSignal.timeout(300_000), undefined, 30_000);
+    const s = parseSyllabus(raw);
+    if (!s) throw Object.assign(new Error("No dates or topics were found in the syllabus."), { statusCode: 422 });
+    return s;
+  }
+
+  /**
+   * Keeps the syllabus she confirmed; the course's exam date becomes its next exam when none was set.
+   */
+  async setSyllabus(id: string, raw: unknown): Promise<StudySyllabus | null> {
+    const d = await this.get(id);
+    const s = raw === null ? undefined : parseSyllabus(raw);
+    if (s) d.syllabus = s;
+    else delete d.syllabus;
+    const today = dayKey(Date.now());
+    const next = s?.exams.find((e) => e.date >= today);
+    if (next && (!d.course.examDate || d.course.examDate < today)) d.course.examDate = next.date;
+    await this.save(d);
+    return s ?? null;
+  }
+
+  /**
    * Keeps a past exam's text for practice tests like it.
    *
    * @param id - The course.
@@ -639,7 +668,9 @@ export class Study {
       // A long, wandering explanation means the model was not sure of its own answer (found on the PC): drop it.
       if (String(x.explain ?? "").length > 900) continue;
       const lec = chosen[Number(x.lecture) - 1] ?? (chosen.length === 1 ? chosen[0] : undefined);
-      questions.push({ q: String(x.q).slice(0, 2000), options, answer, explain: String(x.explain ?? "").slice(0, 2000), ...(lec ? { lectureId: lec.id } : {}) });
+      const checked = checkCalcQuestion({ q: String(x.q).slice(0, 2000), options, answer, explain: String(x.explain ?? "").slice(0, 2000), ...(lec ? { lectureId: lec.id } : {}) });
+      if (!checked) continue;
+      questions.push(checked);
       if (questions.length >= count) break;
     }
     if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });

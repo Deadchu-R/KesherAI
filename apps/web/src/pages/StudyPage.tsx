@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudySyllabus, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -13,7 +13,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
-interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }> }
+interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; reviews: number }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
@@ -331,6 +331,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         }}>{L("מחק קורס", "Delete course")}</button>
       </div>
       {info.plan && !lectureId && <ExamPlanCard id={id} plan={info.plan} />}
+      {!lectureId && <SyllabusCard id={id} syllabus={info.syllabus ?? null} onChange={load} />}
       <div className="seg-pills" role="tablist" aria-label={L("חלקי הקורס", "Course sections")}>
         {TABS.filter(([t]) => clinicalField(info.course.field) || !CLINICAL_TABS.has(t)).map(([t, n]) => (
           <button key={t} type="button" role="tab" aria-selected={on === t} className={on === t ? "on" : ""} onClick={() => go(`#/study/${id}/${t}`)}>
@@ -405,6 +406,62 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
 }
 
 /** The plan toward the exam: the days left, the day's cards, what has nothing to study from yet, the test week. */
+/**
+ * The course's syllabus: what is next (exam, assignments in the next three weeks, this week's topic), or "add the
+ * syllabus": read once from a file or photo, shown to her to confirm, then kept (the exam date follows it).
+ */
+function SyllabusCard({ id, syllabus, onChange }: { id: string; syllabus: StudySyllabus | null; onChange: () => void }) {
+  const [busy, setBusy] = useState("");
+  const [draft, setDraft] = useState<StudySyllabus | null>(null);
+  const read = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(L("קורא את הסילבוס…", "Reading the syllabus…"));
+    const x = await call(api<{ text: string }>("/api/study/extract", { method: "POST", body: { name: f.name, data: await fileBase64(f) } }));
+    setBusy(x ? L("מחפש מבחנים, מטלות ונושאים…", "Finding exams, assignments and topics…") : "");
+    const s = x && (await call(api<StudySyllabus>(`/api/study/courses/${id}/syllabus/read`, { method: "POST", body: { text: x.text } })));
+    setBusy("");
+    if (s) setDraft(s);
+  };
+  const save = async (s: StudySyllabus | null) => {
+    const r = await call(api(`/api/study/courses/${id}/syllabus`, { method: "PUT", body: { syllabus: s } }));
+    if (r) { setDraft(null); onChange(); }
+  };
+  const fmt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" });
+  if (draft) return (
+    <section className="card study-syllabus">
+      <h2>{L("זה מה שמצאתי בסילבוס. נכון?", "This is what I found in the syllabus. Right?")}</h2>
+      {draft.exams.length > 0 && <><h3>{L("מבחנים", "Exams")}</h3><ul>{draft.exams.map((e, i) => <li key={i} dir="auto">{fmt(e.date)} · {e.title} <button type="button" className="ghost small" aria-label={L("הסרה", "Remove")} onClick={() => setDraft({ ...draft, exams: draft.exams.filter((_, k) => k !== i) })}>✕</button></li>)}</ul></>}
+      {draft.assignments.length > 0 && <><h3>{L("מטלות", "Assignments")}</h3><ul>{draft.assignments.map((e, i) => <li key={i} dir="auto">{fmt(e.date)} · {e.title} <button type="button" className="ghost small" aria-label={L("הסרה", "Remove")} onClick={() => setDraft({ ...draft, assignments: draft.assignments.filter((_, k) => k !== i) })}>✕</button></li>)}</ul></>}
+      {draft.weeks.length > 0 && <><h3>{L("נושאים לפי שבוע", "Topics by week")}</h3><ul>{draft.weeks.map((w, i) => <li key={i} dir="auto">{L(`שבוע ${w.week}`, `Week ${w.week}`)}{w.date ? ` (${fmt(w.date)})` : ""} · {w.topic}</li>)}</ul></>}
+      <div className="study-actions">
+        <button type="button" className="primary" onClick={() => void save(draft)}>{L("שמירה", "Save")}</button>
+        <button type="button" className="ghost" onClick={() => setDraft(null)}>{L("ביטול", "Cancel")}</button>
+      </div>
+      <p className="muted small">{L("המבחן הקרוב יהפוך לתאריך המבחן של הקורס (אם עוד לא קבעת). כדאי להשוות לסילבוס עצמו.", "The next exam becomes the course's exam date (if you have not set one). Compare with the syllabus itself.")}</p>
+    </section>
+  );
+  const now = syllabusNow(syllabus ?? undefined);
+  return (
+    <section className="card study-syllabus">
+      <h2>{L("סילבוס", "Syllabus")}</h2>
+      {syllabus ? (
+        <>
+          {now.week && <p dir="auto">{L(`השבוע (שבוע ${now.week.week}): `, `This week (week ${now.week.week}): `)}<b>{now.week.topic}</b></p>}
+          {now.nextExam && <p dir="auto">{L("המבחן הבא: ", "Next exam: ")}{now.nextExam.title} · {fmt(now.nextExam.date)} ({L(`בעוד ${now.nextExam.daysLeft} ימים`, `in ${now.nextExam.daysLeft} days`)})</p>}
+          {now.due.map((a, i) => <p key={i} className="small" dir="auto">{L("להגשה: ", "Due: ")}{a.title} · {fmt(a.date)} ({a.daysLeft === 0 ? L("היום", "today") : L(`בעוד ${a.daysLeft} ימים`, `in ${a.daysLeft} days`)})</p>)}
+          {!now.week && !now.nextExam && !now.due.length && <p className="muted">{L("אין משהו קרוב בסילבוס.", "Nothing coming up in the syllabus.")}</p>}
+        </>
+      ) : <p className="muted">{L("הוסיפי את הסילבוס של הקורס ותקבלי את המבחנים, המטלות ונושא כל שבוע, ותאריך המבחן ייקבע לבד.", "Add the course's syllabus to get its exams, assignments and each week's topic; the exam date is set by itself.")}</p>}
+      <div className="study-actions">
+        <label className="button">{busy || (syllabus ? L("סילבוס חדש", "A new syllabus") : L("הוספת סילבוס (PDF, Word או צילום)", "Add the syllabus (PDF, Word or photo)"))}
+          <input type="file" hidden accept=".pdf,.docx,.pptx,.txt,image/*" disabled={!!busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void read(f); }} />
+        </label>
+        {syllabus && <button type="button" className="ghost" onClick={() => void save(null)}>{L("הסרת הסילבוס", "Remove the syllabus")}</button>}
+      </div>
+    </section>
+  );
+}
+
 function ExamPlanCard({ id, plan }: { id: string; plan: ExamPlan }) {
   const when = plan.daysLeft === 0 ? L("המבחן היום", "The exam is today") : plan.daysLeft === 1 ? L("המבחן מחר", "The exam is tomorrow") : L(`המבחן בעוד ${plan.daysLeft} ימים`, `The exam is in ${plan.daysLeft} days`);
   return (
