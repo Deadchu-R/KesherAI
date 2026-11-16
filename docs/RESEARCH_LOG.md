@@ -1530,3 +1530,21 @@ Stopped at: building (store and public page first, then the chat menu and the se
   lab values and medication calculations.
 - Stopped at: keyword recognition and prompt hints are in; field-specific tools beyond nursing (a computed math
   checker like Wolfram's, statute look-up for law) are not built.
+
+### Students, part 7: the avatar camera (2026-11-16)
+
+- Pickle (YC): a "body double" that replaces the Zoom camera; lip sync from the live voice in under 0.3 s; a short
+  training video of the person; cloud.
+- Open models: MuseTalk (Tencent, MIT; ~4 GB VRAM fp16; 30 fps+ on a V100, far slower on a laptop GPU: an 8 s clip
+  took ~5 min on an RTX 3050 Ti), LivePortrait (portrait animation, near real time on a strong NVIDIA card; its face
+  detector's weights carry their own licence), Duix-Avatar (RTX 4070-class, 12 GB), daVinci-MagiHuman (15 B, H100).
+  None is real time on a modest laptop without a graphics card.
+- Virtual camera on Windows: softcam (MIT, a DirectShow filter DLL: `scCreateCamera`, `scSendFrame`; Zoom and Teams
+  read DirectShow cameras) or Windows 11's Media Foundation virtual camera (`MFCreateVirtualCamera`, needs a signed
+  media source). Either is a native piece in the desktop app: a new dependency to ask Roee about.
+- Design (most realistic, and it runs on any laptop): the student records a few minutes of herself sitting and
+  listening; KesherAI loops it seamlessly (cross-fades at matching frames, small natural movement) as the virtual
+  camera; when she unmutes to speak, it switches to her real camera (or, on a computer with a strong NVIDIA card,
+  lip-syncs the loop to her live voice with MuseTalk/LivePortrait). A warning before first use: if the course or
+  university finds out, it may be treated as breaking its rules.
+- Stopped at: research only; waiting on Roee for the virtual-camera dependency.
