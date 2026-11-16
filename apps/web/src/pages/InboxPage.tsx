@@ -159,7 +159,7 @@ export function InboxBell() {
             </ul>
           )}
           <div className="row inbox-pop-foot">
-            <a href="#/inbox" onClick={close}>{L("כל ההתראות", "All notifications")}</a>
+            <a href="#/inbox" onClick={close}>{L("לתיבת הדואר", "Open the inbox")}</a>
             <span className="grow" />
             {unread > 0 && <button type="button" className="link-btn" onClick={() => markSeen(newest)}>{L("סמן הכל כנקרא", "Mark all read")}</button>}
           </div>

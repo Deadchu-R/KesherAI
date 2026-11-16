@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 
 interface Status {
   enabled: boolean;
@@ -73,7 +73,7 @@ export function ComputerBanner() {
     <div className="cc-banner" role="status">
       <span className="dot" aria-hidden />
       <span dir="auto">{t("ccActive", { app: s.app || "?" })}{last ? ` · ${last.action}` : ""}</span>
-      <a href="#/watch">{t("watchNav")}</a>
+      <a href="#/watch">{getLocale() === "he" ? "מסך המחשב בתיבת הדואר" : "The computer's screen in the inbox"}</a>
       <button type="button" onClick={() => void api("/api/computer/stop", { method: "POST" }).then(() => setS({ ...s, active: false }))}>{t("ccStop")}</button>
     </div>
   );

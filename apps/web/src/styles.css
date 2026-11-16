@@ -2516,3 +2516,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .conv-peek p { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .conv-peek p + p { margin-block-start: 6px; }
 .conv-peek p.you { color: var(--text); }
+/* On a phone the segmented control spans the width, its choices sharing it equally. */
+@media (max-width: 480px) {
+  .seg-pills { width: 100%; }
+  .seg-pills button { flex: 1 1 0; justify-content: center; }
+}
