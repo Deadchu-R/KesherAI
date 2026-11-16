@@ -5,6 +5,7 @@ import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
 import { parseFlow } from "../study-diagram";
+import { StudyRecorder } from "../StudyRecorder";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -182,6 +183,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
 
 function Lectures({ courseId, info, onChange }: { courseId: string; info: CourseInfo; onChange: () => void }) {
   const [adding, setAdding] = useState(!info.lectures.length);
+  const [recording, setRecording] = useState(false);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -196,7 +198,14 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
   };
   return (
     <div className="study-lectures">
-      {adding ? (
+      {recording ? (
+        <StudyRecorder onCancel={() => setRecording(false)} onDone={async (t) => {
+          setRecording(false);
+          if (!t.trim()) return toast(L("לא נשמע דיבור בהקלטה.", "No speech was heard in the recording."));
+          const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures`, { method: "POST", body: { title: L(`הרצאה ${info.lectures.length + 1}`, `Lecture ${info.lectures.length + 1}`), text: t } }));
+          if (l) { onChange(); go(`#/study/${courseId}/l/${l.id}`); }
+        }} />
+      ) : adding ? (
         <section className="card study-new-lecture">
           <h2>{L("הרצאה חדשה", "New lecture")}</h2>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={L("כותרת, למשל: תרופות לב", "Title, e.g. Heart drugs")} aria-label={L("כותרת", "Title")} dir="auto" />
@@ -211,10 +220,16 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
               setText((await f.text()).replace(/^\d+\s*$|^\d\d:\d\d:\d\d[,.]\d+ --> .*$|^WEBVTT.*$/gm, "").replace(/\n{3,}/g, "\n\n"));
               if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
             }} />
+            <button type="button" onClick={() => { setAdding(false); setRecording(true); }}>{L("או: הקלט הרצאה", "Or: record a lecture")}</button>
             {info.lectures.length > 0 && <button type="button" className="ghost" onClick={() => setAdding(false)}>{L("ביטול", "Cancel")}</button>}
           </div>
         </section>
-      ) : <button type="button" className="primary" onClick={() => setAdding(true)}>{L("+ הרצאה", "+ Lecture")}</button>}
+      ) : (
+        <div className="study-actions">
+          <button type="button" className="primary" onClick={() => setRecording(true)}>{L("הקלט הרצאה", "Record a lecture")}</button>
+          <button type="button" onClick={() => setAdding(true)}>{L("+ הרצאה מטקסט", "+ Lecture from text")}</button>
+        </div>
+      )}
       <ul className="study-list">
         {[...info.lectures].reverse().map((l) => (
           <li key={l.id}>

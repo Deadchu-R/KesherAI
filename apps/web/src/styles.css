@@ -2648,3 +2648,13 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-field select { height: 34px; }
 .study-life { display: flex; flex-direction: column; gap: 8px; }
 .study-life-q { height: auto; min-height: 44px; padding: 8px 14px; white-space: normal; text-align: start; }
+.study-recorder { display: flex; flex-direction: column; gap: 10px; }
+.study-check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.study-rec-big { min-height: 48px; padding-inline: 22px; }
+.study-rec-state { margin: 0; color: var(--muted); }
+.study-rec-state.on { color: var(--bad); }
+.study-rec-clock { margin: 0; font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.study-rec-text { white-space: pre-wrap; background: var(--panel-2); border-radius: var(--radius-sm); padding: 12px 14px; min-height: 120px; color: var(--text-2); line-height: 1.6; }
+.study-page label.study-check { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; }
+.study-page label.study-check input { width: 18px; height: 18px; flex: none; margin: 2px 0 0; accent-color: var(--accent); }
+@media (max-width: 480px) { .study-head { gap: 8px; } .study-field { order: 3; width: 100%; margin: 0; } .study-field select { flex: 1; } }
