@@ -53,6 +53,12 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
     (בחינת רישוי) practice questions.
   - Zoom / Teams lectures: record the computer's sound while a meeting app is open (the meeting recorder exists) and
     summarise it the same way.
+  - Summaries (Roee, 2026-11-16): per lecture (short, full, key terms, what was marked ⭐), per topic across lectures,
+    and a whole-course summary that grows with each lecture; every line links to its minute in the recording.
+  - Quizzes and sample exams from everything collected for a course: short quizzes after a lecture, and a sample
+    exam in the course's format (multiple choice, open questions, case questions like the licensing exam), chosen
+    lectures and difficulty, timed or not; graded with an explanation and the source minute for every answer; the
+    next exam leans on the weak topics.
   - Flashcards and quizzes from a lecture or a PDF, spaced repetition, Anki export.
   - Ask the course: answers from all its lectures and files, with the minute in the recording.
   - Live captions and translation (Hebrew ↔ English) during a lecture.
