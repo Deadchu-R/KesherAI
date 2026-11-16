@@ -37,7 +37,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Pause on update and continue where it stopped (chats and self-work)
 - ✅ Named, specialized agents; a background feature-research routine
 - ✅ An interface check and speed check on every version (scripts/ui-check.mjs)
-- ⬜ Per-plugin and per-skill permissions shown before install, and reviewed plugins marked in the store
+- ✅ A plugin's permissions, code and "checked or not" shown before install; a learned skill shown before it is saved
 - ⬜ A project index (fast search over assets, scripts, Blueprints) for token efficiency
 
 ## Code

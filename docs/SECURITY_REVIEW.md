@@ -880,3 +880,24 @@ S5 an outside scanner's rules for Electron.
 - Performance: the phone's home screen no longer waits for its model engine (374 KB): about 0.6 s instead of 1.4 s on a
   six-times-slower processor. The interface check now also runs at 360 px. The computer's chat list on the phone is
   read at most once a minute.
+
+## Scan 96 (2026-11-16, after 0.6.311: Commons animations and videos, game development field, "the lecture is ready", recording with the screen off, the phone widget, the side menu)
+
+- Commons animations and videos: GIFs are fetched by the computer with `redirect: "error"`, 3 MB at most, and must
+  start with `GIF8`; a video's file must be a WebM or Ogg on upload.wikimedia.org over HTTPS (checked in
+  parseCommonsPictures). On the computer a video is a link to its Commons page (the page plays nothing from another
+  site); on the phone it plays from upload.wikimedia.org with `crossorigin="anonymous"` (the app's pages are
+  cross-origin isolated, so nothing loads there without CORS).
+- "The lecture is ready": the computer summarizes only lectures that are new from the phone, have no summary and
+  more than 200 characters, one at a time, with a chat model already chosen; the notification carries the course and
+  lecture titles (her own) and a `#/study/...` path. The summary goes through the same `ask` (no tools).
+- Recording with the screen off: a foreground service of type microphone, started only by her tap in the app (Android
+  requires that), with its own ongoing notification; the service is not exported. The sound stays in the app's own
+  files folder as 30-second WAV pieces, read back only by name (`piece-0000.wav` pattern, no paths) and removed
+  after the lecture is saved. Nothing is sent anywhere.
+- The widget's buttons open fixed phone screens through a separate channel (`#/phone/...` paths go only to the
+  phone's own pages; the computer's interface maps them to the phone app's home address, never to a page a path names).
+- Field hints are one shared list; game development adds no tool with more reach (text in, text out).
+- Found by CI, fixed: the command used on this side for typechecking (`pnpm -s -r typecheck`) skipped the web app;
+  the root `pnpm typecheck` is used now.
+- Performance: the side menu's edge scrolling runs one animation frame loop only while a finger or mouse is held.
