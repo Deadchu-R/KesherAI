@@ -2668,3 +2668,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .avatar-feed { position: fixed; inset: 0; background: #000; }
 .avatar-feed video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.9s linear; }
 .avatar-feed video.on { opacity: 1; }
+.study-remote { display: flex; flex-direction: column; gap: 10px; }
+.study-remote-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.study-remote-btns button { min-height: 64px; font-size: 17px; }
+.avatar-feed video.live { transition: opacity 0.4s linear; z-index: 1; }

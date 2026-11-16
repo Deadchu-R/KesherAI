@@ -82,6 +82,7 @@ export function AvatarCamera() {
           {info.clip && !rec && <button type="button" className="ghost" onClick={async () => { if (confirm(L("למחוק את הסרטון?", "Delete the video?"))) { await api("/api/study/avatar/clip", { method: "DELETE" }); load(); } }}>{L("מחק", "Delete")}</button>}
         </div>
       </section>
+      {info.clip && <CameraMode />}
       {info.clip && <DirectCamera />}
       <section className="card">
         <h2>{L("או: מצלמה דרך OBS", "Or: a camera through OBS")}</h2>
@@ -99,6 +100,30 @@ export function AvatarCamera() {
 }
 
 /** The camera without OBS (the Windows app): add it to Windows once, then on and off. */
+/** The remote control (from the phone or the computer): what the camera shows now. */
+function CameraMode() {
+  const [mode, setMode] = useState<"avatar" | "live">("avatar");
+  useEffect(() => void api<{ mode: "avatar" | "live" }>("/api/study/avatar/mode").then((r) => setMode(r.mode), () => undefined), []);
+  const set = async (m: "avatar" | "live") => {
+    try {
+      setMode((await api<{ mode: "avatar" | "live" }>("/api/study/avatar/mode", { method: "POST", body: { mode: m } })).mode);
+      if (navigator.vibrate) navigator.vibrate(30);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  return (
+    <section className="card study-remote">
+      <h2>{L("שלט רחוק: מה רואים בשיעור", "Remote control: what the class sees")}</h2>
+      <p className="muted small">{L("אפשר לשלוט מכאן גם מהטלפון, כשהוא מחובר למחשב: השיעור רץ בלפטופ, ואת חופשייה לזוז.", "You can control this from the phone too, connected to the computer: the lesson runs on the laptop and you are free to move.")}</p>
+      <div className="study-remote-btns" role="radiogroup" aria-label={L("מה רואים", "What they see")}>
+        <button type="button" role="radio" aria-checked={mode === "avatar"} className={mode === "avatar" ? "primary" : ""} onClick={() => void set("avatar")}>{L("אווטאר", "Avatar")}</button>
+        <button type="button" role="radio" aria-checked={mode === "live"} className={mode === "live" ? "primary" : ""} onClick={() => void set("live")}>{L("המצלמה האמיתית", "Real camera")}</button>
+      </div>
+    </section>
+  );
+}
+
 function DirectCamera() {
   const [st, setSt] = useState<{ available: boolean; installed: boolean; running: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -135,7 +160,29 @@ function DirectCamera() {
 export function AvatarFeed() {
   const a = useRef<HTMLVideoElement>(null);
   const b = useRef<HTMLVideoElement>(null);
+  const live = useRef<HTMLVideoElement>(null);
   const [front, setFront] = useState<"a" | "b">("a");
+  const [mode, setMode] = useState<"avatar" | "live">("avatar");
+  // The mode (avatar or real camera) is switched from the computer or the phone; asked every second.
+  useEffect(() => {
+    const id = setInterval(() => void fetch(withToken("/api/study/avatar/mode")).then((r) => r.json()).then((j: { mode?: string }) => setMode(j.mode === "live" ? "live" : "avatar"), () => undefined), 1000);
+    return () => clearInterval(id);
+  }, []);
+  // The real camera only while it is shown (so its light is off otherwise).
+  useEffect(() => {
+    if (mode !== "live") return;
+    let stream: MediaStream | undefined;
+    let off = false;
+    void navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false }).then((s) => {
+      if (off) return s.getTracks().forEach((t) => t.stop());
+      stream = s;
+      if (live.current) live.current.srcObject = s;
+    }, () => setMode("avatar"));
+    return () => {
+      off = true;
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [mode]);
   const src = withToken("/api/study/avatar/clip");
   useEffect(() => {
     const players = { a: a.current!, b: b.current! };
@@ -176,6 +223,7 @@ export function AvatarFeed() {
     <div className="avatar-feed">
       <video ref={a} src={src} muted playsInline preload="auto" className={front === "a" ? "on" : ""} />
       <video ref={b} src={src} muted playsInline preload="auto" className={front === "b" ? "on" : ""} />
+      <video ref={live} muted playsInline autoPlay className={`live${mode === "live" ? " on" : ""}`} />
     </div>
   );
 }

@@ -64,8 +64,17 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
   // The camera device (Windows desktop app): add it to Windows once, then start or stop it. Only on this computer.
   app.get("/api/study/avatar/camera", async () => (s.virtualCamera ? s.virtualCamera.status() : { available: false, installed: false, running: false }));
+  // What the camera shows: the avatar loop, or the real camera (switched from the computer or from the phone, the
+  // remote control). The feed page asks every second.
+  let mode: "avatar" | "live" = "avatar";
+  app.get("/api/study/avatar/mode", async () => ({ mode }));
+  app.post<{ Body: { mode?: string } }>("/api/study/avatar/mode", async (req) => {
+    mode = req.body?.mode === "live" ? "live" : "avatar";
+    return { mode };
+  });
   app.post<{ Body: { action?: "install" | "start" | "stop" } }>("/api/study/avatar/camera", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The camera is turned on at the computer." });
+    // Adding the camera to Windows happens at the computer (Windows asks there); on and off also from the phone.
+    if (req.body?.action === "install" && !isLocalRequest(req)) return reply.code(403).send({ error: "Add the camera to Windows at the computer." });
     const cam = s.virtualCamera;
     if (!cam) return reply.code(409).send({ error: "The avatar camera without OBS is in the Windows app." });
     try {
