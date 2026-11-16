@@ -159,6 +159,14 @@ export const KesherConfigSchema = z.object({
   /** Looks the user saved by name (Settings → Appearance → My looks). */
   savedLooks: z.array(z.object({ name: z.string().max(60), appearance: z.record(z.string(), z.unknown()) })).max(40).default([]),
   /** The first-run welcome: whether it was finished, and the role the user picked (shapes suggestions). */
+  /** About the user: the name the app and the models call her by, and how to address her (Hebrew and other gendered languages). */
+  user: z
+    .object({
+      name: z.string().max(60).optional(),
+      /** f: feminine, m: masculine, p: plural (neutral). */
+      address: z.enum(["f", "m", "p"]).optional(),
+    })
+    .prefault({}),
   onboarding: z
     .object({
       done: z.boolean().default(false),

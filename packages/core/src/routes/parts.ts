@@ -41,6 +41,24 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     return s.config.onboarding;
   });
 
+  /** About the user (name, how to address her). Her own settings: the phone may change them too. */
+  app.get("/api/user", async () => s.config.user);
+  app.put<{ Body: { name?: string; address?: string } }>("/api/user", async (req, reply) => {
+    const b = req.body ?? {};
+    if (typeof b.name === "string") {
+      const n = b.name.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 60);
+      if (n) s.config.user.name = n;
+      else delete s.config.user.name;
+    }
+    if (typeof b.address === "string") {
+      if (b.address === "f" || b.address === "m" || b.address === "p") s.config.user.address = b.address;
+      else if (b.address === "") delete s.config.user.address;
+      else return reply.code(400).send({ error: "address is f, m or p." });
+    }
+    await s.saveConfig();
+    return s.config.user;
+  });
+
   /** How the app looks. Only looks (no access, no files), so the phone may change it too. */
   app.get("/api/appearance", async () => ({ appearance: cleanAppearance(s.config.appearance), canUndo: s.config.appearanceHistory.length > 0 }));
 

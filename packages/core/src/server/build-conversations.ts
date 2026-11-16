@@ -4,6 +4,7 @@
  * timers, memory), and what a chat reports back (notifications, Telegram). Built once by createKesherServer from the
  * services made before it; the body is the same as when it stood in server.ts.
  */
+import { aboutUserNote } from "../user-profile.js";
 import { ConversationManager } from "../conversations.js";
 import { browserTools } from "../browser-bridge.js";
 import { canvasTools } from "../canvas.js";
@@ -241,6 +242,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         return sd.generateVideo(path, req);
       },
     },
+    aboutUser: () => aboutUserNote(config.user),
     userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
     memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
     // None in an incognito chat: a timer is written to disk (scan 65).

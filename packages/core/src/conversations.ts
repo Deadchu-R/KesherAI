@@ -400,8 +400,10 @@ export class ConversationManager {
     // An incognito chat reads no memory (and files none).
     if (this.deps.library.summary(c.id)?.incognito) return [];
     const learned = (await this.deps.userNotes?.().catch(() => [])) ?? [];
+    const about = this.deps.aboutUser?.() ?? "";
     const topics = (await this.deps.memory?.promptFor(c.projectId).catch(() => "")) ?? "";
     return [
+      ...(about ? [about] : []),
       ...(learned.length ? [`How this user works (learned by KesherAI's coach; they can see and edit it on the Memory page): ${learned.join("; ")}`] : []),
       ...(topics ? [topics] : []),
     ];

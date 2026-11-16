@@ -69,6 +69,8 @@ export interface ConversationDeps {
   mcpTools?(): AgentTool[];
   /** Notes the coach learned about how the user works, added to every system prompt. */
   userNotes?(): Promise<string[]>;
+  /** The user's name and how to address her, as a note for the model ("" when not set). */
+  aboutUser?(): string;
   /** The remember / forget tools for the user's memory (none when memory is off). */
   memoryTools?(convId?: string): AgentTool[];
   /** set_timer and notify_user for a chat (chat-timers.ts). */
