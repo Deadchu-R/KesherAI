@@ -170,7 +170,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       const plan = planGpus(gpus, s.config.engines.gpus, size * 1024 ** 3);
       return { modelGb: size, leader: plan.cards[0] ?? null, parts: plan.parts };
     });
-    return { gpus: gpus.map((g) => ({ ...g, fastest: g.index === fastest })), prefs: s.config.engines.gpus, examples, current: s.engine.status().gpus ?? null };
+    return { gpus: gpus.map((g) => ({ ...g, fastest: g.index === fastest })), prefs: s.config.engines.gpus, comfyGpu: s.config.comfyui.gpu ?? null, examples, current: s.engine.status().gpus ?? null };
   });
 
   /** Sets how models use the cards: `{ mode, use?, split?, main? }`. Applies the next time a model loads. */
@@ -187,6 +187,34 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
     await s.saveConfig();
     return { ok: true, prefs: g };
+  });
+
+  /**
+   * Two cards, the work split: `{ chat, comfy }` card indices (chat models on one card, ComfyUI on the other), or
+   * `{ chat: null, comfy: null }` for all together. A running ComfyUI starts again on its card; a loaded chat model
+   * moves at its next load.
+   */
+  app.put<{ Body: { chat?: number | null; comfy?: number | null } }>("/api/engines/gpu-split", async (req, reply) => {
+    const b = req.body ?? {};
+    const cards = (await detectHardwareCached()).gpus.filter((g) => /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name)).map((g, i) => g.index ?? i);
+    const ok = (x: unknown): x is number => typeof x === "number" && cards.includes(x);
+    if (b.chat === null && b.comfy === null) {
+      delete s.config.engines.gpus.use;
+      delete s.config.engines.gpus.split;
+      delete s.config.comfyui.gpu;
+    } else {
+      if (!ok(b.chat) || !ok(b.comfy) || b.chat === b.comfy) return reply.code(400).send({ error: "Choose two different graphics cards." });
+      s.config.engines.gpus.use = [b.chat];
+      delete s.config.engines.gpus.split;
+      s.config.comfyui.gpu = b.comfy;
+    }
+    await s.saveConfig();
+    const was = s.comfy.status().running;
+    if (was) {
+      await s.comfy.stop().catch(() => undefined);
+      void s.comfy.start().catch(() => undefined);
+    }
+    return { ok: true, chat: s.config.engines.gpus.use ?? null, comfy: s.config.comfyui.gpu ?? null, restartedComfy: was };
   });
 
   /** What the image engine is doing (phase, step x of y, seconds per step), or `{}` when idle. */

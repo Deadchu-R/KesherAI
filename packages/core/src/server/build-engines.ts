@@ -106,6 +106,7 @@ export function buildComfy(p: { paths: DataPaths; downloads: DownloadManager; ru
     modelsDir: () => paths.models,
     port: () => config.comfyui.port,
     folder: () => config.comfyui.folder,
+    gpu: () => config.comfyui.gpu,
     nvidia: async () => (await nvidiaGpus()).length > 0,
     // Linux with an AMD card (RDNA 2 or newer has enough memory to matter): ComfyUI on ROCm.
     amd: async () => amdCardOnLinux(),

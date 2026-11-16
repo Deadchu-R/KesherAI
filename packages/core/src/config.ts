@@ -36,6 +36,8 @@ export const KesherConfigSchema = z.object({
       port: z.number().int().default(8188),
       /** Start ComfyUI when KesherAI starts. */
       autoStart: z.boolean().default(false),
+      /** The graphics card (index, PCI order) ComfyUI runs on; unset: all cards (ComfyUI picks). */
+      gpu: z.number().int().min(0).max(15).optional(),
     })
     .prefault({}),
   engines: z

@@ -63,6 +63,8 @@ export class ComfyManager {
       /** The user's own ComfyUI, if chosen. */
       folder: () => string | undefined;
       nvidia: () => Promise<boolean>;
+      /** The card ComfyUI runs on (PCI order), when the user split the work between two cards. */
+      gpu?: () => number | undefined;
       /** An AMD card PyTorch's ROCm build can use (Linux): then PyTorch for ROCm, not the processor-only build. */
       amd?: () => Promise<boolean>;
       onReady: (url: string) => void;
@@ -216,7 +218,10 @@ export class ComfyManager {
     this.phase = "starting";
     this.message = "Starting ComfyUI…";
     this.add(`> ${cmd} ${full.join(" ")}`);
-    const child = spawn(cmd, full, { cwd: existsSync(join(folder, "main.py")) ? folder : join(folder, "ComfyUI"), windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
+    // Two cards with the work split: ComfyUI sees only its own card (the chat model keeps the other).
+    const card = nvidia ? this.opts.gpu?.() : undefined;
+    if (card !== undefined) this.add(`> on graphics card #${card} only`);
+    const child = spawn(cmd, full, { cwd: existsSync(join(folder, "main.py")) ? folder : join(folder, "ComfyUI"), windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: "1", ...(card !== undefined ? { CUDA_DEVICE_ORDER: "PCI_BUS_ID", CUDA_VISIBLE_DEVICES: String(card) } : {}) } });
     this.child = child;
     const line = (d: Buffer) => d.toString().split(/\r?\n/).filter(Boolean).forEach((l) => this.add(l));
     child.stdout?.on("data", line);

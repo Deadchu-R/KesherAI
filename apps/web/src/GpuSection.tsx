@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { t } from "./i18n";
+import { getLocale, he$, t } from "./i18n";
 import { Select } from "./ui/Select";
 
 interface GpuInfo {
@@ -22,7 +22,10 @@ interface Report {
   prefs: Prefs;
   examples: Array<{ modelGb: number; leader: number | null; parts: Array<{ index: number; share: number }> }>;
   current: string | null;
+  comfyGpu?: number | null;
 }
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 const gb = (b: number) => `${(b / 1024 ** 3).toFixed(0)} GB`;
 const short = (name: string) => name.replace(/^NVIDIA (GeForce )?/i, "");
@@ -116,6 +119,7 @@ export function GpuSection() {
           )}
         </>
       )}
+      {r.gpus.length > 1 && <WorkSplit r={r} reload={load} />}
       <div className="gpu-examples">
         <span className="muted small">{t("gpuWhatHappens")}</span>
         <ul>
@@ -134,5 +138,44 @@ export function GpuSection() {
       </div>
       <p className="muted small">{t("gpuNote")}</p>
     </section>
+  );
+}
+
+/**
+ * Two cards: everything together (a big model split across both), or the chat on one card and ComfyUI (pictures) on
+ * the other, so the chat answers while a picture is made.
+ */
+function WorkSplit({ r, reload }: { r: Report; reload: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const cards = r.gpus.slice(0, 2);
+  const split = r.comfyGpu != null && r.prefs.use?.length === 1 ? { chat: r.prefs.use[0]!, comfy: r.comfyGpu } : null;
+  const pairs = cards.length === 2 ? [[cards[0]!, cards[1]!], [cards[1]!, cards[0]!]] : [];
+  const choose = async (body: { chat: number | null; comfy: number | null }) => {
+    setBusy(true);
+    try {
+      await api("/api/engines/gpu-split", { method: "PUT", body });
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="stack" role="radiogroup" aria-label={L("איך לחלק את העבודה", "How to split the work")}>
+      <span>{L("איך לחלק את העבודה", "How to split the work")}</span>
+      <label className={`split-opt${split ? "" : " on"}`}>
+        <input type="radio" name="gpu-work" checked={!split} disabled={busy} onChange={() => void choose({ chat: null, comfy: null })} />
+        <span>{L("הכול יחד: מודל גדול מתחלק על שני הכרטיסים", "Everything together: a big model splits across both cards")}</span>
+      </label>
+      {pairs.map(([a, b]) => {
+        const on = split?.chat === a.index && split?.comfy === b.index;
+        return (
+          <label key={`${a.index}-${b.index}`} className={`split-opt${on ? " on" : ""}`}>
+            <input type="radio" name="gpu-work" checked={on} disabled={busy} onChange={() => void choose({ chat: a.index, comfy: b.index })} />
+            <span>{L("צ׳אט על ", "Chat on ")}<b dir="ltr">{short(a.name)}</b>{L(", ‏ComfyUI ותמונות על ", ", ComfyUI and pictures on ")}<b dir="ltr">{short(b.name)}</b></span>
+          </label>
+        );
+      })}
+      <p className="muted small">{L("כך הצ׳אט עונה בזמן שתמונה נוצרת, בלי לחכות. ComfyUI מופעל מחדש על הכרטיס שנבחר; מודל הצ׳אט עובר בטעינה הבאה.", "The chat then answers while a picture is made. ComfyUI restarts on its card; the chat model moves at its next load.")}</p>
+    </div>
   );
 }
