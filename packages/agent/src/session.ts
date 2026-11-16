@@ -301,6 +301,17 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     return [...new Set(this.events.filter((e): e is Extract<AgentEvent, { type: "access" }> => e.type === "access").map((e) => e.path))];
   }
 
+  /** No one is there to answer (self-work): questions and access requests are answered at once, not waited for. */
+  private unattended = false;
+
+  /**
+   * Marks the session as running with no one watching (self-work): ask_user gets "decide yourself", and a request
+   * for a folder outside the project is refused, instead of the run waiting all night.
+   */
+  setUnattended(on: boolean): void {
+    this.unattended = on;
+  }
+
   /**
    * Gives the agent access to a folder or file outside its workspace, for
    * the rest of this conversation. The user does this by attaching a file
@@ -1015,6 +1026,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       for (const n of names) this.loadedTools.add(n);
       const output = names.length ? `Loaded: ${names.join(", ")}. Use them now.` : "None of those names is a tool; use names from the list.";
       this.push({ type: "tool_result", callId: call.id, name: call.name, ok: names.length > 0, output });
+      return output;
+    }
+    if (call.name === ASK_USER_TOOL && this.unattended) {
+      const output = "No one is here to answer (this run is unattended): decide yourself, say what you chose and why, and go on.";
+      this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output });
+      return output;
+    }
+    if (call.name === REQUEST_ACCESS_TOOL && this.unattended) {
+      const output = "Refused: this run is unattended, so only the project folder (and folders already shared with it) can be used. The repository's own copy of a file is inside the project folder: use that one.";
+      this.push({ type: "tool_result", callId: call.id, name: call.name, ok: false, output });
       return output;
     }
     if (call.name === ASK_USER_TOOL) {

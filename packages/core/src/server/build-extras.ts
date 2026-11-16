@@ -193,6 +193,9 @@ export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationMa
   const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
     createChat: async (folder, title, modelId, extra = []) => {
       const c = await chats().create({ kind: "code", workspace: folder, mode: "auto", title, ...(modelId ? { modelId } : {}) });
+      // No one watches self-work: its questions and access requests are answered at once (found on the PC: a run
+      // waited hours on a request for a folder outside the project).
+      (await chats().open(c.id))?.session.setUnattended(true);
       // The shared board and handoff: readable by this chat's file tools.
       for (const f of extra) {
         await mkdir(f, { recursive: true }).catch(() => undefined);
@@ -200,7 +203,10 @@ export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationMa
       }
       return c.id;
     },
-    send: async (id, text) => void (await chats().send(id, text)),
+    send: async (id, text) => {
+      (await chats().open(id))?.session.setUnattended(true);
+      await chats().send(id, text);
+    },
     state: async (id) => {
       const opened = await chats().open(id);
       const last = [...(opened?.session.events ?? [])].reverse().find((e) => e.type === "assistant");

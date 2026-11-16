@@ -139,6 +139,20 @@ test("ask_user with several questions shows one card (options with a line each) 
   assert.match(String(seen[1]?.messages.at(-1)?.content), /Projects, CV/);
 });
 
+test("an unattended session (self-work) answers its own questions and refuses folders outside the project", async () => {
+  const { session, seen } = await makeSession([
+    { calls: [{ name: "ask_user", arguments: { question: "Which?", options: ["A", "B"] } }, { name: "request_access", arguments: { reason: "read it", path: "/etc" } }] },
+    { text: "Chose A." },
+  ]);
+  session.setUnattended(true);
+  session.send("go");
+  await waitFor(session, (e) => e.type === "assistant");
+  assert.equal(session.events.some((e) => e.type === "question"), false);
+  const msgs = JSON.stringify(seen[1]?.messages ?? []);
+  assert.match(msgs, /decide yourself/);
+  assert.match(msgs, /Refused: this run is unattended/);
+});
+
 test("auto mode runs safe commands but still asks for dangerous ones", async () => {
   const { session } = await makeSession(
     [
