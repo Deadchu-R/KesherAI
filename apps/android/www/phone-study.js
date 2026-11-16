@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -178,8 +178,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
 
   function home() {
     const now = Date.now();
-    const due = db.courses.reduce((n, c) => n + c.cards.filter((x) => Date.parse(x.due) <= now).length, 0);
-    const first = db.courses.find((c) => c.cards.some((x) => Date.parse(x.due) <= now));
+    const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
+    const first = db.courses.find((c) => cardsToReview(toData(c), now).length);
     root.append(el("section", { class: "api" },
       el("h2", {}, L("להיום", "Today")),
       first ? el("button", { type: "button", class: "primary", onclick: () => go({ at: "review", course: first.id }) }, L(`חזרה על ${due} כרטיסיות`, `Review ${due} cards`)) : el("p", { class: "muted" }, L("אין כרטיסיות לחזרה עכשיו.", "No cards to review now.")),
@@ -217,7 +217,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
     const c = course();
     if (!c) return go({ at: "home" });
     const now = Date.now();
-    const due = c.cards.filter((x) => Date.parse(x.due) <= now).length;
+    const due = cardsToReview(toData(c), now).length;
+    const plan = examPlan(toData(c), now);
     root.append(back({ at: "home" }), el("h2", { dir: "auto" }, c.name),
       el("div", { class: "ph-btns" },
         el("button", { type: "button", class: "primary", disabled: !due, onclick: () => go({ at: "review", course: c.id }) }, L(`חזרה (${due})`, `Review (${due})`)),
@@ -232,6 +233,13 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
         sel.value = c.fieldChosen ? c.field : "";
         return sel;
       })()));
+    const exam = el("input", { type: "date", value: c.examDate || "", "aria-label": L("תאריך המבחן", "Exam date"), onchange: (e) => { const v = e.target.value; if (v) c.examDate = v; else delete c.examDate; if (commit()) draw(); } });
+    root.append(el("label", { class: "ph-filter" }, L("מבחן: ", "Exam: "), exam));
+    if (plan) root.append(el("section", { class: "api" },
+      el("h2", {}, plan.daysLeft === 0 ? L("המבחן היום", "The exam is today") : plan.daysLeft === 1 ? L("המבחן מחר", "The exam is tomorrow") : L(`המבחן בעוד ${plan.daysLeft} ימים`, `The exam is in ${plan.daysLeft} days`)),
+      el("p", {}, plan.perDay ? L(`${plan.perDay} כרטיסיות ביום עד המבחן.`, `${plan.perDay} cards a day until the exam.`) : L("אין כרטיסיות לחזרה עד המבחן.", "No cards to review before the exam.")),
+      plan.notReady.length > 0 && el("p", { class: "muted small", dir: "auto" }, L("עוד אין מה ללמוד מ: ", "Nothing to study from yet: ") + plan.notReady.slice(0, 6).map((l) => l.title).join(" · ")),
+      plan.testWeek && el("button", { type: "button", onclick: () => go({ at: "quiz", course: c.id }) }, L("שבוע מבחן: מבחן תרגול", "Exam week: a practice test"))));
     if (speech) root.append(el("button", { type: "button", class: "primary", style: "display: block; width: 100%; min-height: 52px; margin: 8px 0", onclick: () => go({ at: "record", course: c.id }) }, L("🎙 הקלט הרצאה (בטלפון)", "🎙 Record a lecture (on the phone)")));
     const title = el("input", { placeholder: L("כותרת ההרצאה", "Lecture title"), dir: "auto", "aria-label": L("כותרת", "Title") });
     const text = el("textarea", { rows: "6", dir: "auto", "aria-label": L("טקסט ההרצאה", "Lecture text"), placeholder: L("הדביקי טקסט, הקלידי בקול עם המיקרופון של המקלדת, או הוסיפי מצגת או צילומים.", "Paste text, type by voice with the keyboard's microphone, or add slides or photos.") });
@@ -543,7 +551,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
     const c = course();
     if (!c) return go({ at: "home" });
     const now = Date.now();
-    const card = c.cards.filter((x) => Date.parse(x.due) <= now).sort((a, b) => Date.parse(a.due) - Date.parse(b.due))[0];
+    const card = cardsToReview(toData(c), now, 1)[0];
     root.append(back({ at: "course", course: c.id }));
     if (!card) return root.append(el("p", {}, L("סיימת! אין עוד כרטיסיות לחזרה עכשיו.", "Done! No more cards to review now.")));
     const answer = el("p", { dir: "auto", hidden: true, style: "white-space: pre-wrap" }, card.back);

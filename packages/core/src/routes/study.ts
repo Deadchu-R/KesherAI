@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
+import { examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 
@@ -106,9 +106,13 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       due: d.cards.filter((c) => Date.parse(c.due) <= now).length,
       drugs: d.drugs ?? [],
       quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length })).slice(-20),
+      plan: examPlan(d, now) ?? null,
     };
   });
-  app.patch<C & { Body: { name?: string; field?: string } }>("/api/study/courses/:id", async (req) => (typeof req.body?.field === "string" ? st.setField(req.params.id, req.body.field) : st.renameCourse(req.params.id, String(req.body?.name ?? ""))));
+  app.patch<C & { Body: { name?: string; field?: string; examDate?: string } }>("/api/study/courses/:id", async (req) => {
+    if (typeof req.body?.examDate === "string") return st.setExam(req.params.id, req.body.examDate);
+    return typeof req.body?.field === "string" ? st.setField(req.params.id, req.body.field) : st.renameCourse(req.params.id, String(req.body?.name ?? ""));
+  });
   app.delete<C>("/api/study/courses/:id", async (req) => {
     await st.removeCourse(req.params.id);
     return { ok: true };

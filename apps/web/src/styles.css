@@ -2715,3 +2715,6 @@ html.handheld .palette-list button { min-height: 44px; }
 
 .study-start ol { margin: 0; padding-inline-start: 1.3em; display: grid; gap: 10px; line-height: 1.55; }
 .study-start li b { display: block; }
+
+.study-plan h2 { margin: 0 0 4px; }
+.study-plan p { margin: 4px 0; }

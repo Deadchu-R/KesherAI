@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -85,4 +85,27 @@ test("merging a course from the phone and the computer keeps both, minus deletio
   assert.equal(String(m.cards[0]!.fsrs.last_review), "2026-11-03T00:00:00Z");
   assert.equal(m.reviews.length, 2);
   assert.deepEqual(m.removed?.sort(), ["k2", "k3"]);
+});
+
+test("the plan toward an exam brings forward cards scheduled after it", () => {
+  const now = Date.parse("2026-11-16T12:00:00");
+  const card = (id: string, due: string, last = "2026-11-01T10:00:00") => ({ id, front: id, back: "b", format: "text" as const, createdAt: 1, due, fsrs: { last_review: last }, lectureId: "l1" });
+  const d = {
+    course: { id: "c1234567", name: "Anatomy", createdAt: 1, examDate: "2026-11-21" },
+    lectures: [{ id: "l1", title: "1", date: "2026-11-01", text: "t", summary: "s" }, { id: "l2", title: "2", date: "2026-11-02", text: "t" }],
+    cards: [card("now", "2026-11-15T00:00:00"), card("mid", "2026-11-19T00:00:00"), card("late1", "2026-12-01T00:00:00"), card("late2", "2026-12-20T00:00:00"), card("fresh", "2026-12-25T00:00:00", "2026-11-16T09:00:00")],
+    reviews: [],
+    quizzes: [],
+  };
+  const p = examPlan(d, now)!;
+  assert.equal(p.daysLeft, 5);
+  assert.equal(p.dueNow, 1);
+  assert.equal(p.beforeExam, 2);
+  assert.equal(p.perDay, 1);
+  assert.deepEqual(p.notReady.map((l) => l.id), ["l2"]);
+  assert.equal(p.testWeek, true);
+  assert.deepEqual(cardsToReview(d, now).map((c) => c.id), ["now"]);
+  const twoDays = { ...d, course: { ...d.course, examDate: "2026-11-17" } };
+  assert.deepEqual(cardsToReview(twoDays, now).map((c) => c.id), ["now", "mid", "late1", "late2"]);
+  assert.equal(examPlan({ ...d, course: { ...d.course, examDate: "2026-11-01" } }, now), undefined);
 });

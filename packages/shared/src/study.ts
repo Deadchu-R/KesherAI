@@ -19,6 +19,8 @@ export interface StudyCourse {
   field?: string;
   /** The student chose the field (it is no longer guessed). */
   fieldChosen?: boolean;
+  /** The exam's date (YYYY-MM-DD), when she set one. */
+  examDate?: string;
 }
 
 /** A term from a lecture, Hebrew with its English (medical) name. */
@@ -569,7 +571,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
   const field = !a.course.fieldChosen && b.course.fieldChosen ? { field: b.course.field, fieldChosen: true } : {};
   const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
   return {
-    course: { ...a.course, ...field },
+    course: { ...a.course, ...field, ...(!a.course.examDate && b.course.examDate ? { examDate: b.course.examDate } : {}) },
     lectures: byId(a.lectures, b.lectures, gone, (x, y) => (lectureWeight(y) > lectureWeight(x) || (lectureWeight(y) === lectureWeight(x) && y.text.length > x.text.length) ? y : x)),
     cards: byId(a.cards, b.cards, gone, (x, y) => (lastReview(y) > lastReview(x) ? y : x)),
     reviews,
@@ -577,4 +579,76 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     ...(drugs.length ? { drugs } : {}),
     ...(removed.length ? { removed } : {}),
   };
+}
+
+/** Where a course stands before its exam. */
+export interface ExamPlan {
+  date: string;
+  /** Whole days from today to the exam day (0 on the day itself). */
+  daysLeft: number;
+  /** Cards due now. */
+  dueNow: number;
+  /** Cards whose next review falls after the exam: each is shown once more before it. */
+  beforeExam: number;
+  /** Cards a day, to get through all of them by the exam. */
+  perDay: number;
+  /** Lectures with nothing to study from yet (no summary, or no cards). */
+  notReady: Array<{ id: string; title: string }>;
+  /** The last week: a practice test on the weak topics is worth it now. */
+  testWeek: boolean;
+}
+
+const DAY = 86_400_000;
+const examAt = (date: string) => Date.parse(`${date}T08:00:00`);
+
+/**
+ * The plan toward a course's exam: how many cards a day, what has nothing to study from yet, and whether it is the
+ * week for practice tests. Cards scheduled after the exam are brought forward (seen once more before it), the
+ * standard "review before a deadline" of spaced-repetition apps.
+ *
+ * @param d - The course.
+ * @param now - Now (ms).
+ * @returns The plan, or undefined without an exam date or after the exam.
+ */
+export function examPlan(d: StudyCourseData, now = Date.now()): ExamPlan | undefined {
+  const date = d.course.examDate;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return undefined;
+  const at = examAt(date);
+  if (at + DAY < now) return undefined;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const daysLeft = Math.max(0, Math.round((examAt(date) - 8 * 3_600_000 - today.getTime()) / DAY));
+  const dueNow = d.cards.filter((c) => Date.parse(c.due) <= now).length;
+  const beforeExam = d.cards.filter((c) => Date.parse(c.due) > at && Date.parse(String((c.fsrs as { last_review?: string }).last_review ?? 0)) < now - 2 * DAY).length;
+  const cardsOf = new Set(d.cards.map((c) => c.lectureId));
+  return {
+    date,
+    daysLeft,
+    dueNow,
+    beforeExam,
+    perDay: Math.ceil((dueNow + beforeExam) / Math.max(1, daysLeft)),
+    notReady: d.lectures.filter((l) => !l.summary || !cardsOf.has(l.id)).map((l) => ({ id: l.id, title: l.title })),
+    testWeek: daysLeft <= 7,
+  };
+}
+
+/**
+ * The cards to review now: those due, then (with an exam in the plan) the ones scheduled after the exam, up to the
+ * day's share, earliest first.
+ *
+ * @param d - The course.
+ * @param now - Now (ms).
+ * @param limit - At most this many.
+ * @returns The cards.
+ */
+export function cardsToReview(d: StudyCourseData, now = Date.now(), limit = 50): StudyCard[] {
+  const due = d.cards.filter((c) => Date.parse(c.due) <= now).sort((a, b) => Date.parse(a.due) - Date.parse(b.due));
+  const plan = examPlan(d, now);
+  if (!plan || due.length >= plan.perDay) return due.slice(0, limit);
+  const at = examAt(plan.date);
+  const ahead = d.cards
+    .filter((c) => Date.parse(c.due) > at && Date.parse(String((c.fsrs as { last_review?: string }).last_review ?? 0)) < now - 2 * DAY)
+    .sort((a, b) => Date.parse(a.due) - Date.parse(b.due))
+    .slice(0, plan.perDay - due.length);
+  return [...due, ...ahead].slice(0, limit);
 }

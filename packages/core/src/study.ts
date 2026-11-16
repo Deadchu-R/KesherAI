@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { detectField, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { cardsToReview, detectField, examPlan, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -25,7 +25,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const d = raw as Partial<CourseData> | undefined;
   const c = d?.course;
   if (!c || typeof c.id !== "string" || !/^[a-z0-9-]{8,40}$/.test(c.id)) return undefined;
-  const course: StudyCourse = { id: c.id, name: str(c.name, 120) || "Course", createdAt: Number(c.createdAt) || Date.now(), ...(STUDY_FIELDS.some((f) => f.id === c.field) ? { field: c.field } : {}), ...(c.fieldChosen ? { fieldChosen: true } : {}) };
+  const course: StudyCourse = { id: c.id, name: str(c.name, 120) || "Course", createdAt: Number(c.createdAt) || Date.now(), ...(STUDY_FIELDS.some((f) => f.id === c.field) ? { field: c.field } : {}), ...(c.fieldChosen ? { fieldChosen: true } : {}), ...(typeof c.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.examDate) ? { examDate: c.examDate } : {}) };
   const lectures = arr<StudyLecture>(d.lectures, 2000).filter((l) => okId(l?.id)).map((l) => ({
     id: l.id, title: str(l.title, 200), date: /^\d{4}-\d{2}-\d{2}$/.test(l.date) ? l.date : new Date().toISOString().slice(0, 10), text: str(l.text, 400_000),
     ...(l.summary ? { summary: str(l.summary, 100_000) } : {}),
@@ -133,14 +133,17 @@ export class Study {
   }
 
   /** @returns Every course with its counts, newest first. */
-  async list(): Promise<Array<StudyCourse & { lectures: number; cards: number; due: number }>> {
+  async list(): Promise<Array<StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number }>> {
     await mkdir(this.dir, { recursive: true });
     const names = (await readdir(this.dir)).filter((n) => n.endsWith(".json"));
     const out = [];
     const now = Date.now();
     for (const n of names) {
       const d = await this.get(n.slice(0, -5)).catch(() => undefined);
-      if (d) out.push({ ...d.course, lectures: d.lectures.length, cards: d.cards.length, due: d.cards.filter((c) => Date.parse(c.due) <= now).length });
+      if (d) {
+        const plan = examPlan(d, now);
+        out.push({ ...d.course, lectures: d.lectures.length, cards: d.cards.length, due: d.cards.filter((c) => Date.parse(c.due) <= now).length, ...(plan ? { daysLeft: plan.daysLeft, perDay: plan.perDay } : {}) });
+      }
     }
     return out.sort((a, b) => b.createdAt - a.createdAt);
   }
@@ -188,6 +191,16 @@ export class Study {
   async renameCourse(id: string, name: string): Promise<StudyCourse> {
     const d = await this.get(id);
     d.course.name = name.trim().slice(0, 120) || d.course.name;
+    await this.save(d);
+    return d.course;
+  }
+
+  /** Sets the course's exam date (YYYY-MM-DD), or clears it with "". */
+  async setExam(id: string, date: string): Promise<StudyCourse> {
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw Object.assign(new Error("The date is YYYY-MM-DD."), { statusCode: 400 });
+    const d = await this.get(id);
+    if (date) d.course.examDate = date;
+    else delete d.course.examDate;
     await this.save(d);
     return d.course;
   }
@@ -400,9 +413,7 @@ export class Study {
 
   /** @returns Cards due now, earliest first (at most `limit`). */
   async due(id: string, limit = 50): Promise<StudyCard[]> {
-    const d = await this.get(id);
-    const now = Date.now();
-    return d.cards.filter((c) => Date.parse(c.due) <= now).sort((a, b) => Date.parse(a.due) - Date.parse(b.due)).slice(0, limit);
+    return cardsToReview(await this.get(id), Date.now(), limit);
   }
 
   /** Records a review (1 again … 4 easy) and schedules the card's next one. */

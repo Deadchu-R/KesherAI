@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
@@ -10,9 +10,9 @@ import { AvatarCamera } from "./AvatarCamera";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-type CourseRow = StudyCourse & { lectures: number; cards: number; due: number };
+type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
-interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }> }
+interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; reviews: number }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
@@ -125,6 +125,7 @@ function StudyHome() {
                 <b dir="auto">{c.name}</b>
                 <small>{[fieldName(c.field), L(`${c.lectures} הרצאות · ${c.cards} כרטיסיות`, `${c.lectures} lectures · ${c.cards} cards`)].filter(Boolean).join(" · ")}</small>
                 <small className={c.due ? "warn" : "good"}>{c.due ? L(`${c.due} לחזרה`, `${c.due} to review`) : L("הכול מעודכן", "All caught up")}</small>
+                {c.daysLeft !== undefined && <small className={c.daysLeft <= 7 ? "warn" : ""}>{c.daysLeft === 0 ? L("מבחן היום", "Exam today") : L(`מבחן בעוד ${c.daysLeft} ימים · ${c.perDay} כרטיסיות ביום`, `Exam in ${c.daysLeft} days · ${c.perDay} cards a day`)}</small>}
               </a>
             </li>
           ))}
@@ -201,11 +202,16 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
             {STUDY_FIELDS.map((f) => <option key={f.id} value={f.id}>{L(f.he, f.en)}</option>)}
           </select>
         </label>
+        <label className="study-field">
+          <span>{L("מבחן", "Exam")}</span>
+          <input type="date" value={info.course.examDate ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { examDate: e.target.value } }))) load(); }} />
+        </label>
         <button type="button" className="small ghost" onClick={async () => {
           if (!confirm(L(`למחוק את הקורס "${info.course.name}" עם כל ההרצאות והכרטיסיות? אי אפשר לבטל.`, `Delete "${info.course.name}" with all its lectures and cards? This cannot be undone.`))) return;
           if (await call(api(`/api/study/courses/${id}`, { method: "DELETE" }))) go("#/study");
         }}>{L("מחק קורס", "Delete course")}</button>
       </div>
+      {info.plan && !lectureId && <ExamPlanCard id={id} plan={info.plan} />}
       <div className="seg-pills" role="tablist" aria-label={L("חלקי הקורס", "Course sections")}>
         {TABS.filter(([t]) => clinicalField(info.course.field) || !CLINICAL_TABS.has(t)).map(([t, n]) => (
           <button key={t} type="button" role="tab" aria-selected={on === t} className={on === t ? "on" : ""} onClick={() => go(`#/study/${id}/${t}`)}>
@@ -223,6 +229,24 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "progress" ? <ProgressView courseId={id} />
         : <Lectures courseId={id} info={info} onChange={load} />}
     </div>
+  );
+}
+
+/** The plan toward the exam: the days left, the day's cards, what has nothing to study from yet, the test week. */
+function ExamPlanCard({ id, plan }: { id: string; plan: ExamPlan }) {
+  const when = plan.daysLeft === 0 ? L("המבחן היום", "The exam is today") : plan.daysLeft === 1 ? L("המבחן מחר", "The exam is tomorrow") : L(`המבחן בעוד ${plan.daysLeft} ימים`, `The exam is in ${plan.daysLeft} days`);
+  return (
+    <section className="card study-plan">
+      <h2>{when}</h2>
+      <p>{plan.perDay ? L(`${plan.perDay} כרטיסיות ביום עד המבחן`, `${plan.perDay} cards a day until the exam`) : L("אין כרטיסיות לחזרה עד המבחן.", "No cards to review before the exam.")}{plan.beforeExam ? L(` (כולל ${plan.beforeExam} שהיו מתוזמנות אחרי המבחן ומוקדמות לפניו)`, ` (including ${plan.beforeExam} scheduled after the exam, brought before it)`) : ""}</p>
+      {plan.notReady.length > 0 && (
+        <p className="small">{L("עוד אין מה ללמוד מ: ", "Nothing to study from yet: ")}{plan.notReady.slice(0, 6).map((l, i) => <span key={l.id}>{i ? " · " : ""}<a href={`#/study/${id}/l/${l.id}`} dir="auto">{l.title}</a></span>)}{plan.notReady.length > 6 ? " …" : ""}</p>
+      )}
+      <div className="study-actions">
+        {plan.perDay > 0 && <a className="button primary" href={`#/study/${id}/review`}>{L("לחזרה של היום", "Today's review")}</a>}
+        {plan.testWeek && <a className="button" href={`#/study/${id}/quiz`}>{L("שבוע מבחן: מבחן תרגול על הנושאים החלשים", "Exam week: a practice test on the weak topics")}</a>}
+      </div>
+    </section>
   );
 }
 
