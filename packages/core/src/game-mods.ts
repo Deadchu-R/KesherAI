@@ -17,6 +17,7 @@ import { runProgram } from "./unreal-tools.js";
  * The Java and Rojo tools are KesherAI's own copies in its engines folder (a JDK 21 and rojo.exe), found by themselves.
  */
 
+/** The kinds of Minecraft and Roblox projects. */
 export type ModKind = "fabric" | "neoforge" | "bedrock" | "roblox";
 
 const TEMPLATES: Record<"fabric" | "neoforge", string> = {

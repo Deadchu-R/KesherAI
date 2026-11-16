@@ -49,7 +49,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Models and hardware
 - ✅ Training picture LoRAs from the interface
-- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ⬜ a voice of her own
+- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent)
 - ✅ Game helper over a running game
 - ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
 - ⬜ A check on a real controller after each interface change (C6)

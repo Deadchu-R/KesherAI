@@ -4,6 +4,7 @@ import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast, useLibrary } from "../library";
 import { Select } from "../ui/Select";
+import { VoiceCloneSection } from "../VoiceCloneSection";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -180,6 +181,8 @@ export function TrainingPage() {
           {chat.log.length > 0 && <details><summary className="small">{L("יומן", "Log")}</summary><pre className="code small" dir="ltr">{chat.log.slice(-30).join("\n")}</pre></details>}
         </section>
       )}
+
+      <VoiceCloneSection />
 
       {jobs.length > 0 && (
         <section className="card stack">
