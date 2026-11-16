@@ -38,6 +38,7 @@ import { useParts } from "./parts";
 import { CodeHome } from "./pages/CodeHome";
 import { SelfWorkPage } from "./pages/SelfWorkPage";
 import { TasksPage } from "./pages/TasksPage";
+import { StudyPage } from "./pages/StudyPage";
 import { PadHints } from "./PadHints";
 import { GameHelper } from "./pages/GameHelper";
 import { TextHelper } from "./pages/TextHelper";
@@ -269,6 +270,7 @@ export function App() {
   else if (hash === "#/code") page = <CodeHome />;
   else if (hash === "#/self-work") page = <SelfWorkPage />;
   else if (hash === "#/tasks") page = <TasksPage />;
+  else if (hash === "#/study" || hash.startsWith("#/study/")) page = <StudyPage hash={hash.split("?")[0]!} />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/training") page = <TrainingPage />;
   else if (hash === "#/parts" || hash === "#/connections" || hash === "#/plugins") page = <CustomizePage hash={hash} />;

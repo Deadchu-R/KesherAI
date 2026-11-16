@@ -20,7 +20,7 @@ const port = 7990;
 const base = `http://127.0.0.1:${port}`;
 
 /** The screens to open (hash routes), and a made-up 200-message chat. */
-const PAGES = ["#/", "#/code", "#/unity", "#/unreal", "#/models", "#/personas", "#/knowledge", "#/pages", "#/images", "#/connections", "#/updates", "#/apps", "#/nodes", "#/pipelines", "#/watch", "#/settings", "#/canvas", "#/tasks"];
+const PAGES = ["#/", "#/code", "#/unity", "#/unreal", "#/models", "#/personas", "#/knowledge", "#/pages", "#/images", "#/connections", "#/updates", "#/apps", "#/nodes", "#/pipelines", "#/watch", "#/settings", "#/canvas", "#/tasks", "#/study", "#/study/calc"];
 
 const load = async () => {
   if (process.env.PLAYWRIGHT_MODULE) return (await import(process.env.PLAYWRIGHT_MODULE)).default;

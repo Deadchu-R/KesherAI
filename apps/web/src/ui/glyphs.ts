@@ -66,6 +66,7 @@ export const GLYPHS: Record<string, string[]> = {
   camera: ["M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z", circle(12, 13, 3.3)],
   wrench: ["M15 4.5a4.5 4.5 0 0 0-4.3 5.8l-5.9 5.9a2.1 2.1 0 0 0 3 3l5.9-5.9A4.5 4.5 0 0 0 19.5 9l-2.8 2.8-3-.5-.5-3z"],
   scroll: ["M7 4.5h10.5v13a2.5 2.5 0 0 1-2.5 2.5H6.5", "M7 4.5A2.5 2.5 0 0 0 4.5 7v1.5H7M6.5 20A2.5 2.5 0 0 0 9 17.5V7M10.5 9h4M10.5 12.5h4"],
+  cap: ["M2.5 9 12 4.5 21.5 9 12 13.5z", "M6.5 11v4.5c0 1.4 2.5 2.8 5.5 2.8s5.5-1.4 5.5-2.8V11", "M21.5 9v5"],
   clipboard: [rect(5.5, 5, 13, 16), rect(9, 3, 6, 4, 1.2), "M9 12h6M9 15.5h4"],
   building: ["M5 20.5V5a1.5 1.5 0 0 1 1.5-1.5h7A1.5 1.5 0 0 1 15 5v15.5M15 9.5h3.5A1.5 1.5 0 0 1 20 11v9.5M3.5 20.5h17M8.5 7.5h3M8.5 11h3M8.5 14.5h3"],
   moon: ["M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"],
@@ -91,7 +92,7 @@ const FROM_TEXT: Record<string, string> = {
   "🔧": "wrench", "🔔": "bell", "🔌": "plug", "📷": "camera", "📱": "phone", "📲": "phone", "📦": "box", "📜": "scroll", "📚": "book", "📋": "clipboard", "📄": "page", "📝": "page",
   "🏢": "building", "🌙": "moon", "⭐": "star", "✨": "sparkle", "✦": "sparkle", "✕": "close", "✅": "check", "☁": "cloud", "☁️": "cloud", "◐": "half", "▶": "play", "⇄": "swap", "⌨": "keyboard", "⑂": "branch", "🔊": "speaker", "■": "stop", "⌨️": "keyboard",
   "🖼": "image", "🖼️": "image", "🗂": "stack", "🗂️": "stack", "🏋": "dumbbell", "🏋️": "dumbbell", "📅": "calendar", "⚖": "compare", "⚖️": "compare", "⛓": "flow", "⛓️": "flow",
-  "🎭": "person", "👥": "people", "📊": "chart", "🧷": "puzzle", "🎛": "sliders", "🎛️": "sliders", "🩺": "pulse", "⬆": "upload",
+  "🎭": "person", "👥": "people", "📊": "chart", "🧷": "puzzle", "🎛": "sliders", "🎛️": "sliders", "🩺": "pulse", "🎓": "cap", "⬆": "upload",
 };
 
 /** Pages whose drawing differs from their emoji's (the menu has two 📦, "Libraries" and "Models"). */
