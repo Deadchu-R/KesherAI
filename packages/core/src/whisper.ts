@@ -38,6 +38,8 @@ export function pickWhisperAsset<T extends { name: string }>(assets: T[], nvidia
   );
 }
 const MODELS = {
+  // Hebrew: ivrit-ai's large-v3-turbo, trained further on Hebrew (f16, so only with a graphics card or Apple chip).
+  he: { file: "ivrit-ai-large-v3-turbo.bin", sizeGb: 1.62, label: "Whisper large-v3 turbo · Hebrew (ivrit-ai)", url: "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/main/ggml-model.bin" },
   turbo: { file: "ggml-large-v3-turbo-q5_0.bin", sizeGb: 0.55, label: "Whisper large-v3 turbo" },
   small: { file: "ggml-small-q5_1.bin", sizeGb: 0.19, label: "Whisper small" },
 } as const;
@@ -161,9 +163,14 @@ export class WhisperEngine {
     private readonly gpu: () => Promise<{ nvidia: boolean; vramGb?: number }>,
   ) {}
 
+  /** The speech language setting (Hebrew picks ivrit-ai's model where it runs well). */
+  language: () => string = () => "auto";
+
   private async modelKey(): Promise<ModelKey> {
     const g = await this.gpu().catch(() => ({ nvidia: false }));
-    return g.nvidia || (process.platform === "darwin" && process.arch === "arm64") ? "turbo" : "small";
+    const strong = g.nvidia || (process.platform === "darwin" && process.arch === "arm64");
+    if (!strong) return "small";
+    return this.language() === "he" ? "he" : "turbo";
   }
 
   private modelPath(key: ModelKey): string {
@@ -260,7 +267,8 @@ export class WhisperEngine {
       if (!(await stat(dest).catch(() => undefined))?.size) {
         this.state = { busy: "downloading" };
         await mkdir(join(this.modelsDir(), "speech-to-text", "ggml-org"), { recursive: true });
-        const job = this.downloads.enqueue({ url: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODELS[key].file}`, dest, size: Math.round(MODELS[key].sizeGb * 1024 ** 3), label: `Speech model · ${MODELS[key].label}` });
+        const m: { file: string; url?: string } = MODELS[key];
+        const job = this.downloads.enqueue({ url: m.url ?? `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${m.file}`, dest, size: Math.round(MODELS[key].sizeGb * 1024 ** 3), label: `Speech model · ${MODELS[key].label}` });
         await waitForDownload(this.downloads, job.id);
       }
       this.state = {};
