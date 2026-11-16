@@ -264,7 +264,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
         {busy && <p className="muted">{L("מחפשת בהרצאות…", "Looking through your lectures…")}</p>}
       </div>
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} dir="auto" aria-label={L("שאלה", "Question")} placeholder={L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={L("שאלה", "Question")} placeholder={L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
         <button type="submit" className="primary" disabled={busy || !q.trim()}>{L("שאלי", "Ask")}</button>
       </form>
     </section>

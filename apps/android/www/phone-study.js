@@ -557,7 +557,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
     const turns = tutor.get(c.id) || [];
     tutor.set(c.id, turns);
     const list = el("div", { class: "ph-ask", "aria-live": "polite" }, ...turns.map((t) => el("div", { class: `ph-ask-turn ${t.role}`, dir: "auto" }, t.content, t.sources?.length ? el("small", { class: "muted" }, el("br"), L("מתוך: ", "From: ") + t.sources.join(" · ")) : "")));
-    const q = el("input", { dir: "auto", "aria-label": L("שאלה", "Question"), placeholder: L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
+    // An empty box takes its direction from the page (dir=auto would show the Hebrew example left to right).
+    const q = el("input", { dir: he() ? "rtl" : "auto", "aria-label": L("שאלה", "Question"), placeholder: L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
     const btn = el("button", { type: "submit", class: "primary" }, L("שאלי", "Ask"));
     const form = el("form", { class: "ph-filter", onsubmit: async (e) => {
       e.preventDefault();
