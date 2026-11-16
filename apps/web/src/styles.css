@@ -2690,3 +2690,25 @@ html.handheld .palette-list button { min-height: 44px; }
 .avatar-count { position: absolute; inset: 0; display: grid; place-items: center; font-size: 96px; font-weight: 800; color: #fff; text-shadow: 0 2px 12px rgb(0 0 0 / 0.6); }
 .avatar-hint { position: absolute; inset-inline: 8px; bottom: 8px; padding: 8px 12px; border-radius: 10px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 15px; text-align: center; }
 .study-avatar progress { width: 100%; max-width: 640px; height: 6px; }
+
+/* KesherAI on the computer was updated while this page stayed open. */
+.version-bar {
+  position: fixed;
+  inset-inline: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--panel, #1f2430);
+  border: 1px solid var(--border, #3a4150);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 25%);
+  max-width: 560px;
+  margin-inline: auto;
+}
+@media (max-width: 760px) {
+  .version-bar { bottom: calc(72px + env(safe-area-inset-bottom)); }
+}

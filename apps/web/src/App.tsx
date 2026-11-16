@@ -5,6 +5,7 @@
  */
 import { clearPhoneNotes } from "./phoneNotify";
 import { CommandPalette } from "./CommandPalette";
+import { VersionWatch } from "./VersionWatch";
 import { GuardBanner } from "./GuardSection";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
@@ -323,6 +324,7 @@ export function App() {
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />
       <Reconnecting />
+      <VersionWatch />
       <main className="main">
         <PhoneUpdateBanner />
         <GuardBanner />

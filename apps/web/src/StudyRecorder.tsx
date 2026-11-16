@@ -3,6 +3,7 @@ import { withToken } from "./api";
 import { getLocale } from "./i18n";
 import { encodeWav } from "./Mic";
 import { stamp } from "./study-time";
+import { busy } from "./VersionWatch";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 const PIECE_SEC = 30;
@@ -108,6 +109,7 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
       mark: () => setLines((ls) => [...ls, `${stamp(now())} ⭐ ${L("חשוב", "Important")}`]),
       stop: async () => {
         rec.current = null;
+        busy.recording = false;
         flush();
         node.disconnect();
         [mic, sys].forEach((st) => st?.getTracks().forEach((t) => t.stop()));
@@ -134,6 +136,7 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
         setState("recording");
       }
     };
+    busy.recording = true;
     setSecs(0);
     setLines([]);
     setState("recording");
