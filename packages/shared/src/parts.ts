@@ -36,6 +36,7 @@ export const PARTS: PartDefinition[] = [
   { id: "watch", pages: ["#/watch"], icon: "🖥", downloadGb: 0, title: { en: "Computer use", he: "שימוש במחשב" }, description: { en: "The agent sees the screen and uses apps, and you watch and approve.", he: "הסוכן רואה את המסך ומשתמש באפליקציות, ואתה צופה ומאשר." } },
   { id: "pipelines", pages: ["#/pipelines"], icon: "⛓", downloadGb: 0, title: { en: "Pipelines", he: "צינורות עבודה" }, description: { en: "Chained steps and routines that run by themselves.", he: "שלבים בשרשרת ומשימות שרצות לבד." } },
   { id: "compare", pages: ["#/compare"], icon: "⚖", downloadGb: 0, title: { en: "Compare models", he: "השוואת מודלים" }, description: { en: "One question to several models side by side.", he: "שאלה אחת לכמה מודלים זה לצד זה." } },
+  { id: "study", pages: [], icon: "🎓", downloadGb: 0.5, title: { en: "Study", he: "לימודים" }, description: { en: "Lectures recorded and summarised by course, flashcards and quizzes, ask the course, a tutor that guides. Runs on a modest laptop.", he: "הקלטת הרצאות וסיכום לפי קורס, כרטיסיות ומבחנים, שאלות על כל חומרי הקורס, ומורה שמכוון. רץ גם על לפטופ חלש." } },
   { id: "community", pages: ["#/community", "#/usage"], icon: "👥", downloadGb: 0, title: { en: "Community and usage", he: "קהילה ושימוש" }, description: { en: "Shared prompts and personas, and your usage and coach.", he: "פרומפטים ופרסונות משותפים, והשימוש והמאמן שלך." } },
 ];
 

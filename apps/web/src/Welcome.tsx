@@ -28,6 +28,7 @@ export function useRole(): RoleDefinition | undefined {
 
 /** The tool groups of the welcome (the same as the menu's). */
 const TOOL_GROUPS: Array<{ id: string; icon: string; title: { en: string; he: string }; parts: string[] }> = [
+  { id: "study", icon: "🎓", title: { en: "Study", he: "לימודים" }, parts: ["study"] },
   { id: "create", icon: "🎨", title: { en: "Create", he: "יצירה" }, parts: ["images", "video", "image-editor", "nodes"] },
   { id: "games", icon: "🎮", title: { en: "Game engines", he: "מנועי משחק" }, parts: ["unreal", "unity"] },
   { id: "work", icon: "🧠", title: { en: "Work and knowledge", he: "עבודה וידע" }, parts: ["pages", "knowledge", "day", "compare", "pipelines"] },

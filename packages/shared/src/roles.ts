@@ -14,7 +14,7 @@ export interface RoleDefinition {
   ideas: { en: string[]; he: string[] };
 }
 
-const ALL = ["images", "video", "image-editor", "nodes", "unreal", "unity", "voice", "day", "pages", "knowledge", "browser", "watch", "pipelines", "compare", "community"];
+const ALL = ["images", "video", "image-editor", "nodes", "unreal", "unity", "voice", "day", "pages", "knowledge", "browser", "watch", "pipelines", "compare", "community", "study"];
 
 export const ROLES: RoleDefinition[] = [
   {
@@ -109,8 +109,9 @@ export const ROLES: RoleDefinition[] = [
     id: "student",
     icon: "🎓",
     title: { en: "Student", he: "סטודנט/ית" },
-    description: { en: "Learning, summaries, your materials, voice", he: "למידה, סיכומים, החומרים שלך, קול" },
-    parts: ["pages", "knowledge", "voice", "compare", "images", "community"],
+    description: { en: "Lectures and summaries, flashcards, your course materials; light enough for a modest laptop", he: "הרצאות וסיכומים, כרטיסיות, חומרי הקורס; קל מספיק ללפטופ חלש" },
+    // Only what studying needs (light: nothing heavy starts or downloads unless turned on later).
+    parts: ["study", "voice", "knowledge", "pages"],
     ideas: {
       en: ["Explain photosynthesis simply", "Quiz me on chapter 3", "Summarize this PDF in ten lines", "Help me plan my exam week"],
       he: ["תסביר לי פוטוסינתזה בפשטות", "תבחן אותי על פרק 3", "סכם לי את ה-PDF הזה בעשר שורות", "תעזור לי לתכנן את שבוע המבחנים"],
