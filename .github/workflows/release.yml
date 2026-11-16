@@ -67,7 +67,8 @@ jobs:
         run: |
           git clone --depth 1 --branch v1.8.1 https://github.com/tshino/softcam "$env:RUNNER_TEMP\softcam"
           $msb = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
-          & $msb "$env:RUNNER_TEMP\softcam\softcam.sln" /p:Configuration=Release /p:Platform=x64 /m
+          # Only the camera itself (its test projects need NuGet packages).
+          & $msb "$env:RUNNER_TEMP\softcam\softcam.sln" /t:softcam /p:Configuration=Release /p:Platform=x64 /m
           if ($LASTEXITCODE) { exit 1 }
           & $msb "$env:RUNNER_TEMP\softcam\examples\softcam_installer\softcam_installer.sln" /p:Configuration=Release /p:Platform=x64 /m
           if ($LASTEXITCODE) { exit 1 }
