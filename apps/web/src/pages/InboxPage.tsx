@@ -4,6 +4,7 @@ import { getLocale } from "../i18n";
 import { toast } from "../library";
 import { BarPopover } from "../ui/BarPopover";
 import { groupNotes } from "../note-groups";
+import { noteTitle } from "../note-text";
 import { ComputerScreen } from "./WatchPage";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -142,7 +143,7 @@ export function InboxBell() {
                 const inner = (
                   <>
                     <span className="row">
-                      <strong className="grow" dir="auto">{n.title}{n.count > 1 && <span className="muted"> ({n.count})</span>}</strong>
+                      <strong className="grow" dir="auto">{noteTitle(n.title, getLocale())}{n.count > 1 && <span className="muted"> ({n.count})</span>}</strong>
                       <span className="muted small">{time(n.at)}</span>
                     </span>
                     {n.resolved ? <span className="inbox-resolved small">✓ {resolvedLabel(n.resolved)}</span> : n.body && <span className="muted small inbox-pop-body" dir="auto">{n.body}</span>}
@@ -271,7 +272,7 @@ export function InboxPage({ tab: first }: { tab?: InboxTab }) {
         <ul className="inbox-notes">
           {box.notes.map((n) => (
             <li key={`${n.at}-${n.title}`} className={n.resolved ? "resolved" : n.at > seen ? "new" : ""}>
-              {n.path?.startsWith("#/") ? <a href={n.path} dir="auto"><strong>{n.title}</strong></a> : <strong dir="auto">{n.title}</strong>}
+              {n.path?.startsWith("#/") ? <a href={n.path} dir="auto"><strong>{noteTitle(n.title, getLocale())}</strong></a> : <strong dir="auto">{noteTitle(n.title, getLocale())}</strong>}
               <span className="muted small">{time(n.at)}</span>
               {n.resolved && <span className="inbox-resolved small">✓ {resolvedLabel(n.resolved)}</span>}
               {n.body && <p dir="auto">{n.body}</p>}
