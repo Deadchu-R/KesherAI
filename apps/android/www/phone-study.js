@@ -1,4 +1,4 @@
-/* global fetch, localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, clearTimeout, File, URL */
+/* global fetch, localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, clearTimeout, File, URL, indexedDB, MediaRecorder, Blob */
 /**
  * Study on the phone itself, with no computer: courses, lectures (pasted or typed with the keyboard's voice typing),
  * summaries, flashcards on the FSRS schedule, quizzes graded by code, medication calculations and lab values. The
@@ -72,6 +72,35 @@ function pieces(text, size = 6000) {
  * @param ask - Asks the phone's chosen model: (messages) => Promise<string | undefined> (undefined: no model ready).
  */
 /** Sends a course to a classmate as a file: the phone's share sheet, or a download. */
+/** Recordings waiting to go to the computer (IndexedDB: audio is too big for localStorage). */
+const recStore = {
+  db() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("kesherai-recordings", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("pending");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async put(lectureId, v) {
+    const d = await this.db();
+    await new Promise((res, rej) => { const t = d.transaction("pending", "readwrite"); t.objectStore("pending").put(v, lectureId); t.oncomplete = res; t.onerror = () => rej(t.error); });
+  },
+  async all() {
+    const d = await this.db();
+    return new Promise((res) => {
+      const out = [];
+      const t = d.transaction("pending").objectStore("pending").openCursor();
+      t.onsuccess = () => { const cur = t.result; if (!cur) return res(out); out.push([cur.key, cur.value]); cur.continue(); };
+      t.onerror = () => res(out);
+    });
+  },
+  async remove(lectureId) {
+    const d = await this.db();
+    await new Promise((res) => { const t = d.transaction("pending", "readwrite"); t.objectStore("pending").delete(lectureId); t.oncomplete = res; t.onerror = res; });
+  },
+};
+
 async function shareFile(c) {
   const f = new File([JSON.stringify(shareCourse(toData(c)))], `${c.name}.kesherai-course.json`, { type: "application/json" });
   if (navigator.canShare?.({ files: [f] })) return navigator.share({ files: [f], title: c.name }).catch(() => undefined);
@@ -134,6 +163,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         for (const c of db.courses) if (!theirs.has(c.id) && !gone.has(c.id)) courses.push(c);
         db = { ...db, courses, removedCourses: [] };
         syncNote = save(db) ? L(`מסונכרן עם המחשב · ${db.courses.length} קורסים`, `Synced with the computer · ${db.courses.length} courses`) : "";
+        // Kept recordings waiting on the phone go to the computer now (it keeps them, and they play from there).
+        if (sync.upload) void (async () => {
+          for (const [lid, v] of await recStore.all().catch(() => [])) {
+            if (await sync.upload(v.courseId, lid, v.blob).catch(() => false)) await recStore.remove(lid).catch(() => undefined);
+          }
+        })();
       }
     } catch (e) {
       syncNote = quiet ? L("המחשב לא זמין כרגע; הסנכרון יקרה בפעם הבאה.", "The computer is not reachable now; it will sync next time.") : L("הסנכרון נכשל: ", "Sync failed: ") + (e?.message || e);
@@ -734,14 +769,26 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     // One handler at a time (draw() clears them for the other pages).
     root.onpointerup = () => setTimeout(showPick, 30);
     root.ontouchend = () => setTimeout(showPick, 60);
-    root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), explainBox,
+    // The kept recording plays from the computer; each [mm:ss] in the full text plays from there.
+    const src = l.recording && sync?.audioUrl?.(c.id, l.id);
+    const player = src && el("audio", { controls: true, preload: "metadata", src, crossorigin: "anonymous", style: "width: 100%" });
+    const fullText = () => {
+      if (!player) return el("div", { dir: "auto", style: "white-space: pre-wrap" }, l.text);
+      return el("div", { dir: "auto", style: "white-space: pre-wrap" }, ...l.text.split("\n").map((line) => {
+        const m = /^\[(?:(\d+):)?(\d+):(\d\d)\]/.exec(line);
+        if (!m) return el("div", {}, line || "\u00a0");
+        const sec = Number(m[1] || 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+        return el("div", {}, el("button", { type: "button", dir: "ltr", style: "border: 0; background: none; color: var(--accent); padding: 0 4px 0 0; font: inherit; min-height: 0", onclick: () => { player.currentTime = sec; void player.play().catch(() => undefined); } }, m[0]), line.slice(m[0].length));
+      }));
+    };
+    root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), player ? el("section", { class: "api" }, player, el("small", { class: "muted" }, L("ההקלטה שמורה במחשב. לחיצה על דקה בטקסט המלא מנגנת משם.", "The recording is kept on the computer. A minute in the full text plays from there."))) : "", explainBox,
       el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
       notesBox(l),
       picturesBox(l),
       flowView(l.diagram),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),
-      el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), el("div", { dir: "auto", style: "white-space: pre-wrap" }, l.text)));
+      el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), fullText()));
   }
 
   /** A lecture's diagram as boxes and arrows, the same reading as the computer's (Mermaid flowchart text). */
@@ -932,6 +979,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const offPick = speech.rec && el("input", { type: "checkbox", checked: localStorage.getItem("kesherai-rec-off") !== "0", onchange: (e) => localStorage.setItem("kesherai-rec-off", e.target.checked ? "1" : "0") });
     if (offPick) box.append(el("label", { class: "ph-filter", style: "display: flex; gap: 10px; align-items: center" }, offPick, L("להמשיך להקליט כשהמסך כבוי", "Keep recording with the screen off")),
       el("p", { class: "muted small" }, L("התמלול נעשה בסוף, בטלפון. בלי זה, התמלול מופיע תוך כדי, אבל המסך צריך להישאר דלוק.", "The text is made at the end, on the phone. Without it the text shows as you go, but the screen must stay on.")));
+    const keepPick = typeof MediaRecorder !== "undefined" && el("input", { type: "checkbox", checked: localStorage.getItem("kesherai-rec-keep") !== "0", onchange: (e) => localStorage.setItem("kesherai-rec-keep", e.target.checked ? "1" : "0") });
+    if (keepPick) box.append(el("label", { class: "ph-filter", style: "display: flex; gap: 10px; align-items: center" }, keepPick, L("לשמור את ההקלטה (עוברת למחשב בסנכרון, ומתנגנת מכל דקה)", "Keep the recording (moves to the computer on sync, plays from any minute)")));
     const clock = el("p", { style: "font-size: 40px; font-weight: 700; direction: ltr; text-align: center; margin: 8px 0" }, "00:00");
     const text = el("div", { dir: "auto", style: "white-space: pre-wrap; min-height: 120px; line-height: 1.6" }, L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute."));
     const lines = [];
@@ -954,6 +1003,19 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         return alert(L("אין גישה למיקרופון.", "No access to the microphone."));
       }
       const lock = await navigator.wakeLock?.request("screen").catch(() => undefined);
+      // The kept audio (Opus in WebM, speech quality), held on the phone until it goes to the computer.
+      let audio;
+      const parts = [];
+      if (keepPick?.checked) {
+        try {
+          const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t));
+          audio = new MediaRecorder(mic, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24000 });
+          audio.ondataavailable = (e) => e.data.size && parts.push(e.data);
+          audio.start(10000);
+        } catch {
+          audio = undefined;
+        }
+      }
       const ctx = new AudioContext({ sampleRate: 16000 });
       const src = ctx.createMediaStreamSource(mic);
       const node = ctx.createScriptProcessor(4096, 1, 1);
@@ -1037,6 +1099,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         stop.textContent = L("מסיים את התמלול…", "Finishing the transcript…");
         clearInterval(tick);
         flush();
+        const kept = audio && audio.state !== "inactive" ? new Promise((res) => { audio.onstop = () => res(new Blob(parts, { type: (audio.mimeType || "audio/webm").split(";")[0] })); audio.stop(); }) : undefined;
         node.disconnect();
         mic.getTracks().forEach((t) => t.stop());
         void ctx.close();
@@ -1048,6 +1111,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         lines.sort((a, b) => at(a) - at(b));
         if (!lines.length) return alert(L("לא נשמע דיבור בהקלטה.", "No speech was heard."));
         const l = { id: uid(), title: L(`הרצאה ${c.lectures.length + 1}`, `Lecture ${c.lectures.length + 1}`), date: new Date().toISOString().slice(0, 10), text: lines.join("\n") };
+        const blob = await kept;
+        if (blob && blob.size > 1000) await recStore.put(l.id, { courseId: c.id, blob }).catch(() => undefined);
         c.lectures.push(l);
         if (commit()) go({ at: "lecture", course: c.id, lecture: l.id });
       };
