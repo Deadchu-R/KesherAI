@@ -20,7 +20,7 @@ const port = 7990;
 const base = `http://127.0.0.1:${port}`;
 
 /** The screens to open (hash routes), and a made-up 200-message chat. */
-const PAGES = ["#/", "#/code", "#/unity", "#/unreal", "#/models", "#/personas", "#/knowledge", "#/pages", "#/images", "#/connections", "#/updates", "#/apps", "#/nodes", "#/pipelines", "#/watch", "#/settings", "#/canvas"];
+const PAGES = ["#/", "#/code", "#/unity", "#/unreal", "#/models", "#/personas", "#/knowledge", "#/pages", "#/images", "#/connections", "#/updates", "#/apps", "#/nodes", "#/pipelines", "#/watch", "#/settings", "#/canvas", "#/tasks"];
 
 const load = async () => {
   if (process.env.PLAYWRIGHT_MODULE) return (await import(process.env.PLAYWRIGHT_MODULE)).default;
@@ -93,6 +93,44 @@ try {
     }
     await page.close();
   }
+
+  // The controller (audit C6): a simulated pad moves the focus with the D-pad, A on a search field opens the on-screen
+  // keyboard, B closes it.
+  const padPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  padPage.on("pageerror", (e) => problems.push(`pad: page error: ${e.message}`));
+  await padPage.addInitScript(() => {
+    const buttons = Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 }));
+    const pad = { id: "ui-check pad", index: 0, connected: true, mapping: "standard", axes: [0, 0, 0, 0], buttons, timestamp: 0 };
+    window.__pad = pad;
+    navigator.getGamepads = () => [pad];
+  });
+  await padPage.goto(`${base}/#/settings`);
+  await padPage.waitForTimeout(1500);
+  const press = async (i) => {
+    await padPage.evaluate((b) => { window.__pad.buttons[b].pressed = true; }, i);
+    await padPage.waitForTimeout(120);
+    await padPage.evaluate((b) => { window.__pad.buttons[b].pressed = false; }, i);
+    await padPage.waitForTimeout(160);
+  };
+  await padPage.evaluate(() => window.dispatchEvent(new Event("gamepadconnected")));
+  const before = await padPage.evaluate(() => document.activeElement?.outerHTML.slice(0, 80) ?? "");
+  for (let k = 0; k < 3; k++) await press(13); // D-pad down
+  const after = await padPage.evaluate(() => ({ el: document.activeElement?.outerHTML.slice(0, 80) ?? "", pad: document.documentElement.classList.contains("pad") }));
+  if (after.el === before || !after.pad) problems.push("pad: the D-pad did not move the focus (or pad mode did not turn on)");
+  const field = await padPage.evaluate(() => {
+    const f = document.querySelector('main input[type="search"], main input[type="text"]');
+    if (!f) return false;
+    f.focus();
+    return true;
+  });
+  if (!field) problems.push("pad: no search field on the settings page to try the on-screen keyboard on");
+  else {
+    await press(0); // A
+    if (!(await padPage.evaluate(() => !!document.querySelector(".osk")))) problems.push("pad: A on a field did not open the on-screen keyboard");
+    await press(1); // B
+    if (await padPage.evaluate(() => !!document.querySelector(".osk"))) problems.push("pad: B did not close the on-screen keyboard");
+  }
+  await padPage.close();
 
   // Speed (docs/DESIGN_RESEARCH.md §5): start to first screen, typing lag in a 200-message chat, and the time to draw
   // one streamed token. Printed every run; generous limits fail the check only on a real slowdown.
