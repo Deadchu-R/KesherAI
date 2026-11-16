@@ -224,6 +224,7 @@
   .c-row small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .c-row .tag { flex: none; font-style: normal; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f2a24; color: #7fd6a4; }
   .c-row .tag.net { background: #232333; color: var(--accent); }
+  .c-row .tag.pc { background: #2a2520; color: #f0b37e; }
   .c-row .chk { flex: none; width: 22px; height: 22px; border-radius: 11px; border: 2px solid #4a4a52; }
   .c-row .chk.on { background: var(--accent); border-color: var(--accent); }
   .sel-bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 4px; margin: -4px 0 8px; padding: 4px; border-radius: 12px; background: var(--panel); }
@@ -292,6 +293,7 @@
       <button type="button" data-f="all" class="on" data-he="הכול" data-en="All">הכול</button>
       <button type="button" data-f="phone" data-he="בטלפון" data-en="On the phone">בטלפון</button>
       <button type="button" data-f="net" data-he="דרך האינטרנט" data-en="Online">דרך האינטרנט</button>
+      <button type="button" data-f="pc" data-he="במחשב" data-en="Computer">במחשב</button>
     </div>
     <div id="chatList"></div>
   </main>
@@ -652,11 +654,34 @@
   let chatFilter = "all";
   let selecting = null; // a Set of chat ids while selecting several
   /** Draws the phone's chats: pinned first, then by day; a filter and a search on top. */
+  /** The computer's chats as last seen (kept so the list shows them even when the computer is off). */
+  const PC_CHATS = "kesherai-pc-chats";
+  function pcChats() {
+    try { return JSON.parse(localStorage.getItem(PC_CHATS) || "[]"); } catch { return []; }
+  }
+  let pcChatsAt = 0;
+  /** Reads the paired computer's chat list (at most once a minute) and redraws when it changed. */
+  async function refreshPcChats() {
+    const pc = computer();
+    if (!pc || Date.now() - pcChatsAt < 60_000) return;
+    pcChatsAt = Date.now();
+    try {
+      const r = await getJson(`${pc.base}/api/conversations`, { Authorization: `Bearer ${pc.token}` });
+      const rows = (Array.isArray(r) ? r : []).filter((c) => c && typeof c.id === "string" && /^[\w-]{1,80}$/.test(c.id) && c.source !== "routine")
+        .map((c) => ({ id: c.id, title: String(c.title || "").slice(0, 120), updatedAt: Date.parse(c.updatedAt) || 0, kind: c.kind === "code" ? "code" : "chat" }))
+        .sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 100);
+      const before = localStorage.getItem(PC_CHATS);
+      localStorage.setItem(PC_CHATS, JSON.stringify(rows));
+      if (before !== JSON.stringify(rows) && !$("chatsView").hidden) drawChats();
+    } catch { /* the computer is off or away: the last list stays */ }
+  }
   function drawChats() {
+    void refreshPcChats();
     const q = $("chatSearch").value.trim().toLowerCase();
     const isNet = (c) => String(c.url || "").startsWith("api:");
-    const list = allChats()
-      .filter((c) => chatFilter === "all" || (chatFilter === "net") === isNet(c))
+    const pcs = chatFilter === "all" || chatFilter === "pc" ? pcChats().map((c) => ({ ...c, pc: true, name: c.kind === "code" ? T("קוד במחשב", "Code on the computer") : T("במחשב", "On the computer") })) : [];
+    const list = [...(chatFilter === "pc" ? [] : allChats()), ...pcs]
+      .filter((c) => c.pc || chatFilter === "all" || (chatFilter === "net") === isNet(c))
       .filter((c) => !q || `${c.title} ${c.name}`.toLowerCase().includes(q))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     const day = (t) => {
@@ -673,7 +698,7 @@
       if (g !== last) { out.push(Object.assign(document.createElement("div"), { className: "c-grp", textContent: g })); last = g; }
       out.push(chatRow(c));
     }
-    if (!out.length) out.push(Object.assign(document.createElement("p"), { className: "muted", style: "padding: 20px 8px", textContent: q ? T("לא נמצא צ׳אט כזה.", "No chat matches.") : T("עוד אין צ׳אטים בטלפון. כתבי הודעה במסך הבית.", "No chats on the phone yet. Write a message on the home screen.") }));
+    if (!out.length) out.push(Object.assign(document.createElement("p"), { className: "muted", style: "padding: 20px 8px", textContent: q ? T("לא נמצא צ׳אט כזה.", "No chat matches.") : chatFilter === "pc" ? (computer() ? T("עוד לא נקראה רשימת הצ׳אטים מהמחשב. היא תופיע כשהמחשב זמין.", "The computer's chats were not read yet. They show when the computer is reachable.") : T("קשרי את הטלפון למחשב (לשונית מחשב) כדי לראות כאן את הצ׳אטים שלו.", "Pair the phone with the computer (Computer tab) to see its chats here.")) : T("עוד אין צ׳אטים בטלפון. כתבי הודעה במסך הבית.", "No chats on the phone yet. Write a message on the home screen.") }));
     $("chatList").replaceChildren(...out);
     $("selBar").hidden = !selecting;
     if (selecting) $("selCount").textContent = T(`${selecting.size} נבחרו`, `${selecting.size} selected`);
@@ -684,13 +709,16 @@
     b.type = "button";
     b.className = "c-row";
     const net = String(c.url || "").startsWith("api:");
+    const onPc = !!c.pc;
     // Today: the time; before: the date (Israel time).
     const today = c.updatedAt && new Date(c.updatedAt).toDateString() === new Date().toDateString();
     const time = !c.updatedAt ? "" : new Date(c.updatedAt)[today ? "toLocaleTimeString" : "toLocaleDateString"](he ? "he-IL" : "en-GB", today ? { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" } : { day: "numeric", month: "numeric", timeZone: "Asia/Jerusalem" });
-    b.innerHTML = `${selecting ? `<i class="chk${selecting.has(c.id) ? " on" : ""}"></i>` : c.pinned ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 4 3v2H6v-2l4-3z"/></svg>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'}<span><b dir="auto"></b><small></small></span><i class="tag${net ? " net" : ""}"></i>`;
+    b.innerHTML = `${selecting ? `<i class="chk${selecting.has(c.id) ? " on" : ""}"></i>` : c.pinned ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 4 3v2H6v-2l4-3z"/></svg>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'}<span><b dir="auto"></b><small></small></span><i class="tag${onPc ? " pc" : net ? " net" : ""}"></i>`;
     b.querySelector("b").textContent = c.title || T("צ׳אט", "Chat");
     b.querySelector("small").textContent = [c.name, time].filter(Boolean).join(" · ");
-    b.querySelector(".tag").textContent = net ? T("אינטרנט", "Online") : T("טלפון", "Phone");
+    b.querySelector(".tag").textContent = onPc ? T("מחשב", "Computer") : net ? T("אינטרנט", "Online") : T("טלפון", "Phone");
+    // A computer chat opens on the computer (its own screen, its bigger model).
+    if (onPc) { b.onclick = () => (location.href = `index.html?open=${encodeURIComponent(`#/c/${c.id}`)}`); return b; }
     let timer = 0, long = false;
     const start = () => { long = false; timer = setTimeout(() => { long = true; navigator.vibrate?.(10); chatActions(c); }, 500); };
     const stop = () => clearTimeout(timer);
