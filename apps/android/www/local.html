@@ -430,7 +430,6 @@
   </footer>
 
 <script type="module">
-  import { Wllama } from "./vendor/wllama/index.js";
 
   const $ = (id) => document.getElementById(id);
   const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
@@ -516,8 +515,25 @@
   }
   const doneNotice = (title, text) => { if (document.hidden) BG?.notify({ title, text }).catch(() => undefined); };
 
-  const wllama = new Wllama({ default: new URL("./vendor/wllama/wllama.wasm", location.href).href }, { allowOffline: true, suppressNativeLog: true });
-  const mm = wllama.modelManager;
+  // The phone's model engine (374 KB) loads the first time it is needed, not with the home screen.
+  let wllamaReal = null;
+  let wllamaLoading = null;
+  const getWllama = () => (wllamaLoading ??= import("./vendor/wllama/index.js").then(({ Wllama }) => (wllamaReal = new Wllama({ default: new URL("./vendor/wllama/wllama.wasm", location.href).href }, { allowOffline: true, suppressNativeLog: true }))));
+  // Until it is loaded no model is loaded either; every other call happens after a model was loaded through it.
+  const wllama = new Proxy({ __url: "" }, {
+    get(target, key) {
+      if (key === "__url") return target.__url;
+      if (key === "isModelLoaded") return () => !!wllamaReal?.isModelLoaded();
+      if (!wllamaReal) return key === "exit" ? async () => undefined : undefined;
+      const v = wllamaReal[key];
+      return typeof v === "function" ? v.bind(wllamaReal) : v;
+    },
+    set(target, key, value) { if (key === "__url") target.__url = value; else if (wllamaReal) wllamaReal[key] = value; return true; },
+  });
+  const mm = {
+    getModels: async (...a) => (await getWllama()).modelManager.getModels(...a),
+    downloadModel: async (...a) => (await getWllama()).modelManager.downloadModel(...a),
+  };
   const urlOf = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
   const gb = (b) => (b / 1024 ** 3).toFixed(b < 1024 ** 3 ? 2 : 1) + " GB";
 
@@ -2413,6 +2429,11 @@
   // Back: from a chat to its models, from a part to the home screen.
   $("back").onclick = () => { if (!$("chatView").hidden) { show("models"); renderList(); } else if (!$("homeView").hidden) location.href = "index.html?switch=1"; else { drawHome(); showPage("homeView"); } };
 
+  // Opened to the plain home screen: drawn now; the phone's model list (and its engine) loads behind it.
+  {
+    const q0 = new URLSearchParams(location.search);
+    if (!q0.get("c") && !q0.has("new") && !q0.has("chat") && !q0.get("handoff") && !q0.get("tab")) { drawHome(); showPage("homeView"); }
+  }
   renderList()
     .then(async () => {
       const q = new URLSearchParams(location.search);
