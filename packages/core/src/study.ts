@@ -499,12 +499,30 @@ export class Study {
     return { text: text.trim() };
   }
 
-  private async ask(system: string, user: string, signal?: AbortSignal, field?: string): Promise<string> {
+  /**
+   * One question to the chat model. `maxChars` stops a model that runs on (found on the PC: a quiz of 4 questions
+   * still writing after 10000 tokens) and returns what it wrote so far.
+   */
+  private async ask(system: string, user: string, signal?: AbortSignal, field?: string, maxChars = 60_000): Promise<string> {
     const m = this.model();
     if (field && FIELD_HINT[field]) system = `${system}\n${FIELD_HINT[field]}`;
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
-    const r = await m.turn({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(600_000), () => undefined);
-    return r.text;
+    const stop = new AbortController();
+    const outer = signal ?? AbortSignal.timeout(600_000);
+    if (outer.aborted) stop.abort();
+    else outer.addEventListener("abort", () => stop.abort(), { once: true });
+    let so = "";
+    try {
+      const r = await m.turn({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, stop.signal, (d) => {
+        so += d;
+        if (so.length > maxChars && !stop.signal.aborted) stop.abort();
+      });
+      return r.text;
+    } catch (err) {
+      // Stopped for running on (not by her or the timeout): what it wrote is the answer.
+      if (so.length > maxChars && !outer.aborted) return so;
+      throw err;
+    }
   }
 
   /** Writes a lecture's summary, terms and diagram (long lectures: piece by piece, then together). */
@@ -608,8 +626,10 @@ export class Study {
     const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
     const past = p.style === "past" ? pastExamStyle(d.pastExams ?? []) : "";
     if (p.style === "past" && !past) throw Object.assign(new Error("Add a past exam first."), { statusCode: 400 });
-    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal, d.course.field);
-    const list = jsonIn(raw);
+    // About 1500 characters a question is plenty; past that the model is running on.
+    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT, `Write exactly ${count} questions, then stop.\n\n${material}`, signal, d.course.field, count * 1500 + 2000);
+    // A list cut off mid-way: keep the questions that were finished.
+    const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
     const questions: StudyQuestion[] = [];
     for (const x of list as Array<{ q?: string; options?: unknown[]; answer?: number; explain?: string; lecture?: number }>) {
