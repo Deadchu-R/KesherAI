@@ -10,7 +10,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ⬜ Minecraft and Roblox modding
 - ⬜ Fab search and install from the chat
 - ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)
-- 🔧 KesherAI as a model provider for Unreal and Unity AI: the OpenAI-compatible `/v1` endpoint exists; a guide and a check with each engine's assistant are missing
+- ✅ KesherAI as a model provider for Unreal and Unity AI: a guide in Settings → For developers → API (Unity AI Gateway with Claude Code or Codex pointed at KesherAI; Unreal plugins with an OpenAI-compatible provider); KesherAI's Anthropic API answered a Claude Code style tool call on the PC. 👤 The check inside Unity AI itself needs a Unity AI Gateway seat
 - ⬜ Depth and normals turned into styled frames (like Unreal Canvas)
 - ✅ Music as a chat tool (make_music, ACE-Step 1.5 / XL)
 - ✅ Known engine bugs checked before each build (known-issues.ts)

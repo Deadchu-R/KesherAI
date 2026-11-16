@@ -18,7 +18,7 @@ export function ApiKeysSection() {
   const [v, setV] = useState<View | null>(null);
   const [name, setName] = useState("");
   const [fresh, setFresh] = useState<{ key: string; name: string } | null>(null);
-  const [tab, setTab] = useState<"openai" | "anthropic" | "claude">("openai");
+  const [tab, setTab] = useState<"openai" | "anthropic" | "claude" | "unity" | "unreal">("openai");
   const [log, setLog] = useState<Array<{ at: string; caller: string; method: string; path: string; model?: string; status: number; ms: number }> | null>(null);
   useEffect(() => {
     api<View>("/api/api-keys").then(setV, () => undefined);
@@ -43,17 +43,22 @@ export function ApiKeysSection() {
     openai: `Base URL: ${v.base}/v1\nAPI key: ${key}\nModel: <provider>/<model>  (GET ${v.base}/v1/models)`,
     anthropic: `from anthropic import Anthropic\nclient = Anthropic(base_url="${v.base}", api_key="${key}")\nclient.messages.create(model="<provider>/<model>", max_tokens=1024,\n    messages=[{"role": "user", "content": "Hello"}])`,
     claude: `ANTHROPIC_BASE_URL=${v.base}\nANTHROPIC_AUTH_TOKEN=${key}\nclaude`,
+    // Unity AI's Gateway runs a coding agent (Claude Code, Codex…) with environment variables: point it here.
+    unity: `Unity → Settings → Preferences → AI → Gateway\nAgent Type: Claude Code\nEnvironment Variables:\n  ANTHROPIC_BASE_URL=${v.base}\n  ANTHROPIC_AUTH_TOKEN=${key}\n(or Agent Type: Codex CLI with OPENAI_BASE_URL=${v.base}/v1 and OPENAI_API_KEY=${key})`,
+    // Unreal 5.8 has no model setting of its own: plugins with an "OpenAI-compatible" provider take these.
+    unreal: `Plugins with an OpenAI-compatible provider (e.g. VERA, Sentari):\nBase URL: ${v.base}/v1\nAPI key: ${key}\nModel: <provider>/<model>\n\nUnreal's own MCP server works the other way: KesherAI's chat uses Unreal (Connections → Unreal Engine).`,
   };
   return (
     <section className="card stack">
       <h2>{L("API ומפתחות גישה לאפליקציות", "API and app access keys")}</h2>
       <p className="muted">{L("אפליקציות ו-SDK של OpenAI ושל Anthropic יכולים לעבוד עם כל מודל ש-KesherAI מכיר, גם מקומי. תנו לכל אפליקציה מפתח משלה — כך רואים מי משתמש ואפשר לבטל כל אחת בנפרד.", "Apps and SDKs for OpenAI and Anthropic can work with any model KesherAI knows, local ones too. Give each app its own key, so you see who uses it and can revoke each one alone.")}</p>
       <div className="row seg" role="tablist">
-        {([["openai", "OpenAI"], ["anthropic", "Anthropic SDK"], ["claude", "Claude Code"]] as const).map(([k, label]) => (
+        {([["openai", "OpenAI"], ["anthropic", "Anthropic SDK"], ["claude", "Claude Code"], ["unity", "Unity AI"], ["unreal", "Unreal"]] as const).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
       <div className="snippet"><pre dir="ltr">{examples[tab]}</pre><button type="button" onClick={() => void navigator.clipboard?.writeText(examples[tab])}>{L("העתק", "Copy")}</button></div>
+      {tab === "unity" && <p className="muted small">{L("ב-Unity AI צריך מנוי עם AI Gateway. המודל של KesherAI צריך לתמוך בכלים (Qwen3-Coder תומך).", "Unity AI needs a subscription with AI Gateway. KesherAI's model must support tools (Qwen3-Coder does).")}</p>}
       {tab === "claude" && <p className="muted small">{L("Claude Code יעבוד עם המודל הפעיל ב-KesherAI (שם מודל שהוא לא מכיר הולך למודל הצ׳אט הפעיל). מודל מקומי צריך לתמוך בכלים.", "Claude Code then runs on KesherAI's active chat model (a model name it does not know goes there). A local model needs tool support.")}</p>}
       {fresh && (
         <div className="key-fresh">
