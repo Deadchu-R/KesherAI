@@ -1573,6 +1573,11 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - Windows setup pitfalls found: mmpose needs chumpy built with --no-build-isolation; setuptools < 70 (pkg_resources);
   the s3fd face detector's own site did not answer (an identical copy, sha256 619a316812…, is on HuggingFace
   chunyu-li/face-alignment); PYTHONIOENCODING=utf-8 (it prints Chinese characters); the realtime script asks y/n.
-- Stopped at: measured. Next: how ScrumSurvivor connects it end to end (voice detection, delaying the voice so lips
-  match in Zoom, switching between the idle loop and the lip-sync stream), then a design for KesherAI: an optional
-  download on NVIDIA ≥ 8 GB that feeds kesher-cam the same way the avatar page does.
+- ScrumSurvivor end to end: the microphone goes through a speech detector; silent → an idle compositor (recorded
+  clips + breathing, sway, blinking, sensor noise); speaking → Wav2Lip on a fixed 96×96 face crop over a still
+  background photo, smoothstep cross-fades between the two; video 1280×720 at 25 fps to OBS Virtual Camera; the voice
+  goes through VB-Audio Virtual Cable, held back in a ring buffer by the video's processing time (265 ms), and Teams
+  listens to the cable, so lips and voice arrive together.
+- Stopped at: design written (docs/REDESIGN_PLAN.md, "Avatar lip sync"); one choice is Roee's: hold the voice back
+  through a virtual audio cable (VB-Cable: another install and Windows prompt, lips exactly in time) or not (nothing
+  more to install, lips ~0.3 s behind the voice).

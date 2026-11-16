@@ -103,3 +103,22 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
 - A security and performance scan every 5 changes.
 - Each step checked on the computer through KesherAI, at 390px and through remote.
 - A release every few steps.
+
+
+## Avatar lip sync (strong NVIDIA computers, optional) — design, 2026-11-16
+
+- Who gets it: Windows with an NVIDIA card of 8 GB or more (measured: MuseTalk 1.5 at 42 fps on an RTX 3090 beside
+  the chat model). Everyone else keeps the recorded loop with the look-alive layer (uneven jumps, breathing, sway,
+  grain), which already ships.
+- Install: an optional download from the avatar page ("make the lips move when you talk"): uv brings Python 3.10 into
+  KesherAI's engines folder, then PyTorch (CUDA 11.8), MuseTalk and its models; the known Windows fixes are part of it
+  (chumpy without build isolation, setuptools < 70, the s3fd copy checked by its sha256 prefix, UTF-8 output, no y/n
+  prompt). About 7 GB.
+- Prepare once: the avatar's own recorded clip becomes MuseTalk's avatar (face crops, latents, masks), about 1–2
+  minutes, redone when she records a new clip.
+- Run: a local MuseTalk server (127.0.0.1, KesherAI's token) reads the microphone itself, detects speech, and while
+  she talks sends the lip-synced frames (JPEG over a websocket) to the avatar page, which draws them over the idle
+  loop with a short cross-fade; the page stays the one source of the camera (softcam / OBS), so nothing else changes.
+- Voice and lips: either the voice is held back through a virtual audio cable by the frames' delay (exact, but one
+  more install), or not (lips ~0.3 s late). Roee decides.
+- Off when not needed: the server starts only while the avatar camera runs, and gives the card back when it stops.
