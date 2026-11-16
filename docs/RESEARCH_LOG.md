@@ -1548,3 +1548,12 @@ Stopped at: building (store and public page first, then the chat menu and the se
   lip-syncs the loop to her live voice with MuseTalk/LivePortrait). A warning before first use: if the course or
   university finds out, it may be treated as breaking its rules.
 - Stopped at: research only; waiting on Roee for the virtual-camera dependency.
+
+## Students, part 8: lip sync for the avatar when the student is not in front of the camera (2026-11-16, started)
+
+- Candidates found: MuseTalk (TMElyralab, MIT, real-time 30 fps+ on a V100-class card, latent-space inpainting of the
+  mouth area from audio, 256×256 face region), LiveTalking (lipku; wraps MuseTalk / Wav2Lip / ER-NeRF with WebRTC
+  and a virtual camera output), LatentSync (ByteDance, higher quality, not real time).
+- Stopped at: checking MuseTalk's Windows install size, whether it runs from a 3–5 minute clip of the student (the
+  avatar recording we already have) without training, and its licence for the model weights. Next: compare with what
+  Tavus/HeyGen "interactive avatars" do (cloud), and decide local MuseTalk vs nothing.
