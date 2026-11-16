@@ -438,7 +438,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
 
 /** The course's tutor: questions answered only from her lectures, each fact with its lecture. */
 function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: boolean }) {
-  const [turns, setTurns] = useState<Array<{ role: "user" | "assistant"; content: string; sources?: Array<{ lectureId: string; title: string }> }>>([]);
+  const [turns, setTurns] = useState<Array<{ role: "user" | "assistant"; content: string; sources?: Array<{ lectureId: string; title: string; page?: number }> }>>([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   // "ask": she asks, answers come from her lectures. "study": the tutor asks her, waits, then corrects.
@@ -451,7 +451,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
     setBusy(true);
     const history = turns.map(({ role, content }) => ({ role, content }));
     if (question) setTurns((t) => [...t, { role: "user", content: question }]);
-    const r = await call(api<{ answer: string; sources: Array<{ lectureId: string; title: string }> }>(`/api/study/courses/${courseId}/ask`, { method: "POST", body: { question, history, mode } }));
+    const r = await call(api<{ answer: string; sources: Array<{ lectureId: string; title: string; page?: number }> }>(`/api/study/courses/${courseId}/ask`, { method: "POST", body: { question, history, mode } }));
     setBusy(false);
     if (r) setTurns((t) => [...t, { role: "assistant", content: r.answer, sources: r.sources }]);
   };
@@ -469,7 +469,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
         {turns.map((t, i) => (
           <div key={i} className={`study-ask-turn ${t.role}`} dir="auto">
             <p>{t.content}</p>
-            {t.sources && t.sources.length > 0 && <small className="muted">{L("מתוך: ", "From: ")}{t.sources.map((s, j) => <span key={s.lectureId}>{j ? " · " : ""}<a href={`#/study/${courseId}/l/${s.lectureId}`}>{s.title}</a></span>)}</small>}
+            {t.sources && t.sources.length > 0 && <small className="muted">{L("מתוך: ", "From: ")}{t.sources.map((s, j) => <span key={s.lectureId}>{j ? " · " : ""}<a href={`#/study/${courseId}/l/${s.lectureId}`}>{s.title}{s.page ? L(`, עמ׳ ${s.page}`, `, p. ${s.page}`) : ""}</a></span>)}</small>}
           </div>
         ))}
         {busy && <p className="muted">{mode === "study" ? L("חושבת על שאלה…", "Thinking of a question…") : L("מחפשת בהרצאות…", "Looking through your lectures…")}</p>}

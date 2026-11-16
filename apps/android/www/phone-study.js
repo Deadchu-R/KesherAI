@@ -1029,14 +1029,14 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         if (line) {
           const next = tutorMessages({ lectures: c.lectures, question: "", history: [...turns, { role: "assistant", content: line }], mode, hint: hint(c).trim() || undefined, budget: 4000 });
           const q2 = await need(next.messages, busyBtn);
-          turns.push({ role: "assistant", content: `${line}${q2 ? `\n\n${cleanScript(String(q2).trim(), heb)}` : ""}`, sources: [...new Set(g.passages.map((p) => p.title))] });
+          turns.push({ role: "assistant", content: `${line}${q2 ? `\n\n${cleanScript(String(q2).trim(), heb)}` : ""}`, sources: [...new Set(g.passages.map((p) => p.title + (p.page ? L(`, עמ׳ ${p.page}`, `, p. ${p.page}`) : "")))] });
           return draw();
         }
       }
       const { messages, passages } = tutorMessages({ lectures: c.lectures, question, history: turns.slice(0, question ? -1 : undefined), mode, hint: hint(c).trim() || undefined, budget: 5000 });
       const r = await need(messages, busyBtn);
       if (r === undefined) { if (question) turns.pop(); return; }
-      turns.push({ role: "assistant", content: cleanScript(String(r).trim(), heb), sources: [...new Set(passages.map((p) => p.title))] });
+      turns.push({ role: "assistant", content: cleanScript(String(r).trim(), heb), sources: [...new Set(passages.map((p) => p.title + (p.page ? L(`, עמ׳ ${p.page}`, `, p. ${p.page}`) : "")))] });
       draw();
     };
     const form = el("form", { class: "ph-filter", onsubmit: (e) => {

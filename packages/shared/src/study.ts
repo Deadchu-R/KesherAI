@@ -126,7 +126,7 @@ export const OPEN_GRADE_PROMPT =
 export function openGradeMessages(o: { lectures: StudyLecture[]; question: StudyQuestion; text: string; budget?: number }): TutorMessage[] {
   const pick = o.question.lectureId ? o.lectures.filter((l) => l.id === o.question.lectureId) : o.lectures;
   const passages = findPassages(pick.length ? pick : o.lectures, `${o.question.q} ${o.question.explain}`.slice(0, 3000), o.budget ?? 4000);
-  const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage matches.)";
+  const material = passages.length ? passages.map((p) => `${passageLabel(p)}\n${p.text}`).join("\n\n---\n\n") : "(No passage matches.)";
   return [{ role: "system", content: OPEN_GRADE_PROMPT }, { role: "user", content: `Passages:\n\n${material}\n\nQuestion: ${o.question.q.slice(0, 2000)}\nModel answer: ${o.question.explain.slice(0, 1500)}\nHer answer: ${o.text.slice(0, 3000)}` }];
 }
 
@@ -1083,7 +1083,22 @@ export interface StudyPassage {
   lectureId: string;
   title: string;
   text: string;
+  /** The file's page or slide the passage starts on (lectures read from a PDF or slides keep "— 12 —" marks). */
+  page?: number;
 }
+
+const PAGE_MARK = /(?:^|\n)— (\d{1,4}) —\n/g;
+
+/** The page or slide a place in a lecture's text is on, from the "— n —" marks a file's pages keep. */
+export function pageAt(text: string, at: number): number | undefined {
+  let page: number | undefined;
+  PAGE_MARK.lastIndex = 0;
+  for (let m = PAGE_MARK.exec(text); m && m.index <= at; m = PAGE_MARK.exec(text)) page = Number(m[1]);
+  return page;
+}
+
+/** A passage's label for the model: its lecture, and its page when known (so the answer can cite "p. 12"). */
+export const passageLabel = (p: StudyPassage) => `[Lecture: ${p.title}${p.page ? `, p. ${p.page}` : ""}]`;
 
 const STOP = new Set(["the", "and", "what", "how", "why", "is", "are", "of", "to", "in", "a", "an", "את", "של", "על", "מה", "איך", "למה", "זה", "זו", "הוא", "היא", "עם", "או", "גם", "כי", "אם", "לא", "יש", "אין", "כל", "אני", "מתי", "איזה", "אילו"]);
 
@@ -1109,7 +1124,9 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
     const body = l.text.length > 200 ? l.text : `${l.text}\n${l.summary ?? ""}`;
     for (let i = 0; i < body.length; i += 1400) {
       const text = body.slice(i, i + 1500);
-      pieces.push({ lectureId: l.id, title: l.title, text, w: words(`${l.title} ${text}`) });
+      // The page it starts on, or the first page mark inside it.
+      const page = pageAt(body, i) ?? pageAt(text, text.length);
+      pieces.push({ lectureId: l.id, title: l.title, text, ...(page ? { page } : {}), w: words(`${l.title} ${text}`) });
     }
   }
   const df = new Map<string, number>();
@@ -1127,7 +1144,7 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
   let used = 0;
   for (const { p } of scored) {
     if (used + p.text.length > budget) break;
-    out.push({ lectureId: p.lectureId, title: p.title, text: p.text });
+    out.push({ lectureId: p.lectureId, title: p.title, text: p.text, ...(p.page ? { page: p.page } : {}) });
     used += p.text.length;
   }
   return out;
@@ -1135,7 +1152,7 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
 
 /** The tutor's instructions: answer only from her lectures, say which lecture, and say so when they do not cover it. */
 export const TUTOR_PROMPT =
-  "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]; when the passage is a recording's transcript with times (lines starting like 12:30), add the minute, like [Lecture: <title>, 12:30], so she can find it. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
+  "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]; when the passage is a recording's transcript with times (lines starting like 12:30), add the minute, like [Lecture: <title>, 12:30]; when the passage's label has a page (p. 12), add it, like [Lecture: <title>, p. 12], so she can find it. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
 
 /**
  * A calculation question checked against its own working: the last result after "=" in the explanation must be one
@@ -1203,7 +1220,7 @@ export const GRADE_PROMPT =
  */
 export function gradeMessages(o: { lectures: StudyLecture[]; tutorQuestion: string; answer: string; budget?: number }): { messages: TutorMessage[]; passages: StudyPassage[] } {
   const passages = findPassages(o.lectures, `${o.tutorQuestion} ${o.answer}`.slice(0, 3000), o.budget ?? 6000);
-  const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage matches.)";
+  const material = passages.length ? passages.map((p) => `${passageLabel(p)}\n${p.text}`).join("\n\n---\n\n") : "(No passage matches.)";
   return { messages: [{ role: "system", content: GRADE_PROMPT }, { role: "user", content: `Passages:\n\n${material}\n\nQuestion: ${o.tutorQuestion.slice(0, 1000)}\nHer answer: ${o.answer.slice(0, 1000)}` }], passages };
 }
 
@@ -1280,7 +1297,7 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
       passages = [{ lectureId: l.id, title: l.title, text: body.slice(from, from + Math.min(budget, 4000)) }];
     }
   }
-  const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
+  const material = passages.length ? passages.map((p) => `${passageLabel(p)}\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
   const homework = o.mode === "homework";
   const system = `${study ? STUDY_MODE_PROMPT : homework ? HOMEWORK_PROMPT : TUTOR_PROMPT}${o.hint ? `\n${o.hint}` : ""}`;
   // Homework: the problem is the first thing she wrote; her later messages are steps, hints asked for, or "full solution".

@@ -126,7 +126,8 @@ export async function phoneDocumentText(data: Uint8Array, name: string): Promise
     const out: string[] = [];
     for (const { n, i } of slides) {
       const t = paragraphs((await zip.read(n)) ?? "", "a");
-      if (t) out.push(`Slide ${i}\n${t}`);
+      // The same page marks as the computer's, so answers can cite "slide 12".
+      if (t) out.push(`— ${i} —\n${t}`);
     }
     return out.join("\n\n");
   }
@@ -136,7 +137,10 @@ export async function phoneDocumentText(data: Uint8Array, name: string): Promise
     // No eval of font code from the file (pdf.js 6 is past the 2024 font bug; this is a second lock).
     const pdf = await getDocumentProxy(new Uint8Array(data), { isEvalSupported: false });
     const { text } = await extractText(pdf, { mergePages: false });
-    return (text as string[]).map((p) => p.replace(/[ \t]+\n/g, "\n").trim()).filter(Boolean).join("\n\n");
+    const pages = (text as string[]).map((p) => p.replace(/[ \t]+\n/g, "\n").trim());
+    // Each page keeps its number ("— 12 —"), like on the computer, so answers can cite the page.
+    if (pages.length < 2) return pages.join("\n\n");
+    return pages.map((p, i) => [i + 1, p] as const).filter(([, p]) => p).map(([n, p]) => `— ${n} —\n${p}`).join("\n\n");
   }
   if ([".txt", ".md", ".csv", ".srt", ".vtt"].includes(ext)) return new TextDecoder().decode(data);
   return undefined;

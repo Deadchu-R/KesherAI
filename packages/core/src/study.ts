@@ -431,7 +431,7 @@ export class Study {
     const say = async (messages: TutorMessage[]) => (await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(300_000), () => undefined)).text;
     const sourcesOf = (passages: StudyPassage[]) => {
       const seen = new Set<string>();
-      return passages.filter((p) => !seen.has(p.lectureId) && seen.add(p.lectureId)).map((p) => ({ lectureId: p.lectureId, title: p.title }));
+      return passages.filter((p) => !seen.has(p.lectureId) && seen.add(p.lectureId)).map((p) => ({ lectureId: p.lectureId, title: p.title, ...(p.page ? { page: p.page } : {}) }));
     };
     // Study mode, her answer: graded first as a plain verdict (our words, by her lecture), then the next question.
     const asked = [...history].reverse().find((h) => h.role === "assistant")?.content;

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -318,4 +318,15 @@ test("field tools: each field gets its own tools, unknown fields get all, course
   for (const f of ["nursing", "medicine", "law", "engineering", "cs", "math", "psychology", "economics", "biology", "education", "humanities"]) assert.ok(toolsFor(f).length > 0, f);
   const m = toolMaterial([{ id: "a", title: "א", date: "", text: "x".repeat(90_000) }, { id: "b", title: "ב", date: "", text: "t", summary: "סיכום" }], 10_000);
   assert.ok(m.length <= 10_000 && m.includes("### ב\nסיכום"));
+});
+
+test("passages keep the page of a file's lecture, and the model sees it to cite", () => {
+  const text = `— 1 —\nמבוא לתאים\n\n— 2 —\n${"מילוי ".repeat(300)}\n\n— 3 —\nהמיטוכונדריה מייצרת אנרגיה`;
+  assert.equal(pageAt(text, 0), 1);
+  assert.equal(pageAt(text, text.length), 3);
+  const lec = { id: "l", title: "תאים", date: "", text };
+  const found = findPassages([lec], "מיטוכונדריה", 9000);
+  assert.ok(found.some((p) => p.page === 3 || (p.page !== undefined && p.text.includes("— 3 —"))));
+  assert.equal(passageLabel({ lectureId: "l", title: "תאים", text: "", page: 3 }), "[Lecture: תאים, p. 3]");
+  assert.equal(findPassages([{ ...lec, text: "המיטוכונדריה מייצרת אנרגיה ".repeat(5) }], "מיטוכונדריה")[0]?.page, undefined);
 });
