@@ -910,3 +910,12 @@ S5 an outside scanner's rules for Electron.
 - **Journal OCR**: a failed read in the Tesseract worker no longer throws outside a promise (it was logged as an uncaught error just before the 22:29 exit; that exit itself came from outside the app).
 - **Computer tabs**: open other computers only through the desktop bridge's existing `openDevice` / `openComputer` (same checks as the hub).
 - Performance: the model scan for course models is cached 5 minutes; the wait for a free engine checks every 3 s only while a course waits; the recorder keeps Opus at 24 kb/s (~20 MB per 90 minutes) instead of WAV (~170 MB).
+
+## Scan 98 (2026-11-17, night): guiding questions, Godot, phone computer tabs, limits suggestion, engine API guides, WSL, Films for you
+- **Godot bridge**: the editor connects to `/api/godot/ws` from this computer only (`isLocalRequest`), like Unreal's. Its file commands work only under `res://` and refuse `..` (checked in a real Godot 4.7.2 editor: a write to `res://../escape.gd` is refused). Every scene change goes through the editor's undo history. Connecting a project only writes `addons/kesher_bridge/` and one `project.godot` line; `/api/godot/connect` is local only; the editor started is a Godot found in KesherAI's engines folder or common install places (never a path from the request).
+- **Godot download**: the 4.7.2 Windows editors were checked against the release's SHA512-SUMS before unpacking.
+- **Films for you (Stremio)**: the addon routes (`/stremio/<key>/…`) need one of KesherAI's revocable app keys in the address (Stremio cannot send headers); they answer only the manifest and the picks. The key is cut out of the desktop log (`/stremio/…`) and the access log keeps no such path. Posters come through KesherAI only for stored picks and only from Cinemeta's image hosts, no redirects, images up to 2 MB. Only titles go to Cinemeta's search.
+- **Guiding questions**: ask_user's questions are checked (1–4, 2–4 options, lengths cut) before they reach the card; the answer is plain text.
+- **WSL**: a project at `\\wsl.localhost\<distro>\…` runs commands with `wsl.exe -d <distro> --cd <dir> -- bash -lc <command>` (arguments, not a shell line built from the path); the same approval rules as any command.
+- **Phone computer tabs**: open a saved computer by its index in the phone's own list (`index.html?use=N`, digits only).
+- Performance: the Godot tools add ~1 k tokens only where Godot is installed or connected; the course-model scan is cached; the Stremio refresh is one model call plus up to 30 small searches.

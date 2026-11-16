@@ -125,7 +125,8 @@ async function startCore(): Promise<string> {
   const lastReq = new Map<string, number>();
   try {
     s.app.addHook("onRequest", (req, _reply, done) => {
-    const path = req.url.split("?")[0] ?? "";
+    // The Stremio addon's address holds an app key: never written to the log.
+    const path = (req.url.split("?")[0] ?? "").replace(/^\/stremio\/[^/]+/, "/stremio/…");
     const now = Date.now();
     if ((lastReq.get(path) ?? 0) < now - 30_000) {
       lastReq.set(path, now);
