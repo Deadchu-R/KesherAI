@@ -10,6 +10,7 @@ const fake = () => ({
   id: "fake",
   turn: (async (req: { messages: Array<{ role: string; content: string }> }) => {
     const sys = req.messages[0]!.content;
+    if (sys.includes("tutor for a student")) return { text: req.messages.at(-1)!.content.includes("אינסולין") ? "מוריד סוכר [Lecture: אינסולין]" : "לא מכוסה" };
     if (sys.includes("photos of study material")) return { text: (req.messages[1] as { images?: unknown[] }).images?.length ? "לוח: לחץ דם 120/80" : "NO-IMAGE" };
     if (sys.includes("drug cards")) return { text: '[{"name":"Digoxin","drugClass":"Cardiac glycoside","nursing":"Apical pulse a full minute; hold under 60","sideEffects":"Nausea, visual changes"},{"name":""}]' };
     if (sys.includes("flashcards")) return { text: '```json\n[{"front":"מה עושה אינסולין?","back":"מוריד סוכר בדם","kind":"drug"},{"front":"Normal K+?","back":"3.5–5.0 mEq/L","kind":"concept"},{"front":"bad"}]\n```' };
@@ -102,6 +103,21 @@ test("a lecture from a file: text, a photo, and kinds that cannot be read", asyn
     assert.equal((await st.extract("board.jpg", Buffer.from([0xff, 0xd8, 0xff]))).text, "לוח: לחץ דם 120/80");
     await assert.rejects(st.extract("virus.exe", Buffer.from("MZ")), /cannot be read/);
     await assert.rejects(new Study(dir, () => undefined).extract("a.png", Buffer.from([1])), /chat model/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the course tutor answers from the lectures and names them", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-tutor-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("פרמקולוגיה");
+    const l = await st.addLecture(c.id, { title: "אינסולין", text: "אינסולין מוריד סוכר בדם." });
+    const r = await st.askCourse(c.id, "מה עושה אינסולין?");
+    assert.match(r.answer, /אינסולין/);
+    assert.deepEqual(r.sources, [{ lectureId: l.id, title: "אינסולין" }]);
+    await assert.rejects(st.askCourse(c.id, "  "), /Ask a question/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

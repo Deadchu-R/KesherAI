@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -108,4 +108,14 @@ test("the plan toward an exam brings forward cards scheduled after it", () => {
   const twoDays = { ...d, course: { ...d.course, examDate: "2026-11-17" } };
   assert.deepEqual(cardsToReview(twoDays, now).map((c) => c.id), ["now", "mid", "late1", "late2"]);
   assert.equal(examPlan({ ...d, course: { ...d.course, examDate: "2026-11-01" } }, now), undefined);
+});
+
+test("finding the lecture passages for a question", () => {
+  const lectures = [
+    { id: "a", title: "תרופות לב", date: "2026-11-01", text: "דיגוקסין מגביר את כוח ההתכווצות. בודקים דופק אפיקלי דקה שלמה." },
+    { id: "b", title: "אינסולין", date: "2026-11-02", text: "האינסולין מוריד סוכר בדם. Insulin lowers blood glucose." },
+  ];
+  assert.deepEqual(findPassages(lectures, "מה עושה הדיגוקסין?").map((p) => p.lectureId), ["a"]);
+  assert.equal(findPassages(lectures, "insulin")[0]?.lectureId, "b");
+  assert.deepEqual(findPassages(lectures, "מה זה?"), []);
 });

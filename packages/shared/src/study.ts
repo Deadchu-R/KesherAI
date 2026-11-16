@@ -652,3 +652,62 @@ export function cardsToReview(d: StudyCourseData, now = Date.now(), limit = 50):
     .slice(0, plan.perDay - due.length);
   return [...due, ...ahead].slice(0, limit);
 }
+
+/** A piece of a lecture found for a question. */
+export interface StudyPassage {
+  lectureId: string;
+  title: string;
+  text: string;
+}
+
+const STOP = new Set(["the", "and", "what", "how", "why", "is", "are", "of", "to", "in", "a", "an", "את", "של", "על", "מה", "איך", "למה", "זה", "זו", "הוא", "היא", "עם", "או", "גם", "כי", "אם", "לא", "יש", "אין", "כל", "אני", "מתי", "איזה", "אילו"]);
+
+/** Words of a text for matching: lower case, Hebrew prefixes (ו ה ב ל מ ש כ) off longer words. */
+function words(text: string): string[] {
+  return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).map((w) => (/^[֐-׿]/.test(w) && w.length > 3 ? w.replace(/^[והבלמשכ]{1,2}(?=[֐-׿]{3})/, "") : w)).filter((w) => w.length > 1 && !STOP.has(w));
+}
+
+/**
+ * The lecture passages that best match a question (word overlap, rare words counting more), for answering only from
+ * the student's own material. Lectures are cut into ~1500-character pieces.
+ *
+ * @param lectures - The course's lectures.
+ * @param question - Her question.
+ * @param budget - Characters to return at most.
+ * @returns The passages, best first.
+ */
+export function findPassages(lectures: StudyLecture[], question: string, budget = 9000): StudyPassage[] {
+  const want = new Set(words(question));
+  if (!want.size) return [];
+  const pieces: Array<StudyPassage & { w: string[] }> = [];
+  for (const l of lectures) {
+    const body = l.text.length > 200 ? l.text : `${l.text}\n${l.summary ?? ""}`;
+    for (let i = 0; i < body.length; i += 1400) {
+      const text = body.slice(i, i + 1500);
+      pieces.push({ lectureId: l.id, title: l.title, text, w: words(`${l.title} ${text}`) });
+    }
+  }
+  const df = new Map<string, number>();
+  for (const p of pieces) for (const w of new Set(p.w)) if (want.has(w)) df.set(w, (df.get(w) ?? 0) + 1);
+  const scored = pieces
+    .map((p) => {
+      const seen = new Set(p.w);
+      let score = 0;
+      for (const w of want) if (seen.has(w)) score += Math.log(1 + pieces.length / (df.get(w) ?? 1));
+      return { p, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const out: StudyPassage[] = [];
+  let used = 0;
+  for (const { p } of scored) {
+    if (used + p.text.length > budget) break;
+    out.push({ lectureId: p.lectureId, title: p.title, text: p.text });
+    used += p.text.length;
+  }
+  return out;
+}
+
+/** The tutor's instructions: answer only from her lectures, say which lecture, and say so when they do not cover it. */
+export const TUTOR_PROMPT =
+  "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";

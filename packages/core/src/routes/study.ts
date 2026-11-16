@@ -22,6 +22,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   type L = { Params: { id: string; lid: string } };
 
   app.get("/api/study", async () => ({ courses: await st.list() }));
+  /** The course's tutor: `{ question, history? }` → an answer from her lectures, with the lectures it used. */
+  app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }> } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : []));
   /** The text of a file for a new lecture (`{ name, data }`, data in base64): slides, PDF, Word, text or a photo. */
   app.post<{ Body: { name?: string; data?: string } }>("/api/study/extract", { bodyLimit: 70 * 1024 * 1024 }, async (req) => st.extract(String(req.body?.name ?? "file"), Buffer.from(String(req.body?.data ?? ""), "base64")));
   /** Two-way sync with the phone's own Study tab: `{ courses, removedCourses }` in, every course here out. */

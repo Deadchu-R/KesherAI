@@ -2718,3 +2718,8 @@ html.handheld .palette-list button { min-height: 44px; }
 
 .study-plan h2 { margin: 0 0 4px; }
 .study-plan p { margin: 4px 0; }
+
+.study-ask-turns { display: grid; gap: 10px; margin: 10px 0; }
+.study-ask-turn { padding: 10px 12px; border-radius: 12px; background: var(--panel-2); white-space: pre-wrap; }
+.study-ask-turn.user { background: transparent; border: 1px solid var(--border-strong); }
+.study-ask-turn p { margin: 0 0 4px; }

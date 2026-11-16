@@ -177,6 +177,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["lectures", ["הרצאות", "Lectures"]],
   ["review", ["חזרה", "Review"]],
   ["quiz", ["בוחן", "Quiz"]],
+  ["ask", ["שאלי את הקורס", "Ask the course"]],
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
   ["drugs", ["תרופות", "Drugs"]],
@@ -227,8 +228,46 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />
         : on === "labs" ? <LabValues />
         : on === "progress" ? <ProgressView courseId={id} />
+        : on === "ask" ? <AskCourse courseId={id} hasLectures={info.lectures.length > 0} />
         : <Lectures courseId={id} info={info} onChange={load} />}
     </div>
+  );
+}
+
+/** The course's tutor: questions answered only from her lectures, each fact with its lecture. */
+function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: boolean }) {
+  const [turns, setTurns] = useState<Array<{ role: "user" | "assistant"; content: string; sources?: Array<{ lectureId: string; title: string }> }>>([]);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    const question = q.trim();
+    if (!question || busy) return;
+    setQ("");
+    setBusy(true);
+    const history = turns.map(({ role, content }) => ({ role, content }));
+    setTurns((t) => [...t, { role: "user", content: question }]);
+    const r = await call(api<{ answer: string; sources: Array<{ lectureId: string; title: string }> }>(`/api/study/courses/${courseId}/ask`, { method: "POST", body: { question, history } }));
+    setBusy(false);
+    if (r) setTurns((t) => [...t, { role: "assistant", content: r.answer, sources: r.sources }]);
+  };
+  if (!hasLectures) return <p className="muted">{L("קודם הוסיפי הרצאה: התשובות מגיעות רק מההרצאות שלך.", "Add a lecture first: answers come only from your lectures.")}</p>;
+  return (
+    <section className="study-ask">
+      <p className="muted small">{L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.")}</p>
+      <div className="study-ask-turns" aria-live="polite">
+        {turns.map((t, i) => (
+          <div key={i} className={`study-ask-turn ${t.role}`} dir="auto">
+            <p>{t.content}</p>
+            {t.sources && t.sources.length > 0 && <small className="muted">{L("מתוך: ", "From: ")}{t.sources.map((s, j) => <span key={s.lectureId}>{j ? " · " : ""}<a href={`#/study/${courseId}/l/${s.lectureId}`}>{s.title}</a></span>)}</small>}
+          </div>
+        ))}
+        {busy && <p className="muted">{L("מחפשת בהרצאות…", "Looking through your lectures…")}</p>}
+      </div>
+      <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} dir="auto" aria-label={L("שאלה", "Question")} placeholder={L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
+        <button type="submit" className="primary" disabled={busy || !q.trim()}>{L("שאלי", "Ask")}</button>
+      </form>
+    </section>
   );
 }
 

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { cardsToReview, detectField, examPlan, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { cardsToReview, detectField, examPlan, findPassages, TUTOR_PROMPT, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -337,6 +337,32 @@ export class Study {
     const text = doc.pages.map((p, i) => [i + 1, p.trim()] as const).filter(([, p]) => p).map(([n, p]) => (doc.pages.length > 1 ? `— ${n} —\n${p}` : p)).join("\n\n");
     if (!text.trim()) throw bad(ext === ".pdf" ? "This PDF has no text in it (a scan). Send photos of its pages instead." : "The file has no text.");
     return { title, text: text.slice(0, 400_000) };
+  }
+
+  /**
+   * The course's tutor: answers a question from her own lectures only, naming the lecture of each fact.
+   *
+   * @param id - The course.
+   * @param question - Her question.
+   * @param history - The conversation so far (last few turns are kept).
+   * @returns The answer and the lectures it drew on.
+   */
+  async askCourse(id: string, question: string, history: Array<{ role: "user" | "assistant"; content: string }> = [], signal?: AbortSignal): Promise<{ answer: string; sources: Array<{ lectureId: string; title: string }> }> {
+    const q = question.trim().slice(0, 2000);
+    if (!q) throw Object.assign(new Error("Ask a question."), { statusCode: 400 });
+    const d = await this.get(id);
+    // The previous question helps find the passages for a follow-up ("and its side effects?").
+    const lastQ = [...history].reverse().find((h) => h.role === "user")?.content ?? "";
+    const passages = findPassages(d.lectures, `${q} ${lastQ}`.slice(0, 3000));
+    const m = this.model();
+    if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
+    const system = `${TUTOR_PROMPT}${d.course.field && FIELD_HINT[d.course.field] ? `\n${FIELD_HINT[d.course.field]}` : ""}`;
+    const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
+    const turns = history.slice(-6).filter((h) => (h.role === "user" || h.role === "assistant") && typeof h.content === "string").map((h) => ({ role: h.role, content: h.content.slice(0, 4000) }));
+    const r = await m.turn({ messages: [{ role: "system", content: system }, ...turns, { role: "user", content: `Passages from her lectures:\n\n${material}\n\nHer question: ${q}` }], tools: [] }, signal ?? AbortSignal.timeout(300_000), () => undefined);
+    const seen = new Set<string>();
+    const sources = passages.filter((p) => !seen.has(p.lectureId) && seen.add(p.lectureId)).map((p) => ({ lectureId: p.lectureId, title: p.title }));
+    return { answer: r.text.trim(), sources };
   }
 
   private async ask(system: string, user: string, signal?: AbortSignal, field?: string): Promise<string> {

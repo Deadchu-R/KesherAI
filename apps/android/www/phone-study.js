@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, TUTOR_PROMPT } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -172,6 +172,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
     else if (view.at === "life") life();
     else if (view.at === "record") record();
     else if (view.at === "benefits") benefits();
+    else if (view.at === "ask") askView();
   }
 
   const back = (to) => el("button", { type: "button", class: "link", onclick: () => go(to) }, L("› חזרה", "‹ Back"));
@@ -223,6 +224,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
       el("div", { class: "ph-btns" },
         el("button", { type: "button", class: "primary", disabled: !due, onclick: () => go({ at: "review", course: c.id }) }, L(`חזרה (${due})`, `Review (${due})`)),
         el("button", { type: "button", disabled: !c.lectures.length, onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן", "Quiz")),
+        el("button", { type: "button", disabled: !c.lectures.length, onclick: () => go({ at: "ask", course: c.id }) }, L("שאלי את הקורס", "Ask the course")),
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),
@@ -545,6 +547,36 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
         b.note && el("p", { class: "muted" }, he() ? b.note.he : b.note.en),
         el("p", {}, el("a", { href: b.url, target: "_blank", rel: "noreferrer" }, L("לעמוד הרשמי", "Official page")), " · ", el("small", { class: "muted" }, L(`נבדק ${b.checked.split("-").reverse().join(".")}`, `Checked ${b.checked}`)))));
     }
+  }
+
+  /** The course's tutor on the phone's own model: answers only from her lectures, naming each lecture. */
+  const tutor = new Map();
+  function askView() {
+    const c = course();
+    if (!c) return go({ at: "home" });
+    const turns = tutor.get(c.id) || [];
+    tutor.set(c.id, turns);
+    const list = el("div", { class: "ph-ask", "aria-live": "polite" }, ...turns.map((t) => el("div", { class: `ph-ask-turn ${t.role}`, dir: "auto" }, t.content, t.sources?.length ? el("small", { class: "muted" }, el("br"), L("מתוך: ", "From: ") + t.sources.join(" · ")) : "")));
+    const q = el("input", { dir: "auto", "aria-label": L("שאלה", "Question"), placeholder: L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
+    const btn = el("button", { type: "submit", class: "primary" }, L("שאלי", "Ask"));
+    const form = el("form", { class: "ph-filter", onsubmit: async (e) => {
+      e.preventDefault();
+      const question = q.value.trim();
+      if (!question) return;
+      const last = [...turns].reverse().find((t) => t.role === "user")?.content || "";
+      const passages = findPassages(c.lectures, `${question} ${last}`, 5000);
+      const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
+      const history = turns.slice(-4).map(({ role, content }) => ({ role, content }));
+      turns.push({ role: "user", content: question });
+      const r = await need([{ role: "system", content: TUTOR_PROMPT }, ...history, { role: "user", content: `Passages from her lectures:\n\n${material}\n\nHer question: ${question}` }], btn);
+      if (r === undefined) { turns.pop(); return; }
+      turns.push({ role: "assistant", content: String(r).trim(), sources: [...new Set(passages.map((p) => p.title))] });
+      draw();
+    } }, q, btn);
+    root.append(back({ at: "course", course: c.id }), el("h2", {}, L("שאלי את הקורס", "Ask the course")),
+      el("p", { class: "muted small" }, L("התשובות רק מההרצאות שלך, עם שם ההרצאה. כשהן לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, naming each lecture. When they do not cover a question, it says so.")),
+      list, form);
+    q.focus();
   }
 
   function review() {
