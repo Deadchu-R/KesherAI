@@ -919,3 +919,11 @@ S5 an outside scanner's rules for Electron.
 - **WSL**: a project at `\\wsl.localhost\<distro>\…` runs commands with `wsl.exe -d <distro> --cd <dir> -- bash -lc <command>` (arguments, not a shell line built from the path); the same approval rules as any command.
 - **Phone computer tabs**: open a saved computer by its index in the phone's own list (`index.html?use=N`, digits only).
 - Performance: the Godot tools add ~1 k tokens only where Godot is installed or connected; the course-model scan is cached; the Stremio refresh is one model call plus up to 30 small searches.
+
+## Scan 99 (2026-11-17, night): Minecraft/Roblox, a voice of her own, depth frames, unattended self-work, UEFN
+- **Mods**: `mod_new` clones only the two official templates (fixed URLs) into a new folder that must not exist; `mod_build` is an `exec` tool (asks like any command), runs `gradlew` with KesherAI's JDK, `rojo` from KesherAI's engines folder, or zips the two packs; arguments as lists, no shell line from input (the .mcaddon path goes through an environment variable to PowerShell). The JDK zip was checked against Adoptium's SHA-256 before unpacking; Rojo came from its GitHub release.
+- **Voice**: a clip is kept only with the consent tick, only as a RIFF WAV of 5 s–2 min, under a name of letters, digits, spaces, `_` and `-` (no path); speaking checks the voice name the same way and the language against the list; text is passed to Python as one JSON argument, not a command line. Voices stay in engines/chatterbox/voices on this computer.
+- **Depth frames**: a ready flow of ComfyUI's own nodes and two ControlNet files from comfyanonymous' HF repo; nothing new runs.
+- **Unattended self-work**: ask_user and request_access no longer wait in a self-work session; folders outside the project are refused there (stricter than before).
+- **UEFN**: writes only `.verse` files inside a UEFN project's Content folder (checked with `relative()`; `../` refused, tested).
+- Performance: the mod and UEFN tools add ~300 tokens; UEFN's only when its projects folder exists.
