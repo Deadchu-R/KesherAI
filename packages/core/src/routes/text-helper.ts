@@ -15,7 +15,7 @@ import type { KesherServices } from "../services.js";
 export const TEXT_HELPER_MAX = 20_000;
 
 const TTL_MS = 10 * 60_000;
-const waiting = new Map<string, { text: string; at: number }>();
+const waiting = new Map<string, { text: string; at: number; cut: boolean }>();
 
 /**
  * Keeps a selection for its window, and forgets old ones.
@@ -28,8 +28,17 @@ export function keepSelection(text: string, now = Date.now()): string {
   for (const [k, v] of waiting) if (now - v.at > TTL_MS) waiting.delete(k);
   while (waiting.size >= 30) waiting.delete(waiting.keys().next().value!);
   const id = randomUUID();
-  waiting.set(id, { text: text.slice(0, TEXT_HELPER_MAX), at: now });
+  waiting.set(id, { text: text.slice(0, TEXT_HELPER_MAX), at: now, cut: text.length > TEXT_HELPER_MAX });
   return id;
+}
+
+/**
+ * Whether a kept selection was cut to {@link TEXT_HELPER_MAX} characters.
+ *
+ * @param id - From keepSelection.
+ */
+export function selectionCut(id: string): boolean {
+  return waiting.get(id)?.cut ?? false;
 }
 
 /**
@@ -99,6 +108,6 @@ export async function textHelperRoutes(app: FastifyInstance, s: KesherServices):
   app.get<{ Params: { id: string } }>("/api/text-helper/:id", async (req, reply) => {
     const text = selectionOf(req.params.id);
     if (text === undefined) return reply.code(404).send({ error: "This selection is no longer here. Select the text again." });
-    return { text };
+    return { text, cut: selectionCut(req.params.id) };
   });
 }

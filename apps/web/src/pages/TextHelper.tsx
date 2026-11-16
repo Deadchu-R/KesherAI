@@ -18,6 +18,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 export function TextHelper({ hash }: { hash: string }) {
   const [, , chatId = "", selId = ""] = hash.split("/").map((x) => decodeURIComponent(x));
   const [text, setText] = useState<string | null>(null);
+  const [cut, setCut] = useState(false);
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState("");
   const [question, setQuestion] = useState("");
@@ -29,8 +30,11 @@ export function TextHelper({ hash }: { hash: string }) {
   }, []);
 
   useEffect(() => {
-    void api<{ text: string }>(`/api/text-helper/${encodeURIComponent(selId)}`)
-      .then((r) => setText(r.text))
+    void api<{ text: string; cut?: boolean }>(`/api/text-helper/${encodeURIComponent(selId)}`)
+      .then((r) => {
+        setText(r.text);
+        setCut(!!r.cut);
+      })
       .catch(() => setText(""));
   }, [selId]);
 
@@ -103,7 +107,10 @@ export function TextHelper({ hash }: { hash: string }) {
       {text === null ? (
         <p className="muted small">{L("קורא…", "Reading…")}</p>
       ) : t ? (
-        <blockquote className="text-sel" dir="auto">{t}</blockquote>
+        <>
+          <blockquote className="text-sel" dir="auto">{t}</blockquote>
+          {cut && <p className="muted small">{L("הטקסט קוצר ל-20,000 תווים", "The text was cut to 20,000 characters")}</p>}
+        </>
       ) : (
         <p className="muted small">{L("לא נבחר טקסט. סמנו טקסט בכל אפליקציה ולחצו Ctrl+Alt+K. אפשר גם לשאול כאן.", "No text was selected. Select text in any app and press Ctrl+Alt+K. You can also ask here.")}</p>
       )}
