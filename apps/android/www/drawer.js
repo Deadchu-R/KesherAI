@@ -27,21 +27,27 @@
     .kd-btn { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); right: 16px; z-index: 50; width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 18px; border: 1px solid var(--border); background: rgb(31 31 34 / 0.86); backdrop-filter: blur(14px); color: var(--text); font-size: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); touch-action: none; }
     .kd-bar-btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--text, #ededee); }
     .kd-bar-btn:active { background: rgb(255 255 255 / 0.08); }
-    .kd-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
-    .kd-panel { position: fixed; top: 0; bottom: 0; right: 0; left: auto; z-index: 61; width: min(312px, 84vw); display: flex; flex-direction: column; gap: 2px; padding: max(14px, env(safe-area-inset-top)) 10px max(14px, env(safe-area-inset-bottom)); background: #18181a; border-left: 1px solid #2a2a2e; transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.9,.25,1); overflow-y: auto; touch-action: pan-y; }
+    .kd-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.35); opacity: 0; pointer-events: none; transition: opacity .16s; }
+    /* Like the remote's menu: a panel under the top bar, at its start, above the bottom bar (not a full-height drawer). */
+    .kd-panel { position: fixed; top: var(--kd-top, 64px); bottom: var(--kd-bottom, 12px); right: 12px; left: auto; z-index: 61; width: min(330px, calc(100vw - 72px)); display: flex; flex-direction: column; gap: 0; padding: 8px; background: #1e1e21; border: 1px solid #2c2d33; border-radius: 18px; box-shadow: 0 16px 40px rgb(0 0 0 / .5); opacity: 0; transform: translateY(-6px) scale(.98); transform-origin: top right; pointer-events: none; transition: opacity .16s, transform .16s cubic-bezier(.2,.9,.25,1); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
     .kd-open .kd-scrim { opacity: 1; pointer-events: auto; }
-    .kd-open .kd-panel { transform: none; }
+    .kd-open .kd-panel { opacity: 1; transform: none; pointer-events: auto; }
+    @media (prefers-reduced-motion: reduce) { .kd-panel { transition: opacity .1s; transform: none; } }
+    /* The top bar already has the brand and the phone/computer switch. */
+    .kd-in-bar .kd-brand, .kd-in-bar .kd-seg { display: none; }
     .kd-brand { display: flex; gap: 10px; align-items: center; font-size: 17px; font-weight: 500; padding: 6px 8px 8px; }
     .kd-brand .kd-state { margin-inline-start: auto; font-size: 12px; font-weight: 400; color: #f0b37e; }
     .kd-brand .kd-state.on { color: #7fd6a4; }
     .kd-seg { display: flex; background: #121213; border: 1px solid #2a2a2e; border-radius: 12px; padding: 3px; gap: 2px; margin: 2px 0 8px; }
     .kd-seg a { flex: 1; display: grid; place-items: center; height: 38px; border-radius: 9px; color: #c9c9ce; font-size: 14px; text-decoration: none; }
     .kd-seg a.on { background: #2e2e3a; color: var(--text); font-weight: 500; }
-    .kd-head { font-size: 12px; color: var(--muted); padding: 10px 14px 4px; }
-    .kd-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: #d6d6da; font-size: 15px; text-align: start; text-decoration: none; transition: background .08s, transform .08s, color .08s; user-select: none; -webkit-user-select: none; }
-    .kd-item.on { background: #262630; color: var(--text); font-weight: 500; }
-    .kd-item.kd-new { border: 1px solid #2a2a2e; background: #1f1f22; color: var(--text); font-weight: 500; margin-bottom: 4px; }
-    .kd-ico svg { display: block; margin: 0 auto; stroke: #c9c9ce; }
+    /* Groups are parted by a line, like the remote's menu; the group's name stays small under it. */
+    .kd-head { font-size: 12px; color: var(--muted); padding: 10px 12px 2px; margin: 6px 4px 0; border-top: 1px solid #2c2d33; }
+    .kd-item { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--text, #ededee); font-size: 16px; text-align: start; text-decoration: none; transition: background .08s, transform .08s, color .08s; user-select: none; -webkit-user-select: none; }
+    .kd-item:active { background: rgb(255 255 255 / 0.06); }
+    .kd-item.on { background: #2a2a33; font-weight: 500; }
+    .kd-item.kd-new { margin-bottom: 0; }
+    .kd-ico svg { display: block; margin: 0 auto; stroke: #a9a9b0; }
     .kd-item.on .kd-ico svg { stroke: var(--accent); }
     .kd-item.hot { background: var(--accent); color: var(--accent-ink); transform: scale(1.02); }
     .kd-item.hot small { color: inherit; opacity: .75; }
@@ -294,7 +300,19 @@
   b.setAttribute("aria-label", T("תפריט", "Menu"));
   b.title = T("תפריט", "Menu");
   pressAndSlide(b);
-  if (bar) bar.prepend(b);
+  if (bar) {
+    bar.prepend(b);
+    // The panel opens under the bar and stops above the bottom bar.
+    root.classList.add("kd-in-bar");
+    const fit = () => {
+      document.documentElement.style.setProperty("--kd-top", `${Math.round(bar.getBoundingClientRect().bottom + 6)}px`);
+      const tabs = document.getElementById("appTabs");
+      document.documentElement.style.setProperty("--kd-bottom", `${tabs && !tabs.hidden ? Math.round(document.documentElement.clientHeight - tabs.getBoundingClientRect().top + 8) : 12}px`);
+    };
+    fit();
+    addEventListener("resize", fit);
+    b.addEventListener("pointerdown", fit, true);
+  }
   else {
     document.body.append(b);
     const place = () => {
