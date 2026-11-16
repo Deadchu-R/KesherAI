@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The app's own dark surface (the design doc's #121213), a little see-through over the wallpaper. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#E6141824" />
+    <solid android:color="#F2121213" />
     <corners android:radius="24dp" />
 </shape>

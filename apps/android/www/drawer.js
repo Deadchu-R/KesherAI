@@ -22,6 +22,13 @@
   const params = new URLSearchParams(location.search);
   const here = location.pathname.split("/").pop() || "index.html";
 
+  // The home-screen widget's buttons open the phone's own screens (no computer needed), from any screen of the app.
+  const WIDGET = { "#/phone/new": "local.html?new=1", "#/phone/live": "local.html?new=1&live=1", "#/phone/study": "local.html?tab=study", "#/phone/chats": "local.html?tab=chats" };
+  const notify = window.Capacitor?.Plugins?.KesherNotify;
+  const fromWidget = () => notify?.takeOpenPhone?.().then((r) => { const to = r && WIDGET[r.path]; if (to) location.href = to; }, () => undefined);
+  void fromWidget();
+  notify?.addListener?.("openPhone", () => void fromWidget());
+
   const css = document.createElement("style");
   css.textContent = `
     .kd-btn { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); right: 16px; z-index: 50; width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 18px; border: 1px solid var(--border); background: rgb(31 31 34 / 0.86); backdrop-filter: blur(14px); color: var(--text); font-size: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); touch-action: none; }

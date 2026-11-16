@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="kesher_widget_ask">Ask KesherAI…</string>
-    <string name="kesher_widget_voice">🎙 Speak</string>
-    <string name="kesher_widget_tasks">📋 Tasks</string>
-    <string name="kesher_widget_health">🩺 Health</string>
+    <string name="kesher_widget_voice">Call</string>
+    <string name="kesher_widget_tasks">Study</string>
+    <string name="kesher_widget_health">Chats</string>
     <string name="kesher_widget_label">KesherAI</string>
     <style name="KesherWidgetButton">
         <item name="android:layout_width">0dp</item>
@@ -11,7 +11,9 @@
         <item name="android:layout_weight">1</item>
         <item name="android:gravity">center</item>
         <item name="android:background">@drawable/kesher_widget_pill</item>
-        <item name="android:textColor">#E8ECF4</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">#FFEDEDEE</item>
+        <item name="android:textSize">12.5sp</item>
+        <item name="android:drawablePadding">4dp</item>
+        <item name="android:paddingTop">6dp</item>
     </style>
 </resources>

@@ -166,6 +166,15 @@ public class NotifyPlugin extends Plugin {
         String path = i.getStringExtra(Notes.EXTRA_PATH);
         if (path == null || !path.startsWith("#/")) return;
         i.removeExtra(Notes.EXTRA_PATH);
+        // The widget's buttons open the phone's own screens (no computer needed): a separate channel, so a page of the
+        // computer's interface never takes them.
+        if (path.startsWith("#/phone/")) {
+            Prefs.of(getContext()).edit().putString("openPhone", path).apply();
+            JSObject p = new JSObject();
+            p.put("path", path);
+            notifyListeners("openPhone", p);
+            return;
+        }
         Prefs.of(getContext()).edit().putString("open", path).apply();
         JSObject o = new JSObject();
         o.put("path", path);
@@ -383,6 +392,16 @@ public class NotifyPlugin extends Plugin {
     public void takeOpen(PluginCall call) {
         String path = Prefs.of(getContext()).getString("open", null);
         Prefs.of(getContext()).edit().remove("open").apply();
+        JSObject o = new JSObject();
+        if (path != null) o.put("path", path);
+        call.resolve(o);
+    }
+
+    /** The phone screen a widget button asked for (#/phone/new, live, study, chats), once. */
+    @PluginMethod
+    public void takeOpenPhone(PluginCall call) {
+        String path = Prefs.of(getContext()).getString("openPhone", null);
+        Prefs.of(getContext()).edit().remove("openPhone").apply();
         JSObject o = new JSObject();
         if (path != null) o.put("path", path);
         call.resolve(o);

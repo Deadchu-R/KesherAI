@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="kesher_widget_ask">לשאול את KesherAI…</string>
-    <string name="kesher_widget_voice">🎙 לדבר</string>
-    <string name="kesher_widget_tasks">📋 משימות</string>
-    <string name="kesher_widget_health">🩺 בריאות</string>
+    <string name="kesher_widget_ask">לשאול את קשר…</string>
+    <string name="kesher_widget_voice">שיחה</string>
+    <string name="kesher_widget_tasks">לימודים</string>
+    <string name="kesher_widget_health">צ׳אטים</string>
 </resources>

@@ -33,6 +33,16 @@ export function PcDrop() {
     const t = setInterval(() => void tick(), 15_000);
     return () => clearInterval(t);
   }, [home]);
+  // The phone's home-screen widget asks for one of the phone's own screens: go there from the computer's interface too.
+  useEffect(() => {
+    if (!home) return;
+    const notify = (window as unknown as { Capacitor?: { Plugins?: { KesherNotify?: { takeOpenPhone?: () => Promise<{ path?: string }>; addListener?: (e: string, f: () => void) => Promise<{ remove: () => void }> } } } }).Capacitor?.Plugins?.KesherNotify;
+    const WIDGET: Record<string, string> = { "#/phone/new": "local.html?new=1", "#/phone/live": "local.html?new=1&live=1", "#/phone/study": "local.html?tab=study", "#/phone/chats": "local.html?tab=chats" };
+    const go = () => void notify?.takeOpenPhone?.().then((r) => { const to = r?.path ? WIDGET[r.path] : undefined; if (to) location.href = `${home.replace(/\/$/, "")}/${to}`; }, () => undefined);
+    go();
+    const sub = notify?.addListener?.("openPhone", go);
+    return () => void sub?.then((x) => x.remove());
+  }, [home]);
   if (!home || !down) return null;
   return (
     <div className="pc-drop" role="alert">

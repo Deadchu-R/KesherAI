@@ -1,4 +1,4 @@
-/* global localStorage, document, location, Buffer, process, console -- the functions passed to the page run in the browser; process and console are Node's */
+/* global localStorage, sessionStorage, document, location, window, Buffer, process, console -- the functions passed to the page run in the browser; process and console are Node's */
 /**
  * A quick check of the phone app's chat list at 390 px in Hebrew: the phone's own chats and the paired computer's
  * chats (as last read) show together; the "Computer" filter shows only the computer's; no page errors.
@@ -59,6 +59,16 @@ checks.handoff = await pg.evaluate(() => {
   const msgs = c && JSON.parse(localStorage.getItem(`kesherai-phone-msgs:${c.id}`) || "[]");
   return !!c && msgs.length === 2 && msgs[1].content === "תשובה" && !location.search.includes("handoff");
 });
+// The home-screen widget's "Chats" button: the app opens on its chat list (no computer needed).
+const w = await b.newPage({ viewport: { width: 390, height: 844 } });
+await w.addInitScript(() => {
+  // Like the app's own plugin: the request is read once (kept across pages, as the app keeps it natively).
+  window.Capacitor = { Plugins: { KesherNotify: { takeOpenPhone: async () => { if (sessionStorage.getItem("taken")) return {}; sessionStorage.setItem("taken", "1"); return { path: "#/phone/chats" }; }, addListener: async () => ({ remove() {} }) } } };
+});
+await w.goto("http://127.0.0.1:7992/local.html");
+await w.waitForTimeout(1200);
+checks.widget = w.url().includes("tab=chats") && (await w.locator("#chatsView").isVisible());
+await w.close();
 checks.fits = (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 if (shot) await pg.screenshot({ path: shot });
 await b.close();

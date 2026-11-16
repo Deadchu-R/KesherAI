@@ -2488,7 +2488,10 @@
       // Nothing asked for: the app's own home (the landing screen, works with no computer).
       if (!q.get("c") && !q.has("new") && !q.has("chat")) {
         if (q.get("tab") === "settings") { drawSettings(); return showPage("settingsView", T("הגדרות", "Settings")); }
+        if (q.get("tab") === "chats") { drawChats(); return showPage("chatsView", T("צ׳אטים", "Chats")); }
         if (q.get("tab")) return openPart(q.get("tab"));
+        // Home was drawn at once (before the model list): refresh it only if she is still there, never pull her back.
+        if ($("homeView").hidden) return;
         drawHome();
         return showPage("homeView");
       }
@@ -2503,7 +2506,12 @@
       if (q.has("new")) {
         const url = localStorage.getItem("kesherai-phone-model");
         const item = itemFor(url);
-        if (usable(item, url)) return openChat(item, url, { fresh: true });
+        if (usable(item, url)) {
+          await openChat(item, url, { fresh: true });
+          // From the widget's "Call" button: straight into the voice call.
+          if (q.has("live")) $("goLive").click();
+          return;
+        }
         return noModelYet();
       }
       // From the side menu ("Chat on this phone"): go straight back into the last chat.
