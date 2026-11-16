@@ -29,9 +29,11 @@ import java.util.Set;
 final class RemoteBridge {
     private RemoteBridge() {}
 
-    private static final String PREF = "bridgeOrigins";
+    static final String PREF = "bridgeOrigins";
     private static ScriptHandler script;
     private static boolean listening;
+    /** The origins the channel answers now. */
+    private static Set<String> rulesNow = new HashSet<>();
 
     /** scheme://host[:port] of an http(s) address, or null. */
     static String origin(String url) {
@@ -81,6 +83,13 @@ final class RemoteBridge {
             // The message channel: the app's own pages and the paired computers, main frame only.
             Set<String> rules = new HashSet<>(origins);
             rules.add(bridge.getScheme() + "://" + bridge.getHost());
+            // The same computers as now: the channel stays as it is (replacing it while a call is answered on it
+            // crashes WebView).
+            if (listening && rules.equals(rulesNow)) {
+                if (script != null) script.remove();
+                script = WebViewCompat.addDocumentStartJavaScript(web, js, origins);
+                return null;
+            }
             if (listening) WebViewCompat.removeWebMessageListener(web, "androidBridge");
             else {
                 try {
@@ -100,6 +109,7 @@ final class RemoteBridge {
                 }
             });
             listening = true;
+            rulesNow = rules;
 
             if (script != null) script.remove();
             script = WebViewCompat.addDocumentStartJavaScript(web, js, origins);

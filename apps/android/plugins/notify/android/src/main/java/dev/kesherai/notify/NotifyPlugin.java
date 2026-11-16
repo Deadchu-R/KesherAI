@@ -103,9 +103,15 @@ public class NotifyPlugin extends Plugin {
                 call.reject("Only the app's own screen can choose the computers.");
                 return;
             }
-            String error = RemoteBridge.allow(getBridge(), origins);
-            if (error != null) call.reject(error);
-            else call.resolve();
+            // This call came through the message channel that allow() replaces: answer it first, on the channel it
+            // came on, and replace the channel after (answering on a removed channel ended the app natively when
+            // connecting).
+            Prefs.of(getContext()).edit().putStringSet(RemoteBridge.PREF, new java.util.HashSet<>(origins)).apply();
+            call.resolve();
+            getBridge().getWebView().post(() -> {
+                String error = RemoteBridge.apply(getBridge());
+                if (error != null) android.util.Log.w("KesherNotify", "bridge: " + error);
+            });
         });
     }
 

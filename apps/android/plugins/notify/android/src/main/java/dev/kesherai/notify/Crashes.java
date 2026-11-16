@@ -81,9 +81,14 @@ final class Crashes {
                             String trace = "";
                             try (java.io.InputStream in = e.getTraceInputStream()) {
                                 if (in != null) {
-                                    byte[] buf = new byte[6000];
-                                    int n = in.read(buf);
-                                    if (n > 0) trace = new String(buf, 0, n, "UTF-8");
+                                    if (r == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) {
+                                        // A binary tombstone: told as the signal and the crashed thread's frames.
+                                        trace = Tombstone.describe(in);
+                                    } else {
+                                        byte[] buf = new byte[6000];
+                                        int n = in.read(buf);
+                                        if (n > 0) trace = new String(buf, 0, n, "UTF-8");
+                                    }
                                 }
                             } catch (Throwable ignored) {}
                             String[] names = { "unknown", "exit", "signaled", "low memory", "crash", "native crash", "ANR", "initialization failure", "permission change", "excessive resource use", "user requested", "user stopped", "dependency died", "other", "freezer", "package state change", "package updated" };
