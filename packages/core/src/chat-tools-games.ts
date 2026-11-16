@@ -13,6 +13,7 @@ import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
 import { chosenPhones, phoneNote, type Phone } from "./phones.js";
 import { UNITY_NOTE, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, unrealTools } from "./unreal-tools.js";
+import { GODOT_IDLE_NOTE, GODOT_NOTE, godotTools } from "./godot-tools.js";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
@@ -50,6 +51,14 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     notes.push(
       "Unreal Editor tools (Unreal's own MCP server): first list_toolsets, then describe_toolset on the one you need to read its tools' exact arguments, then call_tool with toolset_name, tool_name and arguments — never guess tool names. Check for project skills with AgentSkillToolset.ListSkills and follow a relevant one. Ask the user to save before a change that touches several assets. Wait for compiles to finish (LiveCodingToolset.CompileLiveCoding for C++). Read every result: anything that is not an explicit success is a stop. If Play-in-Editor is running, asset tools behave differently: stop it first or tell the user.",
     );
+  }
+  // Godot: its tools when its editor is connected or Godot is installed here.
+  if (deps.godot && (deps.godot.status().connected || deps.godot.installed)) {
+    const g = godotTools(deps.godot, async (png) => (await deps.assets.save(png, "image/png", { meta: { use: "godot-screenshot" } })).id);
+    // All of them either way: the editor may connect during the chat (godot_connect opens it), and the tools are
+    // fixed for a chat; the short note is enough until it is connected.
+    tools.push(...g);
+    notes.push(deps.godot.status().connected ? GODOT_NOTE : `${GODOT_IDLE_NOTE} Once connected: ${GODOT_NOTE}`);
   }
   tools.push(...(deps.unity?.activeProject ? unity : unity.filter((t) => t.spec.name === "unity_status")));
   // Fewer tokens: with no Unreal project in use, only the three entry tools and one line go to the model

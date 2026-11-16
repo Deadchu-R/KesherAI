@@ -57,6 +57,8 @@ export interface ConversationDeps {
   board?: TaskBoard;
   /** The KesherAI Bridge plugin in Unreal: the chat's Blueprint tools (when the editor is connected). */
   unreal?: UnrealBridge;
+  /** The Godot editor's link: the chat's Godot tools. */
+  godot?: import("./godot-bridge.js").GodotBridge;
   /** How the app looks: the change_look tool reads and changes it (Undo keeps the last looks). */
   look?: {
     get(): Appearance;

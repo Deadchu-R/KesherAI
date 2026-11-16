@@ -90,6 +90,8 @@ export interface KesherServices {
   faults: import("./fault-log.js").FaultLog;
   /** The Unreal Editor's connection (KesherAI Bridge plugin) and saved Blueprints. */
   unreal: UnrealBridge;
+  /** The Godot editor's connection (KesherAI Bridge addon). */
+  godot: import("./godot-bridge.js").GodotBridge;
   /** Unity projects through Unity's CLI (KesherAI Bridge package). */
   unity: UnityCli;
   /** Microsoft 365 Copilot sign-in. */

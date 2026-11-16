@@ -87,6 +87,7 @@ export interface ConversationParts {
   mcp: McpManager;
   unityCli: UnityCli;
   unrealBridge: UnrealBridge;
+  godot: import("../godot-bridge.js").GodotBridge;
   comfy: ComfyManager;
   coach: Coach;
   memory: MemoryStore;
@@ -105,7 +106,7 @@ export interface ConversationParts {
  * @returns The conversation manager.
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
-  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist } = p;
+  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist } = p;
   return new ConversationManager({
     board: taskBoard,
     registry,
@@ -172,6 +173,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     // change_look: the chat changes how the app looks (the same as Settings → Appearance).
     unity: unityCli,
     unreal: unrealBridge,
+    godot,
     look: {
       get: () => cleanAppearance(config.appearance),
       set: async (next) => {

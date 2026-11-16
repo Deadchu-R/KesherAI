@@ -30,6 +30,7 @@ import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
 import { ensureEngine } from "./routes/engine.js";
 import { StudyModelSwitch } from "./study-model.js";
+import { GodotBridge } from "./godot-bridge.js";
 import { localCall } from "./local-call.js";
 import { scanComputer, scanFolder } from "./model-scan.js";
 import { Prompts } from "./prompts.js";
@@ -407,6 +408,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine });
   void routines.start();
   const { unityCli, unrealBridge } = buildGameEngines(paths, config, persist);
+  // The Godot editor's link (KesherAI Bridge addon); Godot editors are looked for once, for the chat's tools.
+  const godot = new GodotBridge(paths.engines);
+  void godot.findGodot().then((g) => (godot.installed = g.length > 0), () => undefined);
   // The task board self-work shares with Claude: a file on this computer only.
   const sharedDir = join(worker ? worker.mainRoot : paths.root, "self-work");
   const taskBoard = new TaskBoard(join(sharedDir, "board.json"));
@@ -422,7 +426,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot }),
+    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot }),
     coach,
     memory,
     computer,
@@ -467,6 +471,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       telegram.restart();
     },
     unreal: unrealBridge,
+    godot,
     unity: unityCli,
     sd,
     tunnel,
