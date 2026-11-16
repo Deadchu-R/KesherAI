@@ -399,7 +399,7 @@ export class Study {
    * @param history - The conversation so far (last few turns are kept).
    * @returns The answer and the lectures it drew on.
    */
-  async askCourse(id: string, question: string, history: Array<{ role: "user" | "assistant"; content: string }> = [], signal?: AbortSignal, mode: "ask" | "study" = "ask"): Promise<{ answer: string; sources: Array<{ lectureId: string; title: string }> }> {
+  async askCourse(id: string, question: string, history: Array<{ role: "user" | "assistant"; content: string }> = [], signal?: AbortSignal, mode: "ask" | "study" | "homework" = "ask"): Promise<{ answer: string; sources: Array<{ lectureId: string; title: string }> }> {
     if (!question.trim() && mode !== "study") throw Object.assign(new Error("Ask a question."), { statusCode: 400 });
     const d = await this.get(id);
     const m = this.model();

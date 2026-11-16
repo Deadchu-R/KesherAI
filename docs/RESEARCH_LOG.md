@@ -1640,3 +1640,16 @@ Stopped at: building (store and public page first, then the chat menu and the se
   per day; a notification when the time is up. Works on the phone with no computer and on the computer; sessions
   sync with the rest of Study.
 - Stopped at: built (0.6.301), on the computer, in remote and on the phone; sessions sync with Study.
+
+## Students, part 12: homework help step by step (2026-11-16)
+
+- Sources: FutureEd and KQED MindShift on a Khanmigo study, Hechinger Report, Campus Technology on ChatGPT's study
+  mode.
+- Khanmigo never gives the answer, only questions and hints; in the study most students tried to get the answer,
+  and when it held back they mostly stopped using it. Khan now offers help right after a wrong answer and lets
+  assisted redos count. ChatGPT's study mode guides with questions but can be switched off at any time.
+- Ours: a third tutor tab, "Homework: step by step": she pastes the exercise; the tutor says what it asks and asks
+  what she tried (or gives the first step), checks each step she writes, gives one hint at a time ("Hint"), and the
+  full worked solution whenever she asks ("Full solution"), so she is never stuck behind a wall. Her lectures are
+  used when they help. Computer, remote and phone.
+- Stopped at: built (0.6.302).

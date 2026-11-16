@@ -786,6 +786,10 @@ export const TUTOR_PROMPT =
 export const STUDY_MODE_PROMPT =
   "You are a tutor quizzing a student on her own lecture passages (given). Do not lecture. Ask ONE short question at a time about the passages, then stop and wait for her answer. When she answers: judge it only by what the passages say (not by general knowledge): if the passages say something else, it is not right, even if it could be true elsewhere. Say plainly whether it is right, give the passages' answer briefly and name the lecture in square brackets, like [Lecture: <title>], then ask the next question: a little harder if she was right, simpler if not. If she asks for help, give a hint as a question before the answer. Write only in her language (the lectures' language when she has not written yet), with no words in other languages or scripts. Never invent numbers, doses or values.";
 
+/** Homework help: step by step, one hint at a time, the full solution only when she asks (Khanmigo-like, without the wall). */
+export const HOMEWORK_PROMPT =
+  "You help a student with a homework problem step by step, like a good tutor. Do not solve it at once. First, in two short lines, say what the problem asks and ask what she tried, or give only the first step as a question. When she writes a step, say whether it is right and why, then point to the next step. When she asks for a hint, give ONE short hint (each hint a little more direct than the last). Only when she asks for the full solution, give it worked out step by step, then one line on the idea to remember. Use the lecture passages when they help (name the lecture in square brackets, like [Lecture: <title>]); general knowledge is allowed for homework, but never invent numbers, doses or values that the problem does not give. Write only in her language.";
+
 /** Study mode's grading step: a verdict only, as JSON, so even a small or code-minded model grades by her lecture. */
 export const GRADE_PROMPT =
   'You grade a student\'s answer to a question about her lecture, using ONLY the lecture passages given (not general knowledge: if the passages say something else, the answer is wrong). Answer with JSON only: {"verdict": "right" | "partly" | "wrong", "answer": "the passages\' answer in one short sentence, in the question\'s language"}';
@@ -855,7 +859,7 @@ export interface TutorMessage {
  * @param o.pick - For study mode's first question: picks a lecture (tests pass a fixed one; default random).
  * @returns The messages and the passages used.
  */
-export function tutorMessages(o: { lectures: StudyLecture[]; question: string; history?: Array<{ role: string; content: string }>; mode?: "ask" | "study"; hint?: string; budget?: number; pick?: (n: number) => number }): { messages: TutorMessage[]; passages: StudyPassage[] } {
+export function tutorMessages(o: { lectures: StudyLecture[]; question: string; history?: Array<{ role: string; content: string }>; mode?: "ask" | "study" | "homework"; hint?: string; budget?: number; pick?: (n: number) => number }): { messages: TutorMessage[]; passages: StudyPassage[] } {
   const study = o.mode === "study";
   const turns = (o.history ?? [])
     .filter((h): h is { role: "user" | "assistant"; content: string } => (h.role === "user" || h.role === "assistant") && typeof h.content === "string")
@@ -877,8 +881,11 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
     }
   }
   const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
-  const system = `${study ? STUDY_MODE_PROMPT : TUTOR_PROMPT}${o.hint ? `\n${o.hint}` : ""}`;
-  const user = study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\n${turns.length ? "Ask her the next question (a new one, not asked above). Only the question." : "Start: ask her the first question."}`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
+  const homework = o.mode === "homework";
+  const system = `${study ? STUDY_MODE_PROMPT : homework ? HOMEWORK_PROMPT : TUTOR_PROMPT}${o.hint ? `\n${o.hint}` : ""}`;
+  // Homework: the problem is the first thing she wrote; her later messages are steps, hints asked for, or "full solution".
+  const problem = homework ? (turns.find((h) => h.role === "user")?.content ?? q) : "";
+  const user = homework ? `Passages from her lectures:\n\n${material}\n\n${turns.length ? `The problem: ${problem.slice(0, 3000)}\n\nHer message: ${q}` : `The problem: ${q}`}` : study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\n${turns.length ? "Ask her the next question (a new one, not asked above). Only the question." : "Start: ask her the first question."}`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
   return { messages: [{ role: "system", content: system }, ...turns, { role: "user", content: user }], passages };
 }
 

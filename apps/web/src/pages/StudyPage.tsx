@@ -358,10 +358,10 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   // "ask": she asks, answers come from her lectures. "study": the tutor asks her, waits, then corrects.
-  const [mode, setMode] = useState<"ask" | "study">("ask");
-  const switchMode = (m: "ask" | "study") => { setMode(m); setTurns([]); setQ(""); };
-  const send = async (start = false) => {
-    const question = q.trim();
+  const [mode, setMode] = useState<"ask" | "study" | "homework">("ask");
+  const switchMode = (m: "ask" | "study" | "homework") => { setMode(m); setTurns([]); setQ(""); };
+  const send = async (start = false, preset?: string) => {
+    const question = (preset ?? q).trim();
     if ((!question && !start) || busy) return;
     setQ("");
     setBusy(true);
@@ -377,8 +377,9 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
       <div className="seg-pills" role="tablist" aria-label={L("איך לומדים", "How to study")}>
         <button type="button" role="tab" aria-selected={mode === "ask"} className={mode === "ask" ? "on" : ""} onClick={() => switchMode("ask")}>{L("השאלות שלי", "My questions")}</button>
         <button type="button" role="tab" aria-selected={mode === "study"} className={mode === "study" ? "on" : ""} onClick={() => switchMode("study")}>{L("מצב תרגול: המורה שואלת", "Study mode: the tutor asks")}</button>
+        <button type="button" role="tab" aria-selected={mode === "homework"} className={mode === "homework" ? "on" : ""} onClick={() => switchMode("homework")}>{L("שיעורי בית: צעד אחר צעד", "Homework: step by step")}</button>
       </div>
-      <p className="muted small">{mode === "ask" ? L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.") : L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.")}</p>
+      <p className="muted small">{mode === "homework" ? L("הדביקי את התרגיל. המורה עוזרת צעד אחר צעד: כתבי כל צעד שעשית והיא תבדוק, בקשי רמז כשנתקעת, ופתרון מלא כשתרצי.", "Paste the exercise. The tutor helps step by step: write each step you took and it checks it, ask for a hint when stuck, and for the full solution when you want it.") : mode === "ask" ? L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.") : L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.")}</p>
       {mode === "study" && turns.length === 0 && !busy && <button type="button" className="primary" onClick={() => void send(true)}>{L("התחילי תרגול", "Start practising")}</button>}
       <div className="study-ask-turns" aria-live="polite">
         {turns.map((t, i) => (
@@ -389,9 +390,15 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
         ))}
         {busy && <p className="muted">{mode === "study" ? L("חושבת על שאלה…", "Thinking of a question…") : L("מחפשת בהרצאות…", "Looking through your lectures…")}</p>}
       </div>
+      {mode === "homework" && turns.length > 0 && !busy && (
+        <div className="study-actions">
+          <button type="button" onClick={() => void send(false, L("רמז, בבקשה", "A hint, please"))}>{L("רמז", "Hint")}</button>
+          <button type="button" onClick={() => void send(false, L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"))}>{L("פתרון מלא", "Full solution")}</button>
+        </div>
+      )}
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={mode === "study" ? L("התשובה שלך", "Your answer") : L("שאלה", "Question")} placeholder={mode === "study" ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
-        <button type="submit" className="primary" disabled={busy || !q.trim()}>{mode === "study" ? L("שליחת תשובה", "Answer") : L("שאלי", "Ask")}</button>
+        <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={mode === "study" ? L("התשובה שלך", "Your answer") : L("שאלה", "Question")} placeholder={mode === "homework" ? (turns.length ? L("הצעד שעשית, או שאלה", "Your step, or a question") : L("התרגיל (הדביקי את הנוסח)", "The exercise (paste it)")) : mode === "study" ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
+        <button type="submit" className="primary" disabled={busy || !q.trim()}>{mode === "study" ? L("שליחת תשובה", "Answer") : mode === "homework" ? L("שליחה", "Send") : L("שאלי", "Ask")}</button>
       </form>
     </section>
   );

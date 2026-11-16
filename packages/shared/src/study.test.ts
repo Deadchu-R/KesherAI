@@ -188,3 +188,12 @@ test("study streak: days in a row, one missed day a week kept by a shield; focus
   const merged = mergeCourseData({ ...course, focus: [{ t: 1, minutes: 5 }] }, { ...course, focus: [{ t: 1, minutes: 5 }, { t: 2, minutes: 9 }] });
   assert.deepEqual(merged.focus, [{ t: 1, minutes: 5 }, { t: 2, minutes: 9 }]);
 });
+
+test("tutorMessages homework: the problem stays in view; steps and hints follow it", () => {
+  const lectures = [{ id: "l1", title: "חישובי תרופות", date: "", text: "קצב טפטוף = נפח כפול פקטור טפטוף חלקי זמן בדקות." }];
+  const first = tutorMessages({ lectures, question: "1000 מ״ל ב-8 שעות, פקטור 20. מה קצב הטפטוף?", mode: "homework" });
+  assert.match(first.messages[0]!.content, /step by step/);
+  assert.match(first.messages.at(-1)!.content, /The problem: 1000/);
+  const later = tutorMessages({ lectures, question: "רמז", mode: "homework", history: [{ role: "user", content: "1000 מ״ל ב-8 שעות, פקטור 20. מה קצב הטפטוף?" }, { role: "assistant", content: "מה כבר ניסית?" }] });
+  assert.match(later.messages.at(-1)!.content, /The problem: 1000[\s\S]*Her message: רמז/);
+});

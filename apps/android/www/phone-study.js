@@ -705,9 +705,10 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     tutor.set(key, turns);
     const list = el("div", { class: "ph-ask", "aria-live": "polite" }, ...turns.map((t) => el("div", { class: `ph-ask-turn ${t.role}`, dir: "auto" }, t.content, t.sources?.length ? el("small", { class: "muted" }, el("br"), L("מתוך: ", "From: ") + t.sources.join(" · ")) : "")));
     const study = mode === "study";
+    const homework = mode === "homework";
     // An empty box takes its direction from the page (dir=auto would show the Hebrew example left to right).
-    const q = el("input", { dir: he() ? "rtl" : "auto", "aria-label": study ? L("התשובה שלך", "Your answer") : L("שאלה", "Question"), placeholder: study ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
-    const btn = el("button", { type: "submit", class: "primary" }, study ? L("שליחת תשובה", "Answer") : L("שאלי", "Ask"));
+    const q = el("input", { dir: he() ? "rtl" : "auto", "aria-label": study ? L("התשובה שלך", "Your answer") : homework ? L("התרגיל או הצעד שלך", "The exercise or your step") : L("שאלה", "Question"), placeholder: homework ? (turns.length ? L("הצעד שעשית, או שאלה", "Your step, or a question") : L("התרגיל (הדביקי את הנוסח)", "The exercise (paste it)")) : study ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
+    const btn = el("button", { type: "submit", class: "primary" }, study ? L("שליחת תשובה", "Answer") : homework ? L("שליחה", "Send") : L("שאלי", "Ask"));
     /** One turn, the same messages as the computer's tutor (shared). An empty question starts study mode. */
     const send = async (question, busyBtn) => {
       const heb = /[\u0590-\u05ff]/.test(`${question} ${c.lectures[0]?.text.slice(0, 400) ?? ""}`);
@@ -737,12 +738,16 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       const question = q.value.trim();
       if (question) void send(question, btn);
     } }, q, btn);
-    const seg = el("div", { class: "ph-btns", role: "tablist" }, ...[["ask", "השאלות שלי", "My questions"], ["study", "מצב תרגול: המורה שואלת", "Study mode: the tutor asks"]].map(([m, h, e]) =>
+    const seg = el("div", { class: "ph-btns", role: "tablist" }, ...[["ask", "השאלות שלי", "My questions"], ["study", "מצב תרגול", "Study mode"], ["homework", "שיעורי בית", "Homework"]].map(([m, h, e]) =>
       el("button", { type: "button", role: "tab", "aria-selected": String(m === mode), class: m === mode ? "primary" : "", onclick: () => { tutorMode.set(c.id, m); draw(); } }, L(h, e))));
     const startBtn = study && !turns.length ? el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 48px", onclick: (e) => void send("", e.currentTarget) }, L("התחילי תרגול", "Start practising")) : "";
     root.append(back({ at: "course", course: c.id }), el("h2", {}, L("שאלי את הקורס", "Ask the course")), seg,
-      el("p", { class: "muted small" }, study ? L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.") : L("התשובות רק מההרצאות שלך, עם שם ההרצאה. כשהן לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, naming each lecture. When they do not cover a question, it says so.")),
-      startBtn, list, form);
+      el("p", { class: "muted small" }, homework ? L("הדביקי את התרגיל. המורה עוזרת צעד אחר צעד: כתבי כל צעד שעשית והיא תבדוק, בקשי רמז כשנתקעת, ופתרון מלא כשתרצי.", "Paste the exercise. The tutor helps step by step: write each step and it checks it, ask for a hint when stuck, and for the full solution when you want it.") : study ? L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.") : L("התשובות רק מההרצאות שלך, עם שם ההרצאה. כשהן לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, naming each lecture. When they do not cover a question, it says so.")),
+      startBtn, list,
+      homework && turns.length ? el("div", { class: "ph-btns" },
+        el("button", { type: "button", onclick: (e) => void send(L("רמז, בבקשה", "A hint, please"), e.currentTarget) }, L("רמז", "Hint")),
+        el("button", { type: "button", onclick: (e) => void send(L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"), e.currentTarget) }, L("פתרון מלא", "Full solution"))) : "",
+      form);
     if (!startBtn) q.focus();
   }
 
