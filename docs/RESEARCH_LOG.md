@@ -1609,3 +1609,20 @@ Stopped at: building (store and public page first, then the chat menu and the se
   the board is read by the phone's own model when it sees pictures (Gemma 4, or her internet model). Only scans with
   a text-blind model still need the computer.
 - Stopped at: built (0.6.290); next on the student list: study mode and explanations for missed cards.
+
+## Phone app, part 11: the chat screen and the chat list in competitors' phone apps (2026-11-16)
+
+- Sources: AI UX Playground's composer comparison (ChatGPT, Claude, Perplexity, Gemini), Pratt IXD's critique of
+  the Claude phone app, Setproduct's AI chat anatomy.
+- Top bar: menu at the start, the model picker in the middle (Claude, ChatGPT), new chat at the end.
+- Composer: a calm card; one + holds attach, camera, tools and modes (ChatGPT, Claude, Gemini); web search as a
+  chip only in Perplexity. Mic sits beside send; the critique faults Claude for two mic icons and a vague waveform
+  icon, so one dictation mic plus one clearly different live-voice button.
+- Messages: her messages in a bubble, the model's as plain full-width text with copy, listen, retry and more under
+  it; stop replaces send while answering.
+- Chat list: search on top, pinned first, grouped by day; long press for pin, rename, share, delete and selecting
+  several.
+- Ours adds: where it runs (phone, computer, internet) under the model name and on each chat, "continue on the
+  computer", and "from Study" in the + sheet.
+- Designed (5 boards in the design doc, row "מסך הצ׳אט ורשימת הצ׳אטים"); waiting for Roee's review before building.
+- Stopped at: designed; not built.
