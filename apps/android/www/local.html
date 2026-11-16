@@ -151,7 +151,7 @@
   .pc-note button { min-height: 36px; font-size: 13px; padding: 0 12px; }
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0 16px; }
   .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 76px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); font-size: 13px; padding: 0; }
-  .tile .i { font-size: 20px; }
+  .tile .i { font-size: 20px; color: #c9c9ce; display: grid; place-items: center; }
   .lbl { font-size: 13px; color: var(--muted); margin: 6px 0; display: flex; justify-content: space-between; }
   .rec { display: flex; align-items: center; min-height: 48px; padding: 0 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); font-size: 15px; margin-bottom: 8px; color: var(--text); text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; text-align: start; }
   .home-compose { display: flex; gap: 8px; align-items: flex-end; margin: 8px 0 4px; }
@@ -351,6 +351,19 @@
     const a = { f: "feminine forms (את, כתבי)", m: "masculine forms (אתה, כתוב)", p: "plural forms (אתם, כתבו)" }[localStorage.getItem("kesher-address")];
     return (n ? ` The user's name is ${n}.` : "") + (a ? ` In Hebrew, address the user in ${a}.` : "");
   }
+  /** The design's line icons for the phone's parts (the same set as the bottom bar and the side menu). */
+  const LINE = {
+    "🎓": '<path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
+    "🎙": '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    "🖼": '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+    "🩺": '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
+    "🌐": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    "🧠": '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+    "💻": '<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
+    "📅": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  };
+  /** Puts a part's line icon into `el` (the emoji when it has none). */
+  const lineIcon = (el, key) => { if (LINE[key]) el.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${LINE[key]}</svg>`; else el.textContent = key; };
   const T = (h, e) => (he ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(h) : h) : e);
 
   // Small chat models that fit a phone. The file (Q4_K_M) is looked up on Hugging Face when listed.
@@ -531,14 +544,14 @@
     const myName = localStorage.getItem("kesherai-user-name");
     if (myName) $("homeHi").textContent += `, ${myName}`;
     const tiles = [...PARTS.filter((x) => on[x.id]), { id: "models", icon: "🧠", name: T("מודלים", "Models"), tab: "chat" }];
-    $("tiles").replaceChildren(...tiles.map((x) => { const b = document.createElement("button"); b.type = "button"; b.className = "tile"; b.innerHTML = '<span class="i" aria-hidden="true"></span><span></span>'; b.firstChild.textContent = x.icon; b.lastChild.textContent = x.name; b.onclick = () => openPart(x.tab); return b; }));
+    $("tiles").replaceChildren(...tiles.map((x) => { const b = document.createElement("button"); b.type = "button"; b.className = "tile"; b.innerHTML = '<span class="i" aria-hidden="true"></span><span></span>'; lineIcon(b.firstChild, x.icon); b.lastChild.textContent = x.name; b.onclick = () => openPart(x.tab); return b; }));
     const recent = allChats().slice(0, 3);
     $("homeRecent").replaceChildren(...(recent.length ? recent.map((c) => { const a = document.createElement("a"); a.className = "rec"; a.href = `local.html?c=${encodeURIComponent(c.id)}`; a.textContent = c.title || c.name || T("צ׳אט", "Chat"); return a; }) : [Object.assign(document.createElement("p"), { className: "muted", textContent: T("עוד אין צ׳אטים בטלפון. כתבי הודעה למטה.", "No chats on the phone yet. Write a message below.") })]));
     $("pcNote").hidden = !!sessionStorage.getItem("kesherai-pc-ok");
   }
   function drawTools() {
     const on = partsOn();
-    const row = (icon, name, sub, phone, onclick) => { const b = document.createElement("button"); b.type = "button"; b.className = "rec"; b.style.cssText = `height: auto; min-height: 56px; gap: 10px; white-space: normal;${phone ? "" : " opacity: .6"}`; b.innerHTML = '<span aria-hidden="true"></span><span style="flex:1;display:flex;flex-direction:column;align-items:flex-start"><span></span><small class="muted"></small></span><span></span>'; b.children[0].textContent = icon; b.children[1].children[0].textContent = name; b.children[1].children[1].textContent = sub; b.children[2].className = phone ? "tag" : "tag pc"; b.children[2].textContent = phone ? T("בטלפון", "On the phone") : T("צריך מחשב", "Needs the computer"); b.onclick = onclick; return b; };
+    const row = (icon, name, sub, phone, onclick) => { const b = document.createElement("button"); b.type = "button"; b.className = "rec"; b.style.cssText = `height: auto; min-height: 56px; gap: 10px; white-space: normal;${phone ? "" : " opacity: .6"}`; b.innerHTML = '<span aria-hidden="true"></span><span style="flex:1;display:flex;flex-direction:column;align-items:flex-start"><span></span><small class="muted"></small></span><span></span>'; lineIcon(b.children[0], icon); b.children[0].style.color = "#c9c9ce"; b.children[1].children[0].textContent = name; b.children[1].children[1].textContent = sub; b.children[2].className = phone ? "tag" : "tag pc"; b.children[2].textContent = phone ? T("בטלפון", "On the phone") : T("צריך מחשב", "Needs the computer"); b.onclick = onclick; return b; };
     $("toolList").replaceChildren(
       ...PARTS.filter((x) => on[x.id]).map((x) => row(x.icon, x.name, x.sub, true, () => openPart(x.tab))),
       row("🧠", T("מודלים בטלפון", "Models on the phone"), T("הורדה, מהירות, מהמחשב", "Download, speed, from the computer"), true, () => openPart("chat")),

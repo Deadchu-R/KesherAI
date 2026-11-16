@@ -112,7 +112,7 @@
   const PHONE = [["study", "🎓", T("לימודים", "Study")], ["voice", "🎙", T("שיחה קולית", "Voice")], ["images", "🖼", T("תמונות", "Pictures")], ["health", "🩺", T("בריאות", "Health")], ["api", "🌐", T("דרך האינטרנט", "Online")]];
   for (const [id, icon, name] of PHONE) if (parts[id]) item(icon, name, "", `local.html?tab=${id}`, params.get("tab") === id ? "on" : "");
   head(T("דרך המחשב", "Through the computer"));
-  if (!saved) item("🖥", T("להתחבר למחשב", "Connect to a computer"), T("קוד, מודלים גדולים, מצגות ו-PDF", "Code, big models, slides and PDFs"), "index.html?switch=1");
+  if (!saved) item("🖥", T("להתחבר למחשב", "Connect to a computer"), T("קוד, מודלים גדולים, סריקות", "Code, big models, scans"), "index.html?switch=1");
   if (saved) {
     let host = saved;
     try {
