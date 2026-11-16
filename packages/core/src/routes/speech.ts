@@ -72,6 +72,12 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     return reply.code(202).send({ ok: true });
   });
 
+  /** Swaps a processor-only engine for the NVIDIA one (about 0.65 GB; follow it in the downloads circle). */
+  app.post("/api/speech/stt/upgrade-gpu", async (_req, reply) => {
+    void s.whisper.upgradeGpu().catch(() => undefined);
+    return reply.code(202).send({ ok: true });
+  });
+
   /** Loads the speech models ahead (the lecture recorder opens before class). */
   app.post("/api/speech/stt/warm", async () => {
     void s.whisper.warm().catch(() => undefined);

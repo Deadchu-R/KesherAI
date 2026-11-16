@@ -1,8 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { DownloadManager } from "@kesher/downloads";
 import { extractArchive, waitForDownload } from "./llamacpp.js";
@@ -31,7 +31,8 @@ const RELEASES = "https://api.github.com/repos/ggml-org/whisper.cpp/releases?per
  */
 export function pickWhisperAsset<T extends { name: string }>(assets: T[], nvidia: boolean): T | undefined {
   return (
-    (nvidia ? (assets.find((a) => /whisper-cublas-12.*bin-x64\.zip$/i.test(a.name)) ?? assets.find((a) => /cublas.*bin-x64\.zip$/i.test(a.name))) : undefined) ??
+    // whisper.cpp named the CUDA build "whisper-cublas-12.4.0-bin-x64.zip", now "whisper-bin-win-cuda-12.4.0-x64.zip".
+    (nvidia ? (assets.find((a) => /(cublas|cuda)-12[^/]*x64\.zip$/i.test(a.name)) ?? assets.find((a) => /(cublas|cuda)[^/]*x64\.zip$/i.test(a.name))) : undefined) ??
     assets.find((a) => /^whisper-bin-x64\.zip$/i.test(a.name)) ??
     assets.find((a) => /^whisper-blas-bin-x64\.zip$/i.test(a.name)) ??
     assets.find((a) => /bin-x64\.zip$/i.test(a.name) && !/cublas|cuda/i.test(a.name))
@@ -58,6 +59,8 @@ export interface SttStatus {
   error?: string;
   /** Whether a local engine exists for this system at all (else only cloud). */
   localPossible: boolean;
+  /** The engine here runs on the processor although there is an NVIDIA card: the size (GB) of the faster download. */
+  gpuUpgrade?: number;
 }
 
 /**
@@ -200,7 +203,66 @@ export class WhisperEngine {
       recommended: { label: MODELS[key].label, sizeGb: MODELS[key].sizeGb + (process.platform === "win32" && !(await this.binary()) ? 0.4 : 0) },
       ...this.state,
       localPossible: this.localPossible(),
+      ...((await this.cpuOnly()) ? { gpuUpgrade: 0.65 } : {}),
     };
+  }
+
+  /** An engine is here, without its CUDA part, on a Windows computer with an NVIDIA card. */
+  private async cpuOnly(): Promise<boolean> {
+    if (process.platform !== "win32") return false;
+    const bin = await this.binary();
+    if (!bin || existsSync(join(dirname(bin), "ggml-cuda.dll"))) return false;
+    return (await this.gpu().catch(() => ({ nvidia: false }))).nvidia;
+  }
+
+  private upgrading?: Promise<void>;
+
+  /**
+   * Replaces a processor-only engine with whisper.cpp's CUDA build (the NVIDIA card makes each half minute several
+   * times faster). The old engine folder is removed once the new one is in place.
+   */
+  upgradeGpu(): Promise<void> {
+    this.upgrading ??= (async () => {
+      if (!(await this.cpuOnly())) return;
+      this.state = { busy: "installing" };
+      const res = await fetch(RELEASES, { headers: { accept: "application/vnd.github+json", "user-agent": "KesherAI" } });
+      if (!res.ok) throw new Error(`GitHub answered ${res.status} while looking for the speech engine.`);
+      const releases = (await res.json()) as Array<{ tag_name: string; draft?: boolean; assets: Array<{ name: string; browser_download_url: string; size: number }> }>;
+      let tag = "";
+      let asset: (typeof releases)[number]["assets"][number] | undefined;
+      for (const r of releases.filter((x) => !x.draft)) {
+        const a = pickWhisperAsset(r.assets, true);
+        if (a && /cuda|cublas/i.test(a.name)) [tag, asset] = [r.tag_name, a];
+        if (asset) break;
+      }
+      if (!asset) throw new Error("whisper.cpp has no NVIDIA download right now. Try again later.");
+      const archive = join(this.dir, asset.name);
+      const into = join(this.dir, `${tag.replace(/[^\w.-]/g, "")}-cuda`);
+      const job = this.downloads.enqueue({ url: asset.browser_download_url, dest: archive, size: asset.size, label: `Speech engine (NVIDIA) · ${asset.name}` });
+      await waitForDownload(this.downloads, job.id);
+      await rm(into, { recursive: true, force: true });
+      await extractArchive(archive, into);
+      await rm(archive, { force: true });
+      const cli = await findFile(into, "whisper-cli.exe");
+      if (!cli || !existsSync(join(dirname(cli), "ggml-cuda.dll"))) {
+        await rm(into, { recursive: true, force: true });
+        throw new Error("The NVIDIA speech engine download was incomplete; the current engine stays.");
+      }
+      // The loaded models are on the old engine: close them, then keep only the new folder.
+      this.closeServers();
+      await new Promise((r) => setTimeout(r, 1500));
+      for (const e of await readdir(this.dir, { withFileTypes: true }))
+        if (e.isDirectory() && join(this.dir, e.name) !== into) await rm(join(this.dir, e.name), { recursive: true, force: true }).catch(() => undefined);
+    })()
+      .catch((err: Error) => {
+        this.state = { error: err.message };
+        throw err;
+      })
+      .finally(() => {
+        this.upgrading = undefined;
+        if (this.state.busy === "installing") this.state = {};
+      });
+    return this.upgrading;
   }
 
   private install(): Promise<string> {

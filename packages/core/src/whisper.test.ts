@@ -18,6 +18,9 @@ test("picks the right whisper.cpp download", () => {
   const names = ["whisper-v1.9.2-xcframework.zip", "whisper-cublas-12.4.0-bin-x64.zip", "whisper-cublas-11.8.0-bin-x64.zip", "whisper-blas-bin-x64.zip", "whisper-bin-Win32.zip", "whisper-bin-x64.zip"].map((name) => ({ name }));
   assert.equal(pickWhisperAsset(names, true)?.name, "whisper-cublas-12.4.0-bin-x64.zip");
   assert.equal(pickWhisperAsset(names, false)?.name, "whisper-bin-x64.zip");
+  const now = ["whisper-bin-win-cpu-arm64.zip", "whisper-bin-win-cuda-11.8.0-x64.zip", "whisper-bin-win-cuda-12.4.0-x64.zip", "whisper-bin-win-cuda-13.4-arm64.zip", "whisper-bin-x64.zip"].map((name) => ({ name }));
+  assert.equal(pickWhisperAsset(now, true)?.name, "whisper-bin-win-cuda-12.4.0-x64.zip");
+  assert.equal(pickWhisperAsset(now, false)?.name, "whisper-bin-x64.zip");
   assert.equal(pickWhisperAsset([{ name: "whisper-blas-bin-x64.zip" }], false)?.name, "whisper-blas-bin-x64.zip");
   assert.equal(pickWhisperAsset([{ name: "whisper-v1.9.3-xcframework.zip" }], false), undefined);
 });

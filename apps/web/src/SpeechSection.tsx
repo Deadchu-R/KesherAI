@@ -7,7 +7,7 @@ import { Select } from "./ui/Select";
 interface Info {
   choice: string;
   language: string;
-  local: { engine: boolean; model?: string; recommended: { label: string; sizeGb: number }; busy?: string; error?: string; localPossible: boolean };
+  local: { engine: boolean; model?: string; recommended: { label: string; sizeGb: number }; busy?: string; error?: string; localPossible: boolean; gpuUpgrade?: number };
   clouds: Array<{ id: string; label: string }>;
   ttsClouds?: string[];
 }
@@ -53,6 +53,12 @@ export function SpeechSection() {
         <p className="small">
           {ready ? `✓ ${t("spReady", { model: info.local.recommended.label })}` : info.local.busy ? t("micPreparing") : t("spNotReady", { gb: info.local.recommended.sizeGb.toFixed(1) })}{" "}
           {!ready && !info.local.busy && <button type="button" className="link-btn" onClick={() => void api("/api/speech/stt/setup", { method: "POST" }).then(load)}>{t("micDownload")}</button>}
+        </p>
+      )}
+      {ready && !info.local.busy && info.local.gpuUpgrade && (
+        <p className="small">
+          {t("spGpuUpgrade", { gb: info.local.gpuUpgrade.toFixed(2) })}{" "}
+          <button type="button" className="link-btn" onClick={() => void api("/api/speech/stt/upgrade-gpu", { method: "POST" }).then(load)}>{t("micDownload")}</button>
         </p>
       )}
       {info.local.error && <p className="error small">{info.local.error}</p>}

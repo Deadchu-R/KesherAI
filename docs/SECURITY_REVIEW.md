@@ -728,3 +728,17 @@ S5 an outside scanner's rules for Electron.
 - Unreal plugin 0.1.19: the version its hello sends now matches its `.uplugin` and KesherAI's latest (a test checks
   all three), so an installed plugin is not offered again. Close from KesherAI tested on the PC (UE 5.8, no dialog).
 - `pnpm audit --prod --audit-level high`: clean. ui-check passes at both widths; speed 0.3 s / 8 ms / 3 ms.
+
+## Scan 88 (2026-11-16, 0.6.267 – 0.6.274: benefits, avatar wizard and remote, warm speech models, NVIDIA speech engine)
+
+- Avatar clips: `PUT /api/study/avatar/clip` checks the WebM header and stops at 400 MB; ranges are parsed as numbers
+  and clamped to the file. Installing the camera (`POST /api/study/avatar/camera` `install`) is refused from remote;
+  start and stop are allowed (they only show or hide the avatar feed). The administrator prompt is Windows' own.
+- whisper-server processes listen on 127.0.0.1 only, on a random port, and are closed after 10 idle minutes and when
+  KesherAI exits. `warm` only starts them for models that are already downloaded.
+- NVIDIA engine upgrade: the download comes only from ggml-org/whisper.cpp's GitHub releases; the release tag is
+  stripped to `[\w.-]` before it names a folder; the new folder must contain `whisper-cli.exe` and `ggml-cuda.dll`
+  before the old engine is removed, and removal is limited to folders inside KesherAI's own speech engine folder.
+- Student benefits are fixed text and links in the app (no network lookups, nothing sent).
+- Performance: the speech engine on NVIDIA computers was the processor build (whisper.cpp renamed its CUDA download);
+  fixed in the picker, with an upgrade for engines already installed.
