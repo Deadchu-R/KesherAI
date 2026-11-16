@@ -25,6 +25,8 @@
   const css = document.createElement("style");
   css.textContent = `
     .kd-btn { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); right: 16px; z-index: 50; width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 18px; border: 1px solid var(--border); background: rgb(31 31 34 / 0.86); backdrop-filter: blur(14px); color: var(--text); font-size: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); touch-action: none; }
+    .kd-bar-btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--text, #ededee); }
+    .kd-bar-btn:active { background: rgb(255 255 255 / 0.08); }
     .kd-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
     .kd-panel { position: fixed; top: 0; bottom: 0; right: 0; left: auto; z-index: 61; width: min(312px, 84vw); display: flex; flex-direction: column; gap: 2px; padding: max(14px, env(safe-area-inset-top)) 10px max(14px, env(safe-area-inset-bottom)); background: #18181a; border-left: 1px solid #2a2a2e; transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.9,.25,1); overflow-y: auto; touch-action: pan-y; }
     .kd-open .kd-scrim { opacity: 1; pointer-events: auto; }
@@ -282,24 +284,27 @@
     button.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
   };
 
-  // One ☰ on every screen, at the bottom right (thumb reach); it sits above a chat's message box.
+  // One menu button in the top bar of every screen, at its start (like the computer's and the remote's top bar).
+  // A page with no top bar keeps the floating button (above a chat's message box).
   const own = document.getElementById("menu");
   if (own) own.hidden = true;
-  const b = Object.assign(document.createElement("button"), { className: "kd-btn", type: "button", textContent: "☰" });
+  const bar = document.querySelector("body > header, .wbar");
+  const b = Object.assign(document.createElement("button"), { className: bar ? "kd-bar-btn" : "kd-btn", type: "button" });
+  b.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>';
   b.setAttribute("aria-label", T("תפריט", "Menu"));
-  document.body.append(b);
+  b.title = T("תפריט", "Menu");
   pressAndSlide(b);
-  const place = () => {
-    const foot = document.getElementById("chatFoot");
-    const h = foot && !foot.hidden ? foot.getBoundingClientRect().height : 0;
-    b.style.bottom = h ? `${h + 12}px` : "";
-    // With the bottom bar (the app's home, tools, settings), its "Chats" opens this menu: no ☰ over it.
-    const tabs = document.getElementById("appTabs");
-    // Nor over the connect sheet (it has its own "back to the phone").
-    b.hidden = (!!tabs && !tabs.hidden) || !!document.querySelector(".wbar");
-  };
-  place();
-  setInterval(place, 400);
+  if (bar) bar.prepend(b);
+  else {
+    document.body.append(b);
+    const place = () => {
+      const foot = document.getElementById("chatFoot");
+      const h = foot && !foot.hidden ? foot.getBoundingClientRect().height : 0;
+      b.style.bottom = h ? `${h + 12}px` : "";
+    };
+    place();
+    setInterval(place, 400);
+  }
 
   // Swipe in from the right edge to open, swipe right to close.
   let sx = -1, sy = 0;
