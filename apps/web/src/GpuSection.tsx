@@ -149,7 +149,7 @@ function WorkSplit({ r, reload }: { r: Report; reload: () => Promise<unknown> })
   const [busy, setBusy] = useState(false);
   const cards = r.gpus.slice(0, 2);
   const split = r.comfyGpu != null && r.prefs.use?.length === 1 ? { chat: r.prefs.use[0]!, comfy: r.comfyGpu } : null;
-  const pairs = cards.length === 2 ? [[cards[0]!, cards[1]!], [cards[1]!, cards[0]!]] : [];
+  const pairs: Array<[GpuInfo, GpuInfo]> = cards.length === 2 ? [[cards[0]!, cards[1]!], [cards[1]!, cards[0]!]] : [];
   const choose = async (body: { chat: number | null; comfy: number | null }) => {
     setBusy(true);
     try {
