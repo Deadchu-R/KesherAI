@@ -1,7 +1,7 @@
 /* global window, document, localStorage, getComputedStyle, requestAnimationFrame -- the functions passed to page.evaluate run in the browser */
 // The interface check that runs on every version: the real server starts empty,
 // a browser opens every main screen at computer width (1280) and phone width
-// (390, as the remote app), and the check fails on a page error or a page wider
+// (390 and 360, as the remote app), and the check fails on a page error or a page wider
 // than the screen. A picture of every screen is saved, to look at when it fails. It also measures three speeds
 // (first screen, typing in a 200-message chat, drawing a streamed token) and fails above generous limits.
 //
@@ -48,7 +48,7 @@ try {
   const fakeChat = (r) => (r.request().method() === "GET" ? r.fulfill({ json: { ...fake, session, events } }) : r.continue());
   const pages = [...PAGES, `#/c/${fake.id}`];
   const browser = await pw.chromium.launch();
-  for (const [w, h, name] of [[1280, 800, "computer"], [390, 844, "phone"]]) {
+  for (const [w, h, name] of [[1280, 800, "computer"], [390, 844, "phone"], [360, 780, "small-phone"]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     await page.route(`**/api/conversations/${fake.id}`, fakeChat);
     let current = "";
