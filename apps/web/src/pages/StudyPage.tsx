@@ -22,6 +22,19 @@ const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
 };
 const fmtName = (f: StudyFormat) => L(...FORMAT_NAME[f]);
 const go = (h: string) => (location.hash = h);
+/** Opens a new chat with the question ready in the box (the chat can search the web and give links). */
+const askChat = (q: string) => go(`#/?ask=${encodeURIComponent(q)}`);
+
+/** Student life: practical questions that need current, official answers. */
+const LIFE: Array<[string, string, boolean?]> = [
+  ["אילו חיסונים צריך סטודנט/ית לסיעוד בישראל לפני ההתנסות הקלינית, ואיפה ואיך קובעים תור?", "Which vaccinations does a nursing student in Israel need before clinical practice, and where and how do I book them?", true],
+  ["אילו מסמכים ואישורים צריך להביא לפני ההתנסות הקלינית בבית החולים?", "Which documents and certificates do I need before clinical practice at the hospital?", true],
+  ["איך מגישים בקשה למועד מיוחד או להתאמות בבחינה?", "How do I apply for a special exam date or exam accommodations?"],
+];
+const LIFE_RULE = L(
+  "חפש ברשת ותן תשובה עדכנית עם קישור למקור רשמי (משרד הבריאות, gov.il, קופות החולים או המוסד שלי) ותאריך הבדיקה. אם זה משתנה בין מוסדות, כתוב מה לבדוק מול התוכנית שלי.",
+  "Search the web and give a current answer with a link to an official source (the Ministry of Health, gov.il, the health funds or my school) and the date checked. Where it differs between schools, say what to check with my programme.",
+);
 
 /** Calls the computer, with a toast on failure; `undefined` when it failed. */
 async function call<T>(p: Promise<T>): Promise<T | undefined> {
@@ -73,6 +86,13 @@ function StudyHome() {
             <a className="button" href="#/study/calc">{L("תרגול חישובי תרופות", "Medication calculations")}</a>
             <a className="button" href="#/study/labs">{L("ערכי מעבדה", "Lab values")}</a>
           </>}
+        </div>
+      </section>
+      <section className="study-life card">
+        <h2>{L("שאלה על הלימודים", "A question about your studies")}</h2>
+        <p className="muted small">{L("שאלות מעשיות מקבלות תשובה עדכנית מהרשת, עם מקור רשמי.", "Practical questions get a current answer from the web, with an official source.")}</p>
+        <div className="study-actions">
+          {LIFE.filter(([, , clinical]) => !clinical || courses?.some((c) => clinicalField(c.field))).map(([he, en]) => <button key={en} type="button" className="study-life-q" onClick={() => askChat(`${L(he, en)}\n\n${LIFE_RULE}`)}>{L(he, en)}</button>)}
         </div>
       </section>
       <h2>{L("הקורסים שלי", "My courses")}</h2>
@@ -147,7 +167,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
           </button>
         ))}
       </div>
-      {lectureId ? <LectureView courseId={id} lectureId={lectureId} onChange={load} />
+      {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
         : on === "review" ? <Review courseId={id} onChange={load} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} onChange={load} />
         : on === "calc" ? <CalcPractice />
@@ -237,7 +257,7 @@ export function FlowView({ src }: { src: string }) {
   );
 }
 
-function LectureView({ courseId, lectureId, onChange }: { courseId: string; lectureId: string; onChange: () => void }) {
+function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
   const [view, setView] = useState<"summary" | "terms" | "diagram" | "text">("summary");
   const [busy, setBusy] = useState("");
@@ -287,10 +307,14 @@ function LectureView({ courseId, lectureId, onChange }: { courseId: string; lect
       <div className="study-actions">
         <button type="button" className="primary" disabled={!!busy} onClick={() => void makeCards()}>{busy === "cards" ? L("יוצר כרטיסיות…", "Making cards…") : L("צור 12 כרטיסיות", "Make 12 cards")}</button>
         <a className="button" href={`#/study/${courseId}/quiz?l=${l.id}`}>{L("בוחן על ההרצאה", "Quiz on this lecture")}</a>
-        <button type="button" disabled={!!busy} onClick={() => void run("drugs", async () => {
+        <button type="button" onClick={() => askChat(L(
+          `מצא 3–5 סרטונים ומאמרים טובים על "${l.title}"${l.terms?.length ? ` (${l.terms.slice(0, 6).map((t) => t.en || t.term).join(", ")})` : ""}: עדיף בעברית, אחרת באנגלית, ממקורות אמינים (אוניברסיטאות, ארגוני בריאות, ספרות מקצועית). לכל אחד: קישור, מקור, אורך, ומשפט למה הוא עוזר.`,
+          `Find 3–5 good videos and articles about "${l.title}"${l.terms?.length ? ` (${l.terms.slice(0, 6).map((t) => t.en || t.term).join(", ")})` : ""} from reliable sources (universities, health bodies, professional literature). For each: link, source, length, and one line on why it helps.`,
+        ))}>{L("מצא סרטונים ומאמרים", "Find videos and articles")}</button>
+        {clinicalField(courseField) && <button type="button" disabled={!!busy} onClick={() => void run("drugs", async () => {
           const r = await call(api<{ drugs: StudyDrug[] }>(`${base}/drugs`, { method: "POST" }));
           if (r) { toast(L("כרטיסי התרופות עודכנו", "Drug cards updated")); onChange(); go(`#/study/${courseId}/drugs`); }
-        })}>{busy === "drugs" ? L("כותב כרטיסי תרופות…", "Writing drug cards…") : L("כרטיסי תרופות מההרצאה", "Drug cards from this lecture")}</button>
+        })}>{busy === "drugs" ? L("כותב כרטיסי תרופות…", "Writing drug cards…") : L("כרטיסי תרופות מההרצאה", "Drug cards from this lecture")}</button>}
         <button type="button" className="ghost" onClick={async () => {
           if (!confirm(L("למחוק את ההרצאה? הכרטיסיות שלה נשארות.", "Delete this lecture? Its cards stay."))) return;
           if (await call(api(base, { method: "DELETE" }))) { onChange(); go(`#/study/${courseId}`); }

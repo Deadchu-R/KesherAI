@@ -2646,3 +2646,5 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-option.picked { border-color: var(--accent); }
 .study-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-inline-end: auto; }
 .study-field select { height: 34px; }
+.study-life { display: flex; flex-direction: column; gap: 8px; }
+.study-life-q { height: auto; min-height: 44px; padding: 8px 14px; white-space: normal; text-align: start; }
