@@ -315,24 +315,49 @@ export function AvatarFeed() {
       });
     }
     void players.a.play().catch(() => undefined);
+    // Cross-fades to another point of the clip at uneven times (8–20 s), and always before its end: a loop that
+    // never repeats the same way (what makes a recorded clip look live, as ScrumSurvivor and Pickle do).
+    let switchAt = performance.now() + 8000 + Math.random() * 12000;
     const id = setInterval(() => {
       const p = players[cur];
       if (!p.duration || !isFinite(p.duration)) return;
-      if (p.duration - p.currentTime < 1.1) {
+      if (p.duration - p.currentTime < 1.1 || (p.duration > 12 && performance.now() > switchAt)) {
         const next = cur === "a" ? "b" : "a";
-        // Start the other copy from a slightly different point, so the loop never repeats exactly.
-        players[next].currentTime = Math.random() * Math.min(4, p.duration / 10);
+        players[next].currentTime = Math.random() * Math.max(0, p.duration - 10);
         void players[next].play().catch(() => undefined);
         cur = next;
         setFront(next);
+        switchAt = performance.now() + 8000 + Math.random() * 12000;
       }
     }, 200);
     return () => clearInterval(id);
   }, []);
+  // A camera's faint sensor grain over the clip (a recording is too clean next to live cameras).
+  const grain = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = grain.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    c.width = 320;
+    c.height = 180;
+    const img = g.createImageData(c.width, c.height);
+    const id = setInterval(() => {
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random() * 255;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    }, 80);
+    return () => clearInterval(id);
+  }, []);
   return (
     <div className="avatar-feed">
-      <video ref={a} src={src} muted playsInline preload="auto" className={front === "a" ? "on" : ""} />
-      <video ref={b} src={src} muted playsInline preload="auto" className={front === "b" ? "on" : ""} />
+      <div className="avatar-sway">
+        <video ref={a} src={src} muted playsInline preload="auto" className={front === "a" ? "on" : ""} />
+        <video ref={b} src={src} muted playsInline preload="auto" className={front === "b" ? "on" : ""} />
+      </div>
+      <canvas ref={grain} className="avatar-grain" hidden={mode === "live"} aria-hidden="true" />
       <video ref={live} muted playsInline autoPlay className={`live${mode === "live" ? " on" : ""}`} />
     </div>
   );

@@ -2668,6 +2668,11 @@ html.handheld .palette-list button { min-height: 44px; }
 .avatar-feed { position: fixed; inset: 0; background: #000; }
 .avatar-feed video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.9s linear; }
 .avatar-feed video.on { opacity: 1; }
+/* Breathing and a slight sway (a person never sits perfectly still); the grain sits over it, like a webcam's. */
+.avatar-sway { position: absolute; inset: -2%; animation: avatar-breathe 5.3s ease-in-out infinite, avatar-sway 17s ease-in-out infinite; }
+@keyframes avatar-breathe { 0%, 100% { scale: 1; } 45% { scale: 1.006; } }
+@keyframes avatar-sway { 0%, 100% { translate: 0 0; } 30% { translate: 0.25% -0.15%; } 70% { translate: -0.2% 0.1%; } }
+.avatar-grain { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.045; mix-blend-mode: overlay; pointer-events: none; z-index: 2; image-rendering: pixelated; }
 .study-remote { display: flex; flex-direction: column; gap: 10px; }
 .study-remote-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .study-remote-btns button { min-height: 64px; font-size: 17px; }
