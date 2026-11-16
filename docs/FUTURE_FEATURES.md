@@ -38,13 +38,13 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Named, specialized agents; a background feature-research routine
 - ✅ An interface check and speed check on every version (scripts/ui-check.mjs)
 - ✅ A plugin's permissions, code and "checked or not" shown before install; a learned skill shown before it is saved
-- ⬜ A project index (fast search over assets, scripts, Blueprints) for token efficiency
+- ✅ A project index: code_map, find_symbol and find_assets (classes, functions, Unity/Unreal/Godot assets by name), cached by file time (KesherAI: 883 files in 0.4 s, again in 0.06 s)
 
 ## Code
 - ✅ The editor is Monaco (VS Code's own editor)
 - ✅ Library store for languages and engines
 - ✅ Gemini through the user's own subscription (sign-in)
-- ⬜ SSH and WSL targets
+- ✅ WSL targets: a project opened at \\wsl.localhost\<distro>\… runs its commands in that Linux distribution (wsl.exe -d … --cd …); ⬜ SSH targets
 - 👤 DeepSeek V4-Flash test (board t59; downloading on the PC)
 
 ## Models and hardware

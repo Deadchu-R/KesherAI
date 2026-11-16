@@ -15,3 +15,10 @@ test("commands the agent runs commit as KesherAI, never as the computer's git us
   const r = await runShell('node -e "console.log(process.env.GIT_AUTHOR_EMAIL + \' \' + process.env.GIT_COMMITTER_NAME)"', process.cwd(), 30_000, new AbortController().signal);
   assert.match(r.output, /kesherai@noreply\.invalid KesherAI/);
 });
+
+test("a WSL project folder runs its commands in that Linux distribution", async () => {
+  const { wslTarget } = await import("./shell.js");
+  assert.deepEqual(wslTarget("\\\\wsl.localhost\\Ubuntu\\home\\me\\game"), { distro: "Ubuntu", dir: "/home/me/game" });
+  assert.deepEqual(wslTarget("\\\\wsl$\\Debian"), { distro: "Debian", dir: "/" });
+  assert.equal(wslTarget("C:\\Users\\me\\game"), undefined);
+});

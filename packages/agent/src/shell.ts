@@ -25,6 +25,19 @@ export const AGENT_GIT_IDENTITY = {
 } as const;
 
 /**
+ * A project inside WSL, opened through Windows' path to it (\\wsl.localhost\Ubuntu\home\me\game or \\wsl$\…): the
+ * distribution and the Linux folder, so commands run in Linux (wsl.exe), not in cmd.exe on a network path.
+ *
+ * @param cwd - The project folder as Windows sees it.
+ * @returns The distribution and the folder inside it, or undefined for a normal folder.
+ */
+export function wslTarget(cwd: string): { distro: string; dir: string } | undefined {
+  const m = /^\\\\(?:wsl\.localhost|wsl\$)\\([^\\]+)(\\.*)?$/i.exec(cwd);
+  if (!m) return undefined;
+  return { distro: m[1]!, dir: (m[2] ?? "\\").replace(/\\/g, "/") || "/" };
+}
+
+/**
  * Runs a shell command (cmd on Windows, sh elsewhere), collecting its output.
  * Stopped on timeout or when `signal` aborts, with its child processes.
  *
@@ -38,7 +51,12 @@ export const AGENT_GIT_IDENTITY = {
  */
 export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void, extraEnv: Record<string, string> = {}): Promise<ShellResult> {
   return new Promise<ShellResult>((resolvePromise) => {
-    const child = spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env, ...extraEnv, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY } });
+    const env = { ...process.env, ...extraEnv, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY };
+    // A WSL project: the command runs in its Linux distribution, in the project's folder (a login shell, so its PATH).
+    const wsl = process.platform === "win32" ? wslTarget(cwd) : undefined;
+    const child = wsl
+      ? spawn("wsl.exe", ["-d", wsl.distro, "--cd", wsl.dir, "--", "bash", "-lc", command], { windowsHide: true, env })
+      : spawn(command, { cwd, shell: true, windowsHide: true, env });
     let out = "";
     const onData = (b: Buffer) => {
       const text = b.toString();
