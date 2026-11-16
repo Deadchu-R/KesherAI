@@ -1698,3 +1698,27 @@ Stopped at: building (store and public page first, then the chat menu and the se
   date when none is set; the course then shows this week's topic, the next exam and what is due in three weeks.
   A new syllabus replaces the old one. Computer, remote and phone.
 - Stopped at: built (0.6.308). Next: phone reminders the day before an assignment or exam.
+
+## Students, part 17: the night's extras, compared (2026-11-16)
+
+A 2026 round-up of study tools ([Dupple, "The 9 best AI study tools in 2026"](https://dupple.com/learn/best-ai-study-tools)) and the
+tools' own pages, against what was added tonight:
+
+- **A summary of the whole course.** NotebookLM writes study guides across a notebook's sources; StudyFetch writes notes
+  per lecture. Ours grows one summary by topic as lectures are summarized, each line naming its lecture, and works on the
+  phone's own model too.
+- **Questions in her own words.** Quizlet's Test mode and most tools grade multiple choice; ChatGPT's study mode checks
+  understanding in a conversation. Ours adds open and case questions graded against a model answer and her lecture,
+  with a plain verdict line written by KesherAI (right, partly, wrong) and what was missing; difficulty easy, medium, hard.
+- **Citing the page.** NotebookLM cites the exact passage; page numbers are not shown in the round-up. Ours keeps the
+  page or slide of a PDF or presentation and the tutor cites "p. 12" next to the lecture.
+- **Notes and search.** RemNote links notes to cards; Quizlet's Magic Notes start from typed notes. Ours keeps her own
+  notes beside each lecture and searches every course at once (lectures, summaries, notes, cards, terms).
+- **Pictures.** RemNote has image occlusion on her own pictures. Ours finds free diagrams on Wikimedia Commons for the
+  lecture's terms, with author and licence (no unlicensed web images).
+- **Field tools.** No tool in the round-up has per-field tools. Ours: case brief (IRAC) and a section's elements for
+  law, code trace for computer science, a formula sheet for engineering and maths, paper analysis and APA 7 for the
+  social sciences, a lesson plan for education, and for clinical placement a care plan, a Gibbs reflection and an SBAR
+  handoff (identifying details removed).
+- **Slides during a recording.** StudyFetch and Otter take uploaded slides or transcribe; ours reads a photo of the
+  slide on the screen into the transcript at its minute, while the recording goes on.
