@@ -77,6 +77,12 @@ export function startPhoneNotify(): void {
     return;
   }
   const go = (path?: string) => {
+    // The home-screen widget's "Speak": the start page with its microphone on.
+    if (path === "#/voice") {
+      location.hash = "#/";
+      setTimeout(() => document.querySelector<HTMLElement>("main .box-bar .chip.mic")?.click(), 900);
+      return;
+    }
     if (path && /^#\/[\w\-/]*$/.test(path)) location.hash = path;
   };
   try {
