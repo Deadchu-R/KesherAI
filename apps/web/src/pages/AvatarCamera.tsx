@@ -231,7 +231,7 @@ function CameraMode() {
   );
 }
 
-interface LipSyncStatus { possible: boolean; installed: boolean; installing?: string; running: boolean; enabled: boolean; cable?: string; error?: string }
+interface LipSyncStatus { possible: boolean; installed: boolean; installing?: string; running: boolean; enabled: boolean; cable?: string; mic?: string; error?: string }
 
 const INSTALL_STEP: Record<string, [string, string]> = {
   starting: ["מתחיל", "Starting"],
@@ -251,6 +251,8 @@ const INSTALL_STEP: Record<string, [string, string]> = {
 function LipSyncCard() {
   const [st, setSt] = useState<LipSyncStatus | null>(null);
   const [cable, setCable] = useState("");
+  const [mics, setMics] = useState<Array<{ name: string; default: boolean }>>([]);
+  useEffect(() => { if (st?.installed && !mics.length) void api<{ mics: Array<{ name: string; default: boolean }> }>("/api/study/avatar/lipsync/mics").then((r) => setMics(r.mics), () => undefined); }, [st?.installed, mics.length]);
   const load = () => void api<LipSyncStatus>("/api/study/avatar/lipsync").then((x) => { setSt(x); setCable((c) => c || x.cable || ""); }, () => setSt(null));
   useEffect(() => {
     load();
@@ -278,6 +280,15 @@ function LipSyncCard() {
       ) : (
         <>
           <label className="study-check"><input type="checkbox" checked={st.enabled} onChange={(e) => void act({ action: "set", enabled: e.target.checked })} /> {L("להפעיל עם מצלמת האווטאר", "Turn on with the avatar camera")}</label>
+          {mics.length > 0 && (
+            <label className="study-field">
+              <span>{L("מיקרופון", "Microphone")}</span>
+              <select value={st.mic ?? ""} onChange={(e) => void act({ action: "set", mic: e.target.value })}>
+                <option value="">{L("ברירת המחדל של Windows", "Windows' default")}{(() => { const d = mics.find((m) => m.default); return d ? ` (${d.name})` : ""; })()}</option>
+                {mics.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+              </select>
+            </label>
+          )}
           {st.running && <p className="good small">{L("● פועל: השפתיים יזוזו כשתדברי.", "● On: the lips move when you talk.")}</p>}
           <details>
             <summary>{L("שפתיים בדיוק בזמן (כבל שמע וירטואלי)", "Lips exactly on time (a virtual audio cable)")}</summary>

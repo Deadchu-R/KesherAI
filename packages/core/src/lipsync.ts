@@ -23,6 +23,8 @@ export interface LipSyncStatus {
   enabled: boolean;
   /** Its voice goes, held back, into this audio device (a virtual cable such as VB-Cable). */
   cable?: string;
+  /** The microphone it listens to (Windows' default when absent). */
+  mic?: string;
   error?: string;
 }
 
@@ -99,6 +101,7 @@ export class LipSync {
       running: !!this.proc,
       enabled: !!set.enabled,
       ...(set.cable ? { cable: set.cable } : {}),
+      ...(set.mic ? { mic: set.mic } : {}),
       ...(this.error ? { error: this.error } : {}),
     };
   }
@@ -147,6 +150,7 @@ export class LipSync {
     this.port = 28700 + Math.floor(Math.random() * 200);
     const args = ["kesher_lipsync.py", "--clip", this.clip, "--work", join(this.dir, "avatars"), "--port", String(this.port), "--token", this.token];
     if (st.cable) args.push("--cable", st.cable);
+    if (st.mic) args.push("--mic", st.mic);
     const p = spawn(this.python, args, { cwd: mt, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
     this.proc = p;
     this.error = undefined;
@@ -183,16 +187,41 @@ export class LipSync {
     return this.proc ? `ws://127.0.0.1:${this.port}/?token=${this.token}` : undefined;
   }
 
-  private async settings(): Promise<{ enabled?: boolean; cable?: string }> {
-    return readFile(join(this.dir, "settings.json"), "utf8").then((t) => JSON.parse(t) as { enabled?: boolean; cable?: string }, () => ({}));
+  private async settings(): Promise<{ enabled?: boolean; cable?: string; mic?: string }> {
+    return readFile(join(this.dir, "settings.json"), "utf8").then((t) => JSON.parse(t) as { enabled?: boolean; cable?: string; mic?: string }, () => ({}));
+  }
+
+  /** The computer's microphones (from the installed engine), Windows' default marked. */
+  async mics(): Promise<Array<{ name: string; default: boolean }>> {
+    const script = this.script();
+    if (!script || !existsSync(this.python)) return [];
+    const mt = join(this.dir, "MuseTalk");
+    await copyFile(script, join(mt, "kesher_lipsync.py"));
+    return new Promise((done) => {
+      const p = spawn(this.python, ["kesher_lipsync.py", "--clip", "-", "--work", "-", "--list-mics"], { cwd: mt, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
+      let out = "";
+      p.stdout.on("data", (b: Buffer) => (out += b.toString()));
+      p.on("exit", () => {
+        try {
+          done((JSON.parse(out.trim().split("\n").pop() ?? "[]") as Array<{ name: string; default: boolean }>).slice(0, 40));
+        } catch {
+          done([]);
+        }
+      });
+      p.on("error", () => done([]));
+    });
   }
 
   /**
    * Her choices: on or off (with the avatar camera), and the audio device for the held-back voice ("" for none);
    * they take effect at the next start.
    */
-  async set(p: { enabled?: boolean; cable?: string }): Promise<void> {
+  async set(p: { enabled?: boolean; cable?: string; mic?: string }): Promise<void> {
     const cur = await this.settings();
+    if (typeof p.mic === "string") {
+      if (p.mic) cur.mic = p.mic.slice(0, 120);
+      else delete cur.mic;
+    }
     if (typeof p.enabled === "boolean") cur.enabled = p.enabled;
     if (typeof p.cable === "string") {
       if (p.cable) cur.cable = p.cable.slice(0, 120);

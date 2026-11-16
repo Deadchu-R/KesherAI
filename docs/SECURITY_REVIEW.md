@@ -763,3 +763,21 @@ S5 an outside scanner's rules for Electron.
 - Version watch: reads only `/api/version`; it never reloads during a lecture recording.
 - Performance: passage search is one pass over the course's words per question (fine for hundreds of lectures);
   the exam plan is computed per course in the course list (one pass over its cards).
+
+## Scan 90 (2026-11-16, 0.6.280 – 0.6.281: avatar look-alive layer, lip sync)
+
+- Lip sync server (tools/lipsync): listens on 127.0.0.1 only, on a random port, and refuses a connection without
+  KesherAI's per-run random token (32 hex characters, never shown to the page). The page never reaches it: frames
+  come through KesherAI's own `/api/study/avatar/lipsync/stream` (the page's CSP allows only KesherAI), behind the
+  usual login.
+- Its install (7 GB) is refused from remote; it runs PowerShell with a script KesherAI writes itself (paths quoted
+  for PowerShell, tested with an apostrophe), downloads only from GitHub (MuseTalk), PyTorch's index, OpenMMLab's
+  wheel index and HuggingFace; the copied s3fd face detector is checked by its sha256 prefix before use. A failed
+  native step stops the install before it is marked ready.
+- The microphone is read only while the avatar camera runs with lip sync on; audio stays in memory (4 s ring), is
+  never written to disk, and leaves only as frames (and, if she chose it, as her own voice into the audio device she
+  named).
+- Settings (on/off, microphone, cable device) are capped at 120 characters and passed as separate process
+  arguments (no shell).
+- Performance: on an RTX 3090 beside the chat model, 25 fps with the card making the next step while threads blend
+  and encode the last; the server stops with the camera and gives the card back.

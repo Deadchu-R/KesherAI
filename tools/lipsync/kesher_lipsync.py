@@ -45,6 +45,7 @@ def parse():
     p.add_argument("--cable", default=None, help="output device for the held-back voice (e.g. 'CABLE Input')")
     p.add_argument("--threshold", type=float, default=0.012, help="speech level (RMS) that counts as talking")
     p.add_argument("--prepare-only", action="store_true")
+    p.add_argument("--list-mics", action="store_true", help="print the microphones as JSON and stop")
     return p.parse_args()
 
 
@@ -235,6 +236,13 @@ def features(m, audio):
 
 async def main():
     a = parse()
+    if a.list_mics:
+        import sounddevice as sd
+
+        default = sd.default.device[0]
+        mics = [{"name": d["name"], "default": i == default} for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0 and d["hostapi"] == sd.default.hostapi]
+        print(json.dumps(mics, ensure_ascii=False), flush=True)
+        return
     import websockets
 
     m = Models()
