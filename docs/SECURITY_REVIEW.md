@@ -833,3 +833,21 @@ S5 an outside scanner's rules for Electron.
 - Found on the PC (not a code issue): after a restart the 80B chat model, with its experts in system memory and the
   file mapped from disk, processed prompts at under 1 token a second until warm. Left as is: loading it fully into
   memory instead needs the RAM to hold it; to be measured with Roee.
+
+## Scan 94 (2026-11-16, 0.6.305 – 0.6.310: Anki, course summary, search across courses, notes, open and case quizzes)
+
+- Anki import (`POST /api/study/courses/:id/cards/import`): the file is read as text only, tab-separated; fronts and
+  backs are cut like any card, duplicates skipped. The export is plain text with a sanitized file name.
+- Course summary (`POST /api/study/courses/:id/summary`): built only from her lectures' own summaries; at most 50000
+  characters sent per step and 120000 kept; it is shown through RichText (React text, no HTML) on the computer and as
+  text on the phone. A phone sync passes it through the same cleaning (a string, ids checked).
+- Search across courses (`GET /api/study/search?q=`): the query is cut to 200 characters and matched by plain
+  substring (no regular expression from her text); at most 40 hits; courses come from the in-memory cache, so a
+  keystroke (debounced) does not read every file again.
+- Her notes (`PATCH …/lectures/:lid` `{ notes }`): cut to 50000 characters, kept with their time so a sync keeps the
+  newer notes; shown as text.
+- Open and case quizzes: questions need a model answer of 4–1200 characters; at most 30 written answers of 3000
+  characters each, a 1 MB body limit, and the grade line is KesherAI's own text built from a verdict of
+  "right", "partly" or "wrong" only. The model has no tools in any of these steps.
+- Performance: the open quiz is graded one answer at a time (one short prompt each, about 4000 characters of passages),
+  so a 10-question quiz is 10 small turns, not one long one.
