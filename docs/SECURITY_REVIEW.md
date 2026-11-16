@@ -901,3 +901,12 @@ S5 an outside scanner's rules for Electron.
 - Found by CI, fixed: the command used on this side for typechecking (`pnpm -s -r typecheck`) skipped the web app;
   the root `pnpm typecheck` is used now.
 - Performance: the side menu's edge scrolling runs one animation frame loop only while a finger or mouse is held.
+
+## Scan 97 (2026-11-17, night): models move, computer tabs, journal OCR, study pictures, course models, kept recordings
+- **Kept recordings** (`/api/study/courses/:id/lectures/:lid/recording`): behind the same sign-in as every route; the course id must match `[\w-]{1,80}` and the lecture must exist before a path is built (the lecture id is stripped to `[\w-]`), so no path escapes `study/recordings/<course>/`; only audio types are taken (WebM, Ogg, MP4, MPEG, WAV), 1 KB–400 MB, written to a temp file and renamed. Range reads are parsed strictly (`bytes=a-b`), out-of-range answers 416. Deleting a lecture or a course deletes its audio. Automatic deletion only removes kept audio, never transcripts.
+- The token in the phone's player URL (`?token=`) goes only to the paired computer; the request log strips the query (checked: `req.url.split("?")[0]`).
+- The audio parsers (400 MB) are global: a signed-in client could send a large audio body to any route. Accepted (signed-in only, buffered once); noted for a streaming upload later.
+- **Course models**: a course's model id is checked (`provider/name`), and the file loaded comes only from the scanned model folders (never a path from the request). "Switch now" only stops the waiting.
+- **Journal OCR**: a failed read in the Tesseract worker no longer throws outside a promise (it was logged as an uncaught error just before the 22:29 exit; that exit itself came from outside the app).
+- **Computer tabs**: open other computers only through the desktop bridge's existing `openDevice` / `openComputer` (same checks as the hub).
+- Performance: the model scan for course models is cached 5 minutes; the wait for a free engine checks every 3 s only while a course waits; the recorder keeps Opus at 24 kb/s (~20 MB per 90 minutes) instead of WAV (~170 MB).
