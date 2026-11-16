@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { encodeWav } from "./Mic";
-import { stamp } from "./study-time";
+import { stamp, stampSeconds } from "./study-time";
 import { busy } from "./VersionWatch";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -28,7 +28,9 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
   const [translateTo, setTranslateTo] = useState<"" | "he" | "en">("");
   const [translated, setTranslated] = useState<string[]>([]);
   const paused = useRef(false);
-  const rec = useRef<{ stop: () => Promise<void>; mark: () => void } | null>(null);
+  const rec = useRef<{ stop: () => Promise<void>; mark: () => void; slide: (f: File) => void } | null>(null);
+  const [slides, setSlides] = useState(0);
+  const slideInput = useRef<HTMLInputElement>(null);
   const canSystem = typeof navigator.mediaDevices?.getDisplayMedia === "function" && !matchMedia("(pointer: coarse)").matches;
 
   useEffect(() => {
@@ -112,8 +114,29 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
       for (let i = 0; i < d.length; i += 64) peak = Math.max(peak, Math.abs(d[i]!));
       if (now() - pieceAt >= PIECE_SEC) flush();
     };
+    // Photos of slides, read on the computer while the recording goes on; each goes in at its minute.
+    const reading: Array<Promise<void>> = [];
+    let slideN = 0;
     rec.current = {
       mark: () => setLines((ls) => [...ls, `${stamp(now())} ⭐ ${L("חשוב", "Important")}`]),
+      slide: (f) => {
+        const at = now();
+        const n = ++slideN;
+        setSlides(n);
+        reading.push((async () => {
+          let body = L("(השקף לא נקרא)", "(the slide could not be read)");
+          try {
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            let bin = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            const r = await api<{ text: string }>("/api/study/extract", { method: "POST", body: { name: f.name || "slide.jpg", data: btoa(bin) } });
+            if (r.text.trim()) body = r.text.trim().slice(0, 6000);
+          } catch (e) {
+            body = `${body} ${(e as Error).message}`;
+          }
+          setLines((ls) => [...ls, `${stamp(at)} 📸 ${L(`שקף ${n}`, `Slide ${n}`)}:\n${body}`]);
+        })());
+      },
       stop: async () => {
         rec.current = null;
         busy.recording = false;
@@ -124,8 +147,10 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
         void lock?.release().catch(() => undefined);
         setState("finishing");
         await queue;
+        await Promise.all(reading);
         setLines((ls) => {
-          onDone(ls.join("\n"));
+          // Slides were read beside the speech: back into time order.
+          onDone([...ls].sort((a, b) => stampSeconds(a) - stampSeconds(b)).join("\n"));
           return ls;
         });
       },
@@ -183,6 +208,8 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
       {state !== "finishing" && (
         <div className="study-actions">
           <button type="button" onClick={() => rec.current?.mark()}>⭐ {L("חשוב", "Important")}</button>
+          <button type="button" onClick={() => slideInput.current?.click()}>📸 {slides ? L(`שקף (${slides})`, `Slide (${slides})`) : L("צילום שקף", "Photo of a slide")}</button>
+          <input ref={slideInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) rec.current?.slide(f); }} />
           <button type="button" onClick={() => pauseToggle.current()}>{state === "paused" ? L("המשך", "Resume") : L("השהה", "Pause")}</button>
           <button type="button" className="danger study-rec-big" onClick={() => void rec.current?.stop()}>{L("סיים הקלטה", "Finish recording")}</button>
         </div>

@@ -991,6 +991,32 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       };
       const tick = setInterval(() => { const sec = now(); clock.textContent = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`; }, 500);
       const star = el("button", { type: "button", onclick: () => lines.push(`${mmss(now())} ⭐ ${L("חשוב", "Important")}`) }, L("⭐ חשוב", "⭐ Important"));
+      // A photo of the slide on the screen, read into the transcript at its minute (the recording goes on meanwhile).
+      const slides = [];
+      const slideIn = el("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, onchange: (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        const at = now();
+        const n = slides.length + 1;
+        slideBtn.textContent = L(`📸 שקף (${n})`, `📸 Slide (${n})`);
+        slides.push((async () => {
+          let body = L("(לא נקרא: צריך מודל שרואה תמונות או חיבור למחשב)", "(not read: needs a model that sees pictures, or the computer)");
+          try {
+            if (extract) {
+              const bytes = new Uint8Array(await f.arrayBuffer());
+              let bin = "";
+              for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+              const r = await extract({ name: f.name || "slide.jpg", data: btoa(bin) });
+              if (r?.text?.trim()) body = r.text.trim().slice(0, 6000);
+            }
+          } catch {
+            // The slide stays as a mark at its minute.
+          }
+          lines.push(`${mmss(at)} 📸 ${L(`שקף ${n}`, `Slide ${n}`)}:\n${body}`);
+        })());
+      } });
+      const slideBtn = el("button", { type: "button", onclick: () => slideIn.click() }, L("📸 צילום שקף", "📸 Photo of a slide"));
       const stop = el("button", { type: "button", class: "primary", style: "background: #f08a8a; min-height: 52px" }, L("סיים הקלטה", "Finish recording"));
       stop.onclick = async () => {
         stop.disabled = true;
@@ -1002,12 +1028,16 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         void ctx.close();
         void lock?.release?.();
         await queue;
+        await Promise.all(slides);
+        // Slides were read while speech went on: back into time order (each line starts with its mm:ss).
+        const at = (x) => { const m = /^\[(\d+):(\d\d)\]/.exec(x); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
+        lines.sort((a, b) => at(a) - at(b));
         if (!lines.length) return alert(L("לא נשמע דיבור בהקלטה.", "No speech was heard."));
         const l = { id: uid(), title: L(`הרצאה ${c.lectures.length + 1}`, `Lecture ${c.lectures.length + 1}`), date: new Date().toISOString().slice(0, 10), text: lines.join("\n") };
         c.lectures.push(l);
         if (commit()) go({ at: "lecture", course: c.id, lecture: l.id });
       };
-      startBtn.replaceWith(el("div", { class: "ph-btns" }, star, stop));
+      startBtn.replaceWith(el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, star, slideBtn, slideIn, stop));
     };
   }
 
