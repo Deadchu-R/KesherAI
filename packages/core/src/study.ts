@@ -623,8 +623,10 @@ export class Study {
       if (input.length < 10) throw Object.assign(new Error("Paste the text first."), { statusCode: 400 });
     }
     const out = await this.ask(tool.prompt, input, signal, d.course.field, 40_000);
+    // A whole answer wrapped in a ```markdown fence (seen on the PC) showed the fence as text.
+    const plain = out.trim().replace(/^```[a-z]*\s*\n([\s\S]*?)\n?```$/i, "$1");
     // The answer's own language decides the cleaning (an English paper gets a Hebrew analysis).
-    return { text: cleanScript(out.trim(), /[\u0590-\u05ff]/.test(out)).slice(0, 40_000) };
+    return { text: cleanScript(plain.trim(), /[\u0590-\u05ff]/.test(plain)).slice(0, 40_000) };
   }
 
   /**
