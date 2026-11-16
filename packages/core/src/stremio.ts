@@ -200,7 +200,9 @@ export class StremioTaste {
         const title = String(x?.title ?? "").trim();
         if (!title || seen.has(title.toLowerCase())) continue;
         const hit = await this.find(type, title, x.year).catch(() => undefined);
-        if (hit && !out.some((o) => o.id === hit.id)) out.push({ ...hit, ...(x.why ? { why: String(x.why).slice(0, 200) } : {}) });
+        // The reason as plain text (models write *titles* in markdown).
+        const why = String(x.why ?? "").replace(/[*_`#]/g, "").trim().slice(0, 200);
+        if (hit && !out.some((o) => o.id === hit.id)) out.push({ ...hit, ...(why ? { why } : {}) });
       }
       return out;
     };

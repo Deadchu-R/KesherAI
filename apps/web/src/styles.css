@@ -2843,3 +2843,5 @@ html.handheld .palette-list button { min-height: 44px; }
 .stremio-pick { display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; min-width: 0; }
 .stremio-pick img, .stremio-noposter { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: calc(8px * var(--r-scale, 1)); background: var(--panel-2); }
 .stremio-pick strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stremio-rate > input { flex: 1 1 180px; min-width: 0; }
+@media (max-width: 640px) { .stremio-rate > input { flex-basis: 100%; } }

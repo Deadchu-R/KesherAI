@@ -40,8 +40,8 @@ export function StremioPage() {
       <h1>{L("סרטים וסדרות בשבילך", "Films and series for you")}</h1>
       <section className="card">
         <strong>{L("הטעם שלך", "Your taste")}</strong>
-        <p className="small">{L(`${st.letterboxd} מ-Letterboxd · ${st.rated - st.letterboxd} דירוגים ב-KesherAI`, `${st.letterboxd} from Letterboxd · ${st.rated - st.letterboxd} ratings in KesherAI`)}</p>
-        <div className="row wrap">
+        <p className="small"><span>{L(`${st.letterboxd} מ-Letterboxd`, `${st.letterboxd} from Letterboxd`)}</span> · <span>{L(`${st.rated - st.letterboxd} דירוגים ב-KesherAI`, `${st.rated - st.letterboxd} ratings in KesherAI`)}</span></p>
+        <div className="row wrap stremio-rate">
           <label className="button">{L("ייבוא מ-Letterboxd (ratings.csv)", "Import from Letterboxd (ratings.csv)")}
             <input type="file" hidden accept=".csv,text/csv" onChange={async (e) => {
               const f = e.target.files?.[0];
@@ -58,7 +58,7 @@ export function StremioPage() {
         <p className="muted small">{L("ב-Letterboxd: הגדרות ← Import & Export ← Export your data, ובקובץ: ratings.csv.", "In Letterboxd: Settings → Import & Export → Export your data; the file ratings.csv.")}</p>
       </section>
       <section className="card">
-        <div className="row">
+        <div className="row wrap">
           <strong className="grow">{L("ההמלצות", "Recommendations")}</strong>
           <button type="button" className="primary" disabled={!!busy || !st.rated} onClick={() => void run("refresh", api("/api/stremio/refresh", { method: "POST" }))}>{busy === "refresh" ? L("כותב המלצות…", "Writing recommendations…") : L("המלצות חדשות", "New recommendations")}</button>
           {!isRemote() && <button type="button" disabled={!!busy} onClick={() => void makeAddon().catch((e: Error) => toast(e.message))}>{L("להוסיף ל-Stremio", "Add to Stremio")}</button>}
