@@ -69,3 +69,17 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - 👤 OneDrive app ID
 - 👤 Figma token
 - 👤 Decide on the Chrome Web Store $5 fee
+
+## Roee's choices for the night of 2026-11-16 (until 07:00)
+Every addition is an optional component: he chooses whether to use it, and a clean option without it always exists.
+- Allowed: new code dependencies, a Windows OpenSSH server (local only), installing dev tools (Godot, Java/Fabric, depth models, a small Magic Tab model), accounts already signed in (Epic, Stremio); no passwords, no purchases.
+- Self-work may be paused for an install and resumed after, as long as it resumes cleanly.
+- Study: a Hebrew-strong model chosen by Claude (DictaLM 3.0 24B), each course picks its model. Recordings: kept by default, with the choice to delete after a set time or never; ask the first time whether to change it.
+- Godot: GDScript and C#. Minecraft: Java Fabric, Java NeoForge and Bedrock. Roblox: built without his account (he tests).
+- Collaboration: a short-lived invite link, a link for read or edit, and long-term invites by email like Figma, with a page of who is approved, alerts on anything unusual, and a ban button.
+- Voice training: tested on a free voice tonight. Chat training: files he picks, and his KesherAI chats (he picks which).
+- Project index: AutoShooter (Unreal) and KesherAI. SSH/WSL: WSL on the PC. Magic Tab: Tab accepts. CPU/RAM limit: off, with a suggestion.
+- Stremio: watch history, a Letterboxd CSV, and ratings in KesherAI. Depth frames: from Unreal/Unity screenshots.
+- Computer tabs on the phone: at the top of the side menu. Unreal and Unity AI with KesherAI as the provider: tested on a test project.
+- Phone build targets: up to the APK; installing on the phone waits for the weekend (no cable).
+- Morning report at 07:00, here in the chat.
