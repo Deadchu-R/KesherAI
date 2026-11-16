@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -341,9 +341,27 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     localStorage.setItem(KEYR, JSON.stringify(want));
   }
 
+  /** "What now": the one most urgent step across her courses (shared with the computer). */
+  function nextCard() {
+    const n = studyNext(db.courses.map(toData));
+    if (!n) return "";
+    const days = (d = 0) => (d === 0 ? L("היום", "today") : d === 1 ? L("מחר", "tomorrow") : L(`בעוד ${d} ימים`, `in ${d} days`));
+    const [text, to, label] = {
+      "due-soon": [L(`להגשה ${days(n.days)}: ${n.what} (${n.course})`, `Due ${days(n.days)}: ${n.what} (${n.course})`), { at: "course", course: n.courseId }, L("לקורס", "To the course")],
+      "exam-soon": [L(`המבחן ב${n.course} ${days(n.days)}: בוחן תרגול`, `The ${n.course} exam is ${days(n.days)}: a practice quiz`), { at: "quiz", course: n.courseId }, L("לבוחן", "Quiz")],
+      review: [L(`${n.what} כרטיסיות מחכות לחזרה ב${n.course}`, `${n.what} cards wait for review in ${n.course}`), { at: "review", course: n.courseId }, L("לחזרה", "Review")],
+      weak: [L(`חזרה על "${n.what}": שם היה לך קשה בבוחן`, `Go over "${n.what}": it was hard in the quiz`), { at: "lecture", course: n.courseId, lecture: n.lectureId }, L("להרצאה", "Open")],
+      summarize: [L(`לסכם את "${n.what}"`, `Summarize "${n.what}"`), { at: "lecture", course: n.courseId, lecture: n.lectureId }, L("להרצאה", "Open")],
+      cards: [L(`ליצור כרטיסיות מ"${n.what}"`, `Make cards from "${n.what}"`), { at: "lecture", course: n.courseId, lecture: n.lectureId }, L("להרצאה", "Open")],
+      focus: [L(`25 דקות ריכוז על ${n.course}`, `25 minutes of focus on ${n.course}`), null, ""],
+    }[n.kind];
+    return el("section", { class: "api ph-why", "aria-label": L("מה עכשיו", "What now") }, el("small", { class: "muted" }, L("מה עכשיו", "What now")), el("p", { dir: "auto", style: "font-weight: 500; margin: 4px 0 8px" }, text),
+      to ? el("button", { type: "button", class: "primary", onclick: () => go(to) }, label) : "");
+  }
+
   function home() {
     scheduleReminders();
-    if (db.courses.length) root.append(focusCard());
+    if (db.courses.length) root.append(nextCard(), focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);

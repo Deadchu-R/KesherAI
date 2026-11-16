@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudySyllabus, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -100,6 +100,7 @@ function StudyHome() {
   return (
     <div className="page study-page">
       <h1>{L("לימודים", "Study")}</h1>
+      {!!courses?.length && <NextStep />}
       {!!courses?.length && <FocusCard courses={courses} />}
       {!!courses?.length && <section className="study-today">
         <h2>{L("להיום", "Today")}</h2>
@@ -176,6 +177,31 @@ const fieldName = (id: string | undefined) => {
 const CLINICAL_TABS = new Set(["calc", "drugs", "labs"]);
 
 /** Student benefits, the ones for her fields first, each with how to turn it on and its official page. */
+/** "What to study now": one step, the most urgent across her courses, with the button that does it. */
+function NextStep() {
+  const [n, setN] = useState<StudyNext | null>(null);
+  useEffect(() => void api<{ next: StudyNext | null }>("/api/study/next").then((r) => setN(r.next), () => undefined), []);
+  if (!n) return null;
+  const c = `#/study/${n.courseId}`;
+  const days = (d = 0) => (d === 0 ? L("היום", "today") : d === 1 ? L("מחר", "tomorrow") : L(`בעוד ${d} ימים`, `in ${d} days`));
+  const [text, href, button] = {
+    "due-soon": [L(`להגשה ${days(n.days)}: ${n.what} (${n.course})`, `Due ${days(n.days)}: ${n.what} (${n.course})`), c, L("לקורס", "To the course")],
+    "exam-soon": [L(`המבחן ב${n.course} ${days(n.days)}: מבחן תרגול על הנושאים החלשים`, `The ${n.course} exam is ${days(n.days)}: a practice test on the weak topics`), `${c}/quiz`, L("למבחן תרגול", "Practice test")],
+    review: [L(`${n.what} כרטיסיות מחכות לחזרה ב${n.course}`, `${n.what} cards wait for review in ${n.course}`), `${c}/review`, L("לחזרה", "Review")],
+    weak: [L(`חזרה על "${n.what}": שם היה לך קשה בבוחן`, `Go over "${n.what}": it was hard in the quiz`), `${c}/l/${n.lectureId}`, L("להרצאה", "Open the lecture")],
+    summarize: [L(`לסכם את "${n.what}"`, `Summarize "${n.what}"`), `${c}/l/${n.lectureId}`, L("להרצאה", "Open the lecture")],
+    cards: [L(`ליצור כרטיסיות מ"${n.what}"`, `Make cards from "${n.what}"`), `${c}/l/${n.lectureId}`, L("להרצאה", "Open the lecture")],
+    focus: [L(`25 דקות ריכוז על ${n.course}`, `25 minutes of focus on ${n.course}`), "", ""],
+  }[n.kind];
+  return (
+    <section className="card study-next" aria-label={L("מה ללמוד עכשיו", "What to study now")}>
+      <span className="muted small">{L("מה עכשיו", "What now")}</span>
+      <p dir="auto">{text}</p>
+      {href && <a className="button primary" href={href}>{button}</a>}
+    </section>
+  );
+}
+
 /** The focus timer's running session, kept so it survives a reload or the screen turning off. */
 interface Running { courseId: string; minutes: number; end: number; start: number }
 const FOCUS_KEY = "kesher-focus-running";

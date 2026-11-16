@@ -25,6 +25,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get("/api/study", async () => ({ courses: await st.list() }));
   /** Her study streak and this week's focus minutes. */
   app.get("/api/study/progress", async () => st.progress());
+  /** "What to study now": one next step (or null without courses). */
+  app.get("/api/study/next", async () => ({ next: await st.next() }));
   /** A finished focus-timer session: `{ minutes }`. */
   app.post<C & { Body: { minutes?: number } }>("/api/study/courses/:id/focus", async (req) => st.addFocus(req.params.id, Number(req.body?.minutes)));
   /** The course's tutor: `{ question, history? }` → an answer from her lectures, with the lectures it used. */

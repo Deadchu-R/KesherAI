@@ -2767,3 +2767,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-syllabus h3 { margin: 8px 0 2px; font-size: 14px; }
 .study-syllabus ul { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 2px; }
 .study-syllabus p { margin: 4px 0; }
+.study-next { display: flex; flex-direction: column; gap: 4px; border-inline-start: 3px solid var(--accent); }
+.study-next p { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.study-next .button { align-self: flex-start; }

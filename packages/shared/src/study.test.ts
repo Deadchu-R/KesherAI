@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -241,4 +241,17 @@ test("checkCalcQuestion: the option must equal the explanation's own result", ()
   assert.equal(checkCalcQuestion(q(["41.7", "50", "30", "20"], 1, "1000 × 20 ÷ 480 = 41.67"))?.answer, 0);
   const words = q(["כן", "לא"], 0, "כי כך כתוב");
   assert.equal(checkCalcQuestion(words), words);
+});
+
+test("studyNext: the most urgent step first", () => {
+  const now = new Date(2026, 10, 16, 12).getTime();
+  const course = (id: string, extra: Partial<Parameters<typeof studyNext>[0][number]> = {}) => ({ course: { id, name: id, createdAt: 0 }, lectures: [], cards: [], reviews: [], quizzes: [], ...extra });
+  assert.equal(studyNext([]), undefined);
+  assert.equal(studyNext([course("a")], now)?.kind, "focus");
+  const lec = { id: "l1", title: "לב", date: "2026-11-01", text: "x".repeat(300) };
+  assert.deepEqual(studyNext([course("a", { lectures: [lec] })], now), { kind: "summarize", courseId: "a", course: "a", what: "לב", lectureId: "l1" });
+  const card = { id: "k", front: "?", back: "!", format: "text" as const, createdAt: 0, due: "2026-11-01T00:00:00Z", fsrs: {} };
+  assert.equal(studyNext([course("a", { lectures: [lec] }), course("b", { cards: [card] })], now)?.kind, "review");
+  const syl = { exams: [], assignments: [{ title: "עבודה", date: "2026-11-17" }], weeks: [], t: 0 };
+  assert.deepEqual(studyNext([course("b", { cards: [card] }), course("c", { syllabus: syl })], now), { kind: "due-soon", courseId: "c", course: "c", what: "עבודה", days: 1 });
 });

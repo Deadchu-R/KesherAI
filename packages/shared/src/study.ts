@@ -606,6 +606,55 @@ export function pastExamStyle(exams: StudyPastExam[], budget = 8000): string {
   return `Write the questions like these past exams of this course: the same kinds of questions, format, length, difficulty and topics they stress (do not copy their questions word for word; write new ones, only about what the lectures say, never a fact the lectures do not give):\n\n${exams.map((e) => `--- Past exam: ${e.title}\n${e.text.slice(0, each)}`).join("\n\n")}`;
 }
 
+/** "What to study now": one next step across her courses, most urgent first. */
+export interface StudyNext {
+  kind: "due-soon" | "exam-soon" | "review" | "weak" | "summarize" | "cards" | "focus";
+  courseId: string;
+  course: string;
+  /** What it is about: the assignment, the lecture, or the number of cards. */
+  what?: string;
+  lectureId?: string;
+  days?: number;
+}
+
+/**
+ * The one thing to study now (like a study coach): an assignment due within 2 days, an exam within 7 (a practice
+ * test on weak topics), cards due for review, a weak lecture, a lecture not yet summarised, a summarised one with no
+ * cards, else a focus session.
+ *
+ * @param courses - Her courses.
+ * @param now - Now.
+ * @returns The step, or undefined when she has no course.
+ */
+export function studyNext(courses: StudyCourseData[], now = Date.now()): StudyNext | undefined {
+  if (!courses.length) return undefined;
+  const base = (d: StudyCourseData) => ({ courseId: d.course.id, course: d.course.name });
+  for (const d of courses) {
+    const due = syllabusNow(d.syllabus, now).due.find((a) => a.daysLeft <= 2);
+    if (due) return { kind: "due-soon", ...base(d), what: due.title, days: due.daysLeft };
+  }
+  for (const d of courses) {
+    const plan = examPlan(d, now);
+    if (plan && plan.daysLeft <= 7) return { kind: "exam-soon", ...base(d), days: plan.daysLeft };
+  }
+  const reviews = courses.map((d) => ({ d, n: cardsToReview(d, now).length })).sort((a, b) => b.n - a.n)[0];
+  if (reviews && reviews.n > 0) return { kind: "review", ...base(reviews.d), what: String(reviews.n) };
+  for (const d of courses) {
+    const weak = weakLectures(d.quizzes).find((w) => w.correct < 0.6 && w.n >= 3);
+    const l = weak && d.lectures.find((x) => x.id === weak.lectureId);
+    if (l) return { kind: "weak", ...base(d), what: l.title, lectureId: l.id };
+  }
+  for (const d of courses) {
+    const l = [...d.lectures].reverse().find((x) => !x.summary && x.text.length > 200);
+    if (l) return { kind: "summarize", ...base(d), what: l.title, lectureId: l.id };
+  }
+  for (const d of courses) {
+    const l = [...d.lectures].reverse().find((x) => x.summary && !d.cards.some((c) => c.lectureId === x.id));
+    if (l) return { kind: "cards", ...base(d), what: l.title, lectureId: l.id };
+  }
+  return { kind: "focus", ...base(courses[0]!) };
+}
+
 /** A finished focus-timer session (minutes actually focused). */
 export interface StudyFocus {
   t: number;
