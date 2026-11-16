@@ -36,6 +36,7 @@ import { PairPrompt } from "./PairPrompt";
 import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
 import { PcDrop } from "./PcDrop";
+import { UpdatedCard } from "./UpdatedCard";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
 import { CodeHome } from "./pages/CodeHome";
@@ -342,6 +343,7 @@ export function App() {
       <VersionWatch />
       <main className="main">
         <PhoneUpdateBanner />
+        <UpdatedCard hash={hash} />
         <GuardBanner />
         {online === false && (
           <p className="error row" style={{ padding: "12px 28px", gap: 10 }}>
