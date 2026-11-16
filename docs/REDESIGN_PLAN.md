@@ -60,6 +60,16 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
     lectures and difficulty, timed or not; graded with an explanation and the source minute for every answer; the
     next exam leans on the weak topics.
   - Flashcards and quizzes from a lecture or a PDF, spaced repetition, Anki export.
+  - Visual learning (Roee, 2026-11-16): charts (the chat's chart blocks), diagrams and flowcharts (Mermaid: e.g. the
+    blood's path through the heart, a drug's mechanism), pictures (anatomy and the like from open-licence sources
+    such as Wikimedia Commons, shown with their source and licence; made by the picture model when the computer has
+    one), and short videos and animations found on the web (embedded or linked, never copied).
+  - Sources beyond the recordings: every answer, summary line and exam explanation says where it comes from — her
+    lecture (with the minute), her files (with the page), or the web (articles, guidelines, the Ministry of Health,
+    PubMed), with links; "find more" looks for relevant videos and articles on a topic.
+  - Student life helper: practical questions with current, sourced answers from the web — e.g. which vaccinations a
+    nursing student needs, where and how to book them, documents for clinical practice — always with the official
+    source and the date it was checked, and "check with your programme" where rules differ.
   - Ask the course: answers from all its lectures and files, with the minute in the recording.
   - Live captions and translation (Hebrew ↔ English) during a lecture.
   - Exam plan from the syllabus and the calendar; practice from past exams.
