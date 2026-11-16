@@ -71,6 +71,11 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
     nursing student needs, where and how to book them, documents for clinical practice — always with the official
     source and the date it was checked, and "check with your programme" where rules differ.
   - Ask the course: answers from all its lectures and files, with the minute in the recording.
+  - Every field of study (Roee, 2026-11-16; right after nursing and medicine): KesherAI recognises the field from
+    the course name, syllabus and first lectures (law, engineering, psychology, computer science, economics…) and
+    turns on the matching tools — e.g. formulas and worked problems for engineering, case law and statutes for law,
+    code exercises for computer science — the way nursing gets drug cards and medication calculations. Game
+    development (not always academic) comes later, after the academic fields.
   - "What works for me" (Roee, 2026-11-16): not a learning-styles label (the matching claim has no evidence), but
     her own results: each topic in several formats (diagram, text, audio recap, worked example, explain it back),
     each card and question remembers the format it was studied from, and spaced-repetition recall per format and per
