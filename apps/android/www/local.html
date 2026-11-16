@@ -1738,6 +1738,14 @@
       try { await LLM.download({ url: STT.url, name: STT.file }); } finally { sub?.remove?.(); }
     },
     transcribe: async (wavBase64, language) => (await window.Capacitor.Plugins.KesherSpeech.transcribeWav({ wav: wavBase64, model: STT.file, language })).text ?? "",
+    // Recording with the screen off (a native foreground service): undefined in a build without it.
+    rec: window.Capacitor?.Plugins?.KesherSpeech?.recStart ? {
+      start: () => window.Capacitor.Plugins.KesherSpeech.recStart(),
+      state: () => window.Capacitor.Plugins.KesherSpeech.recState(),
+      stop: async () => (await window.Capacitor.Plugins.KesherSpeech.recStop()).pieces ?? [],
+      read: async (file) => (await window.Capacitor.Plugins.KesherSpeech.recRead({ file })).wav,
+      clear: () => window.Capacitor.Plugins.KesherSpeech.recClear(),
+    } : undefined,
   };
   /** Like askOnce, for study: longer answers and up to ten minutes (a phone model is slow). */
   async function askLong(item, msgs) {

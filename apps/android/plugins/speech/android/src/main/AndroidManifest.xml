@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Recording a lecture with the screen off (a foreground service, like a voice recorder app). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
@@ -8,4 +11,7 @@
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
+    <application>
+        <service android:name="dev.kesherai.speech.LectureRecorder" android:exported="false" android:foregroundServiceType="microphone" />
+    </application>
 </manifest>

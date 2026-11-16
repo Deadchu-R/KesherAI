@@ -923,6 +923,11 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       };
       return box.append(el("p", {}, L("כדי לתמלל בטלפון, צריך מודל דיבור פעם אחת (מומלץ ב-Wi-Fi).", "To transcribe on the phone, download a speech model once (Wi-Fi is best).")), dl);
     }
+    // A recording with the screen off already running (the page was reopened): straight to its screen.
+    if (speech.rec && (await speech.rec.state().catch(() => ({}))).running) return recordOff(c, box, true);
+    const offPick = speech.rec && el("input", { type: "checkbox", checked: localStorage.getItem("kesherai-rec-off") !== "0", onchange: (e) => localStorage.setItem("kesherai-rec-off", e.target.checked ? "1" : "0") });
+    if (offPick) box.append(el("label", { class: "ph-filter", style: "display: flex; gap: 10px; align-items: center" }, offPick, L("להמשיך להקליט כשהמסך כבוי", "Keep recording with the screen off")),
+      el("p", { class: "muted small" }, L("התמלול נעשה בסוף, בטלפון. בלי זה, התמלול מופיע תוך כדי, אבל המסך צריך להישאר דלוק.", "The text is made at the end, on the phone. Without it the text shows as you go, but the screen must stay on.")));
     const clock = el("p", { style: "font-size: 40px; font-weight: 700; direction: ltr; text-align: center; margin: 8px 0" }, "00:00");
     const text = el("div", { dir: "auto", style: "white-space: pre-wrap; min-height: 120px; line-height: 1.6" }, L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute."));
     const lines = [];
@@ -933,6 +938,11 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const startBtn = el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 52px" }, L("התחל הקלטה", "Start recording"));
     box.append(el("p", { class: "muted" }, L("כל חצי דקה הופכת לטקסט בטלפון עצמו. השאירי את המסך דלוק. לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "Every half minute becomes text on the phone itself. Keep the screen on. Before recording a class, make sure the lecturer agrees.")), el("label", { class: "ph-filter" }, L("תרגום חי: ", "Live translation: "), transTo), clock, text, trans, startBtn);
     startBtn.onclick = async () => {
+      if (offPick?.checked) {
+        try { await speech.rec.start(); } catch (e) { return alert(String(e?.message || e)); }
+        box.replaceChildren();
+        return recordOff(c, box, false);
+      }
       let mic;
       try {
         mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, noiseSuppression: true, autoGainControl: true } });
@@ -1038,6 +1048,75 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         if (commit()) go({ at: "lecture", course: c.id, lecture: l.id });
       };
       startBtn.replaceWith(el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, star, slideBtn, slideIn, stop));
+    };
+  }
+
+  /**
+   * A recording that goes on with the screen off (the app's recording service, 30-second pieces): a clock, ⭐ and slide
+   * photos while it runs; at the end each piece becomes text on the phone and the lecture is saved.
+   */
+  async function recordOff(c, box, resumed) {
+    const st = await speech.rec.state().catch(() => ({ startedAt: Date.now() }));
+    const began = st.startedAt || Date.now();
+    const now = () => (Date.now() - began) / 1000;
+    const marks = [];
+    const clock = el("p", { style: "font-size: 44px; font-weight: 700; direction: ltr; text-align: center; margin: 8px 0" }, "00:00");
+    const tick = setInterval(() => { const sec = now(); clock.textContent = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`; }, 500);
+    const star = el("button", { type: "button", onclick: () => marks.push(`${mmss(now())} ⭐ ${L("חשוב", "Important")}`) }, L("⭐ חשוב", "⭐ Important"));
+    const slides = [];
+    const slideIn = el("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, onchange: (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      const at = now();
+      const n = slides.length + 1;
+      slides.push((async () => {
+        let body = L("(לא נקרא: צריך מודל שרואה תמונות או חיבור למחשב)", "(not read: needs a model that sees pictures, or the computer)");
+        try {
+          if (extract) {
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            let bin = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            const r = await extract({ name: f.name || "slide.jpg", data: btoa(bin) });
+            if (r?.text?.trim()) body = r.text.trim().slice(0, 6000);
+          }
+        } catch { /* the slide stays as a mark */ }
+        marks.push(`${mmss(at)} 📸 ${L(`שקף ${n}`, `Slide ${n}`)}:\n${body}`);
+      })());
+    } });
+    const stop = el("button", { type: "button", class: "primary", style: "background: #f08a8a; min-height: 52px" }, L("סיים הקלטה", "Finish recording"));
+    box.append(clock,
+      el("p", { style: "text-align: center; margin: 0" }, el("span", { class: "tag pc", style: "padding: 4px 10px; border-radius: 10px; background: #2a2520; color: #f0b37e" }, L("● מקליט, גם כשהמסך כבוי", "● Recording, also with the screen off"))),
+      el("p", { class: "muted small", style: "text-align: center" }, resumed ? L("ההקלטה המשיכה ברקע.", "The recording went on in the background.") : L("אפשר לכבות את המסך. בשורת ההתראות יש \"מקליט הרצאה\". התמלול נעשה בסוף, בטלפון. לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "You can turn the screen off; \"Recording a lecture\" stays in the notifications. The text is made at the end, on the phone. Before recording a class, make sure the lecturer agrees.")),
+      el("div", { class: "ph-btns", style: "flex-wrap: wrap; justify-content: center" }, star, el("button", { type: "button", onclick: () => slideIn.click() }, L("📸 צילום שקף", "📸 Photo of a slide")), slideIn, stop));
+    stop.onclick = async () => {
+      clearInterval(tick);
+      stop.disabled = true;
+      stop.textContent = L("עוצר…", "Stopping…");
+      const pieces = await speech.rec.stop().catch(() => []);
+      await Promise.all(slides);
+      box.replaceChildren();
+      const bar = el("progress", { max: String(Math.max(1, pieces.length)), value: "0", style: "width: 100%" });
+      const where = el("p", { class: "muted small" });
+      const last = el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" });
+      box.append(el("h2", {}, L("ממיר את ההקלטה לטקסט", "Turning the recording into text")), bar, where, last, el("p", { class: "muted small" }, L("ההרצאה תישמר כשהתמלול יסתיים. השאירי את האפליקציה פתוחה.", "The lecture is saved when the text is done. Keep the app open.")));
+      const lines = [];
+      const t0 = Date.now();
+      for (const [i, p] of pieces.entries()) {
+        const left = i ? Math.round(((Date.now() - t0) / i) * (pieces.length - i) / 60000) : 0;
+        where.textContent = L(`קטע ${i + 1} מתוך ${pieces.length}${left ? ` · בערך ${left} דקות נשארו` : ""}`, `Piece ${i + 1} of ${pieces.length}${left ? ` · about ${left} min left` : ""}`);
+        try {
+          const t = (await speech.transcribe(await speech.rec.read(p.file), "auto")).trim();
+          if (t) { lines.push(`${mmss(p.start)} ${t}`); last.textContent = lines.slice(-2).join("\n"); }
+        } catch { /* a piece that fails is skipped */ }
+        bar.value = String(i + 1);
+      }
+      const at = (x) => { const m = /^\[(\d+):(\d\d)\]/.exec(x); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
+      const all = [...lines, ...marks].sort((a, b) => at(a) - at(b));
+      if (!lines.length) { alert(L("לא נשמע דיבור בהקלטה.", "No speech was heard.")); return go({ at: "course", course: c.id }); }
+      const l = { id: uid(), title: L(`הרצאה ${c.lectures.length + 1}`, `Lecture ${c.lectures.length + 1}`), date: new Date().toISOString().slice(0, 10), text: all.join("\n") };
+      c.lectures.push(l);
+      if (commit()) { await speech.rec.clear().catch(() => undefined); go({ at: "lecture", course: c.id, lecture: l.id }); }
     };
   }
 

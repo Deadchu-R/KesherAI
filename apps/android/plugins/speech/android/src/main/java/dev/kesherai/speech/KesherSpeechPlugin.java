@@ -238,4 +238,100 @@ public class KesherSpeechPlugin extends Plugin {
             }
         }).start();
     }
+
+    // ---------- a lecture recorded with the screen off (LectureRecorder, a foreground service) ----------
+
+    /** Starts recording a lecture that goes on with the screen off. Asks for the microphone first when needed. */
+    @PluginMethod
+    public void recStart(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) {
+            requestPermissionForAlias("microphone", call, "recStartAfterPermission");
+            return;
+        }
+        startRecorder(call);
+    }
+
+    @PermissionCallback
+    private void recStartAfterPermission(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) {
+            call.reject("No access to the microphone.");
+            return;
+        }
+        startRecorder(call);
+    }
+
+    private void startRecorder(PluginCall call) {
+        if (LectureRecorder.running) {
+            call.reject("A recording is already running.");
+            return;
+        }
+        Intent i = new Intent(getContext(), LectureRecorder.class);
+        if (android.os.Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(i);
+        else getContext().startService(i);
+        JSObject o = new JSObject();
+        o.put("started", System.currentTimeMillis());
+        call.resolve(o);
+    }
+
+    /** { running, startedAt, pieces }: whether a recording runs (also after the page was reloaded). */
+    @PluginMethod
+    public void recState(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("running", LectureRecorder.running);
+        o.put("startedAt", LectureRecorder.startedAt);
+        synchronized (LectureRecorder.pieces) { o.put("pieces", LectureRecorder.pieces.size()); }
+        call.resolve(o);
+    }
+
+    /** Stops the recording; returns its pieces: [{ file, start }] (start in seconds). */
+    @PluginMethod
+    public void recStop(PluginCall call) {
+        new Thread(() -> {
+            LectureRecorder.finishRecording(getContext());
+            com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();
+            synchronized (LectureRecorder.pieces) {
+                for (String[] p : LectureRecorder.pieces) {
+                    JSObject x = new JSObject();
+                    x.put("file", p[0]);
+                    x.put("start", Long.parseLong(p[1]));
+                    list.put(x);
+                }
+            }
+            JSObject o = new JSObject();
+            o.put("pieces", list);
+            call.resolve(o);
+        }).start();
+    }
+
+    /** { file } → { wav } (base64): one piece, read from the recording folder only. */
+    @PluginMethod
+    public void recRead(PluginCall call) {
+        String name = call.getString("file", "");
+        if (name == null || !name.matches("piece-\\d{4}\\.wav")) {
+            call.reject("No such piece.");
+            return;
+        }
+        File f = new File(LectureRecorder.folder(getContext()), name);
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            byte[] b = new byte[(int) f.length()];
+            int off = 0;
+            while (off < b.length) {
+                int n = in.read(b, off, b.length - off);
+                if (n < 0) break;
+                off += n;
+            }
+            JSObject o = new JSObject();
+            o.put("wav", Base64.encodeToString(b, 0, off, Base64.NO_WRAP));
+            call.resolve(o);
+        } catch (Exception e) {
+            call.reject("Could not read the piece: " + e.getMessage());
+        }
+    }
+
+    /** Removes the recording's pieces once they were turned into text. */
+    @PluginMethod
+    public void recClear(PluginCall call) {
+        LectureRecorder.clear(getContext());
+        call.resolve();
+    }
 }
