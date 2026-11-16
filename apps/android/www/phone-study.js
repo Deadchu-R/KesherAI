@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -369,6 +369,16 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       delete listen.dataset.on;
       listen.textContent = L("🎧 האזנה לסקירה", "🎧 Listen to a review");
     };
+    // The lecture's main process as boxes and arrows (made here on demand, or brought from the computer).
+    const flowBtn = !l.diagram && el("button", { type: "button" }, L("תרשים תהליך", "Process diagram"));
+    if (flowBtn) flowBtn.onclick = async () => {
+      const r = await need([{ role: "system", content: `Draw the main process or mechanism of this lecture as a Mermaid flowchart: "graph TD" and lines like A[step] --> B[next step], at most 10 boxes, labels in the lecture's language. ${ONLY} If the lecture has no process, answer only NONE.` }, { role: "user", content: (l.summary || l.text).slice(0, 6000) }], flowBtn);
+      if (r === undefined) return;
+      const src = String(r).replace(/^[\s\S]*?```(?:mermaid)?\s*|```[\s\S]*$/g, "").trim();
+      if (!parseFlow(src)) return alert(L("אין בהרצאה הזו תהליך לתרשים.", "This lecture has no process to draw."));
+      l.diagram = src.slice(0, 8000);
+      if (commit()) draw();
+    };
     const cards = el("button", { type: "button" }, L("צור 8 כרטיסיות", "Make 8 cards"));
     cards.onclick = async () => {
       const r = await need([{ role: "system", content: `Write 8 flashcards from the lecture. Each tests one fact; the front is a question, the back a short answer. ${LANG} ${ONLY}${hint(c)} Answer with JSON only: [{"front":"...","back":"..."}]` }, { role: "user", content: (l.summary || l.text).slice(0, 6000) }], cards);
@@ -385,12 +395,28 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       if (commit()) alert(L(`נוצרו ${n} כרטיסיות`, `${n} cards made`));
     };
     root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title),
-      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
+      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
+      flowView(l.diagram),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),
       el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), el("div", { dir: "auto", style: "white-space: pre-wrap" }, l.text)));
   }
 
+  /** A lecture's diagram as boxes and arrows, the same reading as the computer's (Mermaid flowchart text). */
+  const flowView = (src) => {
+    const flow = src && parseFlow(src);
+    if (!flow) return null;
+    const label = (id) => flow.nodes.find((n) => n.id === id)?.label ?? id;
+    const order = [];
+    const visit = (id) => { if (order.includes(id)) return; order.push(id); flow.edges.filter((e) => e.from === id).forEach((e) => visit(e.to)); };
+    flow.nodes.forEach((n) => visit(n.id));
+    return el("section", { class: "api" }, el("h2", {}, L("תרשים", "Diagram")),
+      el("div", { class: "ph-flow", role: "img", "aria-label": flow.edges.map((e) => `${label(e.from)} → ${label(e.to)}`).join(", ") },
+        ...order.flatMap((id, i) => {
+          const into = flow.edges.find((e) => e.to === id && order.indexOf(e.from) === i - 1);
+          return [i > 0 ? el("span", { class: "ph-flow-arrow", "aria-hidden": "true" }, into?.label ? `${into.label} ↓` : "↓") : null, el("span", { class: "ph-flow-box", dir: "auto" }, label(id))];
+        })));
+  };
   const termRows = (list) => list.map((t) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, el("b", {}, t.term), t.en && t.en !== t.term ? el("small", { class: "muted", dir: "ltr" }, " · " + t.en) : null, el("br"), el("small", {}, t.explain))));
 
   function drugBtn(c, l) {

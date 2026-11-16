@@ -5,3 +5,4 @@
  */
 export * from "../../packages/shared/src/study.ts";
 export { createEmptyCard, fsrs, Rating } from "ts-fsrs";
+export { parseFlow } from "../web/src/study-diagram.ts";
