@@ -258,11 +258,11 @@ export class WhisperEngine {
   }
 
   /** Installs the engine and downloads the model (both shown in the downloads circle). Resolves when ready. */
-  prepare(): Promise<void> {
+  prepare(hebrew = false): Promise<void> {
     this.preparing ??= (async () => {
       this.state = {};
       await this.install();
-      const key = await this.modelKey();
+      const key: ModelKey = hebrew ? "he" : await this.modelKey();
       const dest = this.modelPath(key);
       if (!(await stat(dest).catch(() => undefined))?.size) {
         this.state = { busy: "downloading" };
@@ -312,11 +312,16 @@ export class WhisperEngine {
     const st = await this.status();
     if (!st.engine || !st.model) throw new Error("The speech engine is not ready yet.");
     const exe = (await this.binary())!;
+    // Hebrew uses ivrit-ai's Hebrew model when it is here; other languages the general one.
+    const heModel = this.modelPath("he");
+    const hasHe = !!(await stat(heModel).catch(() => undefined))?.size;
+    const general = (await Promise.all((Object.keys(MODELS) as ModelKey[]).filter((k) => k !== "he").map(async (k) => ((await stat(this.modelPath(k)).catch(() => undefined))?.size ? this.modelPath(k) : undefined)))).find(Boolean);
+    const modelFile = language === "he" && hasHe ? heModel : general ?? st.model;
     const file = join(tmpdir(), `kesher-stt-${randomUUID()}${/^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext.toLowerCase() : ".wav"}`);
     await writeFile(file, wav);
     try {
       const out = await new Promise<string>((resolve, reject) => {
-        execFile(exe, ["-m", st.model!, "-f", file, "-l", /^[a-z]{2,3}$|^auto$/.test(language) ? language : "auto", ...(timestamps ? [] : ["-nt"]), "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: Math.round(Math.max(300_000, wav.length / 20)), windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+        execFile(exe, ["-m", modelFile, "-f", file, "-l", /^[a-z]{2,3}$|^auto$/.test(language) ? language : "auto", ...(timestamps ? [] : ["-nt"]), "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: Math.round(Math.max(300_000, wav.length / 20)), windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
           if (err) reject(new Error(`The speech engine failed: ${(stderr || err.message).toString().trim().split("\n").slice(-3).join(" ")}`));
           else resolve(stdout.toString());
         });

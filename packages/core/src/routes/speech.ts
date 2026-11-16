@@ -66,8 +66,9 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 
   /** Installs whisper.cpp and downloads its model (follow it in the downloads circle). */
-  app.post("/api/speech/stt/setup", async (_req, reply) => {
-    void s.whisper.prepare().catch(() => undefined);
+  app.post<{ Body: { hebrew?: boolean } }>("/api/speech/stt/setup", async (req, reply) => {
+    // { hebrew: true }: also ivrit-ai's Hebrew model (1.6 GB), used for Hebrew lectures and dictation.
+    void s.whisper.prepare(!!req.body?.hebrew).catch(() => undefined);
     return reply.code(202).send({ ok: true });
   });
 
