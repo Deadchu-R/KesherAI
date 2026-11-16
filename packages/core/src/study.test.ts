@@ -166,3 +166,22 @@ test("a lecture recorded on the phone is summarized on the computer by itself, t
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("kept recordings: saved, checked, and deleted when their time has come", async () => {
+  const { Study } = await import("./study.js");
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const st = new Study(await mkdtemp(join(tmpdir(), "rec-")), () => undefined);
+  const c = await st.addCourse("פיזיולוגיה");
+  const l = await st.addLecture(c.id, { title: "הלב", text: "[00:00] שלום" });
+  const saved = await st.saveRecording(c.id, l.id, Buffer.alloc(5000, 1), "audio/webm");
+  assert.equal(saved.recording?.bytes, 5000);
+  assert.ok((await st.recordingFile(c.id, l.id))?.path.endsWith(".audio"));
+  await assert.rejects(st.saveRecording(c.id, l.id, Buffer.alloc(5000, 1), "text/html"));
+  assert.equal((await st.recordingSettings()).deleteAfter, "never");
+  assert.equal(await st.cleanRecordings(), 0);
+  await st.setRecordingSettings({ deleteAfter: "30" });
+  assert.equal(await st.cleanRecordings(Date.now() + 31 * 24 * 3600_000), 1);
+  assert.equal(await st.recordingFile(c.id, l.id), undefined);
+});

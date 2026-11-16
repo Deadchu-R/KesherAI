@@ -376,6 +376,19 @@ const TABS: Array<[string, [string, string]]> = [
 type ModelState = { waiting?: { want: string; now?: string; why: string; since: number }; switched: boolean; hebrew?: string; models: string[] };
 
 /** Which model writes for the course: automatic (the best Hebrew model on the computer) or one she picks. */
+/** When the semester ends, shown when recordings are deleted "after the semester" and nothing else says the date. */
+function SemesterEnd({ id, course, syllabusEnd, onChange }: { id: string; course: StudyCourse; syllabusEnd?: string; onChange: () => void }) {
+  const [after, setAfter] = useState<string>("");
+  useEffect(() => void api<{ deleteAfter: string }>("/api/study/recordings").then((r) => setAfter(r.deleteAfter), () => undefined), []);
+  if (after !== "semester" || (!course.semesterEnd && (syllabusEnd || course.examDate))) return null;
+  return (
+    <label className="study-field" title={L("ההקלטות של הקורס נמחקות אחרי התאריך הזה", "The course's recordings are deleted after this date")}>
+      <span>{L("סוף סמסטר", "Semester ends")}</span>
+      <input type="date" value={course.semesterEnd ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { semesterEnd: e.target.value } }))) onChange(); }} />
+    </label>
+  );
+}
+
 function CourseModel({ id, model, onChange }: { id: string; model?: string; onChange: () => void }) {
   const [st, setSt] = useState<ModelState | null>(null);
   useEffect(() => void api<ModelState>("/api/study/model").then(setSt, () => undefined), []);
@@ -436,6 +449,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
           </select>
         </label>
         <CourseModel id={id} model={info.course.model} onChange={load} />
+        <SemesterEnd id={id} course={info.course} syllabusEnd={[...(info.syllabus?.exams ?? [])].map((e) => e.date).sort().at(-1)} onChange={load} />
         <label className="study-field">
           <span>{L("מבחן", "Exam")}</span>
           <input type="date" value={info.course.examDate ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { examDate: e.target.value } }))) load(); }} />
@@ -727,10 +741,15 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
   return (
     <div className="study-lectures">
       {recording ? (
-        <StudyRecorder onCancel={() => setRecording(false)} onDone={async (t) => {
+        <StudyRecorder onCancel={() => setRecording(false)} onDone={async (t, audio) => {
           setRecording(false);
           if (!t.trim()) return toast(L("לא נשמע דיבור בהקלטה.", "No speech was heard in the recording."));
           const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures`, { method: "POST", body: { title: L(`הרצאה ${info.lectures.length + 1}`, `Lecture ${info.lectures.length + 1}`), text: t } }));
+          // The kept audio goes up after the lecture exists (its transcript is safe even if this fails).
+          if (l && audio) {
+            const res = await fetch(withToken(`/api/study/courses/${courseId}/lectures/${l.id}/recording`), { method: "POST", headers: { "content-type": audio.type || "audio/webm" }, body: audio }).catch(() => undefined);
+            if (!res?.ok) toast(L("התמלול נשמר, אבל ההקלטה לא נשמרה.", "The transcript is saved, but the recording was not."));
+          }
           if (l) { onChange(); go(`#/study/${courseId}/l/${l.id}`); }
         }} />
       ) : adding ? (
@@ -797,9 +816,67 @@ export function FlowView({ src }: { src: string }) {
   );
 }
 
+/** The lecture's text with each [mm:ss] mark as a button that plays the kept recording from there. */
+function StampedText({ text, onSeek }: { text: string; onSeek: (sec: number) => void }) {
+  return (
+    <>
+      {text.split("\n").map((line, i) => {
+        const m = /^\[(?:(\d+):)?(\d+):(\d\d)\]/.exec(line);
+        if (!m) return <div key={i}>{line || "\u00a0"}</div>;
+        const sec = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+        return (
+          <div key={i}>
+            <button type="button" className="study-stamp" dir="ltr" title={L("לנגן מכאן", "Play from here")} onClick={() => onSeek(sec)}>{m[0]}</button>{line.slice(m[0].length)}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+type RecordingSettings = { keep: boolean; deleteAfter: "never" | "30" | "90" | "semester"; asked?: boolean };
+
+/** The kept recording: a player (the text's minute marks play from there), delete, and the first-time question. */
+function LectureAudio({ courseId, lecture, player, onRemoved }: { courseId: string; lecture: StudyLecture; player: React.RefObject<HTMLAudioElement | null>; onRemoved: () => void }) {
+  const [settings, setSettings] = useState<RecordingSettings | null>(null);
+  useEffect(() => void api<RecordingSettings>("/api/study/recordings").then(setSettings, () => undefined), []);
+  const src = withToken(`/api/study/courses/${courseId}/lectures/${lecture.id}/recording`);
+  const choose = async (deleteAfter: RecordingSettings["deleteAfter"]) => {
+    const r = await call(api<RecordingSettings>("/api/study/recordings", { method: "PUT", body: { deleteAfter, asked: true } }));
+    if (r) setSettings(r);
+  };
+  const mb = Math.max(1, Math.round((lecture.recording?.bytes ?? 0) / 1024 / 1024));
+  return (
+    <div className="study-audio">
+      <audio ref={player} controls preload="metadata" src={src} />
+      <div className="row small">
+        <span className="muted">{L(`ההקלטה נשמרה במחשב (${mb}MB). לחיצה על דקה בטקסט המלא מנגנת משם.`, `The recording is kept on the computer (${mb} MB). A minute in the full text plays from there.`)}</span>
+        <button type="button" className="small ghost" onClick={async () => {
+          if (!confirm(L("למחוק את ההקלטה? התמלול נשאר. אי אפשר לבטל.", "Delete the recording? The transcript stays. This cannot be undone."))) return;
+          if (await call(api(`/api/study/courses/${courseId}/lectures/${lecture.id}/recording`, { method: "DELETE" }))) onRemoved();
+        }}>{L("מחיקת ההקלטה", "Delete the recording")}</button>
+      </div>
+      {settings && !settings.asked && (
+        <div className="card study-rec-ask">
+          <strong>{L("ההקלטות נשמרות", "Recordings are kept")}</strong>
+          <p className="small">{L("הרצאה של שעה וחצי היא בערך 20MB. למחוק אותן אוטומטית?", "A 90-minute lecture is about 20 MB. Delete them automatically?")}</p>
+          <div className="row wrap">
+            <button type="button" className="primary" onClick={() => void choose("never")}>{L("לא למחוק אף פעם", "Never delete")}</button>
+            <button type="button" onClick={() => void choose("30")}>{L("אחרי 30 יום", "After 30 days")}</button>
+            <button type="button" onClick={() => void choose("90")}>{L("אחרי 90 יום", "After 90 days")}</button>
+            <button type="button" onClick={() => void choose("semester")}>{L("אחרי סוף הסמסטר", "After the semester ends")}</button>
+          </div>
+          <p className="muted small">{L("סוף הסמסטר לכל קורס: לפי המבחן האחרון בסילבוס או תאריך המבחן, או תאריך שתכתבי בקורס. אפשר לשנות בהגדרות ← לימודים.", "Each course's semester end: its syllabus's last exam or its exam date, or a date you write on the course. Change it in Settings → Study.")}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
   const [view, setView] = useState<"summary" | "terms" | "diagram" | "text">("summary");
+  const player = useRef<HTMLAudioElement>(null);
   // "Explain this": text she selected in the lecture, and its explanation.
   const [sel, setSel] = useState("");
   const [explained, setExplained] = useState("");
@@ -861,6 +938,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
   return (
     <article className="study-lecture card">
       <h2 dir="auto">{l.title}</h2>
+      {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
         {(["summary", "terms", "diagram", "text"] as const).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
@@ -869,7 +947,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
         ))}
       </div>
       <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
-        {view === "text" ? <div className="study-text" dir="auto">{l.text}</div>
+        {view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.text}</div>
           : !l.summary ? (
             <div className="study-empty">
               <p className="muted">{L("עוד לא סוכם. הסיכום, המונחים והתרשים נכתבים מהטקסט של ההרצאה בלבד.", "Not summarized yet. The summary, terms and diagram come from the lecture's text only.")}</p>

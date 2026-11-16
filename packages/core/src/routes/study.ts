@@ -45,6 +45,32 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Free pictures from Wikimedia Commons for a lecture's topic (with credit). */
   app.get<L & { Querystring: { kind?: string } }>("/api/study/courses/:id/lectures/:lid/pictures", async (req) => st.lecturePictures(req.params.id, req.params.lid, undefined, req.query.kind === "gif" || req.query.kind === "video" ? req.query.kind : "image"));
   /** Search across all courses: `?q=`. */
+  // Kept lecture recordings: sent as audio, played back with ranges (so the player can jump to any minute).
+  app.addContentTypeParser(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg"], { parseAs: "buffer", bodyLimit: 400 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+  app.post<L>("/api/study/courses/:id/lectures/:lid/recording", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
+    const mime = String(req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: "Send the recording as audio (WebM, Ogg, MP4 or WAV)." });
+    return st.saveRecording(req.params.id, req.params.lid, req.body, mime);
+  });
+  app.get<L>("/api/study/courses/:id/lectures/:lid/recording", async (req, reply) => {
+    const f = await st.recordingFile(req.params.id, req.params.lid);
+    const size = f ? await stat(f.path).then((x) => x.size, () => -1) : -1;
+    if (!f || size < 0) return reply.code(404).send({ error: "This lecture has no kept recording." });
+    reply.header("accept-ranges", "bytes").type(f.mime);
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (!m || (!m[1] && !m[2])) return reply.header("content-length", size).send(createReadStream(f.path));
+    const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start >= size || start > end) return reply.code(416).header("content-range", `bytes */${size}`).send();
+    return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).send(createReadStream(f.path, { start, end }));
+  });
+  app.delete<L>("/api/study/courses/:id/lectures/:lid/recording", async (req) => {
+    await st.removeRecording(req.params.id, req.params.lid);
+    return { ok: true };
+  });
+  app.get("/api/study/recordings", async () => st.recordingSettings());
+  app.put<{ Body: { keep?: boolean; deleteAfter?: "never" | "30" | "90" | "semester"; asked?: boolean } }>("/api/study/recordings", async (req) => st.setRecordingSettings(req.body ?? {}));
+
   // The course models: which Hebrew model is on the computer, the models to choose from, and a course waiting for its own.
   app.get("/api/study/model", async () => (st.modelState ? st.modelState() : { switched: false, models: [] }));
   app.post("/api/study/model/now", async () => {
@@ -210,9 +236,10 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       courseSummary: d.courseSummary ?? null,
     };
   });
-  app.patch<C & { Body: { name?: string; field?: string; examDate?: string; model?: string } }>("/api/study/courses/:id", async (req) => {
+  app.patch<C & { Body: { name?: string; field?: string; examDate?: string; model?: string; semesterEnd?: string } }>("/api/study/courses/:id", async (req) => {
     if (typeof req.body?.examDate === "string") return st.setExam(req.params.id, req.body.examDate);
     if (typeof req.body?.model === "string") return st.setModel(req.params.id, req.body.model);
+    if (typeof req.body?.semesterEnd === "string") return st.setSemesterEnd(req.params.id, req.body.semesterEnd);
     return typeof req.body?.field === "string" ? st.setField(req.params.id, req.body.field) : st.renameCourse(req.params.id, String(req.body?.name ?? ""));
   });
   app.delete<C>("/api/study/courses/:id", async (req) => {

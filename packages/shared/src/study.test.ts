@@ -384,3 +384,22 @@ test("game development is a field of study: found from the course, with its own 
   assert.match(STUDY_FIELD_HINTS.gamedev ?? "", /Unity/);
   for (const f of STUDY_FIELDS) assert.ok(STUDY_FIELD_HINTS[f.id], `hint for ${f.id}`);
 });
+
+test("recordings: the semester's end and when a kept recording is due", async () => {
+  const { semesterEnd, recordingExpired } = await import("./study.js");
+  assert.equal(semesterEnd({ course: { examDate: "2027-01-20" }, syllabus: { exams: [{ date: "2027-02-12" }, { date: "2027-01-05" }] } }), "2027-02-12");
+  assert.equal(semesterEnd({ course: { examDate: "2027-01-20", semesterEnd: "2027-03-01" } }), "2027-03-01");
+  assert.equal(semesterEnd({ course: {} }), undefined);
+  const t = Date.parse("2026-11-01T10:00:00");
+  assert.equal(recordingExpired({ t }, { deleteAfter: "never" }, undefined, t + 400 * 864e5), false);
+  assert.equal(recordingExpired({ t }, { deleteAfter: "30" }, undefined, t + 31 * 864e5), true);
+  assert.equal(recordingExpired({ t }, { deleteAfter: "semester" }, undefined, t + 400 * 864e5), false);
+  assert.equal(recordingExpired({ t }, { deleteAfter: "semester" }, "2027-02-12", Date.parse("2027-02-14T12:00:00")), true);
+});
+
+test("recordings: a sync from the phone keeps the computer's recording", () => {
+  const base = { course: { id: "c", name: "x", createdAt: 1 }, lectures: [], cards: [], reviews: [], quizzes: [] } as unknown as StudyCourseData;
+  const pc = { ...base, lectures: [{ id: "l", title: "a", date: "2026-11-16", text: "abc", recording: { t: 5, bytes: 9000, mime: "audio/webm" } }] } as StudyCourseData;
+  const phone = { ...base, lectures: [{ id: "l", title: "a", date: "2026-11-16", text: "abcdef", summary: "s" }] } as StudyCourseData;
+  assert.equal(mergeCourseData(pc, phone).lectures[0]?.recording?.bytes, 9000);
+});

@@ -2813,3 +2813,12 @@ html.handheld .palette-list button { min-height: 44px; }
 /* A course waiting for its own model (study). */
 .study-wait { border-color: color-mix(in srgb, var(--warn, #e8c46a) 45%, var(--border)); display: flex; flex-direction: column; gap: 8px; margin-block: 8px; }
 .study-wait p { margin: 0; }
+/* A lecture's kept recording: the player, and minute marks that play from there. */
+.study-audio { display: flex; flex-direction: column; gap: 6px; margin-block: 8px; }
+.study-audio audio { width: 100%; }
+.study-audio .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.study-stamp { border: 0; background: transparent; color: var(--accent); padding: 0 4px 0 0; font: inherit; cursor: pointer; min-height: 0; }
+.study-stamp:hover { text-decoration: underline; }
+.study-rec-ask { display: flex; flex-direction: column; gap: 8px; }
+.study-rec-ask p { margin: 0; }
+.study-rec-ask .row { display: flex; gap: 8px; flex-wrap: wrap; }

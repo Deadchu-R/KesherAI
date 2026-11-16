@@ -8,7 +8,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -253,6 +253,99 @@ export class Study {
     return d.course;
   }
 
+  /** Recordings are kept in their own folder (audio, not JSON): one file per lecture. */
+  private recDir(id: string): string {
+    if (!/^[\w-]{1,80}$/.test(id)) throw Object.assign(new Error("No such course."), { statusCode: 404 });
+    return join(this.dir, "recordings", id);
+  }
+
+  /** @returns The lecture's kept recording file and type, if it has one. */
+  async recordingFile(id: string, lectureId: string): Promise<{ path: string; mime: string; bytes: number } | undefined> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    if (!l.recording) return undefined;
+    const path = join(this.recDir(id), `${lectureId.replace(/[^\w-]/g, "")}.audio`);
+    return { path, mime: l.recording.mime, bytes: l.recording.bytes };
+  }
+
+  /**
+   * Keeps a lecture's recording (from the computer's recorder or the phone's, on sync).
+   *
+   * @param data - The audio (WebM/Ogg/MP4/WAV), at most 400 MB.
+   * @param mime - Its type.
+   */
+  async saveRecording(id: string, lectureId: string, data: Buffer, mime: string): Promise<StudyLecture> {
+    if (!/^audio\/(webm|ogg|mp4|wav|x-wav|mpeg)$/.test(mime)) throw Object.assign(new Error("Send the recording as audio (WebM, Ogg, MP4 or WAV)."), { statusCode: 415 });
+    if (data.length < 1000 || data.length > 400 * 1024 * 1024) throw Object.assign(new Error("The recording is empty or larger than 400 MB."), { statusCode: 400 });
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    await mkdir(this.recDir(id), { recursive: true });
+    const path = join(this.recDir(id), `${lectureId.replace(/[^\w-]/g, "")}.audio`);
+    await writeFile(`${path}.tmp`, data);
+    await rename(`${path}.tmp`, path);
+    l.recording = { t: Date.now(), bytes: data.length, mime };
+    await this.save(d);
+    return l;
+  }
+
+  /** Deletes a lecture's kept recording (its transcript stays). */
+  async removeRecording(id: string, lectureId: string): Promise<void> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    await rm(join(this.recDir(id), `${lectureId.replace(/[^\w-]/g, "")}.audio`), { force: true });
+    delete l.recording;
+    await this.save(d);
+  }
+
+  /** What happens to kept recordings (Settings → Study). */
+  async recordingSettings(): Promise<StudyRecordingSettings> {
+    const j: Partial<StudyRecordingSettings> = await readFile(join(this.dir, "_recordings.json"), "utf8").then((t) => JSON.parse(t) as Partial<StudyRecordingSettings>, () => ({}));
+    const after = ["never", "30", "90", "semester"].includes(String(j.deleteAfter)) ? (j.deleteAfter as StudyRecordingSettings["deleteAfter"]) : RECORDING_DEFAULTS.deleteAfter;
+    return { keep: typeof j.keep === "boolean" ? j.keep : RECORDING_DEFAULTS.keep, deleteAfter: after, ...(j.asked ? { asked: true } : {}) };
+  }
+
+  /** Changes them (and deletes what the new choice says is due). */
+  async setRecordingSettings(change: Partial<StudyRecordingSettings>): Promise<StudyRecordingSettings> {
+    const cur = await this.recordingSettings();
+    const next: StudyRecordingSettings = {
+      keep: typeof change.keep === "boolean" ? change.keep : cur.keep,
+      deleteAfter: change.deleteAfter && ["never", "30", "90", "semester"].includes(change.deleteAfter) ? change.deleteAfter : cur.deleteAfter,
+      ...(change.asked || cur.asked ? { asked: true } : {}),
+    };
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(join(this.dir, "_recordings.json"), JSON.stringify(next));
+    await this.cleanRecordings().catch(() => undefined);
+    return next;
+  }
+
+  /** Sets when her semester ends (YYYY-MM-DD), for "delete after the semester"; "" clears it. */
+  async setSemesterEnd(id: string, date: string): Promise<StudyCourse> {
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw Object.assign(new Error("The date is YYYY-MM-DD."), { statusCode: 400 });
+    const d = await this.get(id);
+    if (date) d.course.semesterEnd = date;
+    else delete d.course.semesterEnd;
+    await this.save(d);
+    return d.course;
+  }
+
+  /** Deletes kept recordings whose time has come (on start, daily, and when the choice changes). */
+  async cleanRecordings(now = Date.now()): Promise<number> {
+    const settings = await this.recordingSettings();
+    if (settings.deleteAfter === "never") return 0;
+    let n = 0;
+    for (const c of await this.list()) {
+      const d = await this.get(c.id).catch(() => undefined);
+      if (!d) continue;
+      const end = semesterEnd(d);
+      for (const l of d.lectures) {
+        if (!l.recording || !recordingExpired(l.recording, settings, end, now)) continue;
+        await this.removeRecording(d.course.id, l.id).catch(() => undefined);
+        n++;
+      }
+    }
+    return n;
+  }
+
   /** Sets the course's exam date (YYYY-MM-DD), or clears it with "". */
   async setExam(id: string, date: string): Promise<StudyCourse> {
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw Object.assign(new Error("The date is YYYY-MM-DD."), { statusCode: 400 });
@@ -297,6 +390,7 @@ export class Study {
   /** Removes a course and everything in it. */
   async removeCourse(id: string): Promise<void> {
     await rm(this.file(id), { force: true });
+    await rm(this.recDir(id), { recursive: true, force: true }).catch(() => undefined);
     this.cache.delete(id);
     const gone = await this.removedCourses();
     if (!gone.includes(id)) await writeFile(join(this.dir, "_removed.json"), JSON.stringify([...gone, id].slice(-2000)));
@@ -370,6 +464,7 @@ export class Study {
     const d = await this.get(id);
     d.lectures = d.lectures.filter((l) => l.id !== lectureId);
     d.removed = [...(d.removed ?? []), lectureId].slice(-5000);
+    await rm(join(this.recDir(id), `${lectureId.replace(/[^\w-]/g, "")}.audio`), { force: true }).catch(() => undefined);
     for (const c of d.cards) if (c.lectureId === lectureId) delete c.lectureId;
     await this.save(d);
   }

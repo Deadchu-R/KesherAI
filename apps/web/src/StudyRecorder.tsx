@@ -11,19 +11,24 @@ const PIECE_SEC = 30;
 /**
  * Records a lecture (the microphone, and in a Zoom or Teams lesson on the computer also the computer's sound), turns
  * each half minute into text with the computer's speech engine as it goes, and hands the transcript (with minute
- * marks and the ⭐ marks) to be saved as a lecture. The audio itself is not kept. Works on the computer and from the
+ * marks and the ⭐ marks) to be saved as a lecture, with the audio when she keeps it. Works on the computer and from the
  * phone through remote.
  *
- * @param props.onDone - Called with the transcript when the recording stops (empty when nothing was said).
+ * @param props.onDone - Called with the transcript when the recording stops (empty when nothing was said), and the audio
+ *   when it is kept.
  * @param props.onCancel - Called when the person closes it before starting.
  */
-export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => void; onCancel: () => void }) {
+export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string, audio?: Blob) => void; onCancel: () => void }) {
   const [state, setState] = useState<"idle" | "recording" | "paused" | "finishing">("idle");
   const [lines, setLines] = useState<string[]>([]);
   const [secs, setSecs] = useState(0);
   const [error, setError] = useState("");
   const [withSystem, setWithSystem] = useState(false);
   const [awake, setAwake] = useState(true);
+  // Keep the audio (Settings → Study decides the default), so a minute mark can play from there.
+  const [keep, setKeep] = useState(true);
+  useEffect(() => void api<{ keep: boolean }>("/api/study/recordings").then((r) => setKeep(r.keep), () => undefined), []);
+  const canKeep = typeof MediaRecorder !== "undefined";
   // Live translation of each half minute ("" off), shown under the transcript; the lecture keeps the original.
   const [translateTo, setTranslateTo] = useState<"" | "he" | "en">("");
   const [translated, setTranslated] = useState<string[]>([]);
@@ -72,6 +77,21 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
     const mix = ctx.createGain();
     ctx.createMediaStreamSource(mic).connect(mix);
     if (sys) ctx.createMediaStreamSource(sys).connect(mix);
+    // The kept audio: Opus in WebM at speech quality (~20 MB for 90 minutes), paused with the clock.
+    let audio: MediaRecorder | undefined;
+    const parts: Blob[] = [];
+    if (keep && canKeep) {
+      try {
+        const dest = ctx.createMediaStreamDestination();
+        mix.connect(dest);
+        const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t));
+        audio = new MediaRecorder(dest.stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24_000 });
+        audio.ondataavailable = (e) => e.data.size && parts.push(e.data);
+        audio.start(10_000);
+      } catch {
+        audio = undefined;
+      }
+    }
     const node = ctx.createScriptProcessor(4096, 1, 1);
     mix.connect(node);
     node.connect(mute);
@@ -141,6 +161,7 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
         rec.current = null;
         busy.recording = false;
         flush();
+        const kept = audio && audio.state !== "inactive" ? new Promise<Blob>((res) => { audio!.onstop = () => res(new Blob(parts, { type: (audio!.mimeType || "audio/webm").split(";")[0] })); audio!.stop(); }) : undefined;
         node.disconnect();
         [mic, sys].forEach((st) => st?.getTracks().forEach((t) => t.stop()));
         void ctx.close();
@@ -148,9 +169,10 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
         setState("finishing");
         await queue;
         await Promise.all(reading);
+        const blob = await kept;
         setLines((ls) => {
           // Slides were read beside the speech: back into time order.
-          onDone([...ls].sort((a, b) => stampSeconds(a) - stampSeconds(b)).join("\n"));
+          onDone([...ls].sort((a, b) => stampSeconds(a) - stampSeconds(b)).join("\n"), blob && blob.size > 1000 ? blob : undefined);
           return ls;
         });
       },
@@ -160,10 +182,12 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
       paused.current = !paused.current;
       if (paused.current) {
         flush();
+        if (audio?.state === "recording") audio.pause();
         pausedAt = Date.now();
         setState("paused");
       } else {
         pausedFor += Date.now() - pausedAt;
+        if (audio?.state === "paused") audio.resume();
         pieceAt = now();
         setState("recording");
       }
@@ -179,7 +203,8 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
     return (
       <section className="card study-recorder">
         <h2>{L("הקלטת הרצאה", "Record a lecture")}</h2>
-        <p className="muted small">{L("כל חצי דקה הופכת לטקסט במחשב, בזמן ההקלטה. בסוף נשמרת הרצאה עם התמלול והדקות. ההקלטה עצמה לא נשמרת.", "Every half minute becomes text on the computer while you record. At the end a lecture is saved with the transcript and minutes. The audio itself is not kept.")}</p>
+        <p className="muted small">{L("כל חצי דקה הופכת לטקסט במחשב, בזמן ההקלטה. בסוף נשמרת הרצאה עם התמלול והדקות.", "Every half minute becomes text on the computer while you record. At the end a lecture is saved with the transcript and minutes.")}</p>
+        {canKeep && <label className="study-check"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> {L("לשמור את ההקלטה (לנגן מכל הערה או דקה)", "Keep the recording (play from any note or minute)")}</label>}
         {canSystem && <label className="study-check"><input type="checkbox" checked={withSystem} onChange={(e) => setWithSystem(e.target.checked)} /> {L("שיעור בזום או ב-Teams: להקליט גם את הקול של המחשב", "A Zoom or Teams lesson: also record the computer's sound")}</label>}
         <label className="study-check">{L("תרגום חי: ", "Live translation: ")}
           <select value={translateTo} onChange={(e) => setTranslateTo(e.target.value as "" | "he" | "en")}>

@@ -234,6 +234,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     return { ...studySwitch.status(), ...(hebrew ? { hebrew } : {}), models: list.map((m) => `llamacpp/${m.name.replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}`) };
   };
   study.switchNow = () => studySwitch.now();
+  // Kept lecture recordings whose time has come are deleted (Settings → Study): soon after start, then daily.
+  const cleanRec = () => void study.cleanRecordings().catch(() => undefined);
+  setTimeout(cleanRec, 120_000).unref?.();
+  setInterval(cleanRec, 24 * 3600_000).unref?.();
   // Knowledge bases: the user's folders and web pages, searchable by the models, with sources.
   // Search by meaning: an embedding model (KesherAI's own in a second llama.cpp server, or one the user made active).
   // Assigned below, once the engine exists; the knowledge bases ask for it when they search.

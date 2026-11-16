@@ -23,6 +23,8 @@ export interface StudyCourse {
   examDate?: string;
   /** The model that writes for this course (a model id); none = automatic (the best Hebrew model on the computer). */
   model?: string;
+  /** When her semester ends (YYYY-MM-DD), written by her when the syllabus and exam date do not say. */
+  semesterEnd?: string;
 }
 
 /** A term from a lecture, Hebrew with its English (medical) name. */
@@ -44,6 +46,8 @@ export interface StudyLecture {
   diagram?: string;
   /** A few English words to find pictures of the lecture's topic (written with the summary), e.g. "heart anatomy". */
   picture?: string;
+  /** The lecture's kept recording, on the computer (play from any [mm:ss] mark); none when not kept. */
+  recording?: { t: number; bytes: number; mime: string };
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
   /** Her own notes beside the summary (what the lecturer stressed, what to ask, what she did not get). */
@@ -580,6 +584,43 @@ export function pictureQueries(l: Pick<StudyLecture, "title" | "terms" | "pictur
   return [...new Set(all)];
 }
 
+/** What happens to kept lecture recordings (Settings → Study). */
+export interface StudyRecordingSettings {
+  /** Keep the audio of new recordings (the default). */
+  keep: boolean;
+  /** Delete kept recordings: never, some days after the lecture, or after the course's semester ends. */
+  deleteAfter: "never" | "30" | "90" | "semester";
+  /** She was asked once whether to change it (after her first kept recording). */
+  asked?: boolean;
+}
+
+export const RECORDING_DEFAULTS: StudyRecordingSettings = { keep: true, deleteAfter: "never" };
+
+/**
+ * When a course's semester ends, for deleting its recordings "after the semester": the date she wrote, else the last
+ * exam in the syllabus, else the course's exam date.
+ *
+ * @returns YYYY-MM-DD, or undefined when nothing says.
+ */
+export function semesterEnd(d: { course: { semesterEnd?: string; examDate?: string }; syllabus?: { exams?: Array<{ date: string }> } | null }): string | undefined {
+  if (d.course.semesterEnd) return d.course.semesterEnd;
+  const exams = (d.syllabus?.exams ?? []).map((e) => e.date).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+  return exams.at(-1) ?? d.course.examDate;
+}
+
+/**
+ * Whether a kept recording is due for deleting.
+ *
+ * @param rec - The recording (when it was kept).
+ * @param end - The course's semester end (YYYY-MM-DD), if known.
+ * @param now - Now (ms).
+ */
+export function recordingExpired(rec: { t: number }, settings: Pick<StudyRecordingSettings, "deleteAfter">, end: string | undefined, now = Date.now()): boolean {
+  if (settings.deleteAfter === "never") return false;
+  if (settings.deleteAfter === "semester") return !!end && now > Date.parse(`${end}T23:59:59`) + 24 * 3600_000;
+  return now - rec.t > Number(settings.deleteAfter) * 24 * 3600_000;
+}
+
 /** A free picture from Wikimedia Commons for a lecture, with its credit. */
 export interface StudyPicture {
   /** The picture, or a video's still (an upload.wikimedia.org address, or a data: copy the computer fetched). */
@@ -1104,9 +1145,12 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
       const pick = lectureWeight(y) > lectureWeight(x) || (lectureWeight(y) === lectureWeight(x) && y.text.length > x.text.length) ? y : x;
       // Her notes are hers: the newer notes win whichever copy has the better summary.
       const notes = (y.notesT ?? 0) > (x.notesT ?? 0) ? y : x;
-      if (notes.notesT === pick.notesT) return pick;
+      // The kept recording lives on the computer: whichever copy knows of it (the newer one if both).
+      const rec = (y.recording?.t ?? 0) > (x.recording?.t ?? 0) ? y.recording : x.recording;
+      const withRec = (l: StudyLecture): StudyLecture => (rec ? { ...l, recording: rec } : l);
+      if (notes.notesT === pick.notesT) return withRec(pick);
       const { notes: _n, notesT: _t, ...rest } = pick;
-      return { ...rest, ...(notes.notes ? { notes: notes.notes } : {}), ...(notes.notesT ? { notesT: notes.notesT } : {}) };
+      return withRec({ ...rest, ...(notes.notes ? { notes: notes.notes } : {}), ...(notes.notesT ? { notesT: notes.notesT } : {}) });
     }),
     cards: byId(a.cards, b.cards, gone, (x, y) => (lastReview(y) > lastReview(x) ? y : x)),
     reviews,
