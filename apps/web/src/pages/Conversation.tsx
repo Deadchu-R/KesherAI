@@ -9,7 +9,8 @@ import { ReportDialog } from "../ReportDialog";
 import { ChatBarButton, barShows, useBarDefaults } from "../ChatBar";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
 import { api, withToken } from "../api";
-import { desktop, refreshLibrary, useActivity, useLibrary } from "../library";
+import { desktop, refreshLibrary, toast, useActivity, useLibrary } from "../library";
+import { chatStatus, kTokens } from "../chat-status";
 import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
@@ -509,6 +510,14 @@ export function ConversationPage({ id }: { id: string }) {
       setInput("");
       setError("");
       await api(`/api/conversations/${id}/goal`, { method: "POST", body: { goal: goal[1] ?? "" } }).catch((e: Error) => setError(e.message));
+      return;
+    }
+    // "/status": the model, the context the last call used and the tokens so far, as one line; nothing is sent.
+    if (/^\/status$/i.test(input.trim())) {
+      setInput("");
+      const st = chatStatus(events);
+      const model = models.find((m) => m.id === conv.modelId)?.name ?? conv.modelId;
+      toast(L(`${model} · הקשר: ${kTokens(st.context)} טוקנים · סה״כ ${kTokens(st.input)} נכנסו, ${kTokens(st.output)} יצאו (${st.calls} קריאות)`, `${model} · context: ${kTokens(st.context)} tokens · in total ${kTokens(st.input)} in, ${kTokens(st.output)} out (${st.calls} calls)`));
       return;
     }
     // "/side …" (or "/btw …"): a question on the side that does not enter the chat.
