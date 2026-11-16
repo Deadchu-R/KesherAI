@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -83,6 +83,16 @@ function pieces(text, size = 6000) {
 /** Sends a course to a classmate as a file: the phone's share sheet, or a download. */
 async function shareFile(c) {
   const f = new File([JSON.stringify(shareCourse(toData(c)))], `${c.name}.kesherai-course.json`, { type: "application/json" });
+  if (navigator.canShare?.({ files: [f] })) return navigator.share({ files: [f], title: c.name }).catch(() => undefined);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(f);
+  a.download = f.name;
+  a.click();
+}
+
+/** The course's cards for Anki or Quizlet (tab-separated text), through Android's share sheet. */
+async function ankiShare(c) {
+  const f = new File([`#separator:tab\n#html:true\n${cardsToTsv(c.cards ?? [])}\n`], `${c.name}.anki.txt`, { type: "text/plain" });
   if (navigator.canShare?.({ files: [f] })) return navigator.share({ files: [f], title: c.name }).catch(() => undefined);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(f);
@@ -421,6 +431,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", disabled: !c.lectures.length, onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן", "Quiz")),
         el("button", { type: "button", disabled: !c.lectures.length, onclick: () => go({ at: "ask", course: c.id }) }, L("שאלי את הקורס", "Ask the course")),
         el("button", { type: "button", onclick: () => void shareFile(c) }, L("שיתוף הקורס", "Share the course")),
+        c.cards?.length ? el("button", { type: "button", onclick: () => void ankiShare(c) }, L("ייצוא ל-Anki / Quizlet", "Export to Anki / Quizlet")) : "",
+        el("button", { type: "button", onclick: () => ankiPick.click() }, L("ייבוא כרטיסיות", "Import cards")),
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),
@@ -431,6 +443,23 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         sel.value = c.fieldChosen ? c.field : "";
         return sel;
       })()));
+    // Cards from an Anki or Quizlet export, added as new cards (the same front and back is skipped).
+    const ankiPick = el("input", { type: "file", hidden: true, accept: ".txt,.tsv,.csv,text/plain", onchange: async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      const have = new Set((c.cards ?? []).map((k) => `${k.front}\u0000${k.back}`));
+      let n = 0;
+      for (const x of cardsFromTsv(await f.text())) {
+        if (have.has(`${x.front}\u0000${x.back}`)) continue;
+        have.add(`${x.front}\u0000${x.back}`);
+        const e2 = createEmptyCard(new Date());
+        c.cards.push({ id: uid(), front: x.front, back: x.back, format: "text", createdAt: Date.now(), due: e2.due.toISOString(), fsrs: JSON.parse(JSON.stringify(e2)) });
+        n++;
+      }
+      if (commit()) { alert(L(`נוספו ${n} כרטיסיות`, `${n} cards added`)); draw(); }
+    } });
+    root.append(ankiPick);
     const exam = el("input", { type: "date", value: c.examDate || "", "aria-label": L("תאריך המבחן", "Exam date"), onchange: (e) => { const v = e.target.value; if (v) c.examDate = v; else delete c.examDate; if (commit()) draw(); } });
     root.append(el("label", { class: "ph-filter" }, L("מבחן: ", "Exam: "), exam));
     root.append(syllabusCard(c));

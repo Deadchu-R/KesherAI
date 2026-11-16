@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -254,4 +254,11 @@ test("studyNext: the most urgent step first", () => {
   assert.equal(studyNext([course("a", { lectures: [lec] }), course("b", { cards: [card] })], now)?.kind, "review");
   const syl = { exams: [], assignments: [{ title: "עבודה", date: "2026-11-17" }], weeks: [], t: 0 };
   assert.deepEqual(studyNext([course("b", { cards: [card] }), course("c", { syllabus: syl })], now), { kind: "due-soon", courseId: "c", course: "c", what: "עבודה", days: 1 });
+});
+
+test("Anki / Quizlet: cards out as tab-separated lines and back in", () => {
+  const tsv = cardsToTsv([{ front: "מה?\nשתי שורות", back: "כך\tבדיוק" }, { front: "b", back: "c" }]);
+  assert.equal(tsv, "מה?<br>שתי שורות\tכך בדיוק\nb\tc");
+  assert.deepEqual(cardsFromTsv(`#separator:tab\n${tsv}\n\n`), [{ front: "מה?\nשתי שורות", back: "כך בדיוק" }, { front: "b", back: "c" }]);
+  assert.deepEqual(cardsFromTsv('"דיגוקסין";"<b>מגביר</b> כוח"\nרק צד אחד'), [{ front: "דיגוקסין", back: "מגביר כוח" }]);
 });

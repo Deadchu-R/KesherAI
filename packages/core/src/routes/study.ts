@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
+import { cardsToTsv, examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import WebSocket from "ws";
@@ -33,6 +33,13 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : req.body?.mode === "homework" ? "homework" : "ask"));
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   app.post<C & { Params: { cid: string } }>("/api/study/courses/:id/cards/:cid/explain", async (req) => st.explainCard(req.params.id, req.params.cid));
+  /** Cards for Anki or Quizlet (tab-separated text), and cards from their exports (`{ text }`). */
+  app.get<C>("/api/study/courses/:id/anki", async (req, reply) => {
+    const d = await st.get(req.params.id);
+    const name = encodeURIComponent(`${d.course.name}.anki.txt`);
+    return reply.header("content-type", "text/plain; charset=utf-8").header("content-disposition", `attachment; filename*=UTF-8''${name}`).send(`#separator:tab\n#html:true\n${cardsToTsv(d.cards)}\n`);
+  });
+  app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/cards/import", { bodyLimit: 8 * 1024 * 1024 }, async (req) => st.importCards(req.params.id, String(req.body?.text ?? "")));
   /** A syllabus: `{ text }` → what it says (exams, assignments, weekly topics) for her to confirm; then PUT keeps it. */
   app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/syllabus/read", { bodyLimit: 4 * 1024 * 1024 }, async (req) => st.readSyllabus(String(req.body?.text ?? "")));
   app.put<C & { Body: { syllabus?: unknown } }>("/api/study/courses/:id/syllabus", async (req) => ({ syllabus: await st.setSyllabus(req.params.id, req.body?.syllabus ?? null) }));

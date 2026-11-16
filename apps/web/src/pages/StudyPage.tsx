@@ -81,6 +81,18 @@ async function shareCourseFile(id: string, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
+/** The course's cards for Anki or Quizlet (tab-separated text), downloaded or shared. */
+async function ankiFile(id: string, name: string) {
+  const res = await fetch(withToken(`/api/study/courses/${id}/anki`)).catch(() => undefined);
+  if (!res?.ok) return toast(L("לא הצלחתי להכין את הקובץ.", "Could not make the file."));
+  const file = new File([await res.blob()], `${name}.anki.txt`, { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
+
 function BackLink({ to }: { to: string }) {
   return <a className="study-back" href={to}>{L("› חזרה", "‹ Back")}</a>;
 }
@@ -351,6 +363,16 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
           <input type="date" value={info.course.examDate ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { examDate: e.target.value } }))) load(); }} />
         </label>
         <button type="button" className="small" onClick={() => void shareCourseFile(id, info.course.name)}>{L("שיתוף הקורס", "Share the course")}</button>
+        {info.cards > 0 && <button type="button" className="small" title={L("קובץ טקסט שנכנס ל-Anki (ייבוא ← הערות בטקסט פשוט) ול-Quizlet", "A text file for Anki (Import → Notes in plain text) and Quizlet")} onClick={() => void ankiFile(id, info.course.name)}>{L("ייצוא ל-Anki / Quizlet", "Export to Anki / Quizlet")}</button>}
+        <label className="button small" title={L("קובץ ייצוא של Anki או Quizlet (טקסט מופרד בטאבים)", "An Anki or Quizlet export (tab-separated text)")}>{L("ייבוא כרטיסיות", "Import cards")}
+          <input type="file" hidden accept=".txt,.tsv,.csv,text/plain" onChange={async (e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (!f) return;
+            const r = await call(api<{ added: number; skipped: number }>(`/api/study/courses/${id}/cards/import`, { method: "POST", body: { text: await f.text() } }));
+            if (r) { toast(L(`נוספו ${r.added} כרטיסיות${r.skipped ? ` (${r.skipped} כבר היו)` : ""}`, `${r.added} cards added${r.skipped ? ` (${r.skipped} already there)` : ""}`)); load(); }
+          }} />
+        </label>
         <button type="button" className="small ghost" onClick={async () => {
           if (!confirm(L(`למחוק את הקורס "${info.course.name}" עם כל ההרצאות והכרטיסיות? אי אפשר לבטל.`, `Delete "${info.course.name}" with all its lectures and cards? This cannot be undone.`))) return;
           if (await call(api(`/api/study/courses/${id}`, { method: "DELETE" }))) go("#/study");

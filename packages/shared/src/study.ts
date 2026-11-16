@@ -606,6 +606,34 @@ export function pastExamStyle(exams: StudyPastExam[], budget = 8000): string {
   return `Write the questions like these past exams of this course: the same kinds of questions, format, length, difficulty and topics they stress (do not copy their questions word for word; write new ones, only about what the lectures say, never a fact the lectures do not give):\n\n${exams.map((e) => `--- Past exam: ${e.title}\n${e.text.slice(0, each)}`).join("\n\n")}`;
 }
 
+/**
+ * Cards as tab-separated text, one card a line (front, back): what Anki ("Notes in plain text") and Quizlet import.
+ * Line breaks inside a card become <br>, tabs become spaces.
+ */
+export function cardsToTsv(cards: Array<{ front: string; back: string }>): string {
+  const cell = (t: string) => t.replace(/\t/g, " ").replace(/\r?\n/g, "<br>");
+  return cards.map((c) => `${cell(c.front)}\t${cell(c.back)}`).join("\n");
+}
+
+/**
+ * Cards from an Anki or Quizlet export (tab-, semicolon- or comma-separated, one card a line; Anki's "#" header lines
+ * skipped; <br> back to a line break; quoted cells unwrapped). At most 2000.
+ */
+export function cardsFromTsv(text: string): Array<{ front: string; back: string }> {
+  const out: Array<{ front: string; back: string }> = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith("#")) continue;
+    const sep = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+    const [f, ...rest] = line.split(sep);
+    const un = (t = "") => t.trim().replace(/^"([\s\S]*)"$/, "$1").replace(/""/g, '"').replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();
+    const front = un(f).slice(0, 1000);
+    const back = un(rest.join(sep)).slice(0, 3000);
+    if (front && back) out.push({ front, back });
+    if (out.length >= 2000) break;
+  }
+  return out;
+}
+
 /** "What to study now": one next step across her courses, most urgent first. */
 export interface StudyNext {
   kind: "due-soon" | "exam-soon" | "review" | "weak" | "summarize" | "cards" | "focus";

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, dayKey, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -619,6 +619,27 @@ export class Study {
     d.cards.push(card);
     await this.save(d);
     return card;
+  }
+
+  /**
+   * Cards from an Anki or Quizlet export (tab, semicolon or comma separated), added as new cards; the same card
+   * (front and back) already in the course is skipped.
+   */
+  async importCards(id: string, text: string): Promise<{ added: number; skipped: number }> {
+    const d = await this.get(id);
+    const have = new Set(d.cards.map((c) => `${c.front}\u0000${c.back}`));
+    let added = 0;
+    let skipped = 0;
+    for (const x of cardsFromTsv(text)) {
+      if (have.has(`${x.front}\u0000${x.back}`)) { skipped++; continue; }
+      have.add(`${x.front}\u0000${x.back}`);
+      const c = createEmptyCard(new Date());
+      d.cards.push({ id: randomUUID(), front: x.front, back: x.back, format: "text", createdAt: Date.now(), due: c.due.toISOString(), fsrs: fromCard(c) });
+      added++;
+    }
+    if (d.cards.length > 20_000) throw Object.assign(new Error("A course holds 20000 cards at most."), { statusCode: 400 });
+    if (added) await this.save(d);
+    return { added, skipped };
   }
 
   /** Removes a card. */
