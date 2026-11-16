@@ -326,3 +326,60 @@ export function calcCorrect(answer: number, result: CalcResult): boolean {
   if (result.unit === "gtt/min") return Math.round(answer) === result.value;
   return Math.abs(answer - result.value) <= Math.max(0.05, Math.abs(result.value) * 0.01);
 }
+
+// ── Nursing ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A drug card (the fields nursing drug guides use). Only what the student's material says is filled. */
+export interface StudyDrug {
+  id: string;
+  name: string;
+  /** Brand names (Israeli ones when the material gives them). */
+  brands?: string;
+  drugClass?: string;
+  action?: string;
+  uses?: string;
+  dose?: string;
+  sideEffects?: string;
+  contraindications?: string;
+  nursing?: string;
+  teaching?: string;
+  lectureId?: string;
+}
+
+/** One normal adult lab range. Ranges differ between labs: the page says to check the hospital's own. */
+export interface LabValue {
+  group: "electrolytes" | "blood" | "kidney" | "gases" | "coagulation" | "other";
+  name: string;
+  he: string;
+  range: string;
+  unit: string;
+  note?: string;
+}
+
+/** Common adult reference ranges as taught in nursing courses (textbook values; each lab has its own). */
+export const LAB_VALUES: LabValue[] = [
+  { group: "electrolytes", name: "Sodium (Na⁺)", he: "נתרן", range: "135–145", unit: "mEq/L" },
+  { group: "electrolytes", name: "Potassium (K⁺)", he: "אשלגן", range: "3.5–5.0", unit: "mEq/L" },
+  { group: "electrolytes", name: "Chloride (Cl⁻)", he: "כלוריד", range: "98–106", unit: "mEq/L" },
+  { group: "electrolytes", name: "Calcium (total)", he: "סידן", range: "8.5–10.5", unit: "mg/dL" },
+  { group: "electrolytes", name: "Magnesium (Mg²⁺)", he: "מגנזיום", range: "1.5–2.5", unit: "mg/dL" },
+  { group: "electrolytes", name: "Phosphate", he: "זרחן", range: "2.5–4.5", unit: "mg/dL" },
+  { group: "blood", name: "Hemoglobin", he: "המוגלובין", range: "♀ 12–16 · ♂ 14–18", unit: "g/dL" },
+  { group: "blood", name: "Hematocrit", he: "המטוקריט", range: "♀ 37–47 · ♂ 42–52", unit: "%" },
+  { group: "blood", name: "WBC", he: "כדוריות דם לבנות", range: "4.5–11", unit: "×10³/µL" },
+  { group: "blood", name: "Platelets", he: "טסיות", range: "150–400", unit: "×10³/µL" },
+  { group: "blood", name: "Glucose (fasting)", he: "סוכר בצום", range: "70–99", unit: "mg/dL" },
+  { group: "blood", name: "HbA1c", he: "המוגלובין מסוכרר", range: "< 5.7", unit: "%" },
+  { group: "kidney", name: "Creatinine", he: "קריאטינין", range: "0.6–1.2", unit: "mg/dL" },
+  { group: "kidney", name: "BUN", he: "שתנן בדם", range: "7–20", unit: "mg/dL" },
+  { group: "gases", name: "pH (arterial)", he: "חומציות", range: "7.35–7.45", unit: "" },
+  { group: "gases", name: "PaCO₂", he: "פחמן דו-חמצני", range: "35–45", unit: "mmHg" },
+  { group: "gases", name: "HCO₃⁻", he: "ביקרבונט", range: "22–26", unit: "mEq/L" },
+  { group: "gases", name: "PaO₂", he: "חמצן", range: "80–100", unit: "mmHg" },
+  { group: "gases", name: "SpO₂", he: "רוויון חמצן", range: "95–100", unit: "%" },
+  { group: "coagulation", name: "INR", he: "INR", range: "0.8–1.1", unit: "", note: "on warfarin, usually 2–3" },
+  { group: "coagulation", name: "PT", he: "זמן פרותרומבין", range: "11–13.5", unit: "s" },
+  { group: "coagulation", name: "aPTT", he: "aPTT", range: "30–40", unit: "s" },
+  { group: "other", name: "Digoxin level", he: "רמת דיגוקסין", range: "0.5–2.0", unit: "ng/mL" },
+  { group: "other", name: "Albumin", he: "אלבומין", range: "3.5–5.0", unit: "g/dL" },
+];

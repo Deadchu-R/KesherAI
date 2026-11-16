@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { jsonIn, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { jsonIn, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import type { ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -17,6 +17,8 @@ export interface CourseData {
   cards: StudyCard[];
   reviews: StudyReview[];
   quizzes: StudyQuiz[];
+  /** Drug cards (nursing). */
+  drugs?: StudyDrug[];
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -36,6 +38,12 @@ const QUIZ_PROMPT = `You write a multiple-choice quiz for a student from lecture
 Each question has 4 options, exactly one right; wrong options are plausible. Mix recall, understanding and short clinical cases where the material allows.
 The explanation says why the right answer is right, from the material.
 Answer with JSON only: [{"q": "...", "options": ["...", "...", "...", "..."], "answer": 0, "explain": "...", "lecture": 1}] where "lecture" is the number of the lecture the question comes from.`;
+
+const DRUGS_PROMPT = `You make nursing drug cards from lecture material. ${LANG} ${ONLY_MATERIAL}
+For every drug the material discusses, fill what the material says (leave a field out when it says nothing about it; never guess doses).
+Answer with JSON only: [{"name": "generic name", "brands": "", "drugClass": "", "action": "how it works", "uses": "", "dose": "", "sideEffects": "", "contraindications": "", "nursing": "what the nurse checks and does", "teaching": "what to tell the patient"}]`;
+
+const LICENSING = "Write the questions like the Israeli nursing licensing exam (בחינת רישוי): multiple choice with four options, mostly short patient cases that ask what the nurse should do first or what is most important, with plausible distractors.";
 
 const FORMAT_HINT: Record<StudyFormat, string> = {
   text: "",
@@ -284,7 +292,7 @@ export class Study {
   }
 
   /** Makes a multiple-choice quiz from chosen lectures (or the weak ones, or all). */
-  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean }, signal?: AbortSignal): Promise<StudyQuiz> {
+  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" }, signal?: AbortSignal): Promise<StudyQuiz> {
     const d = await this.get(id);
     let chosen = d.lectures.filter((l) => !p.lectureIds?.length || p.lectureIds.includes(l.id));
     if (p.weak) {
@@ -292,10 +300,10 @@ export class Study {
       if (weak.size) chosen = chosen.filter((l) => weak.has(l.id));
     }
     if (!chosen.length) throw Object.assign(new Error("Add a lecture first."), { statusCode: 400 });
-    const count = Math.max(3, Math.min(30, Number(p.count) || 10));
+    const count = Math.max(3, Math.min(p.style === "licensing" ? 60 : 30, Number(p.count) || 10));
     const budget = Math.floor(48_000 / chosen.length);
     const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
-    const raw = await this.ask(QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal);
+    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
     const questions: StudyQuestion[] = [];
@@ -313,6 +321,51 @@ export class Study {
     if (d.quizzes.length > 200) d.quizzes.splice(0, d.quizzes.length - 200);
     await this.save(d);
     return quiz;
+  }
+
+  /**
+   * Makes drug cards from a lecture, and three flashcards for each new drug (class and action, nursing, side effects).
+   *
+   * @returns The course's drugs after the change.
+   */
+  async makeDrugs(id: string, lectureId: string, signal?: AbortSignal): Promise<StudyDrug[]> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const raw = await this.ask(DRUGS_PROMPT, `Lecture: ${l.title}\n\n${l.text.slice(0, 48_000)}`, signal);
+    const list = jsonIn(raw);
+    if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return drug cards. Try again, or another model."), { statusCode: 502 });
+    const keys = ["brands", "drugClass", "action", "uses", "dose", "sideEffects", "contraindications", "nursing", "teaching"] as const;
+    d.drugs ??= [];
+    const now = new Date();
+    for (const x of list as Array<Record<string, unknown>>) {
+      const name = String(x?.name ?? "").trim().slice(0, 120);
+      if (!name) continue;
+      const drug: StudyDrug = { id: randomUUID(), name, lectureId };
+      for (const k of keys) if (typeof x[k] === "string" && (x[k] as string).trim()) drug[k] = (x[k] as string).trim().slice(0, 1500);
+      const old = d.drugs.findIndex((g) => g.name.toLowerCase() === name.toLowerCase());
+      if (old >= 0) {
+        d.drugs[old] = { ...d.drugs[old], ...drug, id: d.drugs[old]!.id };
+        continue;
+      }
+      d.drugs.push(drug);
+      const card = (front: string, back: string | undefined) => {
+        if (!back) return;
+        const c = createEmptyCard(now);
+        d.cards.push({ id: randomUUID(), front, back, format: "text", kind: "drug", lectureId, createdAt: now.getTime(), due: c.due.toISOString(), fsrs: fromCard(c) });
+      };
+      card(`${name}: לאיזו קבוצה שייכת ואיך פועלת?`, [drug.drugClass, drug.action].filter(Boolean).join(" — ") || undefined);
+      card(`${name}: מה האחות בודקת ועושה?`, drug.nursing);
+      card(`${name}: תופעות לוואי?`, drug.sideEffects);
+    }
+    await this.save(d);
+    return d.drugs;
+  }
+
+  /** Removes a drug card (its flashcards stay). */
+  async removeDrug(id: string, drugId: string): Promise<void> {
+    const d = await this.get(id);
+    d.drugs = (d.drugs ?? []).filter((g) => g.id !== drugId);
+    await this.save(d);
   }
 
   /** Grades a quiz by code and keeps the answers (for the weak topics). */

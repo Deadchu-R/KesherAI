@@ -1348,7 +1348,7 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: calc(12px * var
 /* Phone bottom bar */
 .phone-tabs { display: none; }
 @media (max-width: 760px) {
-  .phone-tabs { position: fixed; z-index: 40; inset-inline: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) calc(0.86 * 100%), transparent); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); border-top: 1px solid var(--border); }
+  .phone-tabs { position: fixed; z-index: 40; inset-inline: 0; bottom: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) calc(0.86 * 100%), transparent); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); border-top: 1px solid var(--border); }
   .phone-tabs .tab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; background: none; border: 0; color: var(--muted); text-decoration: none; border-radius: calc(12px * var(--r-scale, 1)); font: inherit; }
   .phone-tabs .tab span { font-size: 19px; line-height: 1; }
   .phone-tabs .tab small { font-size: 11px; }
@@ -2631,3 +2631,16 @@ html.handheld .palette-list button { min-height: 44px; }
   .study-actions > .button, .study-actions > button { flex: 1 1 auto; justify-content: center; }
 }
 .study-page a.button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 500; }
+.study-drugs, .study-labs { display: flex; flex-direction: column; gap: 12px; }
+.study-drug { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.study-drug-head { width: 100%; height: auto; min-height: 48px; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; background: transparent; border: 0; color: var(--text); text-align: start; }
+.study-drug-head small { color: var(--muted); }
+.study-drug-body { margin: 0; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.study-drug-body dt { font-size: 12.5px; color: var(--muted); }
+.study-drug-body dd { margin: 2px 0 0; color: var(--text-2); line-height: 1.55; }
+.study-lab-table { width: 100%; border-collapse: collapse; }
+.study-lab-table th, .study-lab-table td { padding: 8px 4px; border-bottom: 1px solid var(--border); font-weight: 400; vertical-align: top; }
+.study-lab-table th { text-align: start; }
+.study-lab-table td { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.study-lab-table small { color: var(--muted); }
+.study-option.picked { border-color: var(--accent); }

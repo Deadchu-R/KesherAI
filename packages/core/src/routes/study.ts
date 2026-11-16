@@ -28,6 +28,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       lectures: d.lectures.map(({ text, summary, ...l }) => ({ ...l, chars: text.length, summarized: !!summary, cards: d.cards.filter((c) => c.lectureId === l.id).length })),
       cards: d.cards.length,
       due: d.cards.filter((c) => Date.parse(c.due) <= now).length,
+      drugs: d.drugs ?? [],
       quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length })).slice(-20),
     };
   });
@@ -50,6 +51,11 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<L>("/api/study/courses/:id/lectures/:lid/summarize", async (req) => st.summarize(req.params.id, req.params.lid));
   app.post<L & { Body: { format?: StudyFormat; count?: number } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, req.body ?? {}) }));
 
+  app.post<L>("/api/study/courses/:id/lectures/:lid/drugs", async (req) => ({ drugs: await st.makeDrugs(req.params.id, req.params.lid) }));
+  app.delete<{ Params: { id: string; did: string } }>("/api/study/courses/:id/drugs/:did", async (req) => {
+    await st.removeDrug(req.params.id, req.params.did);
+    return { ok: true };
+  });
   app.get<C & { Querystring: { lecture?: string } }>("/api/study/courses/:id/cards", async (req) => ({ cards: (await st.get(req.params.id)).cards.filter((c) => !req.query.lecture || c.lectureId === req.query.lecture) }));
   app.post<C & { Body: { front: string; back: string; format?: StudyFormat; kind?: string; lectureId?: string } }>("/api/study/courses/:id/cards", async (req) => st.addCard(req.params.id, req.body));
   app.delete<{ Params: { id: string; cid: string } }>("/api/study/courses/:id/cards/:cid", async (req) => {
@@ -59,7 +65,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get<C>("/api/study/courses/:id/review", async (req) => ({ cards: await st.due(req.params.id) }));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
 
-  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean } }>("/api/study/courses/:id/quiz", async (req) => st.makeQuiz(req.params.id, req.body ?? {}));
+  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" } }>("/api/study/courses/:id/quiz", async (req) => st.makeQuiz(req.params.id, req.body ?? {}));
   app.post<{ Params: { id: string; qid: string }; Body: { answers?: number[] } }>("/api/study/courses/:id/quiz/:qid/answers", async (req) => st.answerQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.answers) ? req.body.answers : []));
 
   app.get<C>("/api/study/courses/:id/progress", async (req) => {

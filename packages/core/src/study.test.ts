@@ -10,6 +10,7 @@ const fake = () => ({
   id: "fake",
   turn: (async (req: { messages: Array<{ role: string; content: string }> }) => {
     const sys = req.messages[0]!.content;
+    if (sys.includes("drug cards")) return { text: '[{"name":"Digoxin","drugClass":"Cardiac glycoside","nursing":"Apical pulse a full minute; hold under 60","sideEffects":"Nausea, visual changes"},{"name":""}]' };
     if (sys.includes("flashcards")) return { text: '```json\n[{"front":"מה עושה אינסולין?","back":"מוריד סוכר בדם","kind":"drug"},{"front":"Normal K+?","back":"3.5–5.0 mEq/L","kind":"concept"},{"front":"bad"}]\n```' };
     if (sys.includes("multiple-choice")) return { text: 'Here: [{"q":"Q1","options":["a","b","c","d"],"answer":2,"explain":"because","lecture":1},{"q":"broken","options":["a"],"answer":0}]' };
     return { text: '{"summary":"סיכום","terms":[{"term":"אינסולין","en":"Insulin","explain":"הורמון"}],"diagram":"flowchart LR\\nA-->B"}' };
@@ -42,9 +43,17 @@ test("a course: lecture, summary, cards, review and quiz", async () => {
     const graded = await st.answerQuiz(c.id, quiz.id, [2]);
     assert.equal(graded.score, 1);
 
+    const drugs = await st.makeDrugs(c.id, l.id);
+    assert.equal(drugs.length, 1);
+    assert.equal(drugs[0]!.nursing, "Apical pulse a full minute; hold under 60");
+    assert.equal((await st.get(c.id)).cards.filter((x) => x.kind === "drug" && x.front.startsWith("Digoxin")).length, 3);
+    // The same drug again updates it (no new cards).
+    await st.makeDrugs(c.id, l.id);
+    assert.equal((await st.get(c.id)).drugs?.length, 1);
+
     // Kept on disk.
     const again = new Study(dir, fake);
-    assert.equal((await again.list())[0]?.cards, 2);
+    assert.equal((await again.list())[0]?.cards, 5);
     await assert.rejects(again.get("../etc"), /No such course/);
   } finally {
     await rm(dir, { recursive: true, force: true });

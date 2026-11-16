@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { calcCorrect, practiceProblem, STUDY_FORMATS, type CalcKind, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { calcCorrect, LAB_VALUES, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
@@ -10,7 +10,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
-interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; quizzes: Array<{ id: string; t: number; score?: number; of: number }> }
+interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }> }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; reviews: number }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
@@ -40,6 +40,7 @@ async function call<T>(p: Promise<T>): Promise<T | undefined> {
  */
 export function StudyPage({ hash }: { hash: string }) {
   const parts = hash.split("/").slice(2);
+  if (parts[0] === "labs") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("ערכי מעבדה", "Lab values")}</h1><LabValues /></div>;
   if (parts[0] === "calc") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("חישובי תרופות", "Medication calculations")}</h1><CalcPractice /></div>;
   if (!parts[0]) return <StudyHome />;
   return <CoursePage key={parts[0]} id={parts[0]} tab={parts[1] ?? "lectures"} lectureId={parts[1] === "l" ? parts[2] : undefined} />;
@@ -69,6 +70,7 @@ function StudyHome() {
         <div className="study-actions">
           {firstDue ? <a className="button primary" href={`#/study/${firstDue.id}/review`}>{L(`חזרה על ${due} כרטיסיות`, `Review ${due} cards`)} ▶</a> : <span className="muted">{courses?.length ? L("אין כרטיסיות לחזרה עכשיו.", "No cards to review now.") : L("התחילי בקורס ראשון.", "Start with a first course.")}</span>}
           <a className="button" href="#/study/calc">{L("תרגול חישובי תרופות", "Medication calculations")}</a>
+          <a className="button" href="#/study/labs">{L("ערכי מעבדה", "Lab values")}</a>
         </div>
       </section>
       <h2>{L("הקורסים שלי", "My courses")}</h2>
@@ -99,6 +101,8 @@ const TABS: Array<[string, [string, string]]> = [
   ["quiz", ["בוחן", "Quiz"]],
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
+  ["drugs", ["תרופות", "Drugs"]],
+  ["labs", ["ערכי מעבדה", "Lab values"]],
   ["progress", ["מה עובד בשבילי", "What works for me"]],
 ];
 
@@ -130,6 +134,8 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
+        : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />
+        : on === "labs" ? <LabValues />
         : on === "progress" ? <ProgressView courseId={id} />
         : <Lectures courseId={id} info={info} onChange={load} />}
     </div>
@@ -263,6 +269,10 @@ function LectureView({ courseId, lectureId, onChange }: { courseId: string; lect
       <div className="study-actions">
         <button type="button" className="primary" disabled={!!busy} onClick={() => void makeCards()}>{busy === "cards" ? L("יוצר כרטיסיות…", "Making cards…") : L("צור 12 כרטיסיות", "Make 12 cards")}</button>
         <a className="button" href={`#/study/${courseId}/quiz?l=${l.id}`}>{L("בוחן על ההרצאה", "Quiz on this lecture")}</a>
+        <button type="button" disabled={!!busy} onClick={() => void run("drugs", async () => {
+          const r = await call(api<{ drugs: StudyDrug[] }>(`${base}/drugs`, { method: "POST" }));
+          if (r) { toast(L("כרטיסי התרופות עודכנו", "Drug cards updated")); onChange(); go(`#/study/${courseId}/drugs`); }
+        })}>{busy === "drugs" ? L("כותב כרטיסי תרופות…", "Writing drug cards…") : L("כרטיסי תרופות מההרצאה", "Drug cards from this lecture")}</button>
         <button type="button" className="ghost" onClick={async () => {
           if (!confirm(L("למחוק את ההרצאה? הכרטיסיות שלה נשארות.", "Delete this lecture? Its cards stay."))) return;
           if (await call(api(base, { method: "DELETE" }))) { onChange(); go(`#/study/${courseId}`); }
@@ -355,11 +365,24 @@ function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: Le
   const [i, setI] = useState(0);
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(10);
-  const make = async (weak: boolean) => {
+  const [exam, setExam] = useState(false);
+  const [ends, setEnds] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!ends) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [ends]);
+  const make = async (weak: boolean, licensing = false) => {
     setBusy(true);
-    const z = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz`, { method: "POST", body: { count, weak, ...(only ? { lectureIds: [only] } : {}) } }));
+    const n = licensing ? 30 : count;
+    const z = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz`, { method: "POST", body: { count: n, weak, ...(licensing ? { style: "licensing" } : {}), ...(only ? { lectureIds: [only] } : {}) } }));
     setBusy(false);
-    if (z) { setQuiz(z); setAnswers([]); setI(0); }
+    if (z) {
+      setQuiz(z); setAnswers([]); setI(0); setExam(licensing);
+      // The licensing exam: 90 questions in about two hours, so about 80 seconds each.
+      setEnds(licensing ? Date.now() + z.questions.length * 80_000 : 0);
+    }
   };
   const finish = async () => {
     const r = await call(api<StudyQuiz>(`/api/study/courses/${courseId}/quiz/${quiz!.id}/answers`, { method: "POST", body: { answers } }));
@@ -373,6 +396,7 @@ function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: Le
       <div className="study-actions">
         <button type="button" className="primary" disabled={busy} onClick={() => void make(false)}>{busy ? L("כותב שאלות…", "Writing questions…") : L("התחל בוחן", "Start quiz")}</button>
         {!only && <button type="button" disabled={busy} onClick={() => void make(true)}>{L("על הנושאים החלשים", "On weak topics")}</button>}
+        {!only && <button type="button" disabled={busy} onClick={() => void make(false, true)}>{L("מבחן בסגנון בחינת הרישוי (30 שאלות, עם זמן)", "Licensing-exam style (30 questions, timed)")}</button>}
       </div>
       <p className="muted small">{L("השאלות נכתבות מהחומר שלך בלבד, והבדיקה נעשית בקוד.", "Questions come from your material only; grading is done by code.")}</p>
     </section>
@@ -395,19 +419,25 @@ function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: Le
   );
   const q = quiz.questions[i]!;
   const picked = answers[i];
+  const left = ends ? Math.max(0, Math.round((ends - Date.now()) / 1000)) : 0;
   const src = lectures.find((l) => l.id === q.lectureId);
   return (
     <section className="card study-quiz">
-      <p className="muted small">{L(`שאלה ${i + 1} מתוך ${quiz.questions.length}`, `Question ${i + 1} of ${quiz.questions.length}`)}</p>
+      <p className="muted small">{L(`שאלה ${i + 1} מתוך ${quiz.questions.length}`, `Question ${i + 1} of ${quiz.questions.length}`)}{ends ? <span className={left < 300 ? "warn" : ""} dir="ltr"> · {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}</span> : null}</p>
       <progress max={quiz.questions.length} value={i + (picked !== undefined ? 1 : 0)} aria-hidden="true" />
       <h2 dir="auto">{q.q}</h2>
       <div className="study-options" role="radiogroup">
         {q.options.map((o, k) => {
-          const state = picked === undefined ? "" : k === q.answer ? " right" : k === picked ? " wrong" : "";
+          const state = picked === undefined ? "" : exam ? (k === picked ? " picked" : "") : k === q.answer ? " right" : k === picked ? " wrong" : "";
           return <button key={k} type="button" role="radio" aria-checked={picked === k} disabled={picked !== undefined} className={`study-option${state}`} onClick={() => setAnswers((a) => { const n = [...a]; n[i] = k; return n; })} dir="auto">{o}</button>;
         })}
       </div>
-      {picked !== undefined && (
+      {picked !== undefined && exam && (
+        <div className="study-actions">
+          {i + 1 < quiz.questions.length && left > 0 ? <button type="button" className="primary" onClick={() => setI(i + 1)}>{L("לשאלה הבאה", "Next question")}</button> : <button type="button" className="primary" onClick={() => void finish()}>{L("סיום ובדיקה", "Finish")}</button>}
+        </div>
+      )}
+      {picked !== undefined && !exam && (
         <div className="study-explain">
           <p dir="auto"><b>{picked === q.answer ? L("✓ נכון.", "✓ Right.") : L("לא נכון.", "Not right.")}</b> {q.explain}</p>
           {src && <a href={`#/study/${courseId}/l/${src.id}`} className="small">{L("מקור", "Source")}: {src.title}</a>}
@@ -416,6 +446,70 @@ function Quiz({ courseId, lectures, onChange }: { courseId: string; lectures: Le
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+function Drugs({ courseId, info, onChange }: { courseId: string; info: CourseInfo; onChange: () => void }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState<string>();
+  const shown = info.drugs.filter((d) => !q || `${d.name} ${d.brands ?? ""} ${d.drugClass ?? ""}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
+  const rows: Array<[keyof StudyDrug, [string, string]]> = [["brands", ["שמות מסחריים", "Brand names"]], ["drugClass", ["קבוצה", "Class"]], ["action", ["מנגנון פעולה", "How it works"]], ["uses", ["התוויות", "Uses"]], ["dose", ["מינון ודרך מתן", "Dose and route"]], ["sideEffects", ["תופעות לוואי", "Side effects"]], ["contraindications", ["התוויות נגד", "Contraindications"]], ["nursing", ["תפקיד האחות", "Nursing"]], ["teaching", ["הדרכת המטופל", "Patient teaching"]]];
+  return (
+    <section className="study-drugs">
+      <p className="muted small">{L("כרטיסי התרופות נכתבים מההרצאות שלך בלבד (בעמוד ההרצאה: ״כרטיסי תרופות מההרצאה״). כל תרופה מוסיפה גם שלוש כרטיסיות לחזרה. מינונים — תמיד לפי ההוראה ובית המרקחת.", "Drug cards come from your lectures only (on a lecture: “Drug cards from this lecture”). Each drug also adds three review cards. Doses: always by the order and the pharmacy.")}</p>
+      {info.drugs.length > 0 && <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("חיפוש תרופה", "Search a drug")} aria-label={L("חיפוש", "Search")} dir="auto" />}
+      {!info.drugs.length ? <p className="muted">{L("עוד אין כרטיסי תרופות.", "No drug cards yet.")}</p> : (
+        <ul className="study-list">
+          {shown.map((d) => (
+            <li key={d.id} className="study-drug">
+              <button type="button" className="study-drug-head" aria-expanded={open === d.id} onClick={() => setOpen(open === d.id ? undefined : d.id)}>
+                <b dir="ltr">{d.name}</b>
+                {d.drugClass && <small dir="auto">{d.drugClass}</small>}
+              </button>
+              {open === d.id && (
+                <dl className="study-drug-body">
+                  {rows.filter(([k]) => d[k]).map(([k, n]) => <div key={k}><dt>{L(...n)}</dt><dd dir="auto">{String(d[k])}</dd></div>)}
+                  <button type="button" className="small ghost" onClick={async () => { if (confirm(L(`להסיר את ${d.name}?`, `Remove ${d.name}?`)) && (await call(api(`/api/study/courses/${courseId}/drugs/${d.id}`, { method: "DELETE" })))) onChange(); }}>{L("הסר", "Remove")}</button>
+                </dl>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const LAB_GROUPS: Record<LabValue["group"], [string, string]> = { electrolytes: ["אלקטרוליטים", "Electrolytes"], blood: ["ספירת דם וסוכר", "Blood count and glucose"], kidney: ["כליות", "Kidneys"], gases: ["גזים בדם", "Blood gases"], coagulation: ["קרישה", "Clotting"], other: ["עוד", "Other"] };
+
+/** Normal adult lab ranges, by group, with a search. */
+function LabValues() {
+  const [q, setQ] = useState("");
+  const shown = LAB_VALUES.filter((v) => !q || `${v.name} ${v.he}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <section className="study-labs">
+      <p className="muted small">{L("ערכים תקינים למבוגרים כפי שמלמדים בדרך כלל. לכל מעבדה טווחים משלה: תמיד לבדוק מול הטווח של בית החולים ושל הקורס.", "Normal adult values as usually taught. Every lab has its own ranges: always check your hospital's and your course's.")}</p>
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("חיפוש, למשל אשלגן", "Search, e.g. potassium")} aria-label={L("חיפוש", "Search")} dir="auto" />
+      {(Object.keys(LAB_GROUPS) as Array<LabValue["group"]>).map((g) => {
+        const rows = shown.filter((v) => v.group === g);
+        if (!rows.length) return null;
+        return (
+          <div key={g} className="card">
+            <h2>{L(...LAB_GROUPS[g])}</h2>
+            <table className="study-lab-table">
+              <tbody>
+                {rows.map((v) => (
+                  <tr key={v.name}>
+                    <th scope="row"><span>{v.he}</span> <small dir="ltr">{v.name}</small></th>
+                    <td dir="ltr">{v.range} <small>{v.unit}</small>{v.note ? <small> · {v.note}</small> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
     </section>
   );
 }
