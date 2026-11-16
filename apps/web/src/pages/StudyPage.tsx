@@ -392,12 +392,13 @@ function SemesterEnd({ id, course, syllabusEnd, onChange }: { id: string; course
 function CourseModel({ id, model, onChange }: { id: string; model?: string; onChange: () => void }) {
   const [st, setSt] = useState<ModelState | null>(null);
   useEffect(() => void api<ModelState>("/api/study/model").then(setSt, () => undefined), []);
-  const short = (m: string) => m.replace(/^llamacpp\//, "");
+  // A readable name: no provider, no quantization or "Thinking" tail, spaces for dashes (fits 390 px).
+  const short = (m: string) => m.replace(/^llamacpp\//, "").replace(/\.gguf$/i, "").replace(/[-_](Thinking|Instruct)?[-_]?(UD[-_])?(I?Q\d.*|F16|BF16)$/i, "").replace(/[-_]+/g, " ");
   return (
     <label className="study-field">
       <span>{L("מודל", "Model")}</span>
       <select value={model ?? ""} title={L("איזה מודל כותב סיכומים, שאלות ותשובות בקורס הזה", "Which model writes summaries, questions and answers for this course")} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { model: e.target.value } }))) onChange(); }}>
-        <option value="">{st?.hebrew ? L(`אוטומטי: הכי טוב בעברית (${st.hebrew.replace(/\.gguf$/i, "")})`, `Automatic: best in Hebrew (${st.hebrew.replace(/\.gguf$/i, "")})`) : L("אוטומטי: מודל הצ׳אט הפעיל", "Automatic: the active chat model")}</option>
+        <option value="">{st?.hebrew ? L(`אוטומטי: הכי טוב בעברית (${short(st.hebrew)})`, `Automatic: best in Hebrew (${short(st.hebrew)})`) : L("אוטומטי: מודל הצ׳אט הפעיל", "Automatic: the active chat model")}</option>
         {(st?.models ?? []).map((m) => <option key={m} value={m} dir="ltr">{short(m)}</option>)}
         {model && !(st?.models ?? []).includes(model) && <option value={model} dir="ltr">{short(model)}</option>}
       </select>

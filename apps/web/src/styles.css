@@ -2845,3 +2845,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .stremio-pick strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stremio-rate > input { flex: 1 1 180px; min-width: 0; }
 @media (max-width: 640px) { .stremio-rate > input { flex-basis: 100%; } }
+.study-field select, .study-field input { max-width: 100%; }
