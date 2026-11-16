@@ -2803,3 +2803,10 @@ html.handheld .palette-list button { min-height: 44px; }
 .split-opt input { flex: none; }
 .models-move { padding: 12px 14px; border-radius: 10px; background: var(--surface-2, #1f1f22); }
 .models-move progress { width: 100%; }
+/* Tabs for the user's other computers, in the top bar (desktop app, when there is another computer). */
+.pc-tabs { display: flex; gap: 2px; min-width: 0; max-width: 46%; overflow-x: auto; scrollbar-width: none; padding: 2px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--bg); border: 1px solid var(--border); }
+.pc-tabs > button { flex: none; height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: calc(7px * var(--r-scale, 1)); background: transparent; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.pc-tabs > button.on { background: var(--raised); color: var(--text); }
+.pc-tabs > button:not(:disabled):not(.on):hover { color: var(--text); }
+.pc-tabs > button:disabled { opacity: .55; }
+@media (max-width: 640px) { .pc-tabs { max-width: 40vw; } }

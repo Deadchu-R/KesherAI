@@ -8,6 +8,7 @@ import { desktop } from "./library";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, setLocale, t } from "./i18n";
 import { ComputerHub } from "./ComputerHub";
+import { ComputerTabs } from "./ComputerTabs";
 import { reconnect } from "./Reconnect";
 import { InboxBell } from "./pages/InboxPage";
 import { DesignAssistant } from "./DesignAssistant";
@@ -156,6 +157,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         <button type="button" data-pad="Y" className="bar-btn palette-btn" aria-label={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} title={getLocale() === "he" ? "חיפוש ופקודות (Ctrl+K)" : "Search and commands (Ctrl+K)"} onClick={openPalette}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.8" stroke="currentColor" strokeWidth="1.6" fill="none" /><path d="M11.2 11.2 15 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
         </button>
+        <ComputerTabs host={host} />
         <UpdateButton />
         <DesignAssistant />
         <InboxBell />
