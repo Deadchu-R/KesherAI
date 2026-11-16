@@ -14,6 +14,7 @@ import { chosenPhones, phoneNote, type Phone } from "./phones.js";
 import { UNITY_NOTE, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, unrealTools } from "./unreal-tools.js";
 import { GODOT_IDLE_NOTE, GODOT_NOTE, godotTools } from "./godot-tools.js";
+import { MOD_NOTE, modTools } from "./game-mods.js";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
@@ -60,6 +61,9 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     tools.push(...g);
     notes.push(deps.godot.status().connected ? GODOT_NOTE : `${GODOT_IDLE_NOTE} Once connected: ${GODOT_NOTE}`);
   }
+  // Minecraft and Roblox projects (two small tools, one line).
+  tools.push(...modTools(join(deps.outputsDir, "..", "engines")));
+  notes.push(MOD_NOTE);
   tools.push(...(deps.unity?.activeProject ? unity : unity.filter((t) => t.spec.name === "unity_status")));
   // Fewer tokens: with no Unreal project in use, only the three entry tools and one line go to the model
   // (the full set and its long guide come once a project is created or opened); every message carried ~1,500
