@@ -71,6 +71,7 @@ const CanvasPage = lazy(() => import("./pages/CanvasPage").then((m) => ({ defaul
 const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default: m.NodesPage })));
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
+const GodotPage = lazy(() => import("./pages/GodotPage").then((m) => ({ default: m.GodotPage })));
 const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
@@ -289,6 +290,7 @@ export function App() {
   else if (hash === "#/tasks") page = <TasksPage />;
   else if (hash === "#/study" || hash.startsWith("#/study/")) page = <StudyPage hash={hash.split("?")[0]!} />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
+  else if (hash === "#/godot") page = <GodotPage />;
   else if (hash === "#/training") page = <TrainingPage />;
   else if (hash === "#/parts" || hash === "#/connections" || hash === "#/plugins") page = <CustomizePage hash={hash} />;
   else if (hash === "#/apps") page = <AppsPage />;
