@@ -3,6 +3,7 @@
  * asked for it, an error nobody caught, a helper process or the page that crashed, the exit code). Kept on this
  * computer only, cut back when it passes 1 MB. Written synchronously so the last lines survive the process ending.
  */
+import { promisify } from "node:util";
 import cp, { execFile } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -97,8 +98,8 @@ export function watchChildren(write: (line: string) => void): void {
     seen.set(line, now);
     write(`child: ${line}`);
   };
-  const wrap = <F extends (...a: never[]) => unknown>(f: F): F =>
-    ((...a: Parameters<F>) => {
+  const wrap = <F extends (...a: never[]) => unknown>(f: F): F => {
+    const w = ((...a: Parameters<F>) => {
       try {
         note(a[0], a[1]);
       } catch {
@@ -106,6 +107,12 @@ export function watchChildren(write: (line: string) => void): void {
       }
       return f(...a);
     }) as F;
+    // execFile and exec have their own promisified form (resolving { stdout, stderr }); without it, every
+    // promisify(execFile) in the app resolves with stdout alone, and code reading `.stdout` sees nothing.
+    const custom = (f as unknown as Record<symbol, unknown>)[promisify.custom];
+    if (custom) Object.defineProperty(w, promisify.custom, { value: custom });
+    return w;
+  };
   cp.spawn = wrap(cp.spawn);
   cp.execFile = wrap(cp.execFile);
   cp.exec = wrap(cp.exec);
