@@ -851,3 +851,32 @@ S5 an outside scanner's rules for Electron.
   "right", "partly" or "wrong" only. The model has no tools in any of these steps.
 - Performance: the open quiz is graded one answer at a time (one short prompt each, about 4000 characters of passages),
   so a 10-question quiz is 10 small turns, not one long one.
+
+## Scan 95 (2026-11-16, 0.6.310 – 0.6.312: field tools, page citations, Commons pictures, slide photos, computer chats on the phone, "continue on the phone", the live call, Android links)
+
+- Field tools (`POST /api/study/courses/:id/tools/:tool`): only the fixed tool list (an unknown id is 404); pasted text
+  cut to 40000 characters, a 1 MB body limit; no tools for the model; the answer is shown as text (RichText, no HTML).
+  The clinical tools tell the model to drop names and ID numbers ([הוסר]) and say they are practice only.
+- Wikimedia pictures: the search address is fixed (commons.wikimedia.org); only scaled copies on upload.wikimedia.org
+  over HTTPS are kept, never SVG itself (Commons' PNG copy); on the computer they are fetched by the server with
+  `redirect: "error"`, a 1 MB limit and the bytes checked as PNG, JPEG or WebP, then sent as data: copies, so the page's
+  image policy stays `'self' data:`. Credits are plain text with the HTML stripped; the link to the file page must be
+  on commons.wikimedia.org.
+- Slide photos during a recording go through the same `/api/study/extract` as any photo (50 MB limit, vision model
+  without tools); the text is cut to 6000 characters per slide.
+- The computer's chats on the phone: read with the paired computer's own token; ids must match a strict pattern and
+  titles are put in as text; opening one goes through the start screen's `?open=` check (`#/c/<id>` only).
+- "Continue on the phone": `GET /api/conversations/:id/handoff` gives text only (12 messages, 12000 characters), behind
+  the same token as every route; the phone page reads the address once, keeps only user and assistant turns of text,
+  and removes the address from the history. It never runs a model by itself.
+- Android: a link on a paired computer's page to another site now opens in the phone's browser (it used to load
+  inside the app, since the app allows any address to reach the user's computer); the app's own pages still open the
+  computer. The native bridge stays limited to the paired computers' exact origins, main frame only. One WebView
+  client now does the isolation headers, the renderer-crash handling and the links (two plugins each set one, and
+  only the last set is kept).
+- Updates now also wait for Study work running on the model.
+- Model JSON with Hebrew abbreviations is repaired by one regular expression without backtracking (a quote between
+  two Hebrew letters).
+- Performance: the phone's home screen no longer waits for its model engine (374 KB): about 0.6 s instead of 1.4 s on a
+  six-times-slower processor. The interface check now also runs at 360 px. The computer's chat list on the phone is
+  read at most once a minute.
