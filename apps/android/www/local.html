@@ -705,12 +705,31 @@
     $("sheetList").replaceChildren(
       act(c.pinned ? T("ביטול הצמדה", "Unpin") : T("הצמדה למעלה", "Pin to the top"), () => update((x) => { if (x.pinned) delete x.pinned; else x.pinned = true; return x; })),
       act(T("שינוי שם", "Rename"), () => { const t = prompt(T("שם חדש לצ׳אט", "A new name for the chat"), c.title || ""); if (t?.trim()) update((x) => ({ ...x, title: t.trim().slice(0, 80), renamed: true })); }),
+      act(T("המשך במחשב", "Continue on the computer"), () => void continueOnPc(c)),
       act(T("שיתוף כטקסט", "Share as text"), () => void shareChat(c)),
       act(T("בחירת כמה צ׳אטים", "Select several chats"), () => { selecting = new Set([c.id]); drawChats(); }),
       act(T("מחיקה", "Delete"), () => { if (confirm(T("למחוק את הצ׳אט? אי אפשר לבטל.", "Delete the chat? This cannot be undone."))) deleteChats([c.id]); }, true),
     );
     $("sheet").hidden = false;
     $("sheetScrim").hidden = false;
+  }
+  /** Sends the chat to the paired computer (a new chat there, on its bigger model) and opens it there. */
+  async function continueOnPc(c) {
+    const pc = computer();
+    if (!pc) { location.href = "index.html?switch=1"; return; }
+    let msgs = [];
+    try { msgs = JSON.parse(localStorage.getItem(MSGS(c.id)) || "[]"); } catch { /* none */ }
+    const body = { id: c.id, title: c.title, messages: msgs.filter((m) => typeof m.content === "string").map(({ role, content }) => ({ role, content })) };
+    const headers = { Authorization: `Bearer ${pc.token}`, "Content-Type": "application/json" };
+    try {
+      const h = http();
+      const r = h ? await h.post({ url: `${pc.base}/api/import/phone-chat`, headers, data: body, connectTimeout: 6000, readTimeout: 30000 }) : await fetch(`${pc.base}/api/import/phone-chat`, { method: "POST", headers, body: JSON.stringify(body) }).then(async (x) => ({ status: x.status, data: await x.json() }));
+      const data = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+      if (r.status >= 400 || !data?.id) throw new Error(String(data?.error ?? r.status));
+      location.href = `index.html?open=${encodeURIComponent(`#/c/${data.id}`)}`;
+    } catch (e) {
+      alert(T("המחשב לא זמין עכשיו: ", "The computer is not reachable now: ") + (e?.message || e));
+    }
   }
   /** Shares a chat's text through Android's share sheet (or copies it). */
   async function shareChat(c) {

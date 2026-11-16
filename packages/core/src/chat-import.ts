@@ -13,7 +13,7 @@
  */
 
 /** Where an imported chat came from. */
-export type ImportSource = "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code";
+export type ImportSource = "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code" | "phone";
 
 /** One message of an imported chat. */
 export interface ImportedMessage {

@@ -179,6 +179,19 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { source: "jan", found: chats.length, ...(await s.conversations.importChats(chats, projectId)) };
   });
 
+  // "Continue on the computer" from the phone app: a phone chat becomes a chat here (the computer's default model).
+  app.post<{ Body: { id?: string; title?: string; messages?: Array<{ role?: string; content?: unknown }> } }>("/api/import/phone-chat", async (req, reply) => {
+    const b = req.body ?? {};
+    const messages = (Array.isArray(b.messages) ? b.messages : [])
+      .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+      .slice(-200)
+      .map((m) => ({ role: m.role as "user" | "assistant", text: String(m.content).slice(0, 20_000) }));
+    if (!messages.length) return reply.code(400).send({ error: "The chat has no messages." });
+    // A new copy each time it grows (the same chat sent twice unchanged opens the same copy).
+    const r = await s.conversations.importChats([{ source: "phone", originalId: `${String(b.id ?? "").slice(0, 80)}:${messages.length}`, title: String(b.title ?? "").trim().slice(0, 120) || "From the phone", createdAt: new Date().toISOString(), messages }]);
+    return { ...r, id: r.ids[0] };
+  });
+
   // Claude Code's sessions on this computer: continue one in a code chat on the local model (the CoolDown handoff).
   // Session files can hold secrets from commands, so they are read only here, never from another device.
   app.get("/api/import/claude-code", async (req, reply) => {

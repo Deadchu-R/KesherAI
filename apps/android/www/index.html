@@ -510,6 +510,8 @@
       } catch (e) { console.warn("bridge", e); }
       const open = new URL(url.href);
       open.searchParams.set("app", location.origin + "/");
+      const at = sessionStorage.getItem("kesherai-open-at");
+      if (at) { open.hash = at; sessionStorage.removeItem("kesherai-open-at"); }
       location.href = open.href; // the interface stores the token and removes it from the address
     } catch {
       if (cancelled) return;
@@ -797,6 +799,12 @@
     await crashChecked;
     if (lastCrash) return;
     if (launch) return connect(launch);
+    // "Continue on the computer" from a phone chat: open the saved computer at that chat.
+    const openAt = new URLSearchParams(location.search).get("open");
+    if (openAt && /^#\/c\/[\w-]{8,64}$/.test(openAt) && (recent || saved)) {
+      sessionStorage.setItem("kesherai-open-at", openAt);
+      return recent ? connectComputer(recent) : connect(saved);
+    }
     if (cameBack) return;
     // The app opens on the phone's own home. With "connect automatically" on (Settings), a saved computer that
     // answers within a few seconds is opened instead; one that does not answer leaves her on the phone, no error.
