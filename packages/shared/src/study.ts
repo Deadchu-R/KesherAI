@@ -870,7 +870,7 @@ export function gradeLine(raw: string, he: boolean): string | undefined {
 
 /**
  * Removes letters of other scripts a model slipped into a Hebrew (or English) answer (Chinese, Arabic, Cyrillic…),
- * keeping Hebrew, Latin (terms, drug names), digits and punctuation.
+ * keeping Hebrew, Latin (terms, drug names), digits and punctuation; the lecture label becomes Hebrew.
  *
  * @param text - The model's text.
  * @param he - Whether the text should be Hebrew.
@@ -878,7 +878,8 @@ export function gradeLine(raw: string, he: boolean): string | undefined {
  */
 export function cleanScript(text: string, he: boolean): string {
   if (!he) return text;
-  return text.replace(/[\u0400-\u04ff\u0600-\u06ff\u3000-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]+/g, "").replace(/[ \t]{2,}/g, " ");
+  // The lecture label in Hebrew too ([Lecture: …] → [הרצאה: …]).
+  return text.replace(/[\u0400-\u04ff\u0600-\u06ff\u3000-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]+/g, "").replace(/[ \t]{2,}/g, " ").replace(/\[\s*lecture\s*:\s*/gi, "[הרצאה: ");
 }
 
 /** Why a missed card's answer is right, in one or two sentences, from her lecture. */

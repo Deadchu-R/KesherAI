@@ -163,6 +163,7 @@ test("gradeLine writes the verdict itself, and cleanScript drops other scripts",
   assert.equal(gradeLine('```json\n{"verdict":"right"}\n```', true), "✓ נכון.");
   assert.equal(gradeLine("Correct!", true), undefined);
   assert.equal(cleanScript("נכון – ההרצאה של Digoxin هرس אומרת", true), "נכון – ההרצאה של Digoxin אומרת");
+  assert.equal(cleanScript("כך [Lecture: לב, 12:30] וגם [ lecture:ריאות]", true), "כך [הרצאה: לב, 12:30] וגם [הרצאה: ריאות]");
   const g = gradeMessages({ lectures: [{ id: "l", title: "לב", date: "", text: "מערכת החיסון הורסת את תאי הבטא בלבלב" }], tutorQuestion: "מה הורס את תאי הבטא?", answer: "וירוס" });
   assert.match(g.messages[0]!.content, /ONLY the lecture passages/);
   assert.match(g.messages[1]!.content, /Her answer: וירוס/);
