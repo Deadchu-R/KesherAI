@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { withToken } from "./api";
+import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { encodeWav } from "./Mic";
 import { stamp } from "./study-time";
@@ -24,6 +24,9 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
   const [error, setError] = useState("");
   const [withSystem, setWithSystem] = useState(false);
   const [awake, setAwake] = useState(true);
+  // Live translation of each half minute ("" off), shown under the transcript; the lecture keeps the original.
+  const [translateTo, setTranslateTo] = useState<"" | "he" | "en">("");
+  const [translated, setTranslated] = useState<string[]>([]);
   const paused = useRef(false);
   const rec = useRef<{ stop: () => Promise<void>; mark: () => void } | null>(null);
   const canSystem = typeof navigator.mediaDevices?.getDisplayMedia === "function" && !matchMedia("(pointer: coarse)").matches;
@@ -93,6 +96,10 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
           if (!res.ok) throw new Error(j.error ?? String(res.status));
           const t = (j.text ?? "").trim();
           if (t) setLines((ls) => [...ls, `${stamp(at)} ${t}`]);
+          if (t && translateTo) {
+            // Not awaited: the next half minute's transcript does not wait for the translation.
+            void api<{ text: string }>("/api/study/translate", { method: "POST", body: { text: t, to: translateTo } }).then((r) => r.text && setTranslated((ts) => [...ts, `${stamp(at)} ${r.text}`]), () => undefined);
+          }
         } catch (e) {
           setError((e as Error).message);
         }
@@ -149,6 +156,13 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
         <h2>{L("הקלטת הרצאה", "Record a lecture")}</h2>
         <p className="muted small">{L("כל חצי דקה הופכת לטקסט במחשב, בזמן ההקלטה. בסוף נשמרת הרצאה עם התמלול והדקות. ההקלטה עצמה לא נשמרת.", "Every half minute becomes text on the computer while you record. At the end a lecture is saved with the transcript and minutes. The audio itself is not kept.")}</p>
         {canSystem && <label className="study-check"><input type="checkbox" checked={withSystem} onChange={(e) => setWithSystem(e.target.checked)} /> {L("שיעור בזום או ב-Teams: להקליט גם את הקול של המחשב", "A Zoom or Teams lesson: also record the computer's sound")}</label>}
+        <label className="study-check">{L("תרגום חי: ", "Live translation: ")}
+          <select value={translateTo} onChange={(e) => setTranslateTo(e.target.value as "" | "he" | "en")}>
+            <option value="">{L("בלי", "Off")}</option>
+            <option value="en">{L("לאנגלית", "To English")}</option>
+            <option value="he">{L("לעברית", "To Hebrew")}</option>
+          </select>
+        </label>
         <label className="study-check"><input type="checkbox" checked={awake} onChange={(e) => setAwake(e.target.checked)} /> {L("להשאיר את המסך דלוק (בטלפון, מסך כבוי יכול לעצור את ההקלטה)", "Keep the screen on (on a phone, a locked screen can stop the recording)")}</label>
         <p className="muted small">{L("לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "Before recording a class, make sure the lecturer agrees.")}</p>
         {error && <p className="error small">{error}</p>}
@@ -164,6 +178,7 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
       <p className={`study-rec-state ${state === "recording" ? "on" : ""}`}>{state === "recording" ? L("● מקליט", "● Recording") : state === "paused" ? L("מושהה", "Paused") : L("מסיים את התמלול…", "Finishing the transcript…")}</p>
       <p className="study-rec-clock" dir="ltr">{Math.floor(mm / 60) ? `${Math.floor(mm / 60)}:` : ""}{String(mm % 60).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}</p>
       <div className="study-rec-text" dir="auto" aria-live="polite">{lines.length ? lines.slice(-6).join("\n") : L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute.")}</div>
+      {translateTo && <div className="study-rec-text study-rec-trans" dir={translateTo === "he" ? "rtl" : "ltr"} aria-live="polite" aria-label={L("תרגום", "Translation")}>{translated.length ? translated.slice(-6).join("\n") : L("התרגום מגיע כמה שניות אחרי כל קטע.", "The translation follows a few seconds after each piece.")}</div>}
       {error && <p className="error small">{error}</p>}
       {state !== "finishing" && (
         <div className="study-actions">

@@ -31,6 +31,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : req.body?.mode === "homework" ? "homework" : "ask"));
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   app.post<C & { Params: { cid: string } }>("/api/study/courses/:id/cards/:cid/explain", async (req) => st.explainCard(req.params.id, req.params.cid));
+  /** Live translation of the lecture recorder's transcript: `{ text, to: he | en }`. */
+  app.post<{ Body: { text?: string; to?: string } }>("/api/study/translate", async (req) => st.translate(String(req.body?.text ?? ""), req.body?.to === "he" ? "he" : "en"));
   /** "Explain this": a passage she selected in a lecture, explained (`{ text, kind: explain | simple | example }`). */
   app.post<L & { Body: { text?: string; kind?: string } }>("/api/study/courses/:id/lectures/:lid/explain", async (req) => st.explainPassage(req.params.id, req.params.lid, String(req.body?.text ?? "").slice(0, 3000), req.body?.kind === "simple" ? "simple" : req.body?.kind === "example" ? "example" : "explain"));
   /** A lecture's spoken review (audio overview), written by the chat model and kept. */

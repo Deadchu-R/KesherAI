@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -424,6 +424,19 @@ export class Study {
     }
     const { messages, passages } = tutorMessages({ lectures: d.lectures, question, history, mode, hint });
     return { answer: cleanScript((await say(messages)).trim(), he), sources: sourcesOf(passages) };
+  }
+
+  /**
+   * Translates a piece of a live lecture transcript (live captions in the other language).
+   *
+   * @param text - Half a minute of transcript.
+   * @param to - he or en.
+   */
+  async translate(text: string, to: "he" | "en", signal?: AbortSignal): Promise<{ text: string }> {
+    const t = text.trim().slice(0, 4000);
+    if (!t) return { text: "" };
+    const out = await this.ask(TRANSLATE_PROMPT(to), t, signal ?? AbortSignal.timeout(90_000));
+    return { text: cleanScript(out.trim(), to === "he") };
   }
 
   /**

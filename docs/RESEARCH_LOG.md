@@ -1664,3 +1664,14 @@ Stopped at: building (store and public page first, then the chat menu and the se
   is given as context), and To a card keeps the selection and its explanation as a flashcard. Computer, remote and
   phone (the phone's own model).
 - Stopped at: built (0.6.303).
+
+## Students, part 14: live captions and translation during a lecture (2026-11-16)
+
+- Sources: Soniox's Hebrew lecture captions page, Microsoft's live captions in OneNote, Sonix and X-Doc round-ups,
+  SyncWords for education.
+- Others caption live and translate into many languages, mostly in the cloud and by subscription.
+- KesherAI already captions every half minute while recording (on the computer's speech engine or the phone's own).
+  Added: "Live translation: off / to English / to Hebrew" in the lecture recorder; each piece is translated by the
+  chat model (the computer's, or the phone's own) and shown under the transcript, a few seconds behind; the lecture
+  keeps the original. Computer, remote and phone.
+- Stopped at: built (0.6.304).

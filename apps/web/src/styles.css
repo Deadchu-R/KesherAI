@@ -2758,3 +2758,4 @@ html.handheld .palette-list button { min-height: 44px; }
 /* Study: "explain this" for text selected in a lecture. */
 .study-explain { border: 1px solid var(--border); border-inline-start: 3px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
 .study-explain p { margin: 0; }
+.study-rec-trans { opacity: .85; border-inline-start: 3px solid var(--accent); }

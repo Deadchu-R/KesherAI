@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -642,8 +642,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const clock = el("p", { style: "font-size: 40px; font-weight: 700; direction: ltr; text-align: center; margin: 8px 0" }, "00:00");
     const text = el("div", { dir: "auto", style: "white-space: pre-wrap; min-height: 120px; line-height: 1.6" }, L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute."));
     const lines = [];
+    // Live translation of each half minute by the phone's model (the lecture keeps the original).
+    const transTo = el("select", { "aria-label": L("תרגום חי", "Live translation") }, el("option", { value: "" }, L("בלי", "Off")), el("option", { value: "en" }, L("לאנגלית", "To English")), el("option", { value: "he" }, L("לעברית", "To Hebrew")));
+    const trans = el("div", { dir: "auto", hidden: true, style: "white-space: pre-wrap; line-height: 1.6; opacity: .85; border-inline-start: 3px solid var(--accent); padding-inline-start: 8px; margin-top: 8px" });
+    const translated = [];
     const startBtn = el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 52px" }, L("התחל הקלטה", "Start recording"));
-    box.append(el("p", { class: "muted" }, L("כל חצי דקה הופכת לטקסט בטלפון עצמו. השאירי את המסך דלוק. לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "Every half minute becomes text on the phone itself. Keep the screen on. Before recording a class, make sure the lecturer agrees.")), clock, text, startBtn);
+    box.append(el("p", { class: "muted" }, L("כל חצי דקה הופכת לטקסט בטלפון עצמו. השאירי את המסך דלוק. לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "Every half minute becomes text on the phone itself. Keep the screen on. Before recording a class, make sure the lecturer agrees.")), el("label", { class: "ph-filter" }, L("תרגום חי: ", "Live translation: "), transTo), clock, text, trans, startBtn);
     startBtn.onclick = async () => {
       let mic;
       try {
@@ -679,6 +683,16 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
             if (t) {
               lines.push(`${mmss(at)} ${t}`);
               text.textContent = lines.slice(-6).join("\n");
+              if (transTo.value) {
+                trans.hidden = false;
+                const to = transTo.value;
+                // Not awaited: transcription goes on while the phone's model translates.
+                void Promise.resolve(ask([{ role: "system", content: TRANSLATE_PROMPT(to) }, { role: "user", content: t }])).then((r) => {
+                  if (!r) return;
+                  translated.push(`${mmss(at)} ${cleanScript(String(r).trim(), to === "he")}`);
+                  trans.textContent = translated.slice(-6).join("\n");
+                }, () => undefined);
+              }
             }
           } catch (e) {
             text.textContent = String(e?.message || e);

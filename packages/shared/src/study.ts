@@ -790,6 +790,10 @@ export const STUDY_MODE_PROMPT =
 export const HOMEWORK_PROMPT =
   "You help a student with a homework problem step by step, like a good tutor. Do not solve it at once. First, in two short lines, say what the problem asks and ask what she tried, or give only the first step as a question. When she writes a step, say whether it is right and why, then point to the next step. When she asks for a hint, give ONE short hint (each hint a little more direct than the last). Only when she asks for the full solution, give it worked out step by step, then one line on the idea to remember. Use the lecture passages when they help (name the lecture in square brackets, like [Lecture: <title>]); general knowledge is allowed for homework, but never invent numbers, doses or values that the problem does not give. Write only in her language.";
 
+/** Live translation of a lecture's transcript, half a minute at a time. */
+export const TRANSLATE_PROMPT = (to: "he" | "en") =>
+  `Translate this piece of a live lecture transcript into ${to === "he" ? "Hebrew" : "English"}. Keep medical and scientific terms accurate (in Hebrew, add the English term in brackets the first time). The transcript may have recognition mistakes: translate the meaning. Answer with the translation only.`;
+
 /** Explaining a passage she selected in a lecture (like "explain this" in PDF readers), by kind. */
 export const EXPLAIN_PROMPTS: Record<"explain" | "simple" | "example", string> = {
   explain: "A student selected a passage from her lecture and asks what it means. Explain it clearly in 3-5 short sentences in the passage's language: what it says, the terms in it, and why it matters in this lecture. Use the lecture context given; never invent numbers, doses or values.",
