@@ -80,6 +80,14 @@
   panel.append(Object.assign(document.createElement("div"), { className: "kd-brand", innerHTML: `<img src="icon.svg" width="28" height="28" alt="" /> KesherAI` }));
   const lastModel = localStorage.getItem("kesherai-phone-model");
   item("＋", T("צ'אט חדש בטלפון", "New chat on this phone"), "", "local.html?new=1");
+  item("⌂", T("בית", "Home"), "", "local.html", here === "local.html" && !params.toString() ? "on" : "");
+  // The parts that work on the phone (the ones she keeps on in Settings), then what goes through the computer.
+  head(T("בטלפון", "On the phone"));
+  const parts = { study: true, voice: true, images: true, health: true, api: true, ...read("kesherai-phone-parts", {}) };
+  const PHONE = [["study", "🎓", T("לימודים", "Study")], ["voice", "🎙", T("שיחה קולית", "Voice")], ["images", "🖼", T("תמונות", "Pictures")], ["health", "🩺", T("בריאות", "Health")], ["api", "🌐", T("דרך האינטרנט", "Online")]];
+  for (const [id, icon, name] of PHONE) if (parts[id]) item(icon, name, "", `local.html?tab=${id}`, params.get("tab") === id ? "on" : "");
+  head(T("דרך המחשב", "Through the computer"));
+  if (!saved) item("🖥", T("להתחבר למחשב", "Connect to a computer"), T("קוד, מודלים גדולים, מצגות ו-PDF", "Code, big models, slides and PDFs"), "index.html?switch=1");
   if (saved) {
     let host = saved;
     try {
@@ -122,7 +130,7 @@
   }
 
   head(T("עוד", "More"));
-  item("📱", T("מודלים בטלפון ו-API", "Models on this phone and API"), "", "local.html", here === "local.html" && !params.has("c") ? "on" : "");
+  item("📱", T("מודלים בטלפון ו-API", "Models on this phone and API"), "", "local.html?tab=chat", params.get("tab") === "chat" ? "on" : "");
   // Web search for phone chats (the 🌐 button in the chat does the same).
   const web = document.createElement("button");
   web.type = "button";
