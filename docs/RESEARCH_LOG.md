@@ -1728,3 +1728,8 @@ tools' own pages, against what was added tonight:
 - MCP servers: an addon in `addons/` talks to a server over WebSocket (godot-ai: plugin ↔ Python server on 9500, clients on HTTP 8000/mcp; 120+ tools: scene/nodes, scripts/signals, resources, UI, animation, run/stop, screenshots, logs, tests; every write undoable in the editor). GDAI MCP: scene/node CRUD, properties, debugger output and script errors, screenshots of editor and game.
 - Plan for KesherAI: the same shape as the Unreal bridge (the editor connects to KesherAI at /api/godot/ws, this computer only), a GDScript EditorPlugin in integrations/godot, every write through EditorUndoRedoManager, chat tools godot_* (tree, node add/set/remove, script read/write, run/stop, errors, screenshot).
 - **Stopped here**: research done, design board and code not started. Paused for a full check of the student features (Roee, 22:58).
+
+## Guiding questions in the chat (2026-11-17)
+- Claude's own question tool (Claude Code / Claude apps): 1–4 questions in one card, a short header chip each, 2–4 options with a line of description, the recommended option first, multi-select, and an always-there "Other" answer; asked before a costly, unclear task, not for things the model can check. ChatGPT deep research asks a few clarifying questions as text before it starts; Cursor's plan mode asks with options.
+- Built: ask_user takes `questions` (same shape), one card with "Send" and "Skip, you decide"; the system prompt says when to ask; Telegram writes them out; the phone's own models (no tool calls) ask with a ```questions block the phone shows as a card.
+- Stopped at: built (0.6.314); to check on the PC with the local model that it asks before a big task and not for small ones.
