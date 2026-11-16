@@ -1467,3 +1467,19 @@ Stopped at: building (store and public page first, then the chat menu and the se
   nursing-process notes without identifiers; licensing-exam practice.
 - Hebrew speech: ivrit-ai publishes Hebrew-tuned Whisper models (turbo, CTranslate2/ggml); to test on a real
   lecture against whisper small. Stopped at: no test yet.
+
+### Students, part 4: everything on the phone, no computer (2026-11-16)
+
+- Already on the phone app: on-device chat models through MediaPipe LLM Inference and LiteRT-LM (Gemma-class), the
+  system speech recognizer (short phrases only: not for a 90-minute lecture), local web pages (local.html).
+- Speech on the phone: Qualcomm's Whisper-Small on the NPU (QNN): encoder 65–86 ms and 8–10 ms per token on
+  Snapdragon 8 Elite / 8 Gen 3 per 30-second piece, about 1.5–2.5 s per piece → a 90-minute lecture in roughly 5–8
+  minutes. 8 Gen 1: encoder 176 ms, 14.5 ms per token. Only on Snapdragon; other phones need whisper.cpp on the CPU
+  (much slower; fine while charging). Hebrew: ivrit-ai publishes Hebrew Whisper large-v3 and turbo (0.8 B; ggml,
+  ONNX, CT2), too heavy for live use on a phone; community Hebrew-tuned small models exist (quality unknown).
+- Summaries, flashcards, quizzes: a 2–4 B model on the phone (chunked: a lecture is ~15k tokens); medication
+  calculations and FSRS are code; "ask the course" by word search (BM25) on the phone.
+- Plan: phone-first study mode with three levels — (1) phone only, (2) with a laptop for better Hebrew and faster
+  work, (3) a cloud key when she has one. Needs a native speech engine in the app (whisper.cpp or Qualcomm's
+  runtime): a new dependency, to ask Roee. Test phone: Roee's OnePlus 13 (Snapdragon 8 Elite, 16 GB).
+- Stopped at: no hands-on test; Hebrew accuracy of small vs turbo on a real lecture is the open question.
