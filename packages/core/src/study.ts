@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -41,7 +41,8 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const quizzes = arr<StudyQuiz>(d.quizzes, 500).filter((q) => okId(q?.id) && Array.isArray(q.questions)).map((q) => JSON.parse(JSON.stringify(q).slice(0, 200_000)) as StudyQuiz);
   const drugs = arr<StudyDrug>(d.drugs, 1000).filter((g) => okId(g?.id)).map((g) => JSON.parse(JSON.stringify(g).slice(0, 20_000)) as StudyDrug);
   const removed = arr<string>(d.removed, 5000).filter(okId);
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}) };
+  const focus = arr<StudyFocus>(d.focus, 5000).filter((f) => Number.isFinite(f?.t) && Number.isFinite(f?.minutes)).map((f) => ({ t: Number(f.t), minutes: Math.min(600, Math.max(1, Math.round(Number(f.minutes)))) }));
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -147,6 +148,32 @@ export class Study {
       }
     }
     return out.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** Her study streak and this week's focus minutes, across all her courses. */
+  async progress(now = Date.now()): Promise<{ streak: { days: number; today: boolean; shield: boolean }; week: Array<{ day: string; minutes: number }> }> {
+    await mkdir(this.dir, { recursive: true });
+    const all: CourseData[] = [];
+    for (const n of (await readdir(this.dir)).filter((x) => x.endsWith(".json"))) {
+      const d = await this.get(n.slice(0, -5)).catch(() => undefined);
+      if (d) all.push(d);
+    }
+    return { streak: studyStreak(studyDays(all), now), week: focusWeek(all, now) };
+  }
+
+  /**
+   * Keeps a finished focus-timer session.
+   *
+   * @param id - The course she focused on.
+   * @param minutes - Minutes actually focused (1–600).
+   */
+  async addFocus(id: string, minutes: number): Promise<StudyFocus> {
+    const d = await this.get(id);
+    const f = { t: Date.now(), minutes: Math.min(600, Math.max(1, Math.round(Number(minutes) || 0))) };
+    (d.focus ??= []).push(f);
+    if (d.focus.length > 5000) d.focus.splice(0, d.focus.length - 5000);
+    await this.save(d);
+    return f;
   }
 
   /** @returns One course's data (throws 404 when there is none). */

@@ -147,6 +147,10 @@
     .ph-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
     .ph-row button, .ph-btns button { min-height: 40px; flex: none; }
     .ph-btns { display: flex; gap: 6px; flex: none; }
+    .ph-week { display: flex; gap: 5px; align-items: flex-end; flex: none; }
+    .ph-week span { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--muted); }
+    .ph-week i { display: block; width: 8px; border-radius: 3px; background: var(--accent); opacity: .8; }
+    .ph-clock { font-size: 30px; font-variant-numeric: tabular-nums; }
     .ph-filter { display: flex; gap: 8px; }
     .ph-filter input { flex: 1; min-width: 0; }
     #modelsView[data-tab="images"] #imgSection:not([hidden]) ~ #imgNone, #modelsView[data-tab="images"] #imgNone:has(~ #imgSection:not([hidden])) { display: none !important; }

@@ -2745,3 +2745,13 @@ html.handheld .palette-list button { min-height: 44px; }
 /* Study: why a missed card's answer is right (above the next card). */
 .study-why { border: 1px solid var(--border); border-inline-start: 3px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; font-size: 14px; }
 .study-why p { margin: 4px 0 0; color: var(--text); }
+/* Study: focus timer with the streak and this week's minutes. */
+.study-focus { display: flex; flex-direction: column; gap: 10px; }
+.study-focus-top { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.study-focus-top h2 { margin: 0 0 2px; }
+.study-focus-week { display: flex; gap: 6px; align-items: flex-end; }
+.study-focus-week span { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); }
+.study-focus-week i { display: block; width: 10px; border-radius: 3px; background: var(--accent); opacity: .8; }
+.study-focus-run { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.study-focus-clock { font-size: 32px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.study-focus .study-actions button.on { background: var(--raised); border-color: var(--accent); }

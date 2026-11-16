@@ -100,6 +100,7 @@ function StudyHome() {
   return (
     <div className="page study-page">
       <h1>{L("לימודים", "Study")}</h1>
+      {!!courses?.length && <FocusCard courses={courses} />}
       {!!courses?.length && <section className="study-today">
         <h2>{L("להיום", "Today")}</h2>
         <div className="study-actions">
@@ -175,6 +176,92 @@ const fieldName = (id: string | undefined) => {
 const CLINICAL_TABS = new Set(["calc", "drugs", "labs"]);
 
 /** Student benefits, the ones for her fields first, each with how to turn it on and its official page. */
+/** The focus timer's running session, kept so it survives a reload or the screen turning off. */
+interface Running { courseId: string; minutes: number; end: number; start: number }
+const FOCUS_KEY = "kesher-focus-running";
+const readRunning = (): Running | null => {
+  try {
+    return JSON.parse(localStorage.getItem(FOCUS_KEY) || "null") as Running | null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Focus timer with a study streak (Pomodoro 25 or 50 minutes, or her own length), tied to a course. A day counts
+ * when she focused or reviewed cards; one missed day a week keeps the streak. This week's minutes per day under it.
+ */
+function FocusCard({ courses }: { courses: CourseRow[] }) {
+  const [progress, setProgress] = useState<{ streak: { days: number; today: boolean; shield: boolean }; week: Array<{ day: string; minutes: number }> } | null>(null);
+  const [running, setRunning] = useState<Running | null>(readRunning);
+  const [courseId, setCourseId] = useState(courses[0]!.id);
+  const [minutes, setMinutes] = useState(25);
+  const [, tick] = useState(0);
+  const load = () => void api<NonNullable<typeof progress>>("/api/study/progress").then(setProgress, () => undefined);
+  useEffect(load, []);
+  const keep = (r: Running | null) => {
+    setRunning(r);
+    try {
+      if (r) localStorage.setItem(FOCUS_KEY, JSON.stringify(r));
+      else localStorage.removeItem(FOCUS_KEY);
+    } catch {
+      // private mode: this visit only
+    }
+  };
+  const finish = useCallback(async (r: Running, early: boolean) => {
+    keep(null);
+    const done = Math.round((Math.min(Date.now(), r.end) - r.start) / 60000);
+    // A session stopped before 5 minutes does not count.
+    if (early && done < 5) return;
+    await call(api(`/api/study/courses/${r.courseId}/focus`, { method: "POST", body: { minutes: Math.max(1, done) } }));
+    if (!early) {
+      toast(L(`כל הכבוד! ${done} דקות ריכוז. הפסקה קצרה.`, `Well done! ${done} minutes of focus. Take a short break.`));
+      navigator.vibrate?.([200, 100, 200]);
+    }
+    load();
+  }, []);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => {
+      if (Date.now() >= running.end) void finish(running, false);
+      else tick((n) => n + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [running, finish]);
+  const left = running ? Math.max(0, running.end - Date.now()) : 0;
+  const mm = String(Math.floor(left / 60000)).padStart(2, "0");
+  const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
+  const max = Math.max(25, ...(progress?.week.map((w) => w.minutes) ?? [0]));
+  const dayName = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB", { weekday: "narrow" });
+  return (
+    <section className="card study-focus" aria-label={L("טיימר ריכוז", "Focus timer")}>
+      <div className="study-focus-top">
+        <div>
+          <h2>{L("טיימר ריכוז", "Focus timer")}</h2>
+          {progress && <p className="muted small">{progress.streak.days ? L(`רצף: ${progress.streak.days} ימים${progress.streak.today ? "" : " · עוד לא היום"}`, `Streak: ${progress.streak.days} days${progress.streak.today ? "" : " · not yet today"}`) : L("כל יום שלומדים בו (ריכוז או חזרה) נכנס לרצף. יום אחד בשבוע מותר לפספס.", "Every day you study (focus or review) joins the streak. One missed day a week is allowed.")}{progress?.streak.shield ? L(" · יום חופש נוצל השבוע", " · this week's free day used") : ""}</p>}
+        </div>
+        {progress && <div className="study-focus-week" aria-label={L("דקות ריכוז השבוע", "Focus minutes this week")}>
+          {progress.week.map((w) => <span key={w.day} title={`${w.minutes} ${L("דק׳", "min")}`}><i style={{ height: `${Math.round((w.minutes / max) * 28) + 2}px` }} />{dayName(w.day)}</span>)}
+        </div>}
+      </div>
+      {running ? (
+        <div className="study-focus-run">
+          <strong className="study-focus-clock" aria-live="off">{mm}:{ss}</strong>
+          <span className="muted small">{courses.find((c) => c.id === running.courseId)?.name}</span>
+          <button type="button" onClick={() => void finish(running, true)}>{L("עצירה", "Stop")}</button>
+        </div>
+      ) : (
+        <div className="study-actions">
+          <select value={courseId} onChange={(e) => setCourseId(e.target.value)} aria-label={L("קורס", "Course")}>{courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          {[25, 50].map((m) => <button key={m} type="button" className={minutes === m ? "on" : ""} aria-pressed={minutes === m} onClick={() => setMinutes(m)}>{m} {L("דק׳", "min")}</button>)}
+          <input type="number" min={5} max={180} value={minutes} onChange={(e) => setMinutes(Math.min(180, Math.max(5, Number(e.target.value) || 25)))} aria-label={L("דקות", "Minutes")} style={{ width: 72 }} />
+          <button type="button" className="primary" onClick={() => { const now = Date.now(); keep({ courseId, minutes, start: now, end: now + minutes * 60000 }); }}>{L("התחלה", "Start")}</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Benefits() {
   const [fields, setFields] = useState<Array<string | undefined>>([]);
   useEffect(() => void api<{ courses: CourseRow[] }>("/api/study").then((r) => setFields(r.courses.map((c) => c.field)), () => undefined), []);

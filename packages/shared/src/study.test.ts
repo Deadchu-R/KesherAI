@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -166,4 +166,25 @@ test("gradeLine writes the verdict itself, and cleanScript drops other scripts",
   const g = gradeMessages({ lectures: [{ id: "l", title: "לב", date: "", text: "מערכת החיסון הורסת את תאי הבטא בלבלב" }], tutorQuestion: "מה הורס את תאי הבטא?", answer: "וירוס" });
   assert.match(g.messages[0]!.content, /ONLY the lecture passages/);
   assert.match(g.messages[1]!.content, /Her answer: וירוס/);
+});
+
+test("study streak: days in a row, one missed day a week kept by a shield; focus minutes per day", () => {
+  const DAY = 86_400_000;
+  const now = new Date(2026, 10, 16, 18, 0).getTime();
+  const at = (i: number) => dayKey(now - i * DAY);
+  assert.deepEqual(studyStreak(new Set([at(0), at(1), at(2)]), now), { days: 3, today: true, shield: false });
+  // Today not done yet: the streak runs to yesterday.
+  assert.deepEqual(studyStreak(new Set([at(1), at(2)]), now), { days: 2, today: false, shield: false });
+  // One missed day (2 days ago) is covered; a second one in the same week is not.
+  assert.deepEqual(studyStreak(new Set([at(0), at(1), at(3), at(4)]), now), { days: 4, today: true, shield: true });
+  assert.equal(studyStreak(new Set([at(0), at(2), at(4)]), now).days, 2);
+  assert.equal(studyStreak(new Set(), now).days, 0);
+  const course = { course: { id: "c", name: "x", createdAt: 0 }, lectures: [], cards: [], reviews: [{ cardId: "k", t: now - 3 * DAY, rating: 3, format: "text" as const, elapsedDays: 0 }], quizzes: [], focus: [{ t: now, minutes: 25 }, { t: now - DAY, minutes: 50 }] };
+  assert.deepEqual([...studyDays([course])].sort(), [at(3), at(1), at(0)].sort());
+  const w = focusWeek([course], now);
+  assert.equal(w.length, 7);
+  assert.equal(w[6]!.minutes, 25);
+  assert.equal(w[5]!.minutes, 50);
+  const merged = mergeCourseData({ ...course, focus: [{ t: 1, minutes: 5 }] }, { ...course, focus: [{ t: 1, minutes: 5 }, { t: 2, minutes: 9 }] });
+  assert.deepEqual(merged.focus, [{ t: 1, minutes: 5 }, { t: 2, minutes: 9 }]);
 });

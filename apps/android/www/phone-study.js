@@ -1,11 +1,11 @@
-/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, File, URL */
+/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, File, URL */
 /**
  * Study on the phone itself, with no computer: courses, lectures (pasted or typed with the keyboard's voice typing),
  * summaries, flashcards on the FSRS schedule, quizzes graded by code, medication calculations and lab values. The
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -92,12 +92,12 @@ async function shareFile(c) {
 
 /** A phone course (one object) as the computer's course file, for syncing. */
 function toData(c) {
-  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, ...course } = c;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}) };
+  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, ...course } = c;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}) };
 }
 /** The computer's course file as a phone course. */
 function fromData(d) {
-  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}) };
+  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}) };
 }
 
 /**
@@ -188,7 +188,63 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
 
   const back = (to) => el("button", { type: "button", class: "link", onclick: () => go(to) }, L("› חזרה", "‹ Back"));
 
+  /**
+   * The focus timer (25 or 50 minutes, or her own), tied to a course, with her study streak (a day counts when she
+   * focused or reviewed; one missed day a week is allowed) and this week's minutes. The end time is kept, so the
+   * session still counts when the screen was off.
+   */
+  function focusCard() {
+    const KEYF = "kesherai-focus-running";
+    let run = null;
+    try { run = JSON.parse(localStorage.getItem(KEYF) || "null"); } catch { run = null; }
+    const datas = db.courses.map(toData);
+    const streak = studyStreak(studyDays(datas));
+    const week = focusWeek(datas);
+    const max = Math.max(25, ...week.map((w) => w.minutes));
+    const finish = (r, early) => {
+      localStorage.removeItem(KEYF);
+      const done = Math.round((Math.min(Date.now(), r.end) - r.start) / 60000);
+      const c = db.courses.find((x) => x.id === r.course);
+      if (c && (!early || done >= 5)) {
+        (c.focus ??= []).push({ t: Date.now(), minutes: Math.max(1, done) });
+        commit();
+        if (!early) { navigator.vibrate?.([200, 100, 200]); alert(L(`כל הכבוד! ${done} דקות ריכוז. הפסקה קצרה.`, `Well done! ${done} minutes of focus. Take a short break.`)); }
+      }
+      draw();
+    };
+    if (run && Date.now() >= run.end) { setTimeout(() => finish(run, false), 0); run = null; }
+    const day = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(he() ? "he-IL" : "en-GB", { weekday: "narrow" });
+    const bars = el("div", { class: "ph-week", "aria-label": L("דקות ריכוז השבוע", "Focus minutes this week") }, ...week.map((w) => el("span", { title: `${w.minutes}` }, el("i", { style: `height: ${Math.round((w.minutes / max) * 28) + 2}px` }), day(w.day))));
+    const note = streak.days ? L(`רצף: ${streak.days} ימים${streak.today ? "" : " · עוד לא היום"}${streak.shield ? " · יום חופש נוצל השבוע" : ""}`, `Streak: ${streak.days} days${streak.today ? "" : " · not yet today"}${streak.shield ? " · this week's free day used" : ""}`) : L("כל יום שלומדים בו (ריכוז או חזרה) נכנס לרצף. יום אחד בשבוע מותר לפספס.", "Every day you study (focus or review) joins the streak. One missed day a week is allowed.");
+    const sec = el("section", { class: "api" }, el("div", { class: "ph-row" }, el("span", {}, el("h2", { style: "margin: 0" }, L("טיימר ריכוז", "Focus timer")), el("small", { class: "muted" }, note)), bars));
+    if (run) {
+      const clock = el("strong", { class: "ph-clock" }, "");
+      const paint = () => {
+        // Stops when the page was drawn again without it (the first paint is before it is on the page).
+        if (t && !document.body.contains(clock)) return clearInterval(t);
+        const left = Math.max(0, run.end - Date.now());
+        clock.textContent = `${String(Math.floor(left / 60000)).padStart(2, "0")}:${String(Math.floor((left % 60000) / 1000)).padStart(2, "0")}`;
+        if (!left) { clearInterval(t); finish(run, false); }
+      };
+      let t = 0;
+      paint();
+      t = setInterval(paint, 1000);
+      sec.append(el("div", { class: "ph-row" }, clock, el("span", { class: "muted small" }, db.courses.find((c) => c.id === run.course)?.name ?? ""), el("button", { type: "button", onclick: () => { clearInterval(t); finish(run, true); } }, L("עצירה", "Stop"))));
+    } else {
+      let minutes = 25;
+      const pick = el("select", { "aria-label": L("קורס", "Course") }, ...db.courses.map((c) => el("option", { value: c.id }, c.name)));
+      const preset = [25, 50].map((m) => el("button", { type: "button", class: m === 25 ? "primary" : "", onclick: () => { minutes = m; preset.forEach((b, i) => (b.className = [25, 50][i] === m ? "primary" : "")); } }, L(`${m} דק׳`, `${m} min`)));
+      sec.append(el("div", { class: "ph-btns" }, pick, ...preset, el("button", { type: "button", onclick: () => {
+        const now = Date.now();
+        localStorage.setItem(KEYF, JSON.stringify({ course: pick.value, start: now, end: now + minutes * 60000 }));
+        draw();
+      } }, L("התחלה", "Start"))));
+    }
+    return sec;
+  }
+
   function home() {
+    if (db.courses.length) root.append(focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);

@@ -533,6 +533,71 @@ export interface StudyCourseData {
   drugs?: StudyDrug[];
   /** Ids of lectures, cards and drug cards deleted here, so a sync does not bring them back. */
   removed?: string[];
+  /** Finished focus-timer sessions for this course. */
+  focus?: StudyFocus[];
+}
+
+/** A finished focus-timer session (minutes actually focused). */
+export interface StudyFocus {
+  t: number;
+  minutes: number;
+}
+
+/** A day as YYYY-MM-DD in the device's own time zone (Israel time on her phone and computer). */
+export const dayKey = (t: number): string => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** The days she studied: a focus session or a card review that day, across all her courses. */
+export function studyDays(courses: StudyCourseData[]): Set<string> {
+  const days = new Set<string>();
+  for (const d of courses) {
+    for (const f of d.focus ?? []) days.add(dayKey(f.t));
+    for (const r of d.reviews) days.add(dayKey(r.t));
+  }
+  return days;
+}
+
+/**
+ * Her study streak: days in a row she studied, where one missed day in any seven keeps the chain (a "shield", so
+ * one bad day is not punished). Today counts once she studies; until then the streak runs to yesterday.
+ *
+ * @param days - The days she studied (studyDays).
+ * @param now - Now.
+ * @returns The streak in days, whether today is done, and whether a shield was used this week.
+ */
+export function studyStreak(days: Set<string>, now = Date.now()): { days: number; today: boolean; shield: boolean } {
+  const DAY = 86_400_000;
+  const today = days.has(dayKey(now));
+  let n = 0;
+  let shieldAt = -Infinity;
+  let shield = false;
+  // From today (or yesterday when today is not done yet) back, day by day.
+  for (let i = today ? 0 : 1; i < 3660; i++) {
+    if (days.has(dayKey(now - i * DAY))) { n++; continue; }
+    // A missed day: covered when the last shield was more than 7 days ago and the day before was studied.
+    if (i - shieldAt >= 7 && days.has(dayKey(now - (i + 1) * DAY)) && n > 0) {
+      shieldAt = i;
+      if (i < 7) shield = true;
+      continue;
+    }
+    break;
+  }
+  return { days: n, today, shield };
+}
+
+/**
+ * Minutes focused on each of the last 7 days (oldest first), across all courses.
+ *
+ * @param courses - Her courses.
+ * @param now - Now.
+ */
+export function focusWeek(courses: StudyCourseData[], now = Date.now()): Array<{ day: string; minutes: number }> {
+  const week = Array.from({ length: 7 }, (_, i) => ({ day: dayKey(now - (6 - i) * 86_400_000), minutes: 0 }));
+  const at = new Map(week.map((w) => [w.day, w]));
+  for (const d of courses) for (const f of d.focus ?? []) { const w = at.get(dayKey(f.t)); if (w) w.minutes += f.minutes; }
+  return week;
 }
 
 const lectureWeight = (l: StudyLecture) => (l.summary ? 4 : 0) + (l.terms?.length ? 2 : 0) + (l.diagram ? 1 : 0);
@@ -572,6 +637,8 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     .sort((x, y) => x.t - y.t);
   const field = !a.course.fieldChosen && b.course.fieldChosen ? { field: b.course.field, fieldChosen: true } : {};
   const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
+  const focusSeen = new Set<number>();
+  const focus = [...(a.focus ?? []), ...(b.focus ?? [])].filter((f) => !focusSeen.has(f.t) && focusSeen.add(f.t)).sort((x, y) => x.t - y.t).slice(-5000);
   return {
     course: { ...a.course, ...field, ...(!a.course.examDate && b.course.examDate ? { examDate: b.course.examDate } : {}) },
     lectures: byId(a.lectures, b.lectures, gone, (x, y) => (lectureWeight(y) > lectureWeight(x) || (lectureWeight(y) === lectureWeight(x) && y.text.length > x.text.length) ? y : x)),
@@ -580,6 +647,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     quizzes: byId(a.quizzes, b.quizzes, gone, (x, y) => (!x.answers && y.answers ? y : x)).sort((x, y) => x.t - y.t),
     ...(drugs.length ? { drugs } : {}),
     ...(removed.length ? { removed } : {}),
+    ...(focus.length ? { focus } : {}),
   };
 }
 

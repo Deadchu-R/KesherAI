@@ -1596,7 +1596,7 @@ Stopped at: building (store and public page first, then the chat menu and the se
   3. Study mode / Socratic questioning (ChatGPT Study Mode, Khanmigo): the tutor asks her, waits, then corrects.
   4. Explanations for missed cards (RemNote): after "again", a one-line why.
 - Decided: build 1 and 2 now (both work on the computer, in remote and in the phone app), then 3 and 4.
-- Stopped at: decided; building.
+- Stopped at: built (0.6.301), on the computer, in remote and on the phone; sessions sync with Study.
 
 ## Students, part 10: studying on the phone with no computer (2026-11-16)
 
@@ -1626,3 +1626,17 @@ Stopped at: building (store and public page first, then the chat menu and the se
   computer", and "from Study" in the + sheet.
 - Designed (5 boards in the design doc, row "מסך הצ׳אט ורשימת הצ׳אטים"); waiting for Roee's review before building.
 - Stopped at: designed; not built.
+
+## Students, part 11: a focus timer with study streaks (2026-11-16)
+
+- Sources: CrocLab's 2026 study-timer comparison (Forest, Focus Keeper, Tide, FocusCroc), Toolfinder and Habi
+  round-ups.
+- Forest: a tree grows while you focus, an app blocklist; no day streak. Focus Keeper: Pomodoro with custom
+  lengths, daily/weekly/monthly charts, badges, no streaks. Tide: timer with calm sounds. FocusCroc: day streaks
+  with "streak shields" that protect the chain on a missed day, a calendar of check-ins, evening reminders.
+- Complaints: streaks without a safety net feel punishing; subscriptions; no link to what was studied.
+- Ours: Pomodoro presets (25/5, 50/10) and a custom length, tied to a course (optional); a day counts when she
+  focused or reviewed cards; one free missed day a week keeps the streak (a shield, no guilt); this week's minutes
+  per day; a notification when the time is up. Works on the phone with no computer and on the computer; sessions
+  sync with the rest of Study.
+- Stopped at: built (0.6.301), on the computer, in remote and on the phone; sessions sync with Study.

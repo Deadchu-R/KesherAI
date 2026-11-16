@@ -23,6 +23,10 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   type L = { Params: { id: string; lid: string } };
 
   app.get("/api/study", async () => ({ courses: await st.list() }));
+  /** Her study streak and this week's focus minutes. */
+  app.get("/api/study/progress", async () => st.progress());
+  /** A finished focus-timer session: `{ minutes }`. */
+  app.post<C & { Body: { minutes?: number } }>("/api/study/courses/:id/focus", async (req) => st.addFocus(req.params.id, Number(req.body?.minutes)));
   /** The course's tutor: `{ question, history? }` → an answer from her lectures, with the lectures it used. */
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : "ask"));
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
