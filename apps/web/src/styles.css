@@ -2733,3 +2733,8 @@ html.handheld .palette-list button { min-height: 44px; }
 
 .study-import { display: block; margin: -4px 0 10px; cursor: pointer; }
 .appbar-home[aria-current] { color: var(--text); }
+
+/* The phone app's switch between its own screens and the computer's (remote), in the top bar. */
+.bar-where { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; gap: 2px; margin-inline: 4px; }
+.bar-where > * { display: inline-grid; place-items: center; min-height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
+.bar-where > .on { background: #2e2e3a; color: var(--text); font-weight: 500; }

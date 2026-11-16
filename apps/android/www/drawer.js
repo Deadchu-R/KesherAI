@@ -249,7 +249,8 @@
     b.style.bottom = h ? `${h + 12}px` : "";
     // With the bottom bar (the app's home, tools, settings), its "Chats" opens this menu: no ☰ over it.
     const tabs = document.getElementById("appTabs");
-    b.hidden = !!tabs && !tabs.hidden;
+    // Nor over the connect sheet (it has its own "back to the phone").
+    b.hidden = (!!tabs && !tabs.hidden) || !!document.getElementById("scrim");
   };
   place();
   setInterval(place, 400);

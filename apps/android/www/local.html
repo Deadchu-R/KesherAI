@@ -131,6 +131,10 @@
   .seg { display: flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 3px; gap: 2px; margin: 0 0 12px; }
   .seg button { flex: 1; min-height: 38px; border-radius: 9px; border: 0; background: transparent; color: #c9c9ce; font-size: 13px; padding: 0 8px; }
   .seg button.on { background: #2e2e3a; color: var(--text); font-weight: 500; }
+  /* The top bar's switch between the phone's screens and the computer's (remote). */
+  .seg.mini { margin: 0; flex: none; padding: 2px; }
+  .seg.mini button { min-height: 32px; font-size: 12.5px; padding: 0 10px; }
+  header h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .home-hi { margin: 4px 0 12px; font-size: 24px; font-weight: 500; }
   .pc-note { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); margin-bottom: 14px; font-size: 13px; color: #c9c9ce; }
   .pc-note button { min-height: 36px; font-size: 13px; padding: 0 12px; }
@@ -161,16 +165,16 @@
     <button class="icon" id="back" type="button" aria-label="Back">→</button>
     <button class="icon" id="homeBtn" type="button" aria-label="Home" title="Home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg></button>
     <h1 id="title" data-he="בטלפון הזה" data-en="On this phone">בטלפון הזה</h1>
+    <div class="seg mini" id="whereBar" role="tablist" aria-label="Where it runs">
+      <button type="button" role="tab" aria-selected="true" class="on" data-he="טלפון" data-en="Phone">טלפון</button>
+      <button type="button" role="tab" id="whereComputer" data-he="מחשב" data-en="Computer">מחשב</button>
+    </div>
     <button type="button" id="modelSwitch" class="model-switch" hidden><span id="modelName"></span> <span aria-hidden="true">▾</span></button>
     <button class="icon" id="newChat" type="button" aria-label="New chat" hidden>＋</button>
     <button class="icon" id="menu" type="button" aria-label="Menu" hidden>☰</button>
   </header>
 
   <main id="homeView" hidden>
-    <div class="seg" role="tablist" aria-label="Where it runs">
-      <button type="button" role="tab" id="whereComputer" data-he="במחשב" data-en="On the computer">במחשב</button>
-      <button type="button" role="tab" aria-selected="true" class="on" id="wherePhone" data-he="בטלפון" data-en="On the phone">בטלפון</button>
-    </div>
     <h2 class="home-hi" id="homeHi"></h2>
     <div class="pc-note" id="pcNote" hidden>
       <span aria-hidden="true">🖥</span>
@@ -467,6 +471,7 @@
     $("title").textContent = title || (name === "homeView" ? "KesherAI" : T("בטלפון הזה", "On this phone"));
     $("back").style.visibility = top && name === "homeView" ? "hidden" : "visible";
     $("homeBtn").style.visibility = name === "homeView" ? "hidden" : "visible";
+    $("whereBar").hidden = name === "chatView";
     const go = { homeView: "new", toolsView: "tools", settingsView: "settings" }[name] ?? (name === "modelsView" && $("modelsView").dataset.tab === "study" ? "study" : "");
     document.querySelectorAll("#appTabs [data-go]").forEach((b) => (b.dataset.go === go ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
   }

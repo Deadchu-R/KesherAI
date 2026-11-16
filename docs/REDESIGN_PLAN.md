@@ -35,6 +35,10 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
 - Stage 2: 13–16 and 18 are in (0.6.240–0.6.244); 17 for computers in 0.6.245; 19 already existed.
 
 ## Later (asked by Roee)
+- **Addressing her right in Hebrew (asked 2026-11-16):** on first start the interface asks how to address you
+  (female / male / plural or neutral), and every Hebrew string has the matching form ("כתבי" / "כתוב" / "כתבו",
+  "התחילי" / "התחל"), on the computer, in remote and in the phone app; the chat models get the same as a system
+  hint so their answers match. Other gendered languages (Arabic, Spanish, French…) follow the same setting.
 - Synced cloud keys ("My devices") encrypted with a password the user sets, entered once on each new computer.
 - **Students (asked 2026-11-16): AI study helpers that run well on a modest laptop** (8 GB RAM, no graphics card):
   speech with whisper base/small int8 on the CPU (small ≈ 0.85 GB RAM, about 2.5× faster than real time on a laptop

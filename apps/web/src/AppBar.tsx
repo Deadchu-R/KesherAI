@@ -120,6 +120,13 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         </button>
         <button type="button" data-pad="B" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
         <button type="button" className="bar-btn hist" aria-label={t("forward")} title={t("forward")} onClick={() => history.forward()}>{Icon.forward}</button>
+        {/* In the phone app (remote): switch to the phone's own screens and back, from the top bar. */}
+        {appHome() && (
+          <div className="bar-where" role="tablist" aria-label={getLocale() === "he" ? "איפה זה רץ" : "Where it runs"}>
+            <a role="tab" href={`${appHome()!.replace(/\/$/, "")}/local.html`}>{getLocale() === "he" ? "טלפון" : "Phone"}</a>
+            <span role="tab" aria-selected="true" className="on">{getLocale() === "he" ? "מחשב" : "Computer"}</span>
+          </div>
+        )}
         {/* Home, from every screen (computer, remote and phone). */}
         <a href="#/" className="bar-btn appbar-home" aria-label={getLocale() === "he" ? "בית" : "Home"} title={getLocale() === "he" ? "בית" : "Home"} aria-current={hash === "#/" || hash === "" ? "page" : undefined}>{Icon.home}</a>
         <div className="bar-seg" role="group" aria-label={t("chatOrCode")}>
