@@ -61,6 +61,8 @@ jobs:
       # The avatar camera on Windows: softcam (MIT) and KesherAI's small sender, packed into the app (softcam/).
       - if: runner.os == 'Windows'
         name: Build the avatar camera (softcam)
+        # A problem here never stops a release: the app then offers the OBS route only.
+        continue-on-error: true
         shell: pwsh
         run: |
           git clone --depth 1 --branch v1.8.1 https://github.com/tshino/softcam "$env:RUNNER_TEMP\softcam"
