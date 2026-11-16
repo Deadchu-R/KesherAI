@@ -1,0 +1,23 @@
+name: Semgrep
+
+# KesherAI's own Semgrep rules for the Electron app (.semgrep/electron.yml): window settings that must stay safe
+# (nodeIntegration, contextIsolation, sandbox, webSecurity, webviewTag) and shell.openExternal only on checked
+# addresses. A match fails the job. Runs in Semgrep's own container (nothing is added to the project).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.185.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep scan --config .semgrep/electron.yml --metrics=off --error apps/desktop/src packages/core/src apps/web/src

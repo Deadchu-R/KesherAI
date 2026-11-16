@@ -1,0 +1,50 @@
+# KesherAI's own Semgrep rules for the Electron app (audit S5): the settings and calls that turn a renderer bug into
+# code running on the computer. They run in CI (.github/workflows/semgrep.yml) and fail the job on a match.
+rules:
+  - id: electron-node-integration-on
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: A window with nodeIntegration on gives any page script the whole computer. Keep it false.
+    pattern: "{..., nodeIntegration: true, ...}"
+  - id: electron-context-isolation-off
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: contextIsolation must stay on, so a page cannot reach the preload's objects.
+    pattern: "{..., contextIsolation: false, ...}"
+  - id: electron-sandbox-off
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Renderers run in the sandbox. Keep sandbox true.
+    pattern: "{..., sandbox: false, ...}"
+  - id: electron-web-security-off
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: webSecurity false turns off the same-origin policy.
+    pattern: "{..., webSecurity: false, ...}"
+  - id: electron-insecure-content
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: allowRunningInsecureContent lets an HTTPS page run HTTP scripts.
+    pattern: "{..., allowRunningInsecureContent: true, ...}"
+  - id: electron-webview-tag-on
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: The <webview> tag is off in every window; use the browser pane (a WebContentsView) instead.
+    pattern: "{..., webviewTag: true, ...}"
+  - id: electron-open-external-unchecked
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: shell.openExternal opens whatever it is given (file:, smb:, an app's own scheme). Pass only an address checked to be http(s), through the app's own checker.
+    patterns:
+      - pattern: shell.openExternal($URL, ...)
+      - pattern-not: shell.openExternal("...", ...)
+      - pattern-not-inside: |
+          if (<... $RE.test($URL) ...>)
+            $S;
+  - id: electron-remote-module
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: The remote module gives renderers the main process; it is not used.
+    pattern-either:
+      - pattern: require("@electron/remote")
+      - pattern: import $X from "@electron/remote"

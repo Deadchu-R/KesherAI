@@ -416,7 +416,8 @@ async function createWindow(url: string): Promise<void> {
   win.webContents.on("will-navigate", (event, target) => {
     if (!target.startsWith(`${url}/`) && target !== url) {
       event.preventDefault();
-      void shell.openExternal(target);
+      // Only web addresses go to the browser (never file:, smb: or another app's own scheme).
+      if (/^https?:\/\//.test(target)) void shell.openExternal(target);
     }
   });
 
