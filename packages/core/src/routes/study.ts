@@ -24,7 +24,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
 
   app.get("/api/study", async () => ({ courses: await st.list() }));
   /** The course's tutor: `{ question, history? }` → an answer from her lectures, with the lectures it used. */
-  app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }> } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : []));
+  app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : "ask"));
+  /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
+  app.post<C & { Params: { cid: string } }>("/api/study/courses/:id/cards/:cid/explain", async (req) => st.explainCard(req.params.id, req.params.cid));
   /** A lecture's spoken review (audio overview), written by the chat model and kept. */
   app.post<L>("/api/study/courses/:id/lectures/:lid/audio", async (req) => st.audioOverview(req.params.id, req.params.lid));
   /** The course as a file to share with classmates, and a shared file opened as a new course. */

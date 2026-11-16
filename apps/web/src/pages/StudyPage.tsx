@@ -270,21 +270,29 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
   const [turns, setTurns] = useState<Array<{ role: "user" | "assistant"; content: string; sources?: Array<{ lectureId: string; title: string }> }>>([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
-  const send = async () => {
+  // "ask": she asks, answers come from her lectures. "study": the tutor asks her, waits, then corrects.
+  const [mode, setMode] = useState<"ask" | "study">("ask");
+  const switchMode = (m: "ask" | "study") => { setMode(m); setTurns([]); setQ(""); };
+  const send = async (start = false) => {
     const question = q.trim();
-    if (!question || busy) return;
+    if ((!question && !start) || busy) return;
     setQ("");
     setBusy(true);
     const history = turns.map(({ role, content }) => ({ role, content }));
-    setTurns((t) => [...t, { role: "user", content: question }]);
-    const r = await call(api<{ answer: string; sources: Array<{ lectureId: string; title: string }> }>(`/api/study/courses/${courseId}/ask`, { method: "POST", body: { question, history } }));
+    if (question) setTurns((t) => [...t, { role: "user", content: question }]);
+    const r = await call(api<{ answer: string; sources: Array<{ lectureId: string; title: string }> }>(`/api/study/courses/${courseId}/ask`, { method: "POST", body: { question, history, mode } }));
     setBusy(false);
     if (r) setTurns((t) => [...t, { role: "assistant", content: r.answer, sources: r.sources }]);
   };
   if (!hasLectures) return <p className="muted">{L("קודם הוסיפי הרצאה: התשובות מגיעות רק מההרצאות שלך.", "Add a lecture first: answers come only from your lectures.")}</p>;
   return (
     <section className="study-ask">
-      <p className="muted small">{L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.")}</p>
+      <div className="seg-pills" role="tablist" aria-label={L("איך לומדים", "How to study")}>
+        <button type="button" role="tab" aria-selected={mode === "ask"} className={mode === "ask" ? "on" : ""} onClick={() => switchMode("ask")}>{L("השאלות שלי", "My questions")}</button>
+        <button type="button" role="tab" aria-selected={mode === "study"} className={mode === "study" ? "on" : ""} onClick={() => switchMode("study")}>{L("מצב תרגול: המורה שואלת", "Study mode: the tutor asks")}</button>
+      </div>
+      <p className="muted small">{mode === "ask" ? L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.") : L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.")}</p>
+      {mode === "study" && turns.length === 0 && !busy && <button type="button" className="primary" onClick={() => void send(true)}>{L("התחילי תרגול", "Start practising")}</button>}
       <div className="study-ask-turns" aria-live="polite">
         {turns.map((t, i) => (
           <div key={i} className={`study-ask-turn ${t.role}`} dir="auto">
@@ -292,11 +300,11 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
             {t.sources && t.sources.length > 0 && <small className="muted">{L("מתוך: ", "From: ")}{t.sources.map((s, j) => <span key={s.lectureId}>{j ? " · " : ""}<a href={`#/study/${courseId}/l/${s.lectureId}`}>{s.title}</a></span>)}</small>}
           </div>
         ))}
-        {busy && <p className="muted">{L("מחפשת בהרצאות…", "Looking through your lectures…")}</p>}
+        {busy && <p className="muted">{mode === "study" ? L("חושבת על שאלה…", "Thinking of a question…") : L("מחפשת בהרצאות…", "Looking through your lectures…")}</p>}
       </div>
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={L("שאלה", "Question")} placeholder={L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
-        <button type="submit" className="primary" disabled={busy || !q.trim()}>{L("שאלי", "Ask")}</button>
+        <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={mode === "study" ? L("התשובה שלך", "Your answer") : L("שאלה", "Question")} placeholder={mode === "study" ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
+        <button type="submit" className="primary" disabled={busy || !q.trim()}>{mode === "study" ? L("שליחת תשובה", "Answer") : L("שאלי", "Ask")}</button>
       </form>
     </section>
   );
@@ -557,6 +565,8 @@ function Review({ courseId, onChange }: { courseId: string; onChange: () => void
   const [cards, setCards] = useState<StudyCard[] | null>(null);
   const [shown, setShown] = useState(false);
   const [done, setDone] = useState(0);
+  // The last missed card's explanation (shown above the next card).
+  const [why, setWhy] = useState<{ front: string; text?: string }>();
   useEffect(() => void api<{ cards: StudyCard[] }>(`/api/study/courses/${courseId}/review`).then((r) => setCards(r.cards), (e: Error) => toast(e.message)), [courseId]);
   const card = cards?.[0];
   const rate = useCallback(async (rating: number) => {
@@ -565,8 +575,12 @@ function Review({ courseId, onChange }: { courseId: string; onChange: () => void
     if (!ok) return;
     setShown(false);
     setDone((d) => d + 1);
-    // "Again" comes back in this session (after the others).
+    // "Again" comes back in this session (after the others), with a line on why the answer is right.
     setCards((cs) => (cs ? [...cs.slice(1), ...(rating === 1 ? [card] : [])] : cs));
+    if (rating === 1) {
+      setWhy({ front: card.front });
+      void api<{ text: string }>(`/api/study/courses/${courseId}/cards/${card.id}/explain`, { method: "POST", body: {} }).then((r) => setWhy((w) => (w?.front === card.front ? { front: card.front, text: r.text } : w)), () => setWhy(undefined));
+    } else setWhy(undefined);
     onChange();
   }, [card, courseId, onChange]);
   useEffect(() => {
@@ -583,6 +597,12 @@ function Review({ courseId, onChange }: { courseId: string; onChange: () => void
   return (
     <section className="study-review">
       <p className="muted small">{L(`נשארו ${cards.length}`, `${cards.length} left`)} · {fmtName(card.format)}</p>
+      {why && (
+        <div className="study-why" aria-live="polite" dir="auto">
+          <strong>{L("למה? ", "Why? ")}</strong>{why.front}
+          <p>{why.text ?? L("מסבירה…", "Explaining…")}</p>
+        </div>
+      )}
       <button type="button" className="study-card card" onClick={() => setShown(true)} aria-label={shown ? undefined : L("הצג תשובה", "Show answer")}>
         <span className="study-card-front" dir="auto">{card.front}</span>
         {shown ? <span className="study-card-back" dir="auto"><RichText text={card.back} /></span> : <span className="muted small">{L("הקישי או לחצי רווח כדי לראות את התשובה", "Tap or press space to see the answer")}</span>}

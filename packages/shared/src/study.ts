@@ -714,6 +714,59 @@ export function findPassages(lectures: StudyLecture[], question: string, budget 
 export const TUTOR_PROMPT =
   "You are a tutor for a student's course. Answer only from the lecture passages given (her own material), in the language of her question, clearly and briefly, with an example when it helps. After each fact, name its lecture in square brackets, like [Lecture: <title>]. If the passages do not answer the question, say that her lectures do not cover it, and what to look up; do not answer from general knowledge. Never invent numbers, doses or values.";
 
+/** Study mode: the tutor asks her about her own lectures, waits, then corrects (Socratic, like ChatGPT's study mode). */
+export const STUDY_MODE_PROMPT =
+  "You are a tutor quizzing a student on her own lecture passages (given). Do not lecture. Ask ONE short question at a time about the passages, then stop and wait for her answer. When she answers: say plainly whether it is right, correct or complete it briefly from the passages and name the lecture in square brackets, like [Lecture: <title>], then ask the next question: a little harder if she was right, simpler if not. If she asks for help, give a hint as a question before the answer. Speak in her language (the lectures' language when she has not written yet). Never invent numbers, doses or values.";
+
+/** Why a missed card's answer is right, in one or two sentences, from her lecture. */
+export const MISSED_PROMPT =
+  "A student got this flashcard wrong. In one or two short sentences, in the card's language, explain why the answer is right, using the lecture passage when it helps, so it sticks (a reason, a link or a memory trick). Never invent numbers, doses or values. Write only the explanation.";
+
+/** A chat message for the tutor's model. */
+export interface TutorMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+/**
+ * The messages for the course tutor, the same on the computer and on the phone.
+ *
+ * @param o.lectures - The course's lectures.
+ * @param o.question - Her question, or her answer in study mode ("" starts study mode with a first question).
+ * @param o.history - The earlier turns (the last 6 are kept, each cut to 4000 characters).
+ * @param o.mode - "ask": answers from her lectures; "study": the tutor asks her.
+ * @param o.hint - The field's note for the model, if any.
+ * @param o.budget - Characters of lecture passages at most.
+ * @param o.pick - For study mode's first question: picks a lecture (tests pass a fixed one; default random).
+ * @returns The messages and the passages used.
+ */
+export function tutorMessages(o: { lectures: StudyLecture[]; question: string; history?: Array<{ role: string; content: string }>; mode?: "ask" | "study"; hint?: string; budget?: number; pick?: (n: number) => number }): { messages: TutorMessage[]; passages: StudyPassage[] } {
+  const study = o.mode === "study";
+  const turns = (o.history ?? [])
+    .filter((h): h is { role: "user" | "assistant"; content: string } => (h.role === "user" || h.role === "assistant") && typeof h.content === "string")
+    .slice(-6)
+    .map((h) => ({ role: h.role, content: h.content.slice(0, 4000) }));
+  const q = o.question.trim().slice(0, 2000);
+  const budget = o.budget ?? 9000;
+  // The passages: what her question (and the tutor's last question, in study mode) is about.
+  const last = [...turns].reverse().find((h) => h.role === (study ? "assistant" : "user"))?.content ?? "";
+  let passages = q || last ? findPassages(o.lectures, `${q} ${last}`.slice(0, 3000), budget) : [];
+  if (study && !passages.length) {
+    // The first question (or nothing matched): a stretch of one lecture, chosen at random.
+    const withText = o.lectures.filter((l) => l.text.trim() || l.summary);
+    const l = withText[(o.pick ?? ((n) => Math.floor(Math.random() * n)))(withText.length)];
+    if (l) {
+      const body = l.text.length > 200 ? l.text : `${l.text}\n${l.summary ?? ""}`;
+      const from = body.length > budget ? Math.floor(((o.pick ?? ((n) => Math.floor(Math.random() * n)))(1000) / 1000) * (body.length - budget)) : 0;
+      passages = [{ lectureId: l.id, title: l.title, text: body.slice(from, from + Math.min(budget, 4000)) }];
+    }
+  }
+  const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
+  const system = `${study ? STUDY_MODE_PROMPT : TUTOR_PROMPT}${o.hint ? `\n${o.hint}` : ""}`;
+  const user = study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\nStart: ask her the first question.`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
+  return { messages: [{ role: "system", content: system }, ...turns, { role: "user", content: user }], passages };
+}
+
 /** The spoken review of a lecture: written to be heard, not read. */
 export const AUDIO_PROMPT =
   "Write a spoken review of this lecture for a student to listen to on the bus, about 3 minutes long (400-550 words), in the lecture's language. Talk to her directly and warmly, like a good tutor: open with what the lecture is about in one sentence, go through the main ideas in a sensible order with one concrete example, say the key terms clearly (with the English name in brackets the first time, for medical terms), and end with three short questions to think about, each followed by its answer. Plain spoken sentences only: no headings, lists, symbols, tables or markdown. Use only what is in the lecture; never invent numbers, doses or values.";

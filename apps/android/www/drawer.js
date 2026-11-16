@@ -201,7 +201,7 @@
     add(lock);
   }
   item("🔗", T("המחשבים שלי", "My computers"), computers.length ? T(`${computers.length} שמורים`, `${computers.length} saved`) : "", "index.html?switch=1", here === "index.html" ? "on" : "");
-  item("⬆", T("בדוק עדכונים", "Check for updates"), "", "index.html?switch=1&update=1");
+  item("⬆", T("בדיקת עדכונים", "Check for updates"), "", here === "local.html" || !localStorage.getItem("kesherai-server") ? "local.html?tab=settings" : "index.html?switch=1&update=1");
   const foot = document.createElement("div");
   foot.className = "kd-foot";
   panel.append(foot);

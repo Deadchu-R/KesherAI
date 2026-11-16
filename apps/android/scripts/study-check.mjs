@@ -1,7 +1,8 @@
 /* global localStorage, document, process, console -- the functions passed to the page run in the browser; process and console are Node's */
 /**
  * A quick check of the phone app's own Study tab (no computer), at 390 px in Hebrew: the start guide, a course with a
- * lecture and an exam date (the plan shows), the file and photo buttons, and "Ask the course". No page errors.
+ * lecture and an exam date (the plan shows), the file and photo buttons, "Ask the course" and its study mode. No page
+ * errors.
  *
  * Usage: node apps/android/scripts/study-check.mjs [www] [out.png]   (after scripts/vendor.mjs)
  */
@@ -60,6 +61,9 @@ checks.share = text.includes("שיתוף הקורס");
 await sec.locator("button", { hasText: "שאלי את הקורס" }).click();
 await pg.waitForTimeout(400);
 checks.ask = (await sec.locator("text=התשובות רק מההרצאות שלך").count()) > 0;
+await sec.locator("button", { hasText: "מצב תרגול" }).click();
+await pg.waitForTimeout(300);
+checks.studyMode = (await sec.locator("button", { hasText: "התחילי תרגול" }).count()) > 0;
 checks.fits = (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 if (shot) await pg.screenshot({ path: shot });
 await b.close();

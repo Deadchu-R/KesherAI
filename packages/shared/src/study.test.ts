@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -142,4 +142,18 @@ test("a course shared with a classmate keeps its material, not her history, and 
   assert.equal(o.reviews.length, 0);
   assert.equal(o.lectures[0]!.audio, "שמע");
   assert.equal(openSharedCourse({ kind: "other" }, () => "x", () => ({})), undefined);
+});
+
+test("tutorMessages: answers from her lectures, and study mode asks her first", () => {
+  const lectures = [{ id: "l1", title: "לב", date: "2026-11-01", text: "דיגוקסין מגביר את כוח ההתכווצות של הלב ומאט את הדופק. ".repeat(10) }];
+  const ask = tutorMessages({ lectures, question: "מה עושה דיגוקסין?", history: [{ role: "system", content: "x" }, { role: "user", content: "a" }] });
+  assert.equal(ask.messages[0]!.content.startsWith("You are a tutor for"), true);
+  assert.equal(ask.messages.filter((m) => m.role === "system").length, 1);
+  assert.equal(ask.passages[0]!.title, "לב");
+  const start = tutorMessages({ lectures, question: "", mode: "study", pick: () => 0 });
+  assert.match(start.messages.at(-1)!.content, /ask her the first question/);
+  assert.match(start.messages.at(-1)!.content, /\[Lecture: לב\]/);
+  assert.match(start.messages[0]!.content, /Ask ONE short question/);
+  const answer = tutorMessages({ lectures, question: "מאט דופק", mode: "study", history: [{ role: "assistant", content: "מה עושה דיגוקסין לדופק?" }] });
+  assert.match(answer.messages.at(-1)!.content, /Her answer: מאט דופק/);
 });

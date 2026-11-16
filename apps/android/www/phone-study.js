@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, TUTOR_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -606,34 +606,45 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
 
   /** The course's tutor on the phone's own model: answers only from her lectures, naming each lecture. */
   const tutor = new Map();
+  /** The last missed card and why its answer is right (while the explanation is being written: no text yet). */
+  let missed;
+  /** The tutor's way per course: "ask" (she asks) or "study" (the tutor asks her). */
+  const tutorMode = new Map();
   function askView() {
     const c = course();
     if (!c) return go({ at: "home" });
-    const turns = tutor.get(c.id) || [];
-    tutor.set(c.id, turns);
+    const mode = tutorMode.get(c.id) || "ask";
+    const key = `${c.id}:${mode}`;
+    const turns = tutor.get(key) || [];
+    tutor.set(key, turns);
     const list = el("div", { class: "ph-ask", "aria-live": "polite" }, ...turns.map((t) => el("div", { class: `ph-ask-turn ${t.role}`, dir: "auto" }, t.content, t.sources?.length ? el("small", { class: "muted" }, el("br"), L("מתוך: ", "From: ") + t.sources.join(" · ")) : "")));
+    const study = mode === "study";
     // An empty box takes its direction from the page (dir=auto would show the Hebrew example left to right).
-    const q = el("input", { dir: he() ? "rtl" : "auto", "aria-label": L("שאלה", "Question"), placeholder: L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
-    const btn = el("button", { type: "submit", class: "primary" }, L("שאלי", "Ask"));
-    const form = el("form", { class: "ph-filter", onsubmit: async (e) => {
-      e.preventDefault();
-      const question = q.value.trim();
-      if (!question) return;
-      const last = [...turns].reverse().find((t) => t.role === "user")?.content || "";
-      const passages = findPassages(c.lectures, `${question} ${last}`, 5000);
-      const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
-      const history = turns.slice(-4).map(({ role, content }) => ({ role, content }));
-      turns.push({ role: "user", content: question });
-      const r = await need([{ role: "system", content: TUTOR_PROMPT }, ...history, { role: "user", content: `Passages from her lectures:\n\n${material}\n\nHer question: ${question}` }], btn);
-      if (r === undefined) { turns.pop(); return; }
+    const q = el("input", { dir: he() ? "rtl" : "auto", "aria-label": study ? L("התשובה שלך", "Your answer") : L("שאלה", "Question"), placeholder: study ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?") });
+    const btn = el("button", { type: "submit", class: "primary" }, study ? L("שליחת תשובה", "Answer") : L("שאלי", "Ask"));
+    /** One turn, the same messages as the computer's tutor (shared). An empty question starts study mode. */
+    const send = async (question, busyBtn) => {
+      const { messages, passages } = tutorMessages({ lectures: c.lectures, question, history: turns, mode, hint: hint(c).trim() || undefined, budget: 5000 });
+      if (question) turns.push({ role: "user", content: question });
+      const r = await need(messages, busyBtn);
+      if (r === undefined) { if (question) turns.pop(); return; }
       turns.push({ role: "assistant", content: String(r).trim(), sources: [...new Set(passages.map((p) => p.title))] });
       draw();
+    };
+    const form = el("form", { class: "ph-filter", onsubmit: (e) => {
+      e.preventDefault();
+      const question = q.value.trim();
+      if (question) void send(question, btn);
     } }, q, btn);
-    root.append(back({ at: "course", course: c.id }), el("h2", {}, L("שאלי את הקורס", "Ask the course")),
-      el("p", { class: "muted small" }, L("התשובות רק מההרצאות שלך, עם שם ההרצאה. כשהן לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, naming each lecture. When they do not cover a question, it says so.")),
-      list, form);
-    q.focus();
+    const seg = el("div", { class: "ph-btns", role: "tablist" }, ...[["ask", "השאלות שלי", "My questions"], ["study", "מצב תרגול: המורה שואלת", "Study mode: the tutor asks"]].map(([m, h, e]) =>
+      el("button", { type: "button", role: "tab", "aria-selected": String(m === mode), class: m === mode ? "primary" : "", onclick: () => { tutorMode.set(c.id, m); draw(); } }, L(h, e))));
+    const startBtn = study && !turns.length ? el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 48px", onclick: (e) => void send("", e.currentTarget) }, L("התחילי תרגול", "Start practising")) : "";
+    root.append(back({ at: "course", course: c.id }), el("h2", {}, L("שאלי את הקורס", "Ask the course")), seg,
+      el("p", { class: "muted small" }, study ? L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.") : L("התשובות רק מההרצאות שלך, עם שם ההרצאה. כשהן לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, naming each lecture. When they do not cover a question, it says so.")),
+      startBtn, list, form);
+    if (!startBtn) q.focus();
   }
+
 
   function review() {
     const c = course();
@@ -651,9 +662,22 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       card.fsrs = JSON.parse(JSON.stringify(next));
       card.due = next.due.toISOString();
       c.reviews.push({ cardId: card.id, t: Date.now(), rating: r, format: card.format, elapsedDays });
+      // "Again": a line on why the answer is right, from the phone's model (shown above the next card).
+      missed = r === 1 ? { front: card.front } : undefined;
+      if (missed) {
+        const mine = missed;
+        const passage = findPassages(c.lectures.filter((l) => !card.lectureId || l.id === card.lectureId), `${card.front} ${card.back}`, 2000).map((p) => p.text).join("\n");
+        void Promise.resolve(ask([{ role: "system", content: MISSED_PROMPT + hint(c) }, { role: "user", content: `Card: ${card.front}\nAnswer: ${card.back}${passage ? `\n\nLecture passage:\n${passage}` : ""}` }])).then((t) => {
+          if (missed !== mine) return;
+          if (!t) missed = undefined;
+          else mine.text = String(t).trim();
+          if (view.at === "review") draw();
+        }, () => { if (missed === mine) missed = undefined; });
+      }
       if (commit()) draw();
     };
     const rates = el("div", { class: "ph-btns", hidden: true }, ...[[1, "שוב", "Again"], [2, "קשה", "Hard"], [3, "טוב", "Good"], [4, "קל", "Easy"]].map(([r, h, e]) => el("button", { type: "button", onclick: () => rate(r) }, L(h, e))));
+    if (missed) root.append(el("div", { class: "ph-why", "aria-live": "polite", dir: "auto" }, el("strong", {}, L("למה? ", "Why? ")), missed.front, el("p", {}, missed.text ?? L("מסביר… (בטלפון זה לוקח זמן)", "Explaining… (this takes a while on a phone)"))));
     root.append(el("section", { class: "api" },
       el("p", { dir: "auto", style: "font-size: 18px" }, card.front), answer,
       el("button", { type: "button", class: "primary", onclick: (ev) => { answer.hidden = false; rates.hidden = false; ev.currentTarget.hidden = true; } }, L("הצג תשובה", "Show answer")), rates));

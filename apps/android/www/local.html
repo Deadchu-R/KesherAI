@@ -127,6 +127,16 @@
   .ph-ask { display: grid; gap: 8px; margin: 8px 0; }
   .ph-ask-turn { padding: 10px 12px; border-radius: 12px; background: rgb(255 255 255 / 0.05); white-space: pre-wrap; }
   .ph-ask-turn.user { background: transparent; border: 1px solid rgb(255 255 255 / 0.15); }
+  .upd { border: 1px solid rgb(255 255 255 / 0.12); border-radius: 14px; padding: 12px 14px; margin: 0 0 12px; background: var(--panel-2); display: flex; flex-direction: column; gap: 8px; }
+  .upd ul { margin: 0; padding-inline-start: 18px; font-size: 13px; color: var(--muted); max-height: 140px; overflow-y: auto; }
+  .upd-row { display: flex; gap: 8px; }
+  .upd-row button { flex: 1; min-height: 44px; }
+  .upd-bar { height: 6px; border-radius: 3px; background: rgb(255 255 255 / 0.1); overflow: hidden; }
+  .upd-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .upd-msg { margin: 0; font-size: 13px; color: var(--muted); }
+  .upd-msg:empty { display: none; }
+  .ph-why { border: 1px solid rgb(255 255 255 / 0.12); border-inline-start: 3px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; font-size: 14px; }
+  .ph-why p { margin: 4px 0 0; }
 
   /* The phone app's own home (no computer), like the remote's: where it runs, the parts, recent chats, a message box. */
   .seg { display: flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 3px; gap: 2px; margin: 0 0 12px; }
@@ -180,9 +190,20 @@
 
   <main id="homeView" hidden>
     <h2 class="home-hi" id="homeHi"></h2>
+    <!-- A new version of the app (the same updates as the connect screen, here for phone-only use). -->
+    <section class="upd" id="phoneUpdate" hidden aria-live="polite">
+      <strong id="updTitle"></strong>
+      <ul id="updChanges" hidden></ul>
+      <div class="upd-row">
+        <button type="button" class="primary" id="updNow" data-he="עדכון עכשיו" data-en="Update now">עדכון עכשיו</button>
+        <button type="button" id="updLater" data-he="אחר כך" data-en="Later">אחר כך</button>
+      </div>
+      <div class="upd-bar" id="updBarWrap" hidden><span id="updBar"></span></div>
+      <p class="upd-msg" id="updMsg"></p>
+    </section>
     <div class="pc-note" id="pcNote" hidden>
       <span aria-hidden="true">🖥</span>
-      <span style="flex: 1" data-he="המחשב לא מחובר. הכול כאן עובד בטלפון; מצגות, PDF ומודלים גדולים צריכים את המחשב." data-en="The computer is not connected. Everything here works on the phone; slides, PDFs and big models need the computer.">המחשב לא מחובר. הכול כאן עובד בטלפון; מצגות, PDF ומודלים גדולים צריכים את המחשב.</span>
+      <span style="flex: 1" data-he="המחשב לא מחובר. הכול כאן עובד בטלפון; סריקות ומודלים גדולים צריכים את המחשב." data-en="The computer is not connected. Everything here works on the phone; scans and big models need the computer.">המחשב לא מחובר. הכול כאן עובד בטלפון; סריקות ומודלים גדולים צריכים את המחשב.</span>
       <button type="button" id="pcConnect" data-he="התחבר" data-en="Connect">התחבר</button>
     </div>
     <div class="lbl"><span data-he="בטלפון, גם בלי אינטרנט" data-en="On the phone, even offline">בטלפון, גם בלי אינטרנט</span></div>
@@ -216,6 +237,9 @@
     <button type="button" class="rec" id="setModels" data-he="מודלים בטלפון" data-en="Models on the phone">מודלים בטלפון</button>
     <button type="button" class="rec" id="setComputers" data-he="המחשבים שלי" data-en="My computers">המחשבים שלי</button>
     <button type="button" class="rec" id="setLang">English</button>
+    <div class="lbl"><span data-he="עדכונים" data-en="Updates">עדכונים</span></div>
+    <button type="button" class="rec" id="setUpdate" data-he="בדיקת עדכונים לאפליקציה" data-en="Check for app updates">בדיקת עדכונים לאפליקציה</button>
+    <p class="upd-msg" id="setUpdateMsg" aria-live="polite"></p>
   </main>
 
   <main id="modelsView">
@@ -549,6 +573,54 @@
     localStorage.setItem("kesher-address", b.dataset.a);
     location.replace("local.html?tab=settings");
   }));
+  // ---------- App updates on the phone (the connect screen has the same; phone-only use never sees it) ----------
+  const UPDATER = window.Capacitor?.Plugins?.KesherUpdater;
+  const UPDATE_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
+  let newer = null;
+  /** Checks for a newer app; shows the card on the home screen when there is one. @returns The settings line. */
+  async function checkPhoneUpdate() {
+    if (!UPDATER) return T("עדכונים זמינים רק באפליקציה.", "Updates work only in the app.");
+    newer = await UPDATER.check({ url: UPDATE_URL });
+    if (!newer.available) return T(`האפליקציה מעודכנת (v${newer.currentName}).`, `The app is up to date (v${newer.currentName}).`);
+    $("updTitle").textContent = T(`גרסה חדשה זמינה: ${newer.latestName} (מותקנת: ${newer.currentName})`, `A new version is available: ${newer.latestName} (installed: ${newer.currentName})`);
+    const build = await fetch("build.json").then((r) => r.json()).catch(() => ({}));
+    const list = [];
+    for (const c of Array.isArray(newer.changes) ? newer.changes : []) {
+      if (build.date && c.t && c.t <= build.date) break;
+      if (!/^Merge /.test(c.subject)) list.push(he && c.he ? c.he : c.subject);
+    }
+    $("updChanges").replaceChildren(...list.slice(0, 12).map((t) => Object.assign(document.createElement("li"), { textContent: t, dir: "auto" })));
+    $("updChanges").hidden = !list.length;
+    $("phoneUpdate").hidden = sessionStorage.getItem("kesherai-update-later") === newer.latestName;
+    return T(`גרסה חדשה זמינה: ${newer.latestName}. העדכון במסך הבית.`, `Version ${newer.latestName} is available: see the home screen.`);
+  }
+  $("updLater").onclick = () => { if (newer) sessionStorage.setItem("kesherai-update-later", newer.latestName); $("phoneUpdate").hidden = true; };
+  $("updNow").onclick = async () => {
+    if (!newer?.apkUrl) return;
+    $("updNow").disabled = true;
+    $("updBarWrap").hidden = false;
+    $("updMsg").textContent = T("מוריד את העדכון…", "Downloading the update…");
+    const sub = await UPDATER.addListener("progress", (p) => {
+      if (p.percent >= 0) { $("updBar").style.width = `${p.percent}%`; $("updMsg").textContent = T(`מוריד את העדכון… ${p.percent}%`, `Downloading the update… ${p.percent}%`); }
+    });
+    try {
+      await UPDATER.install({ url: newer.apkUrl });
+      $("updBar").style.width = "100%";
+      $("updMsg").textContent = T("מתקין: אשר/י במסך של אנדרואיד.", "Installing: confirm on Android's screen.");
+    } catch (e) {
+      const m = e?.message || String(e);
+      $("updMsg").textContent = m === "needs-permission" ? T("אפשר ל-KesherAI להתקין עדכונים במסך שנפתח, ואז לחזור וללחוץ שוב על עדכון.", "Allow KesherAI to install updates on the screen that opened, then come back and tap Update again.") : T("העדכון נכשל: ", "The update failed: ") + m;
+    } finally {
+      $("updNow").disabled = false;
+      sub?.remove?.();
+    }
+  };
+  $("setUpdate").onclick = async () => {
+    $("setUpdateMsg").textContent = T("בודק…", "Checking…");
+    $("setUpdateMsg").textContent = await checkPhoneUpdate().catch((e) => T("הבדיקה נכשלה: ", "The check failed: ") + (e?.message || e));
+  };
+  // Once per opening, quietly.
+  void checkPhoneUpdate().catch(() => undefined);
   $("autoConnect").onchange = () => localStorage.setItem("kesherai-auto-connect", $("autoConnect").checked ? "1" : "0");
   $("setModels").onclick = () => openPart("chat");
   $("setComputers").onclick = () => (location.href = "index.html?switch=1");
