@@ -6,6 +6,7 @@ import { toast } from "../library";
 import { RichText } from "../RichText";
 import { parseFlow } from "../study-diagram";
 import { StudyRecorder } from "../StudyRecorder";
+import { AvatarCamera } from "./AvatarCamera";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
@@ -54,6 +55,7 @@ async function call<T>(p: Promise<T>): Promise<T | undefined> {
  */
 export function StudyPage({ hash }: { hash: string }) {
   const parts = hash.split("/").slice(2);
+  if (parts[0] === "avatar") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("מצלמת אווטאר", "Avatar camera")}</h1><AvatarCamera /></div>;
   if (parts[0] === "labs") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("ערכי מעבדה", "Lab values")}</h1><LabValues /></div>;
   if (parts[0] === "calc") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("חישובי תרופות", "Medication calculations")}</h1><CalcPractice /></div>;
   if (!parts[0]) return <StudyHome />;
@@ -96,6 +98,7 @@ function StudyHome() {
           {LIFE.filter(([, , clinical]) => !clinical || courses?.some((c) => clinicalField(c.field))).map(([he, en]) => <button key={en} type="button" className="study-life-q" onClick={() => askChat(`${L(he, en)}\n\n${LIFE_RULE}`)}>{L(he, en)}</button>)}
         </div>
       </section>
+      <a className="study-avatar-link" href="#/study/avatar">{L("מצלמת אווטאר לשיעורים בזום", "Avatar camera for Zoom lessons")}</a>
       <h2>{L("הקורסים שלי", "My courses")}</h2>
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder={L("שם קורס חדש, למשל פרמקולוגיה", "New course name, e.g. Pharmacology")} aria-label={L("שם קורס", "Course name")} dir="auto" />

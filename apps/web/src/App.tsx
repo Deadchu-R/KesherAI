@@ -39,6 +39,7 @@ import { CodeHome } from "./pages/CodeHome";
 import { SelfWorkPage } from "./pages/SelfWorkPage";
 import { TasksPage } from "./pages/TasksPage";
 import { StudyPage } from "./pages/StudyPage";
+import { AvatarFeed } from "./pages/AvatarCamera";
 import { PadHints } from "./PadHints";
 import { GameHelper } from "./pages/GameHelper";
 import { TextHelper } from "./pages/TextHelper";
@@ -309,6 +310,8 @@ export function App() {
   if (hash.startsWith("#/game/")) return <GameHelper hash={hash} />;
   if (hash.startsWith("#/text/")) return <TextHelper hash={hash} />;
   if (hash === "#/dictate") return <Dictate />;
+  // The avatar camera for OBS: only the video.
+  if (hash === "#/avatar-feed") return <AvatarFeed />;
   return (
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
       <RemoteBanner />

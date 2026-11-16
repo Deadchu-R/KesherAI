@@ -2658,3 +2658,13 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-page label.study-check { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; }
 .study-page label.study-check input { width: 18px; height: 18px; flex: none; margin: 2px 0 0; accent-color: var(--accent); }
 @media (max-width: 480px) { .study-head { gap: 8px; } .study-field { order: 3; width: 100%; margin: 0; } .study-field select { flex: 1; } }
+.study-avatar { display: flex; flex-direction: column; gap: 12px; }
+.study-avatar .card { display: flex; flex-direction: column; gap: 10px; }
+.study-avatar-video { width: 100%; max-width: 640px; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); object-fit: cover; }
+.study-avatar-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.6; }
+.study-avatar-steps code { overflow-wrap: anywhere; }
+.study-avatar-warn { display: flex; flex-direction: column; gap: 10px; border-color: var(--warn); }
+.study-avatar-link { align-self: flex-start; font-size: 14px; }
+.avatar-feed { position: fixed; inset: 0; background: #000; }
+.avatar-feed video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.9s linear; }
+.avatar-feed video.on { opacity: 1; }

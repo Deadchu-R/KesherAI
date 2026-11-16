@@ -3,6 +3,9 @@
  * recall per study format. The phone reaches it through remote like every other page.
  */
 import type { FastifyInstance } from "fastify";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 
@@ -18,6 +21,50 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   type L = { Params: { id: string; lid: string } };
 
   app.get("/api/study", async () => ({ courses: await st.list() }));
+
+  // The avatar camera: the student's own recorded "listening" video, looped as a camera (OBS or softcam).
+  const avatarDir = join(s.paths.root, "study", "avatar");
+  const clip = join(avatarDir, "clip.webm");
+  const meta = join(avatarDir, "meta.json");
+  const readMeta = async () => JSON.parse(await readFile(meta, "utf8").catch(() => "{}")) as { accepted?: number; size?: number; at?: number };
+  app.get("/api/study/avatar", async () => {
+    const m = await readMeta();
+    const st2 = await stat(clip).catch(() => undefined);
+    return { accepted: !!m.accepted, clip: st2 ? { size: st2.size, at: m.at ?? st2.mtimeMs } : null };
+  });
+  // The warning was read and accepted (shown before first use).
+  app.post("/api/study/avatar/accept", async () => {
+    await mkdir(avatarDir, { recursive: true });
+    await writeFile(meta, JSON.stringify({ ...(await readMeta()), accepted: Date.now() }));
+    return { ok: true };
+  });
+  app.addContentTypeParser(["video/webm", "video/mp4"], { parseAs: "buffer", bodyLimit: 400 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+  app.put("/api/study/avatar/clip", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
+    if (!(await readMeta()).accepted) return reply.code(409).send({ error: "Read and accept the warning first." });
+    const buf = req.body as Buffer;
+    if (!Buffer.isBuffer(buf) || buf.length < 10_000) return reply.code(400).send({ error: "Send the recorded video as video/webm." });
+    await mkdir(avatarDir, { recursive: true });
+    await writeFile(`${clip}.tmp`, buf);
+    await rename(`${clip}.tmp`, clip);
+    await writeFile(meta, JSON.stringify({ ...(await readMeta()), size: buf.length, at: Date.now() }));
+    return { ok: true, size: buf.length };
+  });
+  app.get("/api/study/avatar/clip", async (req, reply) => {
+    const st2 = await stat(clip).catch(() => undefined);
+    if (!st2) return reply.code(404).send({ error: "No avatar video yet." });
+    // Ranges, so the video player can seek and loop.
+    const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
+    reply.header("accept-ranges", "bytes").header("cache-control", "no-store").type("video/webm");
+    if (!m) return reply.header("content-length", st2.size).send(createReadStream(clip));
+    const start = m[1] ? Number(m[1]) : 0;
+    const end = m[2] ? Math.min(Number(m[2]), st2.size - 1) : st2.size - 1;
+    if (start > end || start >= st2.size) return reply.code(416).header("content-range", `bytes */${st2.size}`).send();
+    return reply.code(206).header("content-range", `bytes ${start}-${end}/${st2.size}`).header("content-length", end - start + 1).send(createReadStream(clip, { start, end }));
+  });
+  app.delete("/api/study/avatar/clip", async () => {
+    await rm(clip, { force: true });
+    return { ok: true };
+  });
   app.post<{ Body: { name?: string } }>("/api/study/courses", async (req) => st.addCourse(String(req.body?.name ?? "")));
   app.get<C>("/api/study/courses/:id", async (req) => {
     const d = await st.get(req.params.id);
