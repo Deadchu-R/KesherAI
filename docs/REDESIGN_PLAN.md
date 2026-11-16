@@ -93,6 +93,11 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
     As realistic as possible (natural blinking, small head and posture movement, lighting matched to the room, lip
     sync to the live voice). The feature shows the student a warning before first use: if the course or university
     finds out, it may be treated as breaking its rules.
+    Decided (Roee, 2026-11-16): both virtual-camera routes as options — softcam (a native DirectShow camera in the
+    desktop app) and OBS (KesherAI's avatar page as an OBS browser source + OBS Virtual Camera, no new dependency).
+    Speaking, the student's choice: by default switch to the real camera when she is in front of it, otherwise
+    lip-sync the avatar to her voice (on a computer that can). The avatar is a few minutes of her own recorded
+    "listening" video, looped seamlessly. Research: docs/RESEARCH_LOG.md "Students, part 7".
 
 ## Throughout
 - A security and performance scan every 5 changes.
