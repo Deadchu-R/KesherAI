@@ -507,15 +507,21 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, {
       root: options.webDir,
+      // Our own cache headers (setHeaders) instead of the library's.
+      cacheControl: false,
       // (@fastify/static 10 passes the reply here.)
       setHeaders: (reply: { header(name: string, value: string): unknown }, path: string) => {
-        if (path.endsWith(".html")) reply.header("content-security-policy", WEB_CSP);
+        if (path.endsWith(".html")) {
+          reply.header("content-security-policy", WEB_CSP);
+          // After an update the page must load the new version's files (their names change), never a kept copy.
+          reply.header("cache-control", "no-cache");
+        } else if (/[\\/]assets[\\/]/.test(path)) reply.header("cache-control", "public, max-age=31536000, immutable");
       },
     });
     app.setNotFoundHandler((req, reply) =>
       req.url.startsWith("/api/") || req.url.startsWith("/v1/")
         ? reply.code(404).send({ error: "Not found" })
-        : reply.header("content-security-policy", WEB_CSP).sendFile("index.html"),
+        : reply.header("content-security-policy", WEB_CSP).header("cache-control", "no-cache").sendFile("index.html"),
     );
   }
 
