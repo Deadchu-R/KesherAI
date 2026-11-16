@@ -55,7 +55,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ⬜ A check on a real controller after each interface change (C6)
 - ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
 - ⬜ A CPU and RAM limit for KesherAI's own engines
-- 🔧 Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen; moving what is already there is missing
+- ✅ Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen, and the models already there move over in the background
 - ⬜ As-you-type suggestions in any app (Magic Tab), needs a small model always loaded
 - ⬜ Phone build targets chosen by phone model (OnePlus, Samsung…) for Unity, Unreal and web builds
 
