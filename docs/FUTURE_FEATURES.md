@@ -5,7 +5,7 @@ from notes, had many items that already exist; they are marked ✅ here so the l
 Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits on the owner.
 
 ## Game engines and creative tools
-- ⬜ Godot support: an editor plugin (GDScript/C#) that sees scenes, nodes and scripts and changes them in words
+- ✅ Godot support (#/godot): the KesherAI Bridge addon (GDScript, works for C# projects), the chat sees and changes scenes, nodes and scripts as undo steps, runs the game and reads its log; checked in a real Godot 4.7.2 editor
 - ⬜ UEFN / Verse (Fortnite) support and UE6 preparation (a Verse view of a Blueprint, then conversion)
 - ⬜ Minecraft and Roblox modding
 - ⬜ Fab search and install from the chat
@@ -49,7 +49,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Models and hardware
 - ✅ Training picture LoRAs from the interface
-- ⬜ Training a chat model (LoRA/QLoRA on own texts) and a voice
+- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ⬜ a voice of her own
 - ✅ Game helper over a running game
 - ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
 - ⬜ A check on a real controller after each interface change (C6)
@@ -57,7 +57,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ A CPU and RAM limit for KesherAI's own engines (Settings → Computer: off by default, with a one-tap suggestion of 85% memory and 80% processor)
 - ✅ Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen, and the models already there move over in the background
 - ⬜ As-you-type suggestions in any app (Magic Tab), needs a small model always loaded
-- ⬜ Phone build targets chosen by phone model (OnePlus, Samsung…) for Unity, Unreal and web builds
+- ✅ Phone build targets chosen by phone model (Settings → For developers → Target phones; Unity and Unreal builds use them; a plugged-in phone is read by USB)
 
 ## Content and import
 - ✅ WhatsApp and Instagram chats imported, with the relationship-analyst persona (AskBrandon style)
