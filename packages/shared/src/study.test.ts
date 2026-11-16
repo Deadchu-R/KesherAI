@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -308,4 +308,14 @@ test("open and case quizzes: questions with a model answer, marks from the grade
   assert.match(msgs[1]!.content, /Model answer: סיסטולה ודיאסטולה/);
   const w = weakL([{ id: "z", t: 1, kind: "open", questions: [qs[0]!, { ...qs[0]! }], answers: [-1, -1], marks: [0.5, 0] }]);
   assert.equal(w[0]?.correct, 0.25);
+});
+
+test("field tools: each field gets its own tools, unknown fields get all, course material fits the budget", () => {
+  assert.ok(toolsFor("law").some((t) => t.id === "brief"));
+  assert.ok(!toolsFor("law").some((t) => t.id === "trace"));
+  assert.ok(toolsFor("cs").some((t) => t.id === "trace") && toolsFor("cs").some((t) => t.id === "formulas"));
+  assert.equal(toolsFor(undefined).length, STUDY_TOOLS.length);
+  for (const f of ["nursing", "medicine", "law", "engineering", "cs", "math", "psychology", "economics", "biology", "education", "humanities"]) assert.ok(toolsFor(f).length > 0, f);
+  const m = toolMaterial([{ id: "a", title: "א", date: "", text: "x".repeat(90_000) }, { id: "b", title: "ב", date: "", text: "t", summary: "סיכום" }], 10_000);
+  assert.ok(m.length <= 10_000 && m.includes("### ב\nסיכום"));
 });

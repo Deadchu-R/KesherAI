@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -363,6 +363,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["lectures", ["הרצאות", "Lectures"]],
   ["review", ["חזרה", "Review"]],
   ["summary", ["סיכום הקורס", "Course summary"]],
+  ["tools", ["כלים לתחום", "Field tools"]],
   ["quiz", ["בוחן", "Quiz"]],
   ["ask", ["שאלי את הקורס", "Ask the course"]],
   ["calc", ["חישובים", "Calculations"]],
@@ -425,6 +426,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
         : on === "summary" ? <CourseSummary id={id} info={info} onChange={load} />
+        : on === "tools" ? <FieldTools id={id} info={info} onChange={load} />
         : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />
         : on === "labs" ? <LabValues />
         : on === "progress" ? <ProgressView courseId={id} />
@@ -579,6 +581,46 @@ function CourseSummary({ id, info, onChange }: { id: string; info: CourseInfo; o
       )}
       {s && (shown ? <div dir="auto" className="study-summary-text"><RichText text={shown} /></div> : <p className="muted">{L("אין נושא שמזכיר את זה.", "No topic mentions that.")}</p>)}
       {s && <p className="muted small">{L(`נבנה מ-${s.lectureIds.length} הרצאות. כל שורה מציינת מאיזו הרצאה היא באה.`, `Built from ${s.lectureIds.length} lectures. Each line says which lecture it came from.`)}</p>}
+    </section>
+  );
+}
+
+/** The tools of the course's field: she picks one, pastes text (or it reads the course), and can keep the result. */
+function FieldTools({ id, info, onChange }: { id: string; info: CourseInfo; onChange: () => void }) {
+  const tools = toolsFor(info.course.field);
+  const [pick, setPick] = useState(tools[0]?.id ?? "");
+  const [text, setText] = useState("");
+  const [out, setOut] = useState("");
+  const [busy, setBusy] = useState(false);
+  const tool = tools.find((t) => t.id === pick);
+  const run = async () => {
+    setBusy(true);
+    setOut("");
+    const r = await call(api<{ text: string }>(`/api/study/courses/${id}/tools/${pick}`, { method: "POST", body: { text } }));
+    setBusy(false);
+    if (r) setOut(r.text);
+  };
+  const keep = async () => {
+    const r = await call(api<StudyLecture>(`/api/study/courses/${id}/lectures`, { method: "POST", body: { title: tool ? L(tool.he, tool.en) : "", text: out } }));
+    if (r) { toast(L("נשמר כהרצאה בקורס", "Kept as a lecture in the course")); onChange(); }
+  };
+  if (!tool) return null;
+  return (
+    <section className="card study-tools">
+      <h2>{L("כלים לתחום", "Field tools")}</h2>
+      <div className="study-formats" role="radiogroup" aria-label={L("כלי", "Tool")}>
+        {tools.map((t) => <button key={t.id} type="button" role="radio" aria-checked={pick === t.id} className={`chip${pick === t.id ? " on" : ""}`} onClick={() => { setPick(t.id); setOut(""); }}>{L(t.he, t.en)}</button>)}
+      </div>
+      {tool.input === "text"
+        ? <textarea rows={8} dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={tool.placeholder ? L(...tool.placeholder) : ""} aria-label={L(tool.he, tool.en)} />
+        : <p className="muted small">{L(`נכתב מ-${info.lectures.length} ההרצאות של הקורס.`, `Written from the course's ${info.lectures.length} lectures.`)}</p>}
+      <div className="study-actions">
+        <button type="button" className="primary" disabled={busy || (tool.input === "text" ? text.trim().length < 10 : !info.lectures.length)} onClick={() => void run()}>{busy ? L("עובד…", "Working…") : L(tool.he, tool.en)}</button>
+        {out && <button type="button" onClick={() => void keep()}>{L("שמירה כהרצאה בקורס", "Keep as a lecture")}</button>}
+        {out && <button type="button" className="ghost" onClick={() => void navigator.clipboard.writeText(out).then(() => toast(L("הועתק", "Copied")))}>{L("העתקה", "Copy")}</button>}
+      </div>
+      {out && <div dir="auto" className="study-summary-text"><RichText text={out} /></div>}
+      <p className="muted small">{L("הכלי עובד רק ממה שהדבקת או מההרצאות שלך. מה שחסר מסומן [חסר]. כדאי לבדוק מול המקור.", "The tool works only from what you pasted or your lectures; anything missing is marked [missing]. Check against the source.")}</p>
     </section>
   );
 }

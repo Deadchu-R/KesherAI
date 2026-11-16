@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -191,6 +191,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     else if (view.at === "labs") labs();
     else if (view.at === "terms") terms();
     else if (view.at === "summary") summaryView();
+    else if (view.at === "tools") toolsView();
     else if (view.at === "drugs") drugs();
     else if (view.at === "progress") progress();
     else if (view.at === "life") life();
@@ -370,6 +371,40 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       to ? el("button", { type: "button", class: "primary", onclick: () => go(to) }, label) : "");
   }
 
+  /** The tools of the course's field, on the phone's model: pasted text, or the course's lectures. */
+  function toolsView() {
+    const c = course();
+    if (!c) return go({ at: "home" });
+    const tools = toolsFor(c.field);
+    const tool = tools.find((t) => t.id === view.tool) || tools[0];
+    const sel = el("select", { "aria-label": L("כלי", "Tool"), onchange: (e) => { view.tool = e.target.value; delete view.toolOut; draw(); } }, ...tools.map((t) => el("option", { value: t.id }, L(t.he, t.en))));
+    sel.value = tool.id;
+    const ta = tool.input === "text" ? el("textarea", { rows: "7", dir: "auto", "aria-label": L(tool.he, tool.en), placeholder: tool.placeholder ? L(...tool.placeholder) : "" }) : null;
+    if (ta) ta.value = view.toolText || "";
+    const run = el("button", { type: "button", class: "primary" }, L(tool.he, tool.en));
+    run.onclick = async () => {
+      const input = ta ? ta.value.trim().slice(0, 12000) : toolMaterial(c.lectures, 9000);
+      if (ta) view.toolText = ta.value;
+      if (input.length < 10) return alert(ta ? L("קודם הדביקי טקסט.", "Paste the text first.") : L("קודם הוסיפי הרצאה.", "Add a lecture first."));
+      const r = await need([{ role: "system", content: `${tool.prompt}${hint(c)}` }, { role: "user", content: input }], run);
+      if (r === undefined) return;
+      view.toolOut = cleanScript(String(r).trim(), /[\u0590-\u05ff]/.test(input)).slice(0, 40000);
+      draw();
+    };
+    const out = view.toolOut;
+    const keep = out && el("button", { type: "button", onclick: () => {
+      c.lectures.push({ id: uid(), title: L(tool.he, tool.en), date: new Date().toISOString().slice(0, 10), text: out });
+      if (commit()) { delete view.toolOut; alert(L("נשמר כהרצאה בקורס", "Kept as a lecture in the course")); draw(); }
+    } }, L("שמירה כהרצאה", "Keep as a lecture"));
+    root.append(back({ at: "course", course: c.id }), el("section", { class: "api" },
+      el("h2", {}, L("כלים לתחום", "Field tools")),
+      el("label", { class: "ph-filter" }, L("כלי: ", "Tool: "), sel),
+      ta || el("p", { class: "muted small" }, L(`נכתב מ-${c.lectures.length} ההרצאות של הקורס.`, `Written from the course's ${c.lectures.length} lectures.`)),
+      el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, run, keep || ""),
+      out ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6; margin-top: 8px" }, out) : "",
+      el("p", { class: "muted small" }, L("הכלי עובד רק ממה שהדבקת או מההרצאות שלך. מה שחסר מסומן [חסר].", "The tool works only from what you pasted or your lectures; anything missing is marked [missing]."))));
+  }
+
   /** Her own notes beside the lecture's summary, saved as she types. */
   function notesBox(l) {
     const ta = el("textarea", { rows: "4", dir: "auto", "aria-label": L("ההערות שלי", "My notes"), placeholder: L("מה המרצה הדגיש, מה לשאול, מה לא הבנתי…", "What the lecturer stressed, what to ask, what I did not get…") });
@@ -473,6 +508,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         c.cards?.length ? el("button", { type: "button", onclick: () => void ankiShare(c) }, L("ייצוא ל-Anki / Quizlet", "Export to Anki / Quizlet")) : "",
         el("button", { type: "button", onclick: () => ankiPick.click() }, L("ייבוא כרטיסיות", "Import cards")),
         el("button", { type: "button", onclick: () => go({ at: "summary", course: c.id }) }, L("סיכום הקורס", "Course summary")),
+        el("button", { type: "button", onclick: () => go({ at: "tools", course: c.id }) }, L("כלים לתחום", "Field tools")),
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),

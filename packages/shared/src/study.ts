@@ -485,6 +485,55 @@ export const STUDY_FIELDS: StudyField[] = [
   { id: "humanities", he: "מדעי הרוח והחברה", en: "Humanities and social sciences", words: ["היסטוריה", "פילוסופיה", "ספרות", "סוציולוגיה", "מדע המדינה", "history", "philosophy", "literature", "sociology", "political science"] },
 ];
 
+/** A tool for one field of study: it works on text she pastes, or on the course's lectures. */
+export interface StudyTool {
+  id: string;
+  he: string;
+  en: string;
+  /** Who it is for (field ids). */
+  fields: string[];
+  /** "text": she pastes something; "course": it reads the course's lectures. */
+  input: "text" | "course";
+  placeholder?: [string, string];
+  prompt: string;
+}
+
+const TOOL_LANG = "Write in the same language as the material (usually Hebrew), keeping technical terms, names and symbols as written. Use only what is given; where something needed is missing, write [חסר] instead of inventing it. Markdown.";
+
+/** The tools for each field (the same on the computer and the phone). */
+export const STUDY_TOOLS: StudyTool[] = [
+  { id: "formulas", he: "דף נוסחאות מהקורס", en: "Formula sheet from the course", fields: ["engineering", "math", "cs", "economics", "biology"], input: "course",
+    prompt: `Make a formula sheet from these lectures: every formula, law and rule written in them, grouped by topic (## heading per topic). For each: the formula (plain text, like F = m * a, no LaTeX), what each symbol means with its units, and when to use it, in one line. Then the lecture it came from in brackets. ${TOOL_LANG}` },
+  { id: "brief", he: "תקציר פסק דין (IRAC)", en: "Case brief (IRAC)", fields: ["law"], input: "text", placeholder: ["הדביקי את פסק הדין או חלק ממנו", "Paste the ruling or part of it"],
+    prompt: `Write a case brief of this ruling: ## העובדות (short), ## השאלה המשפטית, ## הכלל (statutes and precedents exactly as cited, with section numbers), ## היישום (the court's reasoning), ## ההכרעה, and ## דעות נוספות (minority or concurring opinions, if any). ${TOOL_LANG}` },
+  { id: "statute", he: "פירוק סעיף לרכיבים", en: "A section broken into elements", fields: ["law"], input: "text", placeholder: ["הדביקי את סעיף החוק", "Paste the section"],
+    prompt: `Break this statutory section into its elements: the conditions that must all hold (numbered), the exceptions, the result or remedy, and the defined terms it uses. Then one short example that meets every element, and one that misses one, saying which. ${TOOL_LANG}` },
+  { id: "trace", he: "הסבר קוד ומעקב", en: "Explain and trace code", fields: ["cs"], input: "text", placeholder: ["הדביקי קוד", "Paste code"],
+    prompt: `Explain this code for a student: what it does in two sentences, then line by line (short), then a trace table of the variables for a small example input (a markdown table, one row per step, at most 15 rows), then its time and space complexity with the reason, and any bug or edge case it misses. Write code in code blocks. ${TOOL_LANG}` },
+  { id: "research", he: "ניתוח מאמר מחקר", en: "Analyze a research paper", fields: ["psychology", "education", "humanities", "biology", "medicine", "nursing", "economics"], input: "text", placeholder: ["הדביקי את התקציר או המאמר", "Paste the abstract or paper"],
+    prompt: `Analyze this study for a student: ## שאלת המחקר והשערות, ## משתנים (independent, dependent, controlled, with how each was measured), ## מערך המחקר (design, sample and size, how it was chosen), ## ממצאים (with the numbers given: effect sizes, p values), ## מגבלות (as the paper states them, then others a reader would raise, marked as such), ## במשפט אחד. ${TOOL_LANG}` },
+  { id: "apa", he: "רשימה ביבליוגרפית APA 7", en: "APA 7 references", fields: ["psychology", "education", "humanities", "economics", "nursing", "medicine", "biology"], input: "text", placeholder: ["פרטי המקורות: מחברים, שנה, כותרת, כתב עת, כרך, עמודים, DOI (מקור בכל שורה)", "Source details: authors, year, title, journal, volume, pages, DOI (one per line)"],
+    prompt: `Write each source as an APA 7th edition reference entry, sorted alphabetically, then the in-text citation for each, e.g. (Cohen & Levi, 2020). Use only the details given; any missing part becomes [חסר]. Hebrew sources follow the Hebrew APA conventions (ו׳ for &, עמ׳). Plain list. ${TOOL_LANG}` },
+  { id: "lesson", he: "מערך שיעור", en: "Lesson plan", fields: ["education"], input: "text", placeholder: ["נושא, גיל או כיתה, משך השיעור, מטרות", "Topic, age or grade, length, goals"],
+    prompt: `Write a lesson plan: ## מטרות (measurable), ## ידע קודם, ## מהלך השיעור (opening, main part, closing, with minutes for each and what the teacher and the pupils do), ## הבחנה בין תלמידים (for those who need more help and those who need more challenge), ## הערכה (how she will know the goals were met), ## חומרים. ${TOOL_LANG}` },
+  { id: "source", he: "ניתוח מקור או טקסט", en: "Analyze a source or text", fields: ["humanities", "education", "law"], input: "text", placeholder: ["הדביקי את הטקסט או המקור", "Paste the text or source"],
+    prompt: `Analyze this text for a student: ## מי, מתי ולמי (author, time, audience, as far as the text shows), ## הטענה המרכזית, ## הנימוקים והראיות, ## מושגי מפתח, ## הקשר (what the text answers or argues with, only if it says so), ## שאלות לדיון (three). ${TOOL_LANG}` },
+  { id: "case", he: "תוכנית טיפול למקרה", en: "Care plan for a case", fields: ["nursing", "medicine", "psychology"], input: "text", placeholder: ["תיאור המקרה", "The case"],
+    prompt: `From this case, write: ## בעיות עיקריות (by priority, with the findings that show each), ## מטרות, ## התערבויות (with the reason for each), ## מה לעקוב ולהעריך. Base everything on the case and on standard principles the course would teach; mark anything that needs a doctor's order or the ward's protocol. This is practice for a student, not care for a real patient. ${TOOL_LANG}` },
+];
+
+/** The tools that fit a course's field (all of them when the field is unknown). */
+export function toolsFor(field: string | undefined): StudyTool[] {
+  if (!field) return STUDY_TOOLS;
+  return STUDY_TOOLS.filter((t) => t.fields.includes(field));
+}
+
+/** The course's material for a "course" tool: summaries (or text), each with its title, within a budget. */
+export function toolMaterial(lectures: StudyLecture[], budget = 40_000): string {
+  const each = Math.max(1500, Math.floor(budget / Math.max(1, lectures.length)));
+  return lectures.map((l) => `### ${l.title}\n${(l.summary || l.text).slice(0, each)}`).join("\n\n").slice(0, budget);
+}
+
 /**
  * Guesses a course's field from its name and its lectures' words (the name counts three times).
  *
