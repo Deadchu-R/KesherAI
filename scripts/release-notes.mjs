@@ -19,7 +19,8 @@ for (const entry of log.split(SEP)) {
   if (!subject) continue;
   const he = body.filter((l) => /^Desktop-he:/i.test(l.trim())).map((l) => l.trim().replace(/^Desktop-he:\s*/i, ""));
   if (he.length) {
-    lines.push(...he);
+    // "No change in the app" (docs, tests) is a note for the log, not news.
+    lines.push(...he.filter((l) => !/^אין שינוי/.test(l)));
     continue;
   }
   // Leave out phone-only changes (they have their own notes), versions and test-only commits.
