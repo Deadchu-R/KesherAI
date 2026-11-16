@@ -8,7 +8,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { detectField, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
-import type { ModelTurn } from "@kesher/agent";
+import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
 export type CourseData = StudyCourseData;
@@ -284,6 +284,46 @@ export class Study {
     const l = d.lectures.find((x) => x.id === lectureId);
     if (!l) throw Object.assign(new Error("No such lecture."), { statusCode: 404 });
     return l;
+  }
+
+  /**
+   * The text of a file for a new lecture: slides (PowerPoint), a PDF, a Word file or a text file are read here; a
+   * photo (the whiteboard, a notebook page, a slide on screen) is read by the chat model, which must see pictures.
+   *
+   * @param name - The file's name (its type comes from the extension).
+   * @param data - Its bytes (at most 50 MB).
+   * @returns The text, with page or slide marks, and a title from the file name.
+   */
+  async extract(name: string, data: Buffer, signal?: AbortSignal): Promise<{ title: string; text: string }> {
+    const ext = (/\.[a-z0-9]+$/i.exec(name)?.[0] ?? "").toLowerCase();
+    const title = name.replace(/\.[^.]+$/, "").slice(0, 200);
+    const bad = (msg: string) => Object.assign(new Error(msg), { statusCode: 400 });
+    if (data.length > 50 * 1024 * 1024) throw bad("The file is larger than 50 MB.");
+    const pictures: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
+    if (pictures[ext]) {
+      const m = this.model();
+      if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
+      const r = await m.turn(
+        {
+          messages: [
+            { role: "system", content: "You read photos of study material (a whiteboard, a notebook page, a slide, a book page). Write out every word exactly, in its own language, keeping the order, headings, lists and numbers. Describe each drawing, diagram, graph or table in words, inside [square brackets]. Add nothing that is not in the photo. If you cannot see a picture, answer only: NO-IMAGE." },
+            { role: "user", content: `The photo: ${name}`, images: [{ mimeType: pictures[ext]!, data: data.toString("base64") }] },
+          ],
+          tools: [],
+        },
+        signal ?? AbortSignal.timeout(300_000),
+        () => undefined,
+      );
+      const text = r.text.trim();
+      if (!text || /^NO-IMAGE/.test(text)) throw bad("The chosen chat model cannot see pictures. Choose a model with vision (for example Gemma 3 or Qwen-VL), or send the slides as a PDF.");
+      return { title, text: text.slice(0, 400_000) };
+    }
+    if (![".pdf", ".pptx", ".docx", ".txt", ".md", ".srt", ".vtt"].includes(ext)) throw bad("This kind of file cannot be read: send a PDF, PowerPoint, Word, text file or a photo.");
+    const doc = await documentText(data, name);
+    // Each page or slide keeps its number (a lecture's "slide 12" can be found again).
+    const text = doc.pages.map((p, i) => [i + 1, p.trim()] as const).filter(([, p]) => p).map(([n, p]) => (doc.pages.length > 1 ? `— ${n} —\n${p}` : p)).join("\n\n");
+    if (!text.trim()) throw bad(ext === ".pdf" ? "This PDF has no text in it (a scan). Send photos of its pages instead." : "The file has no text.");
+    return { title, text: text.slice(0, 400_000) };
   }
 
   private async ask(system: string, user: string, signal?: AbortSignal, field?: string): Promise<string> {

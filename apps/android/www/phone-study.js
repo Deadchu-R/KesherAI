@@ -99,8 +99,10 @@ function fromData(d) {
  * @param speech - On-phone speech to text, when there is one.
  * @param sync - Sends `{ courses, removedCourses }` to the paired computer and returns its answer (undefined when
  *   no computer is paired).
+ * @param extract - Sends a file (`{ name, data }`, base64) to the paired computer and returns `{ title, text }`
+ *   (slides, PDF, Word and photos are read there); undefined when no computer is paired.
  */
-export function renderPhoneStudy(root, ask, search, speech, sync) {
+export function renderPhoneStudy(root, ask, search, speech, sync, extract) {
   let db = load();
   let syncNote = "";
   /** Two-way: the computer merges the phone's courses with its own and sends every course back. */
@@ -189,6 +191,13 @@ export function renderPhoneStudy(root, ask, search, speech, sync) {
       sync && el("div", { class: "ph-row" },
         el("span", { class: "muted small", "aria-live": "polite" }, syncNote || L("הקורסים, ההרצאות והחזרות מסתנכרנים עם המחשב כשהוא מחובר.", "Courses, lectures and reviews sync with the computer when it is connected.")),
         el("button", { type: "button", onclick: () => void syncNow(false) }, L("סנכרן עכשיו", "Sync now")))));
+    if (!db.courses.length) root.append(el("section", { class: "api" },
+      el("h2", {}, L("איך זה עובד", "How it works")),
+      el("ol", { class: "ph-steps" },
+        el("li", {}, el("b", {}, L("פותחים קורס", "Open a course")), " ", L("למטה, בשם שלו. התחום מזוהה לבד.", "below, by its name. Its field is recognised by itself.")),
+        el("li", {}, el("b", {}, L("מוסיפים הרצאה", "Add a lecture")), " ", L("בהקלטה, בהדבקת טקסט, ממצגת או בצילום של הלוח.", "by recording, pasting text, from slides or a photo of the board.")),
+        el("li", {}, el("b", {}, L("מקבלים חומר ללמידה", "Get material to study")), " ", L("סיכום, מושגים, כרטיסיות לחזרה בזמן הנכון ומבחן תרגול.", "a summary, terms, flashcards at the right time and a practice test."))),
+      el("p", { class: "muted small" }, L("הכול נשמר בטלפון, ומסתנכרן עם המחשב כשהוא מחובר.", "Everything stays on the phone, and syncs with the computer when it is connected."))));
     const name = el("input", { placeholder: L("שם קורס חדש", "New course name"), "aria-label": L("שם קורס", "Course name"), dir: "auto" });
     root.append(el("section", { class: "api" },
       el("h2", {}, L("הקורסים שלי", "My courses")),
@@ -225,9 +234,38 @@ export function renderPhoneStudy(root, ask, search, speech, sync) {
       })()));
     if (speech) root.append(el("button", { type: "button", class: "primary", style: "display: block; width: 100%; min-height: 52px; margin: 8px 0", onclick: () => go({ at: "record", course: c.id }) }, L("🎙 הקלט הרצאה (בטלפון)", "🎙 Record a lecture (on the phone)")));
     const title = el("input", { placeholder: L("כותרת ההרצאה", "Lecture title"), dir: "auto", "aria-label": L("כותרת", "Title") });
-    const text = el("textarea", { rows: "6", dir: "auto", "aria-label": L("טקסט ההרצאה", "Lecture text"), placeholder: L("הדביקי טקסט, או הקלידי בקול עם המיקרופון של המקלדת.", "Paste text, or type by voice with the keyboard's microphone.") });
+    const text = el("textarea", { rows: "6", dir: "auto", "aria-label": L("טקסט ההרצאה", "Lecture text"), placeholder: L("הדביקי טקסט, הקלידי בקול עם המיקרופון של המקלדת, או הוסיפי מצגת או צילומים.", "Paste text, type by voice with the keyboard's microphone, or add slides or photos.") });
+    const fileNote = el("p", { class: "muted small", "aria-live": "polite" });
+    /** A file or photo adds to the text: text files here; slides, PDF, Word and photos on the computer. */
+    const fromFile = async (input) => {
+      const f = input.files?.[0];
+      input.value = "";
+      if (!f) return;
+      if (!title.value) title.value = f.name.replace(/\.[^.]+$/, "");
+      const add = (t) => { text.value = text.value.trim() ? `${text.value}\n\n${t}` : t; };
+      if (/\.(txt|md|srt|vtt)$/i.test(f.name)) return add(await f.text());
+      if (!extract) return (fileNote.textContent = L("מצגות, PDF וצילומים נקראים במחשב: התחברי פעם אחת למחשב (לשונית מחשב).", "Slides, PDFs and photos are read on the computer: connect to it once (Computer tab)."));
+      if (f.size > 50 * 1024 * 1024) return (fileNote.textContent = L("הקובץ גדול מ-50MB.", "The file is larger than 50 MB."));
+      fileNote.textContent = L("המחשב קורא את הקובץ…", "The computer is reading the file…");
+      try {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        const r = await extract({ name: f.name, data: btoa(bin) });
+        if (!r) fileNote.textContent = L("אין מחשב מחובר.", "No computer is paired.");
+        else { add(r.text); fileNote.textContent = L("✓ נוסף. אפשר להוסיף עוד צילום או לשמור.", "✓ Added. Add another photo, or save."); }
+      } catch (e) {
+        fileNote.textContent = L("לא הצלחתי לקרוא את הקובץ: ", "Could not read the file: ") + (e?.message || e);
+      }
+    };
+    const pick = el("input", { type: "file", accept: ".pdf,.pptx,.docx,.txt,.md,.srt,.vtt,image/*", hidden: true, onchange: (e) => void fromFile(e.target) });
+    const shoot = el("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, onchange: (e) => void fromFile(e.target) });
     root.append(el("section", { class: "api" },
       el("h2", {}, L("הרצאה חדשה", "New lecture")), title, text,
+      el("div", { class: "ph-btns" },
+        el("button", { type: "button", onclick: () => pick.click() }, L("מקובץ: מצגת, PDF, Word", "From a file: slides, PDF, Word")),
+        el("button", { type: "button", onclick: () => shoot.click() }, L("📷 צילום לוח או מחברת", "📷 Photo of the board or notebook"))),
+      pick, shoot, fileNote,
       el("button", { type: "button", class: "primary", onclick: () => {
         if (!text.value.trim()) return;
         const l = { id: uid(), title: title.value.trim() || String(c.lectures.length + 1), date: new Date().toISOString().slice(0, 10), text: text.value.slice(0, 200000) };

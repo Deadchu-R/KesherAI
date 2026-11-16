@@ -82,16 +82,27 @@ function StudyHome() {
   return (
     <div className="page study-page">
       <h1>{L("לימודים", "Study")}</h1>
-      <section className="study-today">
+      {!!courses?.length && <section className="study-today">
         <h2>{L("להיום", "Today")}</h2>
         <div className="study-actions">
-          {firstDue ? <a className="button primary" href={`#/study/${firstDue.id}/review`}>{L(`חזרה על ${due} כרטיסיות`, `Review ${due} cards`)} ▶</a> : <span className="muted">{courses?.length ? L("אין כרטיסיות לחזרה עכשיו.", "No cards to review now.") : L("התחילי בקורס ראשון.", "Start with a first course.")}</span>}
+          {firstDue ? <a className="button primary" href={`#/study/${firstDue.id}/review`}>{L(`חזרה על ${due} כרטיסיות`, `Review ${due} cards`)} ▶</a> : <span className="muted">{L("אין כרטיסיות לחזרה עכשיו.", "No cards to review now.")}</span>}
           {courses?.some((c) => clinicalField(c.field)) && <>
             <a className="button" href="#/study/calc">{L("תרגול חישובי תרופות", "Medication calculations")}</a>
             <a className="button" href="#/study/labs">{L("ערכי מעבדה", "Lab values")}</a>
           </>}
         </div>
-      </section>
+      </section>}
+      {courses && !courses.length && (
+        <section className="card study-start">
+          <h2>{L("איך זה עובד", "How it works")}</h2>
+          <ol>
+            <li><b>{L("פותחים קורס", "Open a course")}</b> {L("למטה, בשם שלו (למשל ״פרמקולוגיה״). התחום מזוהה לבד, ואיתו הכלים שלו.", "below, by its name (e.g. “Pharmacology”). Its field is recognised by itself, with its tools.")}</li>
+            <li><b>{L("מוסיפים הרצאה", "Add a lecture")}</b> {L("בהקלטה בזמן השיעור, בהדבקת טקסט, ממצגת או PDF, או בצילום של הלוח והמחברת.", "by recording it in class, pasting text, from slides or a PDF, or a photo of the board and notebook.")}</li>
+            <li><b>{L("מקבלים חומר ללמידה", "Get material to study")}</b> {L("סיכום, מושגים, תרשים, כרטיסיות לחזרה בזמן הנכון, ומבחן תרגול שנבדק אוטומטית.", "a summary, terms, a diagram, flashcards reviewed at the right time, and a practice test graded automatically.")}</li>
+          </ol>
+          <p className="muted small">{L("הכול נשמר במחשב שלך, ומסתנכרן עם לשונית הלימודים באפליקציה בטלפון.", "Everything stays on your computer, and syncs with the Study tab in the phone app.")}</p>
+        </section>
+      )}
       <section className="study-life card">
         <h2>{L("שאלה על הלימודים", "A question about your studies")}</h2>
         <p className="muted small">{L("שאלות מעשיות מקבלות תשובה עדכנית מהרשת, עם מקור רשמי.", "Practical questions get a current answer from the web, with an official source.")}</p>
@@ -222,6 +233,27 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const photo = useRef<HTMLInputElement>(null);
+  /** A file becomes the lecture's text (read here for text files, on the computer for the rest); she checks it, then saves. */
+  const fromFile = async (f: File | undefined, input: HTMLInputElement) => {
+    input.value = "";
+    if (!f) return;
+    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
+    if (/\.(txt|md|srt|vtt)$/i.test(f.name)) {
+      const words = (await f.text()).replace(/^\d+\s*$|^\d\d:\d\d:\d\d[,.]\d+ --> .*$|^WEBVTT.*$/gm, "").replace(/\n{3,}/g, "\n\n");
+      setText((t) => (t.trim() ? `${t}\n\n${words}` : words));
+      return;
+    }
+    if (f.size > 50 * 1024 * 1024) return toast(L("הקובץ גדול מ-50MB.", "The file is larger than 50 MB."));
+    setBusy(true);
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const r = await call(api<{ title: string; text: string }>("/api/study/extract", { method: "POST", body: { name: f.name, data: btoa(bin) } }));
+    setBusy(false);
+    // Several photos (the board, then the notebook) add up in one lecture.
+    if (r) setText((t) => (t.trim() ? `${t}\n\n${r.text}` : r.text));
+  };
   const save = async () => {
     setBusy(true);
     const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures`, { method: "POST", body: { title, text } }));
@@ -244,16 +276,13 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
           <h2>{L("הרצאה חדשה", "New lecture")}</h2>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={L("כותרת, למשל: תרופות לב", "Title, e.g. Heart drugs")} aria-label={L("כותרת", "Title")} dir="auto" />
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} dir="auto" aria-label={L("טקסט ההרצאה", "Lecture text")}
-            placeholder={L("הדביקי כאן את התמלול, הסיכום שלך או טקסט מהמצגת. הקלטה מהטלפון תגיע לכאן לבד.", "Paste the transcript, your notes or the slides' text. A recording from the phone will arrive here by itself.")} />
+            placeholder={L("הדביקי כאן את התמלול או הסיכום שלך, או הוסיפי מצגת, PDF או צילום (אפשר כמה צילומים להרצאה אחת).", "Paste the transcript or your notes, or add slides, a PDF or photos (several photos can go into one lecture).")} />
           <div className="study-actions">
-            <button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void save()}>{busy ? "…" : L("שמור הרצאה", "Save lecture")}</button>
-            <button type="button" onClick={() => file.current?.click()}>{L("מקובץ טקסט", "From a text file")}</button>
-            <input ref={file} type="file" accept=".txt,.md,.srt,.vtt,text/plain" hidden onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              setText((await f.text()).replace(/^\d+\s*$|^\d\d:\d\d:\d\d[,.]\d+ --> .*$|^WEBVTT.*$/gm, "").replace(/\n{3,}/g, "\n\n"));
-              if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
-            }} />
+            <button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void save()}>{busy ? L("קורא את הקובץ…", "Reading the file…") : L("שמור הרצאה", "Save lecture")}</button>
+            <button type="button" disabled={busy} onClick={() => file.current?.click()}>{L("מקובץ: מצגת, PDF, Word", "From a file: slides, PDF, Word")}</button>
+            <button type="button" disabled={busy} onClick={() => photo.current?.click()}>{L("📷 צילום לוח או מחברת", "📷 Photo of the board or notebook")}</button>
+            <input ref={file} type="file" accept=".pdf,.pptx,.docx,.txt,.md,.srt,.vtt,image/*" hidden onChange={(e) => void fromFile(e.target.files?.[0], e.target)} />
+            <input ref={photo} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void fromFile(e.target.files?.[0], e.target)} />
             <button type="button" onClick={() => { setAdding(false); setRecording(true); }}>{L("או: הקלט הרצאה", "Or: record a lecture")}</button>
             {info.lectures.length > 0 && <button type="button" className="ghost" onClick={() => setAdding(false)}>{L("ביטול", "Cancel")}</button>}
           </div>
@@ -261,7 +290,7 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
       ) : (
         <div className="study-actions">
           <button type="button" className="primary" onClick={() => setRecording(true)}>{L("הקלט הרצאה", "Record a lecture")}</button>
-          <button type="button" onClick={() => setAdding(true)}>{L("+ הרצאה מטקסט", "+ Lecture from text")}</button>
+          <button type="button" onClick={() => setAdding(true)}>{L("+ הרצאה מטקסט, מצגת או צילום", "+ Lecture from text, slides or a photo")}</button>
         </div>
       )}
       <ul className="study-list">

@@ -2712,3 +2712,6 @@ html.handheld .palette-list button { min-height: 44px; }
 @media (max-width: 760px) {
   .version-bar { bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
+
+.study-start ol { margin: 0; padding-inline-start: 1.3em; display: grid; gap: 10px; line-height: 1.55; }
+.study-start li b { display: block; }

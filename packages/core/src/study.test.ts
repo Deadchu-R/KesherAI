@@ -10,6 +10,7 @@ const fake = () => ({
   id: "fake",
   turn: (async (req: { messages: Array<{ role: string; content: string }> }) => {
     const sys = req.messages[0]!.content;
+    if (sys.includes("photos of study material")) return { text: (req.messages[1] as { images?: unknown[] }).images?.length ? "לוח: לחץ דם 120/80" : "NO-IMAGE" };
     if (sys.includes("drug cards")) return { text: '[{"name":"Digoxin","drugClass":"Cardiac glycoside","nursing":"Apical pulse a full minute; hold under 60","sideEffects":"Nausea, visual changes"},{"name":""}]' };
     if (sys.includes("flashcards")) return { text: '```json\n[{"front":"מה עושה אינסולין?","back":"מוריד סוכר בדם","kind":"drug"},{"front":"Normal K+?","back":"3.5–5.0 mEq/L","kind":"concept"},{"front":"bad"}]\n```' };
     if (sys.includes("multiple-choice")) return { text: 'Here: [{"q":"Q1","options":["a","b","c","d"],"answer":2,"explain":"because","lecture":1},{"q":"broken","options":["a"],"answer":0}]' };
@@ -88,6 +89,19 @@ test("sync with the phone merges courses and keeps deletions", async () => {
     assert.ok(again.removedCourses.includes(fresh.course.id));
     await st.sync([], [pc.id]);
     assert.equal((await st.list()).length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a lecture from a file: text, a photo, and kinds that cannot be read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-file-"));
+  try {
+    const st = new Study(dir, fake);
+    assert.deepEqual(await st.extract("הרצאה 3.txt", Buffer.from("שלום עולם")), { title: "הרצאה 3", text: "שלום עולם" });
+    assert.equal((await st.extract("board.jpg", Buffer.from([0xff, 0xd8, 0xff]))).text, "לוח: לחץ דם 120/80");
+    await assert.rejects(st.extract("virus.exe", Buffer.from("MZ")), /cannot be read/);
+    await assert.rejects(new Study(dir, () => undefined).extract("a.png", Buffer.from([1])), /chat model/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
