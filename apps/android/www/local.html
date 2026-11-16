@@ -54,21 +54,35 @@
     .msg.assistant { align-self: stretch; }
     .msg.note { align-self: center; color: var(--muted); font-size: 13px; }
     footer { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
-    .composer { display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--border); background: var(--panel); border-radius: 18px; padding: 8px; }
-    .composer textarea { flex: 1; resize: none; border: 0; background: transparent; outline: none; font-size: 16px; line-height: 1.4; max-height: 30vh; padding: 6px 4px; }
-    .composer .web { background: transparent; border: 1px solid var(--border); font-size: 17px; filter: grayscale(1); opacity: .65; }
-    .composer .web.on { background: rgb(152 163 255 / 0.16); border-color: rgb(152 163 255 / 0.5); filter: none; opacity: 1; }
-    .composer button { min-height: 40px; width: 40px; padding: 0; border-radius: 12px; font-size: 18px; }
+    /* The composer card: text on top; +, search, dictation and one round button (live voice / send / stop) under it. */
+    .composer { display: flex; flex-direction: column; gap: 6px; border: 1px solid #2f2f35; background: var(--panel); border-radius: 22px; padding: 10px 10px 8px; }
+    .composer textarea { resize: none; border: 0; background: transparent; outline: none; font-size: 16px; line-height: 1.4; max-height: 30vh; padding: 4px 6px; }
+    .comp-row { display: flex; align-items: center; gap: 6px; }
+    .comp-row .grow { flex: 1; }
+    .cchip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; height: 40px; padding: 0 12px; border-radius: 20px; background: #1f1f22; border: 1px solid #2a2a2e; color: #c9c9ce; font-size: 13px; }
+    .cchip.round { width: 40px; padding: 0; justify-content: center; }
+    .cchip.on { color: var(--accent); background: rgb(152 163 255 / 0.12); border-color: rgb(152 163 255 / 0.45); }
+    .cicon { width: 40px; min-height: 40px; height: 40px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 20px; background: transparent; color: #c9c9ce; }
+    .cicon.on { color: var(--accent); background: rgb(152 163 255 / 0.12); }
+    .composer .circle { width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 22px; display: grid; place-items: center; background: #2e2e3a; color: var(--text); }
+    .composer .circle.send { background: var(--accent); color: #121213; }
+    .composer .circle.stop { background: var(--text); color: var(--bg); }
     .queue { display: grid; gap: 4px; margin: 0 2px 8px; }
     .q-head { font-size: 12px; color: var(--muted); padding: 0 4px; }
     .q-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; background: var(--raised); border: 1px dashed rgb(255 255 255 / 0.14); font-size: 14px; }
     .q-n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--panel-2); color: var(--muted); flex: none; }
     .q-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .q-item button { min-height: 32px; width: 32px; padding: 0; border: 0; background: transparent; color: var(--muted); }
-    .model-switch { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--panel-2); font-size: 15px; font-weight: 500; }
+    /* The chat's title: the model in the middle, where it runs under it (like the design doc's chat screen). */
+    .model-switch { flex: 1; min-width: 0; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 0 8px; border: 0; border-radius: 12px; background: transparent; font-size: 15px; font-weight: 600; }
+    .model-switch .ms-top { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+    .model-switch .ms-top svg { flex: none; color: var(--muted); }
     .model-switch #modelName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .model-switch small { font-size: 11px; font-weight: 400; color: #7fd6a4; }
+    .model-switch small.net { color: var(--accent); }
+    .model-switch small.pc { color: #f0b37e; }
     .sheet-scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .45); z-index: 40; }
-    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 72vh; overflow-y: auto; padding: 8px 14px max(16px, env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: rgb(31 31 34 / .96); backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; animation: sheet-in .22s cubic-bezier(.2,.9,.25,1); }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 72vh; overflow-y: auto; padding: 8px 14px max(16px, env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: #1e1e21; border-top: 1px solid #2c2d33; display: flex; flex-direction: column; gap: 8px; animation: sheet-in .22s cubic-bezier(.2,.9,.25,1); }
     @keyframes sheet-in { from { transform: translateY(40%); opacity: .4; } }
     .sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: var(--raised); margin: 4px auto 6px; }
     .sheet strong { font-weight: 500; padding: 0 4px; }
@@ -81,8 +95,22 @@
     .attach-row .chip { position: relative; flex: none; height: 56px; min-width: 56px; border-radius: 12px; background: var(--raised); display: grid; place-items: center; font-size: 12px; padding: 0 8px; overflow: hidden; }
     .attach-row .chip img { width: 56px; height: 56px; object-fit: cover; }
     .attach-row .chip button { position: absolute; top: 2px; right: 2px; min-height: 20px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / .6); font-size: 11px; }
-    .plus-menu { display: flex; flex-direction: column; gap: 2px; margin: 0 2px 8px; padding: 6px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--border); }
-    .plus-menu button { min-height: 46px; text-align: start; border: 0; background: transparent; border-radius: 10px; font-size: 15px; }
+    /* + opens a sheet from the bottom (the design doc's "add" sheet), over a dimmed chat. */
+    .plus-menu { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 78vh; overflow-y: auto; display: flex; flex-direction: column; gap: 0; padding: 8px 12px max(16px, env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: #1e1e21; border-top: 1px solid #2c2d33; animation: sheet-in .22s cubic-bezier(.2,.9,.25,1); }
+    .plus-menu .sheet-grip { margin: 2px auto 8px; }
+    .plus-menu button { display: flex; align-items: center; gap: 14px; min-height: 54px; padding: 0 10px; text-align: start; border: 0; background: transparent; border-radius: 12px; font-size: 15px; color: var(--text); }
+    .plus-menu button > svg { flex: none; color: #a9a9b0; }
+    .plus-menu button > span { flex: 1; display: flex; flex-direction: column; }
+    .plus-menu button small { font-size: 12px; color: var(--muted); }
+    .plus-menu hr { border: 0; border-top: 1px solid #2c2d33; margin: 6px 4px; }
+    .plus-menu .sw { flex: none; width: 40px; height: 24px; border-radius: 12px; background: var(--raised); position: relative; }
+    .plus-menu .sw::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 18px; height: 18px; border-radius: 9px; background: var(--text); transition: inset-inline-start .15s; }
+    .plus-menu .sw.on { background: var(--accent); }
+    .plus-menu .sw.on::after { inset-inline-start: 19px; background: var(--bg); }
+    /* Under each answer: copy, listen, another answer (line icons). */
+    .msg-acts { display: flex; gap: 2px; margin-top: 6px; color: var(--muted); white-space: normal; }
+    .msg-acts button { width: 36px; height: 36px; min-height: 36px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: inherit; }
+    .msg-acts button.on { color: var(--accent); }
     .msg .say { min-height: 30px; padding: 0 10px; margin-top: 6px; font-size: 13px; border-radius: 999px; background: transparent; border: 1px solid var(--border); color: var(--muted); }
     .msg img.att { display: block; max-width: 200px; border-radius: 12px; margin-top: 6px; }
     .live { position: fixed; inset: 0; z-index: 70; background: radial-gradient(120% 80% at 50% 100%, #1d2140 0%, var(--bg) 60%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; }
@@ -171,6 +199,23 @@
   .app-tabs button[aria-current] { color: var(--text); }
   .app-tabs button[aria-current] svg { stroke: var(--accent); }
   .app-tabs button .i { font-size: 19px; }
+  .c-search { display: flex; align-items: center; gap: 8px; height: 44px; margin: 0 0 8px; padding: 0 12px; border-radius: 12px; background: var(--panel); border: 1px solid #2a2a2e; color: var(--muted); }
+  .c-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; outline: none; }
+  .c-filters { display: flex; gap: 6px; margin: 0 0 4px; }
+  .c-filters button { min-height: 32px; height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #2a2a2e; background: transparent; color: #c9c9ce; font-size: 13px; }
+  .c-filters button.on { background: #2e2e3a; border-color: #2e2e3a; color: var(--text); }
+  .c-grp { font-size: 12px; color: var(--muted); padding: 14px 8px 4px; }
+  .c-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 0 10px; border: 0; border-radius: 12px; background: transparent; color: var(--text); text-align: start; user-select: none; -webkit-user-select: none; }
+  .c-row:active, .c-row.on { background: #26262c; }
+  .c-row > svg { flex: none; color: #77777f; }
+  .c-row > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .c-row b { font-weight: 500; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-row small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-row .tag { flex: none; font-style: normal; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f2a24; color: #7fd6a4; }
+  .c-row .tag.net { background: #232333; color: var(--accent); }
+  .c-row .chk { flex: none; width: 22px; height: 22px; border-radius: 11px; border: 2px solid #4a4a52; }
+  .c-row .chk.on { background: var(--accent); border-color: var(--accent); }
+  .sel-bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 4px; margin: -4px 0 8px; padding: 4px; border-radius: 12px; background: var(--panel); }
   .about-name { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); margin: 0 0 10px; }
   .about-name input { min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); padding: 0 12px; font: inherit; font-size: 15px; }
   .about-sub { margin: 0 0 6px; font-size: 14px; color: var(--muted); }
@@ -186,8 +231,8 @@
       <button type="button" role="tab" aria-selected="true" class="on" data-he="טלפון" data-en="Phone">טלפון</button>
       <button type="button" role="tab" id="whereComputer" data-he="מחשב" data-en="Computer">מחשב</button>
     </div>
-    <button type="button" id="modelSwitch" class="model-switch" hidden><span id="modelName"></span> <span aria-hidden="true">▾</span></button>
-    <button class="icon" id="newChat" type="button" aria-label="New chat" hidden>＋</button>
+    <button type="button" id="modelSwitch" class="model-switch" hidden><span class="ms-top"><span id="modelName"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><small id="modelWhere"></small></button>
+    <button class="icon" id="newChat" type="button" aria-label="New chat" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
     <button class="icon" id="menu" type="button" aria-label="Menu" hidden>☰</button>
   </header>
 
@@ -221,6 +266,23 @@
 
   <main id="toolsView" hidden>
     <div id="toolList"></div>
+  </main>
+
+  <main id="chatsView" hidden>
+    <!-- The design doc's chat list: search, filters, pinned, by day; a long press for actions or selecting several. -->
+    <div class="sel-bar" id="selBar" hidden>
+      <button type="button" class="icon" id="selCancel" aria-label="Cancel"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <strong id="selCount" style="flex: 1"></strong>
+      <button type="button" class="icon" id="selPin" aria-label="Pin"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 4 3v2H6v-2l4-3z"/></svg></button>
+      <button type="button" class="icon" id="selDelete" aria-label="Delete"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+    </div>
+    <label class="c-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="chatSearch" type="search" data-ph-he="חיפוש בצ׳אטים" data-ph-en="Search chats" placeholder="חיפוש בצ׳אטים" /></label>
+    <div class="c-filters" id="chatFilters" role="tablist">
+      <button type="button" data-f="all" class="on" data-he="הכול" data-en="All">הכול</button>
+      <button type="button" data-f="phone" data-he="בטלפון" data-en="On the phone">בטלפון</button>
+      <button type="button" data-f="net" data-he="דרך האינטרנט" data-en="Online">דרך האינטרנט</button>
+    </div>
+    <div id="chatList"></div>
   </main>
 
   <main id="settingsView" hidden>
@@ -318,22 +380,29 @@
     <p class="status" id="status"></p>
     <div class="queue" id="queue" hidden></div>
     <div class="attach-row" id="attachRow" hidden></div>
-    <div class="plus-menu" id="plusMenu" hidden>
-      <button type="button" id="addPhoto">📷 <span data-he="צלם תמונה" data-en="Take a photo">צלם תמונה</span></button>
-      <button type="button" id="addVideo">🎥 <span data-he="צלם וידאו קצר" data-en="Record a short video">צלם וידאו קצר</span></button>
-      <button type="button" id="addFile">📎 <span data-he="קובץ או תמונה מהטלפון" data-en="A file or picture from the phone">קובץ או תמונה מהטלפון</span></button>
-      <button type="button" id="addDraw">🎨 <span data-he="צייר תמונה (בטלפון)" data-en="Draw a picture (on the phone)">צייר תמונה (בטלפון)</span></button>
-      <button type="button" id="goLive">◉ <span data-he="שיחה חיה (קול ומצלמה)" data-en="Live conversation (voice and camera)">שיחה חיה (קול ומצלמה)</span></button>
+    <div class="plus-menu" id="plusMenu" hidden role="dialog" aria-modal="true">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <button type="button" id="addPhoto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg><span><span data-he="מצלמה" data-en="Camera">מצלמה</span><small data-he="צילום תמונה" data-en="Take a photo">צילום תמונה</small></span></button>
+      <button type="button" id="addVideo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/></svg><span><span data-he="סרטון קצר" data-en="Short video">סרטון קצר</span><small data-he="צילום מהמצלמה" data-en="From the camera">צילום מהמצלמה</small></span></button>
+      <button type="button" id="addFile"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span><span data-he="תמונה או קובץ מהטלפון" data-en="Picture or file from the phone">תמונה או קובץ מהטלפון</span><small data-he="תמונות, טקסט וקוד" data-en="Pictures, text and code">תמונות, טקסט וקוד</small></span></button>
+      <button type="button" id="addDraw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 14.5 3 21"/><path d="M14 4l6 6-8.5 8.5a2 2 0 0 1-2.8 0l-3.2-3.2a2 2 0 0 1 0-2.8z"/></svg><span><span data-he="יצירת תמונה" data-en="Make a picture">יצירת תמונה</span><small data-he="בטלפון" data-en="On the phone">בטלפון</small></span></button>
+      <button type="button" id="addStudy"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg><span><span data-he="מהלימודים" data-en="From Study">מהלימודים</span><small data-he="הרצאה כהקשר לשאלה" data-en="A lecture as context">הרצאה כהקשר לשאלה</small></span></button>
+      <button type="button" id="goLive"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg><span><span data-he="שיחה חיה" data-en="Live conversation">שיחה חיה</span><small data-he="קול ומצלמה, המודל עונה בקול" data-en="Voice and camera; the model answers aloud">קול ומצלמה, המודל עונה בקול</small></span></button>
+      <hr />
+      <button type="button" id="plusWeb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span><span data-he="חיפוש באינטרנט" data-en="Search the web">חיפוש באינטרנט</span><small data-he="התשובה עם מקורות" data-en="Answers with sources">התשובה עם מקורות</small></span><i class="sw" aria-hidden="true"></i></button>
     </div>
     <input type="file" id="filePick" multiple accept="image/*,video/*,text/*,.md,.json,.csv,.txt,.js,.ts,.py,.html,.css" hidden />
     <input type="file" id="photoPick" accept="image/*" capture="environment" hidden />
     <input type="file" id="videoPick" accept="video/*" capture="environment" hidden />
     <form class="composer" id="composer">
-      <button type="button" id="plus" class="web" aria-label="Add">＋</button>
-      <button type="button" id="web" class="web" aria-pressed="false" title="Search the web">🌐</button>
       <textarea id="input" rows="1" data-ph-he="כתוב הודעה…" data-ph-en="Write a message…" placeholder="כתוב הודעה…"></textarea>
-      <button type="button" id="mic" class="web" aria-label="Talk">🎤</button>
-      <button class="primary" id="send" type="submit" aria-label="Send">↑</button>
+      <div class="comp-row">
+        <button type="button" id="plus" class="cchip round" aria-label="Add"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button type="button" id="web" class="cchip" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span data-he="חיפוש" data-en="Search">חיפוש</span></button>
+        <span class="grow"></span>
+        <button type="button" id="mic" class="cicon" aria-label="Dictate"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <button class="circle" id="send" type="submit" aria-label="Send"></button>
+      </div>
     </form>
   </footer>
 
@@ -347,6 +416,7 @@
   document.documentElement.dir = he ? "rtl" : "ltr";
   for (const el of document.querySelectorAll("[data-he]")) el.textContent = lang === "he" ? (globalThis.kesherHebrew && !el.hasAttribute("data-raw") ? globalThis.kesherHebrew(el.dataset.he) : el.dataset.he) : el.dataset.en;
   $("input").placeholder = $("input").dataset[he ? "phHe" : "phEn"];
+  $("chatSearch").placeholder = $("chatSearch").dataset[he ? "phHe" : "phEn"];
   $("back").textContent = he ? "→" : "←";
   /** The note the chat models get about her (Settings → About you): her name and how to address her in Hebrew. */
   function aboutMe() {
@@ -517,20 +587,22 @@
     document.querySelectorAll("#cats [data-tab]").forEach((b) => { if (b.dataset.tab in on) b.hidden = !on[b.dataset.tab]; });
     document.querySelectorAll("#appTabs [data-part]").forEach((b) => (b.hidden = !on[b.dataset.part]));
   }
-  const PAGES = ["homeView", "toolsView", "settingsView", "modelsView", "chatView"];
+  const PAGES = ["homeView", "toolsView", "settingsView", "modelsView", "chatView", "chatsView"];
   /** Shows one of the app's pages, with the bottom bar on the top-level ones. */
   function showPage(name, title) {
     for (const id of PAGES) $(id).hidden = id !== name;
-    const top = name === "homeView" || name === "toolsView" || name === "settingsView";
+    const top = name === "homeView" || name === "toolsView" || name === "settingsView" || name === "chatsView";
     $("appTabs").hidden = name === "chatView";
     document.body.classList.toggle("has-tabs", name !== "chatView");
     $("chatFoot").hidden = name !== "chatView";
     $("title").hidden = name === "chatView";
     $("title").textContent = title || (name === "homeView" ? "KesherAI" : T("בטלפון הזה", "On this phone"));
     $("back").style.visibility = top && name === "homeView" ? "hidden" : "visible";
+    // A chat's bar is menu, home, the model, new chat (the design doc's chat screen); the phone's Back still goes back.
+    $("back").hidden = name === "chatView";
     $("homeBtn").style.visibility = name === "homeView" ? "hidden" : "visible";
     $("whereBar").hidden = name === "chatView";
-    const go = { homeView: "new", toolsView: "tools", settingsView: "settings" }[name] ?? (name === "modelsView" && $("modelsView").dataset.tab === "study" ? "study" : "");
+    const go = { homeView: "new", toolsView: "tools", settingsView: "settings", chatsView: "chats" }[name] ?? (name === "modelsView" && $("modelsView").dataset.tab === "study" ? "study" : "");
     document.querySelectorAll("#appTabs [data-go]").forEach((b) => (b.dataset.go === go ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
   }
   /** One part (a category of the models page): its own screen. */
@@ -562,6 +634,104 @@
       row("📅", T("היום שלי ועבודה עצמית", "My day and self-work"), T("המחשב עובד בשבילך", "The computer works for you"), false, () => (location.href = "index.html?switch=1")),
     );
   }
+  // ---------- the chat list (bottom bar "Chats") ----------
+  let chatFilter = "all";
+  let selecting = null; // a Set of chat ids while selecting several
+  /** Draws the phone's chats: pinned first, then by day; a filter and a search on top. */
+  function drawChats() {
+    const q = $("chatSearch").value.trim().toLowerCase();
+    const isNet = (c) => String(c.url || "").startsWith("api:");
+    const list = allChats()
+      .filter((c) => chatFilter === "all" || (chatFilter === "net") === isNet(c))
+      .filter((c) => !q || `${c.title} ${c.name}`.toLowerCase().includes(q))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const day = (t) => {
+      const d = new Date(t || 0), now = new Date();
+      const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
+      return days <= 0 ? T("היום", "Today") : days === 1 ? T("אתמול", "Yesterday") : days < 7 ? T("השבוע", "This week") : days < 31 ? T("החודש", "This month") : T("קודם", "Earlier");
+    };
+    const out = [];
+    let last = "";
+    const pinned = list.filter((c) => c.pinned);
+    if (pinned.length) out.push(Object.assign(document.createElement("div"), { className: "c-grp", textContent: T("מוצמדים", "Pinned") }), ...pinned.map(chatRow));
+    for (const c of list.filter((x) => !x.pinned)) {
+      const g = day(c.updatedAt);
+      if (g !== last) { out.push(Object.assign(document.createElement("div"), { className: "c-grp", textContent: g })); last = g; }
+      out.push(chatRow(c));
+    }
+    if (!out.length) out.push(Object.assign(document.createElement("p"), { className: "muted", style: "padding: 20px 8px", textContent: q ? T("לא נמצא צ׳אט כזה.", "No chat matches.") : T("עוד אין צ׳אטים בטלפון. כתבי הודעה במסך הבית.", "No chats on the phone yet. Write a message on the home screen.") }));
+    $("chatList").replaceChildren(...out);
+    $("selBar").hidden = !selecting;
+    if (selecting) $("selCount").textContent = T(`${selecting.size} נבחרו`, `${selecting.size} selected`);
+  }
+  /** One chat: tap opens it (or selects it while selecting); a long press opens its actions. */
+  function chatRow(c) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "c-row";
+    const net = String(c.url || "").startsWith("api:");
+    // Today: the time; before: the date (Israel time).
+    const today = c.updatedAt && new Date(c.updatedAt).toDateString() === new Date().toDateString();
+    const time = !c.updatedAt ? "" : new Date(c.updatedAt)[today ? "toLocaleTimeString" : "toLocaleDateString"](he ? "he-IL" : "en-GB", today ? { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" } : { day: "numeric", month: "numeric", timeZone: "Asia/Jerusalem" });
+    b.innerHTML = `${selecting ? `<i class="chk${selecting.has(c.id) ? " on" : ""}"></i>` : c.pinned ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 4 3v2H6v-2l4-3z"/></svg>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'}<span><b dir="auto"></b><small></small></span><i class="tag${net ? " net" : ""}"></i>`;
+    b.querySelector("b").textContent = c.title || T("צ׳אט", "Chat");
+    b.querySelector("small").textContent = [c.name, time].filter(Boolean).join(" · ");
+    b.querySelector(".tag").textContent = net ? T("אינטרנט", "Online") : T("טלפון", "Phone");
+    let timer = 0, long = false;
+    const start = () => { long = false; timer = setTimeout(() => { long = true; navigator.vibrate?.(10); chatActions(c); }, 500); };
+    const stop = () => clearTimeout(timer);
+    b.addEventListener("pointerdown", start);
+    b.addEventListener("pointerup", stop);
+    b.addEventListener("pointerleave", stop);
+    b.addEventListener("pointercancel", stop);
+    b.addEventListener("contextmenu", (e) => e.preventDefault());
+    b.onclick = () => {
+      if (long) return;
+      if (selecting) { selecting.has(c.id) ? selecting.delete(c.id) : selecting.add(c.id); if (!selecting.size) selecting = null; return drawChats(); }
+      location.href = `local.html?c=${encodeURIComponent(c.id)}`;
+    };
+    return b;
+  }
+  /** The long-press sheet: pin, rename, share, select several, delete. */
+  function chatActions(c) {
+    $("sheetTitle").textContent = c.title || T("צ׳אט", "Chat");
+    const act = (label, fn, danger) => { const b = Object.assign(document.createElement("button"), { type: "button" }); b.innerHTML = "<span></span>"; b.firstChild.textContent = label; if (danger) b.style.color = "var(--bad, #ff9b9b)"; b.onclick = () => { closeSheet(); fn(); }; return b; };
+    const update = (fn) => { saveChats(allChats().map((x) => (x.id === c.id ? fn({ ...x }) : x))); drawChats(); };
+    $("sheetList").replaceChildren(
+      act(c.pinned ? T("ביטול הצמדה", "Unpin") : T("הצמדה למעלה", "Pin to the top"), () => update((x) => { if (x.pinned) delete x.pinned; else x.pinned = true; return x; })),
+      act(T("שינוי שם", "Rename"), () => { const t = prompt(T("שם חדש לצ׳אט", "A new name for the chat"), c.title || ""); if (t?.trim()) update((x) => ({ ...x, title: t.trim().slice(0, 80), renamed: true })); }),
+      act(T("שיתוף כטקסט", "Share as text"), () => void shareChat(c)),
+      act(T("בחירת כמה צ׳אטים", "Select several chats"), () => { selecting = new Set([c.id]); drawChats(); }),
+      act(T("מחיקה", "Delete"), () => { if (confirm(T("למחוק את הצ׳אט? אי אפשר לבטל.", "Delete the chat? This cannot be undone."))) deleteChats([c.id]); }, true),
+    );
+    $("sheet").hidden = false;
+    $("sheetScrim").hidden = false;
+  }
+  /** Shares a chat's text through Android's share sheet (or copies it). */
+  async function shareChat(c) {
+    let msgs = [];
+    try { msgs = JSON.parse(localStorage.getItem(MSGS(c.id)) || "[]"); } catch { /* none */ }
+    const text = msgs.filter((m) => m.role === "user" || m.role === "assistant").map((m) => `${m.role === "user" ? T("אני", "Me") : c.name}: ${typeof m.content === "string" ? m.content : ""}`).join("\n\n");
+    try { if (navigator.share) await navigator.share({ title: c.title, text }); else await navigator.clipboard.writeText(text); } catch { /* cancelled */ }
+  }
+  /** Removes chats and their messages from the phone. */
+  function deleteChats(ids) {
+    const gone = new Set(ids);
+    saveChats(allChats().filter((x) => !gone.has(x.id)));
+    for (const id of gone) localStorage.removeItem(MSGS(id));
+    selecting = null;
+    drawChats();
+  }
+  $("chatSearch").addEventListener("input", () => drawChats());
+  document.querySelectorAll("#chatFilters [data-f]").forEach((b) => (b.onclick = () => {
+    chatFilter = b.dataset.f;
+    document.querySelectorAll("#chatFilters [data-f]").forEach((x) => x.classList.toggle("on", x === b));
+    drawChats();
+  }));
+  $("selCancel").onclick = () => { selecting = null; drawChats(); };
+  $("selPin").onclick = () => { const ids = selecting; saveChats(allChats().map((x) => (ids?.has(x.id) ? { ...x, pinned: true } : x))); selecting = null; drawChats(); };
+  $("selDelete").onclick = () => { if (selecting?.size && confirm(T(`למחוק ${selecting.size} צ׳אטים? אי אפשר לבטל.`, `Delete ${selecting.size} chats? This cannot be undone.`))) deleteChats([...selecting]); };
+
   function drawSettings() {
     const on = partsOn();
     $("autoConnect").checked = localStorage.getItem("kesherai-auto-connect") !== "0";
@@ -656,7 +826,7 @@
   };
   document.querySelectorAll("#appTabs [data-go]").forEach((b) => (b.onclick = () => {
     const go = b.dataset.go;
-    if (go === "chats") return window.kesherDrawer?.open();
+    if (go === "chats") { drawChats(); return showPage("chatsView", T("צ׳אטים", "Chats")); }
     if (go === "new") { drawHome(); return showPage("homeView"); }
     if (go === "study") return openPart("study");
     if (go === "tools") { drawTools(); return showPage("toolsView", T("כל הכלים", "All tools")); }
@@ -1230,9 +1400,10 @@
   const saveChats = (list) => { try { localStorage.setItem(CHATS, JSON.stringify(list.slice(0, 100))); } catch { /* full */ } };
   function saveChat() {
     if (!chatId || !messages.length) return;
+    const old = allChats().find((c) => c.id === chatId);
     const list = allChats().filter((c) => c.id !== chatId);
     const first = messages.find((m) => m.role === "user")?.content ?? "";
-    list.unshift({ id: chatId, title: first.replace(/\s+/g, " ").slice(0, 48), url: current.url, name: current.item.name, updatedAt: Date.now() });
+    list.unshift({ id: chatId, title: old?.renamed ? old.title : first.replace(/\s+/g, " ").slice(0, 48), url: current.url, name: current.item.name, updatedAt: Date.now(), ...(old?.pinned ? { pinned: true } : {}), ...(old?.renamed ? { renamed: true } : {}) });
     saveChats(list);
     // Pictures stay in the open chat only (phone storage is small); the text and file names are kept.
     const slim = messages.slice(-80).map(({ images, ...m }) => (images?.length ? { ...m, content: `${m.content}\n[${images.length} 🖼]` } : m));
@@ -1263,7 +1434,12 @@
     showPage(chat ? "chatView" : "modelsView", $("modelsView").dataset.tab === "chat" ? T("מודלים בטלפון", "Models on the phone") : undefined);
     $("newChat").hidden = !chat;
     $("modelSwitch").hidden = !chat;
-    if (chat) $("modelName").textContent = current.item.name;
+    if (chat) {
+      $("modelName").textContent = current.item.name;
+      const pc = current.url?.includes(FROM_PC);
+      $("modelWhere").textContent = current.item.api ? T("● דרך האינטרנט", "● Over the internet") : pc ? T("● מודל מהמחשב, בטלפון", "● From the computer, on the phone") : T("● בטלפון", "● On the phone");
+      $("modelWhere").className = current.item.api ? "net" : pc ? "pc" : "";
+    }
   }
 
   function addMsg(role, text) {
@@ -1608,8 +1784,9 @@
 
   // ---------- web search (DuckDuckGo, through the app's native HTTP so websites' CORS rules do not block it) ----------
   const webOn = () => localStorage.getItem("kesherai-phone-web") === "1";
-  const paintWeb = () => { $("web").setAttribute("aria-pressed", String(webOn())); $("web").classList.toggle("on", webOn()); $("web").title = T("חיפוש באינטרנט לכל הודעה", "Search the web for each message"); };
+  const paintWeb = () => { $("web").setAttribute("aria-pressed", String(webOn())); $("web").classList.toggle("on", webOn()); $("web").title = T("חיפוש באינטרנט לכל הודעה", "Search the web for each message"); $("plusWeb").querySelector(".sw").classList.toggle("on", webOn()); };
   $("web").onclick = () => { localStorage.setItem("kesherai-phone-web", webOn() ? "0" : "1"); paintWeb(); };
+  $("plusWeb").onclick = () => $("web").click();
   paintWeb();
   addEventListener("kesher-web-changed", paintWeb);
   async function webSearch(q) {
@@ -1646,6 +1823,7 @@
       c.append(x);
       return c;
     }));
+    paintSend();
   };
   /** Shrinks a picture to at most 1280 px (smaller requests, faster answers). */
   const shrink = (src) => new Promise((res) => {
@@ -1687,14 +1865,41 @@
     paintAttachments();
   }
   const plusMenu = $("plusMenu");
-  $("plus").onclick = () => { plusMenu.hidden = !plusMenu.hidden; };
+  /** The + sheet over a dimmed chat (tap outside, or pick something, to close it). */
+  const plusOpen = (on) => { plusMenu.hidden = !on; $("sheetScrim").hidden = !on && $("sheet").hidden; };
+  $("plus").onclick = () => plusOpen(plusMenu.hidden);
   $("addDraw").onclick = async () => {
-    plusMenu.hidden = true;
+    plusOpen(false);
     if (!(await imageReady())) { addMsg("note", T("קודם הורד את מודל התמונות: בדף המודלים, \"תמונות בטלפון\".", "First download the image model: on the models page, \"Images on this phone\".")); return; }
     $("input").value = T("צייר ", "Draw ") + $("input").value;
     $("input").focus();
   };
-  const pick = (id) => () => { plusMenu.hidden = true; $(id).value = ""; $(id).click(); };
+  $("addStudy").onclick = () => {
+    plusOpen(false);
+    let db = { courses: [] };
+    try { db = JSON.parse(localStorage.getItem("kesherai-study") || "") || db; } catch { /* none yet */ }
+    const lectures = (db.courses || []).flatMap((c) => (c.lectures || []).map((l) => ({ c, l })));
+    $("sheetTitle").textContent = T("איזו הרצאה להוסיף כהקשר?", "Which lecture to add as context?");
+    const list = $("sheetList");
+    list.replaceChildren(...(lectures.length ? lectures.slice(-40).reverse().map(({ c, l }) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = '<span dir="auto"></span><small></small>';
+      b.querySelector("span").textContent = l.title;
+      b.querySelector("small").textContent = c.name;
+      b.onclick = () => {
+        closeSheet();
+        // The lecture goes with the next message as an attached text (the model reads it; the chat shows its name).
+        attachments.push({ kind: "text", name: `${c.name} · ${l.title}`, text: (l.summary || l.text || "").slice(0, 12000) });
+        paintAttachments();
+        $("input").focus();
+      };
+      return b;
+    }) : [Object.assign(document.createElement("div"), { className: "grp", textContent: T("עוד אין הרצאות בלימודים בטלפון.", "No lectures in Study on the phone yet.") })]));
+    $("sheet").hidden = false;
+    $("sheetScrim").hidden = false;
+  };
+  const pick = (id) => () => { plusOpen(false); $(id).value = ""; $(id).click(); };
   $("addPhoto").onclick = pick("photoPick");
   $("addVideo").onclick = pick("videoPick");
   $("addFile").onclick = pick("filePick");
@@ -1775,7 +1980,7 @@
     lvl?.remove?.();
   }
   $("goLive").onclick = () => {
-    plusMenu.hidden = true;
+    plusOpen(false);
     if (!SPEECH) { addMsg("note", T("שיחה חיה זמינה באפליקציה.", "Live conversation works in the app.")); return; }
     live = { ended: false, paused: false, cam: null };
     $("live").hidden = false;
@@ -1850,10 +2055,34 @@
   }
   /** While answering: ↑ queues what you typed, ■ (empty box) stops. */
   function paintSend() {
-    $("send").textContent = abort && !$("input").value.trim() ? "■" : "↑";
-    $("send").setAttribute("aria-label", abort && !$("input").value.trim() ? "Stop" : abort ? T("הוסף לתור", "Add to the queue") : "Send");
+    const typed = !!$("input").value.trim() || attachments.length > 0;
+    // One round button: live voice (empty), send (typed), stop (answering, empty), queue (answering, typed).
+    const kind = abort ? (typed ? "up" : "stop") : typed || !SPEECH ? "up" : "wave";
+    $("send").innerHTML = { up: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>', stop: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>', wave: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>' }[kind];
+    $("send").className = `circle ${kind === "stop" ? "stop" : kind === "up" ? "send" : ""}`;
+    $("send").setAttribute("aria-label", kind === "stop" ? T("עצירה", "Stop") : kind === "wave" ? T("שיחה חיה", "Live conversation") : abort ? T("הוסף לתור", "Add to the queue") : T("שליחה", "Send"));
   }
+  paintSend();
   $("input").addEventListener("input", paintSend);
+
+  /** Under an answer: copy, listen (with the phone's voice) and another answer (asks the last question again). */
+  function answerActions(clean, out) {
+    const row = Object.assign(document.createElement("div"), { className: "msg-acts" });
+    const b = (svg, label, fn) => { const x = Object.assign(document.createElement("button"), { type: "button", title: label, innerHTML: svg }); x.setAttribute("aria-label", label); x.onclick = fn; row.append(x); return x; };
+    const copy = b('<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>', T("העתקה", "Copy"), async () => { try { await navigator.clipboard.writeText(clean); copy.classList.add("on"); setTimeout(() => copy.classList.remove("on"), 1200); } catch { /* no clipboard */ } });
+    if (SPEECH) b('<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>', T("הקראה", "Read aloud"), () => speak(clean));
+    b('<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>', T("תשובה אחרת", "Another answer"), () => {
+      if (abort || messages[messages.length - 1]?.role !== "assistant" || out !== $("msgs").lastElementChild) return;
+      const q = messages[messages.length - 2];
+      if (q?.role !== "user" || typeof q.content !== "string") return;
+      messages.splice(-2, 2);
+      out.previousElementSibling?.remove();
+      out.remove();
+      $("input").value = q.content;
+      $("composer").requestSubmit();
+    });
+    return row;
+  }
 
   /** Makes a picture from the chat and puts it in the chat (kept with the chat as a note). */
   async function drawInChat(text) {
@@ -1898,6 +2127,8 @@
       paintQueue();
       return;
     }
+    // The empty round button is live voice.
+    if (!typed && !queue.length && !attachments.length && SPEECH) { $("goLive").click(); return; }
     const text = typed || queue.shift() || (attachments.length ? T("מה רואים כאן?", "What is in this?") : "");
     if (typed === "" && text) paintQueue();
     if (!text || (!current?.item.api && !current?.item.native && !wllama.isModelLoaded())) return;
@@ -2001,11 +2232,7 @@
     out.textContent = clean;
     messages.push({ role: "assistant", content: clean });
     if (live?.onAnswer) { live.onAnswer(clean); live.onAnswer = null; }
-    if (SPEECH && clean) {
-      const say = Object.assign(document.createElement("button"), { type: "button", className: "say", textContent: T("🔊 הקרא", "🔊 Read aloud") });
-      say.onclick = () => speak(clean);
-      out.append(say);
-    }
+    if (clean) out.append(answerActions(clean, out));
     doneNotice(T("התשובה מוכנה", "The answer is ready"), clean.slice(0, 120));
     // Next in the queue, if any (not after Stop).
     if (queue.length && !stoppedByUser) setTimeout(() => $("composer").requestSubmit(), 50);
@@ -2019,7 +2246,7 @@
   $("newChat").onclick = () => { saveChat(); chatId = crypto.randomUUID(); messages = []; $("msgs").replaceChildren(); $("status").textContent = ""; history.replaceState(null, "", `local.html?c=${encodeURIComponent(chatId)}`); };
 
   // ---------- switch the model from the chat's title (a sheet from the bottom, thumb-friendly) ----------
-  const closeSheet = () => { $("sheet").hidden = true; $("sheetScrim").hidden = true; };
+  const closeSheet = () => { $("sheet").hidden = true; $("sheetScrim").hidden = true; plusMenu.hidden = true; };
   $("sheetScrim").onclick = closeSheet;
   $("modelSwitch").onclick = async () => {
     $("sheetTitle").textContent = T("החלף מודל לשיחה הזו", "Switch the model for this chat");
