@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale } from "./i18n";
 import { toast } from "./library";
+import { Path } from "./ui/Code";
 import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
@@ -101,7 +102,7 @@ export function TaskBoardView() {
                   <span className="task-text">
                     <span className="task-title" dir="auto">{t.title.replace(/^\s*\[(cool\s*down|fable)\]\s*/i, "")}</span>
                     <span className="task-meta">
-                      <span dir="ltr">{t.id}</span>
+                      <Path>{t.id}</Path>
                       <span className={`task-state ${t.status}`}>{L(...STATUS[t.status])}</span>
                       {t.owner && <span>{L(...WHO[t.owner]!)}</span>}
                       {c === "normal" && <span>{sizeOf(t) === "small" ? L("קטנה", "Small") : L("גדולה", "Big")}</span>}

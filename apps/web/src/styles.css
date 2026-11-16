@@ -915,7 +915,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .seg button.on { border-color: var(--accent); color: var(--text); }
 .snippet { position: relative; }
 .snippet pre { margin: 0; padding: 12px 14px; padding-inline-end: 80px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
-.snippet button { position: absolute; top: 8px; right: 8px; height: 30px; padding: 0 10px; font-size: 12px; }
+.snippet button { position: absolute; top: 8px; inset-inline-end: 8px; height: 30px; padding: 0 10px; font-size: 12px; }
 .key-fresh { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: calc(12px * var(--r-scale, 1)); }
 .key-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .key-list li { padding: 8px 10px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); }
@@ -1042,7 +1042,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .nodes-page { position: relative; }
 .nodes-page.full { position: fixed; inset: 0; z-index: 60; }
 .nodes-full .appbar, .nodes-full .sidebar { display: none !important; }
-.nodes-float { position: absolute; z-index: 2; bottom: calc(110px + env(safe-area-inset-bottom)); right: 10px; display: flex; gap: 6px; padding: 5px; background: rgb(24 24 26 / 0.86); border: 1px solid var(--border); border-radius: calc(14px * var(--r-scale, 1)); backdrop-filter: blur(10px); max-width: calc(100vw - 20px); }
+.nodes-float { position: absolute; z-index: 2; bottom: calc(110px + env(safe-area-inset-bottom)); inset-inline-end: 10px; display: flex; gap: 6px; padding: 5px; background: rgb(24 24 26 / 0.86); border: 1px solid var(--border); border-radius: calc(14px * var(--r-scale, 1)); backdrop-filter: blur(10px); max-width: calc(100vw - 20px); }
 .nodes-float .nodes-ask { border: 0; padding: 0; flex-wrap: nowrap; width: min(560px, calc(100vw - 32px)); }
 .nodes-float .nodes-note { display: none; }
 @media (max-width: 760px) {
@@ -2509,3 +2509,5 @@ html.handheld .palette-list button { min-height: 44px; }
 /* Long chats: messages off screen are not laid out or painted until they come near (the answer being written and
    the last few always are). The size placeholder keeps the scrollbar from jumping. */
 .messages > .msg:not(.streaming):not(:nth-last-child(-n + 6)) { content-visibility: auto; contain-intrinsic-size: auto 160px; }
+/* <Code> and <Path>: left to right inside Hebrew text, isolated from the sentence around them. */
+.bidi-iso { unicode-bidi: isolate; }

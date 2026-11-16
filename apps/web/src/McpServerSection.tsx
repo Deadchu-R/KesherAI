@@ -1,3 +1,4 @@
+import { Code } from "./ui/Code";
 import { useEffect, useState } from "react";
 import { api, isRemote } from "./api";
 import { getLocale } from "./i18n";
@@ -77,7 +78,7 @@ export function McpServerSection() {
       <p className="muted">{L("Claude Code, Claude Desktop, Cursor ו-VS Code יכולים לתת ל-KesherAI משימות בצ'אט (והוא עובד עם הכלים שלו במחשב), ולהשתמש במודלים המקומיים, במאגרי הידע, ביצירת תמונות ובתמלול — דרך שרת ה-MCP של KesherAI. KesherAI צריך לרוץ.", "Claude Code, Claude Desktop, Cursor and VS Code can give KesherAI tasks in a chat (it works with its own tools on this computer), and use your local models, knowledge bases, image generation and transcription through KesherAI's MCP server. KesherAI needs to be running.")}</p>
       <label className="check">
         <input type="checkbox" checked={info.enabled} onChange={(e) => void api<{ enabled: boolean }>("/api/mcp-server", { method: "PUT", body: { enabled: e.target.checked } }).then((r) => setInfo({ ...info, enabled: r.enabled }))} />
-        {L("שרת MCP פעיל", "MCP server on")} <code dir="ltr">{info.url}</code>
+        {L("שרת MCP פעיל", "MCP server on")} <Code>{info.url}</Code>
       </label>
       {info.enabled && (
         <>
