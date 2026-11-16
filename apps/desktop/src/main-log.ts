@@ -6,6 +6,7 @@
 import cp, { execFile } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { freemem, totalmem } from "node:os";
 import { dirname } from "node:path";
 import { crashReporter, type App } from "electron";
 
@@ -50,11 +51,13 @@ export function startMainLog(app: App, file: string): (line: string) => void {
   const started = Date.now();
   setInterval(() => {
     try {
-      writeFileSync(aliveFile, `${new Date().toISOString()} (pid ${process.pid}, ${Math.round((Date.now() - started) / 1000)} s after start)`);
+      const m = process.memoryUsage();
+      const mb = (b: number) => Math.round(b / 1024 ** 2);
+      writeFileSync(aliveFile, `${new Date().toISOString()} (pid ${process.pid}, ${Math.round((Date.now() - started) / 1000)} s after start; this app ${mb(m.rss)} MB, heap ${mb(m.heapUsed)}/${mb(m.heapTotal)} MB, external ${mb(m.external)} MB; computer free ${mb(freemem())} of ${mb(totalmem())} MB)`);
     } catch {
       // as above
     }
-  }, 2000).unref();
+  }, 1000).unref();
   // Native crashes leave a minidump in the app's Crashpad folder (nothing is sent anywhere).
   try {
     crashReporter.start({ uploadToServer: false, compress: false });

@@ -118,6 +118,21 @@ async function startCore(): Promise<string> {
         }
       : {}),
   });
+  // Each request in the log (a path at most every 30 s), to see what came just before the app was ended.
+  const lastReq = new Map<string, number>();
+  try {
+    s.app.addHook("onRequest", (req, _reply, done) => {
+    const path = req.url.split("?")[0] ?? "";
+    const now = Date.now();
+    if ((lastReq.get(path) ?? 0) < now - 30_000) {
+      lastReq.set(path, now);
+      mainLog?.(`request: ${req.method} ${path.slice(0, 120)} from ${req.ip === "127.0.0.1" || req.ip === "::1" ? "this computer" : "outside"}`);
+    }
+    done();
+    });
+  } catch {
+    // the log is never in the way of starting
+  }
   try {
     const url = await s.listen();
     server = s;
@@ -291,10 +306,16 @@ function secretBox(): { seal(text: string): string; unseal(text: string): string
 const workerMode = process.argv.includes("--worker");
 if (workerMode) app.setPath("userData", join(app.getPath("userData"), "worker"));
 
+/** The app's own log (logs/main.log), once this copy runs. */
+let mainLog: ((line: string) => void) | undefined;
+
 // One window: opening KesherAI again focuses the existing window.
 if (!app.requestSingleInstanceLock()) app.quit();
 // Why the app ended, the next time it does (only the copy that runs writes it).
-else watchChildren(startMainLog(app, join(process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`), "logs", "main.log")));
+else {
+  mainLog = startMainLog(app, join(process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`), "logs", "main.log"));
+  watchChildren(mainLog);
+}
 /** `--headless` (or `--server`): run KesherAI without a window, as a server for the phone and other computers (the tray icon opens the window). */
 const headless = process.argv.includes("--headless") || process.argv.includes("--server");
 
