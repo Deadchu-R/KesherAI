@@ -1453,3 +1453,17 @@ Stopped at: building (store and public page first, then the chat menu and the se
   puts text in the message box (the person sends it).
 - Stopped at: no fullscreen/pip display modes; `ui/update-model-context` is acknowledged but not given to the model;
   not tried with a real MCP App server on the PC yet.
+
+### Students, part 3: a nursing student (2026-11-16)
+
+- Who: Roee's friend, first year of nursing (Israel); laptop + Android phone; lectures in Hebrew, terms and drug
+  names in English.
+- What nursing students use (scholarly.so 2026 review): UWorld / Kaplan for NGN-style case questions and
+  prioritisation; Picmonic visual mnemonics for drug side effects and lab values; Quizlet for quick normal ranges
+  (community decks vary in accuracy); Anki for spaced repetition; course-specific tools built from her own lectures
+  (Scholarly). Gaps the review names: dosage calculations, care plans, clinical notes, terminology.
+- Plan for KesherAI: phone records in class → laptop transcribes and summarises; glossary Hebrew–English; drug cards;
+  medication calculations computed by code with steps (safety: the model never does the arithmetic); lab values;
+  nursing-process notes without identifiers; licensing-exam practice.
+- Hebrew speech: ivrit-ai publishes Hebrew-tuned Whisper models (turbo, CTranslate2/ggml); to test on a real
+  lecture against whisper small. Stopped at: no test yet.

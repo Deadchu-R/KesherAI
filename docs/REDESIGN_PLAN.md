@@ -40,8 +40,17 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
   speech with whisper base/small int8 on the CPU (small ≈ 0.85 GB RAM, about 2.5× faster than real time on a laptop
   i7), a 1–4 B chat model in Q4 (1–3 GB), and a cloud key as the optional faster path. Research: docs/RESEARCH_LOG.md
   "Students".
+  - First user (Roee, 2026-11-16): a friend starting a nursing degree; laptop + Android phone; lectures in Hebrew
+    with English medical terms. Build for her first.
   - Lecture recording and summary: live transcript with timestamps, summary, key terms, slides captured when they
-    change, per course.
+    change, per course. **From the phone too:** the Android app records in class (screen off, a foreground
+    service), keeps the recording on the phone and sends it to her laptop when they are connected; the laptop
+    transcribes (Hebrew: ivrit-ai's Hebrew Whisper) and summarises.
+  - Nursing: a Hebrew–English medical terms glossary built from her lectures; drug cards (name, class, how it
+    works, uses, side effects, nursing points) as flashcards; medication calculations practice computed by code
+    (never by the model) with step-by-step checking; normal lab values cards; clinical practice notes in the nursing
+    process (assessment, diagnosis, goals, interventions, evaluation) with no patient identifiers; licensing exam
+    (בחינת רישוי) practice questions.
   - Zoom / Teams lectures: record the computer's sound while a meeting app is open (the meeting recorder exists) and
     summarise it the same way.
   - Flashcards and quizzes from a lecture or a PDF, spaced repetition, Anki export.
