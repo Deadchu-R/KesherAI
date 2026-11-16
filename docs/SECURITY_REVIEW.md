@@ -488,6 +488,20 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 87 (2026-11-16, 0.6.266 + drug cards: Study)
+
+- Course files: the id must match `[a-z0-9-]{8,40}` before it becomes a path (`../etc` is refused: tested); writes go
+  to a `.tmp` and are renamed, one at a time. Lecture text is capped at 400k characters, summaries at 100k, cards,
+  terms, drugs and quiz fields each have their own caps; reviews keep the last 50,000 and quizzes the last 200.
+- Model output (summaries, terms, cards, quiz questions, drug cards) is parsed as JSON and copied field by field as
+  strings; the page shows it as text or through RichText (no raw HTML), and the flowchart reader turns Mermaid into
+  text boxes (no diagram library, no HTML). Quizzes are graded by code; medication answers are computed by code.
+- Same access as the other pages (the phone through its paired token). Nothing leaves the computer except the text
+  sent to the chat model the user chose. The design and PDF files hold made-up nursing examples, no personal data.
+- Performance: the course list reads each course file once (cached after); the review queue sorts at most one
+  course's cards. Nothing new runs at start.
+- Git: no email, Windows username or personal paths in the new commits (checked).
+
 ## Scan 86 (2026-11-16, 0.6.264: MCP Apps)
 
 - A tool's view (third-party HTML from an MCP server) runs in `<iframe sandbox="allow-scripts">` with no
