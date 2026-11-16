@@ -651,7 +651,8 @@ export class Study {
     if (!d.lectures.some((l) => l.summary?.trim())) throw Object.assign(new Error("Summarize at least one lecture first."), { statusCode: 400 });
     const inp = courseSummaryInput(d);
     if (!inp) return { summary: d.courseSummary!, more: false };
-    const raw = await this.ask(COURSE_SUMMARY_PROMPT, inp.user, signal, d.course.field, 120_000);
+    // A summary is about as long as what it is made from; much past that the model is running on (found on the PC).
+    const raw = await this.ask(COURSE_SUMMARY_PROMPT, inp.user, signal, d.course.field, Math.min(120_000, Math.max(6000, Math.round(inp.user.length * 1.6))));
     const s = parseCourseSummary(raw, d.courseSummary, inp.ids);
     if (!s) throw Object.assign(new Error("The model did not write a summary. Try again."), { statusCode: 502 });
     const fresh = await this.get(id);
