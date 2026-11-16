@@ -43,7 +43,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** A field tool (case brief, formula sheet, code trace…): `{ text }` for the tools that take pasted text. */
   app.post<C & { Params: { tool: string }; Body: { text?: string } }>("/api/study/courses/:id/tools/:tool", { bodyLimit: 1024 * 1024 }, async (req) => st.runTool(req.params.id, req.params.tool, String(req.body?.text ?? "")));
   /** Free pictures from Wikimedia Commons for a lecture's topic (with credit). */
-  app.get<L>("/api/study/courses/:id/lectures/:lid/pictures", async (req) => st.lecturePictures(req.params.id, req.params.lid));
+  app.get<L & { Querystring: { kind?: string } }>("/api/study/courses/:id/lectures/:lid/pictures", async (req) => st.lecturePictures(req.params.id, req.params.lid, undefined, req.query.kind === "gif" || req.query.kind === "video" ? req.query.kind : "image"));
   /** Search across all courses: `?q=`. */
   app.get<{ Querystring: { q?: string } }>("/api/study/search", async (req) => ({ hits: await st.search(String(req.query.q ?? "").slice(0, 200)) }));
   /** Grows the course's summary by topic from newly summarized lectures. */

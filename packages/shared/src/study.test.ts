@@ -332,7 +332,7 @@ test("passages keep the page of a file's lecture, and the model sees it to cite"
 });
 
 test("Commons pictures: English terms make the search, only upload.wikimedia.org copies are kept", () => {
-  assert.equal(pictureQuery({ title: "הרצאה על הלב", terms: [{ term: "חדר", en: "Ventricle", explain: "" }, { term: "עלייה", en: "Atrium", explain: "" }] }), "Ventricle Atrium");
+  assert.equal(pictureQuery({ title: "הרצאה על הלב", terms: [{ term: "חדר", en: "Ventricle", explain: "" }, { term: "עלייה", en: "Atrium", explain: "" }] }), "Ventricle");
   assert.equal(pictureQuery({ title: "הלב \"שלי\"" }), "הלב שלי");
   assert.match(commonsSearchUrl("heart"), /^https:\/\/commons\.wikimedia\.org\/w\/api\.php\?.*origin=\*/);
   const json = { query: { pages: {
@@ -357,4 +357,20 @@ test("JSON from a model with Hebrew abbreviations (a plain quote inside a word) 
   assert.equal(j[0]?.q, "לחץ דם 135/85 מ״מ כספית. תקין?");
   assert.equal(j[0]?.answer, "לפי צה״ל ועוד");
   assert.deepEqual(jsonIn('{"a": "ok"}'), { a: "ok" });
+});
+
+test("Commons animations and videos: GIFs keep moving, videos come with their file on Commons", () => {
+  assert.match(decodeURIComponent(commonsSearchUrl("heart", 360, "video")), /filetype:video/);
+  assert.match(decodeURIComponent(commonsSearchUrl("heart", 360, "gif")), /filemime:gif/);
+  const json = { query: { pages: {
+    "1": { index: 1, imageinfo: [{ mime: "video/webm", thumburl: "https://upload.wikimedia.org/x/heart.webm.jpg", url: "https://upload.wikimedia.org/x/heart.webm", descriptionurl: "https://commons.wikimedia.org/wiki/File:Heart.webm" }] },
+    "2": { index: 2, imageinfo: [{ mime: "video/webm", thumburl: "https://upload.wikimedia.org/y.jpg", url: "https://evil.example/y.webm" }] },
+    "3": { index: 3, imageinfo: [{ mime: "image/gif", thumburl: "https://upload.wikimedia.org/z/beat.gif" }] },
+  } } };
+  const v = parseCommonsPictures(json, 8, "video");
+  assert.equal(v.length, 1);
+  assert.equal(v[0]?.video, "https://upload.wikimedia.org/x/heart.webm");
+  const g = parseCommonsPictures(json, 8, "gif");
+  assert.deepEqual(g.map((x) => x.src), ["https://upload.wikimedia.org/z/beat.gif"]);
+  assert.equal(parseCommonsPictures(json, 8, "image").length, 0);
 });

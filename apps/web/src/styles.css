@@ -2780,6 +2780,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-pics figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .study-pics img { width: 100%; height: 130px; object-fit: contain; background: #fff; border-radius: 8px; }
 .study-pics figcaption { overflow-wrap: anywhere; }
+.study-pic-video { position: relative; display: block; }
+.study-pic-video span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 28px; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
 .study-syllabus p { margin: 4px 0; }
 .study-next { display: flex; flex-direction: column; gap: 4px; border-inline-start: 3px solid var(--accent); }
 .study-next p { margin: 0 0 6px; font-size: 16px; font-weight: 500; }

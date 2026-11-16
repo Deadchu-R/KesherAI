@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -875,31 +875,42 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
   );
 }
 
-/** Free diagrams and photos of the lecture's topic from Wikimedia Commons, each with its licence and author. */
+/**
+ * Free pictures, animations (GIF) and videos of the lecture's topic from Wikimedia Commons, each with its licence and
+ * author. A video shows its still here and opens on Commons (the page plays nothing from another site).
+ */
 function LecturePictures({ base }: { base: string }) {
-  const [r, setR] = useState<{ query: string; pictures: StudyPicture[] } | null>(null);
+  const [kind, setKind] = useState<StudyMediaKind>("image");
+  const [got, setGot] = useState<Partial<Record<StudyMediaKind, { query: string; pictures: StudyPicture[] }>>>({});
   const [busy, setBusy] = useState(false);
-  const find = async () => {
+  const find = async (k: StudyMediaKind) => {
+    setKind(k);
+    if (got[k] || busy) return;
     setBusy(true);
-    const x = await call(api<{ query: string; pictures: StudyPicture[] }>(`${base}/pictures`));
+    const x = await call(api<{ query: string; pictures: StudyPicture[] }>(`${base}/pictures?kind=${k}`));
     setBusy(false);
-    if (x) setR(x);
+    if (x) setGot((g) => ({ ...g, [k]: x }));
   };
+  const r = got[kind];
+  const KINDS: Array<[StudyMediaKind, string, string]> = [["image", "תמונות", "Pictures"], ["gif", "אנימציות", "Animations"], ["video", "סרטונים", "Videos"]];
   return (
-    <details className="study-notes" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && !r && !busy) void find(); }}>
-      <summary>{L("תמונות ותרשימים מוויקישיתוף", "Pictures and diagrams from Wikimedia")}</summary>
+    <details className="study-notes" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && !got.image && !busy) void find("image"); }}>
+      <summary>{L("תמונות, אנימציות וסרטונים מוויקישיתוף", "Pictures, animations and videos from Wikimedia")}</summary>
+      <div className="seg-pills" role="tablist" aria-label={L("סוג", "Kind")} style={{ marginTop: 8 }}>
+        {KINDS.map(([k, he, en]) => <button key={k} type="button" role="tab" aria-selected={kind === k} className={kind === k ? "on" : ""} onClick={() => void find(k)}>{L(he, en)}</button>)}
+      </div>
       {busy && <p className="muted small">{L("מחפש…", "Searching…")}</p>}
       {r && (r.pictures.length ? (
         <div className="study-pics">
           {r.pictures.map((p, i) => (
             <figure key={i}>
-              <img src={p.src} alt={r.query} loading="lazy" />
+              {p.video && p.page ? <a href={p.page} target="_blank" rel="noreferrer noopener" className="study-pic-video" aria-label={L("צפייה בסרטון בוויקישיתוף", "Watch the video on Wikimedia")}><img src={p.src} alt={r.query} loading="lazy" /><span aria-hidden="true">▶</span></a> : <img src={p.src} alt={r.query} loading="lazy" />}
               <figcaption className="small muted" dir="auto">{p.page ? <a href={p.page} target="_blank" rel="noreferrer noopener">{p.artist}</a> : p.artist} · {p.license}</figcaption>
             </figure>
           ))}
         </div>
-      ) : <p className="muted small">{L(`לא נמצאו תמונות ל-"${r.query}".`, `No pictures found for "${r.query}".`)}</p>)}
-      {r && <p className="muted small">{L("תמונות חופשיות מוויקישיתוף לפי המונחים של ההרצאה. כדאי לוודא שהן מתאימות לחומר.", "Free pictures from Wikimedia Commons by the lecture's terms. Check they match the material.")}</p>}
+      ) : <p className="muted small">{L(`לא נמצא ל-"${r.query}".`, `Nothing found for "${r.query}".`)}</p>)}
+      {r && <p className="muted small">{kind === "video" ? L("סרטון נפתח בוויקישיתוף. ", "A video opens on Wikimedia. ") : ""}{L("חומר חופשי מוויקישיתוף לפי המונחים של ההרצאה. כדאי לוודא שהוא מתאים לחומר.", "Free material from Wikimedia Commons by the lecture's terms. Check it matches the material.")}</p>}
     </details>
   );
 }

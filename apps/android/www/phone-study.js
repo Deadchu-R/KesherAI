@@ -405,28 +405,37 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       el("p", { class: "muted small" }, L("הכלי עובד רק ממה שהדבקת או מההרצאות שלך. מה שחסר מסומן [חסר].", "The tool works only from what you pasted or your lectures; anything missing is marked [missing]."))));
   }
 
-  /** Free pictures of the lecture's topic from Wikimedia Commons (the phone asks Commons itself; needs internet). */
+  /** Free pictures, animations and videos of the lecture's topic from Wikimedia Commons (needs internet; videos play here). */
   function picturesBox(l) {
     const grid = el("div", { style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px" });
     const note = el("p", { class: "muted small", "aria-live": "polite" });
-    const box = el("details", { class: "api" }, el("summary", {}, L("תמונות ותרשימים מוויקישיתוף", "Pictures and diagrams from Wikimedia")), note, grid);
-    box.ontoggle = async () => {
-      if (!box.open || box.dataset.done) return;
-      box.dataset.done = "1";
-      const q = pictureQuery(l);
-      note.textContent = L("מחפש…", "Searching…");
-      try {
-        const r = await fetch(commonsSearchUrl(q, 360));
-        const pics = parseCommonsPictures(await r.json(), 8);
-        note.textContent = pics.length ? L("תמונות חופשיות לפי המונחים של ההרצאה. כדאי לוודא שהן מתאימות לחומר.", "Free pictures by the lecture's terms. Check they match the material.") : L(`לא נמצאו תמונות ל-"${q}".`, `No pictures found for "${q}".`);
-        grid.replaceChildren(...pics.map((p) => el("figure", { style: "margin: 0" },
-          el("img", { src: p.src, alt: q, loading: "lazy", style: "width: 100%; height: 120px; object-fit: contain; background: #fff; border-radius: 8px" }),
-          el("figcaption", { class: "muted small", dir: "auto", style: "overflow-wrap: anywhere" }, `${p.artist} · ${p.license}`))));
-      } catch {
-        delete box.dataset.done;
-        note.textContent = L("אין חיבור לאינטרנט כרגע.", "No internet connection right now.");
+    const q = pictureQuery(l);
+    const cache = {};
+    const kinds = [["image", L("תמונות", "Pictures")], ["gif", L("אנימציות", "Animations")], ["video", L("סרטונים", "Videos")]];
+    const tabs = el("div", { class: "ph-btns", role: "tablist", style: "flex-wrap: wrap" });
+    const show = async (kind) => {
+      tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("primary", b.dataset.k === kind));
+      if (!cache[kind]) {
+        note.textContent = L("מחפש…", "Searching…");
+        grid.replaceChildren();
+        try {
+          const r = await fetch(commonsSearchUrl(q, 360, kind));
+          cache[kind] = parseCommonsPictures(await r.json(), 8, kind);
+        } catch {
+          note.textContent = L("אין חיבור לאינטרנט כרגע.", "No internet connection right now.");
+          return;
+        }
       }
+      const pics = cache[kind];
+      note.textContent = pics.length ? L("חומר חופשי לפי המונחים של ההרצאה. כדאי לוודא שהוא מתאים לחומר.", "Free material by the lecture's terms. Check it matches the material.") : L(`לא נמצא ל-"${q}".`, `Nothing found for "${q}".`);
+      grid.replaceChildren(...pics.map((p) => el("figure", { style: "margin: 0" },
+        p.video ? el("video", { src: p.video, poster: p.src, crossorigin: "anonymous", controls: true, preload: "none", playsinline: true, style: "width: 100%; height: 120px; background: #000; border-radius: 8px" })
+          : el("img", { src: p.src, alt: q, loading: "lazy", crossorigin: "anonymous", style: "width: 100%; height: 120px; object-fit: contain; background: #fff; border-radius: 8px" }),
+        el("figcaption", { class: "muted small", dir: "auto", style: "overflow-wrap: anywhere" }, `${p.artist} · ${p.license}`))));
     };
+    for (const [k, name] of kinds) tabs.append(el("button", { type: "button", role: "tab", "data-k": k, onclick: () => void show(k) }, name));
+    const box = el("details", { class: "api" }, el("summary", {}, L("תמונות, אנימציות וסרטונים מוויקישיתוף", "Pictures, animations and videos from Wikimedia")), tabs, note, grid);
+    box.ontoggle = () => { if (box.open && !box.dataset.done) { box.dataset.done = "1"; void show("image"); } };
     return box;
   }
 

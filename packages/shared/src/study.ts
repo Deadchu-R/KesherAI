@@ -540,47 +540,61 @@ export const STUDY_TOOLS: StudyTool[] = [
 /** What to search Wikimedia Commons for, for a lecture: its English terms first (Commons is mostly English), else its title. */
 export function pictureQuery(l: Pick<StudyLecture, "title" | "terms">): string {
   const en = (l.terms ?? []).map((t) => t.en?.trim()).filter((t): t is string => !!t && /^[\x20-\x7e]+$/.test(t));
-  return (en.length ? en.slice(0, 2).join(" ") : l.title).replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  // One term: two terms together as one search found nothing on the PC ("Upper Right Atrium Left Ventricle").
+  return (en[0] ?? l.title).replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
 /** A free picture from Wikimedia Commons for a lecture, with its credit. */
 export interface StudyPicture {
-  /** The picture (an upload.wikimedia.org address, or a data: copy the computer fetched). */
+  /** The picture, or a video's still (an upload.wikimedia.org address, or a data: copy the computer fetched). */
   src: string;
   page: string;
   license: string;
   artist: string;
+  /** A video's file (WebM or Ogg on upload.wikimedia.org), to play on the phone or open on Commons. */
+  video?: string;
 }
+
+/** What to look for on Commons: still pictures and diagrams, animations (GIF), or videos. */
+export type StudyMediaKind = "image" | "gif" | "video";
 
 /**
  * The address of a Commons picture search (the phone calls it itself; `origin=*` lets a page read the answer).
  * Diagrams (Commons' PNG copy of a drawing) and photos, nothing unsuitable.
  */
-export function commonsSearchUrl(query: string, width = 480): string {
+export function commonsSearchUrl(query: string, width = 480, kind: StudyMediaKind = "image"): string {
   const q = query.replace(/["\\]/g, " ").trim().slice(0, 100);
-  const params = new URLSearchParams({ action: "query", format: "json", origin: "*", generator: "search", gsrsearch: `"${q}" -nude -naked -nudity -erotic -sexy -porn -gore`, gsrnamespace: "6", gsrlimit: "16", prop: "imageinfo", iiprop: "url|mime|extmetadata", iiextmetadatafilter: "LicenseShortName|Artist", iiurlwidth: String(width) });
+  const only = kind === "video" ? " filetype:video" : kind === "gif" ? " filemime:gif" : "";
+  const params = new URLSearchParams({ action: "query", format: "json", origin: "*", generator: "search", gsrsearch: `${q}${only} -nude -naked -nudity -erotic -sexy -porn -gore`, gsrnamespace: "6", gsrlimit: "16", prop: "imageinfo", iiprop: "url|mime|extmetadata", iiextmetadatafilter: "LicenseShortName|Artist", iiurlwidth: String(width) });
   return `https://commons.wikimedia.org/w/api.php?${params}`;
 }
 
 /** Reads a Commons search answer into pictures: only scaled copies on upload.wikimedia.org, over HTTPS. */
-export function parseCommonsPictures(json: unknown, max = 8): StudyPicture[] {
+export function parseCommonsPictures(json: unknown, max = 8, kind: StudyMediaKind = "image"): StudyPicture[] {
   const pages = (json as { query?: { pages?: Record<string, { index?: number; imageinfo?: Array<Record<string, unknown>> }> } })?.query?.pages ?? {};
   const plain = (h: unknown) => String(h ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, 120);
   const out: StudyPicture[] = [];
   for (const p of Object.values(pages).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))) {
     const info = p.imageinfo?.[0];
     const mime = String(info?.mime ?? "");
-    if (!info || !/^image\/(png|jpeg|webp|svg\+xml)$/.test(mime)) continue;
+    const wanted = kind === "video" ? /^(video\/(webm|ogg)|application\/ogg)$/ : kind === "gif" ? /^image\/gif$/ : /^image\/(png|jpeg|webp|svg\+xml)$/;
+    if (!info || !wanted.test(mime)) continue;
     const src = String(info.thumburl ?? "");
-    try {
-      const u = new URL(src);
-      if (u.protocol !== "https:" || u.hostname !== "upload.wikimedia.org" || !/\.(png|jpe?g|webp)$/i.test(u.pathname)) continue;
-    } catch {
-      continue;
-    }
+    const onCommons = (url: string, ext: RegExp) => {
+      try {
+        const u = new URL(url);
+        return u.protocol === "https:" && u.hostname === "upload.wikimedia.org" && ext.test(u.pathname);
+      } catch {
+        return false;
+      }
+    };
+    // A video's still is a JPEG; a GIF's scaled copy stays a GIF (it moves).
+    if (!onCommons(src, kind === "gif" ? /\.gif$/i : /\.(png|jpe?g|webp)$/i)) continue;
+    const video = kind === "video" ? String(info.url ?? "") : "";
+    if (kind === "video" && !onCommons(video, /\.(webm|ogv|ogg)$/i)) continue;
     const meta = (info.extmetadata ?? {}) as Record<string, { value?: unknown }>;
     const page = String(info.descriptionurl ?? "");
-    out.push({ src, page: /^https:\/\/commons\.wikimedia\.org\//.test(page) ? page : "", license: plain(meta.LicenseShortName?.value) || "free licence", artist: plain(meta.Artist?.value) || "unknown" });
+    out.push({ src, page: /^https:\/\/commons\.wikimedia\.org\//.test(page) ? page : "", license: plain(meta.LicenseShortName?.value) || "free licence", artist: plain(meta.Artist?.value) || "unknown", ...(video ? { video } : {}) });
     if (out.length >= max) break;
   }
   return out;
