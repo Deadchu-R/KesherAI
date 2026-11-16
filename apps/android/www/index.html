@@ -799,6 +799,9 @@
     await crashChecked;
     if (lastCrash) return;
     if (launch) return connect(launch);
+    // A computer tab in the side menu: open that saved computer (its addresses in turn).
+    const use = new URLSearchParams(location.search).get("use");
+    if (use !== null && /^\d{1,2}$/.test(use) && loadComputers()[Number(use)]) return connectComputer(loadComputers()[Number(use)]);
     // "Continue on the computer" from a phone chat: open the saved computer at that chat.
     const openAt = new URLSearchParams(location.search).get("open");
     if (openAt && /^#\/c\/[\w-]{8,64}$/.test(openAt) && (recent || saved)) {

@@ -66,7 +66,10 @@
     .kd-switch::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text); transition: inset-inline-start .15s; }
     .kd-switch.on { background: var(--accent); }
     .kd-switch.on::after { inset-inline-start: 19px; background: var(--accent-ink); }
-    .kd-foot { margin-top: auto; padding-top: 8px; }`;
+    .kd-foot { margin-top: auto; padding-top: 8px; }
+    .kd-pcs { flex: none; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 0 2px 8px; }
+    .kd-pcs a { flex: none; display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid #2a2a2e; color: #c9c9ce; font-size: 13px; text-decoration: none; white-space: nowrap; }
+    .kd-pcs a.on { border-color: var(--accent); color: var(--text); background: #2a2a33; }`;
   document.head.append(css);
 
   const root = document.createElement("div");
@@ -116,6 +119,27 @@
   segPhone.href = "local.html";
   (here === "local.html" ? segPhone : segPc).classList.add("on");
   panel.append(seg);
+  // The computers, as tabs at the top (asked 2026-11-16, like the computer's top bar): the one in use is marked; another
+  // opens that computer (index.html?use=N tries its saved addresses). Only with two or more saved computers.
+  if (computers.length > 1) {
+    const inUse = (() => { try { return new URL(saved || "").searchParams.get("token") || ""; } catch { return ""; } })();
+    const tabs = Object.assign(document.createElement("div"), { className: "kd-pcs" });
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", T("המחשבים שלי", "My computers"));
+    computers.forEach((c, i) => {
+      const a = document.createElement("a");
+      a.setAttribute("role", "tab");
+      const on = !!inUse && c.token === inUse && here !== "local.html";
+      a.className = on ? "on" : "";
+      a.setAttribute("aria-selected", String(on));
+      a.href = `index.html?use=${i}`;
+      a.textContent = c.name || T("מחשב", "Computer");
+      a.dir = "auto";
+      a.addEventListener("click", close);
+      tabs.append(a);
+    });
+    panel.append(tabs);
+  }
   const lastModel = localStorage.getItem("kesherai-phone-model");
   item("＋", T("צ'אט חדש", "New chat"), "", "local.html?new=1", "kd-new");
   item("⌂", T("בית", "Home"), "", "local.html", here === "local.html" && !params.toString() ? "on" : "");

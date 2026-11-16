@@ -21,7 +21,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Choosing which computer runs a chat (model menu), and splitting work across computers (split_across_computers)
 - ✅ Connecting from the laptop to the home PC (My devices)
 - ✅ The computer's load in remote (CPU, RAM, cards, temperatures) with Terminate
-- ✅ Switching computers: tabs in the top bar for the other computers (desktop app); each opens in its own window. ⬜ The same tabs on the phone
+- ✅ Switching computers: tabs in the top bar for the other computers (desktop app), each in its own window; on the phone, tabs at the top of the side menu
 
 ## Looks and personalization
 - ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
