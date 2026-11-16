@@ -77,6 +77,7 @@ import { buildConversations } from "./server/build-conversations.js";
 import { registerRoutes } from "./server/routes.js";
 import { startEngines } from "./server/start-engines.js";
 import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSelfWork } from "./server/build-extras.js";
+import { Study } from "./study.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -157,6 +158,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"), (cfg) => (cfg.preset === "github" || /api\.githubcopilot\.com/.test(cfg.url ?? "") ? github.token() : undefined), (env) => runtimes.env(env));
   void mcp.load();
   const journal = buildJournal(paths, config, registry, options.screen);
+  // Study (students): courses, lectures, flashcards and quizzes, with the active chat model.
+  const study = new Study(join(paths.root, "study"), (modelId) => {
+    const id = modelId ?? config.activeModels.chat;
+    if (!id) return undefined;
+    try {
+      registry.resolve(id);
+      return { id, turn: modelTurnFor(registry, id) };
+    } catch {
+      return undefined;
+    }
+  });
   // Knowledge bases: the user's folders and web pages, searchable by the models, with sources.
   // Search by meaning: an embedding model (KesherAI's own in a second llama.cpp server, or one the user made active).
   // Assigned below, once the engine exists; the knowledge bases ask for it when they search.
@@ -343,6 +355,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     runtimes,
     github,
     journal,
+    study,
     ...(options.screen ? { screen: options.screen } : {}),
     knowledge,
     libraries,

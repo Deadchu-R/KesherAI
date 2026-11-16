@@ -23,3 +23,4 @@ export * from "./csharp-free.js";
 export * from "./csharp-collapse.js";
 export * from "./csharp-expr.js";
 export * from "./shortcuts.js";
+export * from "./study.js";
