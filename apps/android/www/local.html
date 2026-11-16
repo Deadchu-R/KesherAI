@@ -2402,6 +2402,26 @@
         if (url?.includes(FROM_PC)) return { name: pcName(url) || "PC model" };
         return CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
       };
+      // "Go on with this chat on the phone" (the computer stopped answering): its last messages come in the address.
+      if (q.get("handoff")) {
+        let h = null;
+        try {
+          const b64 = q.get("handoff").replace(/-/g, "+").replace(/_/g, "/");
+          const j = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0))));
+          const msgs = (Array.isArray(j.m) ? j.m : []).filter((x) => Array.isArray(x) && (x[0] === "u" || x[0] === "a") && typeof x[1] === "string").slice(-12).map((x) => ({ role: x[0] === "u" ? "user" : "assistant", content: x[1].slice(0, 4000) }));
+          if (msgs.length) h = { title: String(j.t || "").slice(0, 80), msgs };
+        } catch { /* a broken address: just the home screen */ }
+        history.replaceState(null, "", "local.html");
+        if (h) {
+          const url = localStorage.getItem("kesherai-phone-model");
+          const item = itemFor(url);
+          const id = `pc-${Date.now().toString(36)}`;
+          try { localStorage.setItem(MSGS(id), JSON.stringify(h.msgs)); } catch { /* full */ }
+          saveChats([{ id, title: h.title || T("המשך מהמחשב", "Continued from the computer"), renamed: true, url: url || "", name: item?.name || "", updatedAt: Date.now() }, ...allChats()]);
+          if (usable(item, url)) return openChat(item, url, { id });
+          return noModelYet(T("הצ׳אט מהמחשב נשמר ברשימת הצ׳אטים. בחרי מודל בטלפון כדי להמשיך אותו.", "The computer's chat is saved in the chat list. Choose a model on the phone to go on with it."));
+        }
+      }
       // Nothing asked for: the app's own home (the landing screen, works with no computer).
       if (!q.get("c") && !q.has("new") && !q.has("chat")) {
         if (q.get("tab") === "settings") { drawSettings(); return showPage("settingsView", T("הגדרות", "Settings")); }

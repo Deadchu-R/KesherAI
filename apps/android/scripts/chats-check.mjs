@@ -1,4 +1,4 @@
-/* global localStorage, document, process, console -- the functions passed to the page run in the browser; process and console are Node's */
+/* global localStorage, document, location, Buffer, process, console -- the functions passed to the page run in the browser; process and console are Node's */
 /**
  * A quick check of the phone app's chat list at 390 px in Hebrew: the phone's own chats and the paired computer's
  * chats (as last read) show together; the "Computer" filter shows only the computer's; no page errors.
@@ -48,6 +48,17 @@ await pg.locator("#chatFilters [data-f=pc]").click();
 await pg.waitForTimeout(200);
 const only = await pg.locator("#chatList").innerText();
 checks.pcOnly = only.includes("צ׳אט מהמחשב") && !only.includes("צ׳אט בטלפון");
+// "Go on on the phone": a chat handed over from the computer lands in the list with its messages.
+const json = JSON.stringify({ t: "מהמחשב", m: [["u", "שאלה"], ["a", "תשובה"]] });
+const b64 = Buffer.from(json).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+await pg.goto(`http://127.0.0.1:7992/local.html?handoff=${b64}`);
+await pg.waitForTimeout(600);
+checks.handoff = await pg.evaluate(() => {
+  const list = JSON.parse(localStorage.getItem("kesherai-phone-chats") || "[]");
+  const c = list.find((x) => x.title === "מהמחשב");
+  const msgs = c && JSON.parse(localStorage.getItem(`kesherai-phone-msgs:${c.id}`) || "[]");
+  return !!c && msgs.length === 2 && msgs[1].content === "תשובה" && !location.search.includes("handoff");
+});
 checks.fits = (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 if (shot) await pg.screenshot({ path: shot });
 await b.close();

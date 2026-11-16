@@ -337,6 +337,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ...summary, session: opened.session.info(), events: opened.session.events, ...(interrupted ? { interruptedAt: interrupted.at } : {}) };
   });
 
+  // "Continue on the phone" when the computer drops: the chat's title and last messages, kept by the page ahead of
+  // time (the computer is gone when she taps the button). Text only, at most 12 messages and 12000 characters.
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/handoff", async (req, reply) => {
+    const c = await s.library.getConversation(req.params.id);
+    if (!c) return reply.code(404).send({ error: "Conversation not found" });
+    const turns = c.events.filter((e): e is Extract<typeof e, { type: "user" | "assistant" }> => (e.type === "user" || e.type === "assistant") && !!e.text.trim()).slice(-12);
+    const out: Array<{ role: "user" | "assistant"; content: string }> = [];
+    let room = 12_000;
+    for (const e of [...turns].reverse()) {
+      if (room <= 200) break;
+      const text = e.text.trim().slice(0, Math.min(4000, room));
+      out.unshift({ role: e.type, content: text });
+      room -= text.length;
+    }
+    return { title: String(c.title ?? "").slice(0, 120), messages: out };
+  });
+
   // The sidebar's preview on hover: the last three messages as plain text, read from disk (no session is opened).
   app.get<{ Params: { id: string } }>("/api/conversations/:id/peek", async (req, reply) => {
     const c = await s.library.getConversation(req.params.id);

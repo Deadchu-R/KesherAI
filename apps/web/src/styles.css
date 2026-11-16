@@ -2784,3 +2784,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-next { display: flex; flex-direction: column; gap: 4px; border-inline-start: 3px solid var(--accent); }
 .study-next p { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
 .study-next .button { align-self: flex-start; }
+
+/* The computer stopped answering (inside the phone app): go on with the chat on the phone. */
+.pc-drop { position: fixed; inset-inline: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; background: #2a2520; color: #f0b37e; border: 1px solid #4a3a2a; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); }
+.pc-drop span { flex: 1; min-width: 140px; }

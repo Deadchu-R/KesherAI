@@ -22,6 +22,11 @@ test("continue on the computer: a phone chat becomes a chat here, a new copy whe
     const grew = (await app.inject({ method: "POST", url: "/api/import/phone-chat", payload: { id: "p1", messages: [...messages, { role: "user", content: "ועוד?" }] } })).json() as { id: string };
     assert.notEqual(grew.id, a.id);
     assert.equal((await app.inject({ method: "POST", url: "/api/import/phone-chat", payload: { messages: [] } })).statusCode, 400);
+    // And back: the chat's last messages for "continue on the phone" when the computer drops.
+    const h = (await app.inject({ method: "GET", url: `/api/conversations/${a.id}/handoff` })).json() as { title: string; messages: Array<{ role: string; content: string }> };
+    assert.equal(h.title, "סוכרת");
+    assert.deepEqual(h.messages.map((m) => m.role), ["user", "assistant"]);
+    assert.equal((await app.inject({ method: "GET", url: "/api/conversations/nope/handoff" })).statusCode, 404);
   } finally {
     await server.close();
   }

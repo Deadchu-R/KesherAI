@@ -35,6 +35,7 @@ import { useModels } from "./useModels";
 import { PairPrompt } from "./PairPrompt";
 import { PageBoundary } from "./PageBoundary";
 import { Reconnecting } from "./Reconnect";
+import { PcDrop } from "./PcDrop";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
 import { CodeHome } from "./pages/CodeHome";
@@ -337,6 +338,7 @@ export function App() {
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
       <PairPrompt />
       <Reconnecting />
+      <PcDrop />
       <VersionWatch />
       <main className="main">
         <PhoneUpdateBanner />
