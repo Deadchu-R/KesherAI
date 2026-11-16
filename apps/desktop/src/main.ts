@@ -71,6 +71,7 @@ async function startCore(): Promise<string> {
   const { createKesherServer } = await import("@kesher/core");
   const s = await createKesherServer({
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
+    lipsyncScript: join(app.isPackaged ? process.resourcesPath : join(root, "tools"), "lipsync", "kesher_lipsync.py"),
     virtualCamera: virtualCamera(app.isPackaged ? process.resourcesPath : join(root, "apps/desktop"), () => `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}/#/avatar-feed`),
     pluginRoots: [join(root, "plugins")],
     ...(await googleClient()),

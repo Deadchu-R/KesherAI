@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import WebSocket from "ws";
 
 /**
  * Routes for study.
@@ -85,12 +86,53 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (!cam) return reply.code(409).send({ error: "The avatar camera without OBS is in the Windows app." });
     try {
       if (req.body?.action === "install") await cam.install();
-      else if (req.body?.action === "start") await cam.start();
-      else cam.stop();
+      else if (req.body?.action === "start") {
+        await cam.start();
+        // With lip sync turned on, it starts with the camera (and stops with it).
+        const ls = await lip.status();
+        if (ls.enabled && ls.installed) void lip.start().catch(() => undefined);
+      } else {
+        cam.stop();
+        lip.stop();
+      }
       return await cam.status();
     } catch (e) {
       return reply.code(409).send({ error: (e as Error).message });
     }
+  });
+  // Lip sync (optional, strong NVIDIA cards): MuseTalk moves the clip's lips while she talks.
+  const lip = s.lipSync;
+  app.get("/api/study/avatar/lipsync", async () => lip.status());
+  app.post<{ Body: { action?: "install" | "start" | "stop" | "set"; enabled?: boolean; cable?: string } }>("/api/study/avatar/lipsync", async (req, reply) => {
+    const action = req.body?.action;
+    // The 7 GB install happens at the computer; on, off and the settings also from the phone.
+    if (action === "install" && !isLocalRequest(req)) return reply.code(403).send({ error: "Install lip sync at the computer." });
+    try {
+      if (action === "install") void lip.install().catch(() => undefined);
+      else if (action === "start") await lip.start();
+      else if (action === "stop") lip.stop();
+      else if (action === "set") await lip.set({ ...(typeof req.body?.enabled === "boolean" ? { enabled: req.body.enabled } : {}), ...(typeof req.body?.cable === "string" ? { cable: req.body.cable } : {}) });
+      return await lip.status();
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message });
+    }
+  });
+  // The lip-synced frames, relayed from the local MuseTalk server (the page may only connect to KesherAI itself).
+  app.get("/api/study/avatar/lipsync/stream", { websocket: true }, (client) => {
+    const url = lip.upstream();
+    if (!url) {
+      client.close(1013, "not running");
+      return;
+    }
+    const up = new WebSocket(url, { maxPayload: 4 * 1024 * 1024 });
+    up.on("message", (data, binary) => client.readyState === client.OPEN && client.send(data, { binary }));
+    const end = () => {
+      up.close();
+      client.close();
+    };
+    up.on("close", end);
+    up.on("error", end);
+    client.on("close", end);
   });
   app.delete("/api/study/avatar/clip", async () => {
     await rm(clip, { force: true });

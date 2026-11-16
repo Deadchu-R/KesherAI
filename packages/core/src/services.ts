@@ -130,6 +130,8 @@ export interface KesherServices {
   journal: Journal;
   /** Study (students): courses, lectures, flashcards and quizzes. */
   study: Study;
+  /** Lip sync for the avatar camera (optional, strong NVIDIA cards). */
+  lipSync: import("./lipsync.js").LipSync;
   /** The avatar camera as a camera device (the Windows desktop app), when there is one. */
   virtualCamera?: import("./server/options.js").VirtualCamera;
   /** The screen, from the desktop app (the Game Helper's picture); absent without it. */

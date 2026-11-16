@@ -183,6 +183,7 @@ export function AvatarCamera() {
       {step === 3 && info.clip && (
         <>
           <DirectCamera />
+          <LipSyncCard />
           <section className="card">
             <h2>{L("ב-Teams, ב-Meet או בדפדפן: דרך OBS", "In Teams, Meet or a browser: through OBS")}</h2>
             <p className="muted small">{L("דפדפנים ו-Teams החדש לא רואים את המצלמה הישירה; OBS כן.", "Browsers and the new Teams do not see the direct camera; OBS works there.")}</p>
@@ -226,6 +227,69 @@ function CameraMode() {
         <button type="button" role="radio" aria-checked={mode === "avatar"} className={mode === "avatar" ? "primary" : ""} onClick={() => void set("avatar")}>{L("אווטאר", "Avatar")}</button>
         <button type="button" role="radio" aria-checked={mode === "live"} className={mode === "live" ? "primary" : ""} onClick={() => void set("live")}>{L("המצלמה האמיתית", "Real camera")}</button>
       </div>
+    </section>
+  );
+}
+
+interface LipSyncStatus { possible: boolean; installed: boolean; installing?: string; running: boolean; enabled: boolean; cable?: string; error?: string }
+
+const INSTALL_STEP: Record<string, [string, string]> = {
+  starting: ["מתחיל", "Starting"],
+  tools: ["כלים", "Tools"],
+  python: ["Python", "Python"],
+  pytorch: ["PyTorch (הגדול ביותר)", "PyTorch (the largest)"],
+  packages: ["חבילות", "Packages"],
+  models: ["מודלים", "Models"],
+  check: ["בדיקה", "Checking"],
+};
+
+/**
+ * Lip sync (strong NVIDIA cards only): the avatar's lips move with her voice when she talks while away from the
+ * camera. Optional: about 7 GB, installed at the computer; then on or off, and, for lips exactly on time, a virtual
+ * audio cable that Zoom uses as its microphone.
+ */
+function LipSyncCard() {
+  const [st, setSt] = useState<LipSyncStatus | null>(null);
+  const [cable, setCable] = useState("");
+  const load = () => void api<LipSyncStatus>("/api/study/avatar/lipsync").then((x) => { setSt(x); setCable((c) => c || x.cable || ""); }, () => setSt(null));
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 3000);
+    return () => clearInterval(id);
+  }, []);
+  if (!st?.possible) return null;
+  const act = async (body: Record<string, unknown>) => {
+    try {
+      setSt(await api<LipSyncStatus>("/api/study/avatar/lipsync", { method: "POST", body }));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  return (
+    <section className="card">
+      <h2>{L("שפתיים שזזות כשאת מדברת", "Lips that move when you talk")}</h2>
+      <p className="muted small">{L("למחשבים עם כרטיס NVIDIA חזק: כשאת עונה בקול בלי לשבת מול המצלמה, השפתיים של האווטאר זזות עם הקול שלך (MuseTalk, במחשב, בלי ענן).", "For computers with a strong NVIDIA card: when you answer by voice away from the camera, the avatar's lips move with your voice (MuseTalk, on this computer, no cloud).")}</p>
+      {!st.installed ? (
+        st.installing ? (
+          <p className="small" aria-live="polite">{L("מתקין: ", "Installing: ")}{L(...(INSTALL_STEP[st.installing] ?? [st.installing, st.installing]))}… {L("(כ-7GB, כמה דקות)", "(about 7 GB, a few minutes)")}</p>
+        ) : (
+          <button type="button" className="primary" onClick={() => void act({ action: "install" })}>{L("התקנה (כ-7GB)", "Install (about 7 GB)")}</button>
+        )
+      ) : (
+        <>
+          <label className="study-check"><input type="checkbox" checked={st.enabled} onChange={(e) => void act({ action: "set", enabled: e.target.checked })} /> {L("להפעיל עם מצלמת האווטאר", "Turn on with the avatar camera")}</label>
+          {st.running && <p className="good small">{L("● פועל: השפתיים יזוזו כשתדברי.", "● On: the lips move when you talk.")}</p>}
+          <details>
+            <summary>{L("שפתיים בדיוק בזמן (כבל שמע וירטואלי)", "Lips exactly on time (a virtual audio cable)")}</summary>
+            <p className="muted small">{L("השפתיים מגיעות כ-0.3 שנייה אחרי הקול. כדי שיגיעו יחד: מתקינים VB-Cable מהאתר הרשמי שלו (vb-audio.com), כותבים כאן את שם ההתקן שלו (CABLE Input), ובזום בוחרים כמיקרופון את CABLE Output. הקול שלך יעוכב באותו זמן כמו השפתיים.", "The lips arrive about 0.3 s after the voice. To make them arrive together: install VB-Cable from its official site (vb-audio.com), write its device name here (CABLE Input), and in Zoom choose CABLE Output as the microphone. Your voice is held back by the lips' delay.")}</p>
+            <div className="study-actions">
+              <input value={cable} onChange={(e) => setCable(e.target.value)} placeholder="CABLE Input" aria-label={L("שם התקן הכבל", "Cable device name")} dir="ltr" />
+              <button type="button" onClick={() => void act({ action: "set", cable })}>{L("שמור", "Save")}</button>
+            </div>
+          </details>
+        </>
+      )}
+      {st.error && <p className="error small">{st.error}</p>}
     </section>
   );
 }
@@ -332,6 +396,46 @@ export function AvatarFeed() {
     }, 200);
     return () => clearInterval(id);
   }, []);
+  // Lip sync (when it runs): her lip-synced frames, drawn over the loop while she talks.
+  const lips = useRef<HTMLCanvasElement>(null);
+  const [talking, setTalking] = useState(false);
+  useEffect(() => {
+    let ws: WebSocket | undefined;
+    let stopped = false;
+    let quiet: ReturnType<typeof setTimeout> | undefined;
+    const connect = async () => {
+      if (stopped || ws) return;
+      const st = await fetch(withToken("/api/study/avatar/lipsync")).then((r) => r.json() as Promise<{ running?: boolean }>, () => ({ running: false }));
+      if (!st.running || stopped) return;
+      const url = new URL(withToken("/api/study/avatar/lipsync/stream"), location.href);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      const w = new WebSocket(url);
+      ws = w;
+      w.binaryType = "blob";
+      w.onmessage = async (e) => {
+        if (typeof e.data === "string") return;
+        const c = lips.current;
+        const g = c?.getContext("2d");
+        if (!c || !g) return;
+        const img = await createImageBitmap(e.data as Blob);
+        if (c.width !== img.width) [c.width, c.height] = [img.width, img.height];
+        g.drawImage(img, 0, 0);
+        img.close();
+        setTalking(true);
+        clearTimeout(quiet);
+        quiet = setTimeout(() => setTalking(false), 350);
+      };
+      w.onclose = () => { ws = undefined; setTalking(false); };
+    };
+    const id = setInterval(() => void connect(), 2000);
+    void connect();
+    return () => {
+      stopped = true;
+      clearInterval(id);
+      clearTimeout(quiet);
+      ws?.close();
+    };
+  }, []);
   // A camera's faint sensor grain over the clip (a recording is too clean next to live cameras).
   const grain = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -357,6 +461,7 @@ export function AvatarFeed() {
         <video ref={a} src={src} muted playsInline preload="auto" className={front === "a" ? "on" : ""} />
         <video ref={b} src={src} muted playsInline preload="auto" className={front === "b" ? "on" : ""} />
       </div>
+      <canvas ref={lips} className={`avatar-lips${talking && mode !== "live" ? " on" : ""}`} aria-hidden="true" />
       <canvas ref={grain} className="avatar-grain" hidden={mode === "live"} aria-hidden="true" />
       <video ref={live} muted playsInline autoPlay className={`live${mode === "live" ? " on" : ""}`} />
     </div>

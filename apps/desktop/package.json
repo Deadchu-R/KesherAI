@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.6.279",
+  "version": "0.6.280",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",
@@ -37,6 +37,10 @@
       {
         "from": "softcam",
         "to": "softcam"
+      },
+      {
+        "from": "../../tools/lipsync",
+        "to": "lipsync"
       },
       {
         "from": "../web/dist",

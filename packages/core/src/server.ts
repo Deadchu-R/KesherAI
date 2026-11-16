@@ -5,6 +5,7 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
+import { LipSync } from "./lipsync.js";
 import { join } from "node:path";
 import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
@@ -159,6 +160,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void mcp.load();
   const journal = buildJournal(paths, config, registry, options.screen);
   // Study (students): courses, lectures, flashcards and quizzes, with the active chat model.
+  const lipSync = new LipSync(
+    join(paths.engines, "lipsync"),
+    () => [options.lipsyncScript, join(process.cwd(), "tools", "lipsync", "kesher_lipsync.py")].find((f) => f && existsSync(f)),
+    join(paths.root, "study", "avatar", "clip.webm"),
+    async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)),
+  );
   const study = new Study(join(paths.root, "study"), (modelId) => {
     const id = modelId ?? config.activeModels.chat;
     if (!id) return undefined;
@@ -358,6 +365,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     github,
     journal,
     study,
+    lipSync,
     ...(options.virtualCamera ? { virtualCamera: options.virtualCamera } : {}),
     ...(options.screen ? { screen: options.screen } : {}),
     knowledge,

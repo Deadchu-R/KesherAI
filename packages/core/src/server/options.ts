@@ -34,6 +34,8 @@ export interface KesherServerOptions {
   updates?: PackagedUpdates;
   /** The desktop app's screen capture for "My day" (no PowerShell, which antivirus programs block). */
   screen?: ScreenSource;
+  /** kesher_lipsync.py, shipped with the desktop app (the avatar camera's optional lip sync). */
+  lipsyncScript?: string;
   /** The avatar camera without OBS (the Windows desktop app: softcam). */
   virtualCamera?: VirtualCamera;
   /** Shows a notification on this computer (desktop app); returns false when the window is in front. */
