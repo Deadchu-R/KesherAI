@@ -118,7 +118,7 @@ function Updates() {
   };
 
   // Is the computer free for the restart, and is the install waiting for that.
-  const [ready, setReady] = useState<{ chats: number; selfWork: boolean; downloads: number; updating: boolean; whenFree: boolean } | null>(null);
+  const [ready, setReady] = useState<{ chats: number; selfWork: boolean; downloads: number; updating: boolean; study?: number; whenFree: boolean } | null>(null);
   const loadReady = () => void api<NonNullable<typeof ready>>("/api/updates/ready").then(setReady, () => undefined);
   useEffect(loadReady, []);
   useEffect(() => {
@@ -147,6 +147,7 @@ function Updates() {
             <span className={ready.chats ? "busy" : "free"}>{ready.chats ? (he ? `${ready.chats} צ׳אטים עובדים` : `${ready.chats} chats working`) : he ? "אין צ׳אט שעובד" : "No chat working"}</span>
             <span className={ready.selfWork ? "busy" : "free"}>{ready.selfWork ? (he ? "עבודה עצמית רצה" : "Self-work running") : he ? "עבודה עצמית לא רצה" : "Self-work not running"}</span>
             <span className={ready.downloads ? "busy" : "free"}>{ready.downloads ? (he ? `${ready.downloads} הורדות` : `${ready.downloads} downloads`) : he ? "אין הורדה" : "No download"}</span>
+            {!!ready.study && <span className="busy">{he ? "לימודים: המודל כותב סיכום או בוחן" : "Study: the model is writing a summary or quiz"}</span>}
           </div>
           {ready.whenFree ? (
             <div className="row">

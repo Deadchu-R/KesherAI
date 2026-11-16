@@ -16,6 +16,8 @@ export interface FreeState {
   downloads: number;
   /** An update is already being installed. */
   updating: boolean;
+  /** Study model calls running (a summary, a quiz being written or graded). */
+  study?: number;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface FreeState {
  * @param s - What is busy now.
  */
 export function isFree(s: FreeState): boolean {
-  return s.chats === 0 && !s.selfWork && s.downloads === 0 && !s.updating;
+  return s.chats === 0 && !s.selfWork && s.downloads === 0 && !s.updating && !s.study;
 }
 
 /** What the waiter needs from KesherAI. */

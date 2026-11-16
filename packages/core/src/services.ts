@@ -130,6 +130,8 @@ export interface KesherServices {
   journal: Journal;
   /** Study (students): courses, lectures, flashcards and quizzes. */
   study: Study;
+  /** Study model calls running now (a summary, a quiz, the tutor): an update waits for them. */
+  studyBusy?: () => number;
   /** Lip sync for the avatar camera (optional, strong NVIDIA cards). */
   lipSync: import("./lipsync.js").LipSync;
   /** The avatar camera as a camera device (the Windows desktop app), when there is one. */

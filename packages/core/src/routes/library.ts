@@ -898,6 +898,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       selfWork: run?.status === "running",
       downloads: s.downloads.list().filter((j) => j.status === "downloading" || j.status === "queued").length,
       updating: s.updater.status().running,
+      study: s.studyBusy?.() ?? 0,
     };
   };
   const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, apply: () => s.updater.apply() });

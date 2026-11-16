@@ -166,12 +166,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     join(paths.root, "study", "avatar", "clip.webm"),
     async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)),
   );
+  let studyRunning = 0;
   const study = new Study(join(paths.root, "study"), (modelId) => {
     const id = modelId ?? config.activeModels.chat;
     if (!id) return undefined;
     try {
       registry.resolve(id);
-      return { id, turn: modelTurnFor(registry, id) };
+      const turn = modelTurnFor(registry, id);
+      // Counted while it runs, so an update waits for a summary or a quiz being written (they are not chats).
+      return { id, turn: (async (...args: Parameters<typeof turn>) => { studyRunning++; try { return await turn(...args); } finally { studyRunning--; } }) as typeof turn };
     } catch {
       return undefined;
     }
@@ -365,6 +368,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     github,
     journal,
     study,
+    studyBusy: () => studyRunning,
     lipSync,
     ...(options.virtualCamera ? { virtualCamera: options.virtualCamera } : {}),
     ...(options.screen ? { screen: options.screen } : {}),

@@ -7,6 +7,7 @@ const idle: FreeState = { chats: 0, selfWork: false, downloads: 0, updating: fal
 test("free only when nothing is busy", () => {
   assert.equal(isFree(idle), true);
   assert.equal(isFree({ ...idle, chats: 1 }), false);
+  assert.equal(isFree({ ...idle, study: 1 }), false);
   assert.equal(isFree({ ...idle, selfWork: true }), false);
   assert.equal(isFree({ ...idle, downloads: 2 }), false);
   assert.equal(isFree({ ...idle, updating: true }), false);
