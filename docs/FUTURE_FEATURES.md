@@ -26,7 +26,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 ## Looks and personalization
 - ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
 - ✅ Import a look from Figma (variables or styles) — needs the owner's Figma token to try
-- ⬜ Figma-like sharing and collaboration with other users (careful security review first)
+- 🔧 Figma-like sharing and collaboration: designed (docs/COLLABORATION.md), waiting for Roee's review before building; read-only chat links that expire already exist
 - ✅ Reset to defaults and reinstall the latest version, from Settings
 
 ## Agents and automation
