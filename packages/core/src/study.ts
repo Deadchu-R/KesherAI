@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -424,6 +424,24 @@ export class Study {
     }
     const { messages, passages } = tutorMessages({ lectures: d.lectures, question, history, mode, hint });
     return { answer: cleanScript((await say(messages)).trim(), he), sources: sourcesOf(passages) };
+  }
+
+  /**
+   * Explains a passage she selected in a lecture.
+   *
+   * @param id - The course.
+   * @param lectureId - The lecture.
+   * @param selection - The selected text.
+   * @param kind - explain, simple or example.
+   */
+  async explainPassage(id: string, lectureId: string, selection: string, kind: "explain" | "simple" | "example", signal?: AbortSignal): Promise<{ text: string }> {
+    if (!selection.trim()) throw Object.assign(new Error("Select some text first."), { statusCode: 400 });
+    const d = await this.get(id);
+    const m = this.model();
+    if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
+    const messages = explainMessages({ selection, lecture: this.lecture(d, lectureId), kind, hint: d.course.field ? FIELD_HINT[d.course.field] : undefined });
+    const r = await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(180_000), () => undefined);
+    return { text: cleanScript(r.text.trim(), /[\u0590-\u05ff]/.test(selection)) };
   }
 
   /**

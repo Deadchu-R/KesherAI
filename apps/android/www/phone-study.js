@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -169,6 +169,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
 
   function draw() {
     root.replaceChildren();
+    root.onpointerup = null;
+    root.ontouchend = null;
     root.append(el("p", { class: "intro" }, L("לימודים בטלפון, בלי מחשב: הכול נשמר בטלפון. מודל קטן ואיטי יותר מהמחשב; כשתתחברי למחשב, עמוד הלימודים שם חזק יותר.", "Study on the phone, no computer: everything stays on this phone. A small model, slower than the computer's; connected to the computer, its Study page is stronger.")));
     if (view.at === "home") home();
     else if (view.at === "course") courseView();
@@ -454,8 +456,40 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       }
       if (commit()) alert(L(`נוצרו ${n} כרטיסיות`, `${n} cards made`));
     };
-    root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title),
-      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
+    // "Explain this": select words in the summary or the full text, then explain, simpler, example, or make a card.
+    const explainBox = el("section", { class: "api ph-why", hidden: true, "aria-live": "polite" });
+    let picked = "";
+    const showPick = () => {
+      const t = (globalThis.getSelection?.()?.toString() ?? "").trim();
+      if (t.length < 3 || t === picked) return;
+      picked = t.slice(0, 3000);
+      const out = el("p", { dir: "auto", style: "white-space: pre-wrap" });
+      const explain = async (kind, b) => {
+        const r = await need(explainMessages({ selection: picked, lecture: l, kind, hint: hint(c).trim() || undefined }), b);
+        if (r === undefined) return;
+        out.textContent = cleanScript(String(r).trim(), /[\u0590-\u05ff]/.test(picked));
+        cardBtn.hidden = false;
+      };
+      const cardBtn = el("button", { type: "button", hidden: true, onclick: () => {
+        const e = createEmptyCard(new Date());
+        c.cards.push({ id: uid(), front: L(`מה המשמעות של: "${picked.slice(0, 200)}"?`, `What does this mean: "${picked.slice(0, 200)}"?`), back: out.textContent.slice(0, 3000), format: "text", lectureId: l.id, createdAt: Date.now(), due: e.due.toISOString(), fsrs: JSON.parse(JSON.stringify(e)) });
+        if (commit()) alert(L("נוספה כרטיסייה", "Card added"));
+      } }, L("לכרטיסייה", "To a card"));
+      explainBox.replaceChildren(
+        el("small", { class: "muted", dir: "auto" }, L("נבחר: ", "Selected: ") + `“${picked.length > 120 ? `${picked.slice(0, 120)}…` : picked}”`),
+        el("div", { class: "ph-btns", style: "flex-wrap: wrap; margin-top: 6px" },
+          el("button", { type: "button", class: "primary", onclick: (e) => void explain("explain", e.currentTarget) }, L("הסבר", "Explain")),
+          el("button", { type: "button", onclick: (e) => void explain("simple", e.currentTarget) }, L("בפשטות", "Simpler")),
+          el("button", { type: "button", onclick: (e) => void explain("example", e.currentTarget) }, L("דוגמה", "Example")),
+          cardBtn),
+        out);
+      explainBox.hidden = false;
+    };
+    // One handler at a time (draw() clears them for the other pages).
+    root.onpointerup = () => setTimeout(showPick, 30);
+    root.ontouchend = () => setTimeout(showPick, 60);
+    root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), explainBox,
+      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
       flowView(l.diagram),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),

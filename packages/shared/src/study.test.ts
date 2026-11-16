@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -196,4 +196,12 @@ test("tutorMessages homework: the problem stays in view; steps and hints follow 
   assert.match(first.messages.at(-1)!.content, /The problem: 1000/);
   const later = tutorMessages({ lectures, question: "רמז", mode: "homework", history: [{ role: "user", content: "1000 מ״ל ב-8 שעות, פקטור 20. מה קצב הטפטוף?" }, { role: "assistant", content: "מה כבר ניסית?" }] });
   assert.match(later.messages.at(-1)!.content, /The problem: 1000[\s\S]*Her message: רמז/);
+});
+
+test("explainMessages: the selection with the lecture as context, by kind", () => {
+  const lecture = { id: "l", title: "לב", date: "", text: "דיגוקסין מגביר את כוח ההתכווצות.", summary: "סיכום קצר" };
+  const m = explainMessages({ selection: "  מגביר את כוח ההתכווצות  ", lecture, kind: "simple" });
+  assert.match(m[0]!.content, /very simple words/);
+  assert.match(m[1]!.content, /Context from the lecture:\nסיכום קצר/);
+  assert.match(m[1]!.content, /The passage she selected:\nמגביר את כוח ההתכווצות$/);
 });

@@ -1653,3 +1653,14 @@ Stopped at: building (store and public page first, then the chat menu and the se
   full worked solution whenever she asks ("Full solution"), so she is never stuck behind a wall. Her lectures are
   used when they help. Computer, remote and phone.
 - Stopped at: built (0.6.302).
+
+## Students, part 13: "explain this" in a lecture (2026-11-16)
+
+- Sources: Adobe's Acrobat AI Assistant (answers from the PDF with citations, summaries, education help pages),
+  Macro's AI PDF reader round-up, Wondershare's student summarizers.
+- PDF readers answer about the whole file; the step students use most in reading apps is selecting a hard sentence
+  and asking what it means, simpler, or for an example, then keeping it.
+- Ours: select words in a lecture's summary or full text; a box offers Explain, Simpler and Example (the lecture
+  is given as context), and To a card keeps the selection and its explanation as a flashcard. Computer, remote and
+  phone (the phone's own model).
+- Stopped at: built (0.6.303).

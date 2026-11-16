@@ -2755,3 +2755,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-focus-run { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .study-focus-clock { font-size: 32px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
 .study-focus .study-actions button.on { background: var(--raised); border-color: var(--accent); }
+/* Study: "explain this" for text selected in a lecture. */
+.study-explain { border: 1px solid var(--border); border-inline-start: 3px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.study-explain p { margin: 0; }

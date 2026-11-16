@@ -790,6 +790,23 @@ export const STUDY_MODE_PROMPT =
 export const HOMEWORK_PROMPT =
   "You help a student with a homework problem step by step, like a good tutor. Do not solve it at once. First, in two short lines, say what the problem asks and ask what she tried, or give only the first step as a question. When she writes a step, say whether it is right and why, then point to the next step. When she asks for a hint, give ONE short hint (each hint a little more direct than the last). Only when she asks for the full solution, give it worked out step by step, then one line on the idea to remember. Use the lecture passages when they help (name the lecture in square brackets, like [Lecture: <title>]); general knowledge is allowed for homework, but never invent numbers, doses or values that the problem does not give. Write only in her language.";
 
+/** Explaining a passage she selected in a lecture (like "explain this" in PDF readers), by kind. */
+export const EXPLAIN_PROMPTS: Record<"explain" | "simple" | "example", string> = {
+  explain: "A student selected a passage from her lecture and asks what it means. Explain it clearly in 3-5 short sentences in the passage's language: what it says, the terms in it, and why it matters in this lecture. Use the lecture context given; never invent numbers, doses or values.",
+  simple: "A student selected a passage from her lecture that she finds hard. Say it again in very simple words, as to a first-year student, in 2-4 short sentences in the passage's language, with an everyday comparison if one fits. Never invent numbers, doses or values.",
+  example: "A student selected a passage from her lecture. Give one short concrete example (for clinical material, a short patient case) that shows what it means, in the passage's language, then one line linking it back to the passage. Never invent doses or values that the lecture does not give.",
+};
+
+/** The messages for explaining a selected passage, with the lecture around it as context. */
+export function explainMessages(o: { selection: string; lecture: StudyLecture; kind: "explain" | "simple" | "example"; hint?: string }): TutorMessage[] {
+  const sel = o.selection.trim().slice(0, 3000);
+  const ctx = (o.lecture.summary || o.lecture.text).slice(0, 4000);
+  return [
+    { role: "system", content: `${EXPLAIN_PROMPTS[o.kind]}${o.hint ? `\n${o.hint}` : ""}` },
+    { role: "user", content: `Lecture: ${o.lecture.title}\nContext from the lecture:\n${ctx}\n\nThe passage she selected:\n${sel}` },
+  ];
+}
+
 /** Study mode's grading step: a verdict only, as JSON, so even a small or code-minded model grades by her lecture. */
 export const GRADE_PROMPT =
   'You grade a student\'s answer to a question about her lecture, using ONLY the lecture passages given (not general knowledge: if the passages say something else, the answer is wrong). Answer with JSON only: {"verdict": "right" | "partly" | "wrong", "answer": "the passages\' answer in one short sentence, in the question\'s language"}';

@@ -534,6 +534,25 @@ export function FlowView({ src }: { src: string }) {
 function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
   const [view, setView] = useState<"summary" | "terms" | "diagram" | "text">("summary");
+  // "Explain this": text she selected in the lecture, and its explanation.
+  const [sel, setSel] = useState("");
+  const [explained, setExplained] = useState("");
+  const [explaining, setExplaining] = useState(false);
+  const pickSelection = () => {
+    const t = window.getSelection()?.toString().trim() ?? "";
+    if (t.length >= 3 && t !== sel) { setSel(t.slice(0, 3000)); setExplained(""); }
+  };
+  const explainSel = async (kind: "explain" | "simple" | "example") => {
+    setExplaining(true);
+    const r = await call(api<{ text: string }>(`/api/study/courses/${courseId}/lectures/${lectureId}/explain`, { method: "POST", body: { text: sel, kind } }));
+    setExplaining(false);
+    if (r) setExplained(r.text);
+  };
+  const selToCard = async () => {
+    const front = L(`מה המשמעות של: "${sel.slice(0, 200)}"?`, `What does this mean: "${sel.slice(0, 200)}"?`);
+    const r = await call(api(`/api/study/courses/${courseId}/cards`, { method: "POST", body: { front, back: explained.slice(0, 3000), lectureId } }));
+    if (r) { toast(L("נוספה כרטיסייה", "Card added")); onChange(); }
+  };
   const [busy, setBusy] = useState("");
   const [format, setFormat] = useState<StudyFormat>("text");
   const base = `/api/study/courses/${courseId}/lectures/${lectureId}`;
@@ -583,7 +602,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           </button>
         ))}
       </div>
-      <div className="study-lecture-body">
+      <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
         {view === "text" ? <div className="study-text" dir="auto">{l.text}</div>
           : !l.summary ? (
             <div className="study-empty">
@@ -594,6 +613,18 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           : view === "terms" ? <TermList terms={l.terms ?? []} />
           : l.diagram ? <FlowView src={l.diagram} /> : <p className="muted">{L("בהרצאה הזאת אין תהליך שמתאים לתרשים.", "This lecture has no process that fits a diagram.")}</p>}
       </div>
+      {sel && (
+        <div className="study-explain" aria-live="polite">
+          <p className="muted small" dir="auto">{L("נבחר: ", "Selected: ")}“{sel.length > 140 ? `${sel.slice(0, 140)}…` : sel}”</p>
+          <div className="study-actions">
+            {(["explain", "simple", "example"] as const).map((k) => <button key={k} type="button" disabled={explaining} onClick={() => void explainSel(k)}>{{ explain: L("הסבר", "Explain"), simple: L("בפשטות", "Simpler"), example: L("דוגמה", "Example") }[k]}</button>)}
+            {explained && <button type="button" onClick={() => void selToCard()}>{L("לכרטיסייה", "To a card")}</button>}
+            <button type="button" className="ghost" onClick={() => { setSel(""); setExplained(""); }}>{L("סגירה", "Close")}</button>
+          </div>
+          {explaining && <p className="muted">{L("מסבירה…", "Explaining…")}</p>}
+          {explained && <div dir="auto"><RichText text={explained} /></div>}
+        </div>
+      )}
       <div className="study-actions">
         <button type="button" className={playing ? "primary" : ""} disabled={busy === "audio"} onClick={() => void listen()}>{busy === "audio" ? L("כותב סקירה קולית…", "Writing the audio review…") : playing ? L("⏹ עצירה", "⏹ Stop") : L("🎧 האזנה לסקירה (כ-3 דקות)", "🎧 Listen to a review (about 3 minutes)")}</button>
       </div>
