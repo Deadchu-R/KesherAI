@@ -6,7 +6,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Game engines and creative tools
 - ✅ Godot support (#/godot): the KesherAI Bridge addon (GDScript, works for C# projects), the chat sees and changes scenes, nodes and scripts as undo steps, runs the game and reads its log; checked in a real Godot 4.7.2 editor
-- ⬜ UEFN / Verse (Fortnite) support and UE6 preparation (a Verse view of a Blueprint, then conversion)
+- ✅ UEFN / Verse: the chat lists UEFN projects and reads and writes .verse devices in them (Blueprints read through the bridge can be written as Verse); 👤 building is in UEFN itself (Verse → Build Verse Code), not tried on the PC (no UEFN project there yet)
 - ⬜ Minecraft and Roblox modding
 - ⬜ Fab search and install from the chat
 - ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)

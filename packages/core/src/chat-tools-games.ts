@@ -15,6 +15,9 @@ import { UNITY_NOTE, unityTools } from "./unity-tools.js";
 import { UNREAL_NOTE, unrealTools } from "./unreal-tools.js";
 import { GODOT_IDLE_NOTE, GODOT_NOTE, godotTools } from "./godot-tools.js";
 import { MOD_NOTE, modTools } from "./game-mods.js";
+import { VERSE_NOTE, uefnTools } from "./uefn-tools.js";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
@@ -60,6 +63,11 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     // fixed for a chat; the short note is enough until it is connected.
     tools.push(...g);
     notes.push(deps.godot.status().connected ? GODOT_NOTE : `${GODOT_IDLE_NOTE} Once connected: ${GODOT_NOTE}`);
+  }
+  // UEFN (Fortnite) and Verse: when UEFN has made its projects folder here.
+  if (existsSync(join(homedir(), "Documents", "Fortnite Projects"))) {
+    tools.push(...uefnTools());
+    notes.push(VERSE_NOTE);
   }
   // Minecraft and Roblox projects (two small tools, one line).
   tools.push(...modTools(join(deps.outputsDir, "..", "engines")));
