@@ -84,7 +84,7 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
       if (!wav) return;
       queue = queue.then(async () => {
         try {
-          const res = await fetch(withToken(`/api/speech/transcribe?lang=${getLocale() === "he" ? "he" : "en"}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+          const res = await fetch(withToken(`/api/speech/transcribe?lang=auto`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
           const j = (await res.json()) as { text?: string; error?: string; code?: string };
           if (j.code === "needs-setup") throw new Error(L("צריך להגדיר דיבור-לטקסט במחשב: הגדרות ← דיבור.", "Set up speech to text on the computer first: Settings → Speech."));
           if (!res.ok) throw new Error(j.error ?? String(res.status));

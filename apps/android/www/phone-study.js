@@ -401,7 +401,7 @@ export function renderPhoneStudy(root, ask, search, speech) {
         if (!b64) return;
         queue = queue.then(async () => {
           try {
-            const t = (await speech.transcribe(b64, he() ? "he" : "en")).trim();
+            const t = (await speech.transcribe(b64, "auto")).trim();
             if (t) {
               lines.push(`${mmss(at)} ${t}`);
               text.textContent = lines.slice(-6).join("\n");

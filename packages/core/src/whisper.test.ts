@@ -21,3 +21,10 @@ test("picks the right whisper.cpp download", () => {
   assert.equal(pickWhisperAsset([{ name: "whisper-blas-bin-x64.zip" }], false)?.name, "whisper-blas-bin-x64.zip");
   assert.equal(pickWhisperAsset([{ name: "whisper-v1.9.3-xcframework.zip" }], false), undefined);
 });
+
+test("the language whisper detected", async () => {
+  const { detectedLanguage } = await import("./whisper.js");
+  assert.equal(detectedLanguage("whisper_full_with_state: auto-detected language: he (p = 0.973)"), "he");
+  assert.equal(detectedLanguage("auto-detected language: en (p = 0.88)\n"), "en");
+  assert.equal(detectedLanguage("nothing"), undefined);
+});

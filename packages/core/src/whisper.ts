@@ -308,6 +308,20 @@ export class WhisperEngine {
     return speechParts(await this.raw(wav, language, ".wav", true));
   }
 
+  /** Which language a recording is in (whisper's -dl: the encoder only, no text). */
+  private async detect(exe: string, model: string, wav: Buffer, ext: string): Promise<string> {
+    const file = join(tmpdir(), `kesher-lang-${randomUUID()}${/^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext.toLowerCase() : ".wav"}`);
+    await writeFile(file, wav);
+    try {
+      const out = await new Promise<string>((resolve, reject) => {
+        execFile(exe, ["-m", model, "-f", file, "-dl", "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: 120_000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(err) : resolve(`${stdout}\n${stderr}`)));
+      });
+      return detectedLanguage(out) ?? "auto";
+    } finally {
+      await rm(file, { force: true }).catch(() => undefined);
+    }
+  }
+
   private async raw(wav: Buffer, language: string, ext: string, timestamps: boolean): Promise<string> {
     const st = await this.status();
     if (!st.engine || !st.model) throw new Error("The speech engine is not ready yet.");
@@ -316,6 +330,9 @@ export class WhisperEngine {
     const heModel = this.modelPath("he");
     const hasHe = !!(await stat(heModel).catch(() => undefined))?.size;
     const general = (await Promise.all((Object.keys(MODELS) as ModelKey[]).filter((k) => k !== "he").map(async (k) => ((await stat(this.modelPath(k)).catch(() => undefined))?.size ? this.modelPath(k) : undefined)))).find(Boolean);
+    // "auto" with the Hebrew model here: whisper first tells which language is spoken (one quick pass of the
+    // general model), then Hebrew goes to the Hebrew model and anything else stays on the general one.
+    if (language === "auto" && hasHe && general) language = await this.detect(exe, general, wav, ext).catch(() => "auto");
     const modelFile = language === "he" && hasHe ? heModel : general ?? st.model;
     const file = join(tmpdir(), `kesher-stt-${randomUUID()}${/^\.(wav|mp3|flac|ogg)$/i.test(ext) ? ext.toLowerCase() : ".wav"}`);
     await writeFile(file, wav);
@@ -352,4 +369,14 @@ export async function cloudTranscribe(baseUrl: string, apiKey: string, model: st
   const res = await fetch(`${baseUrl.replace(/\/$/, "")}/audio/transcriptions`, { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(120_000) });
   if (!res.ok) throw new Error(`The speech service answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return String(((await res.json()) as { text?: string }).text ?? "").trim();
+}
+
+/**
+ * The language whisper detected (`auto-detected language: he (p = 0.97)`).
+ *
+ * @param out - whisper-cli's output.
+ * @returns The code, or undefined.
+ */
+export function detectedLanguage(out: string): string | undefined {
+  return /auto-detected language:\s*([a-z]{2,3})\b/i.exec(out)?.[1]?.toLowerCase();
 }
