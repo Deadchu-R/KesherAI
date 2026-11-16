@@ -1,70 +1,71 @@
 # Future features
 
-Features we wrote down for later. They go into work once the student features are done, by priority.
-Status: ⬜ to do · 🔧 in work · ✅ done · 👤 waits on the owner.
+Features we wrote down for later, checked against the code on 2026-11-16 (the first version of this list, written
+from notes, had many items that already exist; they are marked ✅ here so the list stays honest).
+Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits on the owner.
 
 ## Game engines and creative tools
 - ⬜ Godot support: an editor plugin (GDScript/C#) that sees scenes, nodes and scripts and changes them in words
-- ⬜ UEFN / Verse (Fortnite) support, UE6 preparation, closing the gaps with Unity AI
+- ⬜ UEFN / Verse (Fortnite) support and UE6 preparation (a Verse view of a Blueprint, then conversion)
 - ⬜ Minecraft and Roblox modding
-- ⬜ Fab search and a list of Unreal plugins
-- ⬜ KesherAI as a model provider inside Unreal and Unity AI
-- ⬜ Depth and normals turned into styled frames
-- ⬜ Music generation as a chat tool (acestep.cpp, MIT, about 7.7 GB of models, needs our own build)
+- ⬜ Fab search and install from the chat
+- ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)
+- 🔧 KesherAI as a model provider for Unreal and Unity AI: the OpenAI-compatible `/v1` endpoint exists; a guide and a check with each engine's assistant are missing
+- ⬜ Depth and normals turned into styled frames (like Unreal Canvas)
+- ✅ Music as a chat tool (make_music, ACE-Step 1.5 / XL)
+- ✅ Known engine bugs checked before each build (known-issues.ts)
 
 ## Remote control and several computers
-- ⬜ Remote desktop plugin (like Google Remote Desktop), each monitor in its own window, WebRTC
-- ⬜ A fixed outside address (Cloudflare Tunnel or Tailscale)
-- ⬜ A tabs bar of computers, splitting tasks across computers, choosing per chat which device runs it
-- ⬜ Control a laptop from the main computer
-- ⬜ A Stop button for processes in remote
-- ⬜ Watch the screen and approve actions from the Android app
+- ✅ Remote desktop: the computer's screen from the phone, PIN protected (remote-desktop.ts)
+- ✅ A fixed outside address: own Cloudflare domain or Tailscale Funnel
+- ✅ Choosing which computer runs a chat (model menu), and splitting work across computers (split_across_computers)
+- ✅ Connecting from the laptop to the home PC (My devices)
+- ✅ The computer's load in remote (CPU, RAM, cards, temperatures) with Terminate
+- ⬜ A tabs bar of computers at the top of the screen (switching at the control level)
 
-## Looks and personalization (SteamOS-like)
-- ⬜ Change the design in words with AI, animations, a background picture, own icons per tool
-- ⬜ A full-dark HDR preset, a look synced across devices, presets and theme files to share
-- ⬜ Import from Figma (variables, design screenshots), Figma sharing and collaboration
-- ⬜ Reset and reinstall from inside the app
+## Looks and personalization
+- ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
+- ✅ Import a look from Figma (variables or styles) — needs the owner's Figma token to try
+- ⬜ Figma-like sharing and collaboration with other users (careful security review first)
+- ⬜ Reinstall from inside the app
 
-## Agents and automation (OpenClaw and others)
-- ⬜ Talk to KesherAI from Telegram (own bot), approvals as buttons
-- ⬜ Heartbeat: check mail, calendar, a folder or a page on a schedule and write only when needed
-- ⬜ The assistant writes a new skill for itself when asked, approved before it is saved
-- ⬜ Per-plugin and per-skill permissions; reviewed plugins marked in the store
-- ⬜ Smart approvals for a set time
-- ⬜ Pause and resume tasks around an update
-- ⬜ Search for known bugs before a build, a project index, token efficiency, specialized agents
-- ⬜ A background agent that researches competitors
-- ⬜ An automated test system run on every version
+## Agents and automation
+- ✅ Telegram bot with approval buttons
+- ✅ Heartbeat routines (speak only when something needs you)
+- ✅ "Learn to do X": the model writes a skill, shown before saving (learn_skill)
+- ✅ Smart approvals: a reviewer for plain commands in auto-edit, and approvals for good or for a set time
+- ✅ Pause on update and continue where it stopped (chats and self-work)
+- ✅ Named, specialized agents; a background feature-research routine
+- ✅ An interface check and speed check on every version (scripts/ui-check.mjs)
+- ⬜ Per-plugin and per-skill permissions shown before install, and reviewed plugins marked in the store
+- ⬜ A project index (fast search over assets, scripts, Blueprints) for token efficiency
 
 ## Code
-- ⬜ An editor from VS Code's own parts (Monaco, or OpenVSCode Server)
-- ⬜ SSH and WSL
-- ⬜ A library store for all languages
-- ⬜ Gemini CLI and DeepSeek V4-Flash
+- ✅ The editor is Monaco (VS Code's own editor)
+- ✅ Library store for languages and engines
+- ✅ Gemini through the user's own subscription (sign-in)
+- ⬜ SSH and WSL targets
+- 👤 DeepSeek V4-Flash test (board t59; downloading on the PC)
 
 ## Models and hardware
-- ⬜ Train models from the UI: chat LoRA/QLoRA on own texts, picture LoRA (style or character), voice
-- ⬜ An AI helper for games
-- ⬜ ROG Ally console mode: rumble when an answer is ready (C4), own on-screen keyboard (C5), a pad check after UI changes (C6)
-- ⬜ CPU and RAM limits, temperatures, an AI "PC health" view
-- ⬜ Heavy data on the 4 TB drive
+- ✅ Training picture LoRAs from the interface
+- ⬜ Training a chat model (LoRA/QLoRA on own texts) and a voice
+- ✅ Game helper over a running game
+- ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
+- ⬜ A check on a real controller after each interface change (C6)
+- ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
+- ⬜ A CPU and RAM limit for KesherAI's own engines
+- ⬜ Heavy data (models, self-work copies) in a chosen folder on the 4 TB drive, moved by KesherAI
 - ⬜ As-you-type suggestions in any app (Magic Tab), needs a small model always loaded
+- ⬜ Phone build targets chosen by phone model (OnePlus, Samsung…) for Unity, Unreal and web builds
 
 ## Content and import
-- ⬜ Stremio plugin
-- ⬜ WhatsApp and Instagram import
-- ⬜ AskBrandon persona
-
-## Small interface items
-- ⬜ A chat preview on hover in the sidebar (t69)
-- ⬜ `/status` command (t75)
-- ⬜ Semgrep rules for Electron (t119)
+- ✅ WhatsApp and Instagram chats imported, with the relationship-analyst persona (AskBrandon style)
+- ⬜ Stremio plugin (watching patterns, recommendations, Letterboxd)
 
 ## Waiting on the owner 👤
 - 👤 SignPath application and 2FA (signed installer)
 - 👤 The extension in the Edge and Firefox stores
 - 👤 OneDrive app ID
-- 👤 Telegram bot token
 - 👤 Figma token
 - 👤 Decide on the Chrome Web Store $5 fee
