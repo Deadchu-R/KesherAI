@@ -97,6 +97,7 @@ export class VoiceCloner {
         // PyTorch with CUDA first (the version chatterbox-tts asks for), so pip does not take the processor-only build.
         await this.run(uv, ["pip", "install", "--python", this.python, "torch==2.6.0", "torchaudio==2.6.0", "--index-url", "https://download.pytorch.org/whl/cu124"], env);
         await this.run(uv, ["pip", "install", "--python", this.python, "chatterbox-tts"], env);
+        await this.fixWatermark(uv, env);
         Object.assign(this.state, { phase: undefined, message: "Ready." });
       } catch (e) {
         Object.assign(this.state, { phase: "error", message: (e as Error).message });
@@ -105,6 +106,18 @@ export class VoiceCloner {
       }
     })();
     return this.busy;
+  }
+
+  /**
+   * The audio watermark (Resemble's Perth, which marks speech as made by AI) loads its model through pkg_resources,
+   * which setuptools 81 removed; without it Chatterbox stops. Pins setuptools below 81 once (also on engines set up
+   * before this fix).
+   */
+  private async fixWatermark(uv: string, env: NodeJS.ProcessEnv): Promise<void> {
+    const mark = join(this.dir, "watermark-ok");
+    if (existsSync(mark)) return;
+    await this.run(uv, ["pip", "install", "--python", this.python, "setuptools<81"], env);
+    await writeFile(mark, "setuptools<81\n");
   }
 
   /**
@@ -143,6 +156,10 @@ export class VoiceCloner {
     if (!/^[\p{L}\p{N} _-]{1,40}$/u.test(voice) || !existsSync(ref)) throw Object.assign(new Error("No such voice."), { statusCode: 404 });
     const t = text.trim().slice(0, 1500);
     if (!t) throw Object.assign(new Error("Write something to say."), { statusCode: 400 });
+    if (!existsSync(join(this.dir, "watermark-ok"))) {
+      Object.assign(this.state, { phase: "installing", message: "Fixing the voice engine (one small download)…" });
+      await this.fixWatermark(await this.uv(), { ...process.env, UV_PYTHON_INSTALL_DIR: join(this.dir, "python"), UV_CACHE_DIR: join(this.dir, "uv-cache") });
+    }
     const script = join(this.dir, "kesher_say.py");
     await writeFile(script, SCRIPT);
     const out = join(this.dir, `say-${Date.now()}.wav`);
