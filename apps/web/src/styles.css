@@ -2532,3 +2532,10 @@ html.handheld .palette-list button { min-height: 44px; }
 .task-item.running .task-dot { background: #4ade80; }
 .task-item.waiting .task-dot { background: #fbbf24; }
 .tasks-empty { padding: 24px 0; }
+/* The controller's on-screen keyboard (fields other than the chat box). */
+.osk { position: fixed; z-index: 2000; inset-inline: 0; bottom: 0; margin-inline: auto; max-width: 720px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--border-strong); border-radius: calc(16px * var(--r-scale, 1)) calc(16px * var(--r-scale, 1)) 0 0; box-shadow: 0 -12px 40px rgb(0 0 0 / 0.45); display: flex; flex-direction: column; gap: 6px; }
+.osk-row { display: flex; justify-content: center; gap: 6px; }
+.osk-key { min-width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: calc(8px * var(--r-scale, 1)); background: var(--raised); font-size: 18px; }
+.osk-key.on { outline: 3px solid var(--accent, #7aa2ff); background: var(--panel-2); }
+.osk-help { text-align: center; font-size: 12px; color: var(--text-2); }
+@media (max-width: 480px) { .osk-key { min-width: 0; flex: 1 1 0; height: 40px; font-size: 16px; } }

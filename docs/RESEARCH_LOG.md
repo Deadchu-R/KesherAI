@@ -1383,3 +1383,13 @@ Stopped at: building (store and public page first, then the chat menu and the se
   amber = waiting for you. Polls every 4 s while visible; each part read on its own so an older computer still shows
   the rest. Works the same in remote (the phone shows the computer's pages).
 - Stopped at: no peek at the output inside the list (Open goes to the chat); no push of the list itself.
+
+## C5: an on-screen keyboard for the controller (2026-11-16)
+
+- Windows 11's gamepad keyboard (Insider 22635.4145, rolled out 2025): keys realigned for the D-pad; X backspace,
+  Y space, Menu enter. Steam Big Picture: its own keyboard over the field, B closes.
+- Built (`pad-keyboard.ts`): A on a field other than the chat box opens it (the chat box keeps A = send, R3 = mic).
+  D-pad moves (wraps, keeps the column; in Hebrew left and right follow the reading side), A types, X deletes, Y space,
+  Menu = Enter (a form is sent), B closes, LB Hebrew/English, RB capitals → symbols. Types through the field's value
+  setter + input event so React sees it. Phone width: keys share the row.
+- Stopped at: no caret moving with the triggers; no word suggestions.

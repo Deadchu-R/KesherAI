@@ -11,6 +11,7 @@
  * Read with the browser's Gamepad API (standard mapping), only while a controller is connected; the mouse, touch and
  * keyboard work as before, and the controller's look (a bold focus ring, the button hints) shows only after it is used.
  */
+import { openPadKeyboard, padKeyboardButton, padKeyboardOpen } from "./pad-keyboard";
 
 const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, VIEW = 8, MENU = 9, L3 = 10, R3 = 11, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
 const FIRST_REPEAT = 380;
@@ -223,6 +224,12 @@ function press(): void {
   const el = document.activeElement as HTMLElement | null;
   if (!el || el === document.body) return move("down");
   if (typing(el)) {
+    // A field other than the chat box (search, settings, names): the controller's own keyboard. The chat box keeps A
+    // as send (its microphone is R3).
+    if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.closest(".composer") && !el.readOnly) {
+      openPadKeyboard(el);
+      return;
+    }
     // In a field A sends what was typed (Enter), as a chat's send.
     key("Enter");
     return;
@@ -356,6 +363,16 @@ export function startGamepad(): void {
         f();
       }
     };
+    // The on-screen keyboard, while open, takes every button.
+    if (padKeyboardOpen()) {
+      act(UP, true, () => padKeyboardButton("up"));
+      act(DOWN, true, () => padKeyboardButton("down"));
+      act(LEFT, true, () => padKeyboardButton("left"));
+      act(RIGHT, true, () => padKeyboardButton("right"));
+      for (const [i, name] of [[A, "A"], [B, "B"], [X, "X"], [Y, "Y"], [LB, "LB"], [RB, "RB"], [MENU, "MENU"]] as Array<[number, string]>) act(i, i === X, () => padKeyboardButton(name));
+      frame = requestAnimationFrame(loop);
+      return;
+    }
     act(UP, true, () => canvasTakes({ action: "dir", dir: "up" }) || move("up"));
     act(DOWN, true, () => canvasTakes({ action: "dir", dir: "down" }) || move("down"));
     act(LEFT, true, () => canvasTakes({ action: "dir", dir: "left" }) || move("left"));
