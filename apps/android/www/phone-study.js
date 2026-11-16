@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -102,12 +102,12 @@ async function ankiShare(c) {
 
 /** A phone course (one object) as the computer's course file, for syncing. */
 function toData(c) {
-  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, syllabus, ...course } = c;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}) };
+  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, syllabus, courseSummary, ...course } = c;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}) };
 }
 /** The computer's course file as a phone course. */
 function fromData(d) {
-  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}), ...(d.syllabus ? { syllabus: d.syllabus } : {}) };
+  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}), ...(d.syllabus ? { syllabus: d.syllabus } : {}), ...(d.courseSummary ? { courseSummary: d.courseSummary } : {}) };
 }
 
 /**
@@ -190,6 +190,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     else if (view.at === "calc") calc();
     else if (view.at === "labs") labs();
     else if (view.at === "terms") terms();
+    else if (view.at === "summary") summaryView();
     else if (view.at === "drugs") drugs();
     else if (view.at === "progress") progress();
     else if (view.at === "life") life();
@@ -433,6 +434,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", onclick: () => void shareFile(c) }, L("שיתוף הקורס", "Share the course")),
         c.cards?.length ? el("button", { type: "button", onclick: () => void ankiShare(c) }, L("ייצוא ל-Anki / Quizlet", "Export to Anki / Quizlet")) : "",
         el("button", { type: "button", onclick: () => ankiPick.click() }, L("ייבוא כרטיסיות", "Import cards")),
+        el("button", { type: "button", onclick: () => go({ at: "summary", course: c.id }) }, L("סיכום הקורס", "Course summary")),
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),
@@ -689,6 +691,46 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       }
     };
     return b;
+  }
+
+  /** One summary of the whole course by topic, grown here from the lectures' summaries (a few at a time), with a search. */
+  function summaryView() {
+    const c = course();
+    if (!c) return go({ at: "home" });
+    const s = c.courseSummary;
+    const done = c.lectures.filter((l) => l.summary?.trim());
+    const missing = done.filter((l) => !s?.lectureIds.includes(l.id)).length;
+    const sec = el("section", { class: "api" }, el("h2", {}, L("סיכום הקורס לפי נושאים", "The course by topic")));
+    if (!done.length) sec.append(el("p", { class: "muted" }, L("סכמי לפחות הרצאה אחת, והסיכום של כל הקורס ייבנה ממנה ויגדל עם כל הרצאה.", "Summarize at least one lecture; the course summary is built from it and grows with each lecture.")));
+    if (done.length && (!s || missing)) {
+      const btn = el("button", { type: "button", class: "primary" }, s ? L(`הוספת ${missing} הרצאות חדשות לסיכום`, `Add ${missing} new lectures to the summary`) : L("כתיבת סיכום הקורס", "Write the course summary"));
+      btn.onclick = async () => {
+        // A small model: a few lectures per step, with a smaller budget than the computer's.
+        for (let step = 0; step < 20; step++) {
+          const inp = courseSummaryInput(c, 12000);
+          if (!inp) break;
+          const r = await need([{ role: "system", content: `${COURSE_SUMMARY_PROMPT}${hint(c)}` }, { role: "user", content: inp.user }], btn);
+          if (r === undefined) return;
+          const next = parseCourseSummary(r, c.courseSummary, inp.ids);
+          if (!next) { alert(L("המודל לא כתב סיכום. נסי שוב.", "The model did not write a summary. Try again.")); return; }
+          c.courseSummary = next;
+          commit();
+        }
+        draw();
+      };
+      sec.append(el("div", { class: "ph-btns" }, btn));
+    }
+    if (s) {
+      const out = el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, s.text);
+      const find = el("input", { type: "search", dir: "auto", placeholder: L("חיפוש בסיכום", "Search the summary"), "aria-label": L("חיפוש בסיכום", "Search the summary") });
+      find.oninput = () => {
+        const q = find.value.trim().toLowerCase();
+        const parts = q ? s.text.split(/\n(?=## )/).filter((p) => p.toLowerCase().includes(q)) : [s.text];
+        out.textContent = parts.join("\n") || L("אין נושא שמזכיר את זה.", "No topic mentions that.");
+      };
+      sec.append(find, out, el("small", { class: "muted" }, L(`נבנה מ-${s.lectureIds.length} הרצאות. כל שורה מציינת מאיזו הרצאה היא באה.`, `Built from ${s.lectureIds.length} lectures. Each line says which lecture it came from.`)));
+    }
+    root.append(back({ at: "course", course: c.id }), sec);
   }
 
   function terms() {

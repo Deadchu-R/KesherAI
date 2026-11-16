@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -261,4 +261,20 @@ test("Anki / Quizlet: cards out as tab-separated lines and back in", () => {
   assert.equal(tsv, "מה?<br>שתי שורות\tכך בדיוק\nb\tc");
   assert.deepEqual(cardsFromTsv(`#separator:tab\n${tsv}\n\n`), [{ front: "מה?\nשתי שורות", back: "כך בדיוק" }, { front: "b", back: "c" }]);
   assert.deepEqual(cardsFromTsv('"דיגוקסין";"<b>מגביר</b> כוח"\nרק צד אחד'), [{ front: "דיגוקסין", back: "מגביר כוח" }]);
+});
+
+test("the course summary grows only with lectures not yet in it, and merges by the newest", () => {
+  const lec = (id: string, summary?: string) => ({ id, title: `הרצאה ${id}`, text: "x", t: 1, ...(summary ? { summary } : {}) }) as StudyLecture;
+  const d = { lectures: [lec("1", "תאים"), lec("2"), lec("3", "חלבונים")], courseSummary: { text: "## תאים\n- **תא** [הרצאה 1]", lectureIds: ["1"], t: 5 } };
+  const inp = courseSummaryInput(d)!;
+  assert.deepEqual(inp.ids, ["3"]);
+  assert.match(inp.user, /חלבונים/);
+  assert.doesNotMatch(inp.user, /### הרצאה 1/);
+  assert.equal(courseSummaryInput({ ...d, lectures: [lec("1", "תאים")] }), null);
+  const s = parseCourseSummary("```markdown\n## תאים\n- **תא** הוא יחידת החיים [הרצאה 1]\n## חלבונים\n- שרשרת חומצות אמינו [הרצאה 3]\n```", d.courseSummary, inp.ids, 9)!;
+  assert.deepEqual(s.lectureIds, ["1", "3"]);
+  assert.doesNotMatch(s.text, /```/);
+  assert.equal(parseCourseSummary("קצר", undefined, ["1"]), null);
+  const base = { course: { id: "c", name: "c", t: 1 }, lectures: [], cards: [], reviews: [], quizzes: [] } as unknown as StudyCourseData;
+  assert.equal(mergeCourseData({ ...base, courseSummary: d.courseSummary }, { ...base, courseSummary: s }).courseSummary?.t, 9);
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudyNext, type StudySyllabus, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -13,7 +13,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
-interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null }
+interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null; courseSummary?: StudyCourseSummary | null }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; reviews: number }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
@@ -331,6 +331,7 @@ function Benefits() {
 const TABS: Array<[string, [string, string]]> = [
   ["lectures", ["הרצאות", "Lectures"]],
   ["review", ["חזרה", "Review"]],
+  ["summary", ["סיכום הקורס", "Course summary"]],
   ["quiz", ["בוחן", "Quiz"]],
   ["ask", ["שאלי את הקורס", "Ask the course"]],
   ["calc", ["חישובים", "Calculations"]],
@@ -392,6 +393,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
+        : on === "summary" ? <CourseSummary id={id} info={info} onChange={load} />
         : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />
         : on === "labs" ? <LabValues />
         : on === "progress" ? <ProgressView courseId={id} />
@@ -506,6 +508,46 @@ function SyllabusCard({ id, syllabus, onChange }: { id: string; syllabus: StudyS
         </label>
         {syllabus && <button type="button" className="ghost" onClick={() => void save(null)}>{L("הסרת הסילבוס", "Remove the syllabus")}</button>}
       </div>
+    </section>
+  );
+}
+
+/**
+ * One summary of the whole course by topic, grown from the lectures' summaries (a few lectures per step), with a
+ * search inside it.
+ */
+function CourseSummary({ id, info, onChange }: { id: string; info: CourseInfo; onChange: () => void }) {
+  const [busy, setBusy] = useState("");
+  const [find, setFind] = useState("");
+  const s = info.courseSummary ?? null;
+  const summarized = info.lectures.filter((l) => l.summarized);
+  const missing = summarized.filter((l) => !s?.lectureIds.includes(l.id)).length;
+  const grow = async () => {
+    for (let step = 1; step <= 20; step++) {
+      setBusy(L(`כותב את הסיכום… (שלב ${step})`, `Writing the summary… (step ${step})`));
+      const r = await call(api<{ more: boolean }>(`/api/study/courses/${id}/summary`, { method: "POST" }));
+      if (!r?.more) break;
+    }
+    setBusy("");
+    onChange();
+  };
+  const shown = useMemo(() => {
+    if (!s || !find.trim()) return s?.text ?? "";
+    const q = find.trim().toLowerCase();
+    // Whole topics (## …) that mention what she looks for.
+    return s.text.split(/\n(?=## )/).filter((part) => part.toLowerCase().includes(q)).join("\n") || "";
+  }, [s, find]);
+  return (
+    <section className="card study-course-summary">
+      <h2>{L("סיכום הקורס לפי נושאים", "The course by topic")}</h2>
+      {!summarized.length ? <p className="muted">{L("סכמי לפחות הרצאה אחת, והסיכום של כל הקורס ייבנה ממנה ויגדל עם כל הרצאה.", "Summarize at least one lecture; the course summary is built from it and grows with each lecture.")}</p> : (
+        <div className="study-actions">
+          {(!s || missing > 0) && <button type="button" className="primary" disabled={!!busy} onClick={() => void grow()}>{busy || (s ? L(`הוספת ${missing} הרצאות חדשות לסיכום`, `Add ${missing} new lectures to the summary`) : L("כתיבת סיכום הקורס", "Write the course summary"))}</button>}
+          {s && <input type="search" value={find} onChange={(e) => setFind(e.target.value)} placeholder={L("חיפוש בסיכום", "Search the summary")} aria-label={L("חיפוש בסיכום", "Search the summary")} />}
+        </div>
+      )}
+      {s && (shown ? <div dir="auto" className="study-summary-text"><RichText text={shown} /></div> : <p className="muted">{L("אין נושא שמזכיר את זה.", "No topic mentions that.")}</p>)}
+      {s && <p className="muted small">{L(`נבנה מ-${s.lectureIds.length} הרצאות. כל שורה מציינת מאיזו הרצאה היא באה.`, `Built from ${s.lectureIds.length} lectures. Each line says which lecture it came from.`)}</p>}
     </section>
   );
 }

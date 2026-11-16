@@ -539,6 +539,46 @@ export interface StudyCourseData {
   pastExams?: StudyPastExam[];
   /** What the course's syllabus says: exams, assignments and the topic of each week (she confirmed it). */
   syllabus?: StudySyllabus;
+  /** One summary of the whole course by topic, grown as lectures are summarized. */
+  courseSummary?: StudyCourseSummary;
+}
+
+/** The course's growing summary: markdown by topic, and which lectures are already in it. */
+export interface StudyCourseSummary {
+  text: string;
+  lectureIds: string[];
+  t: number;
+}
+
+/** Writing or growing the course's summary from its lectures' summaries. */
+export const COURSE_SUMMARY_PROMPT =
+  "You keep one study summary of a whole university course, organized by topic (not by lecture). You get the summary so far (may be empty) and summaries of new lectures. Merge the new material into the right topics, add new topics where needed, keep everything already there, remove repeats, and keep the order a student would learn it in. Markdown: a `## ` heading per topic, short bullets, key terms in bold, and after each bullet that came from a lecture, the lecture's title in brackets like [הרצאה 3]. Write in the same language as the material (usually Hebrew), keeping English technical terms as written. Use only what the material says. Answer with the full updated summary only.";
+
+/** What to send to grow the summary, or null when no summarized lecture is new to it. */
+export function courseSummaryInput(d: Pick<StudyCourseData, "lectures" | "courseSummary">, budget = 50_000): { user: string; ids: string[] } | null {
+  const have = new Set(d.courseSummary?.lectureIds ?? []);
+  const fresh = d.lectures.filter((l) => l.summary?.trim() && !have.has(l.id));
+  if (!fresh.length) return null;
+  const old = d.courseSummary?.text ?? "";
+  let room = Math.max(4000, budget - old.length);
+  const ids: string[] = [];
+  const parts: string[] = [];
+  for (const l of fresh) {
+    const piece = `### ${l.title}${l.date ? ` (${l.date})` : ""}\n${l.summary!.trim()}`;
+    if (parts.length && piece.length > room) break;
+    parts.push(piece.slice(0, room));
+    room -= piece.length;
+    ids.push(l.id);
+  }
+  return { user: `Summary so far:\n${old || "(empty)"}\n\nNew lectures:\n\n${parts.join("\n\n")}`, ids };
+}
+
+/** A model's course summary, cleaned; keeps the lectures that went into it. */
+export function parseCourseSummary(raw: string, prev: StudyCourseSummary | undefined, ids: string[], t = Date.now()): StudyCourseSummary | null {
+  const body = String(raw ?? "").replace(/^```(?:markdown|md)?\s*|```\s*$/g, "").trim();
+  const text = cleanScript(body, /[\u0590-\u05ff]/.test(body)).slice(0, 120_000);
+  if (text.length < 40) return null;
+  return { text, lectureIds: [...new Set([...(prev?.lectureIds ?? []), ...ids])], t };
 }
 
 /** A course's syllabus, read once from its file and confirmed by her. Dates are YYYY-MM-DD. */
@@ -785,6 +825,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
   const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
   const pastExams = byId(a.pastExams ?? [], b.pastExams ?? [], gone, (x) => x);
   const syllabus = !a.syllabus ? b.syllabus : !b.syllabus ? a.syllabus : b.syllabus.t > a.syllabus.t ? b.syllabus : a.syllabus;
+  const courseSummary = !a.courseSummary ? b.courseSummary : !b.courseSummary ? a.courseSummary : b.courseSummary.t > a.courseSummary.t ? b.courseSummary : a.courseSummary;
   const focusSeen = new Set<number>();
   const focus = [...(a.focus ?? []), ...(b.focus ?? [])].filter((f) => !focusSeen.has(f.t) && focusSeen.add(f.t)).sort((x, y) => x.t - y.t).slice(-5000);
   return {
@@ -798,6 +839,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     ...(focus.length ? { focus } : {}),
     ...(pastExams.length ? { pastExams } : {}),
     ...(syllabus ? { syllabus } : {}),
+    ...(courseSummary ? { courseSummary } : {}),
   };
 }
 

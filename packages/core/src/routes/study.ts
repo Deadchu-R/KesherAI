@@ -40,6 +40,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return reply.header("content-type", "text/plain; charset=utf-8").header("content-disposition", `attachment; filename*=UTF-8''${name}`).send(`#separator:tab\n#html:true\n${cardsToTsv(d.cards)}\n`);
   });
   app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/cards/import", { bodyLimit: 8 * 1024 * 1024 }, async (req) => st.importCards(req.params.id, String(req.body?.text ?? "")));
+  /** Grows the course's summary by topic from newly summarized lectures. */
+  app.post<C>("/api/study/courses/:id/summary", async (req) => st.courseSummary(req.params.id));
   /** A syllabus: `{ text }` → what it says (exams, assignments, weekly topics) for her to confirm; then PUT keeps it. */
   app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/syllabus/read", { bodyLimit: 4 * 1024 * 1024 }, async (req) => st.readSyllabus(String(req.body?.text ?? "")));
   app.put<C & { Body: { syllabus?: unknown } }>("/api/study/courses/:id/syllabus", async (req) => ({ syllabus: await st.setSyllabus(req.params.id, req.body?.syllabus ?? null) }));
@@ -193,6 +195,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       plan: examPlan(d, now) ?? null,
       pastExams: (d.pastExams ?? []).map(({ id, title, t, text }) => ({ id, title, t, chars: text.length })),
       syllabus: d.syllabus ?? null,
+      courseSummary: d.courseSummary ?? null,
     };
   });
   app.patch<C & { Body: { name?: string; field?: string; examDate?: string } }>("/api/study/courses/:id", async (req) => {

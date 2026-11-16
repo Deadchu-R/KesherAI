@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -44,7 +44,9 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const focus = arr<StudyFocus>(d.focus, 5000).filter((f) => Number.isFinite(f?.t) && Number.isFinite(f?.minutes)).map((f) => ({ t: Number(f.t), minutes: Math.min(600, Math.max(1, Math.round(Number(f.minutes)))) }));
   const syllabus = d.syllabus ? parseSyllabus(d.syllabus, Number((d.syllabus as { t?: number }).t) || Date.now()) : undefined;
   const pastExams = arr<StudyPastExam>(d.pastExams, 50).filter((e) => okId(e?.id)).map((e) => ({ id: e.id, title: str(e.title, 200), text: str(e.text, 200_000), t: Number(e.t) || Date.now() }));
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}) };
+  const cs = d.courseSummary as StudyCourseSummary | undefined;
+  const courseSummary = cs && typeof cs.text === "string" ? { text: str(cs.text, 120_000), lectureIds: arr<string>(cs.lectureIds, 5000).filter(okId), t: Number(cs.t) || Date.now() } : undefined;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -585,6 +587,24 @@ export class Study {
     else delete l.diagram;
     await this.save(d);
     return l;
+  }
+
+  /**
+   * Grows the course's one summary by topic from lectures summarized since it was last written (a few at a time:
+   * call again while `more` is true).
+   */
+  async courseSummary(id: string, signal?: AbortSignal): Promise<{ summary: StudyCourseSummary; more: boolean }> {
+    const d = await this.get(id);
+    if (!d.lectures.some((l) => l.summary?.trim())) throw Object.assign(new Error("Summarize at least one lecture first."), { statusCode: 400 });
+    const inp = courseSummaryInput(d);
+    if (!inp) return { summary: d.courseSummary!, more: false };
+    const raw = await this.ask(COURSE_SUMMARY_PROMPT, inp.user, signal, d.course.field, 120_000);
+    const s = parseCourseSummary(raw, d.courseSummary, inp.ids);
+    if (!s) throw Object.assign(new Error("The model did not write a summary. Try again."), { statusCode: 502 });
+    const fresh = await this.get(id);
+    fresh.courseSummary = s;
+    await this.save(fresh);
+    return { summary: s, more: !!courseSummaryInput(fresh) };
   }
 
   /** Makes flashcards from a lecture, studied in one format. */

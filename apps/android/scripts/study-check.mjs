@@ -74,6 +74,11 @@ checks.ask = (await sec.locator("text=התשובות רק מההרצאות של�
 await sec.locator("button", { hasText: "מצב תרגול" }).click();
 await pg.waitForTimeout(300);
 checks.studyMode = (await sec.locator("button", { hasText: "התחילי תרגול" }).count()) > 0;
+await sec.locator("button", { hasText: "› חזרה" }).first().click().catch(() => undefined);
+await pg.waitForTimeout(300);
+await sec.locator("button", { hasText: "סיכום הקורס" }).first().click();
+await pg.waitForTimeout(300);
+checks.summary = (await sec.locator("text=הסיכום של כל הקורס").count()) + (await sec.locator("button", { hasText: "כתיבת סיכום הקורס" }).count()) > 0;
 checks.fits = (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 if (shot) await pg.screenshot({ path: shot });
 await b.close();
