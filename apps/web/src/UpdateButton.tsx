@@ -22,7 +22,7 @@ export function UpdateButton() {
   }, []);
   if (!latest) return null;
   return (
-    <a className="bar-update" href="#/updates" title={L(`גרסה ${latest} זמינה: לדף העדכונים`, `Version ${latest} is available: open Updates`)}>
+    <a className="bar-update" href="#/updates" aria-label={L(`עדכון לגרסה ${latest}`, `Update to ${latest}`)} title={L(`גרסה ${latest} זמינה: לדף העדכונים`, `Version ${latest} is available: open Updates`)}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12.5v-9M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
       <span>{L("עדכון", "Update")}</span>
       <span className="bar-update-v" dir="ltr">{latest}</span>
