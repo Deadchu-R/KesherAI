@@ -314,7 +314,35 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     return sec;
   }
 
+  /**
+   * Reminders from the syllabuses: a notification at 18:00 the day before each exam and assignment (the phone's own
+   * alarms, also with the app closed). Ones no longer in a syllabus are cancelled.
+   */
+  function scheduleReminders() {
+    const N = globalThis.Capacitor?.Plugins?.KesherNotify;
+    if (!N?.remind) return;
+    const KEYR = "kesherai-study-reminders";
+    let before = [];
+    try { before = JSON.parse(localStorage.getItem(KEYR) || "[]"); } catch { before = []; }
+    const now = Date.now();
+    const want = [];
+    for (const c of db.courses) {
+      for (const [kind, list] of [["exam", c.syllabus?.exams ?? []], ["due", c.syllabus?.assignments ?? []]]) {
+        for (const x of list) {
+          const at = new Date(`${x.date}T18:00:00`).getTime() - 86_400_000;
+          if (at <= now) continue;
+          const id = `${c.id.slice(0, 8)}-${x.date}-${[...x.title].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7).toString(36)}`;
+          want.push(id);
+          N.remind({ id, at, title: kind === "exam" ? L(`מחר מבחן: ${x.title}`, `Exam tomorrow: ${x.title}`) : L(`מחר להגשה: ${x.title}`, `Due tomorrow: ${x.title}`), body: c.name }).catch?.(() => undefined);
+        }
+      }
+    }
+    for (const id of before) if (!want.includes(id)) N.remindCancel?.({ id }).catch?.(() => undefined);
+    localStorage.setItem(KEYR, JSON.stringify(want));
+  }
+
   function home() {
+    scheduleReminders();
     if (db.courses.length) root.append(focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);

@@ -292,6 +292,26 @@ public class NotifyPlugin extends Plugin {
         call.resolve();
     }
 
+    /** { id, at, title, body }: a study reminder (the day before an assignment or exam), also with the app closed. */
+    @PluginMethod
+    public void remind(PluginCall call) {
+        String id = call.getString("id");
+        Long at = call.getLong("at");
+        if (id == null || !id.matches("^[\\w-]{1,80}$") || at == null || at < System.currentTimeMillis()) { call.reject("id/at"); return; }
+        String title = call.getString("title", "KesherAI");
+        String body = call.getString("body", "");
+        FocusAlarm.set(getContext(), "r-" + id, at, title.length() > 120 ? title.substring(0, 120) : title, body.length() > 300 ? body.substring(0, 300) : body);
+        call.resolve();
+    }
+
+    /** { id }: the reminder is no longer needed (the syllabus changed). */
+    @PluginMethod
+    public void remindCancel(PluginCall call) {
+        String id = call.getString("id");
+        if (id != null) FocusAlarm.cancel(getContext(), "r-" + id);
+        call.resolve();
+    }
+
     /** The focus timer was stopped: no "time's up" notification. */
     @PluginMethod
     public void focusAlarmCancel(PluginCall call) {
