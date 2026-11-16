@@ -3,7 +3,7 @@ extends EditorPlugin
 ## KesherAI Bridge: connects the Godot editor to KesherAI on this computer (never the other way round) and answers
 ## its commands. Every change goes through the editor's undo history, so Ctrl+Z takes it back.
 
-const VERSION := "0.1.0"
+const VERSION := "0.1.1"
 const URL := "ws://127.0.0.1:7420/api/godot/ws"
 
 var _ws := WebSocketPeer.new()
@@ -160,7 +160,10 @@ func _run(cmd: String, a: Dictionary):
 			if not prop in n:
 				return {"error": "The node has no property " + prop}
 			var old = n.get(prop)
-			var nv = _parse(a.get("value"), old)
+			var raw = a.get("value")
+			if typeof(raw) == TYPE_STRING and String(raw).begins_with("res://") and not ResourceLoader.exists(String(raw)):
+				return {"error": "No such resource: " + String(raw)}
+			var nv = _parse(raw, old)
 			ur.create_action("KesherAI: set " + prop)
 			ur.add_do_property(n, prop, nv)
 			ur.add_undo_property(n, prop, old)
