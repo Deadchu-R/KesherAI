@@ -2740,6 +2740,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .bar-where { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; gap: 2px; margin-inline: 4px; }
 .bar-where > * { display: inline-grid; place-items: center; min-height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
 .bar-where > .on { background: #2e2e3a; color: var(--text); font-weight: 500; }
+/* A phone (with the phone/computer switch): tighter spacing so the whole top bar fits at 360–390 px. */
+@media (max-width: 420px) { .bar-where > * { padding: 0 7px; } .bar-where { margin-inline: 2px; } .appbar-main { gap: 2px; padding: 0 4px; } .appbar-main:has(.bar-update) .bar-pop-wrap:has(.design-btn) { display: none; } }
 /* Study: why a missed card's answer is right (above the next card). */
 .study-why { border: 1px solid var(--border); border-inline-start: 3px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; font-size: 14px; }
 .study-why p { margin: 4px 0 0; color: var(--text); }
