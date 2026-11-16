@@ -388,7 +388,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       if (input.length < 10) return alert(ta ? L("קודם הדביקי טקסט.", "Paste the text first.") : L("קודם הוסיפי הרצאה.", "Add a lecture first."));
       const r = await need([{ role: "system", content: `${tool.prompt}${hint(c)}` }, { role: "user", content: input }], run);
       if (r === undefined) return;
-      view.toolOut = cleanScript(String(r).trim(), /[\u0590-\u05ff]/.test(input)).slice(0, 40000);
+      view.toolOut = cleanScript(String(r).trim(), /[\u0590-\u05ff]/.test(String(r))).slice(0, 40000);
       draw();
     };
     const out = view.toolOut;

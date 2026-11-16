@@ -143,11 +143,15 @@ export function openMark(raw: string, he: boolean): { mark: number; line: string
 /** A model's open or case questions, checked: each has a question and a model answer. */
 export function parseOpenQuestions(raw: string, lectureIds: string[], count: number): StudyQuestion[] {
   const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
-  if (!Array.isArray(list)) return [];
+  // Models also wrap the list ({"questions": [...]}) or name the fields their own way.
+  const items = Array.isArray(list) ? list : Array.isArray((list as { questions?: unknown })?.questions) ? (list as { questions: unknown[] }).questions : undefined;
+  if (!items) return [];
   const out: StudyQuestion[] = [];
-  for (const x of list as Array<{ q?: unknown; answer?: unknown; lecture?: unknown }>) {
-    const q = String(x?.q ?? "").trim();
-    const a = String(x?.answer ?? "").trim();
+  for (const x of items as Array<Record<string, unknown>>) {
+    // Letters of other scripts a model slips into Hebrew are removed (found on the PC: "وما", "وقد").
+    const clean = (t: string) => cleanScript(t, /[\u0590-\u05ff]/.test(t)).trim();
+    const q = clean(String(x?.q ?? x?.question ?? ""));
+    const a = clean(String(x?.answer ?? x?.model_answer ?? x?.modelAnswer ?? ""));
     if (q.length < 8 || a.length < 4 || a.length > 1200) continue;
     const lec = lectureIds[Number(x.lecture) - 1] ?? (lectureIds.length === 1 ? lectureIds[0] : undefined);
     out.push({ q: q.slice(0, 3000), options: [], answer: -1, explain: a, ...(lec ? { lectureId: lec } : {}) });
@@ -215,10 +219,17 @@ export function jsonIn(text: string): unknown {
     const close = open === "[" ? "]" : "}";
     const end = src.lastIndexOf(close);
     if (end <= start) continue;
+    const body = src.slice(start, end + 1);
     try {
-      return JSON.parse(src.slice(start, end + 1));
+      return JSON.parse(body);
     } catch {
-      // try the next form
+      // Hebrew abbreviations (מ"מ, צה"ל, ע"פ) written with a plain quote break the JSON: a quote between two Hebrew
+      // letters is the gershayim sign (״), never the end of a string.
+      try {
+        return JSON.parse(body.replace(/([\u05d0-\u05ea])"(?=[\u05d0-\u05ea])/g, "$1״"));
+      } catch {
+        // try the next form
+      }
     }
   }
   return undefined;
@@ -498,7 +509,7 @@ export interface StudyTool {
   prompt: string;
 }
 
-const TOOL_LANG = "Write in the same language as the material (usually Hebrew), keeping technical terms, names and symbols as written. Use only what is given; where something needed is missing, write [חסר] instead of inventing it. Markdown.";
+const TOOL_LANG = "Write in Hebrew unless the student's own text is in another language, keeping technical terms, names and symbols as written. Use only what is given: add no examples, numbers or details that are not in it; where something needed is missing, write [חסר] instead of inventing it. Markdown.";
 
 /** The tools for each field (the same on the computer and the phone). */
 export const STUDY_TOOLS: StudyTool[] = [

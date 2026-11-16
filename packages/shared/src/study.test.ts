@@ -344,3 +344,17 @@ test("Commons pictures: English terms make the search, only upload.wikimedia.org
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { src: "https://upload.wikimedia.org/a/heart.svg.png", page: "https://commons.wikimedia.org/wiki/File:Heart.svg", license: "CC BY-SA 4.0", artist: "Someone" });
 });
+
+test("open questions: a wrapped list and other field names are read too", () => {
+  const qs = parseOpenQuestions('{"questions":[{"question":"מטופל עם לחץ דם 80/50. מה תעשי?","model_answer":"להשכיב ולהרים רגליים"}]}', ["a"], 3);
+  assert.equal(qs.length, 1);
+  assert.equal(qs[0]?.explain, "להשכיב ולהרים רגליים");
+});
+
+test("JSON from a model with Hebrew abbreviations (a plain quote inside a word) is still read", () => {
+  const raw = '[{"q": "לחץ דם 135/85 מ"מ כספית. תקין?", "answer": "לפי צה"ל ועוד", "lecture": 2}]';
+  const j = jsonIn(raw) as Array<{ q: string; answer: string }>;
+  assert.equal(j[0]?.q, "לחץ דם 135/85 מ״מ כספית. תקין?");
+  assert.equal(j[0]?.answer, "לפי צה״ל ועוד");
+  assert.deepEqual(jsonIn('{"a": "ok"}'), { a: "ok" });
+});
