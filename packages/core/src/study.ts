@@ -8,7 +8,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQuery, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -57,7 +57,7 @@ const LANG = "Write in the same language as the material (usually Hebrew). Keep 
 const ONLY_MATERIAL = "Use only what the material says; do not add facts that are not in it.";
 
 const SUMMARY_PROMPT = `You summarise a university lecture for a student. ${LANG} ${ONLY_MATERIAL}
-Answer with JSON only: {"summary": "a clear summary in short paragraphs and bullet lines (markdown), main ideas first", "terms": [{"term": "the term", "en": "English name if any", "explain": "one sentence"}], "diagram": "a Mermaid flowchart of the main process or mechanism, or an empty string when there is none"}`;
+Answer with JSON only: {"summary": "a clear summary in short paragraphs and bullet lines (markdown), main ideas first", "terms": [{"term": "the term", "en": "English name if any", "explain": "one sentence"}], "diagram": "a Mermaid flowchart of the main process or mechanism, or an empty string when there is none", "picture": "2-4 English words to find a diagram of the lecture's topic on Wikimedia Commons, e.g. heart anatomy"}`;
 
 const CARDS_PROMPT = `You write flashcards for a student from lecture material. ${LANG} ${ONLY_MATERIAL}
 Each card tests one fact or idea; the front is a question, the back a short answer. Prefer questions that make the student recall, not recognise.
@@ -599,12 +599,14 @@ export class Study {
       material = notes.join("\n\n");
     }
     const raw = await this.ask(SUMMARY_PROMPT, `Lecture: ${l.title}\n\n${material.slice(0, 60_000)}`, signal, d.course.field);
-    const j = jsonIn(raw) as { summary?: string; terms?: StudyTerm[]; diagram?: string } | undefined;
+    const j = jsonIn(raw) as { summary?: string; terms?: StudyTerm[]; diagram?: string; picture?: string } | undefined;
     l.summary = (j?.summary ?? raw).slice(0, 100_000);
     l.terms = Array.isArray(j?.terms) ? j!.terms.filter((t) => t && t.term && t.explain).slice(0, 80).map((t) => ({ term: String(t.term).slice(0, 120), ...(t.en ? { en: String(t.en).slice(0, 120) } : {}), explain: String(t.explain).slice(0, 400) })) : [];
     const diagram = String(j?.diagram ?? "").replace(/^```(?:mermaid)?\s*|```$/g, "").trim();
     if (diagram) l.diagram = diagram.slice(0, 8000);
     else delete l.diagram;
+    const picture = String(j?.picture ?? "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, 80);
+    if (picture) l.picture = picture;
     await this.save(d);
     return l;
   }
@@ -636,10 +638,16 @@ export class Study {
   async lecturePictures(id: string, lectureId: string, signal?: AbortSignal, kind: StudyMediaKind = "image"): Promise<{ query: string; pictures: StudyPicture[] }> {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
-    const query = pictureQuery(l);
-    const res = await fetch(commonsSearchUrl(query, 480, kind), { headers: { "user-agent": "KesherAI (https://github.com/Deadchu-R/KesherAI; local app)" }, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(20_000)]) });
-    if (!res.ok) throw Object.assign(new Error(`Wikimedia answered ${res.status}.`), { statusCode: 502 });
-    const found = parseCommonsPictures(await res.json(), 8, kind);
+    // The searches in order until one finds something (see pictureQueries).
+    let query = "";
+    let found: StudyPicture[] = [];
+    for (const q of pictureQueries(l)) {
+      query = q;
+      const res = await fetch(commonsSearchUrl(q, 480, kind), { headers: { "user-agent": "KesherAI (https://github.com/Deadchu-R/KesherAI; local app)" }, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(20_000)]) });
+      if (!res.ok) throw Object.assign(new Error(`Wikimedia answered ${res.status}.`), { statusCode: 502 });
+      found = parseCommonsPictures(await res.json(), 8, kind);
+      if (found.length) break;
+    }
     const got = await Promise.all(found.map(async (p) => {
       try {
         if (kind === "gif") {

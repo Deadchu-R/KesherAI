@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQuery, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -400,7 +400,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
   function picturesBox(l) {
     const grid = el("div", { style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px" });
     const note = el("p", { class: "muted small", "aria-live": "polite" });
-    const q = pictureQuery(l);
+    const qs = pictureQueries(l);
     const cache = {};
     const kinds = [["image", L("תמונות", "Pictures")], ["gif", L("אנימציות", "Animations")], ["video", L("סרטונים", "Videos")]];
     const tabs = el("div", { class: "ph-btns", role: "tablist", style: "flex-wrap: wrap" });
@@ -410,18 +410,22 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         note.textContent = L("מחפש…", "Searching…");
         grid.replaceChildren();
         try {
-          const r = await fetch(commonsSearchUrl(q, 360, kind));
-          cache[kind] = parseCommonsPictures(await r.json(), 8, kind);
+          // The searches in order until one finds something (see pictureQueries).
+          for (const q of qs) {
+            const r = await fetch(commonsSearchUrl(q, 360, kind));
+            cache[kind] = parseCommonsPictures(await r.json(), 8, kind);
+            if (cache[kind].length) break;
+          }
         } catch {
           note.textContent = L("אין חיבור לאינטרנט כרגע.", "No internet connection right now.");
           return;
         }
       }
       const pics = cache[kind];
-      note.textContent = pics.length ? L("חומר חופשי לפי המונחים של ההרצאה. כדאי לוודא שהוא מתאים לחומר.", "Free material by the lecture's terms. Check it matches the material.") : L(`לא נמצא ל-"${q}".`, `Nothing found for "${q}".`);
+      note.textContent = pics.length ? L("חומר חופשי לפי המונחים של ההרצאה. כדאי לוודא שהוא מתאים לחומר.", "Free material by the lecture's terms. Check it matches the material.") : L(`לא נמצא ל-"${qs[0]}".`, `Nothing found for "${qs[0]}".`);
       grid.replaceChildren(...pics.map((p) => el("figure", { style: "margin: 0" },
         p.video ? el("video", { src: p.video, poster: p.src, crossorigin: "anonymous", controls: true, preload: "none", playsinline: true, style: "width: 100%; height: 120px; background: #000; border-radius: 8px" })
-          : el("img", { src: p.src, alt: q, loading: "lazy", crossorigin: "anonymous", style: "width: 100%; height: 120px; object-fit: contain; background: #fff; border-radius: 8px" }),
+          : el("img", { src: p.src, alt: qs[0], loading: "lazy", crossorigin: "anonymous", style: "width: 100%; height: 120px; object-fit: contain; background: #fff; border-radius: 8px" }),
         el("figcaption", { class: "muted small", dir: "auto", style: "overflow-wrap: anywhere" }, `${p.artist} · ${p.license}`))));
     };
     for (const [k, name] of kinds) tabs.append(el("button", { type: "button", role: "tab", "data-k": k, onclick: () => void show(k) }, name));

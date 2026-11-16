@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, pictureQueries, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -332,7 +332,10 @@ test("passages keep the page of a file's lecture, and the model sees it to cite"
 });
 
 test("Commons pictures: English terms make the search, only upload.wikimedia.org copies are kept", () => {
-  assert.equal(pictureQuery({ title: "הרצאה על הלב", terms: [{ term: "חדר", en: "Ventricle", explain: "" }, { term: "עלייה", en: "Atrium", explain: "" }] }), "Ventricle");
+  assert.equal(pictureQuery({ title: "הרצאה על הלב", terms: [{ term: "חדר", en: "Ventricle", explain: "" }, { term: "עלייה", en: "Atrium", explain: "" }] }), "Ventricle Atrium");
+  // The summary's own picture words first; a lone term last (it found portraits of people named Chambers).
+  assert.deepEqual(pictureQueries({ title: "הלב", picture: "heart anatomy", terms: [{ term: "מדורים", en: "chambers", explain: "" }, { term: "סיסטולה", en: "systole", explain: "" }] }), ["heart anatomy", "chambers systole", "chambers diagram", "chambers"]);
+  assert.deepEqual(pictureQueries({ title: "הלב", picture: "לב", terms: [] }), ["הלב"]);
   assert.equal(pictureQuery({ title: "הלב \"שלי\"" }), "הלב שלי");
   assert.match(commonsSearchUrl("heart"), /^https:\/\/commons\.wikimedia\.org\/w\/api\.php\?.*origin=\*/);
   const json = { query: { pages: {

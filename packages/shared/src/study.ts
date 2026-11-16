@@ -40,6 +40,8 @@ export interface StudyLecture {
   terms?: StudyTerm[];
   /** A Mermaid diagram of the lecture's main process, when it has one. */
   diagram?: string;
+  /** A few English words to find pictures of the lecture's topic (written with the summary), e.g. "heart anatomy". */
+  picture?: string;
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
   /** Her own notes beside the summary (what the lecturer stressed, what to ask, what she did not get). */
@@ -559,10 +561,21 @@ export const STUDY_TOOLS: StudyTool[] = [
 ];
 
 /** What to search Wikimedia Commons for, for a lecture: its English terms first (Commons is mostly English), else its title. */
-export function pictureQuery(l: Pick<StudyLecture, "title" | "terms">): string {
+export function pictureQuery(l: Pick<StudyLecture, "title" | "terms" | "picture">): string {
+  return pictureQueries(l)[0]!;
+}
+
+/**
+ * Searches to try in order until one finds pictures: the summary's own picture words, then the first two English
+ * terms together (Commons needs every word), then the first term with "diagram". A lone term alone found portraits of
+ * people with that surname on the PC ("chambers" → William Chambers), so it comes last.
+ */
+export function pictureQueries(l: Pick<StudyLecture, "title" | "terms" | "picture">): string[] {
+  const clean = (q: string) => q.replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
   const en = (l.terms ?? []).map((t) => t.en?.trim()).filter((t): t is string => !!t && /^[\x20-\x7e]+$/.test(t));
-  // One term: two terms together as one search found nothing on the PC ("Upper Right Atrium Left Ventricle").
-  return (en[0] ?? l.title).replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  const pic = l.picture?.trim() && /^[\x20-\x7e]+$/.test(l.picture) ? l.picture : undefined;
+  const all = [pic, en[0] && en[1] ? `${en[0]} ${en[1]}` : undefined, en[0] ? `${en[0]} diagram` : undefined, en[0] ?? l.title].filter((q): q is string => !!q).map(clean).filter(Boolean);
+  return [...new Set(all)];
 }
 
 /** A free picture from Wikimedia Commons for a lecture, with its credit. */
