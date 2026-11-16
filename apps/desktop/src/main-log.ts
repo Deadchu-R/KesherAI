@@ -3,7 +3,8 @@
  * asked for it, an error nobody caught, a helper process or the page that crashed, the exit code). Kept on this
  * computer only, cut back when it passes 1 MB. Written synchronously so the last lines survive the process ending.
  */
-import { execFile } from "node:child_process";
+import cp, { execFile } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { crashReporter, type App } from "electron";
@@ -37,7 +38,23 @@ export function startMainLog(app: App, file: string): (line: string) => void {
   } catch {
     // no log yet
   }
+  // The last moment the previous run was alive (kept every 2 s in a small file beside the log).
+  const aliveFile = `${file}.alive`;
+  try {
+    const was = readFileSync(aliveFile, "utf8").trim();
+    if (was) write(`the previous run was last alive at ${was}`);
+  } catch {
+    // first run
+  }
   write(`start ${app.getVersion()} pid ${process.pid}`);
+  const started = Date.now();
+  setInterval(() => {
+    try {
+      writeFileSync(aliveFile, `${new Date().toISOString()} (pid ${process.pid}, ${Math.round((Date.now() - started) / 1000)} s after start)`);
+    } catch {
+      // as above
+    }
+  }, 2000).unref();
   // Native crashes leave a minidump in the app's Crashpad folder (nothing is sent anywhere).
   try {
     crashReporter.start({ uploadToServer: false, compress: false });
@@ -60,4 +77,34 @@ export function startMainLog(app: App, file: string): (line: string) => void {
   app.on("before-quit", () => write(`quit asked by:${(new Error().stack ?? "").split("\n").slice(2, 8).join(" <")}`));
   process.on("exit", (code) => write(`exit ${code}`));
   return write;
+}
+
+/**
+ * Writes down the programs this app starts (once per command every 10 minutes), so a run that is ended from outside
+ * can be matched with a command that ended it (for example a `taskkill` or `Stop-Process`). Set before the core loads.
+ *
+ * @param write - The log's writer.
+ */
+export function watchChildren(write: (line: string) => void): void {
+  const seen = new Map<string, number>();
+  const note = (file: unknown, args: unknown) => {
+    const line = `${String(file)} ${Array.isArray(args) ? args.map(String).join(" ") : ""}`.replace(/\s+/g, " ").slice(0, 300);
+    const now = Date.now();
+    if ((seen.get(line) ?? 0) > now - 10 * 60_000) return;
+    seen.set(line, now);
+    write(`child: ${line}`);
+  };
+  const wrap = <F extends (...a: never[]) => unknown>(f: F): F =>
+    ((...a: Parameters<F>) => {
+      try {
+        note(a[0], a[1]);
+      } catch {
+        // never in the way
+      }
+      return f(...a);
+    }) as F;
+  cp.spawn = wrap(cp.spawn);
+  cp.execFile = wrap(cp.execFile);
+  cp.exec = wrap(cp.exec);
+  syncBuiltinESMExports();
 }
