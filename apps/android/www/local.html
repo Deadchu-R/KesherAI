@@ -199,6 +199,11 @@
   .app-tabs button[aria-current] { color: var(--text); }
   .app-tabs button[aria-current] svg { stroke: var(--accent); }
   .app-tabs button .i { font-size: 19px; }
+  /* Press, slide across the bar (the button under the finger lights up), and only lifting chooses, like Apple's tab bars. */
+  .app-tabs { touch-action: none; user-select: none; -webkit-user-select: none; }
+  .app-tabs button { margin: 6px 4px; border-radius: 14px; transition: background .08s, transform .08s, color .08s; }
+  .app-tabs button.hot { color: var(--text); background: rgb(152 163 255 / 0.22); transform: scale(1.04); }
+  .app-tabs button.hot svg { stroke: var(--accent); }
   .c-search { display: flex; align-items: center; gap: 8px; height: 44px; margin: 0 0 8px; padding: 0 12px; border-radius: 12px; background: var(--panel); border: 1px solid #2a2a2e; color: var(--muted); }
   .c-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; outline: none; }
   .c-filters { display: flex; gap: 6px; margin: 0 0 4px; }
@@ -824,6 +829,26 @@
     sessionStorage.setItem("kesherai-shared-text", text);
     location.href = "local.html?new=1";
   };
+  // The bottom bar: press, slide (the button under the finger lights up, with a small buzz), lift to choose.
+  {
+    const bar = $("appTabs");
+    let hot = null, pressing = false, swallow = false;
+    const at = (x, y) => { const el = document.elementFromPoint(x, y); return el && bar.contains(el) ? el.closest("[data-go]") : null; };
+    const light = (el) => { if (el === hot) return; hot?.classList.remove("hot"); hot = el; if (hot) { hot.classList.add("hot"); navigator.vibrate?.(8); } };
+    bar.addEventListener("pointerdown", (e) => { if (e.button) return; pressing = true; swallow = true; bar.setPointerCapture?.(e.pointerId); light(at(e.clientX, e.clientY)); });
+    bar.addEventListener("pointermove", (e) => { if (pressing) light(at(e.clientX, e.clientY)); });
+    const end = (e) => {
+      if (!pressing) return;
+      pressing = false;
+      const chosen = e.type === "pointerup" ? at(e.clientX, e.clientY) : null;
+      light(null);
+      if (chosen) setTimeout(() => chosen.click(), 0);
+    };
+    bar.addEventListener("pointerup", end);
+    bar.addEventListener("pointercancel", end);
+    // The browser's own click (a plain tap) is replaced by the one above; keyboard clicks still work.
+    bar.addEventListener("click", (e) => { if (swallow && e.isTrusted && e.detail) { e.preventDefault(); e.stopImmediatePropagation(); } swallow = false; }, true);
+  }
   document.querySelectorAll("#appTabs [data-go]").forEach((b) => (b.onclick = () => {
     const go = b.dataset.go;
     if (go === "chats") { drawChats(); return showPage("chatsView", T("צ׳אטים", "Chats")); }

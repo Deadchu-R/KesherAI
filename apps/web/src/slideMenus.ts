@@ -140,7 +140,11 @@ export function installSlideMenus(): void {
   addEventListener(
     "pointermove",
     (e) => {
-      if (bar) setHot(barItemAt(e.clientX, e.clientY));
+      if (!bar) return;
+      const next = barItemAt(e.clientX, e.clientY);
+      // A small buzz when the finger reaches another button (phones that have it).
+      if (next && !next.classList.contains("slide-hot")) navigator.vibrate?.(8);
+      setHot(next);
     },
     true,
   );
