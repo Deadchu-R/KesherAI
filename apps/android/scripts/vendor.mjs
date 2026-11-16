@@ -22,4 +22,17 @@ mkdirSync(join(www, "fonts"), { recursive: true });
 for (const sub of ["hebrew", "latin"]) {
   for (const w of [400, 500]) cpSync(join(rubik, `rubik-${sub}-${w}-normal.woff2`), join(www, "fonts", `rubik-${sub}-${w}.woff2`));
 }
+// The study helpers for the phone's own study page, bundled from the shared code (esbuild comes with vite).
+const webRequire = createRequire(join(here, "..", "..", "web", "package.json"));
+const esbuild = createRequire(webRequire.resolve("vite"))("esbuild");
+esbuild.buildSync({
+  entryPoints: [join(here, "..", "study-core.ts")],
+  bundle: true,
+  format: "esm",
+  minify: true,
+  target: "es2020",
+  outfile: join(www, "study-core.js"),
+  nodePaths: [join(here, "..", "..", "..", "packages", "core", "node_modules")],
+  logLevel: "warning",
+});
 console.log("vendor files copied to www/vendor");
