@@ -11,7 +11,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ⬜ Fab search and install from the chat
 - ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)
 - ✅ KesherAI as a model provider for Unreal and Unity AI: a guide in Settings → For developers → API (Unity AI Gateway with Claude Code or Codex pointed at KesherAI; Unreal plugins with an OpenAI-compatible provider); KesherAI's Anthropic API answered a Claude Code style tool call on the PC. 👤 The check inside Unity AI itself needs a Unity AI Gateway seat
-- ⬜ Depth and normals turned into styled frames (like Unreal Canvas)
+- ✅ Depth and normals turned into styled frames (Nodes → ready flows: "A styled frame from the engine's depth and normals", ControlNet 1.1 depth + normals on SD 1.5; how to export the passes from Unreal and Unity). 🔧 Not yet run on the PC (the card was busy tonight)
 - ✅ Music as a chat tool (make_music, ACE-Step 1.5 / XL)
 - ✅ Known engine bugs checked before each build (known-issues.ts)
 

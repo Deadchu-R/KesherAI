@@ -302,6 +302,39 @@ export function readyFlows(): ReadyFlow[] {
         "12": { class_type: "SaveImage", inputs: { images: ["11", 0], filename_prefix: "styled/KesherAI" } },
       },
     },
+    {
+      id: "styled-frame-depth",
+      icon: "🧊",
+      title: { en: "A styled frame from the engine's depth and normals", he: "פריים מעוצב מהעומק והנורמלים של המנוע" },
+      description: {
+        en: "Like Unreal's Canvas: export the scene's depth (and, if you like, its normals) from the engine and describe the look. Depth keeps where things are, normals keep their surfaces, and the model paints the rest. Unreal: viewport → View Mode → Buffer Visualization → Scene Depth / World Normal, then a high resolution screenshot of each. Unity: a depth or normals render (URP Rendering Debugger). Near should be light: invert the depth when near is dark.",
+        he: "כמו ה-Canvas של Unreal: מייצאים מהמנוע את העומק של הסצנה (ואם רוצים גם את הנורמלים) ומתארים את המראה. העומק שומר איפה כל דבר נמצא, הנורמלים שומרים על המשטחים, והמודל מצייר את השאר. ב-Unreal: ‏viewport ← View Mode ← Buffer Visualization ← Scene Depth / World Normal, וצילום מסך ברזולוציה גבוהה של כל אחד. ב-Unity: רינדור עומק או נורמלים (URP Rendering Debugger). קרוב צריך להיות בהיר: אם קרוב כהה, הופכים את העומק.",
+      },
+      license: { name: "CreativeML Open RAIL-M (Stable Diffusion 1.5); ControlNet 1.1: OpenRAIL", url: "https://huggingface.co/spaces/CompVis/stable-diffusion-license" },
+      files: [
+        { label: "Stable Diffusion 1.5 (fp16)", repo: "Comfy-Org/stable-diffusion-v1-5-archive", path: "v1-5-pruned-emaonly-fp16.safetensors", rel: "image/v1-5-pruned-emaonly-fp16.safetensors", gb: 2.1 },
+        { label: "ControlNet 1.1 depth (fp16)", repo: "comfyanonymous/ControlNet-v1-1_fp16_safetensors", path: "control_v11f1p_sd15_depth_fp16.safetensors", rel: "controlnet/control_v11f1p_sd15_depth_fp16.safetensors", gb: 0.7 },
+        { label: "ControlNet 1.1 normals (fp16)", repo: "comfyanonymous/ControlNet-v1-1_fp16_safetensors", path: "control_v11p_sd15_normalbae_fp16.safetensors", rel: "controlnet/control_v11p_sd15_normalbae_fp16.safetensors", gb: 0.7 },
+      ],
+      checkpoints: { "1": "v1-5-pruned-emaonly-fp16.safetensors" },
+      flow: {
+        "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "v1-5-pruned-emaonly-fp16.safetensors" }, _meta: { title: "Stable Diffusion 1.5" } },
+        "2": { class_type: "LoadImage", inputs: { image: "example.png" }, _meta: { title: "The scene's depth (near is light)" } },
+        "3": { class_type: "ImageScale", inputs: { image: ["2", 0], upscale_method: "lanczos", width: 768, height: 432, crop: "center" }, _meta: { title: "Size (16:9)" } },
+        "4": { class_type: "LoadImage", inputs: { image: "example.png" }, _meta: { title: "The scene's normals (or the depth again)" } },
+        "5": { class_type: "ImageScale", inputs: { image: ["4", 0], upscale_method: "lanczos", width: 768, height: 432, crop: "center" } },
+        "6": { class_type: "ControlNetLoader", inputs: { control_net_name: "control_v11f1p_sd15_depth_fp16.safetensors" } },
+        "7": { class_type: "ControlNetLoader", inputs: { control_net_name: "control_v11p_sd15_normalbae_fp16.safetensors" } },
+        "8": { class_type: "CLIPTextEncode", inputs: { clip: ["1", 1], text: "stylized game key art, painterly, warm sunset light, detailed" }, _meta: { title: "The look you want" } },
+        "9": { class_type: "CLIPTextEncode", inputs: { clip: ["1", 1], text: "blurry, low quality, text, watermark, distorted" }, _meta: { title: "What to avoid" } },
+        "10": { class_type: "ControlNetApplyAdvanced", inputs: { positive: ["8", 0], negative: ["9", 0], control_net: ["6", 0], image: ["3", 0], strength: 1, start_percent: 0, end_percent: 1, vae: ["1", 2] }, _meta: { title: "Keep where things are (depth strength)" } },
+        "11": { class_type: "ControlNetApplyAdvanced", inputs: { positive: ["10", 0], negative: ["10", 1], control_net: ["7", 0], image: ["5", 0], strength: 0.5, start_percent: 0, end_percent: 0.8, vae: ["1", 2] }, _meta: { title: "Keep the surfaces (normals strength; 0 without normals)" } },
+        "12": { class_type: "EmptyLatentImage", inputs: { width: 768, height: 432, batch_size: 1 } },
+        "13": { class_type: "KSampler", inputs: { model: ["1", 0], positive: ["11", 0], negative: ["11", 1], latent_image: ["12", 0], seed: seed(), steps: 25, cfg: 7, sampler_name: "dpmpp_2m", scheduler: "karras", denoise: 1 } },
+        "14": { class_type: "VAEDecode", inputs: { samples: ["13", 0], vae: ["1", 2] } },
+        "15": { class_type: "SaveImage", inputs: { images: ["14", 0], filename_prefix: "styled/KesherAI-depth" } },
+      },
+    },
   ];
 }
 
