@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MCP_PRESETS, McpManager, mcpResultText, mcpToolName, migratePreset, missingTool, presetHelp, rpcFromSse, unityRelay } from "./mcp.js";
+import { MCP_PRESETS, McpManager, appUri, forModel, mcpResultText, mcpToolName, migratePreset, missingTool, presetHelp, rpcFromSse, unityRelay } from "./mcp.js";
 
 const FAKE_STDIO = `
 let buf = "";
@@ -136,4 +136,42 @@ test("Unity and Unreal use their official servers; old entries are updated", () 
   const u = migratePreset({ id: "unity", name: "Unity", preset: "unity", transport: "stdio", command: "npx", args: ["-y", "mcp-unity"], enabled: true });
   assert.deepEqual(u.args, ["--mcp"]);
   assert.match(presetHelp(old, "fetch failed")!, /Unreal MCP plugin/);
+});
+
+const FAKE_APP = `
+let buf = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (d) => {
+  buf += d;
+  let i;
+  while ((i = buf.indexOf("\\n")) >= 0) {
+    const line = buf.slice(0, i); buf = buf.slice(i + 1);
+    if (!line.trim()) continue;
+    const m = JSON.parse(line);
+    const reply = (result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result }) + "\\n");
+    if (m.method === "initialize") reply({ capabilities: { tools: {}, resources: {} }, serverInfo: { name: "app", version: "1" }, echoCaps: m.params.capabilities });
+    else if (m.method === "tools/list") reply({ tools: [
+      { name: "show", _meta: { ui: { resourceUri: "ui://app/view" } } },
+      { name: "refresh", _meta: { ui: { resourceUri: "ui://app/view", visibility: ["app"] } }, annotations: { readOnlyHint: true } },
+    ] });
+    else if (m.method === "resources/read") reply({ contents: [{ uri: m.params.uri, mimeType: "text/html;profile=mcp-app", text: "<html><head></head><body>view</body></html>", _meta: { ui: { csp: { connectDomains: ["https://api.example.com"] } } } }] });
+  }
+});
+`;
+
+test("MCP Apps: a tool's view is read from its server, and a tool kept for the view is hidden from the model", async () => {
+  const { dir, mcp } = await manager();
+  const script = join(dir, "app.cjs");
+  await writeFile(script, FAKE_APP);
+  await mcp.upsert({ id: "app", name: "App", transport: "stdio", command: process.execPath, args: [script], enabled: true });
+  await mcp.connect("app");
+  const names = mcp.tools().map((t) => t.name);
+  assert.deepEqual(names, ["mcp_app_show"]);
+  assert.equal(appUri(mcp.statusOf("app").tools[0]!), "ui://app/view");
+  assert.ok(mcp.toolOf("app", "refresh"), "the view may still call it");
+  const view = await mcp.readResource("app", "ui://app/view");
+  assert.match(view!.text, /view/);
+  assert.equal(view!.mimeType, "text/html;profile=mcp-app");
+  assert.equal(forModel({ name: "x", _meta: { ui: { visibility: ["model", "app"] } } }), true);
+  await mcp.remove("app");
 });

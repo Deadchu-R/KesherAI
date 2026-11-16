@@ -8,6 +8,7 @@ import { desktop } from "./library";
 import { RichText } from "./RichText";
 import { Select } from "./ui/Select";
 import { durations } from "./settings/PermissionsSection";
+import { McpAppView } from "./McpAppView";
 
 /*
  * The cards a chat shows between messages: a tool the model ran (with its
@@ -73,7 +74,7 @@ export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<
     );
   }
   const state = !result ? "pending" : result.ok ? "ok" : "fail";
-  return (
+  const card = (
     <details className={`tool ${state}`}>
       <summary>
         <span className="tool-state" aria-hidden>{state === "pending" ? "…" : state === "ok" ? "✓" : "✕"}</span>
@@ -86,6 +87,19 @@ export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<
       {result && !result.diff && <pre className="code" dir="ltr">{result.output}</pre>}
     </details>
   );
+  // MCP Apps: the tool's own view, open under the step (text it sends goes into the message box).
+  if (!result?.app) return card;
+  return (
+    <>
+      {card}
+      <McpAppView app={result.app} onMessage={composeText} />
+    </>
+  );
+}
+
+/** Puts text in the chat's message box (a tool's view asked to). */
+function composeText(text: string): void {
+  window.dispatchEvent(new CustomEvent("kesher:compose", { detail: text }));
 }
 
 /** Shows the server's approval reason in the user's language. */

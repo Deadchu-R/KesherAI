@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { realpathSync } from "node:fs";
 import { createTwoFilesPatch } from "diff";
-import type { ToolRisk, ToolSpec } from "@kesher/shared";
+import type { McpAppRef, ToolRisk, ToolSpec } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
 import { buildExecutableTool } from "./build.js";
 import { SYSTEM_TOOLS } from "./system-tools.js";
@@ -26,6 +26,8 @@ export interface ToolOutput {
   files?: string[];
   /** Pictures for the model to look at (vision models), e.g. a screenshot. Only the latest ones are kept in the conversation. */
   images?: Array<{ mimeType: string; data: string }>;
+  /** An MCP App: the tool's own view, shown under the result (the model does not see it). */
+  app?: McpAppRef;
 }
 
 /** What a tool can use while running. */

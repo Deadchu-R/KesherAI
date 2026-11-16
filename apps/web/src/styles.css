@@ -2539,3 +2539,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .osk-key.on { outline: 3px solid var(--accent, #7aa2ff); background: var(--panel-2); }
 .osk-help { text-align: center; font-size: 12px; color: var(--text-2); }
 @media (max-width: 480px) { .osk-key { min-width: 0; flex: 1 1 0; height: 40px; font-size: 16px; } }
+/* MCP Apps: a tool's own view in the chat. */
+.mcp-app { display: block; width: 100%; border: 0; border-radius: calc(12px * var(--r-scale, 1)); background: transparent; margin: 6px 0 10px; }
+.mcp-app.bordered { border: 1px solid var(--border); }

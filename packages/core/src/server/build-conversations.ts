@@ -14,7 +14,7 @@ import { redact } from "../fault-log.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import { googleTools } from "../google-tools.js";
 import { knowledgeTools } from "../knowledge.js";
-import { mcpResultText } from "../mcp.js";
+import { appUri, mcpResultText } from "../mcp.js";
 import { memoryTools } from "../memory-tools.js";
 import { setAppearance } from "../routes/parts.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
@@ -160,7 +160,11 @@ export function buildConversations(p: ConversationParts): ConversationManager {
           const r = await mcp.call(server.id, tool.name, input, ctx.signal);
           const { text, images } = mcpResultText(r);
           if (r.isError) throw new Error(text);
-          return { output: text, ...(images.length ? { images } : {}) };
+          // An MCP App: its view shows under the result, given the input and the result (kept small in the chat).
+          const uri = appUri(tool);
+          const raw = uri ? JSON.stringify({ content: r.content ?? [], structuredContent: r.structuredContent }) : "";
+          const app = uri && raw.length < 512 * 1024 ? { server: server.id, uri, input, result: JSON.parse(raw) as unknown } : undefined;
+          return { output: text, ...(images.length ? { images } : {}), ...(app ? { app } : {}) };
         },
       })),
     ],

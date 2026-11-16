@@ -144,6 +144,8 @@ export type AgentEvent = EventBase &
         audioIds?: string[];
         /** Files made for the user, relative to the conversation's folder (e.g. a built .exe). */
         files?: string[];
+        /** An MCP App: the tool's own view (a `ui://` resource on that server), with the call's input and result. */
+        app?: McpAppRef;
       }
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
     /** After a run that changed files: what changed (paths as shown), with "Undo all" for the run. */
@@ -213,4 +215,16 @@ export type TeamRole = "planner" | "reviewer";
 export interface Teammate {
   role: TeamRole;
   modelId: string;
+}
+
+/** A tool's own view (MCP Apps): which server and `ui://` resource, and what the view is given. */
+export interface McpAppRef {
+  /** The MCP server's id in KesherAI. */
+  server: string;
+  /** The view, e.g. `ui://weather/forecast`. */
+  uri: string;
+  /** The tool's input. */
+  input: unknown;
+  /** The tool's raw result (content and structuredContent). */
+  result: unknown;
 }

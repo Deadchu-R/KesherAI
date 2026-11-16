@@ -488,6 +488,17 @@ installer. Open: S2 connection keys in plain text in config.json (encrypt with s
 Android bridge answers only the paired computer and links open outside the app, S4 signing (waits on SignPath),
 S5 an outside scanner's rules for Electron.
 
+## Scan 86 (2026-11-16, 0.6.264: MCP Apps)
+
+- A tool's view (third-party HTML from an MCP server) runs in `<iframe sandbox="allow-scripts">` with no
+  `allow-same-origin`: an opaque origin, so no access to KesherAI's page, cookies, localStorage or the API token; a CSP
+  meta first in `<head>` (default-src 'none', https domains only from the server's own list, form-action and base-uri
+  'none'). Messages are taken only from that frame's `contentWindow`.
+- What the view can do: call tools of its own server only (`toolOf` checks the server and the disabled list); tools
+  not marked read-only need the person's confirm (the server refuses without `confirmed`); open https links in the
+  browser; put text in the message box (never sends by itself). Views over 8 MB are refused; `ui://` only.
+- Tool results kept on the step for the view: ≤ 512 KB, the model does not see them.
+
 ## Scan 85 (2026-11-16, 0.6.263) and the app that closed after ~20 s
 
 - Cause found (0.6.256–0.6.262): the knowledge indexes kept vectors as JSON numbers (2.4 GB, one base 515 MB) and

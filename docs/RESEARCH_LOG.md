@@ -1432,3 +1432,24 @@ Stopped at: building (store and public page first, then the chat menu and the se
   the background after the lecture (not live), or a cloud key when the user has one; nothing needs a graphics card.
 - Stopped at: Hebrew accuracy of whisper small/base on a real lecture; which 1–4 B model writes good Hebrew
   flashcards; FSRS library licence check before adding a dependency (ask Roee).
+
+## F15: MCP Apps — a tool's own view in the chat (2026-11-16)
+
+- Spec (extension "io.modelcontextprotocol/ui", protocol 2026-01-26; hosts: Claude, Claude Desktop, VS Code Copilot,
+  M365 Copilot, Goose, Postman, MCPJam): a tool names a `ui://` resource in `_meta.ui.resourceUri`
+  (`visibility: ["app"]` keeps a tool for the view only); the resource is `text/html;profile=mcp-app` with optional
+  `_meta.ui.csp` (connectDomains, resourceDomains) and `prefersBorder`. The host shows it in a sandboxed iframe and
+  talks JSON-RPC over postMessage: the view sends `ui/initialize` → host answers hostInfo/hostCapabilities/
+  hostContext → view sends `ui/notifications/initialized` → host sends `ui/notifications/tool-input` then
+  `tool-result`; the view may send `tools/call`, `ui/open-link`, `ui/message`, `ui/update-model-context`,
+  `ui/request-display-mode`, `ui/notifications/size-changed`; teardown is `ui/resource-teardown`. Default CSP: nothing
+  from outside; no blob:.
+- Built: the client declares the extension at `initialize`; tools with `visibility: ["app"]` are hidden from the
+  model; an MCP tool with a view returns it with its input and result (≤ 512 KB) on the step; the chat shows
+  `<McpAppView>` under the step: `sandbox="allow-scripts"` only (opaque origin), a CSP meta put first in the head
+  with only the server's named https domains, messages accepted only from that frame's window, height from
+  size-changed (60–800 px). The view can call only its own server's tools (`/api/mcp/servers/:id/app-call`); a tool
+  not marked read-only needs the person's yes in the chat; links: https only, opened in the browser; `ui/message`
+  puts text in the message box (the person sends it).
+- Stopped at: no fullscreen/pip display modes; `ui/update-model-context` is acknowledged but not given to the model;
+  not tried with a real MCP App server on the PC yet.

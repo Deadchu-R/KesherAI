@@ -53,6 +53,32 @@ export interface McpTool {
   description?: string;
   inputSchema?: Record<string, unknown>;
   annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; title?: string };
+  /** MCP Apps: the tool's own view (`ui.resourceUri`, a `ui://` resource) and who sees the tool (`["model", "app"]`). */
+  _meta?: { ui?: { resourceUri?: string; visibility?: string[] } };
+}
+
+/** The view type MCP Apps use (the "io.modelcontextprotocol/ui" extension). */
+export const MCP_APP_MIME = "text/html;profile=mcp-app";
+
+/**
+ * A tool's view, when it has one KesherAI can show.
+ *
+ * @param tool - The tool as listed.
+ * @returns Its `ui://` resource.
+ */
+export function appUri(tool: McpTool): string | undefined {
+  const u = tool._meta?.ui?.resourceUri;
+  return typeof u === "string" && u.startsWith("ui://") ? u : undefined;
+}
+
+/**
+ * Whether the model may call a tool (MCP Apps can keep a tool for their view only: `visibility: ["app"]`).
+ *
+ * @param tool - The tool as listed.
+ */
+export function forModel(tool: McpTool): boolean {
+  const v = tool._meta?.ui?.visibility;
+  return !Array.isArray(v) || v.includes("model");
 }
 
 /** What a tool call returned. */
@@ -276,7 +302,7 @@ export class McpManager {
           : new HttpTransport(cfg, async () => (await this.tokenFor(id)) ?? (cfg.headers?.Authorization || cfg.headers?.authorization ? undefined : this.presetToken(cfg)), () => this.refreshToken(id));
       this.setStatus(id, { state: "connecting", tools: [] }, t);
       try {
-        const hello = (await t.request("initialize", { protocolVersion: PROTOCOL, capabilities: { roots: { listChanged: false } }, clientInfo: CLIENT })) as { serverInfo?: { name?: string; version?: string } };
+        const hello = (await t.request("initialize", { protocolVersion: PROTOCOL, capabilities: { roots: { listChanged: false }, extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [MCP_APP_MIME] } } }, clientInfo: CLIENT })) as { serverInfo?: { name?: string; version?: string } };
         await t.notify("notifications/initialized");
         const tools: McpTool[] = [];
         let cursor: string | undefined;
@@ -309,7 +335,7 @@ export class McpManager {
       const st = this.live.get(s.id)?.status;
       if (st?.state !== "ready") continue;
       for (const tool of st.tools) {
-        if (s.disabledTools?.includes(tool.name)) continue;
+        if (s.disabledTools?.includes(tool.name) || !forModel(tool)) continue;
         const name = mcpToolName(s.id, tool.name);
         out.push({
           server: s,
@@ -345,6 +371,39 @@ export class McpManager {
       await this.connect(serverId);
       return (await this.live.get(serverId)!.t.request("tools/call", { name: tool, arguments: args }, signal)) as McpCallResult;
     }
+  }
+
+  /**
+   * Reads a resource from a ready server (an MCP App's `ui://` view).
+   *
+   * @param serverId - The server.
+   * @param uri - The resource.
+   * @returns Its text (HTML) and mime type, or undefined when the server has none.
+   */
+  async readResource(serverId: string, uri: string): Promise<{ text: string; mimeType?: string; meta?: unknown } | undefined> {
+    let entry = this.live.get(serverId);
+    if (entry?.status.state !== "ready") {
+      await this.connect(serverId);
+      entry = this.live.get(serverId);
+    }
+    if (!entry || entry.status.state !== "ready") return undefined;
+    const r = (await entry.t.request("resources/read", { uri })) as { contents?: Array<{ uri?: string; mimeType?: string; text?: string; blob?: string; _meta?: unknown }> };
+    const c = r.contents?.find((x) => x.text !== undefined || x.blob !== undefined);
+    if (!c) return undefined;
+    const text = c.text ?? Buffer.from(c.blob ?? "", "base64").toString("utf8");
+    return { text, ...(c.mimeType ? { mimeType: c.mimeType } : {}), ...(c._meta ? { meta: c._meta } : {}) };
+  }
+
+  /**
+   * A tool of a ready server, by its own name (for calls from that server's own view).
+   *
+   * @param serverId - The server.
+   * @param name - The tool's own name.
+   */
+  toolOf(serverId: string, name: string): McpTool | undefined {
+    const s = this.servers.find((x) => x.id === serverId && x.enabled);
+    if (!s || s.disabledTools?.includes(name)) return undefined;
+    return this.live.get(serverId)?.status.tools.find((t) => t.name === name);
   }
 
   // ---------- sign-in for online servers (MCP authorization: OAuth 2.1 + PKCE, dynamic registration) ----------

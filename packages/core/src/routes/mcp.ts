@@ -86,6 +86,36 @@ export async function mcpRoutes(app: FastifyInstance, s: KesherServices): Promis
     return reply.send(s.mcp.statusOf(req.params.id));
   });
 
+  // MCP Apps: a tool's own view (a `ui://` resource on that server), shown in the chat in a sandboxed frame.
+  app.get<{ Params: { id: string }; Querystring: { uri?: string } }>("/api/mcp/servers/:id/ui", async (req, reply) => {
+    const uri = String(req.query.uri ?? "");
+    if (!/^ui:\/\/[^\s]{1,500}$/.test(uri)) return reply.code(400).send({ error: "Not a ui:// view." });
+    try {
+      const r = await s.mcp.readResource(req.params.id, uri);
+      if (!r) return reply.code(404).send({ error: "The server has no such view." });
+      if (r.text.length > 8 * 1024 * 1024) return reply.code(413).send({ error: "The view is larger than 8 MB." });
+      const ui = (r.meta as { ui?: { csp?: Record<string, unknown>; prefersBorder?: boolean } } | undefined)?.ui;
+      const list = (k: string) => (Array.isArray(ui?.csp?.[k]) ? (ui!.csp![k] as unknown[]).filter((d): d is string => typeof d === "string" && /^https:\/\/[\w.*:-]+$/.test(d)).slice(0, 20) : []);
+      return { html: r.text, csp: { connect: list("connectDomains"), resource: list("resourceDomains") }, prefersBorder: ui?.prefersBorder !== false };
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+  // A call from a tool's own view: only that server's tools; one that changes things needs the person's yes in the
+  // chat (the page asks and sends `confirmed`).
+  app.post<{ Params: { id: string }; Body: { name?: string; arguments?: Record<string, unknown>; confirmed?: boolean } }>("/api/mcp/servers/:id/app-call", async (req, reply) => {
+    const name = String(req.body?.name ?? "");
+    const tool = s.mcp.toolOf(req.params.id, name);
+    if (!tool) return reply.code(404).send({ error: "This app's server has no such tool." });
+    const readOnly = !!tool.annotations?.readOnlyHint && !tool.annotations.destructiveHint;
+    if (!readOnly && req.body?.confirmed !== true) return reply.code(409).send({ error: "needs-confirm", title: tool.annotations?.title ?? tool.name });
+    try {
+      return await s.mcp.call(req.params.id, name, (req.body?.arguments ?? {}) as Record<string, unknown>);
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
   /** Returns the service's consent page to open in the browser. */
   app.post<{ Params: { id: string } }>("/api/mcp/servers/:id/sign-in", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Sign in from the computer that runs KesherAI." });

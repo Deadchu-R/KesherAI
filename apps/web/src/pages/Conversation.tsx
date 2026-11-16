@@ -68,6 +68,15 @@ export function ConversationPage({ id }: { id: string }) {
   /** Live output of running tools (builds, commands), by call id. */
   const [liveOut, setLiveOut] = useState<Record<string, string>>({});
   const [input, setInput] = useState("");
+  // A tool's own view (MCP Apps) can put text in the message box; the person sends it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const text = String((e as CustomEvent).detail ?? "");
+      if (text) setInput((v) => (v.trim() ? `${v}\n${text}` : text));
+    };
+    addEventListener("kesher:compose", on);
+    return () => removeEventListener("kesher:compose", on);
+  }, []);
   const personas = usePersonas();
   const [error, setError] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
