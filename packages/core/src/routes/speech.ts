@@ -72,6 +72,12 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     return reply.code(202).send({ ok: true });
   });
 
+  /** Loads the speech models ahead (the lecture recorder opens before class). */
+  app.post("/api/speech/stt/warm", async () => {
+    void s.whisper.warm().catch(() => undefined);
+    return { ok: true };
+  });
+
   // The recording arrives as raw WAV bytes.
   app.addContentTypeParser(["audio/wav", "audio/x-wav", "application/octet-stream"], { parseAs: "buffer", bodyLimit: 60 * 1024 * 1024 }, (_req, body, done) => done(null, body));
 

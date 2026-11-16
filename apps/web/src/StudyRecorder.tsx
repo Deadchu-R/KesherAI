@@ -33,6 +33,8 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string) => 
     return () => clearInterval(id);
   }, [state]);
   useEffect(() => () => void rec.current?.stop(), []);
+  // Load the speech models now, before class, so the first half minute is not slow.
+  useEffect(() => void fetch(withToken("/api/speech/stt/warm"), { method: "POST" }).catch(() => undefined), []);
 
   const start = async () => {
     setError("");

@@ -293,6 +293,10 @@ export class WhisperEngine {
    * @returns The text.
    */
   async transcribe(wav: Buffer, language = "auto", ext = ".wav", timestamps = false): Promise<string> {
+    if (!timestamps && ext.toLowerCase() === ".wav") {
+      const quick = await this.fast(wav, language).catch(() => undefined);
+      if (quick !== undefined) return cleanTranscript(quick);
+    }
     const out = await this.raw(wav, language, ext, timestamps);
     return timestamps ? timedTranscript(out) : cleanTranscript(out);
   }
@@ -306,6 +310,114 @@ export class WhisperEngine {
    */
   async transcribeParts(wav: Buffer, language = "auto"): Promise<SpeechPart[]> {
     return speechParts(await this.raw(wav, language, ".wav", true));
+  }
+
+  /** whisper-server processes that keep a model loaded (one per model file), with when they were last used. */
+  private servers = new Map<string, { port: number; proc: import("node:child_process").ChildProcess; ready: Promise<boolean>; used: number }>();
+  private reaper?: ReturnType<typeof setInterval>;
+
+  private async serverBinary(): Promise<string | undefined> {
+    const exe = process.platform === "win32" ? "whisper-server.exe" : "whisper-server";
+    return findFile(this.dir, exe);
+  }
+
+  /** A loaded model, ready for pieces (started on first use; closed after 10 idle minutes). */
+  private async server(model: string): Promise<number | undefined> {
+    const have = this.servers.get(model);
+    if (have) {
+      have.used = Date.now();
+      return (await have.ready) ? have.port : undefined;
+    }
+    const bin = await this.serverBinary();
+    if (!bin) return undefined;
+    const port = 27000 + Math.floor(Math.random() * 2000);
+    const proc = spawn(bin, ["-m", model, "--host", "127.0.0.1", "--port", String(port), "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { windowsHide: true, stdio: "ignore" });
+    const ready = (async () => {
+      for (let i = 0; i < 120; i++) {
+        if (proc.exitCode !== null) return false;
+        if (await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false)) return true;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      return false;
+    })();
+    const entry = { port, proc, ready, used: Date.now() };
+    this.servers.set(model, entry);
+    proc.on("exit", () => this.servers.get(model) === entry && this.servers.delete(model));
+    if (!this.reaper) process.once("exit", () => this.closeServers());
+    this.reaper ??= setInterval(() => {
+      for (const [k, v] of this.servers) if (Date.now() - v.used > 10 * 60_000) { v.proc.kill(); this.servers.delete(k); }
+      if (!this.servers.size) { clearInterval(this.reaper); this.reaper = undefined; }
+    }, 60_000);
+    this.reaper.unref?.();
+    if (!(await ready)) {
+      proc.kill();
+      this.servers.delete(model);
+      return undefined;
+    }
+    return port;
+  }
+
+  /** Text (and the language whisper heard) from a loaded model. */
+  private async viaServer(port: number, wav: Buffer, language: string): Promise<{ text: string; language?: string }> {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "piece.wav");
+    form.append("response_format", "verbose_json");
+    form.append("language", language);
+    form.append("temperature", "0");
+    const r = await fetch(`http://127.0.0.1:${port}/inference`, { method: "POST", body: form, signal: AbortSignal.timeout(300_000) });
+    if (!r.ok) throw new Error(`The speech engine failed (${r.status}).`);
+    const j = (await r.json()) as { text?: string; language?: string; detected_language?: string };
+    return { text: (j.text ?? "").trim(), ...(j.language || j.detected_language ? { language: (j.language ?? j.detected_language)!.toLowerCase() } : {}) };
+  }
+
+  /**
+   * Loads the speech models ahead (the lecture recorder calls this when it opens, before class): the Hebrew model
+   * when it is here, and the general one. Nothing happens without the server program (older engines).
+   */
+  async warm(): Promise<void> {
+    const he = this.modelPath("he");
+    const hasHe = !!(await stat(he).catch(() => undefined))?.size;
+    const general = (await Promise.all((Object.keys(MODELS) as ModelKey[]).filter((k) => k !== "he").map(async (k) => ((await stat(this.modelPath(k)).catch(() => undefined))?.size ? this.modelPath(k) : undefined)))).find(Boolean);
+    await Promise.all([hasHe ? this.server(he) : undefined, general ? this.server(general) : undefined]);
+  }
+
+  /** Closes the loaded models. */
+  closeServers(): void {
+    for (const v of this.servers.values()) v.proc.kill();
+    this.servers.clear();
+  }
+
+  /**
+   * Transcribes through loaded models when the server program is here: "auto" asks the general model (which also
+   * says the language) and moves a Hebrew piece to the Hebrew model. Undefined when it cannot (then the CLI runs).
+   */
+  private async fast(wav: Buffer, language: string): Promise<string | undefined> {
+    if (!(await this.serverBinary())) return undefined;
+    const he = this.modelPath("he");
+    const hasHe = !!(await stat(he).catch(() => undefined))?.size;
+    const general = (await Promise.all((Object.keys(MODELS) as ModelKey[]).filter((k) => k !== "he").map(async (k) => ((await stat(this.modelPath(k)).catch(() => undefined))?.size ? this.modelPath(k) : undefined)))).find(Boolean);
+    if (language === "he" && hasHe) {
+      const p = await this.server(he);
+      return p ? (await this.viaServer(p, wav, "he")).text : undefined;
+    }
+    if (!general) return undefined;
+    const lang = language === "auto" && hasHe ? await this.autoLanguage(async () => "auto") : language;
+    if (lang === "he" && hasHe) {
+      const p = await this.server(he);
+      return p ? (await this.viaServer(p, wav, "he")).text : undefined;
+    }
+    const gp = await this.server(general);
+    if (!gp) return undefined;
+    const out = await this.viaServer(gp, wav, /^[a-z]{2,3}$|^auto$/.test(lang) ? lang : "auto");
+    if (language === "auto" && hasHe) {
+      this.recentLangs = [...this.recentLangs.slice(0, -1), out.language ?? "auto"].slice(-3);
+      if (this.recentLangs.length === 3 && this.recentLangs.every((l) => l === "he")) this.skipDetect = 4;
+      if (out.language === "he") {
+        const p = await this.server(he);
+        if (p) return (await this.viaServer(p, wav, "he")).text;
+      }
+    }
+    return out.text;
   }
 
   private recentLangs: string[] = [];
