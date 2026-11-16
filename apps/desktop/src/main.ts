@@ -21,7 +21,7 @@ import { BrowserPane } from "./browser-pane.js";
 import { connectComputer, forgetComputer, listComputers, openComputer } from "./computers.js";
 import { WORKER_PORT, workerHost } from "./worker.js";
 import { pasteText, readSelection } from "./text-keys.js";
-import { startMainLog, watchChildren } from "./main-log.js";
+import { startMainLog, watchChildren, watchHeap } from "./main-log.js";
 
 /**
  * The project's Google and GitHub sign-in clients. Release builds get it from the
@@ -315,6 +315,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   mainLog = startMainLog(app, join(process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`), "logs", "main.log"));
   watchChildren(mainLog);
+  void watchHeap(mainLog);
 }
 /** `--headless` (or `--server`): run KesherAI without a window, as a server for the phone and other computers (the tray icon opens the window). */
 const headless = process.argv.includes("--headless") || process.argv.includes("--server");

@@ -111,3 +111,51 @@ export function watchChildren(write: (line: string) => void): void {
   cp.exec = wrap(cp.exec);
   syncBuiltinESMExports();
 }
+
+/** A node of V8's sampling heap profile. */
+interface HeapNode {
+  callFrame: { functionName: string; url: string; lineNumber: number };
+  selfSize: number;
+  children: HeapNode[];
+}
+
+/**
+ * Watches the app's memory with V8's sampling heap profiler (cheap: one sample per MB allocated). When the heap
+ * passes 1.2 GB it writes the 15 call stacks holding the most memory to the log, so a runaway allocation shows its
+ * source before the app runs out of memory.
+ *
+ * @param write - The log's writer.
+ */
+export async function watchHeap(write: (line: string) => void): Promise<void> {
+  try {
+    const { Session } = await import("node:inspector");
+    const session = new Session();
+    session.connect();
+    const post = <T>(method: string, params?: object) => new Promise<T>((done, fail) => session.post(method, params ?? {}, (e, r) => (e ? fail(e) : done(r as T))));
+    await post("HeapProfiler.startSampling", { samplingInterval: 1024 * 1024 });
+    let told = false;
+    const timer = setInterval(() => {
+      if (told || process.memoryUsage().heapUsed < 1.2 * 1024 ** 3) return;
+      told = true;
+      clearInterval(timer);
+      void post<{ profile: { head: HeapNode } }>("HeapProfiler.getSamplingProfile").then(
+        ({ profile }) => {
+          const stacks: Array<{ size: number; stack: string }> = [];
+          const walk = (n: HeapNode, path: string[]) => {
+            const here = n.callFrame.functionName || n.callFrame.url ? [...path, `${n.callFrame.functionName || "(anonymous)"} ${n.callFrame.url.split(/[\\/]/).slice(-2).join("/")}:${n.callFrame.lineNumber + 1}`] : path;
+            if (n.selfSize > 0) stacks.push({ size: n.selfSize, stack: here.slice(-6).reverse().join(" < ") });
+            for (const c of n.children) walk(c, here);
+          };
+          walk(profile.head, []);
+          stacks.sort((a, b) => b.size - a.size);
+          write(`heap passed 1.2 GB; where it went (sampled):`);
+          for (const s of stacks.slice(0, 15)) write(`  ${Math.round(s.size / 1024 ** 2)} MB: ${s.stack.slice(0, 600)}`);
+        },
+        (e: Error) => write(`heap profile failed: ${e.message}`),
+      );
+    }, 1000);
+    timer.unref();
+  } catch (e) {
+    write(`heap watch could not start: ${(e as Error).message}`);
+  }
+}
