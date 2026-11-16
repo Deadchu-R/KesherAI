@@ -51,8 +51,10 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
   - A tutor mode that guides through homework step by step instead of giving the answer.
   - PDF/article reader: summary, glossary, "explain this paragraph".
   - Focus timer with study streaks; a short audio recap (text to speech) to listen to on the way.
-  - Avatar in Zoom in place of the camera: open question with Roee (being shown as present while not there may
-    break the course's rules; an honest version: a clearly labelled avatar or "Roee's notes bot").
+  - Live avatar in place of the camera (Roee, 2026-11-16): a realistic avatar of the student, driven by their own
+    voice, as a virtual camera in Zoom/Teams, so a student who must keep the camera on can move around while still
+    attending. Like Pickle (5-minute training video, live lip-sync). Needs its own research: what runs locally on a
+    modest laptop (likely not real time without a graphics card, so a cloud option), and a virtual camera driver.
 
 ## Throughout
 - A security and performance scan every 5 changes.
