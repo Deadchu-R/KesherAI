@@ -718,6 +718,53 @@ export const TUTOR_PROMPT =
 export const STUDY_MODE_PROMPT =
   "You are a tutor quizzing a student on her own lecture passages (given). Do not lecture. Ask ONE short question at a time about the passages, then stop and wait for her answer. When she answers: judge it only by what the passages say (not by general knowledge): if the passages say something else, it is not right, even if it could be true elsewhere. Say plainly whether it is right, give the passages' answer briefly and name the lecture in square brackets, like [Lecture: <title>], then ask the next question: a little harder if she was right, simpler if not. If she asks for help, give a hint as a question before the answer. Write only in her language (the lectures' language when she has not written yet), with no words in other languages or scripts. Never invent numbers, doses or values.";
 
+/** Study mode's grading step: a verdict only, as JSON, so even a small or code-minded model grades by her lecture. */
+export const GRADE_PROMPT =
+  'You grade a student\'s answer to a question about her lecture, using ONLY the lecture passages given (not general knowledge: if the passages say something else, the answer is wrong). Answer with JSON only: {"verdict": "right" | "partly" | "wrong", "answer": "the passages\' answer in one short sentence, in the question\'s language"}';
+
+/**
+ * The messages for grading her answer in study mode.
+ *
+ * @param o.lectures - The course's lectures.
+ * @param o.tutorQuestion - The question the tutor asked.
+ * @param o.answer - Her answer.
+ * @returns The messages and the passages used.
+ */
+export function gradeMessages(o: { lectures: StudyLecture[]; tutorQuestion: string; answer: string; budget?: number }): { messages: TutorMessage[]; passages: StudyPassage[] } {
+  const passages = findPassages(o.lectures, `${o.tutorQuestion} ${o.answer}`.slice(0, 3000), o.budget ?? 6000);
+  const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage matches.)";
+  return { messages: [{ role: "system", content: GRADE_PROMPT }, { role: "user", content: `Passages:\n\n${material}\n\nQuestion: ${o.tutorQuestion.slice(0, 1000)}\nHer answer: ${o.answer.slice(0, 1000)}` }], passages };
+}
+
+/**
+ * Her grade in words (written here, not by the model, so it never says "right" to a wrong answer in another language).
+ *
+ * @param raw - The model's reply to the grading messages.
+ * @param he - Whether she studies in Hebrew.
+ * @returns The line, or undefined when the reply had no verdict.
+ */
+export function gradeLine(raw: string, he: boolean): string | undefined {
+  const j = jsonIn(raw) as { verdict?: string; answer?: string } | undefined;
+  const v = String(j?.verdict ?? "").toLowerCase();
+  if (!["right", "partly", "wrong"].includes(v)) return undefined;
+  const answer = cleanScript(String(j?.answer ?? "").trim(), he).slice(0, 600);
+  const head = v === "right" ? (he ? "✓ נכון." : "✓ Right.") : v === "partly" ? (he ? "◐ נכון בחלקו." : "◐ Partly right.") : he ? "✗ לא בדיוק." : "✗ Not quite.";
+  return answer ? `${head} ${he ? "לפי ההרצאה: " : "Your lecture says: "}${answer}` : head;
+}
+
+/**
+ * Removes letters of other scripts a model slipped into a Hebrew (or English) answer (Chinese, Arabic, Cyrillic…),
+ * keeping Hebrew, Latin (terms, drug names), digits and punctuation.
+ *
+ * @param text - The model's text.
+ * @param he - Whether the text should be Hebrew.
+ * @returns The text.
+ */
+export function cleanScript(text: string, he: boolean): string {
+  if (!he) return text;
+  return text.replace(/[\u0400-\u04ff\u0600-\u06ff\u3000-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]+/g, "").replace(/[ \t]{2,}/g, " ");
+}
+
 /** Why a missed card's answer is right, in one or two sentences, from her lecture. */
 export const MISSED_PROMPT =
   "A student got this flashcard wrong. In one or two short sentences, in the card's language, explain why the answer is right, using the lecture passage when it helps, so it sticks (a reason, a link or a memory trick). Never invent numbers, doses or values. Write only the explanation.";
@@ -763,7 +810,7 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
   }
   const material = passages.length ? passages.map((p) => `[Lecture: ${p.title}]\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
   const system = `${study ? STUDY_MODE_PROMPT : TUTOR_PROMPT}${o.hint ? `\n${o.hint}` : ""}`;
-  const user = study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\nStart: ask her the first question.`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
+  const user = study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\n${turns.length ? "Ask her the next question (a new one, not asked above). Only the question." : "Start: ask her the first question."}`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
   return { messages: [{ role: "system", content: system }, ...turns, { role: "user", content: user }], passages };
 }
 

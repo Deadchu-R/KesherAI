@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tutorMessages, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { tutorMessages, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -156,4 +156,14 @@ test("tutorMessages: answers from her lectures, and study mode asks her first", 
   assert.match(start.messages[0]!.content, /Ask ONE short question/);
   const answer = tutorMessages({ lectures, question: "מאט דופק", mode: "study", history: [{ role: "assistant", content: "מה עושה דיגוקסין לדופק?" }] });
   assert.match(answer.messages.at(-1)!.content, /Her answer: מאט דופק/);
+});
+
+test("gradeLine writes the verdict itself, and cleanScript drops other scripts", () => {
+  assert.equal(gradeLine('{"verdict":"wrong","answer":"מערכת החיסון הורסת את תאי הבטא好不好"}', true), "✗ לא בדיוק. לפי ההרצאה: מערכת החיסון הורסת את תאי הבטא");
+  assert.equal(gradeLine('```json\n{"verdict":"right"}\n```', true), "✓ נכון.");
+  assert.equal(gradeLine("Correct!", true), undefined);
+  assert.equal(cleanScript("נכון – ההרצאה של Digoxin هرس אומרת", true), "נכון – ההרצאה של Digoxin אומרת");
+  const g = gradeMessages({ lectures: [{ id: "l", title: "לב", date: "", text: "מערכת החיסון הורסת את תאי הבטא בלבלב" }], tutorQuestion: "מה הורס את תאי הבטא?", answer: "וירוס" });
+  assert.match(g.messages[0]!.content, /ONLY the lecture passages/);
+  assert.match(g.messages[1]!.content, /Her answer: וירוס/);
 });

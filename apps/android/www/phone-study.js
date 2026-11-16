@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -650,11 +650,26 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const btn = el("button", { type: "submit", class: "primary" }, study ? L("שליחת תשובה", "Answer") : L("שאלי", "Ask"));
     /** One turn, the same messages as the computer's tutor (shared). An empty question starts study mode. */
     const send = async (question, busyBtn) => {
-      const { messages, passages } = tutorMessages({ lectures: c.lectures, question, history: turns, mode, hint: hint(c).trim() || undefined, budget: 5000 });
+      const heb = /[\u0590-\u05ff]/.test(`${question} ${c.lectures[0]?.text.slice(0, 400) ?? ""}`);
+      const asked = [...turns].reverse().find((t) => t.role === "assistant")?.content;
       if (question) turns.push({ role: "user", content: question });
+      // Study mode, her answer: a plain verdict first (by her lecture, in our words), then the next question.
+      if (study && question && asked) {
+        const g = gradeMessages({ lectures: c.lectures, tutorQuestion: asked, answer: question, budget: 4000 });
+        const raw = await need(g.messages, busyBtn);
+        if (raw === undefined) { turns.pop(); return; }
+        const line = gradeLine(String(raw), heb);
+        if (line) {
+          const next = tutorMessages({ lectures: c.lectures, question: "", history: [...turns, { role: "assistant", content: line }], mode, hint: hint(c).trim() || undefined, budget: 4000 });
+          const q2 = await need(next.messages, busyBtn);
+          turns.push({ role: "assistant", content: `${line}${q2 ? `\n\n${cleanScript(String(q2).trim(), heb)}` : ""}`, sources: [...new Set(g.passages.map((p) => p.title))] });
+          return draw();
+        }
+      }
+      const { messages, passages } = tutorMessages({ lectures: c.lectures, question, history: turns.slice(0, question ? -1 : undefined), mode, hint: hint(c).trim() || undefined, budget: 5000 });
       const r = await need(messages, busyBtn);
       if (r === undefined) { if (question) turns.pop(); return; }
-      turns.push({ role: "assistant", content: String(r).trim(), sources: [...new Set(passages.map((p) => p.title))] });
+      turns.push({ role: "assistant", content: cleanScript(String(r).trim(), heb), sources: [...new Set(passages.map((p) => p.title))] });
       draw();
     };
     const form = el("form", { class: "ph-filter", onsubmit: (e) => {

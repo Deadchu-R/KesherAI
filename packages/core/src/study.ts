@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -378,11 +378,25 @@ export class Study {
     const m = this.model();
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     // The same messages as the phone's tutor (shared): answers from her lectures, or study mode asking her.
-    const { messages, passages } = tutorMessages({ lectures: d.lectures, question, history, mode, hint: d.course.field ? FIELD_HINT[d.course.field] : undefined });
-    const r = await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(300_000), () => undefined);
-    const seen = new Set<string>();
-    const sources = passages.filter((p) => !seen.has(p.lectureId) && seen.add(p.lectureId)).map((p) => ({ lectureId: p.lectureId, title: p.title }));
-    return { answer: r.text.trim(), sources };
+    const hint = d.course.field ? FIELD_HINT[d.course.field] : undefined;
+    const he = /[\u0590-\u05ff]/.test(`${question} ${d.lectures[0]?.text.slice(0, 400) ?? ""}`);
+    const say = async (messages: TutorMessage[]) => (await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(300_000), () => undefined)).text;
+    const sourcesOf = (passages: StudyPassage[]) => {
+      const seen = new Set<string>();
+      return passages.filter((p) => !seen.has(p.lectureId) && seen.add(p.lectureId)).map((p) => ({ lectureId: p.lectureId, title: p.title }));
+    };
+    // Study mode, her answer: graded first as a plain verdict (our words, by her lecture), then the next question.
+    const asked = [...history].reverse().find((h) => h.role === "assistant")?.content;
+    if (mode === "study" && question.trim() && asked) {
+      const g = gradeMessages({ lectures: d.lectures, tutorQuestion: asked, answer: question });
+      const line = gradeLine(await say(g.messages), he);
+      if (line) {
+        const next = tutorMessages({ lectures: d.lectures, question: "", history: [...history, { role: "user", content: question }, { role: "assistant", content: line }], mode, hint });
+        return { answer: `${line}\n\n${cleanScript((await say(next.messages)).trim(), he)}`, sources: sourcesOf(g.passages) };
+      }
+    }
+    const { messages, passages } = tutorMessages({ lectures: d.lectures, question, history, mode, hint });
+    return { answer: cleanScript((await say(messages)).trim(), he), sources: sourcesOf(passages) };
   }
 
   /**
