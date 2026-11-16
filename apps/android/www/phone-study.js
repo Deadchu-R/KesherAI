@@ -269,7 +269,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const title = el("input", { placeholder: L("כותרת ההרצאה", "Lecture title"), dir: "auto", "aria-label": L("כותרת", "Title") });
     const text = el("textarea", { rows: "6", dir: "auto", "aria-label": L("טקסט ההרצאה", "Lecture text"), placeholder: L("הדביקי טקסט, הקלידי בקול עם המיקרופון של המקלדת, או הוסיפי מצגת או צילומים.", "Paste text, type by voice with the keyboard's microphone, or add slides or photos.") });
     const fileNote = el("p", { class: "muted small", "aria-live": "polite" });
-    /** A file or photo adds to the text: text files here; slides, PDF, Word and photos on the computer. */
+    /** A file or photo adds to the text: text, slides, Word and PDF here on the phone; scans and photos on the computer. */
     const fromFile = async (input) => {
       const f = input.files?.[0];
       input.value = "";
@@ -277,15 +277,31 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       if (!title.value) title.value = f.name.replace(/\.[^.]+$/, "");
       const add = (t) => { text.value = text.value.trim() ? `${text.value}\n\n${t}` : t; };
       if (/\.(txt|md|srt|vtt)$/i.test(f.name)) return add(await f.text());
-      if (!extract) return (fileNote.textContent = L("מצגות, PDF וצילומים נקראים במחשב: התחברי פעם אחת למחשב (לשונית מחשב).", "Slides, PDFs and photos are read on the computer: connect to it once (Computer tab)."));
+      // Slides, Word and PDF with text are read here on the phone (no computer); scans and photos need one.
+      if (/\.(pptx|docx|pdf)$/i.test(f.name) && f.size <= 50 * 1024 * 1024) {
+        fileNote.textContent = L("קורא את הקובץ בטלפון…", "Reading the file on the phone…");
+        try {
+          const { phoneDocumentText } = await import("./vendor/docs-core.js");
+          const t = (await phoneDocumentText(new Uint8Array(await f.arrayBuffer()), f.name))?.trim();
+          if (t) {
+            add(t);
+            fileNote.textContent = L("✓ נוסף (נקרא בטלפון). אפשר להוסיף עוד או לשמור.", "✓ Added (read on the phone). Add more, or save.");
+            return;
+          }
+          if (!extract) return (fileNote.textContent = L("אין בקובץ טקסט (כנראה סריקה). סריקות וצילומים נקראים במחשב: התחברי פעם אחת למחשב.", "The file has no text (probably a scan). Scans and photos are read on the computer: connect to it once."));
+        } catch (e) {
+          if (!extract) return (fileNote.textContent = L("לא הצלחתי לקרוא את הקובץ: ", "Could not read the file: ") + (e?.message || e));
+        }
+      }
+      if (!extract) return (fileNote.textContent = L("צילומים נקראים במחשב: התחברי פעם אחת למחשב (לשונית מחשב).", "Photos are read on the computer: connect to it once (Computer tab)."));
       if (f.size > 50 * 1024 * 1024) return (fileNote.textContent = L("הקובץ גדול מ-50MB.", "The file is larger than 50 MB."));
-      fileNote.textContent = L("המחשב קורא את הקובץ…", "The computer is reading the file…");
+      fileNote.textContent = L("קורא את הקובץ…", "Reading the file…");
       try {
         const bytes = new Uint8Array(await f.arrayBuffer());
         let bin = "";
         for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         const r = await extract({ name: f.name, data: btoa(bin) });
-        if (!r) fileNote.textContent = L("אין מחשב מחובר.", "No computer is paired.");
+        if (!r) fileNote.textContent = L("לקריאת צילום: בחרי בטלפון את Gemma 4 או מודל דרך האינטרנט (הם רואים תמונות), או התחברי למחשב.", "To read a photo: choose Gemma 4 or a model over the internet on the phone (they see pictures), or connect to the computer.");
         else { add(r.text); fileNote.textContent = L("✓ נוסף. אפשר להוסיף עוד צילום או לשמור.", "✓ Added. Add another photo, or save."); }
       } catch (e) {
         fileNote.textContent = L("לא הצלחתי לקרוא את הקובץ: ", "Could not read the file: ") + (e?.message || e);

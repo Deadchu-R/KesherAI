@@ -35,6 +35,17 @@ esbuild.buildSync({
   nodePaths: [join(here, "..", "..", "..", "packages", "core", "node_modules")],
   logLevel: "warning",
 });
+// Lecture files read on the phone itself (slides, Word, PDF), from the same unpdf the computer uses.
+esbuild.buildSync({
+  entryPoints: [join(here, "..", "docs-core.ts")],
+  bundle: true,
+  format: "esm",
+  minify: true,
+  target: "es2020",
+  outfile: join(www, "docs-core.js"),
+  nodePaths: [join(here, "..", "..", "..", "packages", "agent", "node_modules")],
+  logLevel: "warning",
+});
 // How to address her in Hebrew, from the same shared code (a classic script, loaded before the others).
 esbuild.buildSync({
   entryPoints: [join(here, "..", "address-core.ts")],

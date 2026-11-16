@@ -781,3 +781,21 @@ S5 an outside scanner's rules for Electron.
   arguments (no shell).
 - Performance: on an RTX 3090 beside the chat model, 25 fps with the card making the next step while threads blend
   and encode the last; the server stops with the camera and gives the card back.
+
+## Scan 91 (2026-11-16, 0.6.288 – 0.6.290: phone menu and connect screen, name and form of address, files on the phone)
+
+- Name and form of address: the computer keeps the name without control characters or `<`/`>` (60 characters at
+  most) and the address only as f, m or p (anything else is refused). The phone does the same before storing; both
+  put the name only into text (never HTML). The phone takes the computer's setting when it connects (behind the
+  usual token); a bad address from the computer is ignored by the phone's converter. The models get the name in their
+  instructions: she can only steer her own chat with it.
+- Hebrew converter on the phone: the same shared code as the computer, bundled; it changes only whole words from a
+  fixed list.
+- Files read on the phone (slides, Word, PDF): the zip reader keeps the computer's limits (64 MB unpacked in total,
+  4000 entries, never more than an entry claims, unpacked by the browser's own DecompressionStream and stopped at
+  the limit). PDFs go through unpdf (pdf.js 6.4, past the 2024 font-code bug) with eval turned off. Files never
+  leave the phone. The 1.7 MB reader loads only when a file is chosen.
+- Photos with no computer go only to the model she chose (on the phone, or the internet model she set up herself),
+  shrunk to 1600 px.
+- Remote search: Back closes it through a history entry that is removed when it closes some other way.
+- Performance: the menu builds once per page; the converter's regular expression is built once per form.

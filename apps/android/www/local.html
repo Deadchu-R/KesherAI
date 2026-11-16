@@ -594,16 +594,37 @@
   /** Reading a lecture's review aloud with the phone's voice (the app only). */
   function studySay(text) { return speak(text); }
   studySay.stop = () => { SPEECH?.stopSpeaking?.(); };
-  /** A lecture file read by the paired computer (slides, PDF, Word, photos): undefined when there is none. */
+  /** A lecture file read by the paired computer (scans, photos), or a photo by the phone's own model: undefined when neither can. */
   async function studyExtract(body) {
     const c = computer();
-    if (!c) return undefined;
+    if (!c) return photoOnPhone(body);
     const headers = { Authorization: `Bearer ${c.token}`, "Content-Type": "application/json" };
     const h = http();
     const r = h ? await h.post({ url: `${c.base}/api/study/extract`, headers, data: body, connectTimeout: 8000, readTimeout: 300000 }) : await fetch(`${c.base}/api/study/extract`, { method: "POST", headers, body: JSON.stringify(body) }).then(async (x) => ({ status: x.status, data: await x.json() }));
     const data = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
     if (r.status >= 400) throw new Error(String(data?.error ?? r.status));
     return data;
+  }
+  /**
+   * With no computer, a photo of the board or notebook is read by the phone's own model when it sees pictures
+   * (Gemma 4 on the phone, or a model over the internet): undefined when the chosen model cannot.
+   */
+  async function photoOnPhone(body) {
+    const item = current?.item;
+    const sees = !!item?.api || !!item?.native?.file?.endsWith(".litertlm");
+    if (!sees || !/\.(png|jpe?g|webp|gif|bmp)$/i.test(body.name)) return undefined;
+    // Smaller first: the model reads a 1600 px picture as well as a 4000 px one, much faster.
+    const img = new Image();
+    img.src = `data:image/${/\.png$/i.test(body.name) ? "png" : "jpeg"};base64,${body.data}`;
+    await img.decode();
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = Object.assign(document.createElement("canvas"), { width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k) });
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    const text = await askLong(item, [
+      { role: "system", content: "You read photos of a lecture's board, slides or notebook. Write out all the text in the photo exactly, in its language (often Hebrew), line by line; describe a diagram in one short line. Write nothing else." },
+      { role: "user", content: [{ type: "text", text: "Write out the text in this photo." }, { type: "image_url", image_url: { url: cv.toDataURL("image/jpeg", 0.85) } }] },
+    ]);
+    return text ? { text } : undefined;
   }
   /** Study sync with the paired computer: undefined when there is none. */
   async function studySync(body) {

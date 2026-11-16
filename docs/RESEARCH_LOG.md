@@ -1597,3 +1597,15 @@ Stopped at: building (store and public page first, then the chat menu and the se
   4. Explanations for missed cards (RemNote): after "again", a one-line why.
 - Decided: build 1 and 2 now (both work on the computer, in remote and in the phone app), then 3 and 4.
 - Stopped at: decided; building.
+
+## Students, part 10: studying on the phone with no computer (2026-11-16)
+
+- Sources: App Store listings for offline flashcard apps (Qsets, QuickStudy, Studycards AI, Mnemesia) and RemNote's
+  offline mode page. The offline apps review cards with no internet, but making cards from a PDF or slides needs
+  their cloud AI; RemNote works offline but imports and AI need a connection.
+- KesherAI's phone app already makes cards, summaries, terms, quizzes and tutor answers with a model on the phone.
+  The gap was reading the material: slides, PDFs, Word and photos went to the computer.
+- Built: slides, Word and PDF with text are read on the phone itself (the computer's reader, bundled); a photo of
+  the board is read by the phone's own model when it sees pictures (Gemma 4, or her internet model). Only scans with
+  a text-blind model still need the computer.
+- Stopped at: built (0.6.290); next on the student list: study mode and explanations for missed cards.

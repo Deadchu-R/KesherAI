@@ -486,6 +486,19 @@
         } catch { /* it stays shown here */ }
       }
       if (token) await rememberComputer(url, token);
+      // Her name and form of address: one setting for the computer and the phone (the computer's wins; the phone
+      // fills in what the computer has not set yet).
+      try {
+        const auth = token ? { authorization: `Bearer ${token}` } : {};
+        const pc = await fetch(`${url.origin}/api/user`, { headers: auth, signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : null));
+        if (pc) {
+          const mine = { name: localStorage.getItem("kesherai-user-name") || undefined, address: localStorage.getItem("kesher-address") || undefined };
+          const fill = { ...(!pc.name && mine.name ? { name: mine.name } : {}), ...(!pc.address && mine.address ? { address: mine.address } : {}) };
+          if (Object.keys(fill).length) await fetch(`${url.origin}/api/user`, { method: "PUT", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(fill), signal: AbortSignal.timeout(3000) });
+          if (pc.name) localStorage.setItem("kesherai-user-name", pc.name);
+          if (pc.address) localStorage.setItem("kesher-address", pc.address);
+        }
+      } catch { /* the phone keeps its own */ }
       // Coming back here with the Back button shows this screen instead of connecting again.
       sessionStorage.setItem("kesherai-connected", "1");
       localStorage.setItem("kesherai-last-mode", "computer");
