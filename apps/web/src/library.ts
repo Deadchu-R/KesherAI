@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConversationSummary, Project } from "@kesher/shared";
 import { ApiError, api } from "./api";
 import { pickModel } from "./ModelPicker";
+import { padRumble, rumbleFor } from "./pad-rumble";
 
 /**
  * The sidebar's data: projects and conversation summaries, shared by every
@@ -150,6 +151,8 @@ let activityTimer: ReturnType<typeof setInterval> | undefined;
 async function pollActivity(): Promise<void> {
   const next = await api<Record<string, "running" | "waiting">>("/api/conversations/activity").catch(() => activity);
   if (JSON.stringify(next) !== JSON.stringify(activity)) {
+    const felt = rumbleFor(activity, next);
+    if (felt) padRumble(felt);
     activity = next;
     activityListeners.forEach((l) => l());
   }
