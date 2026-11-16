@@ -1373,3 +1373,13 @@ Stopped at: building (store and public page first, then the chat menu and the se
   Nodes page's ready-made list. Downloaded tonight: the 5B model (10 GB) and the Wan 2.2 VAE (1.4 GB); the text
   encoder was already there.
 - **Stopped at:** built; to check on the PC once the download ends (one short video at a smaller size first).
+
+## F23: phone "Tasks" view of what runs on the computer (2026-11-16)
+
+- AgentsRoom (mobile companion) and amux (mobile PWA): one list of all agent sessions, a live status dot each,
+  a peek at the output, approve / stop / continue from the phone, real-time sync.
+- Built: `#/tasks` (menu → Work → Tasks): chats answering or waiting, approvals (once, not twice), self-work, active
+  downloads with progress and Pause, running routines, long builds, an update in progress. Green dot = running,
+  amber = waiting for you. Polls every 4 s while visible; each part read on its own so an older computer still shows
+  the rest. Works the same in remote (the phone shows the computer's pages).
+- Stopped at: no peek at the output inside the list (Open goes to the chat); no push of the list itself.

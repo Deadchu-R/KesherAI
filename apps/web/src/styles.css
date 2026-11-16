@@ -2521,3 +2521,14 @@ html.handheld .palette-list button { min-height: 44px; }
   .seg-pills { width: 100%; }
   .seg-pills button { flex: 1 1 0; justify-content: center; }
 }
+/* Tasks: what runs on the computer now (made for the phone first). */
+.tasks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.task-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--raised); border-radius: calc(12px * var(--r-scale, 1)); }
+.task-item .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.task-item .grow b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.task-item small { color: var(--text-2); }
+.task-item progress { width: 100%; height: 4px; }
+.task-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--text-2); }
+.task-item.running .task-dot { background: #4ade80; }
+.task-item.waiting .task-dot { background: #fbbf24; }
+.tasks-empty { padding: 24px 0; }
