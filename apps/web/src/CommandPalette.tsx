@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createConversation, toast, useLibrary } from "./library";
 import { api } from "./api";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, he$ } from "./i18n";
 import { NAV_GROUPS, NAV_ICONS, useNavItems } from "./Sidebar";
 import { useParts } from "./parts";
 import { fit } from "./palette-fit";
@@ -9,7 +9,7 @@ import { handheldSetting, setHandheld } from "./PadHints";
 import { Glyph } from "./ui/Glyph";
 import { isShortcut } from "./keyboard";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** One line of the palette. */
 interface Entry {

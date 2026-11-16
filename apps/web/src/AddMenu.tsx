@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import type { PermissionMode } from "@kesher/shared";
 import { api } from "./api";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, he$ } from "./i18n";
 import { Menu, MenuItem, MenuNote, MenuSeparator, MenuSub } from "./ui/Menu";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** What the menu can do in the conversation that owns it. */
 export interface AddMenuProps {

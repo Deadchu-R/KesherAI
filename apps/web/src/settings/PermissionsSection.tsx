@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale, t } from "../i18n";
+import { getLocale, t, he$ } from "../i18n";
 import { Select } from "../ui/Select";
 import { toast, useLibrary } from "../library";
 
 interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string; until?: string; command?: string }
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** How long an approval can be set to hold, in minutes (0 = for good). */
 export function durations(): Array<[number, string]> {

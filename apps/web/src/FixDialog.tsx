@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const GB = 1024 ** 3;
 const size = (b: number) => (b >= GB ? `${Math.round((b / GB) * 10) / 10} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`);
 

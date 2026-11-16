@@ -6,12 +6,12 @@
 import { useEffect, useState } from "react";
 import type { ModelInfo } from "@kesher/shared";
 import { api, withToken } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { DownloadsMatching, useDownloads } from "./Downloads";
 import { toast } from "./library";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Kind {
   ready: boolean;

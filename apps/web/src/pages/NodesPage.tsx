@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Menu, MenuItem } from "../ui/Menu";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { ComfySection } from "../ComfySection";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A ready-made flow, as `/api/comfy-ui/flows` lists it. */
 interface ReadyFlow {

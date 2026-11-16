@@ -1,7 +1,7 @@
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { shortNumber, ticks, type ChartSpec } from "./chart";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 /** Series colours: the accent first, then colours that stay apart in both themes. */
 const COLORS = ["var(--accent)", "#7fd6a4", "#f0b37e", "#e88fb4", "#7cc7e8", "#c3a6ff", "#e8d27c", "#a9a9b0"];
 

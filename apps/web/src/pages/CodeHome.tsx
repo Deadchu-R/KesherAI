@@ -7,12 +7,12 @@ import { useChatAttach } from "../ChatAttach";
 import { useWebSearch } from "../WebToggle";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { api, isRemote } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { createConversation, desktop, refreshLibrary, toast, useLibrary } from "../library";
 import { useModels } from "../useModels";
 import { Select } from "../ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** The folder's last part, for a short chip ("C:\\Code\\Game" → "Game"). */
 const short = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;

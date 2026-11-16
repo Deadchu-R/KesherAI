@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, isRemote, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { createConversation, toast } from "../library";
 import { MeetingRecorder } from "../MeetingRecorder";
 import { Entities } from "../Entities";
 import { Select } from "../ui/Select";
 
 /** Hebrew or English, for this page's own words. */
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Settings { enabled: boolean; intervalSec: number; excludeApps: string[]; keepFramesDays: number; keepTextDays: number; modelId?: string; allowCloud: boolean; pausedUntil?: number; phone?: boolean }
 interface Info { settings: Settings; status: { running: boolean; lastCapture?: number; error?: string; ocr?: boolean; last?: { app: string; title: string; skipped?: string; idle?: boolean } }; days: string[]; platform: string }

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { withToken } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { encodeWav } from "./Mic";
 import { stamp } from "./study-time";
 import { busy } from "./VersionWatch";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const PIECE_SEC = 30;
 
 /**

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { LineIcon } from "../ui/Glyph";
 import { fileIcon } from "../attach-lines";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Preview =
   | { kind: "table"; name: string; sheets: Array<{ name: string; rows: string[][]; more: number }> }

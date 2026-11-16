@@ -1,9 +1,9 @@
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { VariablesPanel, type PanelType, type PanelVar } from "../VariablesPanel";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A Blueprint variable as the plugin reads it (ptype…category: plugin 0.1.9+). */
 export interface BpVar { name: string; type: string; ptype?: string; default?: string; editable?: boolean; tooltip?: string; category?: string; private?: boolean }

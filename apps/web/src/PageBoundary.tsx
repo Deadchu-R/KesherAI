@@ -1,7 +1,7 @@
 import { Component, type ReactNode } from "react";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * Keeps one broken page from blanking the whole app: shows what went wrong

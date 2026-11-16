@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { McpAppRef } from "@kesher/shared";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { appDocument } from "./mcp-app-doc";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** One JSON-RPC message from the view. */
 interface RpcMsg {

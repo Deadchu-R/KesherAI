@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Key { id: string; name: string; prefix: string; createdAt: string; lastUsedAt?: string; uses?: number }
 interface View { keys: Key[]; requireKeyLocally: boolean; base: string }

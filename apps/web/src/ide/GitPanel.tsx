@@ -1,11 +1,11 @@
 import { PrSection } from "./PrSection";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { Diff } from "../ChatCards";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface ChangedFile { path: string; state: "A" | "M" | "D" | "R" | "?"; added: number; removed: number; from?: string }
 interface GitState { repo: boolean; branch?: string; upstream?: string; ahead: number; behind: number; files: ChangedFile[]; origin?: boolean; github?: string; head?: { sha: string; subject: string } }

@@ -1,9 +1,9 @@
 import { Menu, MenuItem, MenuLabel, MenuNote } from "../ui/Menu";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { createConversation, toast, useLibrary } from "../library";
 import { openWithDraft } from "../phone";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * "Open in chat": the project goes into a chat, a new one or one you pick,

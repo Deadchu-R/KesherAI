@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Something that must not be cut by a reload is running (a lecture recording); set by that page. */
 export const busy = { recording: false };

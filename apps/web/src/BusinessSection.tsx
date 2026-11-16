@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface CopilotStatus { configured: boolean; connected: boolean; email: string | null; web: boolean; lastError: string | null; model: string }
 interface Business { enabled: boolean; allowed: string[]; managed: boolean; providers: Array<{ id: string; name: string; location: string; on: boolean }> }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { Menu, MenuItem, MenuLabel, MenuNote, MenuSeparator } from "./ui/Menu";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface AgentOption { id: string; name: string; category?: string; current: string; choices: Array<{ value: string; name: string; description?: string }> }
 

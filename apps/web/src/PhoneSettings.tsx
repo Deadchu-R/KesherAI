@@ -7,12 +7,12 @@
  */
 import { api, appHome, deviceKey, disconnectComputer, isRemote } from "./api";
 import { phoneNotify, setPhoneNotify, type PhoneNotifyState } from "./phoneNotify";
-import { getLocale, setLocale, t } from "./i18n";
+import { getLocale, setLocale, t, he$ } from "./i18n";
 import { PhoneAppUpdates } from "./pages/UpdatesPage";
 import { BarPopover } from "./ui/BarPopover";
 import { useEffect, useState } from "react";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A phone with a small gear on its corner. */
 const ICON = (

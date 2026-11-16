@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { desktop, toast } from "../library";
 import { ConversationPage } from "./Conversation";
 import { LineIcon } from "../ui/Glyph";
 import { actionPrompt } from "../text-helper-prompts";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * The Text Helper's window (`#/text/<chat>/<selection>`), opened by Ctrl+Alt+K over any app: the selected text,

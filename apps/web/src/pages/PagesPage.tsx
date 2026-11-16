@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { RichText } from "../RichText";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface PageInfo { id: string; title: string; updatedAt: string; words: number }
 interface Page extends PageInfo { content: string }

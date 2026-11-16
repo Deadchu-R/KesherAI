@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * A box that can fill the whole window (a graph to work on at full size) and

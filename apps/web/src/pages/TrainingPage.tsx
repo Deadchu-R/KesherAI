@@ -1,11 +1,11 @@
 import { ImageTabs } from "./ImageTabs";
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast, useLibrary } from "../library";
 import { Select } from "../ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Kind { id: "image-lora" | "chat-lora" | "voice"; ready: boolean; notes: string[]; bases?: Array<{ name: string; family: "sd15" | "sdxl" | "other" }>; estimate?: string }
 interface Job { id: string; name: string; base: string; status: "running" | "done" | "error"; startedAt: string; finishedAt?: string; message?: string; file?: string; steps: number }

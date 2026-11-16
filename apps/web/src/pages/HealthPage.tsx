@@ -1,14 +1,14 @@
 import { addSample, batteryWear, chargingHabits, patchAgeDays, phoneItems as phoneRules, type PhoneReading, type PhoneSample } from "../phone-health";
 import { useEffect, useState } from "react";
 import { api, appHome } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
 import { ReportDialog } from "../ReportDialog";
 import { FixDialog } from "../FixDialog";
 import { StorageSection } from "../StorageSection";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const GB = 1024 ** 3;
 const gb = (b: number) => (b >= 10 * GB ? Math.round(b / GB) : Math.round((b / GB) * 10) / 10);
 

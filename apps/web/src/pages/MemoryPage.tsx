@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { askText } from "../ui/askText";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Fact { text: string; at: string; source: "you" | "auto" }
 interface Topic { id: string; title: string; project?: string; facts: Fact[]; updatedAt: string }

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { SHORTCUTS, comboOf, shortcutConflicts, shortcutKey, type ShortcutMap } from "@kesher/shared";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { desktop, toast } from "../library";
 import { setKeyboard, useKeyboard } from "../keyboard";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**

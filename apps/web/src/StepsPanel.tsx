@@ -5,9 +5,9 @@
  * is never empty while work happens.
  */
 import type { AgentEvent } from "@kesher/shared";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** One step as shown. */
 export interface ShownStep { text: string; status: "pending" | "doing" | "done" }

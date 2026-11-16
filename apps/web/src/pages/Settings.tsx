@@ -1,3 +1,4 @@
+import { AboutYou } from "../AboutYou";
 /**
  * The Settings page: categories on the side (chips on a phone), one search over all of them, and the sections
  * they hold. `SETTINGS_CATS` is the map of what lives where; every section is its own component next to it (GuardSection,
@@ -47,7 +48,7 @@ import { ChatsAtOnce } from "../ChatsAtOnce";
  * last, and one search over every setting by its words.
  */
 const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; words: string; render: () => React.ReactNode }> = [
-  { id: "general", icon: "⚙", en: "General", he: "כללי", words: "model models default chat image voice speech microphone read aloud מודל מודלים ברירת מחדל צאט קול דיבור הקראה מיקרופון", render: () => <><ActiveModels /><SpeechSection /></> },
+  { id: "general", icon: "⚙", en: "General", he: "כללי", words: "name about you gender address male female שם עלייך פנייה זכר נקבה model models default chat image voice speech microphone read aloud מודל מודלים ברירת מחדל צאט קול דיבור הקראה מיקרופון", render: () => <><AboutYou /><ActiveModels /><SpeechSection /></> },
   { id: "chats", icon: "💬", en: "Chats", he: "צ'אטים", words: "chat buttons bar toolbar show hide steps browser files coach context team group כפתורים צאט סרגל להציג להסתיר שלבים דפדפן קבצים מאמן הקשר צוות", render: () => <ChatBarSection /> },
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },

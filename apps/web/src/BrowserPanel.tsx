@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isRemote, withToken } from "./api";
 import { desktop } from "./library";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface PaneTab {
   id: number;

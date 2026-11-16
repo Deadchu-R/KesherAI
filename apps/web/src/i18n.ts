@@ -1,3 +1,4 @@
+import { hebrewFor, type HebrewAddress } from "@kesher/shared";
 /**
  * UI strings. Every visible word goes through `t()`, so adding a language is
  * one new object here (and RTL languages get `dir="rtl"` automatically).
@@ -1612,6 +1613,36 @@ let current: Locale = (() => {
 })();
 
 /** @returns The active locale. */
+let address: HebrewAddress | undefined = (() => {
+  try {
+    const a = localStorage.getItem("kesher-address");
+    return a === "f" || a === "m" || a === "p" ? a : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+
+/** How she is addressed in Hebrew (Settings → About you); kept here too so the text is right at once on the next start. */
+export function getAddress(): HebrewAddress | undefined {
+  return address;
+}
+
+/** Sets how she is addressed (f, m, p, or undefined for the text as written). */
+export function setAddress(a: HebrewAddress | undefined): void {
+  address = a;
+  try {
+    if (a) localStorage.setItem("kesher-address", a);
+    else localStorage.removeItem("kesher-address");
+  } catch {
+    // private mode: for this visit only
+  }
+}
+
+/** Hebrew text in the form she chose (commands and "you" words; see @kesher/shared hebrew-address). */
+export function he$(text: string): string {
+  return hebrewFor(text, address);
+}
+
 export function getLocale(): Locale {
   return current;
 }
@@ -1641,6 +1672,7 @@ export function setLocale(locale: Locale): void {
  */
 export function t(key: StringKey, vars?: Record<string, string | number>): string {
   let text = tables[current][key] ?? en[key];
+  if (current === "he") text = he$(text);
   for (const [k, v] of Object.entries(vars ?? {})) text = text.replace(`{${k}}`, String(v));
   return text;
 }

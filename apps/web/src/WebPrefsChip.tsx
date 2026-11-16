@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import type { WebPrefs } from "@kesher/shared";
 import { BarPopover } from "./ui/BarPopover";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { api, isRemote } from "./api";
 import { toast } from "./library";
 
 interface TorState { installed: boolean; available: boolean; version?: string; running: boolean; job?: { state: string; message: string } }
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * This chat's web search settings, beside the globe button: how deep (how many pages it reads), only these sites,

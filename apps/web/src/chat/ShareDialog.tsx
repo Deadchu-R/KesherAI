@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A share as the server lists it (shares.ts): the link's path, never a separate secret. */
 export interface ShareInfo { id: string; title: string; messages: number; expiresAt: string | null; views: number; path: string; updatedAt?: string }

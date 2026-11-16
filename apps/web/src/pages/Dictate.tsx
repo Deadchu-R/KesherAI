@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { desktop } from "../library";
 import { encodeWav } from "../Mic";
 import { hearFrame, type SilenceState } from "../dictate-silence";
 import { LineIcon } from "../ui/Glyph";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** The longest dictation. */
 const MAX_SECONDS = 120;

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { BarPopover } from "./ui/BarPopover";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * The buttons a chat's bar can show, and which show when nothing was chosen (found by Roee's brother: too many

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const when = (iso: string) => new Date(iso).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { dateStyle: "short", timeStyle: "short" });
 
 interface Req { at: string; address: string; method: string; path: string; status: number; via: "tunnel" | "network"; device?: string; ms?: number }

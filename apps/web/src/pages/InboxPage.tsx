@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { BarPopover } from "../ui/BarPopover";
 import { groupNotes } from "../note-groups";
 import { noteTitle } from "../note-text";
 import { ComputerScreen } from "./WatchPage";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Something an agent waits for the user to approve (a chat, or the self-work run). */
 export interface InboxApproval { kind: "chat" | "self-work"; conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast, useLibrary } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Dl { id: string; label: string; status: string; received: number; total?: number; speed: number }
 interface Run { status: string; goal: string; items?: unknown[]; convId: string }

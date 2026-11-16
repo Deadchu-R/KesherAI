@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { api, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { refreshLibrary, toast } from "../library";
 import { ModelMenu } from "../ModelMenu";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
 import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Turn { seq: number; role: "user" | "assistant"; text: string }
 

@@ -4,9 +4,9 @@ import { ComfySection } from "../ComfySection";
 import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
 import { api } from "../api";
-import { getLocale, t } from "../i18n";
+import { getLocale, t, he$ } from "../i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 import { EstimateDetails, RatingBadge, type Estimate } from "../Estimate";
 import { toast } from "../library";
 import { HubBrowser } from "../HubBrowser";

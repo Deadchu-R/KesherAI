@@ -8,11 +8,11 @@ import type { CodeProblem } from "./ide/CodeEditor";
 // The code editor (VS Code's) is big: loaded when the C# tab first opens.
 const CodeEditor = lazy(() => import("./ide/CodeEditor"));
 import { VariablesPanel, type PanelType, type PanelVar } from "./VariablesPanel";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** What each kind of node is called, in words for people who do not code. */
 const KIND: Record<CsStmt["kind"], [string, string]> = {

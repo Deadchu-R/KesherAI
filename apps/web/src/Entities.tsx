@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { Select } from "./ui/Select";
 
 /** Hebrew or English, for this component's own words. */
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Entity { id: string; name: string; kind: "person" | "project" | "company" | "concept"; summary?: string; aliases: string[]; parent?: string; hidden?: boolean; days: string[]; lastSeen: number }
 

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isRemote, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Status { enabled: boolean; hasPin: boolean; active: boolean; since?: string; device?: string; locked: boolean; waiting?: Array<{ code: string; device: string; at: string }>; trusted?: Array<{ id: string; name: string; at: string }> }
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { phoneNotify, setPhoneNotify, type PhoneNotifyState } from "./phoneNotify";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * In the Android app: its own notifications, the way phone apps notify (docs/RESEARCH_LOG.md, 2026-11-11).

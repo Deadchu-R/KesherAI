@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { desktop, toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Semantic { active: string | null; usable: boolean; builtIn: boolean; phase?: string; message?: string; model: { name: string; sizeGb: number }; found?: { name: string; source: string } }
 interface Base { id: string; name: string; description?: string; folders: string[]; urls: string[]; files: number; passages: number; embedded?: number; indexing: boolean; indexedAt: string | null; error: string | null }

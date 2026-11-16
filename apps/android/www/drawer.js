@@ -4,7 +4,7 @@
 // Open it with ☰, or swipe in from the right edge. Like Apple's menus you can
 // also press ☰ and keep your finger down, slide to an item (it lights up) and
 // let go to open it.
-/* global window, document, localStorage, sessionStorage, location, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event, setInterval, setTimeout, fetch, AbortSignal */
+/* global window, document, localStorage, sessionStorage, location, MutationObserver, navigator, addEventListener, innerWidth, URL, URLSearchParams, Event, setInterval, setTimeout, fetch, AbortSignal */
 (() => {
   const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const he = lang === "he";
@@ -26,13 +26,21 @@
   css.textContent = `
     .kd-btn { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); right: 16px; z-index: 50; width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 18px; border: 1px solid var(--border); background: rgb(31 31 34 / 0.86); backdrop-filter: blur(14px); color: var(--text); font-size: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); touch-action: none; }
     .kd-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
-    .kd-panel { position: fixed; top: 0; bottom: 0; right: 0; left: auto; z-index: 61; width: min(330px, 86vw); display: flex; flex-direction: column; gap: 2px; padding: max(18px, env(safe-area-inset-top)) 10px max(18px, env(safe-area-inset-bottom)); background: rgb(24 24 26 / 0.94); backdrop-filter: blur(22px) saturate(150%); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.9,.25,1); overflow-y: auto; touch-action: pan-y; }
+    .kd-panel { position: fixed; top: 0; bottom: 0; right: 0; left: auto; z-index: 61; width: min(312px, 84vw); display: flex; flex-direction: column; gap: 2px; padding: max(14px, env(safe-area-inset-top)) 10px max(14px, env(safe-area-inset-bottom)); background: #18181a; border-left: 1px solid #2a2a2e; transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.9,.25,1); overflow-y: auto; touch-action: pan-y; }
     .kd-open .kd-scrim { opacity: 1; pointer-events: auto; }
     .kd-open .kd-panel { transform: none; }
-    .kd-brand { display: flex; gap: 10px; align-items: center; font-size: 18px; font-weight: 500; padding: 4px 8px 12px; }
-    .kd-head { font-size: 12px; color: var(--muted); padding: 12px 10px 4px; }
-    .kd-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--text); font-size: 15.5px; text-align: start; text-decoration: none; transition: background .08s, transform .08s, color .08s; user-select: none; -webkit-user-select: none; }
-    .kd-item.on { background: var(--raised); }
+    .kd-brand { display: flex; gap: 10px; align-items: center; font-size: 17px; font-weight: 500; padding: 6px 8px 8px; }
+    .kd-brand .kd-state { margin-inline-start: auto; font-size: 12px; font-weight: 400; color: #f0b37e; }
+    .kd-brand .kd-state.on { color: #7fd6a4; }
+    .kd-seg { display: flex; background: #121213; border: 1px solid #2a2a2e; border-radius: 12px; padding: 3px; gap: 2px; margin: 2px 0 8px; }
+    .kd-seg a { flex: 1; display: grid; place-items: center; height: 38px; border-radius: 9px; color: #c9c9ce; font-size: 14px; text-decoration: none; }
+    .kd-seg a.on { background: #2e2e3a; color: var(--text); font-weight: 500; }
+    .kd-head { font-size: 12px; color: var(--muted); padding: 10px 14px 4px; }
+    .kd-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: #d6d6da; font-size: 15px; text-align: start; text-decoration: none; transition: background .08s, transform .08s, color .08s; user-select: none; -webkit-user-select: none; }
+    .kd-item.on { background: #262630; color: var(--text); font-weight: 500; }
+    .kd-item.kd-new { border: 1px solid #2a2a2e; background: #1f1f22; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+    .kd-ico svg { display: block; margin: 0 auto; stroke: #c9c9ce; }
+    .kd-item.on .kd-ico svg { stroke: var(--accent); }
     .kd-item.hot { background: var(--accent); color: var(--accent-ink); transform: scale(1.02); }
     .kd-item.hot small { color: inherit; opacity: .75; }
     .kd-item small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -77,9 +85,24 @@
   };
   const head = (text) => panel.append(Object.assign(document.createElement("div"), { className: "kd-head", textContent: text }));
 
-  panel.append(Object.assign(document.createElement("div"), { className: "kd-brand", innerHTML: `<img src="icon.svg" width="28" height="28" alt="" /> KesherAI` }));
+  const brand = Object.assign(document.createElement("div"), { className: "kd-brand", innerHTML: `<img src="icon.svg" width="28" height="28" alt="" /> KesherAI <span class="kd-state"></span>` });
+  const onPc = sessionStorage.getItem("kesherai-pc-ok") === "1";
+  brand.querySelector(".kd-state").textContent = onPc ? T("● המחשב מחובר", "● Computer connected") : T("○ בטלפון", "○ On the phone");
+  brand.querySelector(".kd-state").classList.toggle("on", onPc);
+  panel.append(brand);
+  // Where it runs, like the remote's menu: the computer (the saved one, or connecting one) or the phone.
+  const seg = Object.assign(document.createElement("div"), { className: "kd-seg" });
+  seg.setAttribute("role", "tablist");
+  seg.innerHTML = `<a role="tab"></a><a role="tab"></a>`;
+  const [segPc, segPhone] = seg.querySelectorAll("a");
+  segPc.textContent = T("במחשב", "On the computer");
+  segPc.href = saved ? "index.html" : "index.html?switch=1";
+  segPhone.textContent = T("בטלפון", "On the phone");
+  segPhone.href = "local.html";
+  (here === "local.html" ? segPhone : segPc).classList.add("on");
+  panel.append(seg);
   const lastModel = localStorage.getItem("kesherai-phone-model");
-  item("＋", T("צ'אט חדש בטלפון", "New chat on this phone"), "", "local.html?new=1");
+  item("＋", T("צ'אט חדש", "New chat"), "", "local.html?new=1", "kd-new");
   item("⌂", T("בית", "Home"), "", "local.html", here === "local.html" && !params.toString() ? "on" : "");
   // The parts that work on the phone (the ones she keeps on in Settings), then what goes through the computer.
   head(T("בטלפון", "On the phone"));
@@ -192,6 +215,29 @@
     location.reload();
   };
   foot.append(langBtn);
+
+  // The design doc's line icons instead of colour emoji (same set as the bottom bar).
+  const SVG = (d) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICONS = {
+    "＋": '<path d="M12 5v14M5 12h14"/>',
+    "⌂": '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    "🎓": '<path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
+    "🎙": '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    "🖼": '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+    "🩺": '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
+    "🌐": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    "🖥": '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    "🔄": '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+    "💬": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    "📱": '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
+    "🔒": '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    "🔗": '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+    "⬆": '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  };
+  const lineIcons = () => panel.querySelectorAll(".kd-ico").forEach((i) => { const d = ICONS[i.textContent.trim()]; if (d) i.innerHTML = SVG(d); });
+  lineIcons();
+  // Rows drawn again later (web search, lock) keep the line icons.
+  new MutationObserver(lineIcons).observe(panel, { childList: true, subtree: true });
   document.body.append(root);
 
   // ---------- press ☰, slide, let go (Apple-style); a tap just opens ----------
@@ -250,7 +296,7 @@
     // With the bottom bar (the app's home, tools, settings), its "Chats" opens this menu: no ☰ over it.
     const tabs = document.getElementById("appTabs");
     // Nor over the connect sheet (it has its own "back to the phone").
-    b.hidden = (!!tabs && !tabs.hidden) || !!document.getElementById("scrim");
+    b.hidden = (!!tabs && !tabs.hidden) || !!document.querySelector(".wbar");
   };
   place();
   setInterval(place, 400);

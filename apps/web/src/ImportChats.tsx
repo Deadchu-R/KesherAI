@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { unzip } from "fflate";
 import { api, isRemote } from "./api";
 import { refreshLibrary } from "./library";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const NAMES = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", jan: "Jan" } as const;
 
 /** Takes the chats file out of an export's zip (only that file is read). */

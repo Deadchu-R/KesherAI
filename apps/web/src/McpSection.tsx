@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, he$ } from "./i18n";
 import { toast } from "./library";
 
 interface Tool { name: string; description?: string; annotations?: { readOnlyHint?: boolean; title?: string } }
@@ -374,7 +374,7 @@ interface Found { app: string; name: string; transport: "stdio" | "http"; comman
  * ticked. Computer only (the list is not offered to the phone).
  */
 function FoundInOtherApps({ onAdded }: { onAdded: () => Promise<void> }) {
-  const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+  const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
   const [found, setFound] = useState<Found[]>([]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [secrets, setSecrets] = useState(false);

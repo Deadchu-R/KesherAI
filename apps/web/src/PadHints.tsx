@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { api } from "./api";
 import { toast } from "./library";
 import { startGamepad } from "./gamepad";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Whether the handheld look is on: "auto" (on a handheld gaming PC), "on" or "off" (remembered on this device). */
 export function handheldSetting(): "auto" | "on" | "off" {

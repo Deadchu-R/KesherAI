@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { setParts, useParts, setSimple } from "../parts";
 import { refreshPluginUi } from "../plugins";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * Settings → Parts: every part of KesherAI besides the chat, on or off.

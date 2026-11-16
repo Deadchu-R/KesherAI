@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { BUILT_IN_CATEGORIES } from "@kesher/shared";
 import { api } from "./api";
-import { getLocale, t, type StringKey } from "./i18n";
+import { getLocale, t, type StringKey, he$ } from "./i18n";
 import { RatingBadge, type Estimate } from "./Estimate";
 import { DownloadBar } from "./Downloads";
 import { Select } from "./ui/Select";
@@ -36,7 +36,7 @@ const WEIGHTS = /\.(gguf|safetensors|ckpt|bin|pt|pth|onnx)$/i;
 
 const gb = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.round(b / 1024 ** 2)} MB`);
 const compact = (n: number) => new Intl.NumberFormat(getLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(n);
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 function ago(iso?: string): string {
   if (!iso) return "";

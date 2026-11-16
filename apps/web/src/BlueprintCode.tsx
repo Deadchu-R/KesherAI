@@ -3,9 +3,9 @@ import { CodeView } from "./ide/CodeView";
 // The code editor (VS Code's) loads when editing starts.
 const CodeEditor = lazy(() => import("./ide/CodeEditor"));
 import { blueprintToCode, blueprintToVerse, codeText, type CodeNode } from "@kesher/shared";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** The real languages a graph can be shown in. */
 export type Lang = "cpp" | "verse" | "csharp";

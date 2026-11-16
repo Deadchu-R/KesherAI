@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Phone { id: string; brand: string; name: string; soc: string; gpu: string; android: number; screen: { w: number; h: number; hz: number }; tier: "high" | "mid" | "low"; detected?: boolean }
 interface View { catalog: Phone[]; custom: Phone[]; targets: string[]; brief?: string }

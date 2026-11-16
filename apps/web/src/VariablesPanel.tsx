@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { pinColor, VAR_DRAG } from "./BlueprintCanvas";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A variable as the panel shows and edits it (a C# field, a Blueprint or graph variable). */
 export interface PanelVar {

@@ -35,7 +35,7 @@ import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
 const Workspace = lazy(() => import("../ide/Workspace").then((m) => ({ default: m.Workspace })));
 import { ActivityGroup, groupSummary, type Step } from "../Activity";
-import { getLocale, t } from "../i18n";
+import { getLocale, t, he$ } from "../i18n";
 import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../BlueprintChatPanel";
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
@@ -47,7 +47,7 @@ import { splitAttachments } from "../attach-lines";
 import { isShortcut } from "../keyboard";
 import { LineIcon } from "../ui/Glyph";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[]; interruptedAt?: string };
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;

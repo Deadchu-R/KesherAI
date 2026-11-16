@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_PRESETS, HOME_SECTIONS, PHONE_TABS, resolveAppearance, type Appearance, type AppearanceColor } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { applyAppearance, saveAppearance, undoAppearance, useAppearance } from "./appearance";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, he$ } from "./i18n";
 import { NAV_GROUPS, NAV_ICONS } from "./Sidebar";
 import { toast } from "./library";
 import { exportTheme, importTheme, lookFromPicture, lookFromTokens } from "./themeFiles";
@@ -10,7 +10,7 @@ import { ToolIcon } from "./ToolIcon";
 import { Select } from "./ui/Select";
 import { Glyph, LineIcon } from "./ui/Glyph";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 const COLOR_NAMES: Record<AppearanceColor, [string, string]> = {
   bg: ["רקע", "Background"],

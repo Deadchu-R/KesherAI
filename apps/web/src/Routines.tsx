@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { usePersonas } from "./Personas";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number } | { kind: "startup"; delayMinutes?: number } | { kind: "page"; url: string; minutes: number } | { kind: "folder"; path: string } | { kind: "download"; match?: string };
 type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean; web?: boolean; folder?: string; background?: boolean } | { type: "self-work"; repo: string; goal: string; hours: number; check: string; modelId?: string };

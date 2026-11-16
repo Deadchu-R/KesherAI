@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { desktop } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** "Add to a project…" (this computer): copies the package into the project's Packages folder. */
 export function AddUnityPackage({ compact = false, project }: { compact?: boolean; /** The project shown: its package can be updated in one click. */ project?: string }) {

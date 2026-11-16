@@ -5,13 +5,13 @@
  * anything, and everything hidden stays one tap away under "Add". Saved on the computer, so the phone matches.
  */
 import { useEffect, useRef, useState } from "react";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { DEFAULT_PINS, NAV_ICONS, setPinOrder, useNavItems, usePins } from "./Sidebar";
 import { ShortcutForm, describeShortcut, saveShortcuts, useShortcuts, type Shortcut } from "./SidebarShortcuts";
 import { createPortal } from "react-dom";
 import { ToolIcon } from "./ToolIcon";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Moves item `i` of a list by `by` places. */
 function moved<T>(list: T[], i: number, by: number): T[] {

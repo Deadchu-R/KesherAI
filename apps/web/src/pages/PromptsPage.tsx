@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { refreshPrompts, usePrompts, type SavedPrompt } from "../SlashMenu";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type Draft = Omit<SavedPrompt, "id"> & { id?: string };
 const HE_TITLES: Record<string, string> = { summarize: "סיכום", translate: "תרגום (עברית ⇄ אנגלית)", fix: "תיקון באג", explain: "הסבר פשוט", email: "כתיבת מייל", review: "סקירת קוד" };
 

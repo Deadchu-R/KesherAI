@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { ROLES, partsForRole, type RoleDefinition } from "@kesher/shared";
 import { api } from "./api";
-import { getLocale, setLocale } from "./i18n";
+import { getLocale, setLocale, he$ } from "./i18n";
 import { refreshParts, setParts, useParts } from "./parts";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
 
 interface Onboarding { done: boolean; role?: string; show: boolean; google: { configured: boolean; connected: boolean }; remote: { enabled: boolean } }

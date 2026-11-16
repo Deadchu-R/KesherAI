@@ -7,12 +7,12 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { askText } from "./ui/askText";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { NAV_ICONS, useNavItems } from "./Sidebar";
 import { Menu, MenuItem, MenuSeparator } from "./ui/Menu";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A shortcut. */
 export interface Shortcut { id: string; label: string; icon?: string; image?: string; href: string }

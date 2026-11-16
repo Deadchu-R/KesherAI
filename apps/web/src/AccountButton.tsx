@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { refreshComputers } from "./computers";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Google { configured: boolean; connected: boolean; email: string | null; name: string | null; picture: string | null; services: string[] }
 interface Devices { connected: boolean; share: boolean; devices: Array<{ id: string; name: string; me: boolean; online: boolean; asleepSince?: string }> }

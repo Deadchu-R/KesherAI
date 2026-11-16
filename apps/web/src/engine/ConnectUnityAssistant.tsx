@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { api, isRemote } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * "Connect to Unity AI Assistant": adds KesherAI to the project's MCP settings,

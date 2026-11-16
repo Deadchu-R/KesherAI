@@ -1,8 +1,8 @@
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { AddUnityPackage } from "./AddUnityPackage";
 import { InstallIntoProject } from "./InstallIntoProject";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * How to connect the editor: Unity (the package through Unity's CLI) or

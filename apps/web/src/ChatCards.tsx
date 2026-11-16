@@ -3,7 +3,7 @@ import type { AgentEvent } from "@kesher/shared";
 import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { stepLabel } from "./Activity";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, he$ } from "./i18n";
 import { desktop } from "./library";
 import { RichText } from "./RichText";
 import { Select } from "./ui/Select";
@@ -17,7 +17,7 @@ import { McpAppView } from "./McpAppView";
  * same way.
  */
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 

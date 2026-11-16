@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { createConversation, refreshLibrary, toast } from "../library";
 import { ModelMenu } from "../ModelMenu";
 import { refreshPersonas, usePersonas, type Persona } from "../Personas";
 import { useModels } from "../useModels";
 import { Select } from "../ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type Draft = Omit<Persona, "id"> & { id?: string; sources?: Array<{ title: string; url: string }> };
 const HE_NAMES: Record<string, string> = { "Unity mentor": "מנטור Unity", "Code reviewer": "סוקר קוד", Translator: "מתרגם", Editor: "עורך לשון", Teacher: "מורה" };
 const localName = (n: string) => (getLocale() === "he" ? HE_NAMES[n] ?? n : n);

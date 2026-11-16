@@ -2,12 +2,12 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { api } from "../api";
 import { CodeAiBubble } from "../CodeAiBubble";
 import { Fullscreen } from "../Fullscreen";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import type { CodeProblem } from "../ide/CodeEditor";
 import { Select } from "../ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 // KesherAI's code editor (VS Code's), loaded when this view opens.
 const CodeEditor = lazy(() => import("../ide/CodeEditor"));
 

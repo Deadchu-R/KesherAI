@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { isRemote } from "./api";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Device { id: string; name: string; platform: string; gpu?: string; me: boolean; online: boolean; url?: string; models: number; lastSeen: string; providerId?: string }
 interface Status { connected: boolean; share: boolean; syncSettings: boolean; me: { id: string; name: string }; devices: Device[]; lastRun: string | null; error: string | null }

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { ConversationPage } from "./Conversation";
 import { PadHints } from "../PadHints";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * The Game Helper's window over the game (`#/game/<chat>/<picture>`), opened by Ctrl+Alt+G: the picture just taken,

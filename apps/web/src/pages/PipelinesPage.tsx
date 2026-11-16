@@ -5,13 +5,13 @@
  */
 import { useEffect, useState } from "react";
 import { api, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { usePersonas } from "../Personas";
 import { RoutinesSection } from "../Routines";
 import { Select } from "../ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Test = { kind: "contains" | "equals" | "regex" | "ask" | "empty"; text: string; value?: string; not?: boolean };
 type Step = { id: string; type: string; [k: string]: unknown };

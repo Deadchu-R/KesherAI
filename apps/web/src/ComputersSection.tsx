@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, isRemote } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * "A link for another device": a key of its own for the user's laptop (or a

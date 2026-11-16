@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Menu, MenuItem, MenuNote, MenuSeparator } from "./ui/Menu";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { LineIcon } from "./ui/Glyph";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** A saved persona, as the server returns it. */
 export interface Persona { id: string; name: string; icon?: string; instructions: string; modelId?: string; knowledge?: string; params?: { temperature?: number; topP?: number; stop?: string[] }; starters?: string[]; agentWhen?: string; agentWrite?: boolean }

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { api } from "./api";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { Select } from "./ui/Select";
 import { PhoneAppNotifications } from "./PhoneAppNotifications";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 // The server's long 403 for these settings is in English ("Where notifications go … changed only
 // on the computer itself."); on the phone, say it in the page's language. Other errors stay as they are.
 const say = (e: Error) => (e.message.includes("changed only on the computer itself") ? L("הגדרה שזמינה רק במחשב עצמו.", "a setting only the computer itself may change.") : e.message);

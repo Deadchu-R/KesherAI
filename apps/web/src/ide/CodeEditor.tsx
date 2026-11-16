@@ -1,13 +1,13 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import type { EditorHandle, EditorProps } from "./editor-types";
 import { chooseIde, chosenIde, ides, openInChosenIde, type IdeInfo } from "./ide-look";
 
 export type { CodeProblem } from "./editor-types";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 // The engines: VS Code's (Monaco) with a mouse and keyboard, CodeMirror on touch screens (Monaco does not work with on-screen keyboards).
 const MonacoEditor = lazy(() => import("./MonacoEditor"));
 const TouchEditor = lazy(() => import("./TouchEditor"));

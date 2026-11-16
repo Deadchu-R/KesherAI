@@ -3,12 +3,12 @@ import { Excalidraw, convertToExcalidrawElements, exportToBlob, exportToSvg, ser
 import "@excalidraw/excalidraw/index.css";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { api, withToken } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { Menu, MenuItem } from "../ui/Menu";
 import { mergeElements, sceneKey, type Versioned } from "../canvas-merge";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Doc {
   id: string;

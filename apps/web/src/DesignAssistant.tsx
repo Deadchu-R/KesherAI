@@ -8,12 +8,12 @@
 import { useState } from "react";
 import { api } from "./api";
 import { appearanceChanged, undoAppearance } from "./appearance";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { DEFAULT_PINS, showPins, useNavItems } from "./Sidebar";
 import { saveShortcuts, showShortcuts, type Shortcut } from "./SidebarShortcuts";
 import { BarPopover } from "./ui/BarPopover";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Answer { reply: string; look: boolean; menu: boolean; before: { pins: string[] | null; shortcuts: Shortcut[] }; pins: string[] | null; shortcuts: Shortcut[] }
 interface Line { who: "me" | "ai"; text: string; undo?: Answer; undone?: boolean }

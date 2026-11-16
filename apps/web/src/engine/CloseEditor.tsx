@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { api } from "../api";
-import { getLocale } from "../i18n";
+import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { Menu, MenuItem } from "../ui/Menu";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * Closes the open Unreal or Unity editor from KesherAI (the phone too), with the choice made here, so

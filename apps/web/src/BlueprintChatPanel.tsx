@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { BlueprintCanvas, type GNode } from "./BlueprintCanvas";
-import { getLocale } from "./i18n";
+import { getLocale, he$ } from "./i18n";
 import { Select } from "./ui/Select";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Graph = { path: string; name: string; parent?: string; graphs: Array<{ name: string; nodes: GNode[] }> };
 

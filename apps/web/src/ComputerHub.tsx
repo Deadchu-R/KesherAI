@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isRemote } from "./api";
-import { getLocale, t } from "./i18n";
+import { getLocale, t, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Another computer this window can open: one of "My devices", or one connected with a link. */
 interface Other { key: string; name: string; online: boolean; open: () => Promise<{ name?: string; error?: string }> }
