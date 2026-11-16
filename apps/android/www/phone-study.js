@@ -1,4 +1,4 @@
-/* global localStorage, document, alert, confirm, crypto, Node */
+/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval */
 /**
  * Study on the phone itself, with no computer: courses, lectures (pasted or typed with the keyboard's voice typing),
  * summaries, flashcards on the FSRS schedule, quizzes graded by code, medication calculations and lab values. The
@@ -80,7 +80,7 @@ function pieces(text, size = 6000) {
  * @param root - The section.
  * @param ask - Asks the phone's chosen model: (messages) => Promise<string | undefined> (undefined: no model ready).
  */
-export function renderPhoneStudy(root, ask, search) {
+export function renderPhoneStudy(root, ask, search, speech) {
   let db = load();
   let view = { at: "home" };
   const go = (v) => {
@@ -124,6 +124,7 @@ export function renderPhoneStudy(root, ask, search) {
     else if (view.at === "drugs") drugs();
     else if (view.at === "progress") progress();
     else if (view.at === "life") life();
+    else if (view.at === "record") record();
   }
 
   const back = (to) => el("button", { type: "button", class: "link", onclick: () => go(to) }, L("› חזרה", "‹ Back"));
@@ -173,6 +174,7 @@ export function renderPhoneStudy(root, ask, search) {
         sel.value = c.fieldChosen ? c.field : "";
         return sel;
       })()));
+    if (speech) root.append(el("button", { type: "button", class: "primary", style: "display: block; width: 100%; min-height: 52px; margin: 8px 0", onclick: () => go({ at: "record", course: c.id }) }, L("🎙 הקלט הרצאה (בטלפון)", "🎙 Record a lecture (on the phone)")));
     const title = el("input", { placeholder: L("כותרת ההרצאה", "Lecture title"), dir: "auto", "aria-label": L("כותרת", "Title") });
     const text = el("textarea", { rows: "6", dir: "auto", "aria-label": L("טקסט ההרצאה", "Lecture text"), placeholder: L("הדביקי טקסט, או הקלידי בקול עם המיקרופון של המקלדת.", "Paste text, or type by voice with the keyboard's microphone.") });
     root.append(el("section", { class: "api" },
@@ -321,6 +323,120 @@ export function renderPhoneStudy(root, ask, search) {
     };
     root.append(back({ at: "home" }), el("section", { class: "api" }, el("h2", {}, L("שאלה על הלימודים", "A question about your studies")),
       ...qs.map(([h, e]) => el("button", { type: "button", style: "display: block; width: 100%; text-align: start; margin: 4px 0", onclick: () => { input.value = L(h, e); } }, L(h, e))), input, btn, out));
+  }
+
+  /** 16-bit mono WAV, base64 (for the phone's speech engine). */
+  function wavBase64(chunks, rate) {
+    const n = chunks.reduce((a, c) => a + c.length, 0);
+    const buf = new ArrayBuffer(44 + n * 2);
+    const v = new DataView(buf);
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * 2, true);
+    let o = 44;
+    for (const c of chunks) for (let i = 0; i < c.length; i++, o += 2) v.setInt16(o, Math.max(-1, Math.min(1, c[i])) * 0x7fff, true);
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  const mmss = (sec) => `[${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}]`;
+
+  async function record() {
+    const c = course();
+    if (!c) return go({ at: "home" });
+    root.append(back({ at: "course", course: c.id }));
+    const box = el("section", { class: "api" });
+    root.append(box);
+    if (!(await speech.available())) return box.append(el("p", {}, L("בגרסה הזאת של האפליקציה אין מנוע דיבור. עדכני את האפליקציה.", "This build of the app has no speech engine. Update the app.")));
+    if (!(await speech.hasModel())) {
+      const dl = el("button", { type: "button", class: "primary" }, L(`הורד מודל דיבור (${speech.sizeMb}MB)`, `Download the speech model (${speech.sizeMb} MB)`));
+      dl.onclick = async () => {
+        dl.disabled = true;
+        try {
+          await speech.download((pct) => (dl.textContent = L(`מוריד ${pct}%`, `Downloading ${pct}%`)));
+          draw();
+        } catch (e) {
+          dl.disabled = false;
+          dl.textContent = L("נסי שוב", "Try again");
+          alert(String(e?.message || e));
+        }
+      };
+      return box.append(el("p", {}, L("כדי לתמלל בטלפון, צריך מודל דיבור פעם אחת (מומלץ ב-Wi-Fi).", "To transcribe on the phone, download a speech model once (Wi-Fi is best).")), dl);
+    }
+    const clock = el("p", { style: "font-size: 40px; font-weight: 700; direction: ltr; text-align: center; margin: 8px 0" }, "00:00");
+    const text = el("div", { dir: "auto", style: "white-space: pre-wrap; min-height: 120px; line-height: 1.6" }, L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute."));
+    const lines = [];
+    const startBtn = el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 52px" }, L("התחל הקלטה", "Start recording"));
+    box.append(el("p", { class: "muted" }, L("כל חצי דקה הופכת לטקסט בטלפון עצמו. השאירי את המסך דלוק. לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "Every half minute becomes text on the phone itself. Keep the screen on. Before recording a class, make sure the lecturer agrees.")), clock, text, startBtn);
+    startBtn.onclick = async () => {
+      let mic;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, noiseSuppression: true, autoGainControl: true } });
+      } catch {
+        return alert(L("אין גישה למיקרופון.", "No access to the microphone."));
+      }
+      const lock = await navigator.wakeLock?.request("screen").catch(() => undefined);
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      const src = ctx.createMediaStreamSource(mic);
+      const node = ctx.createScriptProcessor(4096, 1, 1);
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      src.connect(node);
+      node.connect(mute);
+      mute.connect(ctx.destination);
+      const began = Date.now();
+      let chunks = [];
+      let peak = 0;
+      let pieceAt = 0;
+      let queue = Promise.resolve();
+      const now = () => (Date.now() - began) / 1000;
+      const flush = () => {
+        const b64 = chunks.length && peak > 0.015 ? wavBase64(chunks, ctx.sampleRate) : undefined;
+        const at = pieceAt;
+        chunks = [];
+        peak = 0;
+        pieceAt = now();
+        if (!b64) return;
+        queue = queue.then(async () => {
+          try {
+            const t = (await speech.transcribe(b64, he() ? "he" : "en")).trim();
+            if (t) {
+              lines.push(`${mmss(at)} ${t}`);
+              text.textContent = lines.slice(-6).join("\n");
+            }
+          } catch (e) {
+            text.textContent = String(e?.message || e);
+          }
+        });
+      };
+      node.onaudioprocess = (e) => {
+        const d = e.inputBuffer.getChannelData(0);
+        chunks.push(new Float32Array(d));
+        for (let i = 0; i < d.length; i += 64) peak = Math.max(peak, Math.abs(d[i]));
+        if (now() - pieceAt >= 30) flush();
+      };
+      const tick = setInterval(() => { const sec = now(); clock.textContent = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`; }, 500);
+      const star = el("button", { type: "button", onclick: () => lines.push(`${mmss(now())} ⭐ ${L("חשוב", "Important")}`) }, L("⭐ חשוב", "⭐ Important"));
+      const stop = el("button", { type: "button", class: "primary", style: "background: #f08a8a; min-height: 52px" }, L("סיים הקלטה", "Finish recording"));
+      stop.onclick = async () => {
+        stop.disabled = true;
+        stop.textContent = L("מסיים את התמלול…", "Finishing the transcript…");
+        clearInterval(tick);
+        flush();
+        node.disconnect();
+        mic.getTracks().forEach((t) => t.stop());
+        void ctx.close();
+        void lock?.release?.();
+        await queue;
+        if (!lines.length) return alert(L("לא נשמע דיבור בהקלטה.", "No speech was heard."));
+        const l = { id: uid(), title: L(`הרצאה ${c.lectures.length + 1}`, `Lecture ${c.lectures.length + 1}`), date: new Date().toISOString().slice(0, 10), text: lines.join("\n") };
+        c.lectures.push(l);
+        if (commit()) go({ at: "lecture", course: c.id, lecture: l.id });
+      };
+      startBtn.replaceWith(el("div", { class: "ph-btns" }, star, stop));
+    };
   }
 
   function review() {

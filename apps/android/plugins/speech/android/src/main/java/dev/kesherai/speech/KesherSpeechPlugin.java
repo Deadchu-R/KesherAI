@@ -20,7 +20,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
+import android.util.Base64;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -167,5 +173,69 @@ public class KesherSpeechPlugin extends Plugin {
     protected void handleOnDestroy() {
         if (recognizer != null) recognizer.destroy();
         if (tts != null) tts.shutdown();
+    }
+
+    // ---- Speech to text on the phone itself (whisper.cpp, shipped as libwhispercli.so) ----
+
+    private File whisper() {
+        return new File(getContext().getApplicationInfo().nativeLibraryDir, "libwhispercli.so");
+    }
+
+    /** Whether this build has the speech engine. */
+    @PluginMethod
+    public void whisperAvailable(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("available", whisper().exists());
+        call.resolve(r);
+    }
+
+    /**
+     * Turns a WAV recording (base64, 16 kHz mono is best) into text with a model in kesher-models
+     * (downloaded by the phone page). Runs off the main thread.
+     */
+    @PluginMethod
+    public void transcribeWav(PluginCall call) {
+        String b64 = call.getString("wav", "");
+        String name = call.getString("model", "").replaceAll("[\\\\/]", "");
+        String lang = call.getString("language", "auto").replaceAll("[^a-z]", "");
+        File model = new File(new File(getContext().getFilesDir(), "kesher-models"), name);
+        if (!whisper().exists()) { call.reject("This build of the app has no speech engine."); return; }
+        if (!model.exists()) { call.reject("The speech model is not downloaded."); return; }
+        new Thread(() -> {
+            File wav = new File(getContext().getCacheDir(), "piece-" + UUID.randomUUID() + ".wav");
+            try {
+                try (FileOutputStream o = new FileOutputStream(wav)) { o.write(Base64.decode(b64, Base64.DEFAULT)); }
+                int threads = Math.max(2, Math.min(6, Runtime.getRuntime().availableProcessors() - 2));
+                List<String> cmd = new ArrayList<>();
+                cmd.add(whisper().getAbsolutePath());
+                cmd.add("-m"); cmd.add(model.getAbsolutePath());
+                cmd.add("-f"); cmd.add(wav.getAbsolutePath());
+                cmd.add("-l"); cmd.add(lang.isEmpty() ? "auto" : lang);
+                cmd.add("-t"); cmd.add(String.valueOf(threads));
+                cmd.add("-nt"); cmd.add("-np");
+                ProcessBuilder pb = new ProcessBuilder(cmd);
+                pb.directory(getContext().getCacheDir());
+                pb.redirectErrorStream(false);
+                Process p = pb.start();
+                StringBuilder text = new StringBuilder();
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), "UTF-8"))) {
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        String t = line.trim();
+                        if (!t.isEmpty() && !t.startsWith("[BLANK_AUDIO]")) text.append(t).append(' ');
+                    }
+                }
+                int code = p.waitFor();
+                if (code != 0) throw new Exception("The speech engine stopped (" + code + ").");
+                JSObject r = new JSObject();
+                r.put("text", text.toString().trim());
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject(e.getMessage() == null ? "Speech to text failed." : e.getMessage());
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                wav.delete();
+            }
+        }).start();
     }
 }

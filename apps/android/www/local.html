@@ -382,7 +382,7 @@
   const drawStudy = () => {
     if (studyDrawn || $("modelsView").dataset.tab !== "study") return;
     studyDrawn = true;
-    void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs), webSearch));
+    void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs), webSearch, studySpeech));
   };
   document.querySelectorAll("#cats [data-tab]").forEach((b) => b.addEventListener("click", drawStudy));
   { const t = new URLSearchParams(location.search).get("tab"); setCat(t === "health" || t === "study" ? t : localStorage.getItem("kesherai-phone-cat") || "chat"); }
@@ -1107,6 +1107,18 @@
   const IMG = window.Capacitor?.Plugins?.KesherImage;
   const SD = { file: "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", url: "https://huggingface.co/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", size: 1.57 * 1024 ** 3 };
   /** Asks the open chat's model one short question (no history). Undefined when no model is ready. */
+  // Speech to text on the phone for lectures (whisper.cpp in the app, a model in kesher-models).
+  const STT = { file: "ggml-small-q5_1.bin", url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin", mb: 190 };
+  const studySpeech = {
+    available: async () => !!LLM && !!window.Capacitor?.Plugins?.KesherSpeech && !!(await window.Capacitor.Plugins.KesherSpeech.whisperAvailable().catch(() => ({}))).available,
+    hasModel: async () => ((await LLM.list().catch(() => ({ models: [] }))).models ?? []).some((m) => m.name === STT.file),
+    sizeMb: STT.mb,
+    download: async (onPct) => {
+      const sub = await LLM.addListener("progress", (e) => { if (e.name === STT.file && e.total) onPct(Math.round((e.received / e.total) * 100)); }).catch(() => undefined);
+      try { await LLM.download({ url: STT.url, name: STT.file }); } finally { sub?.remove?.(); }
+    },
+    transcribe: async (wavBase64, language) => (await window.Capacitor.Plugins.KesherSpeech.transcribeWav({ wav: wavBase64, model: STT.file, language })).text ?? "",
+  };
   /** Like askOnce, for study: longer answers and up to ten minutes (a phone model is slow). */
   async function askLong(item, msgs) {
     if (!item) return undefined;
