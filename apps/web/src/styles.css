@@ -2801,3 +2801,5 @@ html.handheld .palette-list button { min-height: 44px; }
 .split-opt { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--line, #2a2a2e); background: var(--surface-2, #1f1f22); cursor: pointer; }
 .split-opt.on { border-color: var(--accent, #98a3ff); background: color-mix(in srgb, var(--accent, #98a3ff) 10%, transparent); }
 .split-opt input { flex: none; }
+.models-move { padding: 12px 14px; border-radius: 10px; background: var(--surface-2, #1f1f22); }
+.models-move progress { width: 100%; }

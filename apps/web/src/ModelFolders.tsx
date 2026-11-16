@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { t } from "./i18n";
+import { getLocale, he$, t } from "./i18n";
 import { desktop } from "./library";
 
 const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
 
 interface Folder { folder: string; source: string }
+interface MoveStatus { running: boolean; files: number; done: number; bytes: number; bytesDone: number; kept: string[]; error?: string; finishedAt?: number }
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 interface ScanResult extends Folder { added: boolean; totalSize: number; models: Array<{ path: string; name: string; size: number; format: string }> }
 
 /**
@@ -19,6 +21,22 @@ export function ModelFolders({ onChange }: { onChange: () => void }) {
   const [scan, setScan] = useState<ScanResult[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
+  const [move, setMove] = useState<MoveStatus | null>(null);
+  /** Follows a running move until it ends, then reloads the folders. */
+  const pollMove = async () => {
+    const m = await api<MoveStatus>("/api/models/move").catch(() => null);
+    setMove(m);
+    if (m?.running) setTimeout(() => void pollMove(), 1500);
+    else if (m?.finishedAt) { void api<typeof info>("/api/models/folders").then(setInfo); onChange(); }
+  };
+  const startMove = async (from: string) => {
+    if (!confirm(L("להעביר את כל המודלים מהתיקייה הזאת לתיקיית ההורדות? זה יכול לקחת זמן; אפשר להמשיך לעבוד בינתיים.", "Move all the models from this folder to the download folder? It can take a while; you can keep working meanwhile."))) return;
+    setError("");
+    try { setMove(await api<MoveStatus>("/api/models/move", { method: "POST", body: { from } })); setTimeout(() => void pollMove(), 1000); } catch (e) { setError((e as Error).message); }
+  };
+  useEffect(() => {
+    void api<MoveStatus>("/api/models/move").then((m) => { if (m.running) { setMove(m); void pollMove(); } }, () => undefined);
+  }, []);
   useEffect(() => {
     void api<typeof info>("/api/models/folders").then((i) => { setInfo(i); setDir(i?.modelsDir ?? ""); }).catch(() => undefined);
   }, []);
@@ -65,11 +83,26 @@ export function ModelFolders({ onChange }: { onChange: () => void }) {
         <span className="muted">{t("otherFoldersHint")}</span>
         {info.folders.map((f) => (
           <div key={f.folder} className="row">
-            <span className="pill">{f.source}</span>
+            <span className="pill">{f.source === "Earlier download folder" ? L("תיקיית ההורדות הקודמת", "Earlier download folder") : f.source}</span>
             <span className="mono grow" dir="ltr">{f.folder}</span>
+            <button type="button" className={f.source === "Earlier download folder" ? "primary" : ""} disabled={!!move?.running} onClick={() => void startMove(f.folder)}>{L("להעביר את המודלים לתיקייה החדשה", "Move the models to the new folder")}</button>
             <button type="button" onClick={() => void save({ folders: info.folders.filter((x) => x.folder !== f.folder) })}>{t("remove")}</button>
           </div>
         ))}
+        {move && (move.running || move.finishedAt) && (
+          <div className="stack models-move" role="status">
+            <div className="row">
+              <span className="grow">{move.running
+                ? L(`מעביר… ${move.done} מתוך ${move.files} קבצים · ${gb(move.bytesDone)} מתוך ${gb(move.bytes)}`, `Moving… ${move.done} of ${move.files} files · ${gb(move.bytesDone)} of ${gb(move.bytes)}`)
+                : move.error ? move.error
+                : move.kept.length ? L(`הועבר. ${move.kept.length} קבצים נשארו במקומם (בשימוש עכשיו); נסו שוב אחרי שהמודל נפרק.`, `Moved. ${move.kept.length} files stayed (in use now); try again after the model unloads.`)
+                : L("כל המודלים הועברו לתיקייה החדשה.", "All the models moved to the new folder.")}</span>
+              {move.running && <button type="button" onClick={() => void api("/api/models/move", { method: "DELETE" }).then(pollMove)}>{L("עצירה", "Stop")}</button>}
+            </div>
+            {move.running && <progress max={Math.max(1, move.bytes)} value={move.bytesDone} />}
+            <small className="muted">{L("כל קובץ נמחק מהמקום הישן רק אחרי שהעותק נבדק. מודל שטעון עכשיו נשאר במקומו ויועבר בפעם הבאה.", "Each file leaves the old place only after its copy is checked. A model loaded now stays and moves next time.")}</small>
+          </div>
+        )}
         <div className="row">
           <input className="grow mono" dir="ltr" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="D:\AI\models" aria-label={t("otherFolders")} />
           {pick(setExtra)}

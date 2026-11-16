@@ -12,7 +12,11 @@ import { forgetFoundModels } from "./engine.js";
 import { findMmproj } from "../llamacpp.js";
 import { isLocalRequest } from "../auth.js";
 import { assertWritableFolder } from "../library.js";
+import { ModelsMove } from "../models-move.js";
 import { engineRoutes } from "./engine.js";
+
+/** The one move of the models folder that may run at a time. */
+const mover = new ModelsMove();
 
 function mask(config: ProviderConfig): ProviderConfig & { hasApiKey: boolean } {
   const { apiKey, ...rest } = config;
@@ -205,6 +209,32 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true, freed: st.size };
   });
 
+  /**
+   * Moves the models of one of the extra folders into the download folder (another drive too): `{ from }`. Only from
+   * this computer. Progress at GET; DELETE stops it. A folder emptied completely leaves the list by itself.
+   */
+  app.post<{ Body: { from?: string } }>("/api/models/move", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Models can only be moved on this computer." });
+    const from = String(req.body?.from ?? "");
+    if (!s.config.modelFolders.some((f) => f.folder === from)) return reply.code(400).send({ error: "Choose one of the folders KesherAI reads models from." });
+    const to = s.paths.models;
+    const st = mover.start(from, to);
+    void mover.idle().then(async () => {
+      const done = mover.status();
+      if (!done.error && !done.kept.length && done.from === from) {
+        s.config.modelFolders = s.config.modelFolders.filter((f) => f.folder !== from);
+        await s.saveConfig().catch(() => undefined);
+      }
+      forgetFoundModels();
+    });
+    return st;
+  });
+  app.get("/api/models/move", async () => mover.status());
+  app.delete("/api/models/move", async () => {
+    mover.cancel();
+    return mover.status();
+  });
+
   /** The download folder and the extra folders KesherAI reads models from. */
   app.get("/api/models/folders", async () => ({
     modelsDir: s.paths.models,
@@ -221,6 +251,11 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     const b = req.body ?? {};
     try {
       if (b.modelsDir !== undefined) {
+        // The old download folder stays a folder models are read from (nothing is lost, nothing downloads again);
+        // "move" brings them over later.
+        const before = s.paths.models;
+        const hasFiles = (await readdir(before).catch(() => [])).length > 0;
+        if (hasFiles && !s.config.modelFolders.some((f) => f.folder === before)) s.config.modelFolders = [...s.config.modelFolders, { folder: before, source: "Earlier download folder" }];
         if (b.modelsDir) {
           await mkdir(b.modelsDir, { recursive: true });
           await assertWritableFolder(b.modelsDir);
