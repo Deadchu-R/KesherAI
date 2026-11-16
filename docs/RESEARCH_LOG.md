@@ -1406,3 +1406,29 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - Avatar in Zoom: Pickle (5-minute training video, avatar lip-syncs live to your voice, replaces the camera);
   HeyGen / Akool live cameras; Zoom's own avatars. Open question: shown as present while not there.
 - Stopped at: no hands-on test yet; next is a 30-minute Hebrew lecture through whisper small int8 on CPU.
+
+### Students, part 2: how the leaders build it (2026-11-16)
+
+- **Glean (lecture notes, used by disability services at many universities):** text notes timestamped to the audio
+  (click a note → jump to that second); slides/PDF imported beside the recording, text pulled from slides into notes;
+  one-key labels during the lecture ("Important", "Review") and headings; live captions while recording; playback
+  highlights the current word; AI Outline splits the transcript into themes; "Quiz Me" multiple choice; works offline
+  (records offline, syncs later); focus timer and reading view. → For KesherAI: the label keys and note↔audio sync
+  are the core; everything runs locally anyway.
+- **NotebookLM / Gemini Notebook:** everything grounded in the user's sources with inline citations; Audio Overviews
+  (two hosts discuss the material), Video Overviews, mind maps, flashcards and quizzes only from the sources, study
+  guide (key terms, sample quiz with answers, essay questions), "Guided Learning" mode; free tier 50 sources per
+  notebook, 10 quiz/flashcard sets a day. → KesherAI has knowledge bases and TTS already: a per-course notebook with
+  cited answers (lecture minute or PDF page), flashcards/quiz/mind map from it, and a two-voice audio recap.
+- **Khanmigo and university tutors:** ask what the student already knows first; one step at a time, never the whole
+  solution; may confirm whether an answer is right without giving it; short replies (~100 words); the tutor's
+  instructions hidden and fixed; a study found unrestricted ChatGPT raised practice scores but lowered closed-book
+  results. → A "Tutor" persona with these rules, switchable per course.
+- **Spaced repetition: FSRS (Anki's default scheduler since 23.10):** per card stability, difficulty and
+  retrievability; schedules for a target retention (e.g. 90%); about 25% fewer reviews than SM-2 for the same
+  retention; open-source implementations exist (open-spaced-repetition). → Use FSRS for KesherAI's flashcards and keep
+  Anki export (.apkg or CSV).
+- **Modest laptops:** whisper small int8 on CPU for live captions; summaries/flashcards with a 1–4 B model in Q4 in
+  the background after the lecture (not live), or a cloud key when the user has one; nothing needs a graphics card.
+- Stopped at: Hebrew accuracy of whisper small/base on a real lecture; which 1–4 B model writes good Hebrew
+  flashcards; FSRS library licence check before adding a dependency (ask Roee).
