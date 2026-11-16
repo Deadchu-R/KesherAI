@@ -42,6 +42,10 @@ export interface StudyLecture {
   diagram?: string;
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
+  /** Her own notes beside the summary (what the lecturer stressed, what to ask, what she did not get). */
+  notes?: string;
+  /** When her notes were last changed (a sync keeps the newer notes). */
+  notesT?: number;
 }
 
 /** A flashcard. `fsrs` is the scheduler's state (ts-fsrs Card, dates as ISO strings). */
@@ -581,6 +585,45 @@ export function parseCourseSummary(raw: string, prev: StudyCourseSummary | undef
   return { text, lectureIds: [...new Set([...(prev?.lectureIds ?? []), ...ids])], t };
 }
 
+/** One place a search across all her courses found the words. */
+export interface StudyHit {
+  courseId: string;
+  course: string;
+  kind: "lecture" | "summary" | "notes" | "card" | "term";
+  lectureId?: string;
+  title: string;
+  snippet: string;
+}
+
+const fold = (t: string) => t.toLowerCase().replace(/[\u0591-\u05c7]/g, "");
+
+/**
+ * Searches every course: lecture text, summaries, her notes, cards and glossary terms. Every word must appear
+ * (Hebrew prefixes like ו/ה/ב/ל/מ/ש/כ are fine: matching is inside words). Best first: titles and terms, then notes.
+ */
+export function searchStudy(courses: Array<Pick<StudyCourseData, "course" | "lectures" | "cards">>, query: string, limit = 40): StudyHit[] {
+  const want = fold(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1);
+  if (!want.length) return [];
+  const has = (t: string) => { const f = fold(t); return want.every((w) => f.includes(w)); };
+  const snip = (t: string) => {
+    const f = fold(t);
+    const at = Math.max(0, f.indexOf(want[0]!) - 60);
+    return `${at ? "…" : ""}${t.slice(at, at + 180).replace(/\s+/g, " ").trim()}${t.length > at + 180 ? "…" : ""}`;
+  };
+  const out: Array<StudyHit & { rank: number }> = [];
+  for (const d of courses) {
+    const base = { courseId: d.course.id, course: d.course.name };
+    for (const l of d.lectures) {
+      for (const t of l.terms ?? []) if (has(`${t.term} ${t.en ?? ""} ${t.explain}`)) out.push({ ...base, kind: "term", lectureId: l.id, title: t.term, snippet: snip(t.explain), rank: has(t.term) ? 0 : 2 });
+      if (l.notes && has(l.notes)) out.push({ ...base, kind: "notes", lectureId: l.id, title: l.title, snippet: snip(l.notes), rank: 1 });
+      if (l.summary && has(`${l.title} ${l.summary}`)) out.push({ ...base, kind: "summary", lectureId: l.id, title: l.title, snippet: snip(has(l.summary) ? l.summary : l.title), rank: has(l.title) ? 0 : 2 });
+      else if (has(`${l.title} ${l.text}`)) out.push({ ...base, kind: "lecture", lectureId: l.id, title: l.title, snippet: snip(has(l.text) ? l.text : l.title), rank: has(l.title) ? 1 : 3 });
+    }
+    for (const c of d.cards) if (has(`${c.front} ${c.back}`)) out.push({ ...base, kind: "card", ...(c.lectureId ? { lectureId: c.lectureId } : {}), title: c.front.slice(0, 120), snippet: snip(c.back), rank: 3 });
+  }
+  return out.sort((x, y) => x.rank - y.rank).slice(0, limit).map(({ rank: _r, ...h }) => h);
+}
+
 /** A course's syllabus, read once from its file and confirmed by her. Dates are YYYY-MM-DD. */
 export interface StudySyllabus {
   exams: Array<{ title: string; date: string }>;
@@ -830,7 +873,14 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
   const focus = [...(a.focus ?? []), ...(b.focus ?? [])].filter((f) => !focusSeen.has(f.t) && focusSeen.add(f.t)).sort((x, y) => x.t - y.t).slice(-5000);
   return {
     course: { ...a.course, ...field, ...(!a.course.examDate && b.course.examDate ? { examDate: b.course.examDate } : {}) },
-    lectures: byId(a.lectures, b.lectures, gone, (x, y) => (lectureWeight(y) > lectureWeight(x) || (lectureWeight(y) === lectureWeight(x) && y.text.length > x.text.length) ? y : x)),
+    lectures: byId(a.lectures, b.lectures, gone, (x, y) => {
+      const pick = lectureWeight(y) > lectureWeight(x) || (lectureWeight(y) === lectureWeight(x) && y.text.length > x.text.length) ? y : x;
+      // Her notes are hers: the newer notes win whichever copy has the better summary.
+      const notes = (y.notesT ?? 0) > (x.notesT ?? 0) ? y : x;
+      if (notes.notesT === pick.notesT) return pick;
+      const { notes: _n, notesT: _t, ...rest } = pick;
+      return { ...rest, ...(notes.notes ? { notes: notes.notes } : {}), ...(notes.notesT ? { notesT: notes.notesT } : {}) };
+    }),
     cards: byId(a.cards, b.cards, gone, (x, y) => (lastReview(y) > lastReview(x) ? y : x)),
     reviews,
     quizzes: byId(a.quizzes, b.quizzes, gone, (x, y) => (!x.answers && y.answers ? y : x)).sort((x, y) => x.t - y.t),

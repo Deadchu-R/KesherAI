@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { searchStudy, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -277,4 +277,20 @@ test("the course summary grows only with lectures not yet in it, and merges by t
   assert.equal(parseCourseSummary("קצר", undefined, ["1"]), null);
   const base = { course: { id: "c", name: "c", t: 1 }, lectures: [], cards: [], reviews: [], quizzes: [] } as unknown as StudyCourseData;
   assert.equal(mergeCourseData({ ...base, courseSummary: d.courseSummary }, { ...base, courseSummary: s }).courseSummary?.t, 9);
+});
+
+test("search across courses finds terms, notes, summaries and cards, with Hebrew prefixes; newer notes survive a sync", () => {
+  const lec = { id: "l1", title: "הרצאה 1: לב", date: "2026-11-01", text: "מערכת הדם", summary: "הלב שואב דם", terms: [{ term: "סיסטולה", explain: "כיווץ הלב" }], notes: "המרצה אמר שזה במבחן", notesT: 5 } as StudyLecture;
+  const d = { course: { id: "c1", name: "פיזיולוגיה", t: 1 }, lectures: [lec], cards: [{ id: "k1", front: "מה זה סיסטולה?", back: "כיווץ", format: "text", createdAt: 1, due: "", fsrs: {} }] } as unknown as StudyCourseData;
+  const hits = searchStudy([d], "סיסטולה");
+  assert.equal(hits[0]?.kind, "term");
+  assert.ok(hits.some((h) => h.kind === "card"));
+  assert.ok(searchStudy([d], "במבחן").some((h) => h.kind === "notes"));
+  assert.ok(searchStudy([d], "לב").some((h) => h.kind === "summary"));
+  assert.deepEqual(searchStudy([d], "x"), []);
+  const base = { course: d.course, cards: [], reviews: [], quizzes: [] };
+  const older = { ...lec, notes: "ישן", notesT: 1, summary: "סיכום ארוך יותר עם עוד פרטים", diagram: "graph" };
+  const m = mergeCourseData({ ...base, lectures: [older] } as unknown as StudyCourseData, { ...base, lectures: [lec] } as unknown as StudyCourseData);
+  assert.equal(m.lectures[0]?.notes, "המרצה אמר שזה במבחן");
+  assert.equal(m.lectures[0]?.diagram, "graph");
 });

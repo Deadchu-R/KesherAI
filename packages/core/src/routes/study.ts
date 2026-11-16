@@ -40,6 +40,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return reply.header("content-type", "text/plain; charset=utf-8").header("content-disposition", `attachment; filename*=UTF-8''${name}`).send(`#separator:tab\n#html:true\n${cardsToTsv(d.cards)}\n`);
   });
   app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/cards/import", { bodyLimit: 8 * 1024 * 1024 }, async (req) => st.importCards(req.params.id, String(req.body?.text ?? "")));
+  /** Search across all courses: `?q=`. */
+  app.get<{ Querystring: { q?: string } }>("/api/study/search", async (req) => ({ hits: await st.search(String(req.query.q ?? "").slice(0, 200)) }));
   /** Grows the course's summary by topic from newly summarized lectures. */
   app.post<C>("/api/study/courses/:id/summary", async (req) => st.courseSummary(req.params.id));
   /** A syllabus: `{ text }` → what it says (exams, assignments, weekly topics) for her to confirm; then PUT keeps it. */
@@ -212,7 +214,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     const l = (await st.get(req.params.id)).lectures.find((x) => x.id === req.params.lid);
     return l ?? reply.code(404).send({ error: "No such lecture." });
   });
-  app.patch<L & { Body: { title?: string; date?: string; text?: string; summary?: string } }>("/api/study/courses/:id/lectures/:lid", async (req) => st.updateLecture(req.params.id, req.params.lid, req.body ?? {}));
+  app.patch<L & { Body: { title?: string; date?: string; text?: string; summary?: string; notes?: string } }>("/api/study/courses/:id/lectures/:lid", async (req) => st.updateLecture(req.params.id, req.params.lid, req.body ?? {}));
   app.delete<L>("/api/study/courses/:id/lectures/:lid", async (req) => {
     await st.removeLecture(req.params.id, req.params.lid);
     return { ok: true };

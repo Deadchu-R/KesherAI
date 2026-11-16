@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, syllabusNow, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -112,6 +112,7 @@ function StudyHome() {
   return (
     <div className="page study-page">
       <h1>{L("לימודים", "Study")}</h1>
+      {!!courses?.length && <StudySearch />}
       {!!courses?.length && <NextStep />}
       {!!courses?.length && <FocusCard courses={courses} />}
       {!!courses?.length && <section className="study-today">
@@ -190,6 +191,36 @@ const CLINICAL_TABS = new Set(["calc", "drugs", "labs"]);
 
 /** Student benefits, the ones for her fields first, each with how to turn it on and its official page. */
 /** "What to study now": one step, the most urgent across her courses, with the button that does it. */
+const HIT_KIND: Record<StudyHit["kind"], [string, string]> = { term: ["מונח", "Term"], notes: ["ההערות שלי", "My notes"], summary: ["סיכום", "Summary"], lecture: ["הרצאה", "Lecture"], card: ["כרטיסייה", "Card"] };
+
+/** One search over all her courses: lectures, summaries, her notes, cards and terms. */
+function StudySearch() {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<StudyHit[] | null>(null);
+  useEffect(() => {
+    if (q.trim().length < 2) { setHits(null); return; }
+    const t = setTimeout(() => void api<{ hits: StudyHit[] }>(`/api/study/search?q=${encodeURIComponent(q.trim())}`).then((r) => setHits(r.hits), () => setHits([])), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  return (
+    <section className="study-search">
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("חיפוש בכל הקורסים", "Search all courses")} aria-label={L("חיפוש בכל הקורסים", "Search all courses")} dir="auto" />
+      {hits && (hits.length ? (
+        <ul className="study-hits">
+          {hits.map((h, i) => (
+            <li key={i}>
+              <a href={h.lectureId && h.kind !== "card" ? `#/study/${h.courseId}/l/${h.lectureId}` : `#/study/${h.courseId}`} dir="auto">
+                <b>{h.title}</b> <span className="muted small">{h.course} · {L(...HIT_KIND[h.kind])}</span>
+                <span className="small study-hit-snip">{h.snippet}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="muted small">{L("לא נמצא בשום קורס.", "Not found in any course.")}</p>)}
+    </section>
+  );
+}
+
 function NextStep() {
   const [n, setN] = useState<StudyNext | null>(null);
   useEffect(() => void api<{ next: StudyNext | null }>("/api/study/next").then((r) => setN(r.next), () => undefined), []);
@@ -760,6 +791,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           : view === "terms" ? <TermList terms={l.terms ?? []} />
           : l.diagram ? <FlowView src={l.diagram} /> : <p className="muted">{L("בהרצאה הזאת אין תהליך שמתאים לתרשים.", "This lecture has no process that fits a diagram.")}</p>}
       </div>
+      <LectureNotes key={l.id} base={base} notes={l.notes ?? ""} />
       {sel && (
         <div className="study-explain" aria-live="polite">
           <p className="muted small" dir="auto">{L("נבחר: ", "Selected: ")}“{sel.length > 140 ? `${sel.slice(0, 140)}…` : sel}”</p>
@@ -797,6 +829,25 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
         }}>{L("מחק הרצאה", "Delete lecture")}</button>
       </div>
     </article>
+  );
+}
+
+/** Her own notes beside the summary, saved as she types (a short pause). */
+function LectureNotes({ base, notes }: { base: string; notes: string }) {
+  const [text, setText] = useState(notes);
+  const [state, setState] = useState<"" | "saving" | "saved">("");
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    setState("saving");
+    const t = setTimeout(() => void api(base, { method: "PATCH", body: { notes: text } }).then(() => setState("saved"), (e: Error) => { setState(""); toast(e.message); }), 700);
+    return () => clearTimeout(t);
+  }, [text, base]);
+  return (
+    <details className="study-notes" open={!!notes}>
+      <summary>{L("ההערות שלי", "My notes")}{state === "saving" ? L(" · שומר…", " · saving…") : state === "saved" ? L(" · נשמר", " · saved") : ""}</summary>
+      <textarea rows={4} dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={L("מה המרצה הדגיש, מה לשאול, מה לא הבנתי…", "What the lecturer stressed, what to ask, what I did not get…")} aria-label={L("ההערות שלי", "My notes")} />
+    </details>
   );
 }
 

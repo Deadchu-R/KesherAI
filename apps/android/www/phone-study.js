@@ -1,11 +1,11 @@
-/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, File, URL */
+/* global localStorage, document, alert, confirm, crypto, Node, navigator, AudioContext, btoa, setInterval, clearInterval, setTimeout, clearTimeout, File, URL */
 /**
  * Study on the phone itself, with no computer: courses, lectures (pasted or typed with the keyboard's voice typing),
  * summaries, flashcards on the FSRS schedule, quizzes graded by code, medication calculations and lab values. The
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -370,9 +370,47 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       to ? el("button", { type: "button", class: "primary", onclick: () => go(to) }, label) : "");
   }
 
+  /** Her own notes beside the lecture's summary, saved as she types. */
+  function notesBox(l) {
+    const ta = el("textarea", { rows: "4", dir: "auto", "aria-label": L("ההערות שלי", "My notes"), placeholder: L("מה המרצה הדגיש, מה לשאול, מה לא הבנתי…", "What the lecturer stressed, what to ask, what I did not get…") });
+    ta.value = l.notes || "";
+    let t = 0;
+    ta.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        if (ta.value.trim()) l.notes = ta.value.slice(0, 50000);
+        else delete l.notes;
+        l.notesT = Date.now();
+        commit();
+      }, 600);
+    };
+    const box = el("details", { class: "api" }, el("summary", {}, L("ההערות שלי", "My notes")), ta);
+    if (l.notes) box.open = true;
+    return box;
+  }
+
+  const HIT_KIND = { term: ["מונח", "Term"], notes: ["ההערות שלי", "My notes"], summary: ["סיכום", "Summary"], lecture: ["הרצאה", "Lecture"], card: ["כרטיסייה", "Card"] };
+  /** One search over all the courses on the phone. */
+  function searchBox() {
+    const input = el("input", { type: "search", dir: "auto", placeholder: L("חיפוש בכל הקורסים", "Search all courses"), "aria-label": L("חיפוש בכל הקורסים", "Search all courses"), style: "width: 100%" });
+    const list = el("div", { "aria-live": "polite" });
+    let t = 0;
+    input.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const q = input.value.trim();
+        if (q.length < 2) return list.replaceChildren();
+        const hits = searchStudy(db.courses.map(toData), q, 30);
+        list.replaceChildren(...(hits.length ? hits.map((h) => el("button", { type: "button", class: "ph-hit", dir: "auto", style: "display: block; width: 100%; text-align: start; margin-top: 6px", onclick: () => go(h.lectureId && h.kind !== "card" ? { at: "lecture", course: h.courseId, lecture: h.lectureId } : { at: "course", course: h.courseId }) },
+          el("b", {}, h.title), " ", el("small", { class: "muted" }, `${h.course} · ${L(...HIT_KIND[h.kind])}`), el("br"), el("small", {}, h.snippet))) : [el("p", { class: "muted small" }, L("לא נמצא בשום קורס.", "Not found in any course."))]));
+      }, 200);
+    };
+    return el("section", { class: "api" }, input, list);
+  }
+
   function home() {
     scheduleReminders();
-    if (db.courses.length) root.append(nextCard(), focusCard());
+    if (db.courses.length) root.append(searchBox(), nextCard(), focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);
@@ -633,6 +671,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     root.ontouchend = () => setTimeout(showPick, 60);
     root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), explainBox,
       el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
+      notesBox(l),
       flowView(l.diagram),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),

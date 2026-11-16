@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -32,6 +32,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(Array.isArray(l.terms) ? { terms: arr<StudyTerm>(l.terms, 300).map((t) => ({ term: str(t?.term, 200), ...(t?.en ? { en: str(t.en, 200) } : {}), explain: str(t?.explain, 2000) })) } : {}),
     ...(l.diagram ? { diagram: str(l.diagram, 20_000) } : {}),
     ...(l.audio ? { audio: str(l.audio, 20_000) } : {}),
+    ...(l.notes ? { notes: str(l.notes, 50_000), notesT: Number(l.notesT) || Date.now() } : {}),
   }));
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
     id: k.id, front: str(k.front, 4000), back: str(k.back, 8000), format: STUDY_FORMATS.includes(k.format) ? k.format : "text", ...(k.kind ? { kind: str(k.kind, 40) } : {}),
@@ -316,13 +317,18 @@ export class Study {
   }
 
   /** Changes a lecture's title, date or text. */
-  async updateLecture(id: string, lectureId: string, p: Partial<Pick<StudyLecture, "title" | "date" | "text" | "summary">>): Promise<StudyLecture> {
+  async updateLecture(id: string, lectureId: string, p: Partial<Pick<StudyLecture, "title" | "date" | "text" | "summary" | "notes">>): Promise<StudyLecture> {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     if (typeof p.title === "string") l.title = p.title.trim().slice(0, 200) || l.title;
     if (typeof p.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) l.date = p.date;
     if (typeof p.text === "string" && p.text.trim()) l.text = p.text.slice(0, 400_000);
     if (typeof p.summary === "string") l.summary = p.summary.slice(0, 100_000);
+    if (typeof p.notes === "string") {
+      if (p.notes.trim()) l.notes = p.notes.slice(0, 50_000);
+      else delete l.notes;
+      l.notesT = Date.now();
+    }
     await this.save(d);
     return l;
   }
@@ -587,6 +593,13 @@ export class Study {
     else delete l.diagram;
     await this.save(d);
     return l;
+  }
+
+  /** Searches all her courses (lectures, summaries, notes, cards, terms). */
+  async search(q: string): Promise<StudyHit[]> {
+    const rows = await this.list();
+    const all = await Promise.all(rows.map((r) => this.get(r.id)));
+    return searchStudy(all, q);
   }
 
   /**
