@@ -196,8 +196,10 @@ class TextReader {
       this.worker ??= (async () => {
         const { createWorker } = await import("tesseract.js");
         await mkdir(this.cache, { recursive: true });
-        return (await createWorker(["eng", "heb"], 1, { cachePath: this.cache })) as never;
+        // errorHandler: without it tesseract.js throws a failed read outside any promise (an uncaught error in the app).
+        return (await createWorker(["eng", "heb"], 1, { cachePath: this.cache, errorHandler: () => undefined })) as never;
       })();
+      if (png.length < 100) return undefined;
       const w = await this.worker;
       return (await w.recognize(png)).data.text.trim();
     } catch {
