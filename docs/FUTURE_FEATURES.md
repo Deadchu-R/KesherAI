@@ -8,7 +8,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Godot support (#/godot): the KesherAI Bridge addon (GDScript, works for C# projects), the chat sees and changes scenes, nodes and scripts as undo steps, runs the game and reads its log; checked in a real Godot 4.7.2 editor
 - ✅ UEFN / Verse: the chat lists UEFN projects and reads and writes .verse devices in them (Blueprints read through the bridge can be written as Verse); 👤 building is in UEFN itself (Verse → Build Verse Code), not tried on the PC (no UEFN project there yet)
 - ⬜ Minecraft and Roblox modding
-- ⬜ Fab search and install from the chat
+- ⬜ Fab search and install from the chat: no public Fab API; plan in RESEARCH_LOG (open the search, Unreal's Fab plugin for owned assets; never buys)
 - ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)
 - ✅ KesherAI as a model provider for Unreal and Unity AI: a guide in Settings → For developers → API (Unity AI Gateway with Claude Code or Codex pointed at KesherAI; Unreal plugins with an OpenAI-compatible provider); KesherAI's Anthropic API answered a Claude Code style tool call on the PC. 👤 The check inside Unity AI itself needs a Unity AI Gateway seat
 - ✅ Depth and normals turned into styled frames (Nodes → ready flows: "A styled frame from the engine's depth and normals", ControlNet 1.1 depth + normals on SD 1.5; how to export the passes from Unreal and Unity). 🔧 Not yet run on the PC (the card was busy tonight)
@@ -56,7 +56,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
 - ✅ A CPU and RAM limit for KesherAI's own engines (Settings → Computer: off by default, with a one-tap suggestion of 85% memory and 80% processor)
 - ✅ Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen, and the models already there move over in the background
-- ⬜ As-you-type suggestions in any app (Magic Tab), needs a small model always loaded
+- ⬜ As-you-type suggestions in any app (Magic Tab): designed (RESEARCH_LOG: UI Automation + a key hook + a small model), needs a native piece and testing at the keyboard
 - ✅ Phone build targets chosen by phone model (Settings → For developers → Target phones; Unity and Unreal builds use them; a plugged-in phone is read by USB)
 
 ## Content and import
