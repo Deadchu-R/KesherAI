@@ -61,7 +61,7 @@ Answer with JSON only: [{"front": "...", "back": "...", "kind": "..."}]`;
 
 const QUIZ_PROMPT = `You write a multiple-choice quiz for a student from lecture material. ${LANG} ${ONLY_MATERIAL}
 Each question has 4 options, exactly one right; wrong options are plausible. Mix recall, understanding and short clinical cases where the material allows.
-The explanation says why the right answer is right, from the material.
+For a calculation, solve it first; the right option must equal your result exactly, and the other options are plausible mistakes. The explanation says why the right answer is right, from the material, in at most three sentences. Write everything in the material's language.
 Answer with JSON only: [{"q": "...", "options": ["...", "...", "...", "..."], "answer": 0, "explain": "...", "lecture": 1}] where "lecture" is the number of the lecture the question comes from.`;
 
 const DRUGS_PROMPT = `You make nursing drug cards from lecture material. ${LANG} ${ONLY_MATERIAL}
@@ -636,6 +636,8 @@ export class Study {
       const options = Array.isArray(x?.options) ? x.options.map((o) => String(o).slice(0, 600)).filter(Boolean) : [];
       const answer = Number(x?.answer);
       if (!x?.q || options.length < 2 || !(answer >= 0 && answer < options.length)) continue;
+      // A long, wandering explanation means the model was not sure of its own answer (found on the PC): drop it.
+      if (String(x.explain ?? "").length > 900) continue;
       const lec = chosen[Number(x.lecture) - 1] ?? (chosen.length === 1 ? chosen[0] : undefined);
       questions.push({ q: String(x.q).slice(0, 2000), options, answer, explain: String(x.explain ?? "").slice(0, 2000), ...(lec ? { lectureId: lec.id } : {}) });
       if (questions.length >= count) break;

@@ -551,7 +551,7 @@ export interface StudyPastExam {
 export function pastExamStyle(exams: StudyPastExam[], budget = 8000): string {
   if (!exams.length) return "";
   const each = Math.floor(budget / exams.length);
-  return `Write the questions like these past exams of this course: the same kinds of questions, format, length, difficulty and topics they stress (do not copy their questions word for word; write new ones from the lectures):\n\n${exams.map((e) => `--- Past exam: ${e.title}\n${e.text.slice(0, each)}`).join("\n\n")}`;
+  return `Write the questions like these past exams of this course: the same kinds of questions, format, length, difficulty and topics they stress (do not copy their questions word for word; write new ones, only about what the lectures say, never a fact the lectures do not give):\n\n${exams.map((e) => `--- Past exam: ${e.title}\n${e.text.slice(0, each)}`).join("\n\n")}`;
 }
 
 /** A finished focus-timer session (minutes actually focused). */
@@ -813,6 +813,9 @@ export const HOMEWORK_PROMPT =
 export const TRANSLATE_PROMPT = (to: "he" | "en") =>
   `Translate this piece of a live lecture transcript into ${to === "he" ? "Hebrew" : "English"}. Keep medical and scientific terms accurate (in Hebrew, add the English term in brackets the first time). The transcript may have recognition mistakes: translate the meaning. Answer with the translation only.`;
 
+/** Models with English instructions drift into English (found on the PC): Hebrew material says so at the end. */
+const hebrewAsk = (sample: string) => (/[\u0590-\u05ff]/.test(sample) ? "\n\n(Answer in Hebrew.)" : "");
+
 /** Explaining a passage she selected in a lecture (like "explain this" in PDF readers), by kind. */
 const EXPLAIN_RULES = " Write only in the passage's language (English only for a technical term, in brackets). Be accurate: if the lecture does not explain it, give the standard textbook meaning carefully and say it is not from the lecture.";
 export const EXPLAIN_PROMPTS: Record<"explain" | "simple" | "example", string> = {
@@ -827,7 +830,7 @@ export function explainMessages(o: { selection: string; lecture: StudyLecture; k
   const ctx = (o.lecture.summary || o.lecture.text).slice(0, 4000);
   return [
     { role: "system", content: `${EXPLAIN_PROMPTS[o.kind]}${EXPLAIN_RULES}${o.hint ? `\n${o.hint}` : ""}` },
-    { role: "user", content: `Lecture: ${o.lecture.title}\nContext from the lecture:\n${ctx}\n\nThe passage she selected:\n${sel}` },
+    { role: "user", content: `Lecture: ${o.lecture.title}\nContext from the lecture:\n${ctx}\n\nThe passage she selected:\n${sel}${hebrewAsk(`${sel} ${ctx.slice(0, 300)}`)}` },
   ];
 }
 
@@ -927,7 +930,7 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
   // Homework: the problem is the first thing she wrote; her later messages are steps, hints asked for, or "full solution".
   const problem = homework ? (turns.find((h) => h.role === "user")?.content ?? q) : "";
   const user = homework ? `Passages from her lectures:\n\n${material}\n\n${turns.length ? `The problem: ${problem.slice(0, 3000)}\n\nHer message: ${q}` : `The problem: ${q}`}` : study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\n${turns.length ? "Ask her the next question (a new one, not asked above). Only the question." : "Start: ask her the first question."}`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
-  return { messages: [{ role: "system", content: system }, ...turns, { role: "user", content: user }], passages };
+  return { messages: [{ role: "system", content: system }, ...turns, { role: "user", content: `${user}${hebrewAsk(`${q} ${o.lectures[0]?.text.slice(0, 300) ?? ""}`)}` }], passages };
 }
 
 /** The spoken review of a lecture: written to be heard, not read. */

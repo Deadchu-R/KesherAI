@@ -203,7 +203,7 @@ test("explainMessages: the selection with the lecture as context, by kind", () =
   const m = explainMessages({ selection: "  מגביר את כוח ההתכווצות  ", lecture, kind: "simple" });
   assert.match(m[0]!.content, /very simple words/);
   assert.match(m[1]!.content, /Context from the lecture:\nסיכום קצר/);
-  assert.match(m[1]!.content, /The passage she selected:\nמגביר את כוח ההתכווצות$/);
+  assert.match(m[1]!.content, /The passage she selected:\nמגביר את כוח ההתכווצות\n\n\(Answer in Hebrew.\)$/);
 });
 
 test("past exams: a style note from each, merged by id and removed ones stay removed", () => {
