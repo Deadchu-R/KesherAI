@@ -126,16 +126,81 @@
   .ph-ask { display: grid; gap: 8px; margin: 8px 0; }
   .ph-ask-turn { padding: 10px 12px; border-radius: 12px; background: rgb(255 255 255 / 0.05); white-space: pre-wrap; }
   .ph-ask-turn.user { background: transparent; border: 1px solid rgb(255 255 255 / 0.15); }
+
+  /* The phone app's own home (no computer), like the remote's: where it runs, the parts, recent chats, a message box. */
+  .seg { display: flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 3px; gap: 2px; margin: 0 0 12px; }
+  .seg button { flex: 1; min-height: 38px; border-radius: 9px; border: 0; background: transparent; color: #c9c9ce; font-size: 13px; padding: 0 8px; }
+  .seg button.on { background: #2e2e3a; color: var(--text); font-weight: 500; }
+  .home-hi { margin: 4px 0 12px; font-size: 24px; font-weight: 500; }
+  .pc-note { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); margin-bottom: 14px; font-size: 13px; color: #c9c9ce; }
+  .pc-note button { min-height: 36px; font-size: 13px; padding: 0 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0 16px; }
+  .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 76px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); font-size: 13px; padding: 0; }
+  .tile .i { font-size: 20px; }
+  .lbl { font-size: 13px; color: var(--muted); margin: 6px 0; display: flex; justify-content: space-between; }
+  .rec { display: flex; align-items: center; min-height: 48px; padding: 0 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); font-size: 15px; margin-bottom: 8px; color: var(--text); text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; text-align: start; }
+  .home-compose { display: flex; gap: 8px; align-items: flex-end; margin: 8px 0 4px; }
+  .home-compose textarea { flex: 1; min-height: 48px; max-height: 140px; border-radius: 22px; border: 1px solid #2f2f35; background: var(--panel); padding: 12px 16px; font-size: 16px; resize: none; }
+  .home-compose button { width: 48px; min-height: 48px; border-radius: 24px; padding: 0; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f2a24; color: #7fd6a4; white-space: nowrap; margin-inline-start: auto; }
+  .tag.pc { background: #2a2520; color: #f0b37e; }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 8px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); margin-bottom: 8px; }
+  .switch-row small { display: block; color: var(--muted); font-size: 12px; }
+  .switch-row input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
+  /* The bottom bar, like the remote's. */
+  .app-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: calc(64px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--border); background: var(--bg); }
+  .app-tabs button { min-height: 0; border: 0; border-radius: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; color: var(--muted); padding: 0; }
+  .app-tabs button[aria-current] { color: var(--text); }
+  .app-tabs button[aria-current] svg { stroke: var(--accent); }
+  .app-tabs button .i { font-size: 19px; }
+  body.has-tabs main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 </style>
 </head>
 <body class="kd-has-header">
   <header>
     <button class="icon" id="back" type="button" aria-label="Back">→</button>
+    <button class="icon" id="homeBtn" type="button" aria-label="Home" title="Home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg></button>
     <h1 id="title" data-he="בטלפון הזה" data-en="On this phone">בטלפון הזה</h1>
     <button type="button" id="modelSwitch" class="model-switch" hidden><span id="modelName"></span> <span aria-hidden="true">▾</span></button>
     <button class="icon" id="newChat" type="button" aria-label="New chat" hidden>＋</button>
     <button class="icon" id="menu" type="button" aria-label="Menu" hidden>☰</button>
   </header>
+
+  <main id="homeView" hidden>
+    <div class="seg" role="tablist" aria-label="Where it runs">
+      <button type="button" role="tab" id="whereComputer" data-he="במחשב" data-en="On the computer">במחשב</button>
+      <button type="button" role="tab" aria-selected="true" class="on" id="wherePhone" data-he="בטלפון" data-en="On the phone">בטלפון</button>
+    </div>
+    <h2 class="home-hi" id="homeHi"></h2>
+    <div class="pc-note" id="pcNote" hidden>
+      <span aria-hidden="true">🖥</span>
+      <span style="flex: 1" data-he="המחשב לא מחובר. הכול כאן עובד בטלפון; מצגות, PDF ומודלים גדולים צריכים את המחשב." data-en="The computer is not connected. Everything here works on the phone; slides, PDFs and big models need the computer.">המחשב לא מחובר. הכול כאן עובד בטלפון; מצגות, PDF ומודלים גדולים צריכים את המחשב.</span>
+      <button type="button" id="pcConnect" data-he="התחבר" data-en="Connect">התחבר</button>
+    </div>
+    <div class="lbl"><span data-he="בטלפון, גם בלי אינטרנט" data-en="On the phone, even offline">בטלפון, גם בלי אינטרנט</span></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="lbl"><span data-he="אחרונים בטלפון" data-en="Recent on the phone">אחרונים בטלפון</span></div>
+    <div id="homeRecent"></div>
+    <form class="home-compose" id="homeCompose">
+      <textarea id="homeInput" rows="1" aria-label="Message" data-ph-he="כתוב הודעה…" data-ph-en="Write a message…" placeholder="כתוב הודעה…"></textarea>
+      <button type="submit" class="primary" aria-label="Send">↑</button>
+    </form>
+  </main>
+
+  <main id="toolsView" hidden>
+    <div id="toolList"></div>
+  </main>
+
+  <main id="settingsView" hidden>
+    <div class="lbl"><span data-he="חיבור למחשב" data-en="Connecting to the computer">חיבור למחשב</span></div>
+    <label class="switch-row"><span><span data-he="להתחבר אוטומטית למחשב כשאפשר" data-en="Connect to the computer automatically when possible">להתחבר אוטומטית למחשב כשאפשר</span><small data-he="כשהמחשב השמור זמין, האפליקציה עוברת אליו לבד. כבוי: נשארת בטלפון עד שבוחרים." data-en="When the saved computer is reachable, the app moves to it. Off: it stays on the phone until you choose.">כשהמחשב השמור זמין, האפליקציה עוברת אליו לבד. כבוי: נשארת בטלפון עד שבוחרים.</small></span><input type="checkbox" id="autoConnect" /></label>
+    <div class="lbl"><span data-he="מה מופיע באפליקציה" data-en="What the app shows">מה מופיע באפליקציה</span></div>
+    <div id="partList"></div>
+    <div class="lbl"><span data-he="עוד" data-en="More">עוד</span></div>
+    <button type="button" class="rec" id="setModels" data-he="מודלים בטלפון" data-en="Models on the phone">מודלים בטלפון</button>
+    <button type="button" class="rec" id="setComputers" data-he="המחשבים שלי" data-en="My computers">המחשבים שלי</button>
+    <button type="button" class="rec" id="setLang">English</button>
+  </main>
 
   <main id="modelsView">
     <p class="intro" data-he="מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום." data-en="Small models that run on the phone itself, with no computer and no internet (after the download). They are slower and less capable than models on your computer, but work anywhere.">מודלים קטנים שרצים על הטלפון עצמו, בלי מחשב ובלי אינטרנט (אחרי ההורדה). הם מהירים פחות וחכמים פחות ממודלים במחשב, אבל עובדים בכל מקום.</p>
@@ -374,6 +439,104 @@
     localStorage.setItem("kesherai-phone-cat", tab);
   }
   document.querySelectorAll("#cats [data-tab]").forEach((b) => (b.onclick = () => setCat(b.dataset.tab)));
+  // ---------- the app's own home (no computer), tools, settings and the bottom bar (like the remote) ----------
+  /** The parts she can show or hide (Settings), like the remote's parts. */
+  const PARTS = [
+    { id: "study", icon: "🎓", name: T("לימודים", "Study"), sub: T("קורסים, כרטיסיות, בחנים, האזנה", "Courses, cards, quizzes, listening"), tab: "study" },
+    { id: "voice", icon: "🎙", name: T("שיחה קולית", "Voice"), sub: T("מדברים עם המודל", "Talk with the model"), tab: "voice" },
+    { id: "images", icon: "🖼", name: T("תמונות", "Pictures"), sub: T("יצירת תמונות בטלפון", "Make pictures on the phone"), tab: "images" },
+    { id: "health", icon: "🩺", name: T("בריאות", "Health"), sub: T("השעון והטלפון", "The watch and the phone"), tab: "health" },
+    { id: "api", icon: "🌐", name: T("דרך האינטרנט", "Online"), sub: T("מודלים בענן עם מפתח משלך", "Cloud models with your own key"), tab: "api" },
+  ];
+  const PARTS_KEY = "kesherai-phone-parts";
+  const partsOn = () => { try { return { ...Object.fromEntries(PARTS.map((x) => [x.id, true])), ...JSON.parse(localStorage.getItem(PARTS_KEY) || "{}") }; } catch { return Object.fromEntries(PARTS.map((x) => [x.id, true])); } };
+  function applyParts() {
+    const on = partsOn();
+    document.querySelectorAll("#cats [data-tab]").forEach((b) => { if (b.dataset.tab in on) b.hidden = !on[b.dataset.tab]; });
+    document.querySelectorAll("#appTabs [data-part]").forEach((b) => (b.hidden = !on[b.dataset.part]));
+  }
+  const PAGES = ["homeView", "toolsView", "settingsView", "modelsView", "chatView"];
+  /** Shows one of the app's pages, with the bottom bar on the top-level ones. */
+  function showPage(name, title) {
+    for (const id of PAGES) $(id).hidden = id !== name;
+    const top = name === "homeView" || name === "toolsView" || name === "settingsView";
+    $("appTabs").hidden = name === "chatView";
+    document.body.classList.toggle("has-tabs", name !== "chatView");
+    $("chatFoot").hidden = name !== "chatView";
+    $("title").hidden = name === "chatView";
+    $("title").textContent = title || (name === "homeView" ? "KesherAI" : T("בטלפון הזה", "On this phone"));
+    $("back").style.visibility = top && name === "homeView" ? "hidden" : "visible";
+    $("homeBtn").style.visibility = name === "homeView" ? "hidden" : "visible";
+    const go = { homeView: "new", toolsView: "tools", settingsView: "settings" }[name] ?? (name === "modelsView" && $("modelsView").dataset.tab === "study" ? "study" : "");
+    document.querySelectorAll("#appTabs [data-go]").forEach((b) => (b.dataset.go === go ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
+  }
+  /** One part (a category of the models page): its own screen. */
+  function openPart(tab) {
+    setCat(tab);
+    showPage("modelsView", PARTS.find((x) => x.tab === tab)?.name ?? T("מודלים בטלפון", "Models on the phone"));
+    if (tab === "study") drawStudy();
+    if (tab === "health") drawHealth();
+  }
+  function drawHome() {
+    const on = partsOn();
+    const h = new Date().getHours();
+    $("homeHi").textContent = h < 5 ? T("לילה טוב", "Good night") : h < 12 ? T("בוקר טוב", "Good morning") : h < 18 ? T("צהריים טובים", "Good afternoon") : T("ערב טוב", "Good evening");
+    const tiles = [...PARTS.filter((x) => on[x.id]), { id: "models", icon: "🧠", name: T("מודלים", "Models"), tab: "chat" }];
+    $("tiles").replaceChildren(...tiles.map((x) => { const b = document.createElement("button"); b.type = "button"; b.className = "tile"; b.innerHTML = '<span class="i" aria-hidden="true"></span><span></span>'; b.firstChild.textContent = x.icon; b.lastChild.textContent = x.name; b.onclick = () => openPart(x.tab); return b; }));
+    const recent = allChats().slice(0, 3);
+    $("homeRecent").replaceChildren(...(recent.length ? recent.map((c) => { const a = document.createElement("a"); a.className = "rec"; a.href = `local.html?c=${encodeURIComponent(c.id)}`; a.textContent = c.title || c.name || T("צ׳אט", "Chat"); return a; }) : [Object.assign(document.createElement("p"), { className: "muted", textContent: T("עוד אין צ׳אטים בטלפון. כתבי הודעה למטה.", "No chats on the phone yet. Write a message below.") })]));
+    $("pcNote").hidden = !!sessionStorage.getItem("kesherai-pc-ok");
+  }
+  function drawTools() {
+    const on = partsOn();
+    const row = (icon, name, sub, phone, onclick) => { const b = document.createElement("button"); b.type = "button"; b.className = "rec"; b.style.cssText = `height: auto; min-height: 56px; gap: 10px; white-space: normal;${phone ? "" : " opacity: .6"}`; b.innerHTML = '<span aria-hidden="true"></span><span style="flex:1;display:flex;flex-direction:column;align-items:flex-start"><span></span><small class="muted"></small></span><span></span>'; b.children[0].textContent = icon; b.children[1].children[0].textContent = name; b.children[1].children[1].textContent = sub; b.children[2].className = phone ? "tag" : "tag pc"; b.children[2].textContent = phone ? T("בטלפון", "On the phone") : T("צריך מחשב", "Needs the computer"); b.onclick = onclick; return b; };
+    $("toolList").replaceChildren(
+      ...PARTS.filter((x) => on[x.id]).map((x) => row(x.icon, x.name, x.sub, true, () => openPart(x.tab))),
+      row("🧠", T("מודלים בטלפון", "Models on the phone"), T("הורדה, מהירות, מהמחשב", "Download, speed, from the computer"), true, () => openPart("chat")),
+      row("💻", T("קוד, Unity, Unreal", "Code, Unity, Unreal"), T("עבודה על פרויקטים במחשב", "Projects on the computer"), false, () => (location.href = "index.html?switch=1")),
+      row("📅", T("היום שלי ועבודה עצמית", "My day and self-work"), T("המחשב עובד בשבילך", "The computer works for you"), false, () => (location.href = "index.html?switch=1")),
+    );
+  }
+  function drawSettings() {
+    const on = partsOn();
+    $("autoConnect").checked = localStorage.getItem("kesherai-auto-connect") !== "0";
+    $("partList").replaceChildren(...PARTS.map((x) => {
+      const l = document.createElement("label"); l.className = "switch-row";
+      l.innerHTML = '<span><span></span><small></small></span><input type="checkbox" />';
+      l.querySelector("span span").textContent = x.name; l.querySelector("small").textContent = x.sub;
+      const c = l.querySelector("input"); c.checked = on[x.id];
+      c.onchange = () => { const cur = partsOn(); cur[x.id] = c.checked; localStorage.setItem(PARTS_KEY, JSON.stringify(cur)); applyParts(); };
+      return l;
+    }));
+    $("setLang").textContent = he ? "English" : "עברית";
+  }
+  $("autoConnect").onchange = () => localStorage.setItem("kesherai-auto-connect", $("autoConnect").checked ? "1" : "0");
+  $("setModels").onclick = () => openPart("chat");
+  $("setComputers").onclick = () => (location.href = "index.html?switch=1");
+  $("setLang").onclick = () => { localStorage.setItem("lang", he ? "en" : "he"); location.reload(); };
+  // "On the computer": the saved computer, or the screen for connecting one (it never closes the app on failure).
+  $("whereComputer").onclick = () => (location.href = localStorage.getItem("kesherai-server") ? "index.html" : "index.html?switch=1");
+  $("pcConnect").onclick = () => (location.href = "index.html?switch=1");
+  // Home, from every screen (top bar).
+  $("homeBtn").onclick = () => { if (!$("chatView").hidden) history.replaceState(null, "", "local.html"); drawHome(); showPage("homeView"); };
+  $("homeCompose").onsubmit = (e) => {
+    e.preventDefault();
+    const text = $("homeInput").value.trim();
+    if (!text) return;
+    // A new chat with the last model; the message waits in its box (one tap sends it).
+    sessionStorage.setItem("kesherai-shared-text", text);
+    location.href = "local.html?new=1";
+  };
+  document.querySelectorAll("#appTabs [data-go]").forEach((b) => (b.onclick = () => {
+    const go = b.dataset.go;
+    if (go === "chats") return window.kesherDrawer?.open();
+    if (go === "new") { drawHome(); return showPage("homeView"); }
+    if (go === "study") return openPart("study");
+    if (go === "tools") { drawTools(); return showPage("toolsView", T("כל הכלים", "All tools")); }
+    if (go === "settings") { drawSettings(); return showPage("settingsView", T("הגדרות", "Settings")); }
+  }));
+  applyParts();
+
   // Phone health (the phone's own, no computer needed): drawn the first time its tab opens.
   let healthDrawn = false;
   const drawHealth = () => {
@@ -949,14 +1112,10 @@
 
   function show(view) {
     const chat = view === "chat";
-    $("modelsView").hidden = chat;
-    $("chatView").hidden = !chat;
-    $("chatFoot").hidden = !chat;
+    showPage(chat ? "chatView" : "modelsView", $("modelsView").dataset.tab === "chat" ? T("מודלים בטלפון", "Models on the phone") : undefined);
     $("newChat").hidden = !chat;
-    $("title").hidden = chat;
     $("modelSwitch").hidden = !chat;
     if (chat) $("modelName").textContent = current.item.name;
-    $("title").textContent = T("בטלפון הזה", "On this phone");
   }
 
   function addMsg(role, text) {
@@ -1761,7 +1920,8 @@
     }
     if (!list.children.length) list.append(Object.assign(document.createElement("div"), { className: "grp", textContent: T("אין עוד מודלים. הורד מודל או חבר API.", "No other models yet. Download one or connect an API.") }));
   };
-  $("back").onclick = () => { if (!$("chatView").hidden) { show("models"); renderList(); } else location.href = "index.html?switch=1"; };
+  // Back: from a chat to its models, from a part to the home screen.
+  $("back").onclick = () => { if (!$("chatView").hidden) { show("models"); renderList(); } else if (!$("homeView").hidden) location.href = "index.html?switch=1"; else { drawHome(); showPage("homeView"); } };
 
   renderList()
     .then(async () => {
@@ -1786,6 +1946,12 @@
         if (url?.includes(FROM_PC)) return { name: pcName(url) || "PC model" };
         return CATALOG.find((c) => url && url.includes(`/${c.repo}/`));
       };
+      // Nothing asked for: the app's own home (the landing screen, works with no computer).
+      if (!q.get("c") && !q.has("new") && !q.has("chat")) {
+        if (q.get("tab")) return openPart(q.get("tab"));
+        drawHome();
+        return showPage("homeView");
+      }
       // A chat from the side menu.
       if (q.get("c")) {
         const c = allChats().find((x) => x.id === q.get("c"));
@@ -1813,6 +1979,13 @@
     })
     .catch((e) => { $("modelList").textContent = String(e.message || e); });
 </script>
+<nav class="app-tabs" id="appTabs" aria-label="Main" hidden>
+  <button type="button" data-go="chats"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span data-he="צ׳אטים" data-en="Chats">צ׳אטים</span></button>
+  <button type="button" data-go="new"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-he="חדש" data-en="New">חדש</span></button>
+  <button type="button" data-go="study" data-part="study"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg><span data-he="לימודים" data-en="Study">לימודים</span></button>
+  <button type="button" data-go="tools"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span data-he="כלים" data-en="Tools">כלים</span></button>
+  <button type="button" data-go="settings"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span data-he="הגדרות" data-en="Settings">הגדרות</span></button>
+</nav>
 <script src="drawer.js"></script>
 <script src="applock.js"></script>
 </body>

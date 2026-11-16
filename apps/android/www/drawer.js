@@ -239,6 +239,9 @@
     const foot = document.getElementById("chatFoot");
     const h = foot && !foot.hidden ? foot.getBoundingClientRect().height : 0;
     b.style.bottom = h ? `${h + 12}px` : "";
+    // With the bottom bar (the app's home, tools, settings), its "Chats" opens this menu: no ☰ over it.
+    const tabs = document.getElementById("appTabs");
+    b.hidden = !!tabs && !tabs.hidden;
   };
   place();
   setInterval(place, 400);

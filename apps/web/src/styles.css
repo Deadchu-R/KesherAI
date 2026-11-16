@@ -2732,3 +2732,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-ask-turn p { margin: 0 0 4px; }
 
 .study-import { display: block; margin: -4px 0 10px; cursor: pointer; }
+.appbar-home[aria-current] { color: var(--text); }

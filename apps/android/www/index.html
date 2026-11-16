@@ -757,9 +757,25 @@
     // the person connects with one tap, which also sends its details to the computer.
     await crashChecked;
     if (lastCrash) return;
-    if (launch) connect(launch);
-    else if (!cameBack && recent) connectComputer(recent);
-    else if (!cameBack && saved) connect(saved);
+    if (launch) return connect(launch);
+    if (cameBack) return;
+    // The app opens on the phone's own home. With "connect automatically" on (Settings), a saved computer that
+    // answers within a few seconds is opened instead; one that does not answer leaves her on the phone, no error.
+    const auto = localStorage.getItem("kesherai-auto-connect") !== "0";
+    const tries = [];
+    if (recent) for (const l of recent.links || []) tries.push({ base: l, token: recent.token });
+    if (saved) { try { const u = new URL(saved); tries.push({ base: u.origin, token: u.searchParams.get("token") || "" }); } catch { /* a bad saved link */ } }
+    if (auto && tries.length) {
+      $("status").className = "";
+      $("status").textContent = tr.checking[lang];
+      const answers = await Promise.all(tries.map((t) => fetch(`${t.base}/api/health`, { headers: t.token ? { authorization: `Bearer ${t.token}` } : {}, signal: AbortSignal.timeout(3000) }).then((r) => r.ok, () => false)));
+      if (answers.some(Boolean)) {
+        sessionStorage.setItem("kesherai-pc-ok", "1");
+        return recent ? connectComputer(recent) : connect(saved);
+      }
+    }
+    sessionStorage.removeItem("kesherai-pc-ok");
+    location.replace("local.html");
   })();
 </script>
 <script src="drawer.js"></script>

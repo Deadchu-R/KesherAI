@@ -41,6 +41,9 @@ const Icon = {
   code: (
     <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 5 3 9l3.5 4M11.5 5 15 9l-3.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
   ),
+  home: (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 8.5 9 3l6.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" /><path d="M4.5 7.5V15h3.5v-4h2v4h3.5V7.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none" /></svg>
+  ),
   computer: (
     <svg width="20" height="18" viewBox="0 0 20 18" aria-hidden="true"><rect x="3.5" y="3" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" /><path d="M1.5 15h17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
   ),
@@ -117,6 +120,8 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         </button>
         <button type="button" data-pad="B" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
         <button type="button" className="bar-btn hist" aria-label={t("forward")} title={t("forward")} onClick={() => history.forward()}>{Icon.forward}</button>
+        {/* Home, from every screen (computer, remote and phone). */}
+        <a href="#/" className="bar-btn appbar-home" aria-label={getLocale() === "he" ? "בית" : "Home"} title={getLocale() === "he" ? "בית" : "Home"} aria-current={hash === "#/" || hash === "" ? "page" : undefined}>{Icon.home}</a>
         <div className="bar-seg" role="group" aria-label={t("chatOrCode")}>
           <a href="#/" className={!inCode ? "on" : ""} aria-label={t("chatSide")} title={t("chatSide")}>{Icon.chat}</a>
           {/* Code, like the Claude app's Code side: its own start screen, the folder chosen in the message box (no dialog). */}
