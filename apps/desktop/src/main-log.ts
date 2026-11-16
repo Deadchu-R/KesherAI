@@ -3,9 +3,10 @@
  * asked for it, an error nobody caught, a helper process or the page that crashed, the exit code). Kept on this
  * computer only, cut back when it passes 1 MB. Written synchronously so the last lines survive the process ending.
  */
-import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { App } from "electron";
+import { crashReporter, type App } from "electron";
 
 /**
  * Starts the log and watches for the ways the app can end.
@@ -28,7 +29,30 @@ export function startMainLog(app: App, file: string): (line: string) => void {
   } catch {
     // As above.
   }
+  // The last run: when its last line is not "exit", it ended without Node knowing (a crash in native code, or ended
+  // from outside): say so, so the next lines are read in that light.
+  try {
+    const last = readFileSync(file, "utf8").trimEnd().split("\n").at(-1) ?? "";
+    if (last && !/ exit -?\d+$/.test(last)) write(`the previous run ended without an exit (crashed in native code or was ended from outside); its last line: ${last.slice(0, 200)}`);
+  } catch {
+    // no log yet
+  }
   write(`start ${app.getVersion()} pid ${process.pid}`);
+  // Native crashes leave a minidump in the app's Crashpad folder (nothing is sent anywhere).
+  try {
+    crashReporter.start({ uploadToServer: false, compress: false });
+    write(`crash dumps go to ${app.getPath("crashDumps")}`);
+  } catch {
+    // an older Electron
+  }
+  // What Windows recorded about this app's last crashes (Application log: 1000 application error, 1001 error
+  // report, 1002 not responding), so a crash Node never saw still shows here.
+  if (process.platform === "win32") {
+    const ps = "Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000,1001,1002; StartTime=(Get-Date).AddHours(-24)} -MaxEvents 200 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'KesherAI' } | Select-Object -First 4 | ForEach-Object { '{0:o} [{1}] {2}' -f $_.TimeCreated, $_.Id, ($_.Message -replace '\\s+', ' ') }";
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true, timeout: 30_000 }, (_e, out) => {
+      for (const line of String(out ?? "").split(/\r?\n/).filter(Boolean)) write(`windows log: ${line.slice(0, 700)}`);
+    });
+  }
   process.on("uncaughtException", (e) => write(`uncaught error: ${e?.stack ?? String(e)}`));
   process.on("unhandledRejection", (e) => write(`unhandled promise: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`.slice(0, 4000)));
   app.on("child-process-gone", (_e, d) => write(`helper process ended: ${d.type}${d.name ? ` (${d.name})` : ""} ${d.reason} exit ${d.exitCode}`));
