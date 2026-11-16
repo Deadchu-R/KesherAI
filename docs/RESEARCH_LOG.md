@@ -1722,3 +1722,9 @@ tools' own pages, against what was added tonight:
   handoff (identifying details removed).
 - **Slides during a recording.** StudyFetch and Otter take uploaded slides or transcribe; ours reads a photo of the
   slide on the screen into the transcript at its minute, while the recording goes on.
+
+## Godot support: the competitors (2026-11-16, paused)
+- Editor plugins (Ziva, AI Assistant Hub, Godot AI Suite, AI Autonomous Agent): a dock in the editor; local models through Ollama in some.
+- MCP servers: an addon in `addons/` talks to a server over WebSocket (godot-ai: plugin ↔ Python server on 9500, clients on HTTP 8000/mcp; 120+ tools: scene/nodes, scripts/signals, resources, UI, animation, run/stop, screenshots, logs, tests; every write undoable in the editor). GDAI MCP: scene/node CRUD, properties, debugger output and script errors, screenshots of editor and game.
+- Plan for KesherAI: the same shape as the Unreal bridge (the editor connects to KesherAI at /api/godot/ws, this computer only), a GDScript EditorPlugin in integrations/godot, every write through EditorUndoRedoManager, chat tools godot_* (tree, node add/set/remove, script read/write, run/stop, errors, screenshot).
+- **Stopped here**: research done, design board and code not started. Paused for a full check of the student features (Roee, 22:58).
