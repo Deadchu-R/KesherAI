@@ -175,6 +175,41 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
           ))}
         </ul>
       )}
+      <ChatTimers />
     </section>
+  );
+}
+
+/** "In 25 min" when it is within the hour, otherwise the weekday and time. */
+function dueText(due: number): string {
+  const min = Math.round((due - Date.now()) / 60_000);
+  if (min < 1) return L("עוד רגע", "any moment");
+  if (min < 60) return L(`בעוד ${min} דק׳`, `in ${min} min`);
+  return when(new Date(due).toISOString());
+}
+
+/** The waiting chat timers ("remind me in an hour" in a chat), with Cancel. Hidden when there are none. */
+function ChatTimers() {
+  const [timers, setTimers] = useState<Array<{ id: string; convId: string; prompt: string; due: number }>>([]);
+  const load = () => api<{ timers: Array<{ id: string; convId: string; prompt: string; due: number }> }>("/api/timers").then((r) => setTimers([...r.timers].sort((a, b) => a.due - b.due)), () => undefined);
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  if (!timers.length) return null;
+  return (
+    <div className="stack">
+      <h3>{L("טיימרים בצ'אטים", "Chat timers")}</h3>
+      <ul className="key-list">
+        {timers.map((x) => (
+          <li key={x.id} className="row">
+            <span className="muted small">{dueText(x.due)}</span>
+            <a className="grow" href={`#/c/${x.convId}`} dir="auto">{x.prompt.length > 70 ? `${x.prompt.slice(0, 70)}…` : x.prompt}</a>
+            <button type="button" onClick={() => void api(`/api/timers/${x.id}`, { method: "DELETE" }).then(load, (e: Error) => toast(e.message))}>{L("ביטול", "Cancel")}</button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
