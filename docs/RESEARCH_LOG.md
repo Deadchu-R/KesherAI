@@ -1564,5 +1564,15 @@ Stopped at: building (store and public page first, then the chat menu and the se
   NVIDIA card of RTX 3060 class or better; most students' laptops (Intel, small GPUs) cannot.
 - Conclusion: worth it only as an optional download on strong NVIDIA computers, and it adds a Python + PyTorch
   runtime (a new dependency: needs Roee's yes). Without it, the avatar stays the recorded idle loop (already built).
-- Stopped at: the decision is Roee's (optional MuseTalk download on strong NVIDIA PCs, or not now). If yes: next is
-  a Windows test of realtime_inference.py on his RTX 3090 with a 3-minute clip, measuring fps and the delay.
+- Roee chose both: the light look-alive layer for every laptop (done: uneven jumps, breathing, sway, grain) and
+  MuseTalk as an option on strong NVIDIA cards.
+- MuseTalk 1.5 measured on Roee's RTX 3090 (2026-11-16, Windows, Python 3.10 venv, torch 2.0.1+cu118, with
+  KesherAI's chat model holding ~15 GB of the card): avatar preparation from a 268-frame video ~1.5 min (once);
+  first clip 200 frames in 8.7 s (23 fps, with warm-up), then 1500 frames in 35.6 s = 42 fps; audio features 40 ms
+  per clip once warm. Real time (25 fps) holds with room to spare.
+- Windows setup pitfalls found: mmpose needs chumpy built with --no-build-isolation; setuptools < 70 (pkg_resources);
+  the s3fd face detector's own site did not answer (an identical copy, sha256 619a316812…, is on HuggingFace
+  chunyu-li/face-alignment); PYTHONIOENCODING=utf-8 (it prints Chinese characters); the realtime script asks y/n.
+- Stopped at: measured. Next: how ScrumSurvivor connects it end to end (voice detection, delaying the voice so lips
+  match in Zoom, switching between the idle loop and the lip-sync stream), then a design for KesherAI: an optional
+  download on NVIDIA ≥ 8 GB that feeds kesher-cam the same way the avatar page does.
