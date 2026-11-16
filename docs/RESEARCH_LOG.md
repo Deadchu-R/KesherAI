@@ -1554,6 +1554,15 @@ Stopped at: building (store and public page first, then the chat menu and the se
 - Candidates found: MuseTalk (TMElyralab, MIT, real-time 30 fps+ on a V100-class card, latent-space inpainting of the
   mouth area from audio, 256×256 face region), LiveTalking (lipku; wraps MuseTalk / Wav2Lip / ER-NeRF with WebRTC
   and a virtual camera output), LatentSync (ByteDance, higher quality, not real time).
-- Stopped at: checking MuseTalk's Windows install size, whether it runs from a 3–5 minute clip of the student (the
-  avatar recording we already have) without training, and its licence for the model weights. Next: compare with what
-  Tavus/HeyGen "interactive avatars" do (cloud), and decide local MuseTalk vs nothing.
+- MuseTalk details: works from a reference video of the person (an "avatar" is prepared once from it: face crops,
+  latents, masks), then streams: audio in, mouth region repainted per frame; no training per person. ~4 GB VRAM in
+  fp16; 30 fps+ on a V100 (an RTX 3090 is similar), but an RTX 3050 Ti laptop took ~5 minutes for an 8 s clip
+  (far from real time). Code MIT; it also needs Whisper (MIT), sd-vae-ft-mse (CreativeML OpenRAIL-M: commercial
+  use allowed with use restrictions), DWPose and a face parser, and Python with PyTorch + CUDA (several GB).
+- When it would run for us: the student is away from the camera, so she is usually silent; lips matter only when she
+  answers by voice from elsewhere (the phone's microphone while the laptop shows the avatar). Real time needs an
+  NVIDIA card of RTX 3060 class or better; most students' laptops (Intel, small GPUs) cannot.
+- Conclusion: worth it only as an optional download on strong NVIDIA computers, and it adds a Python + PyTorch
+  runtime (a new dependency: needs Roee's yes). Without it, the avatar stays the recorded idle loop (already built).
+- Stopped at: the decision is Roee's (optional MuseTalk download on strong NVIDIA PCs, or not now). If yes: next is
+  a Windows test of realtime_inference.py on his RTX 3090 with a 3-minute clip, measuring fps and the delay.
