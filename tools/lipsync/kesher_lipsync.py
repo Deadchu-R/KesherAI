@@ -29,7 +29,7 @@ import torch
 
 SR = 16000
 FPS = 25
-STEP = 5  # frames made per step (0.2 s)
+STEP = 8  # frames made per step (0.32 s): Whisper encodes a fixed 30 s window each step, so fewer, larger steps
 
 
 def log(*a):
@@ -206,7 +206,7 @@ class Clients:
 
 @torch.no_grad()
 def make_frames(m, av, audio, idx):
-    """The last STEP frames of `audio` (1.2 s window), lip-synced onto the avatar's frames from `idx`."""
+    """The last STEP frames of `audio` (1.2 s window), lip-synced onto the avatar frames from `idx`."""
     feats, length = features(m, audio)
     chunks = m.audio.get_whisper_chunk(feats, m.device, m.dtype, m.whisper, length, fps=FPS, audio_padding_length_left=2, audio_padding_length_right=2)
     # The newest frames lack their right context (the next 0.08 s): take the ones just before them.
