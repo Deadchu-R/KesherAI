@@ -10,6 +10,7 @@
  * server for hot reload; in a packaged build it loads the UI the core
  * server serves from `resources/web`.
  */
+import { virtualCamera } from "./virtual-camera.js";
 import { app, BrowserWindow, shell, dialog, ipcMain, powerSaveBlocker, globalShortcut, Tray, Menu, Notification, nativeImage, desktopCapturer, powerMonitor, safeStorage, screen as displays } from "electron";
 import { join, resolve, sep } from "node:path";
 import { chmod, copyFile, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -70,6 +71,7 @@ async function startCore(): Promise<string> {
   const { createKesherServer } = await import("@kesher/core");
   const s = await createKesherServer({
     webDir: app.isPackaged ? join(root, "web") : join(root, "apps/web/dist"),
+    virtualCamera: virtualCamera(app.isPackaged ? process.resourcesPath : join(root, "apps/desktop"), () => `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}/#/avatar-feed`),
     pluginRoots: [join(root, "plugins")],
     ...(await googleClient()),
     // "My day" takes its pictures with Electron's own screen capture (antivirus programs block a script doing it).

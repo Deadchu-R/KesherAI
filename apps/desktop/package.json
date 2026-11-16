@@ -1,6 +1,6 @@
 {
   "name": "@kesher/desktop",
-  "version": "0.6.268",
+  "version": "0.6.269",
   "private": true,
   "description": "Electron shell: starts the core server in-process and shows the web UI in a window.",
   "license": "Apache-2.0",
@@ -34,6 +34,10 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "softcam",
+        "to": "softcam"
+      },
       {
         "from": "../web/dist",
         "to": "web"

@@ -130,6 +130,8 @@ export interface KesherServices {
   journal: Journal;
   /** Study (students): courses, lectures, flashcards and quizzes. */
   study: Study;
+  /** The avatar camera as a camera device (the Windows desktop app), when there is one. */
+  virtualCamera?: import("./server/options.js").VirtualCamera;
   /** The screen, from the desktop app (the Game Helper's picture); absent without it. */
   screen?: ScreenSource;
   /** Knowledge bases: folders and web pages the models search, with sources. */

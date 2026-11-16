@@ -58,6 +58,28 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # The avatar camera on Windows: softcam (MIT) and KesherAI's small sender, packed into the app (softcam/).
+      - if: runner.os == 'Windows'
+        name: Build the avatar camera (softcam)
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v1.8.1 https://github.com/tshino/softcam "$env:RUNNER_TEMP\softcam"
+          $msb = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          & $msb "$env:RUNNER_TEMP\softcam\softcam.sln" /p:Configuration=Release /p:Platform=x64 /m
+          if ($LASTEXITCODE) { exit 1 }
+          & $msb "$env:RUNNER_TEMP\softcam\examples\softcam_installer\softcam_installer.sln" /p:Configuration=Release /p:Platform=x64 /m
+          if ($LASTEXITCODE) { exit 1 }
+          $out = "apps\desktop\softcam"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $dll = Get-ChildItem -Recurse "$env:RUNNER_TEMP\softcam\dist" -Filter softcam.dll | Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
+          $lib = Get-ChildItem -Recurse "$env:RUNNER_TEMP\softcam\dist" -Filter softcam.lib | Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
+          $inst = Get-ChildItem -Recurse "$env:RUNNER_TEMP\softcam\examples\softcam_installer" -Filter softcam_installer.exe | Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
+          Copy-Item $dll.FullName, $inst.FullName $out
+          $vc = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          cmd /c "`"$vc\VC\Auxiliary\Build\vcvars64.bat`" && cl /nologo /O2 /EHsc /MT /I `"$env:RUNNER_TEMP\softcam\src\softcam`" tools\softcam\kesher-cam.cpp /Fe:$out\kesher-cam.exe /link `"$($lib.FullName)`""
+          if ($LASTEXITCODE) { exit 1 }
+          Copy-Item "$env:RUNNER_TEMP\softcam\LICENSE" "$out\LICENSE-softcam.txt"
+          Get-ChildItem $out
       # The Google sign-in client comes from the repository's secrets, so it is in the app but never in the source.
       - name: Add the Google and GitHub sign-in clients
         env:

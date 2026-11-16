@@ -8,6 +8,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
+import { isLocalRequest } from "../auth.js";
 
 /**
  * Routes for study.
@@ -60,6 +61,21 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     const end = m[2] ? Math.min(Number(m[2]), st2.size - 1) : st2.size - 1;
     if (start > end || start >= st2.size) return reply.code(416).header("content-range", `bytes */${st2.size}`).send();
     return reply.code(206).header("content-range", `bytes ${start}-${end}/${st2.size}`).header("content-length", end - start + 1).send(createReadStream(clip, { start, end }));
+  });
+  // The camera device (Windows desktop app): add it to Windows once, then start or stop it. Only on this computer.
+  app.get("/api/study/avatar/camera", async () => (s.virtualCamera ? s.virtualCamera.status() : { available: false, installed: false, running: false }));
+  app.post<{ Body: { action?: "install" | "start" | "stop" } }>("/api/study/avatar/camera", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The camera is turned on at the computer." });
+    const cam = s.virtualCamera;
+    if (!cam) return reply.code(409).send({ error: "The avatar camera without OBS is in the Windows app." });
+    try {
+      if (req.body?.action === "install") await cam.install();
+      else if (req.body?.action === "start") await cam.start();
+      else cam.stop();
+      return await cam.status();
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message });
+    }
   });
   app.delete("/api/study/avatar/clip", async () => {
     await rm(clip, { force: true });

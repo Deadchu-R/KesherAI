@@ -357,6 +357,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     github,
     journal,
     study,
+    ...(options.virtualCamera ? { virtualCamera: options.virtualCamera } : {}),
     ...(options.screen ? { screen: options.screen } : {}),
     knowledge,
     libraries,

@@ -82,8 +82,9 @@ export function AvatarCamera() {
           {info.clip && !rec && <button type="button" className="ghost" onClick={async () => { if (confirm(L("למחוק את הסרטון?", "Delete the video?"))) { await api("/api/study/avatar/clip", { method: "DELETE" }); load(); } }}>{L("מחק", "Delete")}</button>}
         </div>
       </section>
+      {info.clip && <DirectCamera />}
       <section className="card">
-        <h2>{L("2. להפוך אותו למצלמה (דרך OBS)", "2. Make it a camera (with OBS)")}</h2>
+        <h2>{L("או: מצלמה דרך OBS", "Or: a camera through OBS")}</h2>
         <ol className="study-avatar-steps">
           <li>{L("ב-OBS: מקורות ← + ← דפדפן, ובכתובת:", "In OBS: Sources → + → Browser, with the address:")} <code dir="ltr">{feed}</code> <button type="button" className="small" onClick={() => void navigator.clipboard.writeText(feed).then(() => toast(L("הועתק", "Copied")))}>{L("העתק", "Copy")}</button></li>
           <li>{L("רוחב 1280, גובה 720.", "Width 1280, height 720.")}</li>
@@ -94,6 +95,36 @@ export function AvatarCamera() {
         <a className="button" href="#/avatar-feed" target="_blank" rel="noreferrer">{L("תצוגה מקדימה של המצלמה", "Preview the camera")}</a>
       </section>
     </div>
+  );
+}
+
+/** The camera without OBS (the Windows app): add it to Windows once, then on and off. */
+function DirectCamera() {
+  const [st, setSt] = useState<{ available: boolean; installed: boolean; running: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => void api<{ available: boolean; installed: boolean; running: boolean }>("/api/study/avatar/camera").then(setSt, () => setSt(null));
+  useEffect(load, []);
+  if (!st?.available) return null;
+  const act = async (action: "install" | "start" | "stop") => {
+    setBusy(true);
+    try {
+      setSt(await api("/api/study/avatar/camera", { method: "POST", body: { action } }));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+    setBusy(false);
+  };
+  return (
+    <section className="card">
+      <h2>{L("2. להפוך אותו למצלמה (ישירות, בלי OBS)", "2. Make it a camera (directly, no OBS)")}</h2>
+      <p className="muted small">{L("ב-Zoom או ב-Teams תופיע מצלמה בשם \"DirectShow Softcam\". בפעם הראשונה Windows ישאל אם לאשר להוסיף אותה.", "Zoom and Teams show a camera called \"DirectShow Softcam\". The first time, Windows asks whether to allow adding it.")}</p>
+      <div className="study-actions">
+        {!st.installed ? <button type="button" className="primary" disabled={busy} onClick={() => void act("install")}>{L("הוסף את המצלמה ל-Windows", "Add the camera to Windows")}</button>
+          : st.running ? <button type="button" className="danger" disabled={busy} onClick={() => void act("stop")}>{L("כבה את מצלמת האווטאר", "Turn the avatar camera off")}</button>
+          : <button type="button" className="primary" disabled={busy} onClick={() => void act("start")}>{L("הפעל את מצלמת האווטאר", "Turn the avatar camera on")}</button>}
+        {st.running && <span className="good small">{L("פועלת", "On")}</span>}
+      </div>
+    </section>
   );
 }
 

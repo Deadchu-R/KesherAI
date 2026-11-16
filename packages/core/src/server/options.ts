@@ -34,6 +34,8 @@ export interface KesherServerOptions {
   updates?: PackagedUpdates;
   /** The desktop app's screen capture for "My day" (no PowerShell, which antivirus programs block). */
   screen?: ScreenSource;
+  /** The avatar camera without OBS (the Windows desktop app: softcam). */
+  virtualCamera?: VirtualCamera;
   /** Shows a notification on this computer (desktop app); returns false when the window is in front. */
   notify?: (n: Note) => boolean | Promise<boolean>;
   /** Keys at rest (S2): the system's protection for connection keys and tokens in config.json (Electron safeStorage). */
@@ -87,3 +89,12 @@ export const WEB_CSP = [
   // Only KesherAI itself and a browser extension (its side panel) may show the app in a frame, never a web site.
   "frame-ancestors 'self' chrome-extension: moz-extension:",
 ].join("; ");
+
+/** The avatar camera as a real camera device (the desktop app on Windows). */
+export interface VirtualCamera {
+  status(): Promise<{ available: boolean; installed: boolean; running: boolean }>;
+  /** Adds the camera to Windows (Windows asks the person). */
+  install(): Promise<void>;
+  start(): Promise<void>;
+  stop(): void;
+}
