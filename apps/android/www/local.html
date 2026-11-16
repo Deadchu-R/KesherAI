@@ -133,6 +133,8 @@
     [hidden] { display: none !important; }
     .cats { display: flex; flex: none; min-height: 44px; align-items: center; gap: 6px; overflow-x: auto; margin: 4px 0 10px; padding-bottom: 2px; }
     .cats button { flex: none; height: auto; border-radius: 999px; padding: 6px 14px; min-height: 36px; }
+    .cats button { display: inline-flex; align-items: center; gap: 6px; }
+    .cats .cat-ico svg { width: 16px; height: 16px; display: block; }
     .cats button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
     #modelsView[data-tab="chat"] [data-cat]:not([data-cat="chat"]),
     #modelsView[data-tab="images"] [data-cat]:not([data-cat="images"]),
@@ -259,7 +261,7 @@
       <p class="upd-msg" id="updMsg"></p>
     </section>
     <div class="pc-note" id="pcNote" hidden>
-      <span aria-hidden="true">🖥</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f0b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
       <span style="flex: 1" data-he="המחשב לא מחובר. הכול כאן עובד בטלפון; סריקות ומודלים גדולים צריכים את המחשב." data-en="The computer is not connected. Everything here works on the phone; scans and big models need the computer.">המחשב לא מחובר. הכול כאן עובד בטלפון; סריקות ומודלים גדולים צריכים את המחשב.</span>
       <button type="button" id="pcConnect" data-he="התחבר" data-en="Connect">התחבר</button>
     </div>
@@ -321,12 +323,12 @@
     <p class="intro" id="memNote" data-cat="chat"></p>
     <!-- Models on this phone by kind, like the computer's Models page -->
     <nav class="cats" id="cats" role="tablist">
-      <button type="button" data-tab="chat" class="on" data-he="💬 צ'אט" data-en="💬 Chat">💬 צ'אט</button>
-      <button type="button" data-tab="images" data-he="🖼 תמונות" data-en="🖼 Pictures">🖼 תמונות</button>
-      <button type="button" data-tab="voice" data-he="🎙 שיחה קולית" data-en="🎙 Voice">🎙 שיחה קולית</button>
-      <button type="button" data-tab="api" data-he="🌐 דרך האינטרנט" data-en="🌐 Online">🌐 דרך האינטרנט</button>
-      <button type="button" data-tab="study" data-he="🎓 לימודים" data-en="🎓 Study">🎓 לימודים</button>
-      <button type="button" data-tab="health" data-he="🩺 בריאות" data-en="🩺 Health">🩺 בריאות</button>
+      <button type="button" data-tab="chat" class="on" data-ico="💬" data-he="צ'אט" data-en="Chat">צ'אט</button>
+      <button type="button" data-tab="images" data-ico="🖼" data-he="תמונות" data-en="Pictures">תמונות</button>
+      <button type="button" data-tab="voice" data-ico="🎙" data-he="שיחה קולית" data-en="Voice">שיחה קולית</button>
+      <button type="button" data-tab="api" data-ico="🌐" data-he="דרך האינטרנט" data-en="Online">דרך האינטרנט</button>
+      <button type="button" data-tab="study" data-ico="🎓" data-he="לימודים" data-en="Study">לימודים</button>
+      <button type="button" data-tab="health" data-ico="🩺" data-he="בריאות" data-en="Health">בריאות</button>
     </nav>
     <section class="api fast" id="fastSection" data-cat="chat" hidden>
       <h2 data-he="מהיר במיוחד: המנוע של Google לטלפונים" data-en="Extra fast: Google's engine for phones">מהיר במיוחד: המנוע של Google לטלפונים</h2>
@@ -372,8 +374,8 @@
     <p class="live-state" id="liveState"></p>
     <p class="live-said" id="liveSaid" dir="auto"></p>
     <div class="live-bar">
-      <button type="button" id="liveCamBtn" aria-label="Camera">📷</button>
-      <button type="button" id="liveScreenBtn" aria-label="Share screen" hidden>📱</button>
+      <button type="button" id="liveCamBtn" aria-label="Camera"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <button type="button" id="liveScreenBtn" aria-label="Share screen" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></button>
       <button type="button" id="liveMute" aria-label="Pause">⏸</button>
       <button type="button" id="liveEnd" class="end" aria-label="End">✕</button>
     </div>
@@ -443,9 +445,12 @@
     "🧠": '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
     "💻": '<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
     "📅": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    "💬": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   };
   /** Puts a part's line icon into `el` (the emoji when it has none). */
   const lineIcon = (el, key) => { if (LINE[key]) el.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${LINE[key]}</svg>`; else el.textContent = key; };
+  // The models page's tabs: the same line icons as the home screen.
+  queueMicrotask(() => document.querySelectorAll("#cats [data-ico]").forEach((b) => { const i = document.createElement("span"); i.className = "cat-ico"; i.setAttribute("aria-hidden", "true"); lineIcon(i, b.dataset.ico); b.prepend(i); }));
   const T = (h, e) => (he ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(h) : h) : e);
 
   // Small chat models that fit a phone. The file (Q4_K_M) is looked up on Hugging Face when listed.
@@ -959,13 +964,13 @@
       body.append(out);
       return;
     }
-    btn(T("🎙 בדוק מיקרופון", "🎙 Test the microphone"), "", async () => {
+    btn(T("בדיקת מיקרופון", "Test the microphone"), "", async () => {
       out.textContent = T("מקשיב… תגיד משהו", "Listening… say something");
       try { out.textContent = `“${(await listenOnce((p) => (out.textContent = p))) || "…"}”`; } catch (e) { out.textContent = String(e.message || e); }
     });
-    btn(T("🔊 שמע את הקול", "🔊 Hear the voice"), "", () => void speak(T("שלום! ככה אני נשמע בטלפון.", "Hello! This is how I sound on the phone.")));
+    btn(T("השמעת הקול", "Hear the voice"), "", () => void speak(T("שלום! ככה אני נשמע בטלפון.", "Hello! This is how I sound on the phone.")));
     const hasModel = downloaded.some((m) => m.size > 0) || !!activeUrl;
-    btn(T("💬 התחל שיחה קולית", "💬 Start a voice conversation"), "primary", () => {
+    btn(T("התחלת שיחה קולית", "Start a voice conversation"), "primary", () => {
       if (!hasModel) { out.textContent = T("קודם הורד מודל צ'אט (בלשונית צ'אט).", "First download a chat model (in the Chat tab)."); setCat("chat"); return; }
       location.href = "local.html?chat=1&talk=1";
     });
@@ -1865,7 +1870,7 @@
       const c = document.createElement("div");
       c.className = "chip";
       if (a.kind === "image") c.append(Object.assign(document.createElement("img"), { src: a.url, alt: "" }));
-      else c.append(document.createTextNode(`📄 ${a.name.slice(0, 14)}`));
+      else c.append(document.createTextNode(a.name.slice(0, 16)));
       const x = Object.assign(document.createElement("button"), { type: "button", textContent: "✕" });
       x.onclick = () => { attachments.splice(i, 1); paintAttachments(); };
       c.append(x);
@@ -2032,7 +2037,7 @@
     if (!SPEECH) { addMsg("note", T("שיחה חיה זמינה באפליקציה.", "Live conversation works in the app.")); return; }
     live = { ended: false, paused: false, cam: null };
     $("live").hidden = false;
-    $("liveSaid").textContent = SCREEN ? T("דבר אליי. אפשר להדליק מצלמה 📷 או לשתף את המסך 📱 ולהראות לי דברים.", "Talk to me. Turn on the camera 📷 or share your screen 📱 to show me things.") : T("דבר אליי. אפשר להדליק מצלמה ולהראות לי דברים.", "Talk to me. You can turn on the camera and show me things.");
+    $("liveSaid").textContent = SCREEN ? T("דבר אליי. אפשר להדליק מצלמה או לשתף את המסך ולהראות לי דברים.", "Talk to me. Turn on the camera or share your screen to show me things.") : T("דבר אליי. אפשר להדליק מצלמה ולהראות לי דברים.", "Talk to me. You can turn on the camera and show me things.");
     void liveLoop();
   };
   $("liveEnd").onclick = () => {
