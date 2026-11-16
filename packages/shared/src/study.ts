@@ -584,6 +584,19 @@ export function pictureQueries(l: Pick<StudyLecture, "title" | "terms" | "pictur
   return [...new Set(all)];
 }
 
+/**
+ * Keeps the pictures whose file name has a word of the search (4+ letters): Commons answers a search with nothing
+ * close by with unrelated files (on the PC, "Cardiac output" animations were company logos with "Co").
+ */
+export function relevantPictures<T extends { page: string }>(pictures: T[], query: string): T[] {
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, 6));
+  if (!words.length) return pictures;
+  return pictures.filter((p) => {
+    const name = decodeURIComponent(p.page.split("File:")[1] ?? p.page).toLowerCase();
+    return words.some((w) => name.includes(w));
+  });
+}
+
 /** What happens to kept lecture recordings (Settings → Study). */
 export interface StudyRecordingSettings {
   /** Keep the audio of new recordings (the default). */

@@ -194,7 +194,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     if (ggufs && Date.now() - ggufs.at < 300_000) return ggufs.list;
     const own = await scanFolder({ folder: join(paths.models, "chat"), source: "KesherAI" }).catch(() => []);
     const others = (await scanComputer(config.modelFolders).catch(() => [])).flatMap((f) => f.models);
-    ggufs = { at: Date.now(), list: [...own, ...others].filter((m) => m.format === "gguf" && !/mmproj/i.test(m.name)) };
+    // One entry per model: projector files and the later parts of a split model (-00002-of-00004…) are left out.
+    ggufs = { at: Date.now(), list: [...own, ...others].filter((m) => m.format === "gguf" && !/mmproj/i.test(m.name) && Number(/-(\d+)-of-\d+\.gguf$/i.exec(m.name)?.[1] ?? 1) === 1) };
     return ggufs.list;
   };
   /** The course's model file: "auto" → the largest DictaLM (Dicta's Hebrew models), else the named llamacpp model. */

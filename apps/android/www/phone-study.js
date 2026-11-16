@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -448,7 +448,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
           // The searches in order until one finds something (see pictureQueries).
           for (const q of qs) {
             const r = await fetch(commonsSearchUrl(q, 360, kind));
-            cache[kind] = parseCommonsPictures(await r.json(), 8, kind);
+            cache[kind] = relevantPictures(parseCommonsPictures(await r.json(), 8, kind), q);
             if (cache[kind].length) break;
           }
         } catch {

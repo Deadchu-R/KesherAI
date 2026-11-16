@@ -403,3 +403,10 @@ test("recordings: a sync from the phone keeps the computer's recording", () => {
   const phone = { ...base, lectures: [{ id: "l", title: "a", date: "2026-11-16", text: "abcdef", summary: "s" }] } as StudyCourseData;
   assert.equal(mergeCourseData(pc, phone).lectures[0]?.recording?.bytes, 9000);
 });
+
+test("pictures: only files whose name has a word of the search are kept", async () => {
+  const { relevantPictures } = await import("./study.js");
+  const pics = [{ page: "https://commons.wikimedia.org/wiki/File:Mitsui_%26_Co._Logo.gif" }, { page: "https://commons.wikimedia.org/wiki/File:Cardiac_Output_Animation.gif" }];
+  assert.deepEqual(relevantPictures(pics, "Cardiac output").map((p) => p.page.slice(-24)), ["iac_Output_Animation.gif"]);
+  assert.equal(relevantPictures(pics, "a b").length, 2);
+});
