@@ -180,7 +180,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
 
   // "Continue on the computer" from the phone app: a phone chat becomes a chat here (the computer's default model).
-  app.post<{ Body: { id?: string; title?: string; messages?: Array<{ role?: string; content?: unknown }> } }>("/api/import/phone-chat", async (req, reply) => {
+  app.post<{ Body: { id?: string; title?: string; messages?: Array<{ role?: string; content?: unknown }> } }>("/api/import/phone-chat", { bodyLimit: 8 * 1024 * 1024 }, async (req, reply) => {
     const b = req.body ?? {};
     const messages = (Array.isArray(b.messages) ? b.messages : [])
       .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())

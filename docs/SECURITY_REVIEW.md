@@ -799,3 +799,21 @@ S5 an outside scanner's rules for Electron.
   shrunk to 1600 px.
 - Remote search: Back closes it through a history entry that is removed when it closes some other way.
 - Performance: the menu builds once per page; the converter's regular expression is built once per form.
+
+## Scan 92 (2026-11-16, 0.6.292 – 0.6.300: phone menu and chat screens, study grading, phone chat to the computer)
+
+- Phone chat to the computer (`POST /api/import/phone-chat`): behind the usual login (the phone's token); only
+  user/assistant text is kept, at most 200 messages of 20000 characters, the title cut to 120, an 8 MB body limit.
+  It is stored like any imported chat (no model runs until she writes); the id is a hash of the phone's chat id and
+  length, so the same chat sent twice opens the same copy. The phone opens the computer only at `#/c/<id>` (checked
+  against a strict pattern before use).
+- Phone chat list: titles, model names and renames are put in as text (never HTML); a rename is cut to 80
+  characters; deleting asks first and removes only that chat's own stored messages.
+- "From Study" in the + sheet attaches a lecture's summary or text that is already on the phone (12000 characters
+  at most); nothing leaves the phone unless she sends the message.
+- Study mode grading: the model's verdict is read as JSON and only "right", "partly" or "wrong" is accepted; the
+  verdict line is KesherAI's own text. The script cleaner is one character-class pass (no backtracking).
+- Bottom bar press-and-slide: the click the browser makes is replaced only for trusted pointer clicks; keyboard
+  activation still works.
+- Performance: the chat list is drawn from the phone's stored list (100 chats at most) on each search keystroke;
+  the menu panel's position is measured on open and on resize only.
