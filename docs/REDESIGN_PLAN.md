@@ -55,6 +55,9 @@ accent #98a3ff, text #ededee, muted #94949c, waiting #f0b37e), Heebo, RTL, 44px 
     voice, as a virtual camera in Zoom/Teams, so a student who must keep the camera on can move around while still
     attending. Like Pickle (5-minute training video, live lip-sync). Needs its own research: what runs locally on a
     modest laptop (likely not real time without a graphics card, so a cloud option), and a virtual camera driver.
+    As realistic as possible (natural blinking, small head and posture movement, lighting matched to the room, lip
+    sync to the live voice). The feature shows the student a warning before first use: if the course or university
+    finds out, it may be treated as breaking its rules.
 
 ## Throughout
 - A security and performance scan every 5 changes.
