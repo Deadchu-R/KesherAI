@@ -32,7 +32,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       quizzes: d.quizzes.filter((z) => z.answers).map((z) => ({ id: z.id, t: z.t, score: z.score, of: z.questions.length })).slice(-20),
     };
   });
-  app.patch<C & { Body: { name?: string } }>("/api/study/courses/:id", async (req) => st.renameCourse(req.params.id, String(req.body?.name ?? "")));
+  app.patch<C & { Body: { name?: string; field?: string } }>("/api/study/courses/:id", async (req) => (typeof req.body?.field === "string" ? st.setField(req.params.id, req.body.field) : st.renameCourse(req.params.id, String(req.body?.name ?? ""))));
   app.delete<C>("/api/study/courses/:id", async (req) => {
     await st.removeCourse(req.params.id);
     return { ok: true };

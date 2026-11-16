@@ -15,6 +15,10 @@ export interface StudyCourse {
   id: string;
   name: string;
   createdAt: number;
+  /** Its field of study (STUDY_FIELDS), recognised from its lectures or chosen by the student. */
+  field?: string;
+  /** The student chose the field (it is no longer guessed). */
+  fieldChosen?: boolean;
 }
 
 /** A term from a lecture, Hebrew with its English (medical) name. */
@@ -383,3 +387,53 @@ export const LAB_VALUES: LabValue[] = [
   { group: "other", name: "Digoxin level", he: "רמת דיגוקסין", range: "0.5–2.0", unit: "ng/mL" },
   { group: "other", name: "Albumin", he: "אלבומין", range: "3.5–5.0", unit: "g/dL" },
 ];
+
+// ── Fields of study ───────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A field of study: what it is called and the words that show it (Hebrew and English). */
+export interface StudyField {
+  id: string;
+  he: string;
+  en: string;
+  words: string[];
+}
+
+/** The fields KesherAI recognises (research: docs/RESEARCH_LOG.md "Students, part 6"). */
+export const STUDY_FIELDS: StudyField[] = [
+  { id: "nursing", he: "סיעוד", en: "Nursing", words: ["סיעוד", "אחות", "אחיות", "מטופל", "nursing", "nurse", "בחינת רישוי", "תרופות", "פרמקולוגיה", "pharmacology", "מתן תרופה"] },
+  { id: "medicine", he: "רפואה", en: "Medicine", words: ["רפואה", "רופא", "אבחנה", "medicine", "medical", "clinical", "פתולוגיה", "pathology", "אנטומיה", "anatomy", "פיזיולוגיה", "physiology"] },
+  { id: "law", he: "משפטים", en: "Law", words: ["משפטים", "חוק", "סעיף", "פסק דין", "בית המשפט", "עליון", "חוזים", "נזיקין", "law", "court", "statute", "contract", "tort", "plaintiff"] },
+  { id: "engineering", he: "הנדסה", en: "Engineering", words: ["הנדסה", "מהנדס", "חוזק חומרים", "מעגלים", "engineering", "circuit", "thermodynamics", "תרמודינמיקה", "סטטיקה", "statics", "mechanics"] },
+  { id: "cs", he: "מדעי המחשב", en: "Computer science", words: ["מדעי המחשב", "תכנות", "אלגוריתם", "סיבוכיות", "מבני נתונים", "programming", "algorithm", "complexity", "data structures", "python", "java", "c++", "קוד"] },
+  { id: "math", he: "מתמטיקה ופיזיקה", en: "Mathematics and physics", words: ["מתמטיקה", "חדו\"א", "אינפי", "אלגברה", "לינארית", "פיזיקה", "calculus", "algebra", "linear", "physics", "derivative", "integral", "נגזרת", "אינטגרל", "משוואה"] },
+  { id: "psychology", he: "פסיכולוגיה", en: "Psychology", words: ["פסיכולוגיה", "פסיכולוג", "התנהגות", "קוגניטיבי", "psychology", "cognitive", "behavior", "behaviour", "פרויד", "freud", "piaget"] },
+  { id: "economics", he: "כלכלה וניהול", en: "Economics and management", words: ["כלכלה", "מיקרו", "מאקרו", "ניהול", "חשבונאות", "שיווק", "economics", "micro", "macro", "accounting", "marketing", "finance", "ביקוש", "היצע"] },
+  { id: "biology", he: "ביולוגיה וכימיה", en: "Biology and chemistry", words: ["ביולוגיה", "כימיה", "תא", "גנטיקה", "ביוכימיה", "biology", "chemistry", "cell", "genetics", "biochemistry", "אורגנית", "organic"] },
+  { id: "education", he: "חינוך", en: "Education", words: ["חינוך", "הוראה", "פדגוגיה", "education", "teaching", "pedagogy", "תלמידים", "בית ספר"] },
+  { id: "humanities", he: "מדעי הרוח והחברה", en: "Humanities and social sciences", words: ["היסטוריה", "פילוסופיה", "ספרות", "סוציולוגיה", "מדע המדינה", "history", "philosophy", "literature", "sociology", "political science"] },
+];
+
+/**
+ * Guesses a course's field from its name and its lectures' words (the name counts three times).
+ *
+ * @param name - The course's name.
+ * @param text - Its lectures' titles and the start of their text.
+ * @returns The field's id, or undefined when nothing stands out.
+ */
+export function detectField(name: string, text: string): string | undefined {
+  const hay = ` ${name} ${name} ${name} ${text} `.toLowerCase();
+  let best: { id: string; score: number } | undefined;
+  for (const f of STUDY_FIELDS) {
+    let score = 0;
+    for (const w of f.words) {
+      // Hebrew joins one-letter words to the next (ו, ה, ב, ל, מ, ש, כ).
+      const re = new RegExp(`(^|[^\\p{L}])[והבלמשכ]{0,2}${w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gu");
+      score += hay.match(re)?.length ?? 0;
+    }
+    if (score > (best?.score ?? 1)) best = { id: f.id, score };
+  }
+  return best?.id;
+}
+
+/** Whether a field gets the nursing tools (drug cards, lab values, medication calculations). */
+export const clinicalField = (field: string | undefined): boolean => field === "nursing" || field === "medicine";

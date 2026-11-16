@@ -2644,3 +2644,5 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-lab-table td { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .study-lab-table small { color: var(--muted); }
 .study-option.picked { border-color: var(--accent); }
+.study-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-inline-end: auto; }
+.study-field select { height: 34px; }

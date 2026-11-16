@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
-import { jsonIn, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { detectField, jsonIn, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import type { ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -44,6 +44,21 @@ For every drug the material discusses, fill what the material says (leave a fiel
 Answer with JSON only: [{"name": "generic name", "brands": "", "drugClass": "", "action": "how it works", "uses": "", "dose": "", "sideEffects": "", "contraindications": "", "nursing": "what the nurse checks and does", "teaching": "what to tell the patient"}]`;
 
 const LICENSING = "Write the questions like the Israeli nursing licensing exam (בחינת רישוי): multiple choice with four options, mostly short patient cases that ask what the nurse should do first or what is most important, with plausible distractors.";
+
+/** What each field's material needs from the model. */
+const FIELD_HINT: Record<string, string> = {
+  nursing: "This is nursing: favour what the nurse assesses, does and teaches, and patient safety.",
+  medicine: "This is medicine: favour mechanisms, diagnosis and treatment, as the material states them.",
+  law: "This is law: give section numbers, statute and case names exactly as the material writes them, and the rule or holding of each.",
+  engineering: "This is engineering: keep formulas with their units and the conditions they hold under; a worked example shows each step.",
+  cs: "This is computer science: short code in ``` blocks, the complexity of algorithms, and when to use each data structure.",
+  math: "This is mathematics or physics: state definitions and theorems exactly; worked problems show each step; keep formulas as plain text.",
+  psychology: "This is psychology: name the theory and its researcher, and the study and finding behind it, as the material gives them.",
+  economics: "This is economics or management: definitions, models and what moves each curve or figure, with the formulas as written.",
+  biology: "This is biology or chemistry: processes in order, structures and their functions, reactions as written.",
+  education: "This is education: theories, their thinkers and how each is used in class.",
+  humanities: "This is the humanities or social sciences: thinkers, ideas, dates and arguments as the material gives them.",
+};
 
 const FORMAT_HINT: Record<StudyFormat, string> = {
   text: "",
@@ -140,7 +155,9 @@ export class Study {
 
   /** Adds a course. */
   async addCourse(name: string): Promise<StudyCourse> {
-    const course = { id: randomUUID(), name: name.trim().slice(0, 120) || "Course", createdAt: Date.now() };
+    const n = name.trim().slice(0, 120) || "Course";
+    const field = detectField(n, "");
+    const course: StudyCourse = { id: randomUUID(), name: n, createdAt: Date.now(), ...(field ? { field } : {}) };
     await this.save({ course, lectures: [], cards: [], reviews: [], quizzes: [] });
     return course;
   }
@@ -149,6 +166,23 @@ export class Study {
   async renameCourse(id: string, name: string): Promise<StudyCourse> {
     const d = await this.get(id);
     d.course.name = name.trim().slice(0, 120) || d.course.name;
+    await this.save(d);
+    return d.course;
+  }
+
+  /** Sets a course's field (the student's choice; "" lets KesherAI guess again). */
+  async setField(id: string, field: string): Promise<StudyCourse> {
+    const d = await this.get(id);
+    if (field && !STUDY_FIELDS.some((f) => f.id === field)) throw Object.assign(new Error("No such field."), { statusCode: 400 });
+    if (field) {
+      d.course.field = field;
+      d.course.fieldChosen = true;
+    } else {
+      delete d.course.fieldChosen;
+      const guess = detectField(d.course.name, d.lectures.map((x) => `${x.title} ${x.text.slice(0, 3000)}`).join(" "));
+      if (guess) d.course.field = guess;
+      else delete d.course.field;
+    }
     await this.save(d);
     return d.course;
   }
@@ -166,6 +200,10 @@ export class Study {
     if (!text.trim()) throw Object.assign(new Error("The lecture has no text."), { statusCode: 400 });
     const lecture: StudyLecture = { id: randomUUID(), title: (p.title ?? "").trim().slice(0, 200) || `${d.lectures.length + 1}`, date: /^\d{4}-\d{2}-\d{2}$/.test(p.date ?? "") ? p.date! : new Date().toISOString().slice(0, 10), text };
     d.lectures.push(lecture);
+    if (!d.course.fieldChosen) {
+      const guess = detectField(d.course.name, d.lectures.map((x) => `${x.title} ${x.text.slice(0, 3000)}`).join(" "));
+      if (guess) d.course.field = guess;
+    }
     await this.save(d);
     return lecture;
   }
@@ -196,8 +234,9 @@ export class Study {
     return l;
   }
 
-  private async ask(system: string, user: string, signal?: AbortSignal): Promise<string> {
+  private async ask(system: string, user: string, signal?: AbortSignal, field?: string): Promise<string> {
     const m = this.model();
+    if (field && FIELD_HINT[field]) system = `${system}\n${FIELD_HINT[field]}`;
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     const r = await m.turn({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(600_000), () => undefined);
     return r.text;
@@ -214,7 +253,7 @@ export class Study {
       for (const [i, p] of parts.entries()) notes.push(await this.ask(`Write detailed notes of this part of a lecture: every idea, term, number and example. ${LANG} ${ONLY_MATERIAL}`, `Part ${i + 1} of ${parts.length}:\n\n${p}`, signal));
       material = notes.join("\n\n");
     }
-    const raw = await this.ask(SUMMARY_PROMPT, `Lecture: ${l.title}\n\n${material.slice(0, 60_000)}`, signal);
+    const raw = await this.ask(SUMMARY_PROMPT, `Lecture: ${l.title}\n\n${material.slice(0, 60_000)}`, signal, d.course.field);
     const j = jsonIn(raw) as { summary?: string; terms?: StudyTerm[]; diagram?: string } | undefined;
     l.summary = (j?.summary ?? raw).slice(0, 100_000);
     l.terms = Array.isArray(j?.terms) ? j!.terms.filter((t) => t && t.term && t.explain).slice(0, 80).map((t) => ({ term: String(t.term).slice(0, 120), ...(t.en ? { en: String(t.en).slice(0, 120) } : {}), explain: String(t.explain).slice(0, 400) })) : [];
@@ -232,7 +271,7 @@ export class Study {
     const format: StudyFormat = STUDY_FORMATS.includes(p.format as StudyFormat) ? p.format! : "text";
     const count = Math.max(3, Math.min(40, Number(p.count) || 12));
     const material = (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
-    const raw = await this.ask(`${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal);
+    const raw = await this.ask(`${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course.field);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return cards. Try again, or another model."), { statusCode: 502 });
     const now = new Date();
@@ -303,7 +342,7 @@ export class Study {
     const count = Math.max(3, Math.min(p.style === "licensing" ? 60 : 30, Number(p.count) || 10));
     const budget = Math.floor(48_000 / chosen.length);
     const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
-    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal);
+    const raw = await this.ask(p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : QUIZ_PROMPT, `Write ${count} questions.\n\n${material}`, signal, d.course.field);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
     const questions: StudyQuestion[] = [];

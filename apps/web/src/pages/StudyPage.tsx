@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { calcCorrect, LAB_VALUES, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale } from "../i18n";
 import { toast } from "../library";
@@ -69,8 +69,10 @@ function StudyHome() {
         <h2>{L("להיום", "Today")}</h2>
         <div className="study-actions">
           {firstDue ? <a className="button primary" href={`#/study/${firstDue.id}/review`}>{L(`חזרה על ${due} כרטיסיות`, `Review ${due} cards`)} ▶</a> : <span className="muted">{courses?.length ? L("אין כרטיסיות לחזרה עכשיו.", "No cards to review now.") : L("התחילי בקורס ראשון.", "Start with a first course.")}</span>}
-          <a className="button" href="#/study/calc">{L("תרגול חישובי תרופות", "Medication calculations")}</a>
-          <a className="button" href="#/study/labs">{L("ערכי מעבדה", "Lab values")}</a>
+          {courses?.some((c) => clinicalField(c.field)) && <>
+            <a className="button" href="#/study/calc">{L("תרגול חישובי תרופות", "Medication calculations")}</a>
+            <a className="button" href="#/study/labs">{L("ערכי מעבדה", "Lab values")}</a>
+          </>}
         </div>
       </section>
       <h2>{L("הקורסים שלי", "My courses")}</h2>
@@ -84,7 +86,7 @@ function StudyHome() {
             <li key={c.id}>
               <a href={`#/study/${c.id}`} className="study-course">
                 <b dir="auto">{c.name}</b>
-                <small>{L(`${c.lectures} הרצאות · ${c.cards} כרטיסיות`, `${c.lectures} lectures · ${c.cards} cards`)}</small>
+                <small>{[fieldName(c.field), L(`${c.lectures} הרצאות · ${c.cards} כרטיסיות`, `${c.lectures} lectures · ${c.cards} cards`)].filter(Boolean).join(" · ")}</small>
                 <small className={c.due ? "warn" : "good"}>{c.due ? L(`${c.due} לחזרה`, `${c.due} to review`) : L("הכול מעודכן", "All caught up")}</small>
               </a>
             </li>
@@ -94,6 +96,15 @@ function StudyHome() {
     </div>
   );
 }
+
+/** A field's name in the page's language. */
+const fieldName = (id: string | undefined) => {
+  const f = STUDY_FIELDS.find((x) => x.id === id);
+  return f ? L(f.he, f.en) : "";
+};
+
+/** Tabs only a clinical course has. */
+const CLINICAL_TABS = new Set(["calc", "drugs", "labs"]);
 
 const TABS: Array<[string, [string, string]]> = [
   ["lectures", ["הרצאות", "Lectures"]],
@@ -117,13 +128,20 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
       <BackLink to={lectureId ? `#/study/${id}` : "#/study"} />
       <div className="study-head">
         <h1 dir="auto">{info.course.name}</h1>
+        <label className="study-field">
+          <span>{L("תחום", "Field")}</span>
+          <select value={info.course.fieldChosen ? info.course.field ?? "" : ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { field: e.target.value } }))) load(); }}>
+            <option value="">{info.course.field && !info.course.fieldChosen ? L(`זוהה: ${fieldName(info.course.field)}`, `Recognised: ${fieldName(info.course.field)}`) : L("לזהות לבד", "Recognise by itself")}</option>
+            {STUDY_FIELDS.map((f) => <option key={f.id} value={f.id}>{L(f.he, f.en)}</option>)}
+          </select>
+        </label>
         <button type="button" className="small ghost" onClick={async () => {
           if (!confirm(L(`למחוק את הקורס "${info.course.name}" עם כל ההרצאות והכרטיסיות? אי אפשר לבטל.`, `Delete "${info.course.name}" with all its lectures and cards? This cannot be undone.`))) return;
           if (await call(api(`/api/study/courses/${id}`, { method: "DELETE" }))) go("#/study");
         }}>{L("מחק קורס", "Delete course")}</button>
       </div>
       <div className="seg-pills" role="tablist" aria-label={L("חלקי הקורס", "Course sections")}>
-        {TABS.map(([t, n]) => (
+        {TABS.filter(([t]) => clinicalField(info.course.field) || !CLINICAL_TABS.has(t)).map(([t, n]) => (
           <button key={t} type="button" role="tab" aria-selected={on === t} className={on === t ? "on" : ""} onClick={() => go(`#/study/${id}/${t}`)}>
             {L(...n)}{t === "review" && info.due ? ` (${info.due})` : ""}
           </button>

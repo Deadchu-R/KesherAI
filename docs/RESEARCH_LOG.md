@@ -1516,3 +1516,17 @@ Stopped at: building (store and public page first, then the chat menu and the se
   back helped you most") but never drops retrieval practice, spacing or words-plus-picture. A short start-up
   questionnaire records what she prefers — used only for the first suggestion, then replaced by her own results.
 - Stopped at: design only; the format comparison needs weeks of her real answers before it says anything.
+
+### Students, part 6: every field of study (2026-11-16)
+
+- What exists: general AI study apps (StudyFetch, Knowt, Quizlet, NotebookLM, YouLearn) treat every subject the same;
+  subject tools are separate apps — Wolfram Alpha computes math, physics and chemistry step by step ("doesn't guess —
+  it computes"); Anki is the usual pick for content-heavy medicine, law and languages. None of the reviews found an
+  app that recognises the field by itself and changes its tools.
+- Ours: KesherAI recognises the course's field from its name, lecture titles and the start of each lecture (Hebrew
+  and English words, Hebrew one-letter prefixes allowed); the student can choose it instead. The field steers every
+  summary, card and quiz (law: exact section and case names; engineering and math: formulas with units, worked steps;
+  CS: code and complexity; psychology: theory, researcher, study), and only nursing and medicine get the drug cards,
+  lab values and medication calculations.
+- Stopped at: keyword recognition and prompt hints are in; field-specific tools beyond nursing (a computed math
+  checker like Wolfram's, statute look-up for law) are not built.

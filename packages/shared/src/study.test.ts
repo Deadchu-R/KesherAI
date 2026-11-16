@@ -53,3 +53,13 @@ test("JSON is found inside a model's answer", () => {
   assert.deepEqual(jsonIn('Sure! {"x": [1,2]} done'), { x: [1, 2] });
   assert.equal(jsonIn("no json"), undefined);
 });
+
+test("a course's field is recognised from its name and lectures", async () => {
+  const { detectField } = await import("./study.js");
+  assert.equal(detectField("פרמקולוגיה", "תרופות לב. מתן תרופה למטופל"), "nursing");
+  assert.equal(detectField("דיני חוזים", "סעיף 12 לחוק החוזים. פסק דין"), "law");
+  assert.equal(detectField("Data Structures", "algorithm complexity, python"), "cs");
+  assert.equal(detectField("חדו\"א 1", "נגזרת ואינטגרל"), "math");
+  assert.equal(detectField("קורס", "שלום"), undefined);
+  assert.equal(detectField("מבוא", "לפי החוק והסעיף, ובפסק הדין"), "law");
+});
