@@ -9,7 +9,7 @@ import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
-const L = (h, e) => (he() ? h : e);
+const L = (h, e) => (he() ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(h) : h) : e);
 const scheduler = fsrs();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
 

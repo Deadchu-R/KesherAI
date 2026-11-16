@@ -2,6 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
+  <script src="vendor/address.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#121213" />
   <title>KesherAI · On this phone</title>
@@ -157,6 +158,9 @@
   .app-tabs button[aria-current] { color: var(--text); }
   .app-tabs button[aria-current] svg { stroke: var(--accent); }
   .app-tabs button .i { font-size: 19px; }
+  .about-name { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); margin: 0 0 10px; }
+  .about-name input { min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); padding: 0 12px; font: inherit; font-size: 15px; }
+  .about-sub { margin: 0 0 6px; font-size: 14px; color: var(--muted); }
   body.has-tabs main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 </style>
 </head>
@@ -196,6 +200,14 @@
   </main>
 
   <main id="settingsView" hidden>
+    <div class="lbl"><span data-he="עלייך" data-en="About you">עלייך</span></div>
+    <label class="about-name"><span data-he="איך לקרוא לך?" data-en="What should I call you?">איך לקרוא לך?</span><input id="setName" maxlength="60" dir="auto" autocomplete="given-name" /></label>
+    <p class="about-sub" data-he="ובעברית, איך לפנות אלייך?" data-en="And in Hebrew, how should I address you?">ובעברית, איך לפנות אלייך?</p>
+    <div class="seg" id="addrSeg" role="radiogroup">
+      <button type="button" role="radio" data-a="f" data-raw data-he="נקבה (כתבי)" data-en="Feminine">נקבה (כתבי)</button>
+      <button type="button" role="radio" data-a="m" data-raw data-he="זכר (כתוב)" data-en="Masculine">זכר (כתוב)</button>
+      <button type="button" role="radio" data-a="p" data-raw data-he="רבים (כתבו)" data-en="Plural">רבים (כתבו)</button>
+    </div>
     <div class="lbl"><span data-he="חיבור למחשב" data-en="Connecting to the computer">חיבור למחשב</span></div>
     <label class="switch-row"><span><span data-he="להתחבר אוטומטית למחשב כשאפשר" data-en="Connect to the computer automatically when possible">להתחבר אוטומטית למחשב כשאפשר</span><small data-he="כשהמחשב השמור זמין, האפליקציה עוברת אליו לבד. כבוי: נשארת בטלפון עד שבוחרים." data-en="When the saved computer is reachable, the app moves to it. Off: it stays on the phone until you choose.">כשהמחשב השמור זמין, האפליקציה עוברת אליו לבד. כבוי: נשארת בטלפון עד שבוחרים.</small></span><input type="checkbox" id="autoConnect" /></label>
     <div class="lbl"><span data-he="מה מופיע באפליקציה" data-en="What the app shows">מה מופיע באפליקציה</span></div>
@@ -306,10 +318,16 @@
   const he = lang === "he";
   document.documentElement.lang = lang;
   document.documentElement.dir = he ? "rtl" : "ltr";
-  for (const el of document.querySelectorAll("[data-he]")) el.textContent = el.dataset[lang];
+  for (const el of document.querySelectorAll("[data-he]")) el.textContent = lang === "he" ? (globalThis.kesherHebrew && !el.hasAttribute("data-raw") ? globalThis.kesherHebrew(el.dataset.he) : el.dataset.he) : el.dataset.en;
   $("input").placeholder = $("input").dataset[he ? "phHe" : "phEn"];
   $("back").textContent = he ? "→" : "←";
-  const T = (h, e) => (he ? h : e);
+  /** The note the chat models get about her (Settings → About you): her name and how to address her in Hebrew. */
+  function aboutMe() {
+    const n = localStorage.getItem("kesherai-user-name");
+    const a = { f: "feminine forms (את, כתבי)", m: "masculine forms (אתה, כתוב)", p: "plural forms (אתם, כתבו)" }[localStorage.getItem("kesher-address")];
+    return (n ? ` The user's name is ${n}.` : "") + (a ? ` In Hebrew, address the user in ${a}.` : "");
+  }
+  const T = (h, e) => (he ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(h) : h) : e);
 
   // Small chat models that fit a phone. The file (Q4_K_M) is looked up on Hugging Face when listed.
   const CATALOG = [
@@ -486,6 +504,8 @@
     const on = partsOn();
     const h = new Date().getHours();
     $("homeHi").textContent = h < 5 ? T("לילה טוב", "Good night") : h < 12 ? T("בוקר טוב", "Good morning") : h < 18 ? T("צהריים טובים", "Good afternoon") : T("ערב טוב", "Good evening");
+    const myName = localStorage.getItem("kesherai-user-name");
+    if (myName) $("homeHi").textContent += `, ${myName}`;
     const tiles = [...PARTS.filter((x) => on[x.id]), { id: "models", icon: "🧠", name: T("מודלים", "Models"), tab: "chat" }];
     $("tiles").replaceChildren(...tiles.map((x) => { const b = document.createElement("button"); b.type = "button"; b.className = "tile"; b.innerHTML = '<span class="i" aria-hidden="true"></span><span></span>'; b.firstChild.textContent = x.icon; b.lastChild.textContent = x.name; b.onclick = () => openPart(x.tab); return b; }));
     const recent = allChats().slice(0, 3);
@@ -514,7 +534,21 @@
       return l;
     }));
     $("setLang").textContent = he ? "English" : "עברית";
+    $("setName").value = localStorage.getItem("kesherai-user-name") ?? "";
+    const a = localStorage.getItem("kesher-address");
+    document.querySelectorAll("#addrSeg [data-a]").forEach((b) => { b.classList.toggle("on", b.dataset.a === a); b.setAttribute("aria-checked", String(b.dataset.a === a)); });
   }
+  // About you: the name the app and the models use, and the Hebrew form of address (the page's text changes at once).
+  $("setName").onchange = () => {
+    const n = [...$("setName").value].filter((ch) => ch >= " " && ch !== "<" && ch !== ">").join("").trim().slice(0, 60);
+    if (n) localStorage.setItem("kesherai-user-name", n);
+    else localStorage.removeItem("kesherai-user-name");
+  };
+  document.querySelectorAll("#addrSeg [data-a]").forEach((b) => (b.onclick = () => {
+    $("setName").onchange();
+    localStorage.setItem("kesher-address", b.dataset.a);
+    location.replace("local.html?tab=settings");
+  }));
   $("autoConnect").onchange = () => localStorage.setItem("kesherai-auto-connect", $("autoConnect").checked ? "1" : "0");
   $("setModels").onclick = () => openPart("chat");
   $("setComputers").onclick = () => (location.href = "index.html?switch=1");
@@ -1797,7 +1831,7 @@
         $("status").textContent = T("חושב…", "Thinking…");
       }
       const hebrew = /[\u0590-\u05FF]/.test(text);
-      const system = { role: "system", content: (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
+      const system = { role: "system", content: (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + aboutMe() + (found ? `\n\nWeb search results (just now). Answer from them and give the links you used:\n${found}` : "") };
       // Reasoning models think first; show only the answer (DeepSeek's format starts thinking without an opening tag).
       const thinks = current.item.native?.family === "deepseek";
       const visible = (r) => {
@@ -1818,7 +1852,7 @@
       } else if (current.item.native) {
         // Small phone models: a short context works much better than a long one.
         // Small models follow the user's turn far better than the system part, so search results go there.
-        const baseSystem = hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.";
+        const baseSystem = (hebrew ? "You are a helpful assistant. The user writes in Hebrew: answer in clear, correct Hebrew, briefly." : "You are a helpful assistant. Answer briefly, in the user's language.") + aboutMe();
         const turns = recent.slice(-6);
         if (found && turns.length) {
           const last = turns[turns.length - 1];
@@ -1953,6 +1987,7 @@
       };
       // Nothing asked for: the app's own home (the landing screen, works with no computer).
       if (!q.get("c") && !q.has("new") && !q.has("chat")) {
+        if (q.get("tab") === "settings") { drawSettings(); return showPage("settingsView", T("הגדרות", "Settings")); }
         if (q.get("tab")) return openPart(q.get("tab"));
         drawHome();
         return showPage("homeView");

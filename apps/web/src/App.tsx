@@ -6,6 +6,7 @@
 import { clearPhoneNotes } from "./phoneNotify";
 import { CommandPalette } from "./CommandPalette";
 import { VersionWatch } from "./VersionWatch";
+import { AboutYou, loadUser, type User } from "./AboutYou";
 import { GuardBanner } from "./GuardSection";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
@@ -101,8 +102,19 @@ function Home() {
   useEffect(() => {
     void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setModelId((m) => m || s.activeModels.chat || "")).catch(() => undefined);
   }, []);
+  // Her name in the greeting, and the one-time "what should I call you" question while the address is unset.
+  const [user, setUser] = useState<User | null>(null);
+  useEffect(() => void loadUser().then(setUser), []);
+  const [askLater, setAskLater] = useState(() => {
+    try {
+      return localStorage.getItem("kesher-about-later") === "1";
+    } catch {
+      return true;
+    }
+  });
   const hour = new Date().getHours();
-  const greeting = t(hour < 5 ? "greetNight" : hour < 12 ? "greetMorning" : hour < 18 ? "greetDay" : "greetEvening");
+  const hello = t(hour < 5 ? "greetNight" : hour < 12 ? "greetMorning" : hour < 18 ? "greetDay" : "greetEvening");
+  const greeting = user?.name ? `${hello}, ${user.name}` : hello;
   // The chat is made on the first thing added with + (a file, a project…), or when the message is sent.
   const [draftId, setDraftId] = useState<string>();
   const ensure = async () => {
@@ -148,6 +160,7 @@ function Home() {
   return (
     <div className="home">
       <h1 className="greeting">{greeting}</h1>
+      {user && !user.address && !askLater && <AboutYou compact onDone={() => { setAskLater(true); void loadUser().then(setUser); }} />}
       <form className="composer home-composer" onSubmit={(e) => { e.preventDefault(); void start(); }}>
         <div className="box">
           <PromptTextarea
@@ -255,7 +268,7 @@ export function App() {
   }, [hash]);
 
   useEffect(() => {
-    api("/api/health").then(() => setOnline(true), () => setOnline(false));
+    api("/api/health").then(() => { setOnline(true); void loadUser(); }, () => setOnline(false));
   }, []);
 
   const { parts } = useParts();

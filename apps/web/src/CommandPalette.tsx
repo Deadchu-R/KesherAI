@@ -75,6 +75,17 @@ export function CommandPalette() {
   useEffect(() => {
     if (open) setTimeout(() => input.current?.focus(), 0);
   }, [open]);
+  // The phone's Back button closes the search (a history entry while it is open), instead of doing nothing.
+  useEffect(() => {
+    if (!open) return;
+    history.pushState({ kesherDialog: true }, "");
+    const onBack = () => setOpen(false);
+    addEventListener("popstate", onBack);
+    return () => {
+      removeEventListener("popstate", onBack);
+      if ((history.state as { kesherDialog?: boolean } | null)?.kesherDialog) history.back();
+    };
+  }, [open]);
 
   const close = () => {
     setOpen(false);

@@ -35,4 +35,14 @@ esbuild.buildSync({
   nodePaths: [join(here, "..", "..", "..", "packages", "core", "node_modules")],
   logLevel: "warning",
 });
+// How to address her in Hebrew, from the same shared code (a classic script, loaded before the others).
+esbuild.buildSync({
+  entryPoints: [join(here, "..", "address-core.ts")],
+  bundle: true,
+  format: "iife",
+  minify: true,
+  target: "es2020",
+  outfile: join(www, "address.js"),
+  logLevel: "warning",
+});
 console.log("vendor files copied to www/vendor");

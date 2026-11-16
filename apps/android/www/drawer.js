@@ -8,7 +8,7 @@
 (() => {
   const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
   const he = lang === "he";
-  const T = (h, e) => (he ? h : e);
+  const T = (h, e) => (he ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(h) : h) : e);
   const read = (k, d) => {
     try {
       return JSON.parse(localStorage.getItem(k) || "") ?? d;

@@ -46,7 +46,7 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.put<{ Body: { name?: string; address?: string } }>("/api/user", async (req, reply) => {
     const b = req.body ?? {};
     if (typeof b.name === "string") {
-      const n = b.name.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 60);
+      const n = [...b.name].filter((ch) => ch >= " " && ch !== "<" && ch !== ">").join("").trim().slice(0, 60);
       if (n) s.config.user.name = n;
       else delete s.config.user.name;
     }

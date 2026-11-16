@@ -6,7 +6,7 @@
 
 const lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
 const he = lang === "he";
-const T = (h, e) => (he ? h : e);
+const T = (h, e) => (he ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(h) : h) : e);
 const size = (b) => (!b ? "0 MB" : b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 

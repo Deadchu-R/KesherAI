@@ -6,7 +6,7 @@ import type { HebrewAddress } from "@kesher/shared";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Her name and how to address her, from the computer (all her devices share it). */
-interface User { name?: string; address?: HebrewAddress }
+export interface User { name?: string; address?: HebrewAddress }
 
 /** Loads the setting at start; when the address differs from the one this device remembered, the page reloads once. */
 export async function loadUser(): Promise<User> {

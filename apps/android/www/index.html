@@ -2,6 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
+  <script src="vendor/address.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121213" />
   <link rel="stylesheet" href="theme.css" />
@@ -170,7 +171,7 @@
     noWake: { he: "המחשב לא התעורר. בדוק ש-Wake-on-LAN מופעל, שהמחשב מחובר בכבל רשת, ושהטלפון באותה רשת ביתית.", en: "The computer did not wake. Check that Wake-on-LAN is on, the computer is on a network cable, and the phone is on the same home network." } };
   function applyLang() {
     document.documentElement.lang = lang; document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
-    document.querySelectorAll("[data-he]").forEach((el) => (el.textContent = el.dataset[lang]));
+    document.querySelectorAll("[data-he]").forEach((el) => (el.textContent = lang === "he" ? (globalThis.kesherHebrew ? globalThis.kesherHebrew(el.dataset.he) : el.dataset.he) : el.dataset.en));
     document.querySelectorAll("[data-ph-he]").forEach((el) => (el.placeholder = lang === "he" ? el.dataset.phHe : el.dataset.phEn));
     $("lang").textContent = lang === "he" ? "English" : "עברית";
   }
