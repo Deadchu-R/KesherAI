@@ -92,7 +92,9 @@ async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefin
       "$d=Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])",
       "$b=Await ($d.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])",
       `$lang=[Windows.Globalization.Language]::new('${he ? "he" : "en"}')`,
-      "$e=if([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)){[Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)}else{[Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()}",
+      // Without Windows' Hebrew OCR pack an English engine reads Hebrew as gibberish (seen on the PC): say so instead.
+      `if(-not [Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)){[Console]::Out.Write('NO-LANG');exit 0}`,
+      "$e=[Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)",
       "if(-not $e){exit 3}",
       "$r=Await ($e.RecognizeAsync($b)) ([Windows.Media.Ocr.OcrResult])",
       "[Console]::OutputEncoding=[Text.Encoding]::UTF8",
@@ -102,6 +104,10 @@ async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefin
     const out = await new Promise<string>((resolve, reject) =>
       execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, KESHER_OCR_FILE: file }, timeout: 20_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(Object.assign(err, { why: String(stderr || err.message).replace(/\s+/g, " ").slice(0, 300) })) : resolve(stdout))),
     );
+    if (out.trim() === "NO-LANG") {
+      ocrWhy = "no-language";
+      return undefined;
+    }
     const lines = parseOcr(out);
     if (!lines) ocrWhy = out.trim() ? "no text lines" : "no text found";
     return lines;

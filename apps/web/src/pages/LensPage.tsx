@@ -99,7 +99,12 @@ export function LensPage({ id }: { id?: string }) {
     setResult(null);
     setOver([]);
     try {
-      const r = await api<{ text: string; lines?: Array<{ t: string; x: number; y: number; w: number; h: number }> }>("/api/lens/act", { method: "POST", body: { image: cut.data, action, question, he } });
+      const r = await api<{ text: string; ocr?: string; lines?: Array<{ t: string; x: number; y: number; w: number; h: number }> }>("/api/lens/act", { method: "POST", body: { image: cut.data, action, question, he } });
+      // Windows has no Hebrew text recognition yet: the model read it (slower); say once how to add it.
+      const tipped = (() => { try { const v = sessionStorage.getItem("lens-ocr-tip"); sessionStorage.setItem("lens-ocr-tip", "1"); return !!v; } catch { return false; } })();
+      if (r.ocr === "no-language" && !tipped) {
+        toast(L("לזיהוי טקסט מהיר בעברית: הגדרות Windows ← זמן ושפה ← שפה ← עברית ← אפשרויות ← זיהוי תווים אופטי (OCR) ← הורדה.", "For fast Hebrew text recognition: Windows Settings → Time & language → Language → Hebrew → Options → Optical character recognition → Download."));
+      }
       setResult({ action, text: r.text });
       if (r.lines?.length) setOver(r.lines.map((l) => ({ t: l.t, left: cut.box.x + l.x / cut.sx, top: cut.box.y + l.y / cut.sy, width: l.w / cut.sx, height: l.h / cut.sy })));
       if (action === "text") void navigator.clipboard.writeText(r.text).then(() => toast(L("הטקסט הועתק", "Text copied")), () => undefined);
