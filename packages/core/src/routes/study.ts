@@ -451,9 +451,20 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       ...(b.weak ? { weak: true } : {}),
       ...(b.style === "licensing" || b.style === "past" ? { style: b.style } : {}),
       ...(b.kind === "open" || b.kind === "case" ? { kind: b.kind } : {}),
-      ...(b.level === "easy" || b.level === "normal" || b.level === "hard" ? { level: b.level } : {}),
+      ...(b.level === "easy" || b.level === "normal" || b.level === "hard" ? { level: b.level } : b.level === "auto" ? { level: await autoLevel(req.params.id, Array.isArray(b.lectureIds) ? b.lectureIds.map(String) : []) } : {}),
     });
   });
+  /**
+   * "Adapted to me" (students part 25 #7, like Quizlet Learn): the level from her mastery of those lectures (or the
+   * course): 85+ hard, under 55 easy, else medium; medium without enough answers.
+   */
+  async function autoLevel(id: string, lectureIds: string[]): Promise<"easy" | "normal" | "hard"> {
+    const d = await st.get(id);
+    const m = topicMastery(d.cards, d.reviews, d.quizzes).filter((x) => !lectureIds.length || lectureIds.includes(x.lectureId));
+    if (!m.length) return "normal";
+    const avg = m.reduce((a, x) => a + x.mastery, 0) / m.length;
+    return avg >= 85 ? "hard" : avg < 55 ? "easy" : "normal";
+  }
   /** Her written answers to an open or case quiz, graded one by one. */
   app.post<{ Params: { id: string; qid: string }; Body: { texts?: string[] } }>("/api/study/courses/:id/quiz/:qid/open-answers", { bodyLimit: 1024 * 1024 }, async (req) => st.answerOpenQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.texts) ? req.body.texts.map((t) => String(t ?? "")).slice(0, 30) : []));
   app.post<{ Params: { id: string; qid: string }; Body: { answers?: number[] } }>("/api/study/courses/:id/quiz/:qid/answers", async (req) => st.answerQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.answers) ? req.body.answers : []));

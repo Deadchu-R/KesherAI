@@ -1525,7 +1525,8 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(10);
   const [kind, setKind] = useState<"choice" | "open" | "case">("choice");
-  const [level, setLevel] = useState<StudyLevel>("normal");
+  // "Adapted to me" by default: the level follows her mastery (students part 25 #7).
+  const [level, setLevel] = useState<StudyLevel | "auto">("auto");
   const [texts, setTexts] = useState<string[]>([]);
   const [exam, setExam] = useState(false);
   const [ends, setEnds] = useState(0);
@@ -1564,7 +1565,7 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
         {([["choice", L("אמריקאיות", "Multiple choice")], ["open", L("פתוחות", "Open")], ["case", L("מקרה", "Case")]] as const).map(([k, n]) => <button key={k} type="button" role="radio" aria-checked={kind === k} className={`chip${kind === k ? " on" : ""}`} onClick={() => setKind(k)}>{n}</button>)}
       </div>
       <div className="study-formats" role="radiogroup" aria-label={L("רמת קושי", "Difficulty")}>
-        {([["easy", L("קל", "Easy")], ["normal", L("בינוני", "Medium")], ["hard", L("קשה", "Hard")]] as const).map(([k, n]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={`chip${level === k ? " on" : ""}`} onClick={() => setLevel(k)}>{n}</button>)}
+        {([["auto", L("מותאם אליי", "Adapted to me")], ["easy", L("קל", "Easy")], ["normal", L("בינוני", "Medium")], ["hard", L("קשה", "Hard")]] as const).map(([k, n]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={`chip${level === k ? " on" : ""}`} onClick={() => setLevel(k)}>{n}</button>)}
       </div>
       <label>{L("מספר שאלות", "Questions")} <select value={count} onChange={(e) => setCount(Number(e.target.value))}>{(kind === "choice" ? [5, 10, 15, 20] : [3, 5, 10]).map((n) => <option key={n}>{n}</option>)}</select></label>
       {kind !== "choice" && <p className="muted small">{kind === "case" ? L("כל שאלה מתחילה במקרה קצר מהתחום שלך, ואת עונה במילים שלך.", "Each question starts with a short case from your field; you answer in your words.") : L("עונים במילים שלך, והתשובה נבדקת מול ההרצאה.", "Answer in your words; it is checked against the lecture.")}</p>}
