@@ -38,3 +38,18 @@ test("a reminder once per class a day, only when on", () => {
   assert.equal(classRemindNow(t, at(10, 5)), undefined);
   assert.equal(classRemindNow({ ...t, remind: false }, at(9, 56)), undefined);
 });
+
+test("classes read from a schedule photo are checked", async () => {
+  const { cleanReadClasses } = await import("./timetable.js");
+  assert.deepEqual(cleanReadClasses([
+    { name: " פיזיולוגיה  א ", day: 1, start: "8:30", end: "10:00", room: "קפלן 3", kind: "lecture" },
+    { name: "בלי זמן", day: 2, start: "x", end: "11:00" },
+    { name: "סוף לפני התחלה", day: 2, start: "12:00", end: "11:00" },
+    { name: "יום רע", day: 9, start: "10:00", end: "11:00" },
+    { name: "תרגול", day: 3, start: "14:00", end: "15:30", kind: "seminar" },
+  ]), [
+    { name: "פיזיולוגיה א", day: 1, start: "08:30", end: "10:00", room: "קפלן 3", kind: "lecture" },
+    { name: "תרגול", day: 3, start: "14:00", end: "15:30" },
+  ]);
+  assert.deepEqual(cleanReadClasses("no"), []);
+});

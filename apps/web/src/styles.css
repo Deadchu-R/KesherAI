@@ -3589,3 +3589,6 @@ div.slide-list { padding-inline-start: 0; }
 .study-portion-text { white-space: pre-wrap; line-height: 1.8; }
 .study-moed { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .study-moed-btn { align-self: flex-start; }
+.study-tt-read { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.study-tt-read-row { justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.study-tt-read-row select { max-width: 100%; }

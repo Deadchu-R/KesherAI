@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CLASS_KINDS, classesOn, classNow, type ClassKind, type ClassSlot, type Timetable } from "@kesher/shared";
+import { CLASS_KINDS, classesOn, classNow, type ClassKind, type ClassSlot, type ReadClass, type Timetable } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -29,10 +29,11 @@ function useTimetable(): [Timetable | null, (t: Timetable) => void] {
  * course, and the week's classes (a grid on a computer, today and tomorrow first on a phone), with a note when a class
  * starts.
  */
-export function StudyTimetable({ courses, part }: { courses: Course[]; part: "now" | "card" }) {
+export function StudyTimetable({ courses, part, onCourses }: { courses: Course[]; part: "now" | "card"; onCourses?: () => void }) {
   const [t, save] = useTimetable();
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<ClassSlot | null>(null);
+  const [read, setRead] = useState<ReadClass[] | null>(null);
   const [, tick] = useState(0);
   useEffect(() => {
     const i = setInterval(() => tick((n) => n + 1), 60_000);
@@ -78,8 +79,26 @@ export function StudyTimetable({ courses, part }: { courses: Course[]; part: "no
           <label className="small"><input type="checkbox" checked={!!t.remind} onChange={(e) => save({ ...t, remind: e.target.checked })} /> {L("תזכורת להקליט כשהשיעור מתחיל", "Remind me to record when a class starts")}</label>
           {t.remind && <label className="small"><input type="checkbox" checked={!!t.phone} onChange={(e) => save({ ...t, phone: e.target.checked })} /> {L("גם לטלפון", "Also to the phone")}</label>}
           <span className="grow" />
+          <PhotoButton onRead={setRead} />
           <button type="button" className="ghost small" disabled={!courses.length} onClick={() => setEdit({ id: newId(), courseId: courses[0]!.id, day: now.getDay() === 6 ? 0 : now.getDay(), start: "10:00", end: "12:00", kind: "lecture" })}>＋ {L("שיעור", "Class")}</button>
         </div>
+        {read && <ReadClasses read={read} courses={courses} onCancel={() => setRead(null)} onApply={async (picked) => {
+          const made = new Map<string, string>();
+          const slots: ClassSlot[] = [];
+          for (const p of picked) {
+            let id = p.courseId;
+            if (id.startsWith("new:")) {
+              const nm = id.slice(4);
+              if (!made.has(nm)) made.set(nm, (await api<{ id: string }>("/api/study/courses", { method: "POST", body: { name: nm } }).catch(() => ({ id: "" }))).id);
+              id = made.get(nm)!;
+            }
+            if (id) slots.push({ id: newId(), courseId: id, day: p.c.day, start: p.c.start, end: p.c.end, ...(p.c.room ? { room: p.c.room } : {}), ...(p.c.kind ? { kind: p.c.kind } : {}) });
+          }
+          save({ ...t, slots: [...t.slots, ...slots].slice(0, 80) });
+          setRead(null);
+          if (made.size) onCourses?.();
+          toast(L(`נוספו ${slots.length} שיעורים`, `${slots.length} classes added`));
+        }} />}
         {edit && <SlotForm slot={edit} courses={courses} onSave={saveSlot} onCancel={() => setEdit(null)} onDelete={t.slots.some((x) => x.id === edit.id) ? () => { save({ ...t, slots: t.slots.filter((x) => x.id !== edit.id) }); setEdit(null); } : undefined} />}
         {!!slots.length && <>
           <div className="study-tt-grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
@@ -123,5 +142,59 @@ function SlotForm({ slot, courses, onSave, onCancel, onDelete }: { slot: ClassSl
         {onDelete && <button type="button" className="ghost" onClick={onDelete}>{L("להסיר", "Remove")}</button>}
       </div>
     </form>
+  );
+}
+
+/** A photo or screenshot of her schedule read by the vision model (design TimetablePhoto). */
+function PhotoButton({ onRead }: { onRead: (c: ReadClass[]) => void }) {
+  const [busy, setBusy] = useState(false);
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(true);
+    try {
+      const im = new Image();
+      im.src = URL.createObjectURL(f);
+      await im.decode();
+      const k = Math.min(1, 2400 / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(im.naturalWidth * k);
+      c.height = Math.round(im.naturalHeight * k);
+      c.getContext("2d")!.drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(im.src);
+      const r = await api<{ classes: ReadClass[] }>("/api/study/timetable/photo", { method: "POST", body: { image: c.toDataURL("image/jpeg", 0.9).split(",")[1], mime: "image/jpeg" } });
+      if (!r.classes.length) toast(L("לא נמצאו שיעורים בתמונה.", "No classes were found in the picture."));
+      else onRead(r.classes);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <label className="button ghost small" aria-disabled={busy}>{busy ? L("קורא את המערכת…", "Reading the schedule…") : L("📷 מצילום", "📷 From a photo")}<input type="file" accept="image/*" hidden disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void pick(f); }} /></label>;
+}
+
+/** The classes read from the photo: she checks each one's course (one of hers, a new course, or skip) and adds them. */
+function ReadClasses({ read, courses, onApply, onCancel }: { read: ReadClass[]; courses: Course[]; onApply: (p: Array<{ c: ReadClass; courseId: string }>) => void; onCancel: () => void }) {
+  const fold = (x: string) => x.toLowerCase().replace(/[\s"'׳״-]+/g, "");
+  const guess = (n: string) => courses.find((c) => fold(c.name) && (fold(n).includes(fold(c.name)) || fold(c.name).includes(fold(n))))?.id ?? `new:${n}`;
+  const [pick, setPick] = useState(() => read.map((c) => guess(c.name)));
+  return (
+    <div className="study-tt-read">
+      <b className="small">{L(`נמצאו ${read.length} שיעורים. בדקי לאיזה קורס כל אחד שייך:`, `${read.length} classes found. Check each one's course:`)}</b>
+      {read.map((c, i) => (
+        <div key={i} className="row study-tt-read-row">
+          <span className="small" dir="auto"><b>{c.name}</b> · {L(...DAYS[c.day]!)} {c.start}–{c.end}{c.room ? ` · ${c.room}` : ""}</span>
+          <select value={pick[i]} onChange={(e) => setPick(pick.map((p, j) => (j === i ? e.target.value : p)))} aria-label={L("הקורס", "The course")}>
+            {courses.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+            <option value={`new:${c.name}`}>{L(`➕ קורס חדש: ${c.name}`, `➕ New course: ${c.name}`)}</option>
+            <option value="">{L("לדלג", "Skip")}</option>
+          </select>
+        </div>
+      ))}
+      <div className="study-actions">
+        <button type="button" className="primary" onClick={() => onApply(read.flatMap((c, i) => (pick[i] ? [{ c, courseId: pick[i]! }] : [])))}>{L("להוסיף למערכת", "Add to the timetable")}</button>
+        <button type="button" className="ghost" onClick={onCancel}>{L("ביטול", "Cancel")}</button>
+      </div>
+    </div>
   );
 }

@@ -205,7 +205,7 @@ function StudyHome() {
         </section>
       )}
       <MoreTools simple={simple}>
-      {!!courses?.length && <StudyTimetable part="card" courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
+      {!!courses?.length && <StudyTimetable part="card" courses={courses.map((c) => ({ id: c.id, name: c.name }))} onCourses={load} />}
       {!!courses?.length && <StudyGrades courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
       <section className="study-life card">
         <h2>{L("שאלה על הלימודים", "A question about your studies")}</h2>

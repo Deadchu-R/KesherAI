@@ -80,6 +80,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   /** Cards from the "term :: meaning" lines of the lecture's notes (design NoteCards). */
   app.post<L>("/api/study/courses/:id/lectures/:lid/note-cards", async (req) => st.cardsFromNotes(req.params.id, req.params.lid));
+  /** Her classes from a photo of her schedule (design TimetablePhoto); she picks each one's course before saving. */
+  app.post<{ Body: { image?: string; mime?: string } }>("/api/study/timetable/photo", { bodyLimit: 16 * 1024 * 1024 }, async (req) => ({ classes: await st.timetableFromPhoto(Buffer.from(String(req.body?.image ?? ""), "base64"), String(req.body?.mime ?? "image/jpeg")) }));
   /** Her hard cards and their fixes (design HardCards). */
   app.get<C>("/api/study/courses/:id/leeches", async (req) => ({ leeches: await st.leeches(req.params.id) }));
   app.post<C & { Params: { cid: string }; Body: { how?: string } }>("/api/study/courses/:id/cards/:cid/fix", async (req) => ({ cards: await st.fixLeech(req.params.id, req.params.cid, (["simpler", "split", "hook"].includes(String(req.body?.how)) ? req.body!.how : "simpler") as "simpler") }));

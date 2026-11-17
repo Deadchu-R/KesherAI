@@ -95,3 +95,24 @@ export function classRemindNow(t: Timetable, now: Date): { slot: ClassSlot; key:
   const key = `${slot.id}@${date}`;
   return t.lastReminded === key ? undefined : { slot, key };
 }
+
+/** A class read from a photo of her schedule (design TimetablePhoto, students part 31 #3), before she picks its course. */
+export interface ReadClass { name: string; day: number; start: string; end: string; room?: string; kind?: ClassKind }
+
+export const TIMETABLE_PHOTO_PROMPT = "You read a photo or screenshot of a student's weekly class schedule. List every class you can see: its course name exactly as written, the day (0 Sunday, 1 Monday … 6 Saturday; Hebrew days: א=0 ב=1 ג=2 ד=3 ה=4 ו=5), the start and end time as HH:MM (24 hours), the room if written, and the kind if written (lecture / practice for תרגול / lab for מעבדה). Answer with JSON only: [{\"name\":\"…\",\"day\":1,\"start\":\"10:00\",\"end\":\"12:00\",\"room\":\"…\",\"kind\":\"lecture\"}]. If it is not a schedule, answer [].";
+
+/** The classes the model read, checked: valid days and times, end after start, at most 80. */
+export function cleanReadClasses(raw: unknown): ReadClass[] {
+  const pad = (t: string) => (/^\d:\d\d$/.test(t) ? `0${t}` : t);
+  return (Array.isArray(raw) ? raw : []).slice(0, 80).flatMap((r): ReadClass[] => {
+    const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const name = typeof x.name === "string" ? x.name.replace(/\s+/g, " ").trim().slice(0, 120) : "";
+    const day = Number(x.day);
+    const start = pad(String(x.start ?? "").trim());
+    const end = pad(String(x.end ?? "").trim());
+    if (!name || !(Number.isInteger(day) && day >= 0 && day <= 6) || !HM.test(start) || !HM.test(end) || mins(end) <= mins(start)) return [];
+    const room = typeof x.room === "string" ? x.room.replace(/\s+/g, " ").trim().slice(0, 40) : "";
+    const kind = CLASS_KINDS.includes(x.kind as ClassKind) ? (x.kind as ClassKind) : undefined;
+    return [{ name, day, start, end, ...(room ? { room } : {}), ...(kind ? { kind } : {}) }];
+  });
+}
