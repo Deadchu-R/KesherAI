@@ -122,6 +122,18 @@ export function PhoneSection() {
           </figure>
         )}
         {anyQr && <p className="muted small">{t("anywhereNote")}</p>}
+        {remote.tunnel.url && (
+          <p className="row">
+            {/* A plain https link that opens the phone app and connects, from any messaging app (the key stays in the link's # part, which the browser never sends). */}
+            <button type="button" onClick={() => {
+              const link = `${remote.tunnel.url}/open#t=${encodeURIComponent(remote.token)}`;
+              const text = getLocale() === "he" ? "לחיצה על הקישור בטלפון פותחת את KesherAI ומתחברת למחשב (לא לשתף עם אחרים)" : "Tap this on the phone to open KesherAI and connect (do not share it)";
+              if (navigator.share) void navigator.share({ title: "KesherAI", text, url: link }).catch(() => undefined);
+              else void navigator.clipboard?.writeText(link).then(() => setCopied(link));
+            }}>📲 {copied.endsWith("/open#t=" + encodeURIComponent(remote.token)) ? t("copied") : getLocale() === "he" ? "קישור לטלפון (לשלוח לעצמי)" : "A link for the phone (send it to yourself)"}</button>
+            <span className="muted small">{getLocale() === "he" ? "שולחים לעצמך בוואטסאפ או במייל, ולוחצים עליו בטלפון: האפליקציה נפתחת ומתחברת." : "Send it to yourself by WhatsApp or mail and tap it on the phone: the app opens and connects."}</span>
+          </p>
+        )}
       </div>
       <p className="muted">{t("wakeHint")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/WAKE_ON_LAN.md" target="_blank" rel="noreferrer">docs/WAKE_ON_LAN.md</a></p>
       <div className="row" style={{ alignItems: "flex-start" }}>

@@ -152,3 +152,32 @@ export async function projectRoutes(app: FastifyInstance, st: Study): Promise<vo
     return f ? view(f) : { course: "", title: p.title, tasks: p.tasks };
   });
 }
+
+/** The phone app's package (apps/android/capacitor.config.json). */
+const APP_PACKAGE = "dev.kesherai.app";
+
+/**
+ * A plain https link that opens the phone app and connects to this computer (Roee, 2026-11-17: a kesherai:// link
+ * is not tappable in most apps, and pasting a long link was "complicated"). The key is in the link's fragment
+ * (/open#t=…), which the browser never sends anywhere: this page reads it and hands it to the app through an
+ * Android intent; without the app it opens KesherAI in the browser instead.
+ *
+ * @param app - Fastify instance.
+ */
+export async function appLinkRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/open", async (_req, reply) => {
+    const nonce = randomBytes(12).toString("base64");
+    return reply.headers(headers(nonce)).send(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KesherAI</title>
+<style>body{font-family:system-ui,sans-serif;background:#121213;color:#eee;display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center;padding:16px}a{display:inline-block;margin:10px;padding:14px 20px;border-radius:14px;background:#a5b4ff;color:#121213;text-decoration:none;font-weight:700}p{color:#aaa}</style></head>
+<body><main><h1>KesherAI</h1><p id="m">פותח את האפליקציה…</p><a id="app" href="#">פתיחה באפליקציה</a><br><a id="web" href="/" style="background:#2a2a2e;color:#eee">פתיחה בדפדפן</a></main>
+<script nonce="${nonce}">
+const t=new URLSearchParams(location.hash.slice(1)).get("t")||"";
+if(!/^[\\w.~-]{8,200}$/.test(t)){document.getElementById("m").textContent="הקישור חסר את המפתח. סרקי את קוד ה-QR במחשב (הגדרות ← טלפון).";document.getElementById("app").hidden=true;document.getElementById("web").hidden=true;}
+else{const server=location.origin+"/?token="+encodeURIComponent(t);history.replaceState(null,"",location.pathname);
+const intent="intent://connect?server="+encodeURIComponent(server)+"#Intent;scheme=kesherai;package=${APP_PACKAGE};S.browser_fallback_url="+encodeURIComponent(server)+";end";
+document.getElementById("app").href=/Android/i.test(navigator.userAgent)?intent:"kesherai://connect?server="+encodeURIComponent(server);
+document.getElementById("web").href=server;
+if(/Android/i.test(navigator.userAgent))location.href=intent;else document.getElementById("m").textContent="";}
+</script></body></html>`);
+  });
+}
