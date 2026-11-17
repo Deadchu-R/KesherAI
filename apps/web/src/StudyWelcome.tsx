@@ -94,6 +94,13 @@ function ModelCheck({ st, reload }: { st: ModelStatus | null; reload: () => void
   );
 }
 
+/** One tap that starts a model download (its size on the button), then says it is downloading. */
+function DownloadButton({ url, sizeGb, onStarted }: { url: string; sizeGb: number; onStarted: () => void }) {
+  const [on, setOn] = useState(false);
+  if (on) return <span className="small">{L("✓ יורד ברקע", "✓ Downloading")}</span>;
+  return <button type="button" onClick={() => void api(url, { method: "POST" }).then(() => { setOn(true); window.setTimeout(onStarted, 4000); }, (e: Error) => toast(e.message))}>{L(`⬇ להוריד (${sizeGb}GB)`, `⬇ Download (${sizeGb} GB)`)}</button>;
+}
+
 /**
  * The first visit to Study (design StudySetupWizard, students part 38): four short steps, each saying why it asks:
  * her field, her courses (all from a timetable photo, or the first by name), whether this computer can do the work
@@ -266,8 +273,10 @@ export function StudySetupChecklist({ prefs, onPrefs, courses }: { prefs: StudyP
   const items: Array<{ id: string; done: boolean; title: string; why: string; act?: React.ReactNode }> = [
     { id: "field", done: !!prefs.field, title: prefs.field ? L(`התחום: ${STUDY_FIELDS.find((f) => f.id === prefs.field)?.he ?? ""}`, `Field: ${STUDY_FIELDS.find((f) => f.id === prefs.field)?.en ?? ""}`) : L("התחום שלך", "Your field"), why: L("כלים ומילים שמתאימים לתחום", "Tools and words that fit your field"), act: <button type="button" onClick={() => setFieldOpen((v) => !v)}>{L("לבחור", "Choose")}</button> },
     { id: "courses", done: courses.length > 0, title: L("הקורסים", "Your courses"), why: L("לכל קורס הרצאות וכרטיסיות משלו", "Each course has its own lectures and cards") },
-    { id: "model", done: models.chat.ready, title: L("מודל שמבין ועונה", "A model that answers"), why: L("בלעדיו אין סיכום, כרטיסיות ובוחן", "Without it there is no summary, cards or quiz") },
-    ...(models.stt ? [{ id: "stt", done: models.stt.ready, title: L("תמלול הקלטות", "Transcribing recordings"), why: L("כדי להקליט הרצאה ולקבל טקסט", "To record a lecture and get the text") }] : []),
+    { id: "model", done: models.chat.ready, title: L("מודל שמבין ועונה", "A model that answers"), why: models.suggest ? L(`בלעדיו אין סיכום, כרטיסיות ובוחן. מוצע: ${models.suggest.name}`, `Without it there is no summary, cards or quiz. Suggested: ${models.suggest.name}`) : L("בלעדיו אין סיכום, כרטיסיות ובוחן", "Without it there is no summary, cards or quiz"),
+      act: models.suggest ? <DownloadButton url={`/api/models/recommended/${models.suggest.id}/run`} sizeGb={models.suggest.sizeGb} onStarted={reloadModels} /> : <a className="button" href="#/models">{L("לבחור", "Choose")}</a> },
+    ...(models.stt && (models.stt.ready || models.stt.setup || models.stt.busy) ? [{ id: "stt", done: models.stt.ready, title: L("תמלול הקלטות", "Transcribing recordings"), why: L("כדי להקליט הרצאה ולקבל טקסט", "To record a lecture and get the text"),
+      act: models.stt.busy ? <span className="small">{L("✓ יורד ברקע", "✓ Downloading")}</span> : models.stt.setup ? <DownloadButton url={models.stt.setup} sizeGb={Math.round(models.stt.sizeGb * 10) / 10} onStarted={reloadModels} /> : undefined }] : []),
     { id: "lecture", done: firstLecture, title: L("ההרצאה הראשונה", "The first lecture"), why: L("ממנה נעשים סיכום, כרטיסיות ובוחן", "It becomes a summary, cards and a quiz"), ...(courses[0] ? { act: <a className="button" href={`#/study/${courses[0].id}`}>{L("להוסיף", "Add")}</a> } : {}) },
     ...(phones !== null && !isRemote() ? [{ id: "phone", done: phones > 0, title: L("לחבר את הטלפון", "Connect the phone"), why: L("ללמוד ולהקליט מהטלפון, גם מחוץ לבית", "Study and record from the phone, also away from home"), act: <a className="button" href="#/settings/phone">{L("QR לחיבור", "Connect with a QR")}</a> }] : []),
     ...(goalOn !== null ? [{ id: "goal", done: goalOn, title: L("יעד יומי ותזכורת", "A daily goal and reminder"), why: L("10–15 דקות ביום מספיקות לחזרה", "10–15 minutes a day is enough for review"), act: <button type="button" onClick={() => void api("/api/study/goal", { method: "PUT", body: { on: true, targets: { minutes: 15, cards: 0 }, remind: "20:30" } }).then(() => setGoalOn(true), (e: Error) => toast(e.message))}>{L("15 דקות, תזכורת ב־20:30", "15 minutes, reminder at 20:30")}</button> }] : []),
@@ -278,7 +287,6 @@ export function StudySetupChecklist({ prefs, onPrefs, courses }: { prefs: StudyP
     if (goalOn !== null && phones !== null) set({ checklistHidden: true });
     return null;
   }
-  const modelOpen = items.some((i) => (i.id === "model" || i.id === "stt") && !i.done);
   return (
     <section className="card study-setup-list" aria-label={L("מתחילים", "Getting started")}>
       <div className="row">
@@ -300,7 +308,7 @@ export function StudySetupChecklist({ prefs, onPrefs, courses }: { prefs: StudyP
           {STUDY_FIELDS.map((f) => <button type="button" key={f.id} role="radio" aria-checked={prefs.field === f.id} className={prefs.field === f.id ? "on" : ""} onClick={() => { set({ field: f.id }); setFieldOpen(false); }}>{FIELD_ICONS[f.id] ?? "📘"} {getLocale() === "he" ? f.he : f.en}</button>)}
         </div>
       )}
-      {modelOpen && <ModelCheck st={models} reload={reloadModels} />}
+      {items.some((i) => (i.id === "model" || i.id === "stt") && !i.done) && <p className="muted small">{L("הורדה מתחילה רק כשלוחצים, וממשיכה ברקע.", "A download starts only when you tap, and goes on in the background.")}</p>}
     </section>
   );
 }
