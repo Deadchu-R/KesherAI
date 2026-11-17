@@ -11,6 +11,7 @@ import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
 import { StudyLive } from "../StudyLive";
 import { StudyTogether } from "../StudyTogether";
+import { StudyPapers } from "../StudyPapers";
 import { StudyNotesTab, StudyTimeNotes } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -643,6 +644,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["game", ["🎯 משחק", "🎯 Game"]],
   ["together", ["👥 לומדים יחד", "👥 Study together"]],
   ["writing", ["✍ כתיבה", "✍ Writing"]],
+  ["papers", ["📚 מאמרים ומקורות", "📚 Papers and sources"]],
   ["drugs", ["תרופות", "Drugs"]],
   ["labs", ["ערכי מעבדה", "Lab values"]],
   ["progress", ["מה עובד בשבילי", "What works for me"]],
@@ -761,6 +763,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
       </div>
       {lectureId ? <LectureView key={`${lectureId}-${startAt ?? ""}`} courseId={id} lectureId={lectureId} courseField={info.course.field} {...(startAt !== undefined ? { startAt } : {})} onChange={load} />
         : on === "notes" ? <StudyNotesTab courseId={id} />
+        : on === "papers" ? <StudyPapers courseId={id} courseName={info.course.name} />
         : on === "together" ? <StudyTogether courseId={id} courseName={info.course.name} groups={info.course.groups ?? []} onChange={load} />
         : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />

@@ -1,3 +1,4 @@
+import type { StudySource } from "./papers.js";
 /**
  * Study (students): the shapes shared by the computer and the page, the medication calculations (always computed
  * here, never by a model), and "what works for me" — recall per study format from the student's own reviews.
@@ -1069,6 +1070,8 @@ export interface StudyCourseData {
   syllabus?: StudySyllabus;
   /** One summary of the whole course by topic, grown as lectures are summarized. */
   courseSummary?: StudyCourseSummary;
+  /** Her sources library: papers and books she saved for this course (design Papers). */
+  sources?: StudySource[];
 }
 
 /** The course's growing summary: markdown by topic, and which lectures are already in it. */
@@ -1592,6 +1595,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
   const field = !a.course.fieldChosen && b.course.fieldChosen ? { field: b.course.field, fieldChosen: true } : {};
   const drugs = byId(a.drugs ?? [], b.drugs ?? [], gone, (x) => x);
   const pastExams = byId(a.pastExams ?? [], b.pastExams ?? [], gone, (x) => x);
+  const sources = byId(a.sources ?? [], b.sources ?? [], gone, (x) => x);
   const syllabus = !a.syllabus ? b.syllabus : !b.syllabus ? a.syllabus : b.syllabus.t > a.syllabus.t ? b.syllabus : a.syllabus;
   const courseSummary = !a.courseSummary ? b.courseSummary : !b.courseSummary ? a.courseSummary : b.courseSummary.t > a.courseSummary.t ? b.courseSummary : a.courseSummary;
   const focusSeen = new Set<number>();
@@ -1613,6 +1617,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     reviews,
     quizzes: byId(a.quizzes, b.quizzes, gone, (x, y) => (!x.answers && y.answers ? y : x)).sort((x, y) => x.t - y.t),
     ...(drugs.length ? { drugs } : {}),
+    ...(sources.length ? { sources } : {}),
     ...(removed.length ? { removed } : {}),
     ...(focus.length ? { focus } : {}),
     ...(pastExams.length ? { pastExams } : {}),

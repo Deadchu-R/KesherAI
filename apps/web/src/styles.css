@@ -3518,3 +3518,17 @@ div.slide-list { padding-inline-start: 0; }
 .study-groups-list a.button { flex: 1; min-width: 0; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .study-groups-add { display: flex; gap: 8px; flex-wrap: wrap; }
 .study-groups-add input { flex: 1 1 160px; min-width: 0; }
+/* Papers and the course's sources library (design Papers). */
+.study-papers { display: flex; flex-direction: column; gap: 12px; }
+.study-papers-find, .study-papers-lib { display: flex; flex-direction: column; gap: 10px; }
+.study-papers h2 { margin: 0; }
+.study-papers-search { gap: 8px; }
+.study-papers-search input { flex: 1; min-width: 0; }
+.study-papers-list, .study-papers-refs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.study-papers-list li, .study-papers-refs li { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--border, #333); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.study-paper-head { display: flex; gap: 6px; align-items: baseline; }
+.study-paper-n { color: var(--accent, #a5b4ff); font-weight: 700; flex: none; }
+.study-paper-actions { gap: 6px; flex-wrap: wrap; }
+.study-paper-ref { margin: 0; text-align: left; font-size: 14px; line-height: 1.5; }
+.study-papers-answer { white-space: pre-wrap; margin: 6px 0 0; line-height: 1.6; }
+.study-papers-say { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }

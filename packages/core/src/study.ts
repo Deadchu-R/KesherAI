@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -56,7 +56,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const pastExams = arr<StudyPastExam>(d.pastExams, 50).filter((e) => okId(e?.id)).map((e) => ({ id: e.id, title: str(e.title, 200), text: str(e.text, 200_000), t: Number(e.t) || Date.now() }));
   const cs = d.courseSummary as StudyCourseSummary | undefined;
   const courseSummary = cs && typeof cs.text === "string" ? { text: str(cs.text, 120_000), lectureIds: arr<string>(cs.lectureIds, 5000).filter(okId), t: Number(cs.t) || Date.now() } : undefined;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}) };
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}), ...(cleanSources(d.sources).length ? { sources: cleanSources(d.sources) } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -525,6 +525,63 @@ export class Study {
     else delete d.course.semesterEnd;
     await this.save(d);
     return d.course;
+  }
+
+  /** Her sources library for a course (design Papers). */
+  async sources(id: string): Promise<StudySource[]> {
+    return (await this.get(id)).sources ?? [];
+  }
+
+  /** Saves a paper to the course's sources (once: the same DOI or title is not added twice). */
+  async addSource(id: string, raw: unknown): Promise<StudySource[]> {
+    const d = await this.get(id);
+    const [s] = cleanSources([raw]);
+    if (!s) throw Object.assign(new Error("A source needs a title."), { statusCode: 400 });
+    const list = d.sources ?? [];
+    const same = (x: StudySource) => (s.doi && x.doi?.toLowerCase() === s.doi.toLowerCase()) || x.title.toLowerCase() === s.title.toLowerCase();
+    if (!list.some(same)) {
+      if (list.length >= 500) throw Object.assign(new Error("The library is full (500 sources)."), { statusCode: 409 });
+      d.sources = [...list, { ...s, id: `s${randomUUID().slice(0, 8)}`, t: Date.now() }];
+      await this.save(d);
+    }
+    return d.sources ?? list;
+  }
+
+  /** Removes a source. */
+  async removeSource(id: string, sourceId: string): Promise<StudySource[]> {
+    const d = await this.get(id);
+    d.sources = (d.sources ?? []).filter((s) => s.id !== sourceId);
+    if (!d.sources.length) delete d.sources;
+    d.removed = [...(d.removed ?? []), sourceId].slice(-5000);
+    await this.save(d);
+    return d.sources ?? [];
+  }
+
+  /**
+   * Real papers on a topic, or one by its DOI, from OpenAlex (open scholarly data, no key; only the words she typed
+   * leave the computer).
+   */
+  async findPapers(q: string, signal?: AbortSignal): Promise<StudySource[]> {
+    const doi = cleanDoi(q);
+    const words = q.replace(/\s+/g, " ").trim().slice(0, 300);
+    if (!doi && words.length < 2) return [];
+    const select = "id,doi,title,display_name,publication_year,authorships,primary_location,biblio,open_access,best_oa_location,abstract_inverted_index,cited_by_count";
+    const url = doi ? `https://api.openalex.org/works/doi:${encodeURIComponent(doi)}?select=${select}` : `https://api.openalex.org/works?search=${encodeURIComponent(words)}&per-page=12&select=${select}`;
+    const r = await fetch(url, { headers: { "user-agent": "KesherAI (study sources)" }, redirect: "error", signal: signal ?? AbortSignal.timeout(20_000) }).catch(() => undefined);
+    if (r?.status === 404) return [];
+    if (!r?.ok) throw Object.assign(new Error("The paper search did not answer. Try again in a minute."), { statusCode: 502 });
+    const text = await r.text();
+    if (text.length > 6_000_000) throw Object.assign(new Error("The answer was too large."), { statusCode: 502 });
+    return parseOpenAlex(JSON.parse(text) as unknown);
+  }
+
+  /** "What do the studies say": a short answer from these papers' abstracts only, each claim with its [n]. */
+  async papersSay(id: string, question: string, papers: StudySource[], signal?: AbortSignal): Promise<string> {
+    const d = await this.get(id);
+    const list = cleanSources(papers).filter((p) => p.abstract).slice(0, 10);
+    if (!list.length) throw Object.assign(new Error("None of these papers has an abstract to read."), { statusCode: 400 });
+    const material = list.map((p, i) => `[${i + 1}] ${p.title} (${p.authors.slice(0, 3).join(", ")}${p.authors.length > 3 ? " et al." : ""}, ${p.year ?? "n.d."})\n${p.abstract}`).join("\n\n");
+    return (await this.ask(PAPERS_PROMPT, `Question: ${question.slice(0, 500)}\n\nPapers:\n${material}`, signal, d.course)).trim().slice(0, 6000);
   }
 
   /** Her study groups' links for a course (design StudyTogether): the whole list, checked. */

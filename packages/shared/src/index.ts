@@ -24,6 +24,7 @@ export * from "./csharp-collapse.js";
 export * from "./csharp-expr.js";
 export * from "./shortcuts.js";
 export * from "./study.js";
+export * from "./papers.js";
 export * from "./hebrew-address.js";
 export * from "./graph.js";
 export * from "./ideas.js";
