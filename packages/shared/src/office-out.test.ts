@@ -8,7 +8,7 @@ test("Word: headings, lists, tables and escaped text; Excel: formulas with value
   assert.match(xml, /<w:pStyle w:val="Heading2"\/>/);
   assert.match(xml, /<w:b\/><w:bCs\/><w:rtl\/><\/w:rPr><w:t xml:space="preserve">β1/);
   assert.match(xml, /&amp; &lt;x&gt;<\/w:t>/);
-  assert.doesNotMatch(xml, /\u0001/);
+  assert.ok(!xml.includes(String.fromCharCode(1)));
   assert.match(xml, /<w:tblGrid><w:gridCol w:w="2400"\/><w:gridCol w:w="2400"\/><\/w:tblGrid>/);
   const x = xlsxFiles({ title: "a/b:c", cells: { A1: "שם", B1: "5", C1: "=B1*2", D1: '="<"&A1' } })["xl/worksheets/sheet1.xml"]!;
   assert.match(x, /rightToLeft="1"/);
