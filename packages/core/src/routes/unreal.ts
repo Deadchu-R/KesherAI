@@ -226,7 +226,10 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     app.get(`${base}/sync`, async () => {
       const ub = b as UnrealBridge;
       const project = await ub.project();
-      return { waiting: (await ub.queue()).filter((q) => q.project === project).length, ...ub.syncState };
+      const waiting = (await ub.queue()).filter((q) => q.project === project).length;
+      // An old error means nothing once every change went in (e.g. through the editor when it opened).
+      const { lastError, ...rest } = ub.syncState;
+      return { waiting, ...rest, ...(waiting && lastError ? { lastError } : {}) };
     });
     app.post(`${base}/sync`, async (_req, reply) => {
       try {
