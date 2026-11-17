@@ -55,3 +55,30 @@ test("code map ranks the files others use, finds symbols and game assets", async
   assert.match(await findAssets(root), /2 assets: .*Blueprint.*widget|2 assets: .*widget.*Blueprint/);
   assert.match(await findAssets(root, "door"), /BP_Door\.uasset {2}\(Blueprint\)/);
 });
+
+test("check_code holds only the changed C++ files to Unreal's rules in a project with its own checker", async () => {
+  const { mkdtemp, mkdir: md, writeFile: wf, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join: j } = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const { checkCodeTool } = await import("./code-intel.js");
+  const dir = await mkdtemp(j(tmpdir(), "kesher-check-"));
+  try {
+    await wf(j(dir, "tsconfig.json"), "{}");
+    await md(j(dir, "plugin", "Source"), { recursive: true });
+    // An old header with an Unreal error (no .generated.h include).
+    await wf(j(dir, "plugin", "Source", "Old.h"), "#pragma once\nUCLASS()\nclass UOld : public UObject { GENERATED_BODY() };\n");
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "ignore" });
+    git("init", "-q");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "add", ".");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "first");
+    const ctx = { workspace: dir, signal: new AbortController().signal } as unknown as Parameters<typeof checkCodeTool.run>[1];
+    const before = await checkCodeTool.run({}, ctx);
+    assert.doesNotMatch(before.output, /Unreal C\+\+ rules: \d+ problem/);
+    await wf(j(dir, "plugin", "Source", "Old.h"), "#pragma once\nUCLASS()\nclass UOld : public UObject { GENERATED_BODY() int x; };\n");
+    const after = await checkCodeTool.run({}, ctx);
+    assert.match(after.output, /Unreal C\+\+ rules: 1 problem/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

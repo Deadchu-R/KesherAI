@@ -356,7 +356,17 @@ export const checkCodeTool: AgentTool = {
     const top = await readdir(root).catch(() => [] as string[]);
     const c = checkerFor(root, top);
     // Unreal C++: the fast rules first (generated.h names, includes, delegates, A/U prefixes), with or without a compiler here.
-    const ue = await checkUnrealFolder(root).catch(() => undefined);
+    // In a git project that has its own checker (KesherAI itself: TypeScript plus an Unreal plugin folder), only the
+    // C++ files changed in this work are held to them: old problems elsewhere hid the real check (self-work kept
+    // reading "35 Unreal errors" about engine headers and never saw its TypeScript errors).
+    let ue = await checkUnrealFolder(root).catch(() => undefined);
+    if (ue?.length && c) {
+      const st = await runShell("git status --porcelain --untracked-files=all", root, 20_000, ctx.signal).catch(() => undefined);
+      if (st && st.code === 0) {
+        const changed = st.output.split(/\r?\n/).map((l) => l.slice(3).trim().replace(/^"|"$/g, "").replace(/\\/g, "/")).filter((f) => /\.(h|hpp|cpp)$/i.test(f));
+        ue = ue.filter((line) => changed.some((f) => line.includes(f)));
+      }
+    }
     const ueText = ue ? (ue.length ? `Unreal C++ rules: ${ue.length} problem(s) — fix every error:\n${ue.slice(0, 60).join("\n")}` : "Unreal C++ rules: no problems found.") : "";
     if (!c) {
       if (ueText) return { output: ueText };
