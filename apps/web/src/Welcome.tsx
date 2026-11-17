@@ -96,6 +96,8 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
     } finally {
       setSaving(false);
       setOpen(false);
+      // A student goes straight to Study, where its guided first setup starts (design StudySetupWizard).
+      if (!skip && roles.includes("student")) location.hash = "#/study";
     }
   };
   const gb = parts.filter((p) => choice[p.id]).reduce((n, p) => n + p.downloadGb, 0);
