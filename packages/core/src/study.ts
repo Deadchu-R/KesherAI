@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -259,6 +259,36 @@ export class Study {
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, "_grades.json"), JSON.stringify(g), { mode: 0o600 });
     return g;
+  }
+
+  /** Her weekly timetable (design Timetable, students part 27 #3). */
+  async timetable(): Promise<Timetable> {
+    return cleanTimetable(await readFile(join(this.dir, "_timetable.json"), "utf8").then((t) => JSON.parse(t) as unknown, () => ({})));
+  }
+
+  /** Saves her timetable (classes of courses she has; the reminder state is kept). */
+  async setTimetable(raw: unknown, lastReminded?: string): Promise<Timetable> {
+    const cur = await this.timetable();
+    const ids = new Set((await this.list()).map((c) => c.id));
+    const t = cleanTimetable({ ...(raw && typeof raw === "object" ? raw : {}), lastReminded: lastReminded ?? cur.lastReminded });
+    t.slots = t.slots.filter((s) => ids.has(s.courseId));
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(join(this.dir, "_timetable.json"), JSON.stringify(t), { mode: 0o600 });
+    return t;
+  }
+
+  /** A note when a class starts (once per class a day), to record it into its course. */
+  async remindClassIfDue(send: (title: string, body: string, path: string, phone: boolean) => Promise<unknown>, now = new Date()): Promise<boolean> {
+    const t = await this.timetable();
+    const due = classRemindNow(t, now);
+    if (!due) return false;
+    await this.setTimetable(t, due.key);
+    const course = (await this.list()).find((c) => c.id === due.slot.courseId);
+    if (!course) return false;
+    const he = /[\u0590-\u05FF]/.test(course.name);
+    const room = due.slot.room ? (he ? ` · חדר ${due.slot.room}` : ` · room ${due.slot.room}`) : "";
+    await send(he ? `🎙 ${course.name} מתחיל ב-${due.slot.start}${room}` : `🎙 ${course.name} starts at ${due.slot.start}${room}`, he ? "להקליט את השיעור? ההקלטה תישמר בקורס." : "Record the class? It is saved in the course.", `#/study/${course.id}?record=1`, t.phone === true);
+    return true;
   }
 
   /** How she felt each day (dayKey → level), the last 400 days. */

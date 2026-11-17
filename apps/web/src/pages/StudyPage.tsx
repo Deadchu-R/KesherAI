@@ -9,6 +9,7 @@ import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
 import { StudyGrades } from "../StudyGrades";
+import { StudyTimetable } from "../StudyTimetable";
 import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
@@ -162,6 +163,7 @@ function StudyHome() {
     <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}`}>
       <h1>{L("לימודים", "Study")}</h1>
       {!!courses?.length && <StudySearch />}
+      {!!courses?.length && <StudyTimetable courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
       {!!courses?.length && <NextStep />}
       {!!courses?.length && <GoalCard />}
       {!!courses?.length && <FocusCard courses={courses} />}
@@ -1061,11 +1063,16 @@ function CoursePath({ courseId, lectures }: { courseId: string; lectures: Lectur
 }
 
 function Lectures({ courseId, info, onChange }: { courseId: string; info: CourseInfo; onChange: () => void }) {
+  // "Record the class" from the timetable or its note (#/study/<id>?record=1) opens the recorder in this course.
+  const fromClass = /[?&]record=1\b/.test(location.hash);
   // The path is optional (Settings → Study → View).
   const [prefs] = useStudyPrefs();
   const showPath = prefs?.path !== false;
   const [adding, setAdding] = useState(!info.lectures.length);
-  const [recording, setRecording] = useState(false);
+  const [recording, setRecording] = useState(fromClass);
+  useEffect(() => {
+    if (fromClass) history.replaceState(null, "", location.hash.replace(/[?&]record=1\b/, ""));
+  }, [fromClass]);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);

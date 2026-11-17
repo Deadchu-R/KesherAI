@@ -30,3 +30,4 @@ export * from "./ideas.js";
 export * from "./pptx.js";
 export * from "./deck.js";
 export * from "./grades.js";
+export * from "./timetable.js";

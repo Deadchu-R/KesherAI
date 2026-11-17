@@ -50,6 +50,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get("/api/study/prefs", async () => st.prefs());
   app.get("/api/study/grades", async () => st.grades());
   app.put("/api/study/grades", { bodyLimit: 512 * 1024 }, async (req) => st.setGrades(req.body));
+  app.get("/api/study/timetable", async () => st.timetable());
+  app.put("/api/study/timetable", { bodyLimit: 256 * 1024 }, async (req) => st.setTimetable(req.body));
   app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean; path?: boolean } }>("/api/study/prefs", async (req) => {
     const b = req.body ?? {};
     return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead", "path"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));
@@ -60,7 +62,11 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
   // The reminder: looked at every minute; a note at most once a day, only when today's goal is not reached.
-  const remind = setInterval(() => void st.remindIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["dart"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined), 60_000);
+  const remind = setInterval(() => {
+    void st.remindIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["dart"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined);
+    // A class starting (design Timetable): record it.
+    void st.remindClassIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["studio_microphone"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined);
+  }, 60_000);
   remind.unref?.();
   app.addHook("onClose", async () => clearInterval(remind));
   /** The week in one card. */

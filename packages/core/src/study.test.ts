@@ -229,3 +229,24 @@ test("the daily goal: off by default, counts lectures and quizzes, and reminds o
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("timetable: only her courses' classes, and one reminder per class a day", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-tt-"));
+  try {
+    const st = new Study(dir, () => undefined);
+    const c = await st.addCourse("פיזיולוגיה");
+    const t = await st.setTimetable({ slots: [{ id: "a", courseId: c.id, day: 0, start: "10:00", end: "12:00", room: "101" }, { id: "b", courseId: "gone", day: 0, start: "08:00", end: "09:00" }], remind: true, lastReminded: "forged" });
+    assert.deepEqual(t.slots.map((s) => s.id), ["a"]);
+    assert.equal(t.lastReminded, undefined);
+    const sent: string[][] = [];
+    const send = async (title: string, body: string, path: string) => void sent.push([title, body, path]);
+    const at = new Date(2026, 10, 15, 9, 57);
+    assert.equal(await st.remindClassIfDue(send, at), true);
+    assert.equal(await st.remindClassIfDue(send, new Date(2026, 10, 15, 9, 58)), false);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0]![0]!, /פיזיולוגיה מתחיל ב-10:00 · חדר 101/);
+    assert.equal(sent[0]![2], `#/study/${c.id}?record=1`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
