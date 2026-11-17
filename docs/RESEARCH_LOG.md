@@ -1837,3 +1837,14 @@ tools' own pages, against what was added tonight:
   all of a run's changes (Zed's multibuffer); ⬜ "follow the agent" in the editor pane. Keep per-change review the
   default (Cursor's users show why).
 - Stopped at: research done (parts 1 and 2); the changes are in FUTURE_FEATURES.
+
+## Hebrew answers while coding, without losing coding ability (2026-11-17)
+Roee: in code sessions the model should answer in Hebrew like he writes, and stay a strong coder. Found on the PC: Qwen3-Coder-Next writes Hebrew with Arabic and Chinese letters and English words mixed in ("language confusion").
+- **What other tools do**: Cursor, JetBrains AI Assistant, Bito and Autohand have a "response language" setting (a line in the system prompt); Claude Code users ask for separate languages for chat and for code (comments, names). None does more than the prompt; all rely on a model that writes the language well.
+- **Research on language confusion** (Marchisio et al. 2024, arXiv 2406.20052): a few short examples in the target language raise "right language on every line" from 86% to 99%; low temperature helps (greedy 97% vs 87% at T=1); multilingual tuning fixes it at training time (about 10% of the data).
+- **Language-Aware Token Boosting** (arXiv 2606.08994): add a constant to the logits of the target script's tokens (plus digits and symbols); confusion falls to near zero with no loss in task quality and no slowdown. A static version is a logit bias, which llama.cpp's server supports: KesherAI can lower the tokens of other alphabets (Arabic, Chinese, Japanese, Korean, Cyrillic) when the answer is in Hebrew, leaving Latin (code) and Hebrew alone. The token list comes from the model's own vocabulary once per model (llama-server's /detokenize), cached.
+- **Two models** (a coder in English and a small Hebrew model translating its messages, e.g. DictaLM 3.0 1.7B): no loss in coding, but slower, and technical translation can go wrong. Kept as a fallback.
+- **Training (LoRA)**: teaching a language is continued pre-training on ~100B tokens (Dicta-LM 3.0), not possible on one GPU; a LoRA on Hebrew coding chats could fix the mixing but risks coding ability and needs a dataset. Last resort.
+- **The model itself**: a 24 GB card runs a 27–31B model fully (Qwen 3.6/3.8 27B: SWE-bench Verified ~77, ~42 tok/s on a 3090; Gemma 4 31B: likely better Hebrew, weaker code). No public Hebrew benchmark for these yet: test on our own Hebrew tasks.
+- **Plan**: (1) a reply-language setting, separate for chat and for code (comments and names stay English unless asked); (2) two short Hebrew examples of a coding answer in the code prompt; (3) the other-alphabets logit bias on local models when the answer is Hebrew; (4) a model test (Hebrew report, a coding task with tools, Hebrew chat) between Qwen 3.8 27B and Gemma 4 31B, with Roee's OK for the downloads.
+- Stopped at: research done; nothing built yet.
