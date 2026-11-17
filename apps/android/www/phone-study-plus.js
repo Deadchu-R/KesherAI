@@ -1,4 +1,4 @@
-/* global localStorage, fetch, alert, navigator, document, setInterval, clearInterval, AudioContext, Blob, URL */
+/* global localStorage, fetch, alert, navigator, document, setInterval, clearInterval, confirm, AudioContext, Blob, URL */
 /**
  * The phone's own Study, part two (Roee: "everything that can work alone on the phone should"): the features the
  * computer's Study page gained in students parts 25–34, here with no computer — the feed, hard cards and the card
@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -34,6 +34,7 @@ export function studyPlus(x) {
   /** The buttons for the extra views on the course page. */
   function courseButtons(c) {
     return btns(
+      el("button", { type: "button", onclick: () => go({ at: "mock", course: c.id }) }, L("📝 מבחן דמה", "📝 Mock exam")),
       el("button", { type: "button", onclick: () => go({ at: "feed", course: c.id }) }, L("📱 פיד", "📱 Feed")),
       el("button", { type: "button", onclick: () => go({ at: "web", course: c.id }) }, L("🕸 מפת הקורס", "🕸 Course web")),
       el("button", { type: "button", onclick: () => go({ at: "palace", course: c.id }) }, L("🏛 ארמון זיכרון", "🏛 Memory palace")),
@@ -530,6 +531,108 @@ export function studyPlus(x) {
     x.root.append(section("", text, b), out);
   }
 
+  // ---------- a mock exam on the phone alone (the computer's design MockExam, students part 27 #1) ----------
+  /**
+   * A full exam under time: multiple-choice questions from all her lectures (5 at a time, the phone's model is small)
+   * and, if she wants, open questions; one countdown (a quarter more with extra time); at the end the grade out of 100,
+   * how she did per lecture, and each open answer checked against the lectures. Kept with the course's quizzes, so the
+   * computer shows it in her mock exams too.
+   */
+  function mock(c) {
+    const v = x.view;
+    x.root.append(back({ at: "course", course: c.id }), el("h2", {}, L("📝 מבחן דמה", "📝 Mock exam")));
+    if (!c.lectures.length) return x.root.append(el("p", { class: "muted" }, L("מבחן דמה נבנה מההרצאות. הוסיפי הרצאה קודם.", "A mock exam is built from the lectures. Add a lecture first.")));
+    const z = v.mock;
+    if (!z) {
+      const choice = el("select", { "aria-label": L("שאלות אמריקאיות", "Multiple-choice questions") }, ...[10, 15, 20].map((n) => el("option", { value: String(n) }, L(`${n} אמריקאיות`, `${n} multiple choice`))));
+      const open = el("select", { "aria-label": L("שאלות פתוחות", "Open questions") }, ...[0, 2, 3].map((n) => el("option", { value: String(n) }, n ? L(`${n} פתוחות`, `${n} open`) : L("בלי פתוחות", "No open ones"))));
+      const extra = el("input", { type: "checkbox" });
+      const status = el("p", { class: "muted small", "aria-live": "polite" });
+      const go2 = el("button", { type: "button", class: "primary" }, L("לבנות את המבחן", "Build the exam"));
+      go2.onclick = async () => {
+        const n = Number(choice.value);
+        const o = Number(open.value);
+        const material = c.lectures.slice(-8).map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.summary || l.text).slice(0, 1500)}`).join("\n\n");
+        const ids = c.lectures.slice(-8).map((l) => l.id);
+        const qs = [];
+        for (let k = 0; qs.length < n && k < Math.ceil(n / 5) + 2; k++) {
+          status.textContent = L(`כותב שאלות… ${qs.length}/${n} (בטלפון זה לוקח זמן)`, `Writing questions… ${qs.length}/${n} (this takes a while on a phone)`);
+          const r = await need([{ role: "system", content: `Write 5 multiple-choice questions for an exam from the material, 4 options each, exactly one right, different topics from: ${qs.map((q) => q.q.slice(0, 60)).join(" | ") || "none yet"}. Write in the same language as the material. Use only what the material says. Answer with JSON only: [{"q":"...","options":["...","...","...","..."],"answer":0,"explain":"...","lecture":1}]` }, { role: "user", content: material }], go2);
+          if (r === undefined) return;
+          const list = jsonIn(r);
+          for (const q of Array.isArray(list) ? list : []) {
+            if (!(q?.q && Array.isArray(q.options) && q.options.length >= 2 && q.answer >= 0 && q.answer < q.options.length)) continue;
+            const checked = checkCalcQuestion({ ...q, options: q.options.map(String) });
+            if (!checked) continue;
+            if (ids[Number(q.lecture) - 1]) checked.lectureId = ids[Number(q.lecture) - 1];
+            if (qs.length < n) qs.push(checked);
+          }
+        }
+        let openQs = [];
+        if (o) {
+          status.textContent = L("כותב שאלות פתוחות…", "Writing open questions…");
+          const r = await need([{ role: "system", content: OPEN_QUIZ_PROMPT("open") }, { role: "user", content: `Write exactly ${o} questions, then stop.\n\n${material}` }], go2);
+          openQs = r ? parseOpenQuestions(r, ids, o) : [];
+        }
+        status.textContent = "";
+        if (qs.length < 3) return alert(L("המודל לא כתב מספיק שאלות. נסי שוב.", "The model did not write enough questions. Try again."));
+        const minutes = mockMinutes(qs.length, openQs.length);
+        x.go({ ...v, mock: { group: `m${uid().slice(0, 10)}`, minutes, extra: extra.checked, ends: Date.now() + mockTime({ minutes, extra: extra.checked }) * 60000, qs, openQs, picked: [], texts: [] } });
+      };
+      return x.root.append(section("", el("p", { class: "muted small" }, L("מבחן שלם בזמן אמת מכל ההרצאות, עם שעון. בסוף: ציון מתוך 100 ואיפה כדאי לחזור.", "A full timed exam from all the lectures. At the end: a grade out of 100 and where to go back.")),
+        el("div", { class: "ph-filter", style: "flex-wrap: wrap" }, choice, open), el("label", { class: "ph-filter" }, extra, L(" תוספת זמן (25%)", " Extra time (25%)")), go2, status));
+    }
+    if (!z.done) {
+      const left = el("b", { "aria-live": "off" });
+      const finish = async (b) => {
+        clearInterval(t);
+        if (b) { b.disabled = true; b.textContent = L("בודק…", "Checking…"); }
+        const marks = [];
+        const feedback = [];
+        for (const [i, q] of z.openQs.entries()) {
+          const text = (z.texts[i] || "").trim();
+          if (!text) { marks.push(0); feedback.push(L("לא נכתבה תשובה.", "No answer was written.")); continue; }
+          const r = await need(openGradeMessages({ lectures: c.lectures, question: q, text, budget: 2500 }));
+          const m = r ? openMark(r, /[\u0590-\u05ff]/.test(q.q)) : undefined;
+          marks.push(m?.mark ?? 0);
+          feedback.push(m?.line ?? L("לא הצלחתי לבדוק את התשובה הזאת.", "Could not check this answer."));
+        }
+        const at = Date.now();
+        const m = { group: z.group, minutes: z.minutes, ...(z.extra ? { extra: true } : {}) };
+        const score = z.qs.filter((q, i) => z.picked[i] === q.answer).length;
+        c.quizzes ??= [];
+        c.quizzes.push({ id: uid(), t: at, questions: z.qs, answers: z.qs.map((_, i) => z.picked[i] ?? -1), score, mock: m });
+        if (z.openQs.length) c.quizzes.push({ id: uid(), t: at, kind: "open", questions: z.openQs, answers: z.openQs.map(() => -1), texts: z.texts, marks, feedback, score: marks.reduce((a, b2) => a + b2, 0), mock: m });
+        commit();
+        x.go({ ...v, mock: { ...z, done: true, feedback } });
+      };
+      const t = setInterval(() => {
+        if (!left.isConnected) return clearInterval(t);
+        const s = Math.max(0, Math.round((z.ends - Date.now()) / 1000));
+        left.textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+        if (!s) void finish();
+      }, 1000);
+      const submit = el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 48px" }, L("הגשה", "Hand in"));
+      submit.onclick = () => { if (confirm(L("להגיש את המבחן?", "Hand in the exam?"))) void finish(submit); };
+      return x.root.append(el("div", { class: "ph-row", style: "position: sticky; top: 0; background: var(--bg); z-index: 2" }, left, el("small", { class: "muted" }, L(`${z.qs.length} אמריקאיות${z.openQs.length ? ` · ${z.openQs.length} פתוחות` : ""}`, `${z.qs.length} multiple choice${z.openQs.length ? ` · ${z.openQs.length} open` : ""}`))),
+        ...z.qs.map((q, i) => section("", el("b", { dir: "auto" }, `${i + 1}. ${q.q}`), ...q.options.map((o, k) => {
+          const r = el("input", { type: "radio", name: `mq${i}`, onchange: () => { z.picked[i] = k; } });
+          r.checked = z.picked[i] === k;
+          return el("label", { class: "ph-row", style: "justify-content: flex-start; gap: 8px", dir: "auto" }, r, String(o));
+        }))),
+        ...z.openQs.map((q, i) => section("", el("b", { dir: "auto" }, `${z.qs.length + i + 1}. ${q.q}`), (() => { const ta = el("textarea", { rows: "4", dir: "auto", "aria-label": L("התשובה שלך", "Your answer"), oninput: (e) => { z.texts[i] = e.target.value; } }); ta.value = z.texts[i] || ""; return ta; })())),
+        submit);
+    }
+    const res = mockResult(c.quizzes.filter((q) => q.mock?.group === z.group));
+    const title = (id) => c.lectures.find((l) => l.id === id)?.title ?? "";
+    x.root.append(section(res ? L(`ציון: ${res.grade}`, `Grade: ${res.grade}`) : L("נבדק", "Checked"),
+      res ? el("p", {}, L(`${res.right}/${res.choice} אמריקאיות נכונות${res.openMax ? ` · פתוחות: ${res.open}/${res.openMax}` : ""}`, `${res.right}/${res.choice} multiple choice right${res.openMax ? ` · open: ${res.open}/${res.openMax}` : ""}`)) : "",
+      ...(res?.byLecture ?? []).slice(0, 5).map((b) => el("p", { class: "small", dir: "auto" }, `${title(b.lectureId) || L("הרצאה", "Lecture")}: ${b.got}/${b.of}`)),
+      ...z.qs.map((q, i) => z.picked[i] === q.answer ? "" : el("details", {}, el("summary", { dir: "auto" }, `✗ ${i + 1}. ${q.q.slice(0, 80)}`), el("p", { dir: "auto", class: "small" }, `${L("נכון: ", "Right: ")}${q.options[q.answer]}. ${q.explain || ""}`))),
+      ...z.openQs.map((q, i) => el("details", {}, el("summary", { dir: "auto" }, `${z.qs.length + i + 1}. ${q.q.slice(0, 80)}`), el("p", { dir: "auto", class: "small" }, z.feedback?.[i] ?? ""))),
+      btns(el("button", { type: "button", class: "primary", onclick: () => x.go({ at: "mock", course: c.id }) }, L("מבחן דמה נוסף", "Another mock exam")))));
+  }
+
   // ---------- the timetable, typed or read from a photo ----------
   const loadTable = () => { try { return cleanTimetable(JSON.parse(localStorage.getItem(TABLE_KEY) || "{}")); } catch { return cleanTimetable({}); } };
   // Her changes carry the time, so the phone's and the computer's copies sync (the later one wins).
@@ -618,5 +721,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english, timetable }, classBanner };
+  return { tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock }, homeViews: { grades, english, timetable }, classBanner };
 }
