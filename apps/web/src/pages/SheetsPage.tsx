@@ -57,6 +57,8 @@ function SheetEditor({ id }: { id: string }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState<"" | "saving" | "saved">("");
   const [ask, setAsk] = useState("");
+  // A long sheet (an imported CSV) draws its rows 200 at a time, so the page stays quick.
+  const [shownRows, setShownRows] = useState(200);
   const pending = useRef<Record<string, string>>({});
   const meta = useRef<{ title?: string; cols?: number; rows?: number }>({});
   const rev = useRef(-1);
@@ -174,7 +176,7 @@ function SheetEditor({ id }: { id: string }) {
         <table>
           <thead><tr><th />{Array.from({ length: sheet.cols }, (_, c) => <th key={c} className={c === sel.c ? "on" : ""}>{colName(c)}</th>)}</tr></thead>
           <tbody>
-            {Array.from({ length: sheet.rows }, (_, r) => (
+            {Array.from({ length: Math.min(sheet.rows, Math.max(shownRows, sel.r + 1)) }, (_, r) => (
               <tr key={r}>
                 <th className={r === sel.r ? "on" : ""}>{r + 1}</th>
                 {Array.from({ length: sheet.cols }, (_, c) => {
@@ -194,6 +196,7 @@ function SheetEditor({ id }: { id: string }) {
           </tbody>
         </table>
       </div>
+      {sheet.rows > shownRows && <button type="button" className="ghost small" onClick={() => setShownRows((n) => n + 200)}>{L(`להציג עוד שורות (${sheet.rows - shownRows} נוספות)`, `Show more rows (${sheet.rows - shownRows} more)`)}</button>}
       <p className="muted small sheets-tip">{L("לחיצה על תא בוחרת אותו, ולחיצה נוספת (או הקלדה) פותחת אותו לעריכה. נוסחה מתחילה ב-=.", "Tap a cell to pick it; tap again (or type) to edit. A formula starts with =.")}</p>
       <div className="row sheets-more">
         <button type="button" className="ghost small" onClick={() => grow("rows")}>＋ {L("10 שורות", "10 rows")}</button>

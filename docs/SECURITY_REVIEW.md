@@ -1079,3 +1079,12 @@ S5 an outside scanner's rules for Electron.
 - **Actions**: the marked part goes to her chosen chat model; Windows OCR runs PowerShell with a fixed script (the file path passed in an environment variable, never in the command), a 20-second limit, the temporary folder removed after.
 - **Replace retries**: a busy file (EPERM/EBUSY) is tried again at most 20 times with a growing wait, then the error stands.
 - Result: no open issues.
+
+## Scan 120 (2026-11-17): security and performance after the lens follow-ups
+- **Extension lens**: the region layer is injected into the active tab only on her click, removes itself on finish or Esc, and sends nothing; the cut picture goes only to the KesherAI page in the panel (postMessage to its exact origin), which accepts it only from the extension parent.
+- **Translation over the picture**: OCR text goes to her chat model as numbered lines; the answer is used only as text (React text nodes), counted against the lines.
+- **Several screens**: the desktop captures the display under the cursor and posts it to the local server; the lens window is placed on that display.
+- **Phone share into the lens**: asks first; the shared file is removed from the phone's cache either way.
+- **Lens window → main window**: only a `#/c/<id>` hash, checked, set as text.
+- **Performance, fixed**: the lens keeps three pictures at most (a 4K PNG is 10–20 MB); a sheet draws 200 rows at a time (an imported 2,000-row CSV was 100,000 cells at once); the vision answer stops at 6,000 characters.
+- Result: no open issues.

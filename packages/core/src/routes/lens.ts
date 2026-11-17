@@ -33,7 +33,8 @@ const shots = new Map<string, { png: Buffer; t: number }>();
 const keep = (png: Buffer) => {
   const now = Date.now();
   for (const [k, v] of shots) if (now - v.t > 10 * 60_000) shots.delete(k);
-  while (shots.size >= 5) shots.delete(shots.keys().next().value!);
+  // Full-screen PNGs are large (a 4K one is 10–20 MB): three at most.
+  while (shots.size >= 3) shots.delete(shots.keys().next().value!);
   const id = randomUUID();
   shots.set(id, { png, t: now });
   return id;
