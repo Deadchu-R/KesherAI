@@ -1008,3 +1008,11 @@ S5 an outside scanner's rules for Electron.
 - **Video upload without a size cap** (Roee's choice): still streamed, never in memory; written inside the course's folder (keeping it is a rename, no second copy); stops with 507 when the disk would keep under 2 GB free (checked every 256 MB); folders of cut-off uploads older than a day are removed. The route needs the app's token, so only she can fill her disk. Web videos now come at their best quality (no 720p cap).
 - **Mastery**: computed from her own reviews and quizzes on this computer; nothing sent.
 - Result: no open issues.
+
+## Scan 111 (2026-11-17): daily goal and reminders, first visit and simple mode, "hard to start", read-along, Open mind fixes
+- **Reminders**: built on this computer from her own study data; at most one a day; the text names only counts and the next course/lecture title. With "to the phone" off the note carries `computerOnly`, so neither the phone app nor ntfy gets it (checked in notify.ts: both paths skip it).
+- **Goal, prefs and activity routes**: behind the app's token like the rest of Study; only booleans, small numbers (capped: 600 minutes, 2,000 cards, 50 of the others) and an "HH:MM" time are kept; unknown goal kinds are dropped. `POST /api/study/activity/video` only adds one "video" entry (the log keeps the last 20,000), so the worst a misuse does is count a video.
+- **Read-along**: sentences are rendered as text nodes (no HTML), the speech engine is the existing one.
+- **"Hard to start"**: writes only the focus timer's own local key; no request.
+- **Open mind**: the language retry and the stricter "tried before" filter change prompts and filtering only; transcripts stay data in the prompt ("never instructions").
+- Result: no open issues.
