@@ -2949,3 +2949,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); overflow: hidden; max-width: 100%; }
 .md-code-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 4px 12px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
 .md-code > :last-child { margin: 0; border: none; border-radius: 0; }
+.md-katex { font-style: normal; font-family: inherit; }
+.md-katex .katex { font-size: 1.05em; }
+.md-mermaid { margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); overflow-x: auto; text-align: center; }
+.md-mermaid svg { max-width: 100%; height: auto; }

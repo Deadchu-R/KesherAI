@@ -3,6 +3,7 @@ import { useState } from "react";
 import { CodeView } from "./ide/CodeView";
 import { getLocale, he$ } from "./i18n";
 import { ChartView } from "./ChartView";
+import { MathView, MermaidView } from "./MathMermaid";
 import { parseChart } from "./chart";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -43,7 +44,7 @@ function inline(text: string, key: string): React.ReactNode[] {
     if (tok.startsWith("**")) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
     else if (tok.startsWith("`")) out.push(<code key={k} className="inline-code">{tok.slice(1, -1)}</code>);
     else if (tok.startsWith("~~")) out.push(<s key={k}>{tok.slice(2, -2)}</s>);
-    else if (tok.startsWith("$")) out.push(<span key={k} className="md-math" dir="ltr">{texText(tok.slice(1, -1))}</span>);
+    else if (tok.startsWith("$")) out.push(<MathView key={k} tex={tok.slice(1, -1)} fallback={texText(tok.slice(1, -1))} />);
     else if (tok.startsWith("![")) {
       const [, alt, src] = /!\[([^\]]*)\]\(([^)]+)\)/.exec(tok)!;
       const ok = imageSrc(src!);
@@ -142,7 +143,7 @@ export function RichText({ text }: { text: string }) {
           if (!one) while (end + 1 < lines.length && !lines[end + 1]!.includes("$$")) end++;
           const body = (one ? line.trim().slice(2, -2) : lines.slice(j, Math.min(end + 2, lines.length)).join("\n").replace(/\$\$/g, "")).trim();
           flush(`l${k}`);
-          out.push(<div key={k} className="md-math md-math-block" dir="ltr">{texText(body)}</div>);
+          out.push(<MathView key={k} display tex={body} fallback={texText(body)} />);
           skip = one ? 0 : Math.min(end + 1, lines.length - 1) - j;
           return;
         }
@@ -180,7 +181,8 @@ export function RichText({ text }: { text: string }) {
     if (parts[i + 2] !== undefined) {
       // A ```chart block with complete JSON is drawn; while it is still being written (or if it is not a chart) it shows as code.
       const chart = parts[i + 1] === "chart" ? parseChart(parts[i + 2]!) : undefined;
-      out.push(chart ? <ChartView key={`c${i}`} spec={chart} /> : <CodeBlock key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />);
+      const code = <CodeBlock key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />;
+      out.push(chart ? <ChartView key={`c${i}`} spec={chart} /> : parts[i + 1] === "mermaid" ? <MermaidView key={`c${i}`} code={parts[i + 2]!} fallback={code} /> : code);
     }
   }
   return <div className="msg-text">{out}</div>;
