@@ -29,7 +29,7 @@ function useTimetable(): [Timetable | null, (t: Timetable) => void] {
  * course, and the week's classes (a grid on a computer, today and tomorrow first on a phone), with a note when a class
  * starts.
  */
-export function StudyTimetable({ courses }: { courses: Course[] }) {
+export function StudyTimetable({ courses, part }: { courses: Course[]; part: "now" | "card" }) {
   const [t, save] = useTimetable();
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<ClassSlot | null>(null);
@@ -57,7 +57,7 @@ export function StudyTimetable({ courses }: { courses: Course[] }) {
     </button>
   );
   return <>
-    {cur && (
+    {part === "now" && cur && (
       <section className="card study-tt-now">
         <span aria-hidden="true">{cur.state === "now" ? "🔴" : "⏰"}</span>
         <b dir="auto">{cur.state === "now" ? L(`עכשיו: ${name(cur.slot.courseId)}`, `Now: ${name(cur.slot.courseId)}`) : L(`בעוד ${cur.minutes} דק׳: ${name(cur.slot.courseId)}`, `In ${cur.minutes} min: ${name(cur.slot.courseId)}`)}{cur.slot.kind ? ` · ${L(...KIND[cur.slot.kind])}` : ""}</b>
@@ -66,7 +66,7 @@ export function StudyTimetable({ courses }: { courses: Course[] }) {
         <a className="button primary" href={`#/study/${cur.slot.courseId}?record=1`}>🎙 {L("להקליט את השיעור", "Record the class")}</a>
       </section>
     )}
-    <section className="card study-tt">
+    {part === "card" && <section className="card study-tt">
       <button type="button" className="study-grades-head" aria-expanded={open} onClick={() => setOpen(!open)}>
         <b>🗓 {L("מערכת שעות", "Timetable")}</b>
         <span className="grow" />
@@ -101,7 +101,7 @@ export function StudyTimetable({ courses }: { courses: Course[] }) {
         </>}
         <p className="muted small">{L("כשהשיעור מתחיל אפשר להקליט בלחיצה, וההקלטה נשמרת בקורס הנכון.", "When a class starts you can record it in one tap; it is saved in the right course.")}</p>
       </>}
-    </section>
+    </section>}
   </>;
 }
 

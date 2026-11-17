@@ -165,12 +165,12 @@ function StudyHome() {
     <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}`}>
       <h1>{L("לימודים", "Study")}</h1>
       {!!courses?.length && <StudySearch />}
-      {!!courses?.length && <StudyTimetable courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
+      {/* "Now: <class>" first, the timetable itself lower with the other set-up cards (simple mode: under "more"). */}
+      {!!courses?.length && <StudyTimetable part="now" courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
       {!!courses?.length && <NextStep />}
       {!!courses?.length && <GoalCard />}
       {!!courses?.length && <FocusCard courses={courses} />}
       {!!courses?.length && <WeekCard />}
-      {!!courses?.length && <StudyGrades courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
       {!!courses?.length && <section className="study-today">
         <h2>{L("להיום", "Today")}</h2>
         <div className="study-actions">
@@ -194,6 +194,8 @@ function StudyHome() {
         </section>
       )}
       <MoreTools simple={simple}>
+      {!!courses?.length && <StudyTimetable part="card" courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
+      {!!courses?.length && <StudyGrades courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
       <section className="study-life card">
         <h2>{L("שאלה על הלימודים", "A question about your studies")}</h2>
         <p className="muted small">{L("שאלות מעשיות מקבלות תשובה עדכנית מהרשת, עם מקור רשמי.", "Practical questions get a current answer from the web, with an official source.")}</p>
