@@ -54,13 +54,15 @@ function GoalSettings() {
 
 /** Settings → Study → View: simple mode (design StudySimple). */
 function ViewSettings() {
-  const [p, setP] = useState<{ simple: boolean; welcomed: boolean } | null>(null);
-  useEffect(() => void api<{ simple: boolean; welcomed: boolean }>("/api/study/prefs").then(setP, () => undefined), []);
+  const [p, setP] = useState<{ simple: boolean; welcomed: boolean; easyRead: boolean } | null>(null);
+  useEffect(() => void api<{ simple: boolean; welcomed: boolean; easyRead: boolean }>("/api/study/prefs").then(setP, () => undefined), []);
   if (!p) return null;
+  const set = (body: Partial<typeof p>) => void api<typeof p>("/api/study/prefs", { method: "PUT", body }).then(setP, (er: Error) => toast(er.message));
   return (
     <section className="card">
       <h2>🧹 {L("תצוגה", "View")}</h2>
-      <label className="study-check"><input type="checkbox" checked={p.simple} onChange={(e) => void api<typeof p>("/api/study/prefs", { method: "PUT", body: { simple: e.target.checked } }).then(setP, (er: Error) => toast(er.message))} /> {L("תצוגה פשוטה: רק הכלים של כל יום, השאר תחת \"עוד כלים\"", "Simple view: only the everyday tools, the rest under \"More tools\"")}</label>
+      <label className="study-check"><input type="checkbox" checked={p.easyRead} onChange={(e) => set({ easyRead: e.target.checked })} /> {L("קריאה נוחה: טקסט גדול ומרווח יותר בלימודים", "Easy reading: larger, more spaced text in Study")}</label>
+      <label className="study-check"><input type="checkbox" checked={p.simple} onChange={(e) => set({ simple: e.target.checked })} /> {L("תצוגה פשוטה: רק הכלים של כל יום, השאר תחת \"עוד כלים\"", "Simple view: only the everyday tools, the rest under \"More tools\"")}</label>
     </section>
   );
 }

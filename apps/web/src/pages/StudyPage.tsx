@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReadAlong } from "../ReadAlong";
 import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMatch } from "../StudyMatch";
@@ -117,7 +118,7 @@ function BackLink({ to }: { to: string }) {
 }
 
 /** Simple mode and the first visit (design StudySimple / StudyWelcome), shared by the home and the course. */
-type StudyPrefs = { simple: boolean; welcomed: boolean };
+type StudyPrefs = { simple: boolean; welcomed: boolean; easyRead?: boolean };
 function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
   const [p, setP] = useState<StudyPrefs | null>(null);
   useEffect(() => void api<StudyPrefs>("/api/study/prefs").then(setP, () => setP({ simple: false, welcomed: true })), []);
@@ -149,7 +150,7 @@ function StudyHome() {
   }
   const simple = !!prefs?.simple;
   return (
-    <div className="page study-page">
+    <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}`}>
       <h1>{L("לימודים", "Study")}</h1>
       {!!courses?.length && <StudySearch />}
       {!!courses?.length && <NextStep />}
@@ -267,6 +268,7 @@ function StudySearch() {
 
 function NextStep() {
   const [n, setN] = useState<StudyNext | null>(null);
+  const [stuck, setStuck] = useState(false);
   useEffect(() => void api<{ next: StudyNext | null }>("/api/study/next").then((r) => setN(r.next), () => undefined), []);
   if (!n) return null;
   const c = `#/study/${n.courseId}`;
@@ -280,11 +282,41 @@ function NextStep() {
     cards: [L(`ליצור כרטיסיות מ"${n.what}"`, `Make cards from "${n.what}"`), `${c}/l/${n.lectureId}`, L("להרצאה", "Open the lecture")],
     focus: [L(`25 דקות ריכוז על ${n.course}`, `25 minutes of focus on ${n.course}`), "", ""],
   }[n.kind];
+  // "Hard to start" (RESEARCH_LOG students part 26 #3): the next thing as a step of two minutes, and five minutes on the timer.
+  const tiny = {
+    "due-soon": L(`רק לפתוח את המטלה ולכתוב משפט אחד: מה היא מבקשת.`, "Just open the assignment and write one sentence: what it asks for."),
+    "exam-soon": L("רק 3 שאלות תרגול. לא מבחן שלם.", "Just 3 practice questions. Not a whole test."),
+    review: L("רק 5 כרטיסיות. אפשר לעצור אחריהן.", "Just 5 cards. You can stop after them."),
+    weak: L("רק לקרוא את הפסקה הראשונה של הסיכום, ולהגיד אותה בקול במילים שלך.", "Just read the summary's first paragraph and say it aloud in your words."),
+    summarize: L("רק ללחוץ על \"לסכם\" ולקרוא את שלוש השורות הראשונות.", "Just press \"Summarize\" and read the first three lines."),
+    cards: L("רק ליצור את הכרטיסיות ולעבור על 3 מהן.", "Just make the cards and go through 3 of them."),
+    focus: L("רק 5 דקות. טיימר קטן, בלי מטרה גדולה.", "Just 5 minutes. A small timer, no big aim."),
+  }[n.kind];
+  const startSmall = () => {
+    const now = Date.now();
+    try {
+      localStorage.setItem(FOCUS_KEY, JSON.stringify({ courseId: n.courseId, minutes: 5, start: now, end: now + 5 * 60_000 } satisfies Running));
+    } catch {
+      // no storage: the timer is not kept
+    }
+    dispatchEvent(new Event("kesher-focus-start"));
+    if (href) location.hash = href;
+  };
   return (
     <section className="card study-next" aria-label={L("מה ללמוד עכשיו", "What to study now")}>
       <span className="muted small">{L("מה עכשיו", "What now")}</span>
       <p dir="auto">{text}</p>
-      {href && <a className="button primary" href={href}>{button}</a>}
+      <div className="row">
+        {href && <a className="button primary" href={href}>{button}</a>}
+        <button type="button" className="study-stuck-btn" aria-expanded={stuck} onClick={() => setStuck(!stuck)}>🆘 {L("קשה להתחיל", "Hard to start")}</button>
+      </div>
+      {stuck && (
+        <div className="study-stuck" role="status">
+          <p dir="auto"><b>{L("צעד של 2 דקות:", "A 2-minute step:")}</b> {tiny}</p>
+          <p className="muted small">{L("זה הכל. אחרי 5 דקות אפשר להפסיק בלי רגשות אשם, או להמשיך אם זה זורם.", "That's all. After 5 minutes you can stop, no guilt, or go on if it flows.")}</p>
+          <button type="button" className="primary" onClick={startSmall}>▶ {L("רק 5 דקות", "Just 5 minutes")}</button>
+        </div>
+      )}
     </section>
   );
 }
@@ -351,6 +383,12 @@ function GoalCard() {
 function FocusCard({ courses }: { courses: CourseRow[] }) {
   const [progress, setProgress] = useState<{ streak: { days: number; today: boolean; shield: boolean }; week: Array<{ day: string; minutes: number }> } | null>(null);
   const [running, setRunning] = useState<Running | null>(readRunning);
+  // "Just 5 minutes" from "Hard to start" starts it here too.
+  useEffect(() => {
+    const on = () => setRunning(readRunning());
+    addEventListener("kesher-focus-start", on);
+    return () => removeEventListener("kesher-focus-start", on);
+  }, []);
   const [courseId, setCourseId] = useState(courses[0]!.id);
   const [minutes, setMinutes] = useState(25);
   const [, tick] = useState(0);
@@ -529,7 +567,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
   if (!info) return <div className="page study-page"><BackLink to="#/study" /><p className="muted">…</p></div>;
   const on = lectureId ? "lectures" : tab;
   return (
-    <div className="page study-page">
+    <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}`}>
       <BackLink to={lectureId ? `#/study/${id}` : "#/study"} />
       <div className="study-head">
         <h1 dir="auto">{info.course.name}</h1>
@@ -1087,7 +1125,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
               <p className="muted">{L("עוד לא סוכם. הסיכום, המונחים והתרשים נכתבים מהטקסט של ההרצאה בלבד.", "Not summarized yet. The summary, terms and diagram come from the lecture's text only.")}</p>
               <button type="button" className="primary" disabled={!!busy} onClick={() => void summarize()}>{busy === "summary" ? L("מסכם… (הרצאה ארוכה לוקחת כמה דקות)", "Summarizing… (a long lecture takes a few minutes)") : L("סכם את ההרצאה", "Summarize the lecture")}</button>
             </div>
-          ) : view === "summary" ? <div dir="auto"><RichText text={l.summary} /></div>
+          ) : view === "summary" ? <ReadAlong text={l.summary} />
           : view === "terms" ? <TermList terms={l.terms ?? []} />
           : l.diagram ? <FlowView src={l.diagram} /> : <p className="muted">{L("בהרצאה הזאת אין תהליך שמתאים לתרשים.", "This lecture has no process that fits a diagram.")}</p>}
       </div>
