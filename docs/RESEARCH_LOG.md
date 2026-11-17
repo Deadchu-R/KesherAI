@@ -2062,3 +2062,11 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - KesherAI already has: an Excalidraw canvas the model draws on live (canvas.ts: a JSON store, model tools, a live stream), HTML artifacts with versions, lecture slides (video overview), a PPTX writer and PDF printing.
 - Plan: a Deck document like the canvas: JSON slides (layouts: title, bullets, two columns, quote, picture; speaker notes; a theme), a store with versions and a live stream, model tools (deck_create, deck_update_slide, deck_add_slide…), an editor where she clicks any text to edit it, adds, removes and reorders slides, picks a theme, asks the AI to change one slide; present full screen with notes for the presenter; export PDF (no other program), PPTX optional; import a PPTX's text. A lecture's slides open as a deck. Docs and Sheets follow the same way.
 - Stopped at: research done; design next.
+
+## Students, part 36: the phone alone (2026-11-17, Roee: "everything that can work alone on the phone should")
+- Checked each study feature from parts 25-34 against what the phone has by itself: the shared code (study-core), its own model (chat and vision), speech to text, the phone's voice (pitch and rate), the internet.
+- Runs alone on the phone: the feed, the course web, the memory palace, papers (OpenAlex straight from the phone), letters, presentation rehearsal, grades with the degree and Moed B, academic English, the days before the exam, hard cards with a model fix, the card timer, "::" note cards, reading in portions, a two-voice podcast, where a term appears, quiz talk, a similar problem and a photo of the exercise, and the timetable (by hand or from a photo) with the class now on the home page.
+- Not alone: the live quiz, the focus room and the group-project link (others need a server to reach), a scanned PDF (Windows' PDF renderer and OCR), and YouTube search (the phone has web search for videos and articles).
+- Built (2026-11-17, design PhoneAlone): apps/android/www/phone-study-plus.js, with sources and the palace syncing with the computer; checked at 390 px (study-check.mjs, 22 checks).
+- Found on the PC while testing: photos went to a model with no vision → 0.6.344 reads photos with a vision model.
+- Stopped at: done; next, the timetable photo is tested again on the PC with 0.6.344.
