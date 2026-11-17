@@ -159,6 +159,8 @@ export interface ChatReport {
   read: string;
   scores: Array<{ name: string; value: string; measured: boolean; /** 1–5, for the dots. */ of5?: number }>;
   findings: Array<{ title: string; body: string; measured: boolean; quotes: Quote[] }>;
+  /** A Hebrew report whose own words have letters of other alphabets (Arabic, Chinese…): the model's Hebrew is weak. */
+  mixed?: true;
   turningPoint?: { when: string; what: string; quotes: Quote[] };
   roles: Array<{ name: string; role: string }>;
   next: string;
@@ -306,7 +308,9 @@ export function checkReport(raw: Record<string, unknown> | undefined, msgs: Pers
     measuredScores.push({ name: he ? "זמן תגובה חציוני" : "Median reply time", value: r.join(" / "), measured: true });
   }
   const t = (raw?.turningPoint ?? undefined) as Record<string, unknown> | undefined;
+  const own = [raw?.headline, raw?.read, raw?.kinder, raw?.next, ...arr(raw?.findings).map((f) => (f as { body?: unknown }).body)].filter((x) => typeof x === "string").join(" ");
   return {
+    ...(he && /[\u0600-\u06FF\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(own) ? { mixed: true as const } : {}),
     headline: str(raw?.headline, 200) || (he ? "הצ'אט נקרא" : "The chat, read"),
     read: str(raw?.read, 1500),
     scores: [...measuredScores, ...arr(raw?.scores).slice(0, 5).map((x) => {

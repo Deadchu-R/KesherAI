@@ -139,3 +139,9 @@ test("mostlyLatin: English words when Hebrew was asked", () => {
   assert.equal(mostlyLatin({ headline: "They speak the same language", read: "You and Noah", findings: [] }), true);
   assert.equal(mostlyLatin({ headline: "אתם מדברים באותה שפה", read: "את ונועה, עם קצת emoji", findings: [] }), false);
 });
+
+test("checkReport: a Hebrew report with other alphabets is marked mixed", () => {
+  const n = chatNumbers({ source: "whatsapp", title: "t", messages: [] });
+  assert.equal(checkReport({ headline: "זוג שبنוי על רתיחות", read: "", findings: [] }, [], n, "he").mixed, true);
+  assert.equal(checkReport({ headline: "זוג שבנוי על שגרה", read: "", findings: [] }, [], n, "he").mixed, undefined);
+});
