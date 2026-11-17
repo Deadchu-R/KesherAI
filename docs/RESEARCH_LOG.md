@@ -2110,4 +2110,5 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   3. "Will it work on this computer?": checks the chat model (Hebrew, enough memory) and speech-to-text for recordings; when missing, names the suggested model, its size and time, and downloads only when she taps. On the phone alone: the phone's own model.
   4. "Your first lecture": record now, upload a file, or later; ends inside the course with a three-point tour (summary, cards, quiz).
   - Each step says in one line why it is asked. A "Getting set up" checklist on Study's home keeps what was skipped plus the extras (connect the phone with a QR code, a daily goal and reminder, simple or all tools), each with its reason; it goes away when done or dismissed.
-- Stopped at: research done; next the design boards, then the computer wizard, then the phone.
+- Built (2026-11-17): the computer wizard and list (design StudySetupWizard / StudySetupChecklist) and the phone-alone wizard and list (StudySetupWizardPhone). Tested end to end at 1280 and 390 and in study-check.
+- Stopped at: built; left to do: a pass on Roee's PC in a separate test profile after the 06:00 release, and on his phone in the morning.
