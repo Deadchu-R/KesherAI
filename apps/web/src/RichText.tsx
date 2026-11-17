@@ -1,12 +1,39 @@
 import type React from "react";
+import { useState } from "react";
 import { CodeView } from "./ide/CodeView";
+import { getLocale, he$ } from "./i18n";
 import { ChartView } from "./ChartView";
 import { parseChart } from "./chart";
 
-/** Inline Markdown: **bold**, *italic*, `code` and [links](https://…). */
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+
+/** A picture's address a reply may show: the web (https) or KesherAI's own files. */
+const imageSrc = (src: string) => (/^https:\/\/[^\s"'<>]+$/i.test(src) || /^\/api\/(assets|files)\/[\w./?=&%-]+$/.test(src) ? src : undefined);
+
+const GREEK: Record<string, string> = { alpha: "α", beta: "β", gamma: "γ", delta: "δ", Delta: "Δ", epsilon: "ε", theta: "θ", lambda: "λ", mu: "μ", pi: "π", sigma: "σ", Sigma: "Σ", tau: "τ", phi: "φ", omega: "ω", Omega: "Ω", cdot: "·", times: "×", div: "÷", pm: "±", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", infty: "∞", to: "→", rightarrow: "→", sum: "∑", int: "∫", partial: "∂", nabla: "∇", in: "∈" };
+const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "n": "ⁿ", "-": "⁻", "+": "⁺" };
+const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "i": "ᵢ", "n": "ₙ", "x": "ₓ" };
+
+/**
+ * Simple TeX as readable text (no math library): Greek letters and symbols, \frac{a}{b} → (a)/(b), \sqrt{x} → √(x),
+ * x^2 → x², x_1 → x₁. Anything else stays as written.
+ *
+ * @example texText("\\Delta x / \\Delta t") → "Δx / Δt"
+ */
+export function texText(tex: string): string {
+  return tex
+    .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, "($1)/($2)")
+    .replace(/\\sqrt\{([^{}]*)\}/g, "√($1)")
+    .replace(/\\(?:left|right|,|;|!|quad)/g, "")
+    .replace(/\\([A-Za-z]+)\s?/g, (m, w: string) => GREEK[w] ?? m)
+    .replace(/\^\{?([0-9n+-]+)\}?/g, (m, d: string) => ([...d].every((c) => SUP[c]) ? [...d].map((c) => SUP[c]).join("") : m))
+    .replace(/_\{?([0-9inx]+)\}?/g, (m, d: string) => ([...d].every((c) => SUB[c]) ? [...d].map((c) => SUB[c]).join("") : m));
+}
+
+/** Inline Markdown: **bold**, *italic*, ~~struck~~, `code`, $math$, [links](https://…), pictures and bare https links. */
 function inline(text: string, key: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|\*[^*\s][^*]*\*)/g;
+  const re = /(\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|\$[^$\s\d][^$\n]*?[=^_\\][^$\n]*?\$|https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?]|\*[^*\s][^*]*\*)/g;
   let last = 0;
   let i = 0;
   for (const m of text.matchAll(re)) {
@@ -15,6 +42,13 @@ function inline(text: string, key: string): React.ReactNode[] {
     const k = `${key}-${i++}`;
     if (tok.startsWith("**")) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
     else if (tok.startsWith("`")) out.push(<code key={k} className="inline-code">{tok.slice(1, -1)}</code>);
+    else if (tok.startsWith("~~")) out.push(<s key={k}>{tok.slice(2, -2)}</s>);
+    else if (tok.startsWith("$")) out.push(<span key={k} className="md-math" dir="ltr">{texText(tok.slice(1, -1))}</span>);
+    else if (tok.startsWith("![")) {
+      const [, alt, src] = /!\[([^\]]*)\]\(([^)]+)\)/.exec(tok)!;
+      const ok = imageSrc(src!);
+      out.push(ok ? <a key={k} href={ok} target="_blank" rel="noreferrer"><img className="md-img" src={ok} alt={alt} loading="lazy" /></a> : alt);
+    } else if (/^https?:/.test(tok)) out.push(<a key={k} href={tok} target="_blank" rel="noreferrer" dir="ltr">{tok}</a>);
     else if (tok.startsWith("[")) {
       const [, label, href] = /\[([^\]]+)\]\(([^)]+)\)/.exec(tok)!;
       out.push(<a key={k} href={href} target="_blank" rel="noreferrer">{label}</a>);
@@ -92,6 +126,38 @@ export function RichText({ text }: { text: string }) {
           skip = end - j - 1;
           return;
         }
+        // A quote: lines starting with ">" go together.
+        if (/^\s*>/.test(line)) {
+          let end = j;
+          while (end < lines.length && /^\s*>/.test(lines[end]!)) end++;
+          flush(`l${k}`);
+          out.push(<blockquote key={k} dir="auto" className="md-quote">{lines.slice(j, end).map((q, n) => <p key={n}>{inline(q.replace(/^\s*>\s?/, ""), `${k}q${n}`)}</p>)}</blockquote>);
+          skip = end - j - 1;
+          return;
+        }
+        // Math on its own lines: $$ … $$.
+        if (line.trim().startsWith("$$")) {
+          let end = j;
+          const one = line.trim().length > 4 && line.trim().endsWith("$$");
+          if (!one) while (end + 1 < lines.length && !lines[end + 1]!.includes("$$")) end++;
+          const body = (one ? line.trim().slice(2, -2) : lines.slice(j, Math.min(end + 2, lines.length)).join("\n").replace(/\$\$/g, "")).trim();
+          flush(`l${k}`);
+          out.push(<div key={k} className="md-math md-math-block" dir="ltr">{texText(body)}</div>);
+          skip = one ? 0 : Math.min(end + 1, lines.length - 1) - j;
+          return;
+        }
+        if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+          flush(`l${k}`);
+          out.push(<hr key={k} className="md-hr" />);
+          return;
+        }
+        // A line that is only a link: a card with the site's name.
+        const only = /^\s*<?(https?:\/\/[^\s<>]+?)>?\s*$/.exec(line);
+        if (only) {
+          flush(`l${k}`);
+          out.push(<LinkCard key={k} href={only[1]!} />);
+          return;
+        }
         const h = /^(#{1,4})\s+(.*)$/.exec(line);
         const li = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(line);
         if (h) {
@@ -114,9 +180,37 @@ export function RichText({ text }: { text: string }) {
     if (parts[i + 2] !== undefined) {
       // A ```chart block with complete JSON is drawn; while it is still being written (or if it is not a chart) it shows as code.
       const chart = parts[i + 1] === "chart" ? parseChart(parts[i + 2]!) : undefined;
-      out.push(chart ? <ChartView key={`c${i}`} spec={chart} /> : <CodeView key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />);
+      out.push(chart ? <ChartView key={`c${i}`} spec={chart} /> : <CodeBlock key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />);
     }
   }
   return <div className="msg-text">{out}</div>;
 }
 
+
+/** A link on its own line, as a card: the site's name and the address (nothing is fetched from the site). */
+function LinkCard({ href }: { href: string }) {
+  let host = "";
+  try {
+    host = new URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return <p dir="ltr">{href}</p>;
+  }
+  return (
+    <a className="md-link-card" href={href} target="_blank" rel="noreferrer">
+      <span className="md-link-icon" aria-hidden>🔗</span>
+      <span className="md-link-text"><strong>{host}</strong><span className="muted small" dir="ltr">{href.replace(/^https?:\/\//, "").slice(0, 90)}</span></span>
+    </a>
+  );
+}
+
+/** A code block with its language and a copy button above it. */
+function CodeBlock({ code, language }: { code: string; language?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => void navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => undefined);
+  return (
+    <div className="md-code">
+      <div className="md-code-bar"><span className="muted small" dir="ltr">{language || L("קוד", "code")}</span><button type="button" className="ghost small" onClick={copy}>{copied ? L("הועתק ✓", "Copied ✓") : L("העתק", "Copy")}</button></div>
+      <CodeView code={code} language={language} />
+    </div>
+  );
+}

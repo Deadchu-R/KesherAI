@@ -197,7 +197,12 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
       )}
       {images.length > 0 && (
         <div className="activity-images">
-          {images.map((id) => <img key={id} src={withToken(`/api/assets/${id}`)} alt="" className="asset" />)}
+          {images.map((id) => (
+            <div key={id} className="image-card">
+              <a href={withToken(`/api/assets/${id}`)} target="_blank" rel="noreferrer"><img src={withToken(`/api/assets/${id}`)} alt="" className="asset" /></a>
+              <a href={withToken(`/api/assets/${id}`)} download={`kesher-image-${id.slice(0, 8)}.png`}>{t("download")}</a>
+            </div>
+          ))}
         </div>
       )}
     </div>
