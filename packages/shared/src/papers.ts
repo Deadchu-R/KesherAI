@@ -152,5 +152,61 @@ export function toRis(list: StudySource[]): string {
   }).join("\r\n");
 }
 
+/** A name as "First Last" (BibTeX and RIS keep "Last, First"). */
+const firstLast = (n: string) => (n.includes(",") ? `${n.split(",").slice(1).join(" ").trim()} ${n.split(",")[0]!.trim()}` : n).replace(/\s+/g, " ").trim();
+
+/**
+ * Sources from a BibTeX file (Zotero, Mendeley, Google Scholar, LaTeX), checked as any source (FUTURE_FEATURES
+ * "Zotero import"). Braces and simple LaTeX accents are dropped.
+ */
+export function parseBibtex(text: string): StudySource[] {
+  const out: Array<Record<string, unknown>> = [];
+  for (const m of String(text).slice(0, 2_000_000).matchAll(/@(\w+)\s*\{\s*[^,]*,([\s\S]*?)\n\s*\}\s*(?=@|$)/g)) {
+    if (/^(comment|string|preamble)$/i.test(m[1]!)) continue;
+    const f: Record<string, string> = {};
+    for (const g of m[2]!.matchAll(/(\w+)\s*=\s*(\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}|"([^"]*)"|(\d+))/g)) f[g[1]!.toLowerCase()] = (g[3] ?? g[4] ?? g[5] ?? "").replace(/\\["'`^~]?\{?(\w)\}?/g, "$1").replace(/[{}]/g, "").replace(/\\([%&$#_])/g, "$1");
+    out.push({ title: f.title, authors: (f.author ?? "").split(/\s+and\s+/i).map(firstLast).filter(Boolean), year: Number(/\d{4}/.exec(f.year ?? f.date ?? "")?.[0]), venue: f.journal ?? f.journaltitle ?? f.booktitle ?? f.publisher, volume: f.volume, issue: f.number ?? f.issue, pages: f.pages?.replace(/--/g, "–"), doi: f.doi, url: f.url });
+  }
+  return cleanSources(out);
+}
+
+/** Sources from an RIS file (EndNote, Zotero, Mendeley, many library sites). */
+export function parseRis(text: string): StudySource[] {
+  const out: Array<Record<string, unknown>> = [];
+  let cur: Record<string, string[]> = {};
+  for (const raw of String(text).slice(0, 2_000_000).split(/\r?\n/)) {
+    const m = /^([A-Z][A-Z0-9]) {2}- ?(.*)$/.exec(raw);
+    if (!m) continue;
+    const [, k, v] = m as unknown as [string, string, string];
+    if (k === "ER") {
+      const g = (...keys: string[]) => keys.map((x) => cur[x]?.[0]).find(Boolean);
+      const sp = g("SP");
+      const ep = g("EP");
+      out.push({ title: g("TI", "T1", "CT", "BT"), authors: [...(cur.AU ?? []), ...(cur.A1 ?? [])].map(firstLast), year: Number(/\d{4}/.exec(g("PY", "Y1", "DA") ?? "")?.[0]), venue: g("JO", "JF", "T2", "JA", "PB"), volume: g("VL"), issue: g("IS"), pages: sp ? (ep ? `${sp}–${ep}` : sp) : undefined, doi: g("DO"), url: g("UR"), abstract: g("AB", "N2") });
+      cur = {};
+    } else (cur[k] ??= []).push(v.trim());
+  }
+  return cleanSources(out);
+}
+
+/** Its Chicago reference (author-date, 17th ed.): Levi, Dana, and Ori Cohen. 2020. "Title." Journal 12 (3): 45–67. */
+export function chicagoRef(s: StudySource): string {
+  const a = s.authors;
+  const inv = (n: string) => { const p = n.split(/\s+/).filter(Boolean); return p.length < 2 ? n : `${p.at(-1)}, ${p.slice(0, -1).join(" ")}`; };
+  const who = !a.length ? "" : a.length === 1 ? inv(a[0]!) : a.length <= 10 ? `${inv(a[0]!)}, ${a.slice(1, -1).map((x) => `${x}, `).join("")}and ${a.at(-1)}` : `${inv(a[0]!)}, ${a.slice(1, 7).join(", ")}, et al`;
+  const vol = s.volume ? ` ${s.volume}${s.issue ? ` (${s.issue})` : ""}` : "";
+  const venue = s.venue ? ` ${s.venue}${vol}${s.pages ? `: ${s.pages}` : ""}.` : "";
+  const link = s.doi ? ` https://doi.org/${s.doi}.` : s.url ? ` ${s.url}.` : "";
+  return `${who ? `${who.replace(/\.$/, "")}. ` : ""}${s.year ?? "n.d."}. “${s.title.replace(/\.$/, "")}.”${venue}${link}`.replace(/\s+/g, " ").trim();
+}
+
+/** Its Chicago author-date in-text citation: (Levi 2020), (Levi and Cohen 2020), (Levi et al. 2020). */
+export function chicagoCite(s: StudySource): string {
+  const last = (n: string) => n.split(/\s+/).filter(Boolean).pop() ?? n;
+  const a = s.authors.map(last);
+  const who = !a.length ? s.title.split(/\s+/).slice(0, 3).join(" ") : a.length === 1 ? a[0] : a.length <= 3 ? `${a.slice(0, -1).join(", ")} and ${a.at(-1)}` : `${a[0]} et al.`;
+  return `(${who} ${s.year ?? "n.d."})`;
+}
+
 /** Asking "what do the studies say" from these papers' abstracts only, each claim with its [n]. */
 export const PAPERS_PROMPT = "You answer a student's research question only from the numbered paper abstracts given. Write a short answer (4-8 sentences): what most studies find, where they disagree, and how strong the evidence looks (study kinds, sizes, when said). After each claim put the paper's number in brackets, e.g. [2]. If the abstracts do not answer the question, say so plainly. Never invent papers, numbers or findings. Answer in the language of the question.";

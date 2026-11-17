@@ -95,11 +95,11 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - Self-work: new rounds of small tasks all night, while watching the computer's health (temperatures, memory).
 
 ## The chat at Claude/Gemini level (Roee, 2026-11-17; designs in the design doc, RESEARCH_LOG)
-- ⬜ 1. The answer shows what the model made (images, video, music, file cards) and math, Mermaid, quotes, inline images, copy/run on code, link cards
-- ⬜ 2. "+" like Gemini/ChatGPT: one "Files" that reads any type (Whisper for audio and video, a few video frames, code files, OCR)
-- ⬜ 3. The model team: a small translation model (TranslateGemma 4B) for the answer's prose, the other-alphabets bias, reply-language settings (chat / code); a coding brain that fits the card (Qwen 3.8 27B or Gemma 4 31B, test both) 👤 downloads
-- ⬜ 4. Artifacts in a side panel (sandboxed)
-- ⬜ 5. A design canvas (frames, comments, export)
+- ✅ 1. The answer shows what the model made (images, video, music, file cards) and math, Mermaid, quotes, inline images, copy/run on code, link cards
+- ✅ 2. "+" like Gemini/ChatGPT: one "Files" that reads any type (Whisper for audio and video, a few video frames, code files, OCR)
+- ✅ 3. The model team: a small translation model (TranslateGemma 4B) for the answer's prose, the other-alphabets bias, reply-language settings (chat / code); a coding brain that fits the card (Qwen 3.8 27B or Gemma 4 31B, test both) 👤 downloads
+- ✅ 4. Artifacts in a side panel (sandboxed)
+- ✅ 5. A design canvas (frames, comments, export)
 
 ## Students, still missing (RESEARCH_LOG "Students, part 18", 2026-11-17)
 - ✅ Moodle: courses, what is due and lecture files through the browser pane on her sign-in (built 2026-11-17, to check on the PC)
@@ -107,10 +107,10 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ✅ A video overview of a lecture (narrated slides)
 - ✅ A slide deck from her material: present in KesherAI, PDF, PPTX optional (2026-11-17)
 - ✅ A writing coach on her own draft (never writes it for her) (2026-11-17)
-- ✅ The course's sources with an APA 7 list (2026-11-17); ⬜ Zotero import, Chicago
+- ✅ The course's sources with an APA 7 list (2026-11-17); ✅ Zotero import (BibTeX / RIS) and Chicago (2026-11-17)
 - ✅ A mind map of a course or a topic (2026-11-17)
-- ✅ Oral exam practice by voice (2026-11-17); ⬜ presentation practice
-- ✅ Read-along for lectures from PDFs (2026-11-17); ⬜ OCR for scans
+- ✅ Oral exam practice by voice (2026-11-17); ✅ presentation practice (rehearsal, 2026-11-17)
+- ✅ Read-along for lectures from PDFs (2026-11-17); ✅ OCR for scans (scanned PDFs, 2026-11-17)
 - ✅ Comparison tables (2026-11-17); ⬜ export to a sheet
 - ✅ A YouTube lecture as a lecture
 - ✅ Teach-back (Feynman)

@@ -477,6 +477,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get<C>("/api/study/courses/:id/sources", async (req) => ({ sources: await st.sources(req.params.id) }));
   app.get<C & { Querystring: { q?: string } }>("/api/study/courses/:id/papers", async (req) => ({ papers: await st.findPapers(String(req.query.q ?? "")) }));
   app.post<C & { Body: { source?: unknown } }>("/api/study/courses/:id/sources", { bodyLimit: 64 * 1024 }, async (req) => ({ sources: await st.addSource(req.params.id, req.body?.source) }));
+  app.post<C & { Body: { text?: string } }>("/api/study/courses/:id/sources/import", { bodyLimit: 4 * 1024 * 1024 }, async (req) => st.importSources(req.params.id, String(req.body?.text ?? "")));
   app.delete<C & { Params: { sid: string } }>("/api/study/courses/:id/sources/:sid", async (req) => ({ sources: await st.removeSource(req.params.id, req.params.sid) }));
   app.post<C & { Body: { question?: string; papers?: unknown } }>("/api/study/courses/:id/papers/say", { bodyLimit: 256 * 1024 }, async (req) => ({ text: await st.papersSay(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.papers) ? (req.body.papers as never) : []) }));
   /** Her notes across the course (design TimeNotes): time notes on recordings and videos, and noted highlights. */

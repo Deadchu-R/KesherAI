@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apaCite, apaRef, toBibtex, toRis, type StudySource } from "@kesher/shared";
+import { apaCite, apaRef, chicagoCite, chicagoRef, toBibtex, toRis, type StudySource } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -22,6 +22,7 @@ const byline = (p: StudySource) => [p.authors.slice(0, 3).join(", ") + (p.author
  * links, save to the course, and every saved source as an APA 7 reference, an in-text citation, BibTeX and RIS.
  */
 export function StudyPapers({ courseId, courseName }: { courseId: string; courseName: string }) {
+  const [style, setStyle] = useState<"apa" | "chicago">(() => { try { return localStorage.getItem("kesher-cite-style") === "chicago" ? "chicago" : "apa"; } catch { return "apa"; } });
   const [q, setQ] = useState("");
   const [found, setFound] = useState<StudySource[] | null>(null);
   const [asked, setAsked] = useState("");
@@ -66,7 +67,20 @@ export function StudyPapers({ courseId, courseName }: { courseId: string; course
   // "What the studies say" numbers only the papers with an abstract, in this order.
   const withAbstract = (found ?? []).filter((p) => p.abstract).slice(0, 10);
   const file = courseName.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "sources";
-  const sorted = [...lib].sort((a, b) => apaRef(a).localeCompare(apaRef(b)));
+  const ref = style === "chicago" ? chicagoRef : apaRef;
+  const cite = style === "chicago" ? chicagoCite : apaCite;
+  const sorted = [...lib].sort((a, b) => ref(a).localeCompare(ref(b)));
+  /** A BibTeX or RIS file from Zotero, Mendeley or EndNote: its sources join the course's. */
+  const importFile = async (f: File | undefined) => {
+    if (!f) return;
+    try {
+      const r = await api<{ sources: StudySource[]; added: number; found: number }>(`/api/study/courses/${courseId}/sources/import`, { method: "POST", body: { text: await f.text() } });
+      setLib(r.sources);
+      toast(L(`נוספו ${r.added} מקורות (מתוך ${r.found} בקובץ)`, `${r.added} sources added (of ${r.found} in the file)`));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
 
   return (
     <div className="study-papers">
@@ -110,10 +124,20 @@ export function StudyPapers({ courseId, courseName }: { courseId: string; course
 
       <section className="card study-papers-lib">
         <h2>📚 {L(`המקורות של הקורס (${lib.length})`, `The course's sources (${lib.length})`)}</h2>
-        {!lib.length ? <p className="muted small">{L("מאמרים ששומרים מהחיפוש מגיעים לכאן, עם הפניה מוכנה ב-APA 7.", "Papers you save from the search come here, with an APA 7 reference ready.")}</p> : (
+        <div className="row study-paper-actions">
+          <label className="button small">
+            📥 {L("ייבוא מ-Zotero / Mendeley (BibTeX או RIS)", "Import from Zotero / Mendeley (BibTeX or RIS)")}
+            <input type="file" accept=".bib,.ris,.txt,text/plain" hidden onChange={(e) => { void importFile(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          <select value={style} onChange={(e) => { const v = e.target.value === "chicago" ? "chicago" : "apa"; setStyle(v); try { localStorage.setItem("kesher-cite-style", v); } catch { /* a convenience */ } }} aria-label={L("סגנון ציטוט", "Citation style")}>
+            <option value="apa">APA 7</option>
+            <option value="chicago">Chicago</option>
+          </select>
+        </div>
+        {!lib.length ? <p className="muted small">{L("מאמרים ששומרים מהחיפוש מגיעים לכאן, עם הפניה מוכנה ב-APA 7 או Chicago.", "Papers you save from the search come here, with an APA 7 or Chicago reference ready.")}</p> : (
           <>
             <div className="row study-paper-actions">
-              <button type="button" className="small" onClick={() => copy(sorted.map(apaRef).join("\n"))}>{L("העתקת רשימת המקורות (APA)", "Copy the reference list (APA)")}</button>
+              <button type="button" className="small" onClick={() => copy(sorted.map(ref).join("\n"))}>{L(`העתקת רשימת המקורות (${style === "chicago" ? "Chicago" : "APA"})`, `Copy the reference list (${style === "chicago" ? "Chicago" : "APA"})`)}</button>
               <button type="button" className="small" onClick={() => save(toBibtex(sorted), `${file}.bib`, "application/x-bibtex;charset=utf-8")}>BibTeX</button>
               <button type="button" className="small" onClick={() => save(toRis(sorted), `${file}.ris`, "application/x-research-info-systems;charset=utf-8")}>RIS</button>
             </div>
@@ -121,10 +145,10 @@ export function StudyPapers({ courseId, courseName }: { courseId: string; course
             <ul className="study-papers-refs">
               {sorted.map((s) => (
                 <li key={s.id}>
-                  <p dir="ltr" className="study-paper-ref">{apaRef(s)}</p>
+                  <p dir="ltr" className="study-paper-ref">{ref(s)}</p>
                   <div className="row study-paper-actions">
-                    <button type="button" className="small" onClick={() => copy(apaRef(s))}>{L("העתקת ההפניה", "Copy the reference")}</button>
-                    <button type="button" className="small" onClick={() => copy(apaCite(s))} title={L("הציטוט בתוך הטקסט", "The in-text citation")}>{apaCite(s)}</button>
+                    <button type="button" className="small" onClick={() => copy(ref(s))}>{L("העתקת ההפניה", "Copy the reference")}</button>
+                    <button type="button" className="small" onClick={() => copy(cite(s))} title={L("הציטוט בתוך הטקסט", "The in-text citation")}>{cite(s)}</button>
                     {s.pdf && <a className="button small" href={s.pdf} target="_blank" rel="noopener noreferrer">PDF ↗</a>}
                     <button type="button" className="ghost small" aria-label={L("להסיר מהמקורות", "Remove from sources")} onClick={() => void drop(s.id)}>✕</button>
                   </div>

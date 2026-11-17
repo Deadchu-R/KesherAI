@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -425,7 +425,29 @@ export function studyPlus(x) {
         go2.disabled = false;
       }
     };
-    const src = cleanSources(c.sources ?? []).sort((a, b) => apaRef(a).localeCompare(apaRef(b)));
+    let style = "apa";
+    try { style = localStorage.getItem("kesherai-cite-style") === "chicago" ? "chicago" : "apa"; } catch { /* a convenience */ }
+    const ref = style === "chicago" ? chicagoRef : apaRef;
+    const cite = style === "chicago" ? chicagoCite : apaCite;
+    const src = cleanSources(c.sources ?? []).sort((a, b) => ref(a).localeCompare(ref(b)));
+    // A BibTeX or RIS file from Zotero, Mendeley or EndNote: its sources join the course's (same DOI or title skipped).
+    const pick = el("input", { type: "file", accept: ".bib,.ris,.txt,text/plain", hidden: true, onchange: async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      const text = await f.text();
+      const found = /^\s*TY {2}- /m.test(text) ? parseRis(text) : parseBibtex(text);
+      c.sources ??= [];
+      let added = 0;
+      for (const p of found) {
+        if (c.sources.length >= 500 || c.sources.some((s) => (p.doi && s.doi === p.doi) || s.title.toLowerCase() === p.title.toLowerCase())) continue;
+        c.sources.push({ ...p, id: `s${uid().slice(0, 8)}`, t: Date.now() });
+        added++;
+      }
+      if (commit()) { alert(L(`נוספו ${added} מקורות (מתוך ${found.length} בקובץ)`, `${added} sources added (of ${found.length} in the file)`)); x.draw(); }
+    } });
+    const styleSel = el("select", { "aria-label": L("סגנון ציטוט", "Citation style"), onchange: (e) => { try { localStorage.setItem("kesherai-cite-style", e.target.value); } catch { /* a convenience */ } x.draw(); } }, el("option", { value: "apa" }, "APA 7"), el("option", { value: "chicago" }, "Chicago"));
+    styleSel.value = style;
     const share = (text, name, type) => {
       const f = new globalThis.File([text], name, { type });
       if (navigator.canShare?.({ files: [f] })) return void navigator.share({ files: [f] }).catch(() => undefined);
@@ -436,8 +458,9 @@ export function studyPlus(x) {
     };
     x.root.append(section("", el("div", { class: "ph-filter" }, q, go2), found),
       section(L(`המקורות של הקורס (${src.length})`, `The course's sources (${src.length})`),
-        ...src.map((s) => el("div", { class: "ph-row", style: "flex-direction: column; align-items: stretch" }, el("small", { dir: "ltr", style: "text-align: left" }, apaRef(s)),
-          btns(el("button", { type: "button", onclick: () => void navigator.clipboard?.writeText(apaRef(s)) }, L("העתקה", "Copy")), el("button", { type: "button", onclick: () => void navigator.clipboard?.writeText(apaCite(s)) }, apaCite(s)),
+        btns(pick, el("button", { type: "button", onclick: () => pick.click() }, L("📥 ייבוא מ-Zotero (BibTeX / RIS)", "📥 Import from Zotero (BibTeX / RIS)")), styleSel),
+        ...src.map((s) => el("div", { class: "ph-row", style: "flex-direction: column; align-items: stretch" }, el("small", { dir: "ltr", style: "text-align: left" }, ref(s)),
+          btns(el("button", { type: "button", onclick: () => void navigator.clipboard?.writeText(ref(s)) }, L("העתקה", "Copy")), el("button", { type: "button", onclick: () => void navigator.clipboard?.writeText(cite(s)) }, cite(s)),
             el("button", { type: "button", "aria-label": L("להסיר", "Remove"), onclick: () => { c.sources = (c.sources ?? []).filter((y) => y.id !== s.id); c.removed = [...(c.removed ?? []), s.id]; if (commit()) x.draw(); } }, "✕")))),
         src.length ? btns(el("button", { type: "button", onclick: () => share(toBibtex(src), "sources.bib", "text/plain") }, "BibTeX"), el("button", { type: "button", onclick: () => share(toRis(src), "sources.ris", "text/plain") }, "RIS")) : el("p", { class: "muted small" }, L("מאמרים ששומרים מגיעים לכאן, עם הפניה ב-APA 7.", "Saved papers come here, with an APA 7 reference."))));
   }

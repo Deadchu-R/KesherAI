@@ -10,7 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -554,6 +554,32 @@ export class Study {
   /** Her sources library for a course (design Papers). */
   async sources(id: string): Promise<StudySource[]> {
     return (await this.get(id)).sources ?? [];
+  }
+
+  /**
+   * Sources from a BibTeX or RIS file (exported from Zotero, Mendeley, EndNote or Google Scholar): each new one is
+   * added, the ones she has already (same DOI or title) are skipped.
+   *
+   * @returns The list and how many were added.
+   */
+  async importSources(id: string, text: string): Promise<{ sources: StudySource[]; added: number; found: number }> {
+    const t = String(text ?? "");
+    const found = /^\s*TY {2}- /m.test(t) ? parseRis(t) : parseBibtex(t);
+    if (!found.length) throw Object.assign(new Error("No sources were found in the file (send a BibTeX .bib or an RIS .ris file)."), { statusCode: 400 });
+    const d = await this.get(id);
+    const list = [...(d.sources ?? [])];
+    let added = 0;
+    for (const s of found) {
+      if (list.length >= 500) break;
+      if (list.some((x) => (s.doi && x.doi?.toLowerCase() === s.doi.toLowerCase()) || x.title.toLowerCase() === s.title.toLowerCase())) continue;
+      list.push({ ...s, id: `s${randomUUID().slice(0, 8)}`, t: Date.now() });
+      added++;
+    }
+    if (added) {
+      d.sources = list;
+      await this.save(d);
+    }
+    return { sources: list, added, found: found.length };
   }
 
   /** Saves a paper to the course's sources (once: the same DOI or title is not added twice). */
