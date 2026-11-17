@@ -86,6 +86,14 @@ const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ defaul
 const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
 const UpdatesPage = lazy(() => import("./pages/UpdatesPage").then((m) => ({ default: m.UpdatesPage })));
 
+/** Moves focus to the page's heading (or the page itself), for the skip link and after opening a page from the sidebar. */
+function focusMain(): void {
+  const target = document.querySelector<HTMLElement>("main h1") ?? document.querySelector<HTMLElement>("main");
+  if (!target) return;
+  if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: false });
+}
+
 function useHash(): string {
   const [hash, setHash] = useState(location.hash || "#/");
   useEffect(() => {
@@ -240,6 +248,13 @@ function ApprovalsPill({ hidden }: { hidden: boolean }) {
 /** Routes by URL hash: `#/c/<id>`, `#/images`, `#/models`, `#/connections`, `#/settings`. */
 export function App() {
   const hash = useHash();
+  // A page opened from the sidebar takes keyboard and screen-reader focus to its heading; before, focus stayed in the
+  // sidebar and a Tab walked through every chat again (NVDA pass, t50).
+  useEffect(() => {
+    if (!document.activeElement?.closest("nav.sidebar")) return;
+    const timer = window.setTimeout(() => focusMain(), 150);
+    return () => window.clearTimeout(timer);
+  }, [hash]);
   const [, rerender] = useState(0);
   const [online, setOnline] = useState<boolean | null>(null);
   const narrow = () => matchMedia("(max-width: 760px)").matches;
@@ -349,6 +364,7 @@ export function App() {
   if (hash === "#/avatar-feed") return <AvatarFeed />;
   return (
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
+      <a className="skip-link" href="#/" onClick={(e) => { e.preventDefault(); focusMain(); }}>{getLocale() === "he" ? "דילוג לתוכן" : "Skip to content"}</a>
       <RemoteBanner />
       <ExtensionPage />
       <AskFromUrl />

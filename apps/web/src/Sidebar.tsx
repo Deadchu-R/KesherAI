@@ -709,6 +709,8 @@ function SidebarGrip() {
       aria-valuenow={Math.round(width())}
       aria-valuemin={SIDE_MIN}
       aria-valuemax={SIDE_MAX}
+      // NVDA read only "50" (a percent of the range); the width in words instead (NVDA pass, t50).
+      aria-valuetext={getLocale() === "he" ? `רוחב ${Math.round(width())} פיקסלים` : `${Math.round(width())} pixels wide`}
       aria-label={getLocale() === "he" ? "שינוי רוחב סרגל הצד" : "Resize the sidebar"}
       tabIndex={0}
       onPointerDown={start}

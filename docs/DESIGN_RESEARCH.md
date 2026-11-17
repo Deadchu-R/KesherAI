@@ -104,11 +104,29 @@ On approvals ([Kunal Ganglani](https://www.kunalganglani.com/blog/tool-approval-
 - The history can be focused and scrolled with the keyboard.
 - A first `forced-colors` rule for the marks that carry meaning.
 
+### The NVDA pass (2026-11-17, Roee's PC, NVDA 2026.3 portable, speech muted and logged)
+
+Home, a chat while it answers, Models, Settings and the task board, with Tab and NVDA's quick keys (H headings, F fields, B buttons, I list items).
+
+What it said well:
+- The sidebar is the "Main navigation" landmark, the page the "main" landmark; links say "current page".
+- Models and Settings: one level-1 heading and level-2 sections; every field has its name ("What should I call you?", "Chat & code" combo box with the chosen model), the address choice is a group of three radio buttons, Hugging Face filters are toggle buttons with pressed / not pressed.
+- After Stop, focus went back to the message box.
+
+What was missing, and what was done:
+1. **No way past the sidebar.** Every chat is two stops (the chat and its Options), so reaching the page meant 40+ Tabs, and after opening a page from the sidebar focus stayed there. → A "Skip to content" link first on the page, and a page opened from the sidebar moves focus to its heading.
+2. **The chat's state line.** On a new chat "Writing an answer" was never said (the line and its region came in the same moment), and after Stop it said "The answer is ready". → The line waits 400 ms before it changes, and says "Stopped" after Stop.
+3. **The sidebar grip** was read as "50" (a percent of its range). → It says its width (for example "360 pixels wide").
+4. **The task board** had one heading, the page's; the self-work box and the shared board were plain text, the category read "Tasks21", and the live steps list was read as one long run of text. → The two are level-2 headings, the count reads "Tasks, 21 open", the steps list has its own name.
+5. **Windows notifications** were titled "electron.app.KesherAI". → The app sets its Windows app id (the installer's), so they say KesherAI.
+
+Left for later: a long chat title is read twice (the link and "Options: …"); one Options button per list with the chat named once would halve the stops. The model's answer itself could not be heard: the model was busy with self-work, so the chat stayed on "Working…".
+
 ### What to do
 
 1. **A hidden heading per message** (who wrote it), so heading navigation works.
 2. **Focus:** returns to the input after Stop; a dialog returns focus to what opened it.
-3. **One pass with NVDA** on the five main screens, and write what it finds.
+3. ~~**One pass with NVDA** on the five main screens, and write what it finds.~~ Done 2026-11-17 (above).
 4. **An automatic check:** `axe-core` in the existing `ui-check` script, failing on serious findings.
 5. **Answer length as a setting** (short, normal, detailed). It helps screen-reader users and everyone on a phone.
 
@@ -238,7 +256,7 @@ Ordered by what protects the user first, then what most users feel, then what de
 | 9 | `<Code>` and `<Path>` that isolate direction; the 12 physical CSS properties | Hebrew with code reads right everywhere | Small | t47 |
 | 10 | `content-visibility: auto` on chat messages | Long chats stay smooth | Small | t48 |
 | 11 | Split `server.ts` by area (see the review) | The largest obstacle for a new developer | Big | t49 |
-| 12 | One NVDA pass on the five main screens | Real users, real reader | Needs Roee's PC | t50 |
+| 12 | ✅ One NVDA pass on the five main screens | Real users, real reader | Done 2026-11-17 | t50 |
 
 ## Sources
 

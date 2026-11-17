@@ -134,6 +134,8 @@ export function ConversationPage({ id }: { id: string }) {
   // A live stream that went quiet (a phone's network, the tunnel) is opened again with the chat as it is now:
   // found on the phone, the page kept "Working…" and the stop button after the run had stopped.
   const [resync, setResync] = useState(0);
+  // When she pressed Stop, so the screen-reader line says "Stopped" and not "The answer is ready" (NVDA pass, t50).
+  const [stopAsked, setStopAsked] = useState(0);
   // "Try again": a run that has said nothing for two minutes (no text, no tool output) is shown as stuck.
   const lastWork = useRef(Date.now());
   const [stalled, setStalled] = useState(false);
@@ -743,7 +745,7 @@ export function ConversationPage({ id }: { id: string }) {
       <div className="chat">
         {/* For screen readers: the history is a log that is not read aloud while it streams (a live region on it
             re-read the answer on every word); one short line says what is happening instead. */}
-        <ChatStatus status={info?.status} waiting={(info?.pendingApprovals.length ?? 0) > 0} />
+        <ChatStatus status={info?.status} waiting={(info?.pendingApprovals.length ?? 0) > 0} stopAsked={stopAsked} />
         <div className="messages" role="log" aria-live="off" aria-busy={info?.status === "running"} aria-label={getLocale() === "he" ? "היסטוריית השיחה" : "Chat history"} tabIndex={0}>
           {conv.kind === "code" && <SessionEnvBar convId={id} />}
           {conv.incognito && <p className="muted small incognito-note">👻 {getLocale() === "he" ? "צ'אט בלי זיכרון: לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש." : "Incognito: no memory read or filed, left out of search."}</p>}
@@ -1065,6 +1067,7 @@ export function ConversationPage({ id }: { id: string }) {
                         // The Stop button goes away: keyboard and screen-reader focus goes back to the message box.
                         const box = ev.currentTarget.closest(".composer")?.querySelector("textarea");
                         box?.focus();
+                        setStopAsked(Date.now());
                         void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500));
                       }}
                       aria-label={t("stop")}
@@ -1115,17 +1118,26 @@ export function ConversationPage({ id }: { id: string }) {
  *
  * @param p.status - The conversation's status.
  * @param p.waiting - Whether an approval waits for the user.
+ * @param p.stopAsked - When she pressed Stop (0: not in this run), so the end is said as "Stopped".
  */
-function ChatStatus({ status, waiting }: { status: string | undefined; waiting: boolean }) {
+function ChatStatus({ status, waiting, stopAsked = 0 }: { status: string | undefined; waiting: boolean; stopAsked?: number }) {
   const he = getLocale() === "he";
   const now = waiting || status === "waiting" ? "waiting" : status === "running" ? "running" : "idle";
   const [said, setSaid] = useState("");
   const before = useRef("idle");
+  const runStart = useRef(0);
+  const timer = useRef(0);
   useEffect(() => {
     if (before.current === now) return;
     const was = before.current;
     before.current = now;
-    setSaid(now === "running" ? (he ? "כותב תשובה" : "Writing an answer") : now === "waiting" ? (he ? "מחכה לאישור שלך" : "Waiting for your approval") : was === "running" || was === "waiting" ? (he ? "התשובה מוכנה" : "The answer is ready") : "");
-  }, [now, he]);
+    if (now === "running" && was === "idle") runStart.current = Date.now();
+    const line = now === "running" ? (he ? "כותב תשובה" : "Writing an answer") : now === "waiting" ? (he ? "מחכה לאישור שלך" : "Waiting for your approval") : was === "running" || was === "waiting" ? (stopAsked >= runStart.current && stopAsked > 0 ? (he ? "נעצר" : "Stopped") : he ? "התשובה מוכנה" : "The answer is ready") : "";
+    // NVDA missed the first line on a new chat: the region and its text came in the same moment. A short wait lets
+    // the reader see the empty region first (NVDA pass, t50).
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setSaid(line), 400);
+  }, [now, he, stopAsked]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   return <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{said}</div>;
 }

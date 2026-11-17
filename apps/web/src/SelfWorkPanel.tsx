@@ -105,11 +105,14 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
 
   return (
     <section className="self-work">
+      {/* A heading (with its button inside), so NVDA's heading keys reach it (NVDA pass, t50). */}
+      <h2 className="self-work-h">
       <button type="button" className="self-work-head" aria-expanded={open || !!active} onClick={() => setOpen((v) => !v)}>
         <span>🤖 {L("עבודה עצמית", "Self-work")}</span>
         {log.waiting.length > 0 && <span className="pill small warn">✋ {L(`מחכה לאישור (${log.waiting.length})`, `Waiting for approval (${log.waiting.length})`)}</span>}
         {run && <span className="muted small">{L(...STATUS[run.status])}{active ? ` · ${run.items.length} ${L("הושלמו", "done")}` : ""}</span>}
       </button>
+      </h2>
       {(open || active) && (
         <div className="self-work-body">
           {active && run ? (
@@ -161,7 +164,7 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
               {log.lines.length > 0 && (
                 <details className="self-work-log" open>
                   <summary className="small">{L("מה הוא עושה עכשיו", "What it is doing now")}: <span dir="auto">{log.lines.at(-1)!.slice(0, 90)}</span></summary>
-                  <ol className="small" dir="auto" reversed>{log.lines.slice(-12).reverse().map((l, i) => <li key={i}>{l}</li>)}</ol>
+                  <ol className="small" dir="auto" reversed aria-label={L("הצעדים האחרונים, החדש ראשון", "The latest steps, newest first")}>{log.lines.slice(-12).reverse().map((l, i) => <li key={i}>{l}</li>)}</ol>
                 </details>
               )}
               <div className="row">

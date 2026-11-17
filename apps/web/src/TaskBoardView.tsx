@@ -78,7 +78,7 @@ export function TaskBoardView() {
   return (
     <div className="task-board">
       <div className="row wrap">
-        <strong className="grow">{L("לוח המשימות המשותף", "The shared task board")}</strong>
+        <h2 className="grow task-board-h">{L("לוח המשימות המשותף", "The shared task board")}</h2>
         {done > 0 && <button type="button" className="small" onClick={() => setShowDone((v) => !v)}>{showDone ? L("הסתר שהושלמו", "Hide done") : L(`הצג שהושלמו (${done})`, `Show done (${done})`)}</button>}
       </div>
       {!tasks.length && <p className="muted small">{L("אין משימות עדיין. משימה שתוסיפו כאן תופיע גם אצל Claude וגם אצל העבודה העצמית.", "No tasks yet. A task you add here shows for Claude and for self-work alike.")}</p>}
@@ -92,7 +92,7 @@ export function TaskBoardView() {
             const isOpen = (e.currentTarget as HTMLDetailsElement).open;
             setFolded((f) => (isOpen ? f.filter((x) => x !== c) : f.includes(c) ? f : [...f, c]));
           }}>
-            <summary title={L(hintHe, hintEn)}><span className="task-cat-name">{L(he, en)}</span><span className="task-count">{all}</span></summary>
+            <summary title={L(hintHe, hintEn)}><span className="task-cat-name">{L(he, en)}</span><span className="task-count"><span className="sr-only">, </span>{all}<span className="sr-only">{L(" פתוחות", " open")}</span></span></summary>
             {list.length === 0 ? <p className="muted small task-empty">{L("אין משימות פתוחות.", "No open tasks.")}</p> : (
               <ul className="task-list">
                 {list.map((t) => (

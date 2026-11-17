@@ -315,6 +315,9 @@ let mainLog: ((line: string) => void) | undefined;
 
 // One window: opening KesherAI again focuses the existing window.
 if (!app.requestSingleInstanceLock()) app.quit();
+// Windows names a notification by the app's model id; without it the toast said "electron.app.KesherAI" (NVDA
+// pass, t50). The installer's shortcut carries the same id (package.json build.appId), so toasts say "KesherAI".
+if (process.platform === "win32") app.setAppUserModelId("dev.kesherai.app");
 // Why the app ended, the next time it does (only the copy that runs writes it).
 else {
   mainLog = startMainLog(app, join(process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`), "logs", "main.log"));
