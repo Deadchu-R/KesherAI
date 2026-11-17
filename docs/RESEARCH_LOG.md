@@ -1985,6 +1985,18 @@ Missing (checked in the code):
 7. **Videos on a topic** (Gemini Guided Learning): a few YouTube lectures on a lecture's topic, one tap to add one as a lecture.
 8. **Scanned PDFs** (Speechify, part 18 #9): a PDF with no text is read page by page (Windows renders the pages; Windows OCR or the vision model reads them). Today it asks for photos.
 - Not taken: an "AI-written?" detector (unreliable, and her writing is hers), OpenStax books (English; OpenAlex covers books), a spoken day into a schedule (the timetable and plans cover it).
+- Built (2026-11-17): all eight (designs ProblemPhoto, Podcast, QuizTalkPalace, TopicVideos; EPUB/ODT and scanned PDFs need no new screen). Checked on the PC in 0.6.340: papers search (12 results, DOI lookup), the live quiz end to end, the focus room page.
+- Stopped at: built; 0.6.341 building.
+
+## Students, part 30: flashcard power tools and reading differences (2026-11-17, Roee: "keep looping until we have everything")
+Sources: a 2026 deep-dive of spaced-repetition apps (Anki and its add-ons, AnkiHub, RemNote, SuperMemo, Quizlet, Mochi, Brainscape, Memrise), StudyCardsAI's med-school Anki add-ons (Image Occlusion, Speed Focus Mode, Advanced Browser for leeches), Genio's "accessible learning apps 2026" (Genio Notes, Tiimo, NaturalReader, Forest, Goblin.tools, Habitica); checked against the code.
+Missing:
+1. **Hard cards (leeches)** (Anki): cards she keeps forgetting are found and offered a fix: rewrite simpler, split in two, or an explanation; today a forgotten card just comes back.
+2. **Cards typed in notes** (RemNote's "term :: meaning"): lines with "::" in her lecture notes become cards.
+3. **A timer per card** (Speed Focus Mode): an optional few seconds per card, then the answer shows by itself.
+4. **Incremental reading** (SuperMemo): a long chapter or article read in daily portions, the place kept, cards from each portion.
+5. **A reading font for dyslexia** (NaturalReader and dyslexia apps): an easier font choice with the easy reading.
+- Not taken: blocking sites (Forest; outside KesherAI's reach), a visual day timeline (the timetable and "now" cover it), shared decks with live updates (shared courses cover sharing).
 - Stopped at: list made; building from (1).
 
 ## Screen lens, part 1: capture part of the screen and hand it to the AI (2026-11-17, Roee asked)
