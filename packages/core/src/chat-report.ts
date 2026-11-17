@@ -672,8 +672,17 @@ export class ChatReports {
     const lines = keep.size ? chatLines([...keep].sort((a, b) => a - b).map((i) => msgs[i]!)) : chatLines(msgs.slice(-150));
     const reportText = r.report ? `${r.report.headline} ${r.report.read} ${r.report.findings.map((f) => `${f.title}: ${f.body}`).join(" ")}` : "";
     const system = `${reportPrompt(r).split("\n").slice(0, 3).join("\n")}\nNow answer one question about the same chat in 3-8 sentences, from the lines given. Answer with JSON only: {"answer":"…","quotes":[{"who":"exact name","text":"exact line"}]}.`;
-    const user = `Numbers:\n${JSON.stringify(r.numbers)}\n\nThe report: ${reportText.slice(0, 6000)}\n\n${lines.length ? `Lines from the chat:\n${lines.join("\n").slice(0, 30_000)}` : "(Only the report; the chat itself was not added.)"}\n\nQuestion: ${q}`;
-    const j = jsonOf(await ask(system, user, signal));
+    const userFor = (cap: number) => `Numbers:\n${JSON.stringify(r.numbers)}\n\nThe report: ${reportText.slice(0, Math.min(6000, cap / 5))}\n\n${lines.length ? `Lines from the chat:\n${lines.join("\n").slice(0, cap)}` : "(Only the report; the chat itself was not added.)"}\n\nQuestion: ${q}`;
+    // Fewer lines when the model's context is full (as for the report itself).
+    let j: Record<string, unknown> | undefined;
+    for (const cap of [30_000, 12_000, 5_000]) {
+      try {
+        j = jsonOf(await ask(system, userFor(cap), signal));
+        break;
+      } catch (err) {
+        if (cap === 5_000 || signal?.aborted || !CONTEXT_FULL.test((err as Error).message)) throw err;
+      }
+    }
     const answer = str(j?.answer, 3000);
     if (!answer) throw new Error("The model did not answer in the expected form; try again.");
     const f = { q, a: answer, quotes: arr(j?.quotes).map((x) => findQuote(msgs, str((x as { text?: unknown }).text, 400), str((x as { who?: unknown }).who, 80) || undefined)).filter((x): x is Quote => !!x).slice(0, 3), at: new Date().toISOString() };
