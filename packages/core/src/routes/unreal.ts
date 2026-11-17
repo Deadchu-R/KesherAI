@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
 import type { UnityCli } from "../unity-cli.js";
+import type { UnrealBridge } from "../unreal-bridge.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
 import { modelTurnFor } from "../conversations.js";
@@ -220,10 +221,36 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     return { changedAt: await (b as UnityCli).changedAt() };
   });
 
+  if (kind === "unreal") {
+    /** Changes waiting for Unreal, and the background sync. POST applies them now (in a headless editor when closed). */
+    app.get(`${base}/sync`, async () => {
+      const ub = b as UnrealBridge;
+      const project = await ub.project();
+      return { waiting: (await ub.queue()).filter((q) => q.project === project).length, ...ub.syncState };
+    });
+    app.post(`${base}/sync`, async (_req, reply) => {
+      try {
+        return await (b as UnrealBridge).syncNow();
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
+  }
+
   /** Applies operations as given (for "Apply again" and plugins). */
   app.post<{ Body: { path?: string; graph?: string; ops?: unknown[] } }>(`${base}/apply`, async (req, reply) => {
     const { path, graph = "", ops } = req.body ?? {};
     if (!path || !Array.isArray(ops)) return reply.code(400).send({ error: "Send the Blueprint and the operations." });
+    // Unreal closed: the change waits in the queue and syncs a few seconds after the last one, in a headless editor
+    // (no open editor needed; RESEARCH_LOG "Work without the editor").
+    if (kind === "unreal" && !(await b.status()).connected) {
+      const ub = b as UnrealBridge;
+      const project = await ub.project();
+      if (!project) return reply.code(409).send({ error: "Open the project in Unreal once (with the KesherAI Bridge plugin) so KesherAI knows it; after that it works with Unreal closed." });
+      await ub.enqueue({ project, path, graph, ops, request: "Changed on the Blueprint page" });
+      ub.scheduleSync();
+      return { queued: true, results: ops.map(() => ({ ok: true })), failed: 0 };
+    }
     try {
       return await b.request("apply", { path, graph, ops: kind === "unity" ? JSON.stringify(ops) : ops });
     } catch (err) {

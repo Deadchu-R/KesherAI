@@ -127,6 +127,17 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     chatEnd.current?.scrollIntoView({ block: "nearest" });
   }, [chat, busy]);
   const [queue, setQueue] = useState<Queued[]>([]);
+  // Unreal closed: changes wait and sync in the background (a headless editor), no open editor needed.
+  const [sync, setSync] = useState<{ waiting: number; running: boolean; lastAt?: string; lastError?: string } | null>(null);
+  const loadSync = () => void (unity ? Promise.resolve() : api<NonNullable<typeof sync>>(`${base}/sync`).then((n) => setSync((was) => {
+    if (was && (was.waiting > 0 || was.running) && n.waiting === 0 && !n.running && path) { loadBp(path); loadQueue(); }
+    return n;
+  }), () => undefined));
+  useEffect(() => {
+    loadSync();
+    const t = setInterval(() => { if (sync && (sync.waiting > 0 || sync.running)) loadSync(); }, 3000);
+    return () => clearInterval(t);
+  }, [sync?.waiting, sync?.running, path]);
 
   const loadStatus = () => void api<Status>(base).then(setSt, () => undefined);
   const loadList = () => void api<typeof list>(`${base}/blueprints`).then(setList, () => undefined);
@@ -438,7 +449,13 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <Fullscreen hidden={shownView === "code"} label={L("הגרף במסך מלא", "The graph, full screen")}>
                 <div className="ue-graph-row">
                 <div className="ue-stage">
-                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={st.connected && !bp.offline} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => loadBp(path)} flash={flash} onSelect={setPicked} />}</div>
+                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={(st.connected && !bp.offline) || (!unity && !st.connected && !!st.offline)} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => { loadBp(path); loadSync(); }} flash={flash} onSelect={setPicked} />}</div>
+                  {!unity && !st.connected && sync && (sync.waiting > 0 || sync.running || sync.lastError) && (
+                    <div className="row small ue-sync" role="status">
+                      <span className="grow">{sync.running ? L(`מסנכרן ${sync.waiting} שינויים… (Unreal ברקע, כדקה)`, `Syncing ${sync.waiting} changes… (Unreal in the background, about a minute)`) : sync.waiting > 0 ? L(`${sync.waiting} שינויים מחכים לסנכרון. הם יסונכרנו לבד בעוד רגע, או כשתפתח את הפרויקט ב-Unreal.`, `${sync.waiting} changes waiting to sync. They sync by themselves in a moment, or when you open the project in Unreal.`) : sync.lastError}</span>
+                      {!sync.running && sync.waiting > 0 && <button type="button" className="ghost small" onClick={() => void api(`${base}/sync`, { method: "POST" }).then(loadSync, (e: Error) => toast(e.message))}>{L("סנכרן עכשיו", "Sync now")}</button>}
+                    </div>
+                  )}
                   {st.connected && readAt > 0 && (
                     <p className="muted small ue-read-at" title={unity ? L("נבדק כל 5 שניות, ונקרא שוב כשמשהו משתנה ביוניטי", "Checked every 5 seconds, and read again when something changes in Unity") : L("נבדק כל 5 שניות, ונקרא שוב כש-Unreal מקמפל", "Checked every 5 seconds, and read again when Unreal compiles")}>
                       {L("נקרא מהעורך ב-", "Read from the editor at ")}

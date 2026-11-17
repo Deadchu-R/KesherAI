@@ -452,6 +452,71 @@ export class UnrealBridge {
     return (await this.readJson<QueuedEdit[]>(join(this.dir, "queue.json"))) ?? [];
   }
 
+  private syncTimer?: NodeJS.Timeout;
+  private syncing?: Promise<{ applied: number; failed: number }>;
+  /** Where the background sync stands (the page shows it). */
+  syncState: { running: boolean; lastAt?: string; lastError?: string } = { running: false };
+
+  /**
+   * Work without the editor open (Roee, 2026-11-17: "work and sync, no constant connection"): a change made while the
+   * editor is closed is queued, and a few seconds after the last one the queue is applied in one headless editor start
+   * (compiled and saved there); the graphs are read again. Opening the editor first also applies it (afterConnect).
+   *
+   * @param delayMs - Quiet time after the last change before syncing.
+   */
+  scheduleSync(delayMs = 8000): void {
+    clearTimeout(this.syncTimer);
+    this.syncTimer = setTimeout(() => void this.syncNow().catch(() => undefined), delayMs);
+    this.syncTimer.unref?.();
+  }
+
+  /** Applies the queued changes now, in one headless editor start (the editor being closed). */
+  async syncNow(): Promise<{ applied: number; failed: number }> {
+    if (this.connected) {
+      await this.afterConnect();
+      return { applied: 0, failed: 0 };
+    }
+    this.syncing ??= (async () => {
+      this.syncState = { running: true };
+      const project = await this.project();
+      const mine = (await this.queue()).filter((q) => q.project === project);
+      if (!mine.length) return { applied: 0, failed: 0 };
+      const commands: Array<Record<string, unknown>> = [];
+      for (const q of mine) {
+        if (q.kind === "create") commands.push({ cmd: "create", path: q.path, parent: q.parent ?? "Actor" });
+        else commands.push({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops });
+      }
+      const paths = [...new Set(mine.map((q) => q.path))];
+      for (const path of paths) commands.push({ cmd: "compile", path }, { cmd: "save", path });
+      for (const path of paths) commands.push({ cmd: "graph", path });
+      const answers = await this.offline(commands);
+      let applied = 0;
+      let failed = 0;
+      for (let i = 0; i < mine.length; i++) {
+        const a = answers[i] as { ok?: boolean } | undefined;
+        if (a && a.ok !== false) {
+          applied++;
+          await this.unqueue(mine[i]!.id);
+        } else failed++;
+      }
+      // The graphs read at the end become the saved copies the page shows.
+      for (let i = 0; i < paths.length; i++) {
+        const a = answers[commands.length - paths.length + i] as { ok?: boolean; result?: unknown } | undefined;
+        if (a?.ok !== false && a?.result) await this.remember(paths[i]!, a.result as BlueprintJson).catch(() => undefined);
+      }
+      return { applied, failed };
+    })()
+      .then((r) => {
+        this.syncState = { running: false, lastAt: new Date().toISOString(), ...(r.failed ? { lastError: `${r.failed} change(s) could not be applied; they stay waiting.` } : {}) };
+        return r;
+      }, (e: Error) => {
+        this.syncState = { running: false, lastAt: new Date().toISOString(), lastError: e.message };
+        throw e;
+      })
+      .finally(() => { this.syncing = undefined; });
+    return this.syncing;
+  }
+
   /**
    * Keeps a change for when the editor connects.
    *

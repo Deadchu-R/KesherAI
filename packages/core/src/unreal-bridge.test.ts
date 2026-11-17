@@ -229,3 +229,28 @@ test("the Unreal plugin reports the same version everywhere (its .uplugin, its C
   assert.equal(uplugin.VersionName, BRIDGE_VERSION);
   assert.equal(/BridgeVersion = TEXT\("([^"]+)"\)/.exec(cpp)?.[1], BRIDGE_VERSION);
 });
+
+test("with Unreal closed, queued changes sync in one headless start: applied, compiled, saved, read again", async () => {
+  const { UnrealBridge } = await import("./unreal-bridge.js");
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ue-sync-"));
+  const proj = join(dir, "Game.uproject");
+  await writeFile(proj, "{}");
+  const b = new UnrealBridge(dir);
+  let sent: Array<Record<string, unknown>> = [];
+  b.setHeadless(async (_file, commands) => {
+    sent = commands;
+    return commands.map((c) => (c.cmd === "graph" ? { ok: true, result: { path: c.path, graphs: [{ name: "EventGraph", nodes: [{ id: "n1" }] }] } } : { ok: true }));
+  });
+  (b as unknown as { lastProjectFile: string }).lastProjectFile = proj;
+  (b as unknown as { project: () => Promise<string> }).project = async () => "Game";
+  await b.enqueue({ project: "Game", path: "/Game/BP_A.BP_A", graph: "EventGraph", ops: [{ op: "add" }] });
+  await b.enqueue({ project: "Game", path: "/Game/BP_A.BP_A", graph: "EventGraph", ops: [{ op: "connect" }] });
+  const r = await b.syncNow();
+  assert.deepEqual(r, { applied: 2, failed: 0 });
+  assert.deepEqual(sent.map((c) => c.cmd), ["apply", "apply", "compile", "save", "graph"]);
+  assert.equal((await b.queue()).length, 0);
+  assert.equal(b.syncState.running, false);
+});
