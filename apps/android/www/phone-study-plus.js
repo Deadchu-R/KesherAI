@@ -258,7 +258,7 @@ export function studyPlus(x) {
         body.push(el("b", { dir: "auto", style: "font-size: 22px" }, it.front), backText, el("button", { type: "button", onclick: (e) => { backText.hidden = false; e.currentTarget.hidden = true; } }, L("להפוך", "Flip")));
       } else if (it.kind === "question") {
         const why = el("p", { class: "muted small", dir: "auto" });
-        const opts = it.options.map((o, k) => el("button", { type: "button", dir: "auto", style: "display: block; width: 100%; text-align: start; margin: 4px 0", onclick: () => { opts.forEach((b, j) => { b.disabled = true; if (j === it.answer) b.style.borderColor = "#6fd3a5"; else if (j === k) b.style.borderColor = "#f08a8a"; }); why.textContent = it.explain || ""; } }, o));
+        const opts = it.options.map((o, k) => el("button", { type: "button", dir: "auto", style: "display: block; width: 100%; text-align: start; margin: 4px 0", onclick: () => { opts.forEach((b, j) => { b.disabled = true; if (j === it.answer) b.style.borderColor = "#6fd3a5"; else if (j === k) b.style.borderColor = "#f08a8a"; }); why.textContent = `${k === it.answer ? L("✓ נכון. ", "✓ Right. ") : L("✗ לא נכון. ", "✗ Not right. ")}${it.explain || ""}`; } }, o));
         body.push(el("b", { dir: "auto" }, it.q), ...opts, why);
       } else body.push(el("p", { dir: "auto", style: "font-size: 20px; line-height: 1.6" }, it.text));
       return el("section", { class: "ph-bite" }, el("small", { class: "muted" }, `${tag[it.kind]}${it.lecture ? ` · ${it.lecture}` : ""} · ${i + 1}/${items.length}`), ...body, i === 0 ? el("small", { class: "muted" }, L("↑ לגלול למעלה לפריט הבא", "↑ Swipe up for the next")) : "");
@@ -322,6 +322,9 @@ export function studyPlus(x) {
     const kind = el("select", { "aria-label": L("סוג המכתב", "Kind of letter") }, ...[["extension", "⏳ בקשת הארכה", "⏳ An extension"], ["reserve", "🎖 התאמות אחרי מילואים", "🎖 Reserve-duty accommodations"], ["appeal", "📝 ערעור על ציון", "📝 A grade appeal"], ["special", "📅 מועד מיוחד", "📅 A special exam date"], ["other", "✉️ משהו אחר", "✉️ Something else"]].map(([k, h, e]) => el("option", { value: k }, L(h, e))));
     const to = el("input", { dir: "auto", placeholder: L("אל: ד״ר כהן / מזכירות", "To: Dr Cohen / the office") });
     const name = el("input", { dir: "auto", placeholder: L("השם שלך", "Your name") });
+    // Her name is kept for the next letter (t144).
+    try { name.value = localStorage.getItem("kesherai-letter-name") || ""; } catch { /* none */ }
+    name.addEventListener("input", () => { try { localStorage.setItem("kesherai-letter-name", name.value.slice(0, 80)); } catch { /* full */ } });
     const details = el("textarea", { rows: "3", dir: "auto", placeholder: L("הפרטים: מה ולמה", "The details: what and why") });
     const subject = el("input", { dir: "auto", hidden: true, "aria-label": L("נושא", "Subject") });
     const body = el("textarea", { rows: "10", dir: "auto", hidden: true, "aria-label": L("המכתב", "The letter") });
@@ -527,11 +530,14 @@ export function studyPlus(x) {
       const p = r && cleanEnglish(jsonIn(r));
       if (!p?.questions.length) return r !== undefined && alert(L("המודל לא כתב שאלות. נסי שוב.", "The model wrote no questions. Try again."));
       const course = el("select", {}, ...x.db().courses.map((c) => el("option", { value: c.id }, c.name)));
+      // The score after the last answer (t141).
+      let right = 0, answered = 0;
+      const score = el("p", { class: "small", "aria-live": "polite" });
       out.replaceChildren(...p.questions.map((q) => {
         const why = el("p", { class: "muted small", dir: "auto" });
-        const opts = q.options.map((o, k) => el("button", { type: "button", dir: "ltr", style: "display: block; width: 100%; text-align: left; margin: 4px 0", onclick: () => { opts.forEach((y, j) => { y.disabled = true; if (j === q.answer) y.style.borderColor = "#6fd3a5"; else if (j === k) y.style.borderColor = "#f08a8a"; }); why.textContent = q.explain; } }, o));
+        const opts = q.options.map((o, k) => el("button", { type: "button", dir: "ltr", style: "display: block; width: 100%; text-align: left; margin: 4px 0", onclick: () => { opts.forEach((y, j) => { y.disabled = true; if (j === q.answer) y.style.borderColor = "#6fd3a5"; else if (j === k) y.style.borderColor = "#f08a8a"; }); why.textContent = q.explain; answered++; if (k === q.answer) right++; if (answered === p.questions.length) score.textContent = L(`${right} מתוך ${p.questions.length}`, `${right} of ${p.questions.length}`); } }, o));
         return section("", el("b", { dir: "ltr" }, q.q), ...opts, why);
-      }), p.words.length ? section(L("מילים מהטקסט", "Words from the text"), ...p.words.map((w) => el("div", { class: "ph-row" }, el("span", { dir: "ltr" }, w.en), el("span", { dir: "rtl" }, w.he))),
+      }), score, p.words.length ? section(L("מילים מהטקסט", "Words from the text"), ...p.words.map((w) => el("div", { class: "ph-row" }, el("span", { dir: "ltr" }, w.en), el("span", { dir: "rtl" }, w.he))),
         x.db().courses.length ? el("div", { class: "ph-filter" }, course, el("button", { type: "button", onclick: () => { const c = x.db().courses.find((y) => y.id === course.value); if (!c) return; for (const w of p.words) newCard(c, w.en, w.he); if (commit()) alert(L(`נוספו ${p.words.length} כרטיסיות`, `${p.words.length} cards added`)); } }, L("📇 לכרטיסיות", "📇 Into cards"))) : "") : "");
     };
     x.root.append(section("", text, b), out);
@@ -1033,7 +1039,7 @@ export function studyPlus(x) {
     const courses = x.db().courses;
     x.root.append(back({ at: "home" }), el("h2", {}, L("🗓 מערכת שעות", "🗓 Timetable")));
     const days = [0, 1, 2, 3, 4, 5].filter((d) => classesOn(t, d).length);
-    x.root.append(section("", ...(days.length ? days.map((d) => el("div", {}, el("b", {}, L(`יום ${DAYS[d][0]}`, DAYS[d][1])),
+    x.root.append(section("", ...(days.length ? days.map((d) => el("div", {}, el("b", {}, L(`יום ${DAYS[d][0]}`, DAYS[d][1]), d === new Date().getDay() ? L(" · היום", " · today") : ""),
       ...classesOn(t, d).map((s) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, `${s.start}–${s.end} · ${courseName(s.courseId) || L("קורס שנמחק", "A deleted course")}${s.room ? ` · ${s.room}` : ""}`),
         el("button", { type: "button", "aria-label": L("להסיר", "Remove"), onclick: () => { t.slots = t.slots.filter((y) => y.id !== s.id); if (saveTable(t)) x.draw(); } }, "✕"))))) : [el("p", { class: "muted" }, L("עוד אין שיעורים. אפשר להוסיף ידנית או מצילום של המערכת.", "No classes yet. Add them by hand or from a photo of your schedule."))])));
     if (courses.length) {
