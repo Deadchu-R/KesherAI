@@ -62,6 +62,15 @@ export function StudyVideoLecture({ base, lecture, onLecture }: { base: string; 
   };
   const pause = () => (video.current ? video.current.pause() : yt("pauseVideo"));
   const current = chapters.findIndex((c) => now >= c.start && now < c.end);
+  // Near the end (95% of the last chapter): watched, once, for a daily goal of videos.
+  const counted = useRef(false);
+  useEffect(() => {
+    const end = chapters.at(-1)?.end ?? 0;
+    if (!counted.current && end > 60 && now >= end * 0.95) {
+      counted.current = true;
+      void api("/api/study/activity/video", { method: "POST" }).catch(() => undefined);
+    }
+  }, [now, chapters]);
   // A chapter's end with a question not answered yet: pause and ask.
   useEffect(() => {
     if (asking !== null) return;

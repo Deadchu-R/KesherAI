@@ -32,6 +32,8 @@ export interface Note {
   resolved?: string;
   /** "Send a test": the phone shows it even while its app is open on screen (a finished-work note stays quiet then). */
   test?: boolean;
+  /** Only on this computer: not to the phone (the app or ntfy), e.g. a study reminder with phone reminders off. */
+  computerOnly?: boolean;
 }
 
 /** How long an Approve / Deny button works. */
@@ -113,11 +115,11 @@ export class Notifier {
       jobs.push(Promise.resolve(this.opts.desktop(n)).then((shown) => shown && channels.push("desktop"), () => undefined));
     }
     // The phone app first: when it got the note, ntfy is not sent too (one notification, not two).
-    const inApp = this.opts.app ? await this.opts.app.deliver(phoneMessage(n)).catch(() => false) : false;
+    const inApp = this.opts.app && !n.computerOnly ? await this.opts.app.deliver(phoneMessage(n)).catch(() => false) : false;
     if (inApp) channels.push("app");
     // ntfy only when it is on, and only when the phone app did not get the note (a test follows the same rule:
     // it used to go through ntfy even with ntfy off, which looked as if the app's own notifications did not work).
-    if (s.ntfy.enabled && s.ntfy.topic && !inApp) {
+    if (s.ntfy.enabled && s.ntfy.topic && !inApp && !n.computerOnly) {
       const base = this.opts.publicUrl?.();
       const headers: Record<string, string> = { Title: ascii(n.title), Priority: String(n.priority ?? 3) };
       if (n.tags?.length) headers.Tags = n.tags.join(",");

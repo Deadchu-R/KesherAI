@@ -1155,6 +1155,94 @@ export function studyStreak(days: Set<string>, now = Date.now()): { days: number
   return { days: n, today, shield };
 }
 
+/** What a daily goal can count (Roee, 2026-11-17: minutes, lectures, videos, scripts…). */
+export type GoalKind = "minutes" | "cards" | "lectures" | "videos" | "quizzes" | "summaries";
+export const GOAL_KINDS: GoalKind[] = ["minutes", "cards", "lectures", "videos", "quizzes", "summaries"];
+
+/**
+ * Her daily goal (design DailyGoal, like Duolingo's). Off until she turns it on in Settings → Study; then any mix of
+ * targets a day, a reminder time, and whether the reminder also goes to the phone.
+ */
+export interface StudyGoal {
+  on: boolean;
+  /** How many of each a day; a missing or 0 kind is not part of the goal. */
+  targets: Partial<Record<GoalKind, number>>;
+  /** "HH:MM" on this computer's clock, or absent for no reminder. */
+  remind?: string;
+  /** The reminder also goes to the phone. */
+  phone?: boolean;
+}
+
+/** Off until she turns it on. */
+export const GOAL_DEFAULTS: StudyGoal = { on: false, targets: { minutes: 30 } };
+
+/** Something she did that a goal can count (kept by Study): a lecture added, a video watched, a quiz done, a summary. */
+export interface StudyActivity { t: number; kind: Exclude<GoalKind, "minutes" | "cards"> }
+
+/** How much of each kind she did on each day (dayKey → counts). */
+export function goalCounts(courses: StudyCourseData[], activity: StudyActivity[]): Map<string, Record<GoalKind, number>> {
+  const days = new Map<string, Record<GoalKind, number>>();
+  const at = (t: number) => {
+    const k = dayKey(t);
+    let d = days.get(k);
+    if (!d) days.set(k, (d = { minutes: 0, cards: 0, lectures: 0, videos: 0, quizzes: 0, summaries: 0 }));
+    return d;
+  };
+  for (const c of courses) {
+    for (const f of c.focus ?? []) at(f.t).minutes += f.minutes;
+    for (const r of c.reviews) at(r.t).cards++;
+  }
+  for (const a of activity) at(a.t)[a.kind]++;
+  return days;
+}
+
+/** Whether a day's counts reach every target of the goal. */
+export function goalMet(goal: StudyGoal, counts: Record<GoalKind, number> | undefined): boolean {
+  const kinds = GOAL_KINDS.filter((k) => (goal.targets[k] ?? 0) > 0);
+  return kinds.length > 0 && kinds.every((k) => (counts?.[k] ?? 0) >= goal.targets[k]!);
+}
+
+/**
+ * Today against the goal, and the goal streak: days in a row the whole goal was reached, counted back from today (or
+ * from yesterday while today is not reached yet).
+ *
+ * @param courses - Her courses.
+ * @param activity - What she did (lectures, videos, quizzes, summaries).
+ * @param goal - The goal.
+ * @param now - Now.
+ */
+export function goalToday(courses: StudyCourseData[], activity: StudyActivity[], goal: StudyGoal, now = Date.now()): { counts: Record<GoalKind, number>; done: boolean; streak: number } {
+  const days = goalCounts(courses, activity);
+  const counts = days.get(dayKey(now)) ?? { minutes: 0, cards: 0, lectures: 0, videos: 0, quizzes: 0, summaries: 0 };
+  const done = goalMet(goal, counts);
+  let streak = 0;
+  // Noon steps, so a clock change never skips or repeats a day.
+  const noon = new Date(now);
+  noon.setHours(12, 0, 0, 0);
+  for (let i = done ? 0 : 1; i < 3650; i++) {
+    if (!goalMet(goal, days.get(dayKey(noon.getTime() - i * 86_400_000)))) break;
+    streak++;
+  }
+  return { counts, done, streak };
+}
+
+/**
+ * Whether to remind her now: the goal is on, a reminder time is set and has passed today, the goal is not reached,
+ * and no reminder went today yet.
+ *
+ * @param goal - The goal.
+ * @param done - Whether today's goal is reached.
+ * @param lastDay - The day of the last reminder (dayKey), if any.
+ * @param now - Now (local time).
+ */
+export function goalRemindNow(goal: StudyGoal, done: boolean, lastDay: string | undefined, now = new Date()): boolean {
+  if (!goal.on || !goal.remind || done || !GOAL_KINDS.some((k) => (goal.targets[k] ?? 0) > 0)) return false;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(goal.remind);
+  if (!m) return false;
+  if (lastDay === dayKey(now.getTime())) return false;
+  return now.getHours() * 60 + now.getMinutes() >= Number(m[1]) * 60 + Number(m[2]);
+}
+
 /**
  * Minutes focused on each of the last 7 days (oldest first), across all courses.
  *

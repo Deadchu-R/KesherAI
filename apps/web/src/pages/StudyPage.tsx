@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMatch } from "../StudyMatch";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
+import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -120,6 +121,7 @@ function StudyHome() {
       <h1>{L("לימודים", "Study")}</h1>
       {!!courses?.length && <StudySearch />}
       {!!courses?.length && <NextStep />}
+      {!!courses?.length && <GoalCard />}
       {!!courses?.length && <FocusCard courses={courses} />}
       {!!courses?.length && <section className="study-today">
         <h2>{L("להיום", "Today")}</h2>
@@ -263,6 +265,50 @@ const readRunning = (): Running | null => {
     return null;
   }
 };
+
+/**
+ * Today's goal (design DailyGoal): only when she turned it on in Settings → Study. A ring per part of the goal, the
+ * days in a row she reached it, and when the reminder comes.
+ */
+function GoalCard() {
+  const [p, setP] = useState<{ goal: StudyGoal; today: { counts: Record<GoalKind, number>; done: boolean; streak: number } } | null>(null);
+  useEffect(() => {
+    const load = () => void api<NonNullable<typeof p>>("/api/study/progress").then(setP, () => undefined);
+    load();
+    const t = window.setInterval(load, 60_000);
+    addEventListener("focus", load);
+    return () => {
+      window.clearInterval(t);
+      removeEventListener("focus", load);
+    };
+  }, []);
+  if (!p?.goal.on) return null;
+  const kinds = GOAL_KINDS.filter((k) => (p.goal.targets[k] ?? 0) > 0);
+  if (!kinds.length) return null;
+  const left = kinds.filter((k) => p.today.counts[k] < p.goal.targets[k]!);
+  return (
+    <section className="card study-goal" aria-label={L("היעד של היום", "Today's goal")}>
+      <div className="goal-rings">
+        {kinds.map((k) => {
+          const target = p.goal.targets[k]!;
+          const n = p.today.counts[k];
+          return (
+            <div key={k} className={`goal-ring${n >= target ? " done" : ""}`} style={{ ["--p" as string]: String(Math.min(1, n / target)) }} title={L(GOAL_NAMES[k][0], GOAL_NAMES[k][1])}>
+              <b dir="ltr">{n >= target ? `✓ ${n}` : `${n}/${target}`}</b>
+              <small>{L(GOAL_NAMES[k][0], GOAL_NAMES[k][1])}</small>
+            </div>
+          );
+        })}
+      </div>
+      <div className="study-goal-text">
+        <b>🎯 {L("היעד של היום", "Today's goal")}</b>
+        <span className="small">{p.today.done ? L("הושלם! 🎉", "Done! 🎉") : L(`נשאר: ${left.map((k) => `${p.goal.targets[k]! - p.today.counts[k]} ${GOAL_NAMES[k][0]}`).join(", ")}`, `Left: ${left.map((k) => `${p.goal.targets[k]! - p.today.counts[k]} ${GOAL_NAMES[k][1].toLowerCase()}`).join(", ")}`)}</span>
+        <span className="muted small">🔥 {p.today.streak ? L(`${p.today.streak} ימים ברצף ביעד`, `${p.today.streak} days in a row`) : L("היום הראשון של הרצף", "Day one of the streak")}{p.goal.remind ? L(` · תזכורת ב-${p.goal.remind} אם עוד לא`, ` · reminder at ${p.goal.remind} if not yet`) : ""}</span>
+        <a href="#/settings/study" className="small">⚙ {L("לשנות יעד", "Change the goal")}</a>
+      </div>
+    </section>
+  );
+}
 
 /**
  * Focus timer with a study streak (Pomodoro 25 or 50 minutes, or her own length), tied to a course. A day counts

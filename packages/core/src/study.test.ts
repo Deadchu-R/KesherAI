@@ -205,3 +205,27 @@ test("a web page saved to a course: a new lecture with its address, or added to 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("the daily goal: off by default, counts lectures and quizzes, and reminds once (computer only unless the phone is on)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-"));
+  try {
+    const st = new Study(dir, fake);
+    assert.equal((await st.goal()).on, false);
+    await st.setGoal({ on: true, targets: { lectures: 1, minutes: 0 }, remind: "00:00" });
+    const sent: Array<[string, boolean]> = [];
+    const send = async (title: string, _b: string, _p: string, phone: boolean) => void sent.push([title, phone]);
+    const c = await st.addCourse("פרמקולוגיה");
+    assert.equal(await st.remindIfDue(send), true);
+    assert.equal(await st.remindIfDue(send), false, "once a day");
+    assert.equal(sent[0]![1], false);
+    assert.match(sent[0]![0], /עוד 1 הרצאות/);
+    await st.addLecture(c.id, { title: "x", text: "y" });
+    await new Promise((r) => setTimeout(r, 50));
+    const p = await st.progress();
+    assert.equal(p.today.counts.lectures, 1);
+    assert.equal(p.today.done, true);
+    assert.equal(p.today.streak, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -196,15 +196,106 @@ export class Study {
     return studyNext(all, now) ?? null;
   }
 
+  /** Her daily goal (design DailyGoal): off until she turns it on. */
+  async goal(): Promise<StudyGoal & { lastReminded?: string }> {
+    const j = await readFile(join(this.dir, "_goal.json"), "utf8").then((t) => JSON.parse(t) as Partial<StudyGoal & { lastReminded: string }>, () => ({}) as Partial<StudyGoal & { lastReminded: string }>);
+    const targets: StudyGoal["targets"] = {};
+    const src = j.targets && typeof j.targets === "object" ? j.targets : GOAL_DEFAULTS.targets;
+    for (const k of GOAL_KINDS) {
+      const v = Math.max(0, Math.min(k === "cards" ? 2000 : k === "minutes" ? 600 : 50, Math.round(Number((src as Record<string, unknown>)[k]) || 0)));
+      if (v) targets[k] = v;
+    }
+    return {
+      on: j.on === true,
+      targets,
+      ...(typeof j.remind === "string" && /^\d{1,2}:\d{2}$/.test(j.remind) ? { remind: j.remind } : {}),
+      ...(j.phone === true ? { phone: true } : {}),
+      ...(typeof j.lastReminded === "string" ? { lastReminded: j.lastReminded } : {}),
+    };
+  }
+
+  /** Changes the goal (any part); a reminder time of "" turns the reminder off. */
+  async setGoal(change: Partial<{ on: boolean; targets: Partial<Record<GoalKind, number>>; remind: string; phone: boolean }>, lastReminded?: string): Promise<StudyGoal> {
+    const cur = await this.goal();
+    const remind = change.remind !== undefined ? (/^\d{1,2}:\d{2}$/.test(change.remind) ? change.remind : undefined) : cur.remind;
+    const next = {
+      on: typeof change.on === "boolean" ? change.on : cur.on,
+      targets: change.targets && typeof change.targets === "object" ? { ...cur.targets, ...change.targets } : cur.targets,
+      ...(remind ? { remind } : {}),
+      ...((typeof change.phone === "boolean" ? change.phone : cur.phone) ? { phone: true } : {}),
+      ...(lastReminded ?? cur.lastReminded ? { lastReminded: lastReminded ?? cur.lastReminded } : {}),
+    };
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(join(this.dir, "_goal.json"), JSON.stringify(next));
+    const { lastReminded: _l, ...goal } = await this.goal();
+    return goal;
+  }
+
+  /** What she did that a goal counts (a lecture added, a video watched, a quiz done, a summary), newest last. */
+  async activity(): Promise<StudyActivity[]> {
+    const j = await readFile(join(this.dir, "_activity.json"), "utf8").then((t) => JSON.parse(t) as unknown, () => []);
+    return Array.isArray(j) ? (j as StudyActivity[]).filter((a) => a && typeof a.t === "number" && ["lectures", "videos", "quizzes", "summaries"].includes(a.kind)) : [];
+  }
+
+  /** Notes one thing she did (the last 20,000 are kept: years of study). */
+  async logActivity(kind: StudyActivity["kind"], t = Date.now()): Promise<void> {
+    // One write at a time, so two at once never lose one.
+    const run = this.activityChain.then(async () => {
+      const all = await this.activity();
+      all.push({ t, kind });
+      await mkdir(this.dir, { recursive: true });
+      await writeFile(join(this.dir, "_activity.json"), JSON.stringify(all.slice(-20_000)));
+    });
+    this.activityChain = run.catch(() => undefined);
+    return run;
+  }
+  private activityChain: Promise<unknown> = Promise.resolve();
+
+  /** All her courses' data (for the streak, the goal and the reminder). */
+  private async allData(): Promise<CourseData[]> {
+    const all: CourseData[] = [];
+    for (const c of await this.list()) {
+      const d = await this.get(c.id).catch(() => undefined);
+      if (d) all.push(d);
+    }
+    return all;
+  }
+
+  /**
+   * The daily reminder (called every minute): when it is time and today's goal is not reached, a note with how much is
+   * left and the one next thing to study. At most once a day.
+   *
+   * @param send - Sends the note.
+   * @param now - Now.
+   */
+  async remindIfDue(send: (title: string, body: string, path: string, phone: boolean) => Promise<unknown>, now = new Date()): Promise<boolean> {
+    const goal = await this.goal();
+    if (!goal.on || !goal.remind) return false;
+    const all = await this.allData();
+    const t = goalToday(all, await this.activity(), goal, now.getTime());
+    if (!goalRemindNow(goal, t.done, goal.lastReminded, now)) return false;
+    await this.setGoal({}, dayKey(now.getTime()));
+    const he = all.length === 0 || all.some((d) => /[\u0590-\u05FF]/.test(d.course.name));
+    const names: Record<GoalKind, [string, string]> = { minutes: ["דקות", "min"], cards: ["כרטיסיות", "cards"], lectures: ["הרצאות", "lectures"], videos: ["סרטונים", "videos"], quizzes: ["בחנים", "quizzes"], summaries: ["סיכומים", "summaries"] };
+    const left = GOAL_KINDS.filter((k) => (goal.targets[k] ?? 0) > t.counts[k]).map((k) => `${goal.targets[k]! - t.counts[k]} ${names[k][he ? 0 : 1]}`).join(", ");
+    const next = studyNext(all, now.getTime());
+    const streak = t.streak ? (he ? ` · רצף של ${t.streak} ימים` : ` · ${t.streak}-day streak`) : "";
+    const title = he ? `🎯 עוד ${left} ליעד של היום${streak}` : `🎯 ${left} left for today's goal${streak}`;
+    const body = next ? (he ? `הבא: ${next.what ?? next.course} (${next.course})` : `Next: ${next.what ?? next.course} (${next.course})`) : he ? "פתחי את הלימודים" : "Open Study";
+    await send(title, body, next ? `#/study/${next.courseId}${next.lectureId ? `/l/${next.lectureId}` : ""}` : "#/study", goal.phone === true);
+    return true;
+  }
+
   /** Her study streak and this week's focus minutes, across all her courses. */
-  async progress(now = Date.now()): Promise<{ streak: { days: number; today: boolean; shield: boolean }; week: Array<{ day: string; minutes: number }> }> {
+  async progress(now = Date.now()): Promise<{ streak: { days: number; today: boolean; shield: boolean }; week: Array<{ day: string; minutes: number }>; goal: StudyGoal; today: ReturnType<typeof goalToday> }> {
     await mkdir(this.dir, { recursive: true });
     const all: CourseData[] = [];
     for (const n of (await readdir(this.dir)).filter((x) => x.endsWith(".json"))) {
       const d = await this.get(n.slice(0, -5)).catch(() => undefined);
       if (d) all.push(d);
     }
-    return { streak: studyStreak(studyDays(all), now), week: focusWeek(all, now) };
+    const { lastReminded: _l, ...goal } = await this.goal();
+    return { streak: studyStreak(studyDays(all), now), week: focusWeek(all, now), goal, today: goalToday(all, await this.activity(), goal, now) };
   }
 
   /**
@@ -450,6 +541,7 @@ export class Study {
     if (!text.trim()) throw Object.assign(new Error("The lecture has no text."), { statusCode: 400 });
     const lecture: StudyLecture = { id: randomUUID(), title: (p.title ?? "").trim().slice(0, 200) || `${d.lectures.length + 1}`, date: /^\d{4}-\d{2}-\d{2}$/.test(p.date ?? "") ? p.date! : new Date().toISOString().slice(0, 10), text, ...(p.youtube && /^[\w-]{11}$/.test(p.youtube) ? { youtube: p.youtube } : {}) };
     d.lectures.push(lecture);
+    void this.logActivity("lectures").catch(() => undefined);
     if (!d.course.fieldChosen) {
       const guess = detectField(d.course.name, d.lectures.map((x) => `${x.title} ${x.text.slice(0, 3000)}`).join(" "));
       if (guess) d.course.field = guess;
@@ -785,6 +877,7 @@ export class Study {
     const picture = String(j?.picture ?? "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, 80);
     if (picture) l.picture = picture;
     await this.save(d);
+    await this.logActivity("summaries").catch(() => undefined);
     return l;
   }
 
@@ -1137,6 +1230,7 @@ export class Study {
     fz.answers = z.questions.map(() => -1);
     fz.score = marks.reduce((a, b) => a + b, 0);
     await this.save(fresh);
+    await this.logActivity("quizzes").catch(() => undefined);
     return fz;
   }
 
@@ -1148,6 +1242,7 @@ export class Study {
     z.answers = z.questions.map((_, i) => (Number.isInteger(answers?.[i]) ? answers[i]! : -1));
     z.score = z.questions.filter((q, i) => z.answers![i] === q.answer).length;
     await this.save(d);
+    await this.logActivity("quizzes").catch(() => undefined);
     return z;
   }
 }

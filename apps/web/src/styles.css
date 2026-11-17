@@ -3151,3 +3151,17 @@ html.handheld .palette-list button { min-height: 44px; }
 @keyframes match-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 @media (prefers-reduced-motion: reduce) { .study-match-tile.bad { animation: none; } }
 .study-match-done { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px; font-size: 18px; }
+/* Daily goal (design DailyGoal). */
+.study-goal-settings { display: flex; flex-direction: column; gap: 10px; }
+.goal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.goal-row > span:first-child { min-width: 150px; }
+.goal-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.goal-opts button { padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; }
+.goal-opts button.on { border-color: var(--accent); color: var(--accent); }
+.study-goal { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.goal-rings { display: flex; flex-wrap: wrap; gap: 10px; }
+.goal-ring { --p: 0; width: 84px; height: 84px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(closest-side, var(--panel, #1a1a1d) 82%, transparent 83%), conic-gradient(var(--accent) calc(var(--p) * 360deg), var(--border, #2a2a30) 0); text-align: center; }
+.goal-ring.done { background: radial-gradient(closest-side, var(--panel, #1a1a1d) 82%, transparent 83%), conic-gradient(#7fd8a8 360deg, #7fd8a8 0); }
+.goal-ring b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.goal-ring small { font-size: 11px; color: var(--muted); max-width: 70px; line-height: 1.2; }
+.study-goal-text { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 4px; }

@@ -33,6 +33,8 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
       if (token !== run.current) return;
       if (i >= slides.length) {
         setPlaying(false);
+        // Watched to the end: counts toward a daily goal of videos.
+        if (from === 0) void api("/api/study/activity/video", { method: "POST" }).catch(() => undefined);
         return;
       }
       setAt(i);

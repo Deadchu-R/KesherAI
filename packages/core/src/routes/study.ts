@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { cardsToTsv, examPlan, formatStats, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
+import { cardsToTsv, examPlan, formatStats, GOAL_KINDS, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -29,6 +29,25 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get("/api/study", async () => ({ courses: await st.list() }));
   /** Her study streak and this week's focus minutes. */
   app.get("/api/study/progress", async () => st.progress());
+  /** Her daily goal and reminder (design DailyGoal); off until she turns it on. */
+  app.get("/api/study/goal", async () => {
+    const { lastReminded: _l, ...g } = await st.goal();
+    return g;
+  });
+  app.put<{ Body: { on?: boolean; targets?: Record<string, number>; remind?: string; phone?: boolean } }>("/api/study/goal", async (req) => {
+    const b = req.body ?? {};
+    const targets = b.targets && typeof b.targets === "object" ? Object.fromEntries(Object.entries(b.targets).filter(([k]) => GOAL_KINDS.includes(k as never)).map(([k, v]) => [k, Number(v) || 0])) : undefined;
+    return st.setGoal({ ...(typeof b.on === "boolean" ? { on: b.on } : {}), ...(targets ? { targets } : {}), ...(typeof b.remind === "string" ? { remind: b.remind } : {}), ...(typeof b.phone === "boolean" ? { phone: b.phone } : {}) });
+  });
+  /** A video she watched to the end (a video lecture or a video overview), for the goal. */
+  app.post("/api/study/activity/video", async () => {
+    await st.logActivity("videos");
+    return { ok: true };
+  });
+  // The reminder: looked at every minute; a note at most once a day, only when today's goal is not reached.
+  const remind = setInterval(() => void st.remindIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["dart"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined), 60_000);
+  remind.unref?.();
+  app.addHook("onClose", async () => clearInterval(remind));
   /** "What to study now": one next step (or null without courses). */
   app.get("/api/study/next", async () => ({ next: await st.next() }));
   /** A finished focus-timer session: `{ minutes }`. */
