@@ -95,6 +95,28 @@ export function startPhoneShare(): void {
         location.hash = `#/text/${encodeURIComponent(r.chatId)}/${encodeURIComponent(r.id)}`;
         return;
       }
+      // One picture shared, nothing else: the lens can take it (design ScreenLens), or a chat as before.
+      const pic = !s.text && !s.action && s.files?.length === 1 && /^image\//.test(s.files[0]!.mime) ? s.files[0]! : undefined;
+      if (pic && confirm(L("לפתוח את התמונה בעדשה? (ביטול: צ'אט חדש)", "Open the picture in the lens? (Cancel: a new chat)"))) {
+        try {
+          const { data } = await plugin.read({ path: pic.path });
+          const url = URL.createObjectURL(fromBase64(data, pic.mime));
+          const im = new Image();
+          im.src = url;
+          await im.decode();
+          const c = document.createElement("canvas");
+          const k = Math.min(1, 2560 / Math.max(im.naturalWidth, im.naturalHeight));
+          c.width = Math.round(im.naturalWidth * k);
+          c.height = Math.round(im.naturalHeight * k);
+          c.getContext("2d")!.drawImage(im, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          const r = await api<{ id: string }>("/api/lens/shot", { method: "POST", body: { data: c.toDataURL("image/png").split(",")[1] } });
+          location.hash = `#/lens/${r.id}`;
+        } finally {
+          void plugin.remove({ path: pic.path }).catch(() => undefined);
+        }
+        return;
+      }
       const id = await createConversation({ kind: "chat" });
       if (!id) return;
       if (s.action === "talk") return setOpening(id, { voice: true });
