@@ -12,6 +12,7 @@ import { StudyMock } from "../StudyMock";
 import { StudyLive } from "../StudyLive";
 import { StudyTogether } from "../StudyTogether";
 import { StudyPapers } from "../StudyPapers";
+import { StudyPalace } from "../StudyPalace";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -771,7 +772,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary courseId={id} lectures={info.lectures} />
         : on === "writing" ? <StudyWriting courseId={id} />
-        : on === "game" ? <StudyMatch courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
+        : on === "game" ? <StudyGames courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
         : on === "summary" ? <CourseSummary id={id} info={info} onChange={load} />
         : on === "tools" ? <FieldTools id={id} info={info} onChange={load} />
         : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />
@@ -869,6 +870,34 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
       </form>
     </section>
   );
+}
+
+/** The course's games: matching against the clock, and the memory palace (design MemoryPalace). */
+function StudyGames({ courseId, courseName, terms }: { courseId: string; courseName: string; terms: StudyTerm[] }) {
+  const [game, setGame] = useState<"match" | "palace">("match");
+  return (
+    <>
+      <div className="seg-pills" role="tablist" aria-label={L("משחק", "Game")}>
+        <button type="button" role="tab" aria-selected={game === "match"} className={game === "match" ? "on" : ""} onClick={() => setGame("match")}>🎯 {L("התאמה נגד השעון", "Match against the clock")}</button>
+        <button type="button" role="tab" aria-selected={game === "palace"} className={game === "palace" ? "on" : ""} onClick={() => setGame("palace")}>🏛 {L("ארמון זיכרון", "Memory palace")}</button>
+      </div>
+      {game === "match" ? <StudyMatch courseId={courseId} courseName={courseName} terms={terms} /> : <StudyPalace courseId={courseId} terms={terms} />}
+    </>
+  );
+}
+
+/** "What should I learn from this?" after a quiz (design QuizTalk): a short plan from the questions she missed. */
+function QuizTalk({ courseId, quizId }: { courseId: string; quizId: string }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ask = async () => {
+    setBusy(true);
+    const r = await call(api<{ text: string }>(`/api/study/courses/${courseId}/quiz/${quizId}/advice`, { method: "POST" }));
+    setBusy(false);
+    if (r) setText(r.text);
+  };
+  return text ? <div className="card study-quiz-talk" dir="auto"><b>💬 {L("מה ללמוד מזה", "What to learn from this")}</b><p>{text}</p></div>
+    : <button type="button" disabled={busy} onClick={() => void ask()}>{busy ? L("קורא את הטעויות…", "Reading the mistakes…") : L("💬 מה ללמוד מזה?", "💬 What should I learn from this?")}</button>;
 }
 
 /** The plan toward the exam: the days left, the day's cards, what has nothing to study from yet, the test week. */
@@ -1792,6 +1821,7 @@ function Quiz({ courseId, lectures, pastExams, clinical, mocks, onChange }: { co
           </li>
         ))}
       </ol>
+      {quiz.score < quiz.questions.length && <QuizTalk courseId={courseId} quizId={quiz.id} />}
       <button type="button" className="primary" onClick={() => setQuiz(null)}>{L("בוחן נוסף", "Another quiz")}</button>
     </section>
   );
@@ -1825,6 +1855,7 @@ function Quiz({ courseId, lectures, pastExams, clinical, mocks, onChange }: { co
           </li>
         ))}
       </ol>
+      {quiz.score < quiz.questions.length && <QuizTalk courseId={courseId} quizId={quiz.id} />}
       <button type="button" className="primary" onClick={() => setQuiz(null)}>{L("בוחן נוסף", "Another quiz")}</button>
     </section>
   );

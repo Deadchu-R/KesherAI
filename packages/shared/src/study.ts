@@ -1072,6 +1072,8 @@ export interface StudyCourseData {
   courseSummary?: StudyCourseSummary;
   /** Her sources library: papers and books she saved for this course (design Papers). */
   sources?: StudySource[];
+  /** Her memory palace for this course (design MemoryPalace). */
+  palace?: StudyPalace;
 }
 
 /** The course's growing summary: markdown by topic, and which lectures are already in it. */
@@ -1661,6 +1663,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     quizzes: byId(a.quizzes, b.quizzes, gone, (x, y) => (!x.answers && y.answers ? y : x)).sort((x, y) => x.t - y.t),
     ...(drugs.length ? { drugs } : {}),
     ...(sources.length ? { sources } : {}),
+    ...((a.palace?.t ?? 0) >= (b.palace?.t ?? 0) ? (a.palace ? { palace: a.palace } : {}) : b.palace ? { palace: b.palace } : {}),
     ...(removed.length ? { removed } : {}),
     ...(focus.length ? { focus } : {}),
     ...(pastExams.length ? { pastExams } : {}),
@@ -1895,6 +1898,33 @@ export function checkCalcQuestion<T extends { options: string[]; answer: number;
 /** Study mode: the tutor asks her about her own lectures, waits, then corrects (Socratic, like ChatGPT's study mode). */
 export const STUDY_MODE_PROMPT =
   "You are a tutor quizzing a student on her own lecture passages (given). Do not lecture. Ask ONE short question at a time about the passages, then stop and wait for her answer. When she answers: judge it only by what the passages say (not by general knowledge): if the passages say something else, it is not right, even if it could be true elsewhere. Say plainly whether it is right, give the passages' answer briefly and name the lecture in square brackets, like [Lecture: <title>], then ask the next question: a little harder if she was right, simpler if not. If she asks for help, give a hint as a question before the answer. Write only in her language (the lectures' language when she has not written yet), with no words in other languages or scripts. Never invent numbers, doses or values.";
+
+/** A memory palace (method of loci, design MemoryPalace, students part 29 #6, like Coconote's): her familiar place's spots, each holding a term in a vivid scene. */
+export interface StudyPalace {
+  place: string;
+  items: Array<{ spot: string; term: string; explain: string; scene: string }>;
+  t: number;
+}
+
+/** A familiar place's spots to start from (she changes them). */
+export const PALACE_SPOTS_HE = ["דלת הכניסה", "המסדרון", "הספה בסלון", "הטלוויזיה", "שולחן האוכל", "המקרר", "הכיור במטבח", "המיטה", "הארון", "המקלחת"];
+
+export const PALACE_PROMPT = "You build a memory palace (the method of loci) for a student. For each spot of her familiar place, in the given order, take the term given for it and write ONE short scene (1-2 sentences) that happens at that spot: vivid, concrete, a little absurd or funny, with movement and senses, that clearly encodes the term's meaning (a Hebrew sound-alike for the term's name helps when natural). Use only the meaning given. Write in the terms' language. Answer with JSON only: [{\"spot\":\"…\",\"scene\":\"…\"}] in the same order.";
+
+/** Her memory palace from the page and the model, checked: at most 12 spots, short texts. */
+export function cleanPalace(raw: unknown): StudyPalace | undefined {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const t = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const items = (Array.isArray(o.items) ? o.items : []).slice(0, 12).flatMap((x) => {
+    const y = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    const it = { spot: t(y.spot, 60), term: t(y.term, 120), explain: t(y.explain, 600), scene: t(y.scene, 600) };
+    return it.spot && it.term && it.scene ? [it] : [];
+  });
+  return items.length ? { place: t(o.place, 60), items, t: Number(o.t) || Date.now() } : undefined;
+}
+
+/** "What should I learn from this quiz?": a short plan from the questions she missed (design QuizTalk). */
+export const QUIZ_TALK_PROMPT = "A student finished a quiz. From the questions she missed (her answer, the right one and the lecture), write a short, warm plan in her language: (1) the one or two ideas behind most of the mistakes, in plain words; (2) what to review first, naming the lecture; (3) one next step she can do in ten minutes (e.g. a few cards, re-reading one part, a quiz on that lecture). At most 8 short lines, no headings. Never add facts that are not in what is given.";
 
 /** How "a similar problem to practice" starts, so the tutor and the problem it wrote are recognised (design SimilarProblem). */
 export const SIMILAR_MARK = "🔁";

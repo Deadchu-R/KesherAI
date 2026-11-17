@@ -446,6 +446,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
   /** Where else a term appears in the course's lectures (design WhereTerm). */
   app.get<C & { Querystring: { term?: string; en?: string } }>("/api/study/courses/:id/where", async (req) => ({ places: whereTerm((await st.get(req.params.id)).lectures, String(req.query.term ?? "").slice(0, 100), typeof req.query.en === "string" ? req.query.en.slice(0, 100) : undefined).slice(0, 30) }));
+  /** Her memory palace (design MemoryPalace): the kept one, and building a new one. */
+  app.get<C>("/api/study/courses/:id/palace", async (req) => ({ palace: (await st.get(req.params.id)).palace ?? null }));
+  app.post<C & { Body: { place?: string; spots?: unknown; terms?: unknown } }>("/api/study/courses/:id/palace", { bodyLimit: 64 * 1024 }, async (req) => ({ palace: await st.buildPalace(req.params.id, String(req.body?.place ?? ""), Array.isArray(req.body?.spots) ? req.body.spots.map(String) : [], Array.isArray(req.body?.terms) ? (req.body.terms as Array<{ term: string; explain: string }>) : []) }));
   /** Her sources library (design Papers): the list, find papers (OpenAlex), save, remove, "what the studies say". */
   app.get<C>("/api/study/courses/:id/sources", async (req) => ({ sources: await st.sources(req.params.id) }));
   app.get<C & { Querystring: { q?: string } }>("/api/study/courses/:id/papers", async (req) => ({ papers: await st.findPapers(String(req.query.q ?? "")) }));
@@ -516,6 +519,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   }
   /** Her written answers to an open or case quiz, graded one by one. */
   app.post<{ Params: { id: string; qid: string }; Body: { texts?: string[] } }>("/api/study/courses/:id/quiz/:qid/open-answers", { bodyLimit: 1024 * 1024 }, async (req) => st.answerOpenQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.texts) ? req.body.texts.map((t) => String(t ?? "")).slice(0, 30) : []));
+  app.post<{ Params: { id: string; qid: string } }>("/api/study/courses/:id/quiz/:qid/advice", async (req) => ({ text: await st.quizAdvice(req.params.id, req.params.qid) }));
   app.post<{ Params: { id: string; qid: string }; Body: { answers?: number[] } }>("/api/study/courses/:id/quiz/:qid/answers", async (req) => st.answerQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.answers) ? req.body.answers : []));
 
   app.get<C>("/api/study/courses/:id/progress", async (req) => {

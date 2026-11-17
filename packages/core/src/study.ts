@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -56,7 +56,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const pastExams = arr<StudyPastExam>(d.pastExams, 50).filter((e) => okId(e?.id)).map((e) => ({ id: e.id, title: str(e.title, 200), text: str(e.text, 200_000), t: Number(e.t) || Date.now() }));
   const cs = d.courseSummary as StudyCourseSummary | undefined;
   const courseSummary = cs && typeof cs.text === "string" ? { text: str(cs.text, 120_000), lectureIds: arr<string>(cs.lectureIds, 5000).filter(okId), t: Number(cs.t) || Date.now() } : undefined;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}), ...(cleanSources(d.sources).length ? { sources: cleanSources(d.sources) } : {}) };
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}), ...(cleanSources(d.sources).length ? { sources: cleanSources(d.sources) } : {}), ...(cleanPalace(d.palace) ? { palace: cleanPalace(d.palace)! } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -525,6 +525,24 @@ export class Study {
     else delete d.course.semesterEnd;
     await this.save(d);
     return d.course;
+  }
+
+  /**
+   * Builds her memory palace (design MemoryPalace): each of her spots gets one of the terms (in order) and a vivid
+   * scene from the chat model that encodes its meaning; kept with the course.
+   */
+  async buildPalace(id: string, place: string, spots: string[], terms: Array<{ term: string; explain: string }>, signal?: AbortSignal): Promise<StudyPalace> {
+    const d = await this.get(id);
+    const pairs = spots.map((s) => String(s).replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, 12).flatMap((spot, i) => (terms[i]?.term ? [{ spot, term: String(terms[i].term).slice(0, 120), explain: String(terms[i].explain ?? "").slice(0, 600) }] : []));
+    if (pairs.length < 2) throw Object.assign(new Error("A palace needs at least two spots and two terms."), { statusCode: 400 });
+    const raw = await this.ask(PALACE_PROMPT, pairs.map((p, i) => `${i + 1}. Spot: ${p.spot}\n   Term: ${p.term}\n   Meaning: ${p.explain}`).join("\n"), signal, d.course);
+    const scenes = jsonIn(raw);
+    const list = Array.isArray(scenes) ? scenes : [];
+    const palace = cleanPalace({ place, items: pairs.map((p, i) => ({ ...p, scene: (list[i] as { scene?: unknown } | undefined)?.scene })), t: Date.now() });
+    if (!palace || palace.items.length < pairs.length) throw Object.assign(new Error("The model did not write a scene for every spot. Try again."), { statusCode: 502 });
+    d.palace = palace;
+    await this.save(d);
+    return palace;
   }
 
   /** Her sources library for a course (design Papers). */
@@ -1542,6 +1560,26 @@ export class Study {
     await this.save(fresh);
     await this.logActivity("quizzes").catch(() => undefined);
     return fz;
+  }
+
+  /**
+   * "What should I learn from this?" after a quiz (design QuizTalk, students part 29 #5, like Gemini Notebook's chat on
+   * results): from the questions she missed, their explanations and the lectures they came from, a short plan: what
+   * to review first, where, and one next step. From her material only.
+   */
+  async quizAdvice(id: string, quizId: string, signal?: AbortSignal): Promise<string> {
+    const d = await this.get(id);
+    const z = d.quizzes.find((q) => q.id === quizId);
+    if (!z || z.score === undefined) throw Object.assign(new Error("Finish the quiz first."), { statusCode: 400 });
+    const missed = z.questions.flatMap((q, i) => {
+      const wrong = z.kind ? (z.marks?.[i] ?? 0) < 1 : z.answers?.[i] !== q.answer;
+      if (!wrong) return [];
+      const lecture = d.lectures.find((l) => l.id === q.lectureId)?.title ?? "";
+      const said = z.kind ? z.texts?.[i] : q.options[z.answers?.[i] ?? -1];
+      return [`- ${q.q}\n  Her answer: ${said || "(none)"}\n  Right: ${z.kind ? q.explain : `${q.options[q.answer]}. ${q.explain}`}${lecture ? `\n  Lecture: ${lecture}` : ""}`];
+    });
+    if (!missed.length) return "";
+    return (await this.ask(QUIZ_TALK_PROMPT, `Score: ${z.score} of ${z.questions.length}.\nQuestions she missed:\n${missed.join("\n").slice(0, 20_000)}`, signal, d.course)).trim().slice(0, 4000);
   }
 
   /** Grades her multiple-choice answers by code. */

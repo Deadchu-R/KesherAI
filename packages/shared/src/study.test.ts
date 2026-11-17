@@ -461,3 +461,12 @@ test("whereTerm: every lecture that mentions a term, with its page and minute", 
   assert.equal(w[1]!.spots[0]!.at, 60);
   assert.deepEqual(whereTerm(lectures, "x"), []);
 });
+
+test("memory palace: checked, and kept through a sync by the newer one", async () => {
+  const { cleanPalace, mergeCourseData } = await import("./study.js");
+  assert.equal(cleanPalace({ items: [{ spot: "דלת", term: "", scene: "x" }] }), undefined);
+  const p = cleanPalace({ place: " הבית ", items: [{ spot: "דלת", term: "היפרקלמיה", explain: "אשלגן", scene: "בננות" }], t: 5 });
+  assert.deepEqual(p, { place: "הבית", items: [{ spot: "דלת", term: "היפרקלמיה", explain: "אשלגן", scene: "בננות" }], t: 5 });
+  const base = { course: { id: "c", name: "c", createdAt: 1 }, lectures: [], cards: [], reviews: [], quizzes: [] };
+  assert.equal(mergeCourseData({ ...base, palace: { ...p!, t: 1 } }, { ...base, palace: { ...p!, place: "new", t: 9 } }).palace?.place, "new");
+});
