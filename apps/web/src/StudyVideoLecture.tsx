@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { StudyTimeNotes } from "./StudyTimeNotes";
 import { SpeedSelect, useSpeed } from "./MediaSpeed";
 import type { StudyLecture, VideoChapter } from "@kesher/shared";
 import { api, withToken } from "./api";
@@ -41,7 +42,7 @@ function useYouTube(frame: React.RefObject<HTMLIFrameElement | null>, id: string
  * or one brought from Panopto/Kaltura), its chapters with a short summary each, and a question at the end of each
  * chapter: the video pauses there; a wrong answer offers to go back to the chapter's start.
  */
-export function StudyVideoLecture({ base, lecture, onLecture }: { base: string; lecture: StudyLecture; onLecture: (l: StudyLecture) => void }) {
+export function StudyVideoLecture({ base, lecture, startAt, onLecture }: { base: string; lecture: StudyLecture; startAt?: number; onLecture: (l: StudyLecture) => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [now, setNow] = useState(0);
@@ -107,9 +108,9 @@ export function StudyVideoLecture({ base, lecture, onLecture }: { base: string; 
       </div>
       <div className="vl-stage">
         {lecture.videoFile ? (
-          <video ref={video} src={withToken(`${base}/video-file`)} controls preload="metadata" onLoadedMetadata={(e) => (e.currentTarget.playbackRate = rate)} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+          <video ref={video} src={withToken(`${base}/video-file`)} controls preload="metadata" onLoadedMetadata={(e) => { e.currentTarget.playbackRate = rate; if (startAt !== undefined && e.currentTarget.currentTime < 1) e.currentTarget.currentTime = startAt; }} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
         ) : lecture.youtube ? (
-          <iframe ref={frame} title={lecture.title} src={`https://www.youtube-nocookie.com/embed/${lecture.youtube}?enablejsapi=1&rel=0&origin=${encodeURIComponent(location.origin)}`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+          <iframe ref={frame} title={lecture.title} src={`https://www.youtube-nocookie.com/embed/${lecture.youtube}?enablejsapi=1&rel=0${startAt ? `&start=${startAt}` : ""}&origin=${encodeURIComponent(location.origin)}`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
         ) : null}
         {q && asking !== null && (
           <div className="vl-question">
@@ -132,6 +133,7 @@ export function StudyVideoLecture({ base, lecture, onLecture }: { base: string; 
         )}
       </div>
       <div className="vl-side">
+        <StudyTimeNotes base={base} lecture={lecture} now={now} onSeek={seek} onLecture={onLecture} />
         <b>{L("פרקים", "Chapters")}</b>
         {!chapters.length && (
           <div className="stack">

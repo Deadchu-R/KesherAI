@@ -3490,3 +3490,18 @@ div.slide-list { padding-inline-start: 0; }
 .study-live-opts-list { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 6px; }
 .study-live-opts-list li.right { color: var(--ok, #2e9e6a); font-weight: 700; }
 .study-live-board { margin: 4px 0 0; padding-inline-start: 22px; line-height: 1.8; }
+/* Notes on moments of a recording or video, and the course's "My notes" (design TimeNotes). */
+.study-tnotes { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.study-tnotes-head { justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.study-tnotes-new { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.study-tnotes-new .study-stamp { align-self: flex-start; }
+.study-tnotes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.study-tnotes-list li { display: flex; gap: 8px; align-items: flex-start; padding: 4px 6px; border-radius: 8px; }
+.study-tnotes-list li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.study-tnotes-list li.now { background: color-mix(in srgb, var(--accent, #a5b4ff) 14%, transparent); }
+.study-notes-tab { display: flex; flex-direction: column; gap: 10px; }
+.study-notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.study-notes-list a { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border, #333); color: inherit; text-decoration: none; }
+.study-notes-list a:hover { border-color: var(--accent, #a5b4ff); }
+.study-tnotes-list li > button.ghost { padding: 2px 8px; min-height: 0; }
+.study-notes-text { white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }

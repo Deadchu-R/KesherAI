@@ -1135,6 +1135,19 @@ export class Study {
     await this.save(d);
   }
 
+  /**
+   * Every note she wrote in the course (design TimeNotes): her notes on moments of recordings and videos and her
+   * highlights with a note (newest first), and the notes beside each lecture's summary, each with its lecture.
+   */
+  async notes(id: string): Promise<{ notes: Array<StudyHighlight & { lectureId: string; title: string }>; written: Array<{ lectureId: string; title: string; text: string }> }> {
+    const d = await this.get(id);
+    return {
+      notes: d.lectures.flatMap((l) => (l.highlights ?? []).filter((h) => h.at !== undefined || h.note).map((h) => ({ ...h, lectureId: l.id, title: l.title }))).sort((a, b) => b.t - a.t),
+      // The notes she wrote beside each lecture's summary.
+      written: d.lectures.filter((l) => l.notes?.trim()).map((l) => ({ lectureId: l.id, title: l.title, text: l.notes!.slice(0, 4000) })),
+    };
+  }
+
   /** Saves her highlights in a lecture (the whole list, checked). */
   async setHighlights(id: string, lectureId: string, raw: unknown): Promise<StudyHighlight[]> {
     const d = await this.get(id);

@@ -443,6 +443,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     await st.removeSlides(req.params.id, req.params.lid);
     return { ok: true };
   });
+  /** Her notes across the course (design TimeNotes): time notes on recordings and videos, and noted highlights. */
+  app.get<C>("/api/study/courses/:id/notes", async (req) => st.notes(req.params.id));
   /** Her highlights in a lecture (design ReadHighlights): the whole list. */
   app.put<L & { Body: { highlights?: unknown } }>("/api/study/courses/:id/lectures/:lid/highlights", { bodyLimit: 2 * 1024 * 1024 }, async (req) => ({ highlights: await st.setHighlights(req.params.id, req.params.lid, req.body?.highlights) }));
 

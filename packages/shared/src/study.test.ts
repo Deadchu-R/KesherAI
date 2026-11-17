@@ -431,3 +431,12 @@ test("a video's chapters are checked: in order, inside the video, questions only
   const c = parseChapters({ chapters: [{ start: 5, title: "מבוא", summary: "s", question: { q: "?", options: ["a", "b", "c"], answer: 1, explain: "e" } }, { start: 3, title: "back in time" }, { start: 400, title: "חוסמי בטא", question: { q: "?", options: ["a"], answer: 0 } }, { start: 9999, title: "after the end" }] }, 1000);
   assert.deepEqual(c.map((x) => [x.start, x.end, x.title, !!x.question]), [[0, 400, "מבוא", true], [400, 1000, "חוסמי בטא", false]]);
 });
+
+test("time notes keep a note's moment and find the line heard then", async () => {
+  const { cleanHighlights, lineAt } = await import("./study.js");
+  assert.deepEqual(cleanHighlights([{ id: "a", text: "x", at: 75.6, t: 1 }, { id: "b", text: "y", at: null, t: 1 }, { id: "c", text: "z", at: -3, t: 1 }]).map((h) => h.at), [75, undefined, undefined]);
+  const text = "[0:00] פתיחה\n[1:10] חוסמי בטא\nבלי סימן\n[1:01:05] סוף";
+  assert.equal(lineAt(text, 75), "חוסמי בטא");
+  assert.equal(lineAt(text, 3700), "סוף");
+  assert.equal(lineAt("no marks", 5), "");
+});

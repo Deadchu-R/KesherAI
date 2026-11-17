@@ -10,6 +10,7 @@ import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
 import { StudyLive } from "../StudyLive";
+import { StudyNotesTab, StudyTimeNotes } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
 import { StudyHighlights } from "../StudyHighlights";
@@ -84,7 +85,7 @@ export function StudyPage({ hash }: { hash: string }) {
   if (parts[0] === "labs") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("ערכי מעבדה", "Lab values")}</h1><LabValues /></div>;
   if (parts[0] === "calc") return <div className="page study-page"><BackLink to="#/study" /><h1>{L("חישובי תרופות", "Medication calculations")}</h1><CalcPractice /></div>;
   if (!parts[0]) return <StudyHome />;
-  return <CoursePage key={parts[0]} id={parts[0]} tab={parts[1] ?? "lectures"} lectureId={parts[1] === "l" ? parts[2] : undefined} />;
+  return <CoursePage key={parts[0]} id={parts[0]} tab={parts[1] ?? "lectures"} lectureId={parts[1] === "l" ? parts[2] : undefined} {...(parts[1] === "l" && /^\d+$/.test(parts[3] ?? "") ? { startAt: Number(parts[3]) } : {})} />;
 }
 
 /**
@@ -139,7 +140,7 @@ function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
   return [p, setP];
 }
 /** The course tabs of simple mode; the rest are under "More tools". */
-const SIMPLE_TABS = new Set(["lectures", "review", "quiz", "ask", "game", "progress"]);
+const SIMPLE_TABS = new Set(["lectures", "review", "quiz", "notes", "ask", "game", "progress"]);
 
 function StudyHome() {
   const [courses, setCourses] = useState<CourseRow[] | null>(null);
@@ -634,6 +635,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["summary", ["סיכום הקורס", "Course summary"]],
   ["tools", ["כלים לתחום", "Field tools"]],
   ["quiz", ["בוחן", "Quiz"]],
+  ["notes", ["📝 ההערות שלי", "📝 My notes"]],
   ["ask", ["שאלי את הקורס", "Ask the course"]],
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
@@ -702,7 +704,7 @@ function ModelWait() {
   );
 }
 
-function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId?: string }) {
+function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; lectureId?: string; startAt?: number }) {
   const [info, setInfo] = useState<CourseInfo | null>(null);
   const [prefs] = useStudyPrefs();
   const [allTabs, setAllTabs] = useState(false);
@@ -755,7 +757,8 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         ))}
         {prefs?.simple && <button type="button" className="study-more-tabs" aria-expanded={allTabs} onClick={() => setAllTabs(!allTabs)}>{allTabs ? L("פחות", "Fewer") : `⋯ ${L("עוד כלים", "More tools")}`}</button>}
       </div>
-      {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
+      {lectureId ? <LectureView key={`${lectureId}-${startAt ?? ""}`} courseId={id} lectureId={lectureId} courseField={info.course.field} {...(startAt !== undefined ? { startAt } : {})} onChange={load} />
+        : on === "notes" ? <StudyNotesTab courseId={id} />
         : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} clinical={clinicalField(info.course.field)} mocks={info.mocks ?? []} onChange={load} />
@@ -1258,7 +1261,7 @@ function StampedText({ text, onSeek, now }: { text: string; onSeek: (sec: number
 type RecordingSettings = { keep: boolean; deleteAfter: "never" | "30" | "90" | "semester"; asked?: boolean };
 
 /** The kept recording: a player (the text's minute marks play from there), delete, and the first-time question. */
-function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { courseId: string; lecture: StudyLecture; player: React.RefObject<HTMLAudioElement | null>; onRemoved: () => void; onTime?: (sec: number) => void }) {
+function LectureAudio({ courseId, lecture, player, startAt, onRemoved, onTime }: { courseId: string; lecture: StudyLecture; player: React.RefObject<HTMLAudioElement | null>; startAt?: number; onRemoved: () => void; onTime?: (sec: number) => void }) {
   const [settings, setSettings] = useState<RecordingSettings | null>(null);
   // Listening speed, the same for every player, remembered on this device (0.25×–4×).
   const [rate, setRate] = useSpeed();
@@ -1275,7 +1278,7 @@ function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { course
   const mb = Math.max(1, Math.round((lecture.recording?.bytes ?? 0) / 1024 / 1024));
   return (
     <div className="study-audio">
-      <audio ref={player} controls preload="metadata" src={src} onLoadedMetadata={(e) => (e.currentTarget.playbackRate = rate)} onTimeUpdate={(e) => onTime?.(e.currentTarget.currentTime)} />
+      <audio ref={player} controls preload="metadata" src={src} onLoadedMetadata={(e) => { e.currentTarget.playbackRate = rate; if (startAt !== undefined && e.currentTarget.currentTime < 1) e.currentTarget.currentTime = startAt; }} onTimeUpdate={(e) => onTime?.(e.currentTarget.currentTime)} />
       <div className="row study-audio-tools" dir="ltr">
         <button type="button" className="ghost small" onClick={() => skip(-10)} aria-label={L("10 שניות אחורה", "Back 10 seconds")}>↺ 10</button>
         <button type="button" className="ghost small" onClick={() => skip(10)} aria-label={L("10 שניות קדימה", "Forward 10 seconds")}>10 ↻</button>
@@ -1306,7 +1309,7 @@ function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { course
   );
 }
 
-function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
+function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { courseId: string; lectureId: string; courseField?: string; startAt?: number; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
   const [view, setView] = useState<"watch" | "summary" | "terms" | "diagram" | "video" | "teach" | "read" | "sheet" | "slides" | "text">("summary");
   // A video lecture opens on its video.
@@ -1382,7 +1385,8 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
     <article className="study-lecture card">
       <h2 dir="auto">{l.title}</h2>
       {l.web && <p className="muted small">🔗 {L("נשמר מ:", "Saved from:")} <a href={l.web} target="_blank" rel="noopener noreferrer" dir="ltr">{l.web.replace(/^https?:\/\//, "").slice(0, 80)}</a></p>}
-      {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} onTime={(t) => setHeard(Math.floor(t))} />}
+      {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} {...(startAt !== undefined && !(l.youtube || l.videoFile) ? { startAt } : {})} onRemoved={() => setL({ ...l, recording: undefined })} onTime={(t) => setHeard(Math.floor(t))} />}
+      {l.recording && !(l.youtube || l.videoFile) && <StudyTimeNotes base={base} lecture={l} now={heard ?? 0} onLecture={setL} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
         {(["watch", "summary", "terms", "diagram", "sheet", "slides", "video", "teach", "read", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
@@ -1391,7 +1395,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
         ))}
       </div>
       <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
-        {view === "watch" ? <StudyVideoLecture base={base} lecture={l} onLecture={setL} />
+        {view === "watch" ? <StudyVideoLecture base={base} lecture={l} {...(startAt !== undefined ? { startAt } : {})} onLecture={setL} />
           : view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
           : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
           : view === "slides" ? <StudySlides base={base} slides={l.slides ?? []} heard={heard} hasRecording={!!l.recording} onSlides={(sl) => setL({ ...l, slides: sl })} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} />

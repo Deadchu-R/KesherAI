@@ -77,6 +77,8 @@ export interface StudyHighlight {
   /** The page or slide (from the text's "— N —" marks), when known. */
   page?: number;
   note?: string;
+  /** A note on a moment of the recording or video (seconds): her time-stamped notes (design TimeNotes). */
+  at?: number;
   t: number;
   /** Made into cards already. */
   carded?: boolean;
@@ -90,10 +92,27 @@ export function cleanHighlights(raw: unknown): StudyHighlight[] {
     if (!text) return [];
     const page = Number(x.page);
     const note = typeof x.note === "string" ? x.note.trim().slice(0, 2000) : "";
-    return [{ id: typeof x.id === "string" && /^[\w-]{1,40}$/.test(x.id) ? x.id : `h${i}${Date.now().toString(36)}`, text, ...(Number.isInteger(page) && page > 0 && page < 100_000 ? { page } : {}), ...(note ? { note } : {}), t: Number(x.t) || Date.now(), ...(x.carded === true ? { carded: true } : {}) }];
+    const at = Number(x.at);
+    return [{ id: typeof x.id === "string" && /^[\w-]{1,40}$/.test(x.id) ? x.id : `h${i}${Date.now().toString(36)}`, text, ...(Number.isInteger(page) && page > 0 && page < 100_000 ? { page } : {}), ...(note ? { note } : {}), ...(typeof x.at === "number" && Number.isFinite(at) && at >= 0 && at < 86_400 ? { at: Math.floor(at) } : {}), t: Number(x.t) || Date.now(), ...(x.carded === true ? { carded: true } : {}) }];
   });
 }
 
+
+/**
+ * The transcript line heard at a moment (the last "[m:ss]" or "[h:mm:ss]" mark at or before it), for a time note's
+ * context; empty when the text has no marks.
+ */
+export function lineAt(text: string, sec: number): string {
+  let best = "";
+  for (const line of text.split("\n")) {
+    const m = /^\s*\[(?:(\d+):)?(\d{1,2}):(\d{2})\]\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const t = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+    if (t > sec) break;
+    best = m[4]!.trim();
+  }
+  return best.slice(0, 600);
+}
 
 /** A flashcard. `fsrs` is the scheduler's state (ts-fsrs Card, dates as ISO strings). */
 export interface StudyCard {
