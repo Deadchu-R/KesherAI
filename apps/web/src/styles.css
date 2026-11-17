@@ -3303,3 +3303,24 @@ div.slide-list { padding-inline-start: 0; }
 .slides-present-count { position: fixed; bottom: 10px; inset-inline-end: 16px; color: #fff8; font-size: 13px; }
 .slides-present-notes { position: fixed; bottom: 0; inset-inline: 0; margin: 0; padding: 12px 20px; background: #000c; color: #fff; font-size: 15px; }
 .slides-thumbs .slide { width: 140px; flex: none; }
+/* KesherAI's own documents (design DocEditor). */
+.docs-editor { display: flex; flex-direction: column; gap: 10px; }
+.docs-title { font-weight: 700; font-size: 18px; border: 1px solid transparent; background: transparent; min-width: 160px; flex: 1 1 200px; }
+.docs-title:hover, .docs-title:focus { border-color: var(--border-strong); }
+.docs-page { background: #fbfaf7; color: #1d1d22; border-radius: 10px; padding: 32px 40px; max-width: 820px; width: 100%; box-sizing: border-box; margin: 0 auto; line-height: 1.8; min-height: 60vh; }
+@media (max-width: 600px) { .docs-page { padding: 18px 16px; } }
+.docs-page .msg-text { color: inherit; }
+.docs-page a { color: #3d5afe; }
+.docs-block { border-radius: 6px; padding: 2px 6px; margin: 0 -6px; cursor: text; }
+.docs-block:hover { background: #1d1d2210; }
+.docs-block-edit { width: 100%; font: inherit; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 14px; background: #fff; color: #1d1d22; border: 1px solid #3d5afe; border-radius: 6px; padding: 6px 8px; box-sizing: border-box; }
+.docs-add { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.docs-add button { color: #5b5e6b; border: 1px dashed #b9bcc8; }
+.docs-empty { cursor: text; }
+.docs-write { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.docs-write button, .docs-add button { color: #3a3d4a; background: #eceaf3; border: 1px solid #d6d4e0; }
+.docs-add button { border-style: dashed; }
+.docs-page blockquote { background: transparent; border-inline-start: 3px solid #3d5afe; color: #4a4d5a; }
+.docs-page th, .docs-page td { background: transparent; color: inherit; border-color: #c9c7d2; }
+.docs-page th { background: #eceaf3; }
+.docs-page pre, .docs-page code { background: #efeef3; color: #1d1d22; }

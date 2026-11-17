@@ -74,11 +74,11 @@ const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default:
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
 const StremioPage = lazy(() => import("./pages/StremioPage").then((m) => ({ default: m.StremioPage })));
+const DocsPage = lazy(() => import("./pages/DocsPage").then((m) => ({ default: m.DocsPage })));
 const SlidesPage = lazy(() => import("./pages/SlidesPage").then((m) => ({ default: m.SlidesPage })));
 const IdeasPage = lazy(() => import("./pages/IdeasPage").then((m) => ({ default: m.IdeasPage })));
 const ChatReportsPage = lazy(() => import("./pages/ChatReportsPage").then((m) => ({ default: m.ChatReportsPage })));
 const GodotPage = lazy(() => import("./pages/GodotPage").then((m) => ({ default: m.GodotPage })));
-const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
@@ -300,11 +300,13 @@ export function App() {
   else if (hash === "#/stremio") page = <StremioPage />;
   else if (hash === "#/chat-reports") page = <ChatReportsPage />;
   else if (hash === "#/ideas") page = <IdeasPage />;
+  else if (hash === "#/docs" || hash.startsWith("#/docs/")) page = <DocsPage key={hash} {...(hash.length > 7 ? { id: hash.slice(7) } : {})} />;
   else if (hash === "#/slides" || hash.startsWith("#/slides/")) page = <SlidesPage key={hash} {...(hash.length > 9 ? { id: hash.slice(9) } : {})} />;
   else if (hash === "#/training") page = <TrainingPage />;
   else if (hash === "#/parts" || hash === "#/connections" || hash === "#/plugins") page = <CustomizePage hash={hash} />;
   else if (hash === "#/apps") page = <AppsPage />;
-  else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <PagesPage {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
+  // The older "Pages" are documents now (same ids): old links and pins open them.
+  else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <DocsPage key={hash} {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;
