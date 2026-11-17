@@ -192,9 +192,21 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       busyBtn.textContent = L("עובד… (בטלפון זה לוקח זמן)", "Working… (this takes a while on a phone)");
     }
     try {
-      const r = await ask(msgs);
-      if (r === undefined) alert(L("קודם בחרי מודל בלשונית צ'אט, ואז חזרי לכאן.", "First pick a model in the Chat tab, then come back."));
-      return r;
+      // A phone model's context is short: on "too long" the last message (the material) is cut to a half, then a
+      // quarter, keeping its start, as the computer's Study does.
+      let list = msgs;
+      for (let tries = 0; ; tries++) {
+        try {
+          const r = await ask(list);
+          if (r === undefined) alert(L("קודם בחרי מודל בלשונית צ'אט, ואז חזרי לכאן.", "First pick a model in the Chat tab, then come back."));
+          return r;
+        } catch (err) {
+          const last = list[list.length - 1];
+          const text = typeof last?.content === "string" ? last.content : "";
+          if (tries >= 2 || text.length < 1500 || !/context|too long|exceed|max(imum)? ?(num(ber)? of )?tokens|n_ctx/i.test(String(err?.message || err))) throw err;
+          list = [...list.slice(0, -1), { ...last, content: `${text.slice(0, Math.floor(text.length / 2))}\n\n[The rest was cut to fit the model's memory.]` }];
+        }
+      }
     } catch (e) {
       alert(String(e?.message || e));
       return undefined;
