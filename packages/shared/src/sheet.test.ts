@@ -42,5 +42,6 @@ test("CSV in and out, and clean cells", () => {
   const cells = csvCells('קורס,ציון\n"פיזיולוגיה, א",88\nסטטיסטיקה,"7""8"');
   assert.deepEqual(cells, { A1: "קורס", B1: "ציון", A2: "פיזיולוגיה, א", B2: "88", A3: "סטטיסטיקה", B3: '7"8' });
   assert.equal(sheetCsv({ cells: { ...cells, C2: "=B2*2" }, cols: 3, rows: 3 }), 'קורס,ציון,\n"פיזיולוגיה, א",88,176\nסטטיסטיקה,"7""8",');
+  assert.equal(sheetCsv({ cells: { A1: '="=cmd|calc"', B1: "-5", C1: "@x" }, cols: 3, rows: 1 }), "'=cmd|calc,-5,'@x");
   assert.deepEqual(cleanCells({ a1: 5, "../x": "1", B2: "", ZZ1: "x", C3: { x: 1 } }), { A1: "5" });
 });

@@ -298,8 +298,10 @@ export function sheetCsv(s: Pick<Sheet, "cells" | "cols" | "rows">): string {
     if (p) { lastR = Math.max(lastR, p.r); lastC = Math.max(lastC, p.c); }
   }
   const q = (x: string) => (/[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
+  // Text that Excel would read as a formula (CSV injection) gets a leading apostrophe; numbers stay numbers.
+  const safe = (v: Val | undefined) => { const t = showValue(v); return typeof v === "string" && /^[=+\-@\t\r]/.test(t) ? `'${t}` : t; };
   const lines: string[] = [];
-  for (let r = 0; r <= lastR; r++) lines.push(Array.from({ length: lastC + 1 }, (_, c) => q(showValue(vals[addr(c, r)]))).join(","));
+  for (let r = 0; r <= lastR; r++) lines.push(Array.from({ length: lastC + 1 }, (_, c) => q(safe(vals[addr(c, r)]))).join(","));
   return lines.join("\n");
 }
 
