@@ -64,6 +64,7 @@ import { studyRoutes } from "../routes/study.js";
 import { moodleRoutes } from "../routes/moodle.js";
 import { webImageRoutes } from "../routes/web-image.js";
 import { studyPlanRoutes } from "../routes/study-plans.js";
+import { ideasRoutes } from "../routes/ideas.js";
 import { canvasRoutes } from "../routes/canvas.js";
 import { shareRoutes } from "../routes/shares.js";
 import { ShareStore } from "../shares.js";
@@ -125,6 +126,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await moodleRoutes(app, services);
   await webImageRoutes(app);
   await studyPlanRoutes(app, services);
+  await ideasRoutes(app, services);
   await canvasRoutes(app, canvases, (convId) => library.summary(convId)?.title);
   // Share links: a chat as a read-only page at /s/<token> (never an incognito chat).
   await shareRoutes(app, new ShareStore(join(paths.root, "shares.json")), async (convId) => {

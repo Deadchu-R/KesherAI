@@ -2,6 +2,6 @@
 export const NAV_ICONS: Record<string, string> = {
   "#/images": "🖼", "#/canvas": "🎨", "#/batch": "🗂", "#/nodes": "🧩", "#/unreal": "🎮", "#/unity": "🕹", "#/training": "🏋",
   "#/pages": "📝", "#/knowledge": "📚", "#/libraries": "📦", "#/day": "📅", "#/compare": "⚖", "#/pipelines": "⛓", "#/watch": "🖥", "#/inbox": "🔔", "#/self-work": "🤖", "#/tasks": "📋", "#/study": "🎓",
-  "#/personas": "🎭", "#/chat-reports": "💬", "#/memory": "🧠", "#/prompts": "💬", "#/community": "👥", "#/usage": "📊",
+  "#/personas": "🎭", "#/chat-reports": "💬", "#/ideas": "🧠", "#/memory": "🧠", "#/prompts": "💬", "#/community": "👥", "#/usage": "📊",
   "#/models": "📦", "#/connections": "🔌", "#/plugins": "🧷", "#/parts": "🎛", "#/health": "🩺", "#/remote": "📲", "#/updates": "⬆", "#/settings": "⚙",
 };

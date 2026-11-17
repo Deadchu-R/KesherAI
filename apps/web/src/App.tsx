@@ -74,6 +74,7 @@ const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default:
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
 const StremioPage = lazy(() => import("./pages/StremioPage").then((m) => ({ default: m.StremioPage })));
+const IdeasPage = lazy(() => import("./pages/IdeasPage").then((m) => ({ default: m.IdeasPage })));
 const ChatReportsPage = lazy(() => import("./pages/ChatReportsPage").then((m) => ({ default: m.ChatReportsPage })));
 const GodotPage = lazy(() => import("./pages/GodotPage").then((m) => ({ default: m.GodotPage })));
 const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
@@ -297,6 +298,7 @@ export function App() {
   else if (hash === "#/godot") page = <GodotPage />;
   else if (hash === "#/stremio") page = <StremioPage />;
   else if (hash === "#/chat-reports") page = <ChatReportsPage />;
+  else if (hash === "#/ideas") page = <IdeasPage />;
   else if (hash === "#/training") page = <TrainingPage />;
   else if (hash === "#/parts" || hash === "#/connections" || hash === "#/plugins") page = <CustomizePage hash={hash} />;
   else if (hash === "#/apps") page = <AppsPage />;
