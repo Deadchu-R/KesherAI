@@ -52,14 +52,28 @@ function GoalSettings() {
   );
 }
 
+/** Settings → Study → View: simple mode (design StudySimple). */
+function ViewSettings() {
+  const [p, setP] = useState<{ simple: boolean; welcomed: boolean } | null>(null);
+  useEffect(() => void api<{ simple: boolean; welcomed: boolean }>("/api/study/prefs").then(setP, () => undefined), []);
+  if (!p) return null;
+  return (
+    <section className="card">
+      <h2>🧹 {L("תצוגה", "View")}</h2>
+      <label className="study-check"><input type="checkbox" checked={p.simple} onChange={(e) => void api<typeof p>("/api/study/prefs", { method: "PUT", body: { simple: e.target.checked } }).then(setP, (er: Error) => toast(er.message))} /> {L("תצוגה פשוטה: רק הכלים של כל יום, השאר תחת \"עוד כלים\"", "Simple view: only the everyday tools, the rest under \"More tools\"")}</label>
+    </section>
+  );
+}
+
 /** Settings → Study: the daily goal; keep lecture recordings, and when to delete them. */
 export function StudySection() {
   const [s, setS] = useState<RecordingSettings | null>(null);
   useEffect(() => void api<RecordingSettings>("/api/study/recordings").then(setS, () => undefined), []);
   const save = (change: Partial<RecordingSettings>) => void api<RecordingSettings>("/api/study/recordings", { method: "PUT", body: { ...change, asked: true } }).then(setS, (e: Error) => toast(e.message));
-  if (!s) return <GoalSettings />;
+  if (!s) return <><ViewSettings /><GoalSettings /></>;
   return (
     <>
+    <ViewSettings />
     <GoalSettings />
     <section className="card">
       <h2>{L("הקלטות הרצאה", "Lecture recordings")}</h2>

@@ -39,6 +39,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     const targets = b.targets && typeof b.targets === "object" ? Object.fromEntries(Object.entries(b.targets).filter(([k]) => GOAL_KINDS.includes(k as never)).map(([k, v]) => [k, Number(v) || 0])) : undefined;
     return st.setGoal({ ...(typeof b.on === "boolean" ? { on: b.on } : {}), ...(targets ? { targets } : {}), ...(typeof b.remind === "string" ? { remind: b.remind } : {}), ...(typeof b.phone === "boolean" ? { phone: b.phone } : {}) });
   });
+  /** Simple mode and the first visit (design StudyWelcome / StudySimple). */
+  app.get("/api/study/prefs", async () => st.prefs());
+  app.put<{ Body: { simple?: boolean; welcomed?: boolean } }>("/api/study/prefs", async (req) => st.setPrefs({ ...(typeof req.body?.simple === "boolean" ? { simple: req.body.simple } : {}), ...(typeof req.body?.welcomed === "boolean" ? { welcomed: req.body.welcomed } : {}) }));
   /** A video she watched to the end (a video lecture or a video overview), for the goal. */
   app.post("/api/study/activity/video", async () => {
     await st.logActivity("videos");

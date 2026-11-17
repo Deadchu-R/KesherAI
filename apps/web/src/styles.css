@@ -3165,3 +3165,21 @@ html.handheld .palette-list button { min-height: 44px; }
 .goal-ring b { font-size: 16px; font-variant-numeric: tabular-nums; }
 .goal-ring small { font-size: 11px; color: var(--muted); max-width: 70px; line-height: 1.2; }
 .study-goal-text { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 4px; }
+/* First visit to Study and simple mode (designs StudyWelcome, StudySimple). */
+.study-welcome { max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+.study-welcome-steps { display: flex; gap: 6px; justify-content: center; list-style: none; margin: 0; padding: 0; }
+.study-welcome-steps li { width: 8px; height: 8px; border-radius: 4px; background: var(--border-strong); transition: width 0.2s; }
+.study-welcome-steps li.done, .study-welcome-steps li.now { background: var(--accent); }
+.study-welcome-steps li.now { width: 26px; }
+.study-welcome-body { display: flex; flex-direction: column; gap: 10px; }
+.study-welcome-body h2 { margin: 0; }
+.study-welcome-body label { display: flex; flex-direction: column; gap: 4px; }
+.study-welcome-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.study-welcome-opts button { padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; }
+.study-welcome-opts button.on, .study-welcome-choice.on { border-color: var(--accent); color: var(--accent); }
+.study-welcome-choice { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-strong); background: transparent; }
+.study-welcome-choice b { color: inherit; }
+.study-more { margin: 8px 0; }
+.study-more > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+.study-more-tabs { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .study-welcome-steps li { transition: none; } }

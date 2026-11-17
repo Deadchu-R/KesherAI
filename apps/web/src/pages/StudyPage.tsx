@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
@@ -100,12 +101,34 @@ async function ankiFile(id: string, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
+/** In simple mode, a "More tools" fold; otherwise the children as they are. */
+function MoreTools({ simple, children }: { simple: boolean; children: React.ReactNode }) {
+  if (!simple) return <>{children}</>;
+  return (
+    <details className="study-more">
+      <summary>⋯ {L("עוד כלים", "More tools")}</summary>
+      {children}
+    </details>
+  );
+}
+
 function BackLink({ to }: { to: string }) {
   return <a className="study-back" href={to}>{L("› חזרה", "‹ Back")}</a>;
 }
 
+/** Simple mode and the first visit (design StudySimple / StudyWelcome), shared by the home and the course. */
+type StudyPrefs = { simple: boolean; welcomed: boolean };
+function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
+  const [p, setP] = useState<StudyPrefs | null>(null);
+  useEffect(() => void api<StudyPrefs>("/api/study/prefs").then(setP, () => setP({ simple: false, welcomed: true })), []);
+  return [p, setP];
+}
+/** The course tabs of simple mode; the rest are under "More tools". */
+const SIMPLE_TABS = new Set(["lectures", "review", "quiz", "ask", "game", "progress"]);
+
 function StudyHome() {
   const [courses, setCourses] = useState<CourseRow[] | null>(null);
+  const [prefs, setPrefs] = useStudyPrefs();
   const [name, setName] = useState("");
   const load = () => void api<{ courses: CourseRow[] }>("/api/study").then((r) => setCourses(r.courses), (e: Error) => toast(e.message));
   useEffect(load, []);
@@ -116,6 +139,15 @@ function StudyHome() {
   };
   const due = courses?.reduce((n, c) => n + c.due, 0) ?? 0;
   const firstDue = courses?.find((c) => c.due > 0);
+  if (courses && !courses.length && prefs && !prefs.welcomed) {
+    return (
+      <div className="page study-page">
+        <h1>{L("לימודים", "Study")}</h1>
+        <StudyWelcome onSkip={() => { setPrefs({ ...prefs, welcomed: true }); void api("/api/study/prefs", { method: "PUT", body: { welcomed: true } }).catch(() => undefined); }} />
+      </div>
+    );
+  }
+  const simple = !!prefs?.simple;
   return (
     <div className="page study-page">
       <h1>{L("לימודים", "Study")}</h1>
@@ -144,6 +176,7 @@ function StudyHome() {
           <p className="muted small">{L("הכול נשמר במחשב שלך, ומסתנכרן עם לשונית הלימודים באפליקציה בטלפון.", "Everything stays on your computer, and syncs with the Study tab in the phone app.")}</p>
         </section>
       )}
+      <MoreTools simple={simple}>
       <section className="study-life card">
         <h2>{L("שאלה על הלימודים", "A question about your studies")}</h2>
         <p className="muted small">{L("שאלות מעשיות מקבלות תשובה עדכנית מהרשת, עם מקור רשמי.", "Practical questions get a current answer from the web, with an official source.")}</p>
@@ -153,6 +186,7 @@ function StudyHome() {
       </section>
       <a className="study-avatar-link" href="#/study/benefits">{L("הטבות לסטודנטים: הנחה בתחבורה, תוכנות ו-AI בחינם", "Student benefits: transport discount, free software and AI")}</a>
       <a className="study-avatar-link" href="#/study/avatar">{L("מצלמת אווטאר לשיעורים בזום", "Avatar camera for Zoom lessons")}</a>
+      </MoreTools>
       <StudyPlans />
       <MoodleCard courses={(courses ?? []).map((c) => ({ id: c.id, name: c.name }))} onAdded={load} />
       <h2>{L("הקורסים שלי", "My courses")}</h2>
@@ -488,6 +522,8 @@ function ModelWait() {
 
 function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId?: string }) {
   const [info, setInfo] = useState<CourseInfo | null>(null);
+  const [prefs] = useStudyPrefs();
+  const [allTabs, setAllTabs] = useState(false);
   const load = useCallback(() => void api<CourseInfo>(`/api/study/courses/${id}`).then(setInfo, (e: Error) => toast(e.message)), [id]);
   useEffect(load, [load]);
   if (!info) return <div className="page study-page"><BackLink to="#/study" /><p className="muted">…</p></div>;
@@ -530,11 +566,12 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
       {!lectureId && <SyllabusCard id={id} syllabus={info.syllabus ?? null} onChange={load} />}
       <ModelWait />
       <div className="seg-pills" role="tablist" aria-label={L("חלקי הקורס", "Course sections")}>
-        {TABS.filter(([t]) => clinicalField(info.course.field) || !CLINICAL_TABS.has(t)).map(([t, n]) => (
+        {TABS.filter(([t]) => clinicalField(info.course.field) || !CLINICAL_TABS.has(t)).filter(([t]) => !prefs?.simple || allTabs || SIMPLE_TABS.has(t) || t === on).map(([t, n]) => (
           <button key={t} type="button" role="tab" aria-selected={on === t} className={on === t ? "on" : ""} onClick={() => go(`#/study/${id}/${t}`)}>
             {L(...n)}{t === "review" && info.due ? ` (${info.due})` : ""}
           </button>
         ))}
+        {prefs?.simple && <button type="button" className="study-more-tabs" aria-expanded={allTabs} onClick={() => setAllTabs(!allTabs)}>{allTabs ? L("פחות", "Fewer") : `⋯ ${L("עוד כלים", "More tools")}`}</button>}
       </div>
       {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
         : on === "review" ? <Review courseId={id} onChange={load} />

@@ -231,6 +231,21 @@ export class Study {
     return goal;
   }
 
+  /** How Study looks for her (design StudySimple): simple mode, and whether she went through the first visit. */
+  async prefs(): Promise<{ simple: boolean; welcomed: boolean }> {
+    const j = await readFile(join(this.dir, "_prefs.json"), "utf8").then((t) => JSON.parse(t) as { simple?: unknown; welcomed?: unknown }, () => ({}) as { simple?: unknown; welcomed?: unknown });
+    return { simple: j.simple === true, welcomed: j.welcomed === true };
+  }
+
+  /** Changes them. */
+  async setPrefs(change: Partial<{ simple: boolean; welcomed: boolean }>): Promise<{ simple: boolean; welcomed: boolean }> {
+    const cur = await this.prefs();
+    const next = { simple: typeof change.simple === "boolean" ? change.simple : cur.simple, welcomed: typeof change.welcomed === "boolean" ? change.welcomed : cur.welcomed };
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(join(this.dir, "_prefs.json"), JSON.stringify(next));
+    return next;
+  }
+
   /** What she did that a goal counts (a lecture added, a video watched, a quiz done, a summary), newest last. */
   async activity(): Promise<StudyActivity[]> {
     const j = await readFile(join(this.dir, "_activity.json"), "utf8").then((t) => JSON.parse(t) as unknown, () => []);
