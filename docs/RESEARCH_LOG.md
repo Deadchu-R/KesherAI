@@ -1768,3 +1768,26 @@ tools' own pages, against what was added tonight:
   that checks SSHFS-Win, the key and the connection, makes the key once and shows the line to add on the server.
   Optional: nothing changes for anyone who never opens such a project.
 - Stopped at: built; to check on the PC against a real SSH server (Roee's Windows OpenSSH server or WSL's sshd).
+
+## Chat reports like What Brandon Thinks (2026-11-17, morning; Roee: "a page that really gives a useful report", unlike the personas)
+- **What Brandon Thinks** (whatbrandonthinks.org and look-alikes): upload a WhatsApp zip / iMessage txt / Instagram or
+  Messenger JSON → "Brandon", an opinionated narrator, writes: a verdict, a five-part scorecard, six findings each tied
+  to message excerpts, "lines from your chat", who carries the conversation, a turning point, what to say next, and a
+  custom deep question. Media stripped on the device; interpretations, not proof; not therapy. 14 languages.
+- **WhatBrendonThinks** (open-source recreation): the statistics are computed exactly in code, never by the model
+  (who talks and who starts, terms of address, "love you" counts, busiest day, streaks, silences, active hours,
+  longest messages, first and latest message, laughs, top words and emojis), then the model gets the figures plus the
+  chat; long chats: an agent with read-only tools (read_messages, search_messages, person_profile, messages_on_date),
+  or, for a local model, chunked summaries merged up. Fixed format: headline, cast, sections; Hebrew renders RTL.
+- **LoveGraft**: Gottman's positivity ratio, reply times, initiation balance, interest over time, conflict patterns,
+  red-flag checklist with exact quotes, each reading marked *measured* or *AI*, quotes checked against the messages.
+- **Textopsy**: verdict, "the receipts", effort check, red and green flags with the messages behind them, a grade,
+  two personality roasts, next move, awards, anonymous share cards.
+- **Mosaic**: sentiment timeline, activity heatmap, response patterns, word cloud, memorable moments; the coach's voice
+  is chosen (coach / caring friend / roaster).
+- **For KesherAI** (all local, nothing leaves the computer; the WhatsApp and Instagram import already exists):
+  exact numbers in code; the local model writes in a chosen voice from the numbers plus the messages (chunked for
+  long chats); every quote checked against the chat and dropped when it is not there; each finding marked measured or
+  read; follow-up questions answered with search over the chat; a not-therapy line and no "will it last"
+  percentages (made-up precision); an optional part (Settings → parts), off for anyone who does not want it.
+- Stopped at: research done; design next, then build.

@@ -15,11 +15,12 @@ interface Done { name: string; messages: number; from: string; to: string; peopl
 /** One Instagram thread found in a zip. */
 interface Thread { folder: string; files: Record<string, Uint8Array>; bytes: number }
 
-const text = (b: Uint8Array) => new TextDecoder().decode(b);
+export const text = (b: Uint8Array) => new TextDecoder().decode(b);
 /** "WhatsApp Chat with Dana.txt" / "צ'אט WhatsApp עם דנה.txt" → "Dana". */
-const waTitle = (file: string) => file.replace(/^.*[\\/]/, "").replace(/\.(txt|zip)$/i, "").replace(/^(WhatsApp Chat( with)?|צ'אט WhatsApp עם|שיחת WhatsApp עם|_chat)\s*[-–]?\s*/i, "").trim();
+export const waTitle = (file: string) => file.replace(/^.*[\\/]/, "").replace(/\.(txt|zip)$/i, "").replace(/^(WhatsApp Chat( with)?|צ'אט WhatsApp עם|שיחת WhatsApp עם|_chat)\s*[-–]?\s*/i, "").trim();
 
-function unzipSome(file: File, filter: (name: string) => boolean): Promise<Record<string, Uint8Array>> {
+/** Some files out of a zip. */
+export function unzipSome(file: File, filter: (name: string) => boolean): Promise<Record<string, Uint8Array>> {
   return file.arrayBuffer().then((buf) => new Promise((resolve, reject) => unzip(new Uint8Array(buf), { filter: (f) => filter(f.name) }, (err, files) => (err ? reject(err) : resolve(files)))));
 }
 

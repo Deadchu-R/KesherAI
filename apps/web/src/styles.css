@@ -2850,3 +2850,27 @@ html.handheld .palette-list button { min-height: 44px; }
 @media (max-width: 640px) { .stremio-rate > input { flex-basis: 100%; } }
 .study-field select, .study-field input { max-width: 100%; }
 .nav-count { position: absolute; inset-inline-end: 10px; top: 50%; transform: translateY(-50%); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent, #ededee); color: var(--bg, #121213); font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+/* Chat reading (#/chat-reports) */
+.chat-reports { display: flex; gap: 14px; align-items: flex-start; }
+.chat-reports .cr-list { width: 250px; flex: none; }
+.chat-reports .cr-main { flex: 1; min-width: 0; }
+.cr-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; padding: 8px 10px; border-radius: var(--radius-sm); background: transparent; border: 0; color: inherit; }
+.cr-item.active { background: var(--surface-2, rgb(255 255 255 / 0.06)); }
+.cr-drop { border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--radius-sm); padding: 18px 14px; background: transparent; color: var(--text-2); text-align: center; line-height: 1.5; }
+.chat-reports .chip { width: auto; padding: 0 12px; font-size: 13.5px; color: var(--text-2); }
+.chat-reports .chip.on { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+.cr-headline { font-size: 26px; line-height: 1.25; margin: 4px 0; }
+.cr-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.cr-scores b { font-size: 19px; }
+.cr-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); }
+.cr-hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; direction: ltr; }
+.cr-hours div { height: 44px; border-radius: 2px; background: var(--text); }
+.cr-hour-axis { justify-content: space-between; direction: ltr; }
+.cr-finding { border-inline-start: 3px solid var(--text); padding-inline-start: 10px; }
+.cr-finding p { margin: 4px 0; }
+.cr-quote { margin: 4px 0; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--bg); font-size: 13.5px; }
+@media (max-width: 700px) {
+  .chat-reports { flex-direction: column; }
+  .chat-reports .cr-list { width: 100%; box-sizing: border-box; }
+  .cr-headline { font-size: 21px; }
+}
