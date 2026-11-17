@@ -157,6 +157,8 @@ export class Study {
   onLectureReady?: (course: StudyCourse, lecture: StudyLecture) => void;
   /** The course models' state (set by the server): a course waiting for its model, and the models to choose from. */
   modelState?: () => Promise<{ waiting?: { want: string; now?: string; why: string; since: number }; switched: boolean; hebrew?: string; models: string[] }>;
+  /** A model that sees pictures, for photos (set by the server); undefined → the chat model. */
+  visionModel?: () => Model | undefined;
   /** "Switch now": load the waiting course's model at once (set by the server). */
   switchNow?: () => void;
   private later: Promise<void> = Promise.resolve();
@@ -809,7 +811,7 @@ export class Study {
     if (data.length > 50 * 1024 * 1024) throw bad("The file is larger than 50 MB.");
     const pictures: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
     if (pictures[ext]) {
-      const m = this.model();
+      const m = this.visionModel?.() ?? this.model();
       if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
       const r = await m.turn(
         {
@@ -956,7 +958,7 @@ export class Study {
   /** Her classes read from a photo or screenshot of her weekly schedule by the vision model (design TimetablePhoto). */
   async timetableFromPhoto(image: Buffer, mime: string, signal?: AbortSignal): Promise<ReadClass[]> {
     if (image.length > 12 * 1024 * 1024) throw Object.assign(new Error("The picture is too large."), { statusCode: 400 });
-    const m = this.model();
+    const m = this.visionModel?.() ?? this.model();
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     const r = await m.turn({ messages: [{ role: "system", content: TIMETABLE_PHOTO_PROMPT }, { role: "user", content: "The schedule:", images: [{ mimeType: /^image\/(png|jpeg|webp)$/.test(mime) ? mime : "image/jpeg", data: image.toString("base64") }] }], tools: [] }, signal ?? AbortSignal.timeout(300_000), () => undefined);
     if (/^NO-IMAGE/.test(r.text.trim())) throw Object.assign(new Error("The chosen chat model cannot see pictures. Choose a model with vision."), { statusCode: 400 });

@@ -239,6 +239,25 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     return { ...studySwitch.status(), ...(hebrew ? { hebrew } : {}), models: list.map((m) => `llamacpp/${m.name.replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}`) };
   };
   study.switchNow = () => studySwitch.now();
+  // Photos (a board, a schedule) need a model that sees pictures: the loaded one when it has its vision file, else the
+  // largest local model under 24 GB that has one (found on the PC: the active Hebrew model has none, so photos
+  // came back empty). Loaded when free, like a course's model; none found → the active chat model.
+  study.visionModel = () => {
+    const active = config.activeModels.chat;
+    if (!active?.startsWith("llamacpp/")) return undefined;
+    const pick = async () => {
+      const st = engine.status();
+      if (st.running && st.modelPath && (await findMmproj(st.modelPath))) return st.modelPath;
+      for (const m of (await localGgufs()).filter((x) => x.size < 24 * 1024 ** 3).sort((a, b) => b.size - a.size)) if (await findMmproj(m.path)) return m.path;
+      return undefined;
+    };
+    const turn: ReturnType<typeof modelTurnFor> = async (req, signal, onText) => {
+      const file = await pick();
+      if (!file) return modelTurnFor(registry, active)(req, signal, onText);
+      return studySwitch.use(file, () => modelTurnFor(registry, "llamacpp/" + (file.split(/[\\/]/).pop() ?? "").replace(/\.gguf$/i, ""))(req, signal, onText), signal);
+    };
+    return { id: active, turn };
+  };
   // Kept lecture recordings whose time has come are deleted (Settings → Study): soon after start, then daily.
   const cleanRec = () => void study.cleanRecordings().catch(() => undefined);
   setTimeout(cleanRec, 120_000).unref?.();
