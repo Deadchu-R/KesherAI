@@ -99,6 +99,21 @@ export function joinSplitModels<T extends { path: string; name: string; size: nu
 }
 
 /**
+ * The files of one model: a model split in parts (name-00001-of-00004.gguf) is all its parts in that folder; any other
+ * file is itself.
+ *
+ * @param path - One file of the model.
+ */
+export async function modelParts(path: string): Promise<string[]> {
+  const split = /^(.*)-\d{5}-of-(\d{5})\.gguf$/i.exec(basename(path));
+  if (!split) return [path];
+  const same = new RegExp(`-\\d{5}-of-${split[2]}\\.gguf$`, "i");
+  const names = await readdir(dirname(path)).catch(() => [] as string[]);
+  const parts = names.filter((n) => n.toLowerCase().startsWith(`${split[1]!}-`.toLowerCase()) && same.test(n) && n.length === basename(path).length).map((n) => join(dirname(path), n));
+  return parts.length ? parts : [path];
+}
+
+/**
  * Models, providers (connections) and local model files.
  *
  * @param app - Fastify instance.
@@ -199,15 +214,24 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (resolve(s.engine.status().modelPath ?? "") === path) return reply.code(409).send({ error: "This model is loaded. Load another one (or stop the engine) first." });
     const st = await stat(path).catch(() => undefined);
     if (!st?.isFile()) return reply.code(404).send({ error: "No such model file." });
-    try {
-      await unlink(path);
-    } catch (e) {
-      return reply.code(409).send({ error: `It could not be deleted (another app may have it open): ${(e as Error).message}` });
+    // A model split in parts (name-00001-of-00004.gguf) is listed as one: all its parts go (only one part went before,
+    // and the model stayed listed, broken, found on the PC 2026-11-17).
+    const files = await modelParts(path);
+    if (files.some((f) => resolve(s.engine.status().modelPath ?? "") === resolve(f))) return reply.code(409).send({ error: "This model is loaded. Load another one (or stop the engine) first." });
+    let freed = 0;
+    for (const f of files) {
+      const size = (await stat(f).catch(() => undefined))?.size ?? 0;
+      try {
+        await unlink(f);
+        freed += size;
+      } catch (e) {
+        return reply.code(409).send({ error: `It could not be deleted (another app may have it open): ${(e as Error).message}` });
+      }
     }
     // Remove the folders it leaves empty, up to the models folder.
     for (let d = dirname(path); d.startsWith(root + sep); d = dirname(d)) if (!(await rmdir(d).then(() => true, () => false))) break;
     forgetFoundModels();
-    return { ok: true, freed: st.size };
+    return { ok: true, freed, files: files.length };
   });
 
   /**
