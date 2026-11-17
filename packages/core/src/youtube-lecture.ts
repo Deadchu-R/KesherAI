@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,6 +75,14 @@ export async function ensureYtDlp(o: { dir: string; downloads: DownloadManager }
     await mkdir(home, { recursive: true });
     const job = o.downloads.enqueue({ url: `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${file}`, dest: exe, label: "yt-dlp (reads YouTube lectures)" });
     await waitForDownload(o.downloads, job.id);
+    // The program is checked against yt-dlp's own published SHA-256 list before it ever runs.
+    const sums = await fetch("https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS").then((r) => (r.ok ? r.text() : ""), () => "");
+    const want = sums.split("\n").map((l) => l.trim().split(/\s+/)).find((p) => p[1] === file)?.[0]?.toLowerCase();
+    const got = createHash("sha256").update(await readFile(exe)).digest("hex");
+    if (!want || want !== got) {
+      await rm(exe, { force: true });
+      throw new Error("The yt-dlp download did not match its published fingerprint, so it was removed. Try again later.");
+    }
     if (process.platform !== "win32") await chmod(exe, 0o755);
     if (!(await works(exe))) throw new Error("yt-dlp did not start after downloading.");
     return exe;

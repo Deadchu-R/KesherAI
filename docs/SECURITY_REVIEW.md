@@ -986,3 +986,10 @@ S5 an outside scanner's rules for Electron.
 - **Media previews**: the chat's existing download route as the player's source; no new route.
 - **↓ button, list numbers, dedent**: display only.
 - Performance: the ↓ state changes only when crossing 400 px from the end. Secrets/personal paths: none in the diff.
+
+## Scan 108 (2026-11-17): run review, follow the agent, Hebrew overviews, YouTube lectures, teach-back
+- **Fixed: yt-dlp** is a program downloaded the first time she adds a YouTube lecture; it was run without a check. Now it is compared with yt-dlp's own published SHA-256 list (SHA2-256SUMS of the same release) before it ever runs, and removed when it does not match. The video is named only by its 11-character id (checked), the address is rebuilt from it, and yt-dlp gets its arguments as a list; captions and sound go to a temporary folder that is removed afterwards.
+- **Run review**: diffs come only from the run's own kept files (read as they are now); capped at 400 KB in all.
+- **Follow the agent**: opens files already in the chat's file list in the editor; nothing new is read.
+- **Teach-back**: the model's answer is parsed, clamped and shown as text; cards are added through the existing card route on her click.
+- Performance: YouTube fetches captions only (no video) unless there are none; the review loads on its button. Secrets/personal paths: none in the diff.
