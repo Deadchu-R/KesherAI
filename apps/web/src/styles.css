@@ -3450,3 +3450,7 @@ div.slide-list { padding-inline-start: 0; }
 .lens-text { white-space: pre-wrap; overflow: auto; line-height: 1.6; }
 .lens-pick label.button { align-self: flex-start; }
 .lens-over { position: absolute; z-index: 2; background: #fbfaf7; color: #1d1d22; border-radius: 3px; padding: 0 3px; line-height: 1.15; white-space: nowrap; display: flex; align-items: center; box-shadow: 0 1px 3px #0005; pointer-events: none; }
+/* Listening controls (students part 28 #3). */
+.study-audio-tools { gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.study-audio-tools .chip { min-width: 0; width: auto; height: auto; padding: 2px 8px; }
+.study-text .study-now { background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 4px; }

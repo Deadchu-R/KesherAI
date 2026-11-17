@@ -1222,15 +1222,27 @@ export function FlowView({ src }: { src: string }) {
 }
 
 /** The lecture's text with each [mm:ss] mark as a button that plays the kept recording from there. */
-function StampedText({ text, onSeek }: { text: string; onSeek: (sec: number) => void }) {
+function StampedText({ text, onSeek, now }: { text: string; onSeek: (sec: number) => void; now?: number }) {
+  const lines = text.split("\n");
+  const secOf = (line: string) => {
+    const m = /^\[(?:(\d+):)?(\d+):(\d\d)\]/.exec(line);
+    return m ? Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) : undefined;
+  };
+  // The line being heard (design: listening controls, students part 28 #3): the last mark at or before the sound.
+  let current = -1;
+  if (now !== undefined) lines.forEach((line, i) => { const s = secOf(line); if (s !== undefined && s <= now) current = i; });
+  const here = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    here.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [current]);
   return (
     <>
-      {text.split("\n").map((line, i) => {
+      {lines.map((line, i) => {
         const m = /^\[(?:(\d+):)?(\d+):(\d\d)\]/.exec(line);
-        if (!m) return <div key={i}>{line || "\u00a0"}</div>;
-        const sec = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+        if (!m) return <div key={i} className={current >= 0 && i > current && lines.slice(current + 1, i).every((x) => secOf(x) === undefined) ? "study-now" : ""}>{line || "\u00a0"}</div>;
+        const sec = secOf(line)!;
         return (
-          <div key={i}>
+          <div key={i} ref={i === current ? here : undefined} className={i === current ? "study-now" : ""}>
             <button type="button" className="study-stamp" dir="ltr" title={L("לנגן מכאן", "Play from here")} onClick={() => onSeek(sec)}>{m[0]}</button>{line.slice(m[0].length)}
           </div>
         );
@@ -1242,8 +1254,15 @@ function StampedText({ text, onSeek }: { text: string; onSeek: (sec: number) => 
 type RecordingSettings = { keep: boolean; deleteAfter: "never" | "30" | "90" | "semester"; asked?: boolean };
 
 /** The kept recording: a player (the text's minute marks play from there), delete, and the first-time question. */
-function LectureAudio({ courseId, lecture, player, onRemoved }: { courseId: string; lecture: StudyLecture; player: React.RefObject<HTMLAudioElement | null>; onRemoved: () => void }) {
+function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { courseId: string; lecture: StudyLecture; player: React.RefObject<HTMLAudioElement | null>; onRemoved: () => void; onTime?: (sec: number) => void }) {
   const [settings, setSettings] = useState<RecordingSettings | null>(null);
+  // Listening speed, remembered on this device (Genio, Notability: 0.75–2×).
+  const [rate, setRate] = useState(() => { try { return Number(localStorage.getItem("kesher-audio-rate")) || 1; } catch { return 1; } });
+  useEffect(() => {
+    if (player.current) player.current.playbackRate = rate;
+    try { localStorage.setItem("kesher-audio-rate", String(rate)); } catch { /* a convenience */ }
+  }, [rate, player]);
+  const skip = (d: number) => { const a = player.current; if (a) a.currentTime = Math.max(0, a.currentTime + d); };
   useEffect(() => void api<RecordingSettings>("/api/study/recordings").then(setSettings, () => undefined), []);
   const src = withToken(`/api/study/courses/${courseId}/lectures/${lecture.id}/recording`);
   const choose = async (deleteAfter: RecordingSettings["deleteAfter"]) => {
@@ -1253,7 +1272,13 @@ function LectureAudio({ courseId, lecture, player, onRemoved }: { courseId: stri
   const mb = Math.max(1, Math.round((lecture.recording?.bytes ?? 0) / 1024 / 1024));
   return (
     <div className="study-audio">
-      <audio ref={player} controls preload="metadata" src={src} />
+      <audio ref={player} controls preload="metadata" src={src} onLoadedMetadata={(e) => (e.currentTarget.playbackRate = rate)} onTimeUpdate={(e) => onTime?.(e.currentTarget.currentTime)} />
+      <div className="row study-audio-tools" dir="ltr">
+        <button type="button" className="ghost small" onClick={() => skip(-10)} aria-label={L("10 שניות אחורה", "Back 10 seconds")}>↺ 10</button>
+        <button type="button" className="ghost small" onClick={() => skip(10)} aria-label={L("10 שניות קדימה", "Forward 10 seconds")}>10 ↻</button>
+        <span className="grow" />
+        {[0.75, 1, 1.25, 1.5, 2].map((r) => <button key={r} type="button" className={`chip small${rate === r ? " on" : ""}`} aria-pressed={rate === r} onClick={() => setRate(r)}>{r}×</button>)}
+      </div>
       <div className="row small">
         <span className="muted">{L(`ההקלטה נשמרה במחשב (${mb}MB). לחיצה על דקה בטקסט המלא מנגנת משם.`, `The recording is kept on the computer (${mb} MB). A minute in the full text plays from there.`)}</span>
         <button type="button" className="small ghost" onClick={async () => {
@@ -1286,6 +1311,8 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
     if (l?.youtube || l?.videoFile) setView("watch");
   }, [l?.id]);
   const player = useRef<HTMLAudioElement>(null);
+  // Where the recording is (the full text marks the line being heard).
+  const [heard, setHeard] = useState<number>();
   // "Explain this": text she selected in the lecture, and its explanation.
   const [sel, setSel] = useState("");
   const [explained, setExplained] = useState("");
@@ -1348,7 +1375,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
     <article className="study-lecture card">
       <h2 dir="auto">{l.title}</h2>
       {l.web && <p className="muted small">🔗 {L("נשמר מ:", "Saved from:")} <a href={l.web} target="_blank" rel="noopener noreferrer" dir="ltr">{l.web.replace(/^https?:\/\//, "").slice(0, 80)}</a></p>}
-      {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} />}
+      {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} onTime={(t) => setHeard(Math.floor(t))} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
         {(["watch", "summary", "terms", "diagram", "sheet", "video", "teach", "read", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
@@ -1362,7 +1389,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
           : view === "sheet" ? <StudySheet lecture={l} {...(l.diagram ? { diagram: <FlowView src={l.diagram} /> } : {})} />
           : view === "read" ? <StudyHighlights key={l.id} base={base} text={l.text} initial={l.highlights ?? []} onCards={onChange} />
-          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : <ReadAlong text={l.text} plain />}</div>
+          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} {...(heard !== undefined ? { now: heard } : {})} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : <ReadAlong text={l.text} plain />}</div>
           : !l.summary ? (
             <div className="study-empty">
               <p className="muted">{L("עוד לא סוכם. הסיכום, המונחים והתרשים נכתבים מהטקסט של ההרצאה בלבד.", "Not summarized yet. The summary, terms and diagram come from the lecture's text only.")}</p>
