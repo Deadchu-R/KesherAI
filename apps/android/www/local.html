@@ -1023,6 +1023,15 @@
     return c && /^[\w-]{1,80}\.(png|jpg|webp)$/.test(name) ? `${c.base}/api/study/courses/${encodeURIComponent(courseId)}/images/${encodeURIComponent(name)}?token=${encodeURIComponent(c.token)}` : undefined;
   };
   // Where the phone plays a recording kept on the computer from (undefined with no computer).
+  // For Study's first setup on the phone (design StudySetupWizardPhone): is there a model on the phone, is a computer
+  // connected, and the way to the place where a model is downloaded.
+  studySync.phoneModel = async () => {
+    const list = await mm.getModels().catch(() => downloaded);
+    const ready = list.some((m) => m.size > 0) || !!activeUrl;
+    return { ready, name: ready ? decodeURIComponent((activeUrl || list.find((m) => m.size > 0)?.name || "").split("/").pop() || "") : "" };
+  };
+  studySync.hasComputer = () => !!computer();
+  studySync.openModels = () => setCat("chat");
   studySync.audioUrl = (courseId, lectureId) => {
     const c = computer();
     return c ? `${c.base}/api/study/courses/${encodeURIComponent(courseId)}/lectures/${encodeURIComponent(lectureId)}/recording?token=${encodeURIComponent(c.token)}` : undefined;

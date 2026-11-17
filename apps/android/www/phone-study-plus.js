@@ -7,12 +7,13 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
 const TABLE_KEY = "kesherai-timetable";
 const PLANS_KEY = "kesherai-plans";
+const SETUP_KEY = "kesherai-study-setup";
 const DAYS = [["א׳", "Sun"], ["ב׳", "Mon"], ["ג׳", "Tue"], ["ד׳", "Wed"], ["ה׳", "Thu"], ["ו׳", "Fri"], ["ש׳", "Sat"]];
 
 /**
@@ -638,6 +639,136 @@ export function studyPlus(x) {
       btns(el("button", { type: "button", class: "primary", onclick: () => x.go({ at: "mock", course: c.id }) }, L("מבחן דמה נוסף", "Another mock exam")))));
   }
 
+  // ---------- the first setup on the phone alone (design StudySetupWizardPhone, students part 38) ----------
+  // The same four explained steps as the computer's (field, courses, will it work here, the first lecture), kept in the
+  // phone (the same checked shape as the computer's prefs); skipped steps wait on the "Getting started" list.
+  function loadSetup() { try { return cleanStudyPrefs(JSON.parse(localStorage.getItem(SETUP_KEY) || "{}")); } catch { return cleanStudyPrefs({}); } }
+  function saveSetup(change) {
+    const next = cleanStudyPrefs({ ...loadSetup(), ...change });
+    try { localStorage.setItem(SETUP_KEY, JSON.stringify(next)); } catch { /* full: the setup just starts again */ }
+    return next;
+  }
+  /** Whether the first setup shows instead of the home: a new start, or a setup left in the middle. */
+  const needsSetup = () => { const p = loadSetup(); return !p.welcomed && (!x.db().courses.length || p.setupStep > 0); };
+  const FIELD_ICONS = { nursing: "🩺", medicine: "⚕️", law: "⚖️", engineering: "📐", cs: "💻", psychology: "🧠", economics: "💼", math: "➗", biology: "🧬", education: "🍎", humanities: "📜", gamedev: "🎮" };
+  const FIRST_FIELDS = ["nursing", "medicine", "law", "engineering", "cs", "psychology", "economics"];
+  const fieldName = (id) => { const f = STUDY_FIELDS.find((y) => y.id === id); return f ? L(f.he, f.en) : ""; };
+  const chip = (on, label, onclick, attrs = {}) => el("button", { type: "button", role: "radio", "aria-checked": on ? "true" : "false", style: `border-radius: 999px; padding: 6px 12px${on ? "; border-color: var(--accent); color: var(--accent)" : ""}`, onclick, ...attrs }, `${on ? "✓ " : ""}${label}`);
+  /** What the phone can do: a model on it, speech-to-text, a connected computer. */
+  async function phoneReady() {
+    const m = await Promise.resolve(x.sync?.phoneModel?.()).catch(() => undefined);
+    return { model: !!m?.ready, modelName: m?.name || "", speech: !!x.speech, computer: !!x.sync?.hasComputer?.() };
+  }
+  function readyBox(st) {
+    const line = (ok, title, text, act) => el("div", { class: "ph-row", style: "align-items: flex-start" }, el("span", {}, el("b", {}, `${ok ? "✅" : "⬜"} ${title}`), el("br"), el("small", { class: "muted", dir: "auto" }, text)), act || "");
+    return el("div", {},
+      line(st.model || st.computer, L("מודל שעונה", "A model that answers"), st.model ? st.modelName || L("מודל בטלפון", "A model on the phone") : st.computer ? L("המחשב המחובר עושה את העבודה", "The connected computer does the work") : L("מודל קטן בטלפון (כ־1.5GB, עדיף ב־Wi‑Fi), או חיבור למחשב.", "A small model on the phone (about 1.5 GB, Wi‑Fi is better), or connect a computer."),
+        st.model || st.computer || !x.sync?.openModels ? null : el("button", { type: "button", onclick: () => x.sync.openModels() }, L("להוריד מודל", "Get a model"))),
+      line(st.speech, L("תמלול הקלטות", "Transcribing recordings"), st.speech ? L("בטלפון עצמו", "On the phone itself") : L("לא זמין בטלפון הזה; אפשר להדביק טקסט או להעלות קובץ.", "Not available on this phone; paste text or upload a file instead.")),
+      line(st.computer, L("מחשב מחובר (לא חובה)", "A connected computer (optional)"), st.computer ? L("מחובר: הקורסים מסתנכרנים, והעבודה הכבדה רצה שם", "Connected: courses sync, and the heavy work runs there") : L("אפשר לחבר בהמשך, מהמסך הראשי של האפליקציה.", "You can connect one later, from the app's main screen.")));
+  }
+  function setupView() {
+    const p = loadSetup();
+    const step = p.setupStep;
+    const courses = x.db().courses;
+    const go2 = (to, skipped) => {
+      const list = skipped ? [...new Set([...p.setupSkipped, skipped])] : p.setupSkipped.filter((k) => k !== SETUP_STEPS[step]);
+      saveSetup({ setupStep: Math.min(to, SETUP_STEPS.length - 1), setupSkipped: list });
+      x.draw();
+      globalThis.setTimeout(() => x.root.querySelector("h2")?.focus(), 30);
+    };
+    const finish = (to) => {
+      saveSetup({ welcomed: true, setupStep: 0 });
+      const first = x.db().courses[0];
+      if (to === "record" && first) return go({ at: "record", course: first.id });
+      if (to === "file" && first) return go({ at: "course", course: first.id });
+      go({ at: "home" });
+    };
+    const nav = (next, nextLabel, skip, disabled = false) => el("div", { class: "ph-btns", style: "flex-wrap: wrap; margin-top: 10px" },
+      el("button", { type: "button", class: "primary", disabled: disabled ? "" : undefined, onclick: next }, nextLabel),
+      step > 0 ? el("button", { type: "button", onclick: () => go2(step - 1) }, L("‹ חזרה", "‹ Back")) : "",
+      el("button", { type: "button", class: "link", onclick: () => go2(step + 1, skip) }, L("לדלג על השלב (יישאר ברשימה)", "Skip this step (it stays on the list)")));
+    const bar = el("div", { style: "display: flex; gap: 5px; margin: 6px 0 10px" }, ...SETUP_STEPS.map((_, i) => el("span", { style: `flex: 1; height: 4px; border-radius: 2px; background: ${i <= step ? "var(--accent, #a5b4ff)" : "#2a2a2e"}` })));
+    x.root.append(el("div", { class: "ph-row" }, el("span", { class: "muted small", "aria-live": "polite" }, L(`שלב ${step + 1} מתוך 4`, `Step ${step + 1} of 4`)),
+      el("button", { type: "button", class: "link", onclick: () => { saveSetup({ welcomed: true }); go({ at: "home" }); } }, L("לסגור, אסתדר לבד", "Close, I'll find my way"))), bar);
+    if (step === 0) {
+      const more = p.field && !FIRST_FIELDS.includes(p.field);
+      const showAll = x.view.moreFields || more;
+      x.root.append(section("",
+        el("h2", { tabindex: "-1" }, L("🎓 מה את לומדת?", "🎓 What do you study?")),
+        el("p", { class: "muted small" }, L("ככה הכלים יתאימו לתחום שלך: מחשבוני תרופות לסיעוד, מקרים למשפטים, נוסחאות להנדסה.", "So the tools fit your field: medication calculators for nursing, cases for law, formulas for engineering.")),
+        el("div", { role: "radiogroup", "aria-label": L("תחום", "Field"), style: "display: flex; flex-wrap: wrap; gap: 6px" },
+          ...STUDY_FIELDS.filter((f) => showAll || FIRST_FIELDS.includes(f.id)).map((f) => chip(p.field === f.id, `${FIELD_ICONS[f.id] ?? "📘"} ${L(f.he, f.en)}`, () => { saveSetup({ field: f.id }); x.draw(); })),
+          showAll ? "" : el("button", { type: "button", class: "link", onclick: () => go({ ...x.view, moreFields: true }) }, L("עוד תחומים…", "More fields…"))),
+        el("p", { class: "small", style: "margin: 10px 0 4px" }, L("באיזו שנה? (לא חובה)", "Which year? (optional)")),
+        el("div", { role: "radiogroup", "aria-label": L("שנה", "Year"), style: "display: flex; flex-wrap: wrap; gap: 6px" },
+          ...[1, 2, 3, 4].map((y) => chip(p.year === y, L(["א׳", "ב׳", "ג׳", "ד׳ ומעלה"][y - 1], ["1st", "2nd", "3rd", "4th+"][y - 1]), () => { saveSetup({ year: p.year === y ? null : y }); x.draw(); }))),
+        nav(() => go2(1, p.field ? undefined : "field"), L("הבא ›", "Next ›"), "field")));
+    } else if (step === 1) {
+      const name = el("input", { dir: "auto", "aria-label": L("שם הקורס", "Course name"), placeholder: L("למשל: פרמקולוגיה", "e.g. Pharmacology"), style: "flex: 1 1 100%; min-width: 0" });
+      const exam = el("input", { type: "date", "aria-label": L("תאריך המבחן (לא חובה)", "Exam date (optional)") });
+      const add = () => {
+        const n = name.value.trim();
+        if (!n) return courses.length ? go2(2) : go2(2, "courses");
+        const c = { id: uid(), name: n.slice(0, 80), createdAt: Date.now(), field: detectField(n, "") || p.field, ...(exam.value ? { examDate: exam.value } : {}), lectures: [], cards: [], reviews: [], quizzes: [] };
+        x.db().courses.push(c);
+        if (commit()) go2(2);
+      };
+      const photo = x.extract ? timetablePhoto(() => go2(2)) : null;
+      x.root.append(section("",
+        el("h2", { tabindex: "-1" }, L("📚 הקורסים שלך", "📚 Your courses")),
+        el("p", { class: "muted small" }, L("לכל קורס יש הרצאות, כרטיסיות ובוחנים משלו. הכי מהיר: צילום של מערכת השעות.", "Each course has its own lectures, cards and quizzes. Fastest: a photo of your timetable.")),
+        photo ? el("div", {}, photo.shot, el("button", { type: "button", class: "primary", style: "width: 100%", onclick: () => photo.shot.click() }, L("📷 כל הקורסים מצילום מערכת השעות", "📷 All my courses from a timetable photo")), photo.found) : "",
+        el("p", { class: "small", style: "margin: 12px 0 4px" }, L("או קורס אחד בכל פעם:", "Or one course at a time:")),
+        el("div", { class: "ph-filter", style: "flex-wrap: wrap" }, name, el("label", { class: "small", style: "display: flex; flex-direction: column; gap: 2px" }, L("מתי המבחן? (לא חובה)", "When is the exam? (optional)"), exam)),
+        courses.length ? el("p", { class: "small", dir: "auto" }, `✅ ${L(`יש לך ${courses.length} קורסים: `, `You have ${courses.length} courses: `)}${courses.slice(0, 6).map((c) => c.name).join(" · ")}`) : "",
+        nav(add, L("להוסיף ולהמשיך ›", "Add and go on ›"), "courses")));
+    } else if (step === 2) {
+      const box = el("div", {}, el("p", { class: "muted small" }, L("בודק מה יש בטלפון…", "Checking this phone…")));
+      x.root.append(section("",
+        el("h2", { tabindex: "-1" }, L("📱 האם זה יעבוד בטלפון?", "📱 Will it work on this phone?")),
+        el("p", { class: "muted small" }, L("הכול נשמר ורץ בטלפון, בלי לשלוח את ההרצאות לשום מקום. צריך מודל שעונה; תמלול הקלטות אם יש.", "Everything stays and runs on the phone; your lectures go nowhere. It needs a model that answers, and speech-to-text if there is one.")),
+        box, el("p", { class: "muted small" }, L("הורדה מתחילה רק כשלוחצים.", "A download starts only when you tap.")),
+        nav(() => void phoneReady().then((st) => go2(3, st.model || st.computer ? undefined : "model")), L("הבא ›", "Next ›"), "model")));
+      void phoneReady().then((st) => box.replaceChildren(readyBox(st)));
+    } else {
+      const has = courses.length > 0;
+      const opt = (label, text, onclick, off) => el("button", { type: "button", disabled: off ? "" : undefined, style: "display: flex; flex-direction: column; align-items: flex-start; text-align: start; width: 100%; margin: 4px 0; padding: 10px 12px", onclick }, el("b", {}, label), el("small", { class: "muted" }, text));
+      x.root.append(section("",
+        el("h2", { tabindex: "-1" }, L("🎙 ההרצאה הראשונה", "🎙 Your first lecture")),
+        el("p", { class: "muted small" }, L("מכל הרצאה נעשים סיכום, כרטיסיות לחזרה ובוחן.", "Each lecture becomes a summary, review cards and a quiz.")),
+        x.speech ? opt(L("🎙 להקליט עכשיו", "🎙 Record now"), L("הגישה למיקרופון נשאלת רק עכשיו.", "The microphone is asked only now."), () => finish("record"), !has) : "",
+        opt(L("📄 טקסט, קובץ או צילום לוח", "📄 Text, a file or a photo of the board"), L("להדביק תמלול, להעלות מצגת או PDF, או לצלם.", "Paste a transcript, upload slides or a PDF, or take a photo."), () => finish("file"), !has),
+        opt(L("🕐 בשיעור הבא", "🕐 In the next class"), L("הכול מוכן. ברשימת \"מתחילים\" יחכה הצעד הבא.", "All set. The \"Getting started\" list keeps the next step."), () => finish("later")),
+        has ? "" : el("p", { class: "small" }, L("כדי להוסיף הרצאה צריך קורס אחד לפחות (שלב 2).", "A lecture needs at least one course (step 2).")),
+        el("div", { class: "ph-btns" }, el("button", { type: "button", onclick: () => go2(2) }, L("‹ חזרה", "‹ Back")))));
+    }
+  }
+  /** "Getting started" on the phone's Study home: what is done, what is left and why, one button each. */
+  function setupList() {
+    const p = loadSetup();
+    if (!p.welcomed || p.checklistHidden) return null;
+    const courses = x.db().courses;
+    const box = el("div");
+    void phoneReady().then((st) => {
+      const items = [
+        [!!p.field, p.field ? L(`התחום: ${fieldName(p.field)}`, `Field: ${fieldName(p.field)}`) : L("התחום שלך", "Your field"), L("כלים שמתאימים לתחום", "Tools that fit your field"), () => { saveSetup({ welcomed: false, setupStep: 0 }); x.draw(); }, L("לבחור", "Choose")],
+        [courses.length > 0, L("הקורסים", "Your courses"), L("לכל קורס הרצאות וכרטיסיות משלו", "Each course has its own lectures and cards"), null, ""],
+        [st.model || st.computer, L("מודל שעונה", "A model that answers"), L("בלעדיו אין סיכום, כרטיסיות ובוחן", "Without it there is no summary, cards or quiz"), x.sync?.openModels ? () => x.sync.openModels() : null, L("להוריד", "Get one")],
+        [courses.some((c) => c.lectures.length), L("ההרצאה הראשונה", "The first lecture"), L("ממנה נעשים סיכום, כרטיסיות ובוחן", "It becomes a summary, cards and a quiz"), courses[0] ? () => go({ at: "course", course: courses[0].id }) : null, L("להוסיף", "Add")],
+      ];
+      const done = items.filter((i) => i[0]).length;
+      if (done === items.length) return box.remove();
+      box.replaceChildren(section("",
+        el("div", { class: "ph-row" }, el("h2", { style: "margin: 0" }, L(`🧭 מתחילים: ${done} מתוך ${items.length}`, `🧭 Getting started: ${done} of ${items.length}`)),
+          el("button", { type: "button", class: "link", onclick: () => { saveSetup({ checklistHidden: true }); box.remove(); } }, L("להסתיר", "Hide"))),
+        ...items.map(([ok, title, why, act, label]) => el("div", { class: "ph-row" },
+          el("span", { style: "flex: 1; min-width: 0" }, el("b", { dir: "auto" }, `${ok ? "✅" : "⬜"} ${title}`), ok ? "" : el("small", { class: "muted" }, ` — ${why}`)),
+          !ok && act ? el("button", { type: "button", onclick: act }, label) : ""))));
+    });
+    return box;
+  }
+
   // ---------- my mistakes, the 5-minute lesson and the match game: from what is already on the phone ----------
   const scheduler = fsrs();
   const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
@@ -855,6 +986,46 @@ export function studyPlus(x) {
       btns(x.speech && el("button", { type: "button", onclick: () => go({ at: "record", course: n.slot.courseId }) }, L("🎙 להקליט את השיעור", "🎙 Record the class")), el("button", { type: "button", onclick: () => go({ at: "course", course: n.slot.courseId }) }, L("לקורס", "To the course"))));
   }
 
+  /**
+   * Classes from a photo of her timetable (the phone's model reads the text): a hidden file input and a box that lists
+   * what was found, with "add them all" (new courses are made, with her field when the name does not tell).
+   *
+   * @param after - Called once they are added.
+   */
+  function timetablePhoto(after) {
+    const t = loadTable();
+    const courses = x.db().courses;
+    const found = el("div");
+    const shot = el("input", { type: "file", accept: "image/*", hidden: true, onchange: async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      found.replaceChildren(el("p", { class: "muted small" }, L("קורא את הצילום… (בטלפון זה לוקח זמן)", "Reading the photo… (this takes a while on a phone)")));
+      let text;
+      try { text = (await x.extract({ name: "timetable.jpg", data: globalThis.btoa(bin) }))?.text; } catch (err) { return found.replaceChildren(el("p", { class: "muted" }, String(err?.message || err))); }
+      if (!text) return found.replaceChildren(el("p", { class: "muted" }, L("לקריאת צילום: בחרי מודל שרואה תמונות (כמו Gemma 4), או התחברי למחשב.", "To read a photo: choose a model that sees pictures (like Gemma 4), or connect to the computer.")));
+      const r = await need([{ role: "system", content: TIMETABLE_PHOTO_PROMPT.replace("You read a photo or screenshot", "You read the text of a photo or screenshot") }, { role: "user", content: `The schedule's text:\n${String(text).slice(0, 6000)}` }]);
+      const list = r === undefined ? [] : cleanReadClasses(jsonIn(r));
+      if (!list.length) return found.replaceChildren(el("p", { class: "muted" }, L("לא נמצאו שיעורים בצילום. נסי צילום חד יותר או צילום מסך של המערכת.", "No classes were found. Try a sharper photo or a screenshot of the schedule.")));
+      const match = (name) => courses.find((c) => c.name.trim() === name.trim() || c.name.includes(name) || name.includes(c.name));
+      found.replaceChildren(section(L(`נמצאו ${list.length} שיעורים`, `${list.length} classes found`),
+        ...list.map((k) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, `${L(`יום ${DAYS[k.day][0]}`, DAYS[k.day][1])} ${k.start}–${k.end} · ${k.name}${k.room ? ` · ${k.room}` : ""}`), el("small", { class: "muted" }, match(k.name) ? L("✓ קורס קיים", "✓ Existing course") : L("+ קורס חדש", "+ New course")))),
+        el("button", { type: "button", class: "primary", onclick: () => {
+          const slots = [...t.slots];
+          for (const k of list) {
+            let c = match(k.name);
+            if (!c) { c = { id: uid(), name: k.name.slice(0, 80), createdAt: Date.now(), field: detectField(k.name, "") || loadSetup().field, lectures: [], cards: [], reviews: [], quizzes: [] }; x.db().courses.push(c); courses.push(c); }
+            slots.push({ id: `t${uid().slice(0, 8)}`, courseId: c.id, day: k.day, start: k.start, end: k.end, ...(k.room ? { room: k.room } : {}), ...(k.kind ? { kind: k.kind } : {}) });
+          }
+          if (commit() && saveTable(cleanTimetable({ ...t, slots }))) after();
+        } }, L("להוסיף את כולם למערכת", "Add them all to the timetable"))));
+    } });
+    return { shot, found };
+  }
+
   /** Her week: classes by day, added by hand or read from a photo of the schedule (the phone reads it, its model sorts it). */
   function timetable() {
     const t = loadTable();
@@ -878,34 +1049,7 @@ export function studyPlus(x) {
         } }, L("הוספה", "Add")))));
     }
     if (x.extract) {
-      const found = el("div");
-      const shot = el("input", { type: "file", accept: "image/*", hidden: true, onchange: async (e) => {
-        const f = e.target.files?.[0];
-        e.target.value = "";
-        if (!f) return;
-        const bytes = new Uint8Array(await f.arrayBuffer());
-        let bin = "";
-        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-        found.replaceChildren(el("p", { class: "muted small" }, L("קורא את הצילום… (בטלפון זה לוקח זמן)", "Reading the photo… (this takes a while on a phone)")));
-        let text;
-        try { text = (await x.extract({ name: "timetable.jpg", data: globalThis.btoa(bin) }))?.text; } catch (err) { return found.replaceChildren(el("p", { class: "muted" }, String(err?.message || err))); }
-        if (!text) return found.replaceChildren(el("p", { class: "muted" }, L("לקריאת צילום: בחרי מודל שרואה תמונות (כמו Gemma 4), או התחברי למחשב.", "To read a photo: choose a model that sees pictures (like Gemma 4), or connect to the computer.")));
-        const r = await need([{ role: "system", content: TIMETABLE_PHOTO_PROMPT.replace("You read a photo or screenshot", "You read the text of a photo or screenshot") }, { role: "user", content: `The schedule's text:\n${String(text).slice(0, 6000)}` }]);
-        const list = r === undefined ? [] : cleanReadClasses(jsonIn(r));
-        if (!list.length) return found.replaceChildren(el("p", { class: "muted" }, L("לא נמצאו שיעורים בצילום. נסי צילום חד יותר או צילום מסך של המערכת.", "No classes were found. Try a sharper photo or a screenshot of the schedule.")));
-        const match = (name) => courses.find((c) => c.name.trim() === name.trim() || c.name.includes(name) || name.includes(c.name));
-        found.replaceChildren(section(L(`נמצאו ${list.length} שיעורים`, `${list.length} classes found`),
-          ...list.map((k) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, `${L(`יום ${DAYS[k.day][0]}`, DAYS[k.day][1])} ${k.start}–${k.end} · ${k.name}${k.room ? ` · ${k.room}` : ""}`), el("small", { class: "muted" }, match(k.name) ? L("✓ קורס קיים", "✓ Existing course") : L("+ קורס חדש", "+ New course")))),
-          el("button", { type: "button", class: "primary", onclick: () => {
-            const slots = [...t.slots];
-            for (const k of list) {
-              let c = match(k.name);
-              if (!c) { c = { id: uid(), name: k.name.slice(0, 80), createdAt: Date.now(), field: detectField(k.name, ""), lectures: [], cards: [], reviews: [], quizzes: [] }; x.db().courses.push(c); courses.push(c); }
-              slots.push({ id: `t${uid().slice(0, 8)}`, courseId: c.id, day: k.day, start: k.start, end: k.end, ...(k.room ? { room: k.room } : {}), ...(k.kind ? { kind: k.kind } : {}) });
-            }
-            if (commit() && saveTable(cleanTimetable({ ...t, slots }))) x.draw();
-          } }, L("להוסיף את כולם למערכת", "Add them all to the timetable"))));
-      } });
+      const { shot, found } = timetablePhoto(() => x.draw());
       x.root.append(section(L("מצילום של המערכת", "From a photo of the schedule"), el("p", { class: "muted small" }, L("צילום מסך מהפורטל או צילום של הדף. קורסים חדשים נוצרים לבד.", "A screenshot from the portal or a photo of the page. New courses are made for you.")), shot, el("button", { type: "button", onclick: () => shot.click() }, L("📷 בחירת צילום", "📷 Choose a photo")), found));
     }
   }
@@ -979,5 +1123,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match }, homeViews: { grades, english, timetable, week }, classBanner };
+  return { needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match }, homeViews: { grades, english, timetable, week }, classBanner };
 }

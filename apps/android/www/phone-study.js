@@ -207,7 +207,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
   };
 
   // The features from the computer's Study (students parts 25-34), here with no computer (phone-study-plus.js).
-  const plus = studyPlus({ root, el, L, go, need, commit, uid, course, draw: () => draw(), back: (to) => back(to), toData, db: () => db, get view() { return view; }, say, speech, extract, wavBase64: (c, r) => wavBase64(c, r) });
+  const plus = studyPlus({ root, el, L, go, need, commit, uid, course, sync, draw: () => draw(), back: (to) => back(to), toData, db: () => db, get view() { return view; }, say, speech, extract, wavBase64: (c, r) => wavBase64(c, r) });
 
   function draw() {
     root.replaceChildren();
@@ -516,8 +516,10 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
   }
 
   function home() {
+    // The first setup (design StudySetupWizardPhone) until she finishes or closes it.
+    if (plus.needsSetup()) return plus.setupView();
     scheduleReminders();
-    if (db.courses.length) root.append(plus.classBanner(), searchBox(), nextCard(), focusCard());
+    if (db.courses.length) root.append(plus.setupList() ?? "", plus.classBanner(), searchBox(), nextCard(), focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);

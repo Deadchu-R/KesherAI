@@ -42,7 +42,23 @@ pg.on("dialog", (d) => {
 await pg.goto("http://127.0.0.1:7991/local.html?tab=study");
 await pg.waitForTimeout(1500);
 const sec = pg.locator("#studySection");
-const checks = { howto: (await sec.locator("text=איך זה עובד").count()) > 0 };
+// The first setup (design StudySetupWizardPhone): field, a course, the readiness check, then "later"; leaving in the
+// middle resumes at the same step.
+const checks = { setup: (await sec.locator("text=מה את לומדת?").count()) > 0 && (await sec.locator("text=שלב 1 מתוך 4").count()) > 0 };
+await sec.locator("button", { hasText: "סיעוד" }).click();
+await sec.locator("button", { hasText: "הבא ›" }).click();
+await pg.waitForTimeout(300);
+await sec.locator("input[aria-label=\"שם הקורס\"]").fill("מבוא לסיעוד");
+await sec.locator("button", { hasText: "להוסיף ולהמשיך" }).click();
+await pg.waitForTimeout(500);
+await pg.reload();
+await pg.waitForTimeout(1500);
+checks.setupResumes = (await sec.locator("text=שלב 3 מתוך 4").count()) > 0 && (await sec.locator("text=האם זה יעבוד בטלפון?").count()) > 0;
+await sec.locator("button", { hasText: "הבא ›" }).click();
+await pg.waitForTimeout(500);
+await sec.locator("button", { hasText: "בשיעור הבא" }).click();
+await pg.waitForTimeout(500);
+checks.setupDone = (await sec.locator("text=מתחילים:").count()) > 0 && (await pg.evaluate(() => JSON.parse(localStorage.getItem("kesherai-study") || "{}").courses?.[0]?.field)) === "nursing";
 await sec.locator("input[aria-label=\"שם קורס\"]").fill("פרמקולוגיה");
 await sec.locator("button", { hasText: "+ קורס" }).click();
 await pg.waitForTimeout(500);
