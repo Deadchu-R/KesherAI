@@ -262,13 +262,30 @@ def features(m, audio):
     return [f], len(audio)
 
 
+def mic_device(name):
+    """The input device for --mic: an index, or a full name from --list-mics matched to the default host API's device
+    (MME's names are the first 31 characters of the full one)."""
+    if not name:
+        return None
+    if name.isdigit():
+        return int(name)
+    import sounddevice as sd
+
+    hits = [(len(d["name"]), i) for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0 and d["hostapi"] == sd.default.hostapi and name.startswith(d["name"])]
+    return max(hits)[1] if hits else name
+
+
 async def main():
     a = parse()
     if a.list_mics:
         import sounddevice as sd
 
-        default = sd.default.device[0]
-        mics = [{"name": d["name"], "default": i == default} for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0 and d["hostapi"] == sd.default.hostapi]
+        # Full names from WASAPI (the default MME cuts them at 31 characters); the mic is still opened through MME
+        # (see mic_device), which takes any sample rate.
+        apis = list(sd.query_hostapis())
+        api = next((i for i, h in enumerate(apis) if "WASAPI" in h["name"]), sd.default.hostapi)
+        default = apis[api]["default_input_device"] if api != sd.default.hostapi else sd.default.device[0]
+        mics = [{"name": d["name"], "default": i == default} for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0 and d["hostapi"] == api]
         print(json.dumps(mics, ensure_ascii=False), flush=True)
         return
     import websockets
@@ -277,7 +294,7 @@ async def main():
     av = Avatar(m, a.clip, a.work)
     if a.prepare_only:
         return
-    mic = FileMic(a.test_audio) if a.test_audio else Mic(int(a.mic) if a.mic and a.mic.isdigit() else a.mic, a.cable)
+    mic = FileMic(a.test_audio) if a.test_audio else Mic(mic_device(a.mic), a.cable)
     clients = Clients()
 
     async def handler(ws):
