@@ -59,6 +59,9 @@ export function LensPage({ id }: { id?: string }) {
   // A translation drawn over the picture, line by line (Windows' OCR found where each line is).
   const [over, setOver] = useState<Array<{ t: string; left: number; top: number; width: number; height: number }>>([]);
   const [question, setQuestion] = useState("");
+  // The finger's or mouse's path while marking: a circle (or any scribble) around something marks the box around it,
+  // like Circle to Search; a straight drag stays a rectangle.
+  const [path, setPath] = useState<Array<[number, number]>>([]);
   const img = useRef<HTMLImageElement>(null);
   const he = getLocale() === "he";
   const close = () => {
@@ -139,13 +142,30 @@ export function LensPage({ id }: { id?: string }) {
     if ((e.target as HTMLElement).closest(".lens-bar, .lens-card")) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setDrag({ x: e.clientX, y: e.clientY });
+    setPath([[e.clientX, e.clientY]]);
     setOver([]);
     setBox({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
     setResult(null);
   };
-  const moveTo = (e: React.PointerEvent) => drag && setBox({ x: Math.min(drag.x, e.clientX), y: Math.min(drag.y, e.clientY), w: Math.abs(e.clientX - drag.x), h: Math.abs(e.clientY - drag.y) });
+  const moveTo = (e: React.PointerEvent) => {
+    if (!drag) return;
+    setBox({ x: Math.min(drag.x, e.clientX), y: Math.min(drag.y, e.clientY), w: Math.abs(e.clientX - drag.x), h: Math.abs(e.clientY - drag.y) });
+    if (path.length < 2000) setPath([...path, [e.clientX, e.clientY]]);
+  };
   const up = () => {
     setDrag(null);
+    // A scribble (its path much longer than a straight drag would be): the box around everything it went over.
+    const xs = path.map((p) => p[0]);
+    const ys = path.map((p) => p[1]);
+    const len = path.reduce((n, p, i) => (i ? n + Math.hypot(p[0] - path[i - 1]![0], p[1] - path[i - 1]![1]) : 0), 0);
+    if (path.length > 8) {
+      const b = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+      if (len > 1.8 * Math.hypot(b.w, b.h) && b.w >= 8 && b.h >= 8) {
+        setPath([]);
+        return setBox(b);
+      }
+    }
+    setPath([]);
     // A tap (no drag) marks the whole picture.
     if (box && (box.w < 8 || box.h < 8) && img.current) {
       const r = shown(img.current);
@@ -157,9 +177,13 @@ export function LensPage({ id }: { id?: string }) {
   return (
     <div className={`lens${overlay ? " overlay" : ""}`} onPointerDown={down} onPointerMove={moveTo} onPointerUp={up}>
       <img ref={img} src={withToken(`/api/lens/shot/${shot}`)} alt="" draggable={false} onLoad={() => { if (all && img.current) { const r = shown(img.current); setBox({ x: r.x, y: r.y, w: r.w, h: r.h }); } }} onError={() => { toast(L("התמונה כבר לא שמורה. לחצי שוב על המקש.", "The picture is gone. Press the key again.")); setShot(undefined); }} />
-      {box && <div className="lens-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />}
+      {drag && path.length > 8 ? (
+        <svg className="lens-path" aria-hidden="true" style={{ position: "fixed", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+          <polyline points={path.map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--accent, #a5b4ff)" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : box && <div className="lens-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />}
       {over.map((o, i) => <div key={i} className="lens-over" dir="auto" style={{ left: o.left, top: o.top, minWidth: o.width, height: Math.max(14, o.height), fontSize: Math.max(10, Math.min(28, o.height * 0.8)) }}>{o.t}</div>)}
-      {!box && <div className="lens-hint chip">{L("גוררים כדי לסמן · נגיעה = כל התמונה · Esc לסגירה", "Drag to mark · a tap = the whole picture · Esc to close")}</div>}
+      {!box && <div className="lens-hint chip">{L("גוררים מלבן או מקיפים בעיגול · נגיעה = כל התמונה · Esc לסגירה", "Drag a box or draw a circle · a tap = the whole picture · Esc to close")}</div>}
       <button type="button" className="lens-close ghost" onClick={close} aria-label={L("סגירה", "Close")}>✕</button>
       {box && !drag && box.w >= 8 && (
         <div className="lens-bar" style={{ left, top: below }} dir={he ? "rtl" : "ltr"}>
