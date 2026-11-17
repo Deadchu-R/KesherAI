@@ -9,6 +9,7 @@ import { ReadAlong } from "../ReadAlong";
 import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
+import { StudyLive } from "../StudyLive";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
 import { StudyHighlights } from "../StudyHighlights";
@@ -1652,6 +1653,7 @@ function PastExams({ courseId, exams, onChange }: { courseId: string; exams: Non
 
 function Quiz({ courseId, lectures, pastExams, clinical, mocks, onChange }: { courseId: string; lectures: LectureRow[]; pastExams: NonNullable<CourseInfo["pastExams"]>; clinical: boolean; mocks: NonNullable<CourseInfo["mocks"]>; onChange: () => void }) {
   const [mock, setMock] = useState(false);
+  const [live, setLive] = useState(false);
   const only = new URLSearchParams(location.hash.split("?")[1] ?? "").get("l") ?? undefined;
   const [quiz, setQuiz] = useState<StudyQuiz | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -1692,6 +1694,7 @@ function Quiz({ courseId, lectures, pastExams, clinical, mocks, onChange }: { co
     if (r) { setQuiz(r); onChange(); }
   };
   if (!lectures.length) return <p className="muted">{L("הוסיפי הרצאה כדי לקבל בוחן.", "Add a lecture to get a quiz.")}</p>;
+  if (live) return <StudyLive courseId={courseId} {...(only ? { lectureIds: [only] } : {})} onClose={() => setLive(false)} />;
   if (mock) return <StudyMock courseId={courseId} lectures={lectures} pastExams={pastExams.length} clinical={clinical} history={mocks} onDone={onChange} onClose={() => setMock(false)} />;
   if (!quiz) return (
     <section className="card study-quiz-setup">
@@ -1708,6 +1711,7 @@ function Quiz({ courseId, lectures, pastExams, clinical, mocks, onChange }: { co
         <button type="button" className="primary" disabled={busy} onClick={() => void make(false)}>{busy ? L("כותב שאלות…", "Writing questions…") : L("התחל בוחן", "Start quiz")}</button>
         {!only && <button type="button" disabled={busy} onClick={() => void make(true)}>{L("על הנושאים החלשים", "On weak topics")}</button>}
         {!only && <button type="button" disabled={busy} onClick={() => setMock(true)}>📝 {L("מבחן דמה (עם שעון, ציון בסוף)", "Mock exam (timed, graded at the end)")}</button>}
+        <button type="button" disabled={busy} onClick={() => setLive(true)}>🎮 {L("בוחן חי עם חברים", "Live quiz with friends")}</button>
       </div>
       {!only && <PastExams courseId={courseId} exams={pastExams} onChange={onChange} />}
       <p className="muted small">{kind === "choice" ? L("השאלות נכתבות מהחומר שלך בלבד, והבדיקה נעשית בקוד.", "Questions come from your material only; grading is done by code.") : L("השאלות נכתבות מהחומר שלך בלבד. את התשובות בודק המודל מול תשובה לדוגמה ומול ההרצאה.", "Questions come from your material only. The model checks answers against a model answer and the lecture.")}</p>

@@ -61,6 +61,7 @@ import { journalRoutes } from "../routes/journal.js";
 import { gameRoutes } from "../routes/game.js";
 import { timerRoutes } from "../routes/timers.js";
 import { studyRoutes } from "../routes/study.js";
+import { liveQuizRoutes } from "../routes/live-quiz.js";
 import { moodleRoutes } from "../routes/moodle.js";
 import { webImageRoutes } from "../routes/web-image.js";
 import { studyPlanRoutes } from "../routes/study-plans.js";
@@ -131,6 +132,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await textHelperRoutes(app, services);
   await timerRoutes(app, chatTimers);
   await studyRoutes(app, services);
+  await liveQuizRoutes(app, services.study);
   await moodleRoutes(app, services);
   await webImageRoutes(app);
   await studyPlanRoutes(app, services);
