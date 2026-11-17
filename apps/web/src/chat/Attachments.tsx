@@ -95,7 +95,9 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
           {p?.kind === "html" && <iframe className="attach-frame" sandbox="" srcDoc={framed(p.html)} title={p.name} />}
           {p?.kind === "text" && <pre className="attach-text" dir="auto">{p.text}</pre>}
           {p?.kind === "image" && <img className="attach-img" src={download} alt={p.name} />}
-          {p?.kind === "none" && <p className="muted">{L("אין תצוגה מקדימה לסוג הקובץ הזה. אפשר להוריד אותו.", "No preview for this kind of file. You can download it.")}</p>}
+          {p?.kind === "none" && /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) && <video className="attach-img" src={download} controls preload="metadata" />}
+          {p?.kind === "none" && /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <audio src={download} controls preload="metadata" style={{ width: "100%" }} />}
+          {p?.kind === "none" && !/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <p className="muted">{L("אין תצוגה מקדימה לסוג הקובץ הזה. אפשר להוריד אותו.", "No preview for this kind of file. You can download it.")}</p>}
         </div>
       </div>
     </div>
