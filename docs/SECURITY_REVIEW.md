@@ -1123,6 +1123,13 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 128 (2026-11-17): sources import, a table as a sheet, the phone's share lens, the circle lens
+- **BibTeX/RIS import (fixed while scanning)**: the first BibTeX reader matched whole entries with one lazy pattern over the file, which a broken file (many "@" and no closing brace) could make slow; it now splits the file at each "@" line (at most 2000 entries, 50 KB each) and reads one entry at a time (a 20,000-entry broken file: 5 ms). Up to 4 MB a request; every source goes through `cleanSources` (lengths, DOI shape, http(s) links only); at most 500 sources a course.
+- **Comparison table → sheet**: only the first Markdown table's cells, as CSV, through the existing sheet route (its limits); no formulas are made from model text unless a cell starts with "=" as typed by the model — sheets compute locally and only reference other cells (no outside calls).
+- **Share → KesherAI on the phone**: only files ShareActivity copied into the app's own share folder can be read (`inShared` path check), at most 10, removed after reading; pictures go to the phone's own model; text files over 400 KB are refused.
+- **Circle lens**: the path is kept in memory only while marking (at most 2000 points); nothing new leaves the computer.
+- **Downloads default folder**: a .gguf without a category goes to models/chat (still under the models folder; the path check against the base is unchanged).
+
 ## Scan 127 (2026-11-17): the phone link page, development plugin folders, a new npm advisory
 - **/open (a link that opens the phone app)**: outside /api with the nonce'd CSP, no-referrer, no-store; the key travels only in the link's # part (never sent to the server or logged), is checked against `^[\w.~-]{8,200}$` and leaves the address bar at once (history.replaceState); the intent names the app's package, with the browser as the fallback.
 - **Development plugin folders**: added and removed only from this computer (`isLocalRequest`), at most 10, must hold a kesher-plugin.json; they load with the same rules as installed plugins (their own process, permissions shown); the watcher ignores node_modules and .git and reloads at most once per 800 ms; watching stops at shutdown.

@@ -161,8 +161,10 @@ const firstLast = (n: string) => (n.includes(",") ? `${n.split(",").slice(1).joi
  */
 export function parseBibtex(text: string): StudySource[] {
   const out: Array<Record<string, unknown>> = [];
-  for (const m of String(text).slice(0, 2_000_000).matchAll(/@(\w+)\s*\{\s*[^,]*,([\s\S]*?)\n\s*\}\s*(?=@|$)/g)) {
-    if (/^(comment|string|preamble)$/i.test(m[1]!)) continue;
+  // Entry by entry (each starts with "@" at a line's start), so a broken file cannot make the matching slow.
+  for (const chunk of String(text).slice(0, 2_000_000).split(/\n(?=\s*@)/).slice(0, 2000)) {
+    const m = /^\s*@(\w+)\s*[{(]\s*[^,]*,([\s\S]*)[})]\s*$/.exec(chunk.slice(0, 50_000));
+    if (!m || /^(comment|string|preamble)$/i.test(m[1]!)) continue;
     const f: Record<string, string> = {};
     for (const g of m[2]!.matchAll(/(\w+)\s*=\s*(\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}|"([^"]*)"|(\d+))/g)) f[g[1]!.toLowerCase()] = (g[3] ?? g[4] ?? g[5] ?? "").replace(/\\["'`^~]?\{?(\w)\}?/g, "$1").replace(/[{}]/g, "").replace(/\\([%&$#_])/g, "$1");
     out.push({ title: f.title, authors: (f.author ?? "").split(/\s+and\s+/i).map(firstLast).filter(Boolean), year: Number(/\d{4}/.exec(f.year ?? f.date ?? "")?.[0]), venue: f.journal ?? f.journaltitle ?? f.booktitle ?? f.publisher, volume: f.volume, issue: f.number ?? f.issue, pages: f.pages?.replace(/--/g, "–"), doi: f.doi, url: f.url });
