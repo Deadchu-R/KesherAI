@@ -4,6 +4,8 @@
  * One JSON file per course, on this computer.
  */
 import { randomUUID } from "node:crypto";
+import { renderPdfPages } from "./pdf-pages.js";
+import { ocrText } from "./ocr.js";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
@@ -826,8 +828,39 @@ export class Study {
     const doc = await documentText(data, name);
     // Each page or slide keeps its number (a lecture's "slide 12" can be found again).
     const text = doc.pages.map((p, i) => [i + 1, p.trim()] as const).filter(([, p]) => p).map(([n, p]) => (doc.pages.length > 1 ? `— ${n} —\n${p}` : p)).join("\n\n");
-    if (!text.trim()) throw bad(ext === ".pdf" ? "This PDF has no text in it (a scan). Send photos of its pages instead." : "The file has no text.");
+    if (!text.trim() && ext === ".pdf") return { title, text: await this.readScannedPdf(data, signal) };
+    if (!text.trim()) throw bad("The file has no text.");
     return { title, text: text.slice(0, 400_000) };
+  }
+
+  /**
+   * A scanned PDF (design ScannedPdf, students part 29 #8): Windows renders its pages; each is read by Windows' Hebrew
+   * OCR when the language pack is there, else by the vision model (slower, so fewer pages). Pages keep their marks.
+   */
+  private async readScannedPdf(data: Buffer, signal?: AbortSignal): Promise<string> {
+    const bad = (msg: string) => Object.assign(new Error(msg), { statusCode: 400 });
+    const r = await renderPdfPages(data, 60);
+    if (!r) throw bad("This PDF has no text in it (a scan), and it could not be opened as pictures here. Send photos of its pages instead.");
+    const out: string[] = [];
+    let vision = false;
+    for (let i = 0; i < r.pages.length; i++) {
+      if (signal?.aborted) break;
+      let text: string | undefined;
+      if (!vision) {
+        const o = await ocrText(r.pages[i]!, true);
+        if (o.why === "no-language") vision = true;
+        else text = o.text;
+      }
+      if (vision) {
+        if (i >= 15) break;
+        text = (await this.extract(`page-${i + 1}.png`, r.pages[i]!, signal).catch(() => undefined))?.text;
+      }
+      if (text?.trim()) out.push(`— ${i + 1} —\n${text.trim()}`);
+    }
+    if (!out.length) throw bad("No text was found on the PDF's pages.");
+    const read = vision ? Math.min(r.pages.length, 15) : r.pages.length;
+    const note = r.total > read ? `\n\n(${read} of ${r.total} pages were read.)` : "";
+    return `${out.join("\n\n")}${note}`.slice(0, 400_000);
   }
 
   /** Writes the lecture's spoken review (an audio overview) from its summary, or its text, and keeps it. */

@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { KesherServices } from "../services.js";
 import { modelTurnFor } from "../conversations.js";
 import { isLocalRequest } from "../auth.js";
+import { ocrWhyLast, windowsOcr } from "../ocr.js";
+
+export { parseOcr, type OcrLine } from "../ocr.js";
 
 /** What the lens can do with a part of the screen. */
 export type LensAction = "ask" | "search" | "translate" | "summarize" | "text";
@@ -45,79 +46,6 @@ const pngOf = (b64: unknown) => {
   if (buf.length > 20 * 1024 * 1024) throw Object.assign(new Error("The picture is too big."), { statusCode: 413 });
   return buf;
 };
-
-/** A line Windows' OCR found: its text and box, in the picture's pixels. */
-export interface OcrLine { t: string; x: number; y: number; w: number; h: number }
-
-/** The OCR script's JSON (one line or a list), checked. */
-export function parseOcr(out: string): OcrLine[] | undefined {
-  try {
-    const j = JSON.parse(out.trim().replace(/^\uFEFF/, "")) as unknown;
-    const list = (Array.isArray(j) ? j : [j]) as Array<Record<string, unknown>>;
-    const lines = list.filter((l) => l && typeof l.t === "string" && l.t.trim()).map((l) => ({ t: String(l.t), x: Number(l.x) || 0, y: Number(l.y) || 0, w: Number(l.w) || 0, h: Number(l.h) || 0 }));
-    return lines.length ? lines : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Windows' own text recognition (Windows.Media.Ocr, on the computer, nothing sent): the text of a picture, or
- * undefined when it is not available (not Windows, no language pack) so the vision model reads it instead.
- */
-/** Why the last OCR attempt failed (shown with the answer, so a missing language pack is visible). */
-let ocrWhy = "";
-
-async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefined> {
-  ocrWhy = "";
-  if (process.platform !== "win32") return undefined;
-  const dir = await mkdtemp(join(tmpdir(), "kesher-ocr-"));
-  try {
-    const file = join(dir, "shot.png");
-    await writeFile(file, png);
-    const script = [
-      "$ErrorActionPreference='Stop'",
-      "Add-Type -AssemblyName System.Runtime.WindowsRuntime",
-      "$as=([System.WindowsRuntimeSystemExtensions].GetMethods()|?{$_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'})[0]",
-      "function Await($op,$t){$task=$as.MakeGenericMethod($t).Invoke($null,@($op));$task.Wait(-1)|Out-Null;$task.Result}",
-      "[Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime]|Out-Null",
-      "[Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
-      "[Windows.Graphics.Imaging.BitmapDecoder,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
-      "[Windows.Graphics.Imaging.SoftwareBitmap,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
-      "[Windows.Storage.Streams.IRandomAccessStream,Windows.Storage.Streams,ContentType=WindowsRuntime]|Out-Null",
-      "[Windows.Media.Ocr.OcrResult,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
-      "[Windows.Globalization.Language,Windows.Globalization,ContentType=WindowsRuntime]|Out-Null",
-      `$f=Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($env:KESHER_OCR_FILE)) ([Windows.Storage.StorageFile])`,
-      "$s=Await ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])",
-      "$d=Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])",
-      "$b=Await ($d.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])",
-      `$lang=[Windows.Globalization.Language]::new('${he ? "he" : "en"}')`,
-      // Without Windows' Hebrew OCR pack an English engine reads Hebrew as gibberish (seen on the PC): say so instead.
-      `if(-not [Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)){[Console]::Out.Write('NO-LANG');exit 0}`,
-      "$e=[Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)",
-      "if(-not $e){exit 3}",
-      "$r=Await ($e.RecognizeAsync($b)) ([Windows.Media.Ocr.OcrResult])",
-      "[Console]::OutputEncoding=[Text.Encoding]::UTF8",
-      // Each line with its box (the union of its words), for drawing a translation over it.
-      "ConvertTo-Json -Compress -Depth 3 @($r.Lines|%{$ws=@($_.Words|%{$_.BoundingRect});$x=($ws|%{$_.X}|Measure-Object -Minimum).Minimum;$y=($ws|%{$_.Y}|Measure-Object -Minimum).Minimum;$r2=($ws|%{$_.X+$_.Width}|Measure-Object -Maximum).Maximum;$b=($ws|%{$_.Y+$_.Height}|Measure-Object -Maximum).Maximum;@{t=$_.Text;x=$x;y=$y;w=$r2-$x;h=$b-$y}})",
-    ].join(";");
-    const out = await new Promise<string>((resolve, reject) =>
-      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, KESHER_OCR_FILE: file }, timeout: 20_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(Object.assign(err, { why: String(stderr || err.message).replace(/\s+/g, " ").slice(0, 300) })) : resolve(stdout))),
-    );
-    if (out.trim() === "NO-LANG") {
-      ocrWhy = "no-language";
-      return undefined;
-    }
-    const lines = parseOcr(out);
-    if (!lines) ocrWhy = out.trim() ? "no text lines" : "no text found";
-    return lines;
-  } catch (e) {
-    ocrWhy = (e as { why?: string }).why ?? (e as Error).message;
-    return undefined;
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
-  }
-}
 
 /**
  * The screen lens (design ScreenLens, RESEARCH_LOG "Screen lens, part 1"): the key freezes the screen (a picture kept
@@ -183,7 +111,7 @@ export async function lensRoutes(app: FastifyInstance, s: KesherServices): Promi
     });
     const text = r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
     if (!text) return reply.code(502).send({ error: "The chat model did not answer. Choose a model that sees pictures (for example Gemma 4 or Qwen-VL)." });
-    return { text, by: "model", ...(ocrWhy && (action === "text" || action === "translate") ? { ocr: ocrWhy } : {}) };
+    return { text, by: "model", ...(ocrWhyLast() && (action === "text" || action === "translate") ? { ocr: ocrWhyLast() } : {}) };
   });
   /** "Continue in chat": a new chat with the marked part attached and her question (or the action) sent. */
   app.post<{ Body: { image?: string; action?: string; question?: string; he?: boolean } }>("/api/lens/chat", { bodyLimit: 28 * 1024 * 1024 }, async (req) => {
