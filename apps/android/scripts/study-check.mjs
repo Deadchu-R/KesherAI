@@ -68,6 +68,11 @@ await sec.locator("button", { hasText: "עצירה" }).click();
 await pg.waitForTimeout(300);
 await sec.locator("button", { hasText: "פתח" }).first().click();
 await pg.waitForTimeout(300);
+await sec.locator("button", { hasText: "פתח" }).first().click();
+await pg.waitForTimeout(300);
+checks.teachBack = (await sec.locator("summary", { hasText: "להסביר במילים שלי" }).count()) > 0;
+await sec.locator("button", { hasText: "› חזרה" }).first().click().catch(() => undefined);
+await pg.waitForTimeout(300);
 await sec.locator("button", { hasText: "שאלי את הקורס" }).click();
 await pg.waitForTimeout(400);
 checks.ask = (await sec.locator("text=התשובות רק מההרצאות שלך").count()) > 0;
@@ -95,7 +100,7 @@ const backTo = async () => { await sec.locator("button", { hasText: "› חזר�
 const open = async (label, wait = 300) => { await sec.locator("button", { hasText: label }).first().click(); await pg.waitForTimeout(wait); };
 await backTo();
 checks.plusButtons = (await sec.locator("button", { hasText: "📱 פיד" }).count()) > 0 && (await sec.locator("button", { hasText: "✉️ מכתב למרצה" }).count()) > 0;
-for (const [name, label, look] of [["mock", "📝 מבחן דמה", "button:has-text('לבנות את המבחן')"], ["feed", "📱 פיד", "text=הפיד מתמלא"], ["web", "🕸 מפת הקורס", "text=המפה נבנית"], ["palace", "🏛 ארמון זיכרון", "text=ארמון זיכרון נבנה"], ["papers", "📚 מאמרים ומקורות", "input[type=search]"], ["letter", "✉️ מכתב למרצה", "select[aria-label='סוג המכתב']"]]) {
+for (const [name, label, look] of [["mock", "📝 מבחן דמה", "button:has-text('לבנות את המבחן')"], ["feed", "📱 פיד", "text=הפיד מתמלא"], ["web", "🕸 מפת הקורס", "text=המפה נבנית"], ["palace", "🏛 ארמון זיכרון", "text=ארמון זיכרון נבנה"], ["papers", "📚 מאמרים ומקורות", "input[type=search]"], ["letter", "✉️ מכתב למרצה", "select[aria-label='סוג המכתב']"], ["writing", "✍️ מאמן כתיבה", "select[aria-label='שלב']"]]) {
   await open(label);
   checks[name] = (await sec.locator(look).count()) > 0 && (await wide());
   await backTo();

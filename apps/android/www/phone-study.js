@@ -797,6 +797,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), player ? el("section", { class: "api" }, player, el("small", { class: "muted" }, L("ההקלטה שמורה במחשב. לחיצה על דקה בטקסט המלא מנגנת משם.", "The recording is kept on the computer. A minute in the full text plays from there."))) : "", explainBox,
       el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l), plus.podcastBtn(c, l))),
       plus.portions(c, l),
+      plus.teachBackBox(c, l),
       notesBox(l, c),
       picturesBox(l),
       flowView(l.diagram),

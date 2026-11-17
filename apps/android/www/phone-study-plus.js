@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -40,6 +40,7 @@ export function studyPlus(x) {
       el("button", { type: "button", onclick: () => go({ at: "palace", course: c.id }) }, L("🏛 ארמון זיכרון", "🏛 Memory palace")),
       el("button", { type: "button", onclick: () => go({ at: "papers", course: c.id }) }, L("📚 מאמרים ומקורות", "📚 Papers and sources")),
       x.speech && el("button", { type: "button", onclick: () => go({ at: "rehearse", course: c.id }) }, L("🎤 חזרה על הצגה", "🎤 Rehearse a talk")),
+      el("button", { type: "button", onclick: () => go({ at: "writing", course: c.id }) }, L("✍️ מאמן כתיבה", "✍️ Writing coach")),
       el("button", { type: "button", onclick: () => go({ at: "letter", course: c.id }) }, L("✉️ מכתב למרצה", "✉️ Letter to the lecturer")));
   }
 
@@ -633,6 +634,52 @@ export function studyPlus(x) {
       btns(el("button", { type: "button", class: "primary", onclick: () => x.go({ at: "mock", course: c.id }) }, L("מבחן דמה נוסף", "Another mock exam")))));
   }
 
+  // ---------- explain it back (Feynman) and the writing coach, on the phone's model ----------
+  const heb = (t) => /[\u0590-\u05ff]/.test(t);
+  /** In a lecture: she explains it in her own words; what she got, what she left out (as cards), what was wrong. */
+  function teachBackBox(c, l) {
+    const ta = el("textarea", { rows: "4", dir: "auto", "aria-label": L("ההסבר שלך", "Your explanation"), placeholder: L("הסבירי את ההרצאה במילים שלך, כאילו לחברה שלא הייתה בשיעור…", "Explain the lecture in your own words, as to a friend who missed it…") });
+    const out = el("div");
+    const b = el("button", { type: "button", class: "primary" }, L("בדיקה", "Check"));
+    b.onclick = async () => {
+      if (ta.value.trim().length < 20) return alert(L("כתבי כמה משפטים קודם.", "Write a few sentences first."));
+      const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture:\n${l.text.slice(0, 6000)}` : l.text.slice(0, 8000);
+      const r = await need([{ role: "system", content: `${TEACH_BACK_PROMPT}${heb(ta.value) ? " Write it all in Hebrew." : ""}` }, { role: "user", content: `Lecture: ${l.title}\n\n${material}\n\nHer explanation:\n${ta.value.slice(0, 4000)}` }], b);
+      const t = r && parseTeachBack(jsonIn(r));
+      if (!t) return r !== undefined && alert(L("המודל לא בדק בצורה הצפויה. נסי שוב.", "The model did not check it in the expected form. Try again."));
+      const cards = t.missing.filter((m) => m.card);
+      out.replaceChildren(el("p", {}, el("b", {}, L(`הבנה: ${t.score}/100`, `Understanding: ${t.score}/100`))),
+        t.covered.length ? el("p", { dir: "auto", class: "small" }, `✓ ${t.covered.join(" · ")}`) : "",
+        ...t.missing.map((m) => el("p", { dir: "auto", class: "small" }, `○ ${m.point}`)),
+        ...t.wrong.map((w) => el("p", { dir: "auto", class: "small" }, `✗ ${w.said} → ${w.right}`)),
+        t.tip ? el("p", { dir: "auto", class: "small muted" }, `💡 ${t.tip}`) : "",
+        cards.length ? el("button", { type: "button", onclick: (e) => { for (const m of cards) newCard(c, m.card.front, m.card.back, l.id); if (commit()) { e.currentTarget.disabled = true; e.currentTarget.textContent = L("✓ נוספו", "✓ Added"); } } }, L(`📇 ${cards.length} מה שחסר לכרטיסיות`, `📇 What was missing as ${cards.length} cards`)) : "");
+    };
+    return el("details", { class: "api" }, el("summary", {}, L("🗣 להסביר במילים שלי", "🗣 Explain it in my words")), ta, b, out);
+  }
+
+  /** The writing coach: feedback on her assignment, outline, draft or revision; it never writes the work for her. */
+  function writing(c) {
+    x.root.append(back({ at: "course", course: c.id }), el("h2", {}, L("✍️ מאמן כתיבה", "✍️ Writing coach")));
+    const stage = el("select", { "aria-label": L("שלב", "Stage") }, ...[["assignment", "המטלה (להבין מה מבקשים)", "The assignment"], ["outline", "ראשי פרקים / טענה", "Outline / thesis"], ["draft", "טיוטה", "Draft"], ["revision", "תיקון אחרי הערות", "Revision"]].map(([k, h, e]) => el("option", { value: k }, L(h, e))));
+    const text = el("textarea", { rows: "8", dir: "auto", "aria-label": L("הטקסט שלך", "Your text"), placeholder: L("הדביקי את המטלה או את מה שכתבת", "Paste the assignment or what you wrote") });
+    const out = el("div");
+    const b = el("button", { type: "button", class: "primary" }, L("משוב", "Feedback"));
+    b.onclick = async () => {
+      const t = text.value.trim();
+      if (t.length < 30) return alert(L("כתבי או הדביקי כמה משפטים קודם.", "Write or paste a few sentences first."));
+      const passages = findPassages(c.lectures, t.slice(0, 3000), 3000).map((p) => `[${p.title}]\n${p.text}`).join("\n\n---\n\n") || "(No lecture passage matches.)";
+      const r = await need([{ role: "system", content: `${WRITING_PROMPT(stage.value)}${heb(t) ? " Write it all in Hebrew." : ""}` }, { role: "user", content: `Her text:\n<<<\n${t.slice(0, 8000)}\n>>>\n\nPassages from her course's lectures:\n${passages}` }], b);
+      const f = r && parseWritingFeedback(jsonIn(r), t);
+      if (!f) return r !== undefined && alert(L("המאמן לא ענה בצורה הצפויה. נסי שוב.", "The coach did not answer in the expected form. Try again."));
+      out.replaceChildren(section("", el("p", { dir: "auto" }, f.summary),
+        ...f.dimensions.map((d) => el("p", { dir: "auto", class: "small" }, `${"●".repeat(d.level)}${"○".repeat(4 - d.level)} ${d.name}: ${d.note}`)),
+        ...f.comments.map((m) => el("p", { dir: "auto", class: "small" }, el("q", {}, m.quote), ` — ${m.note}`)),
+        f.next.length ? el("ol", { dir: "auto" }, ...f.next.map((n) => el("li", {}, n))) : ""));
+    };
+    x.root.append(section("", el("p", { class: "muted small" }, L("המאמן לא כותב בשבילך: הוא שואל, מצביע על המילים שלך ומסביר, עם מה שבהרצאות.", "The coach never writes it for you: it asks, points to your words and explains, with what the lectures say.")), stage, text, b), out);
+  }
+
   // ---------- the timetable, typed or read from a photo ----------
   const loadTable = () => { try { return cleanTimetable(JSON.parse(localStorage.getItem(TABLE_KEY) || "{}")); } catch { return cleanTimetable({}); } };
   // Her changes carry the time, so the phone's and the computer's copies sync (the later one wins).
@@ -721,5 +768,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock }, homeViews: { grades, english, timetable }, classBanner };
+  return { teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing }, homeViews: { grades, english, timetable }, classBanner };
 }
