@@ -65,8 +65,47 @@ type NativeVoice = {
 };
 const nativeVoice = (): NativeVoice | undefined => (window as unknown as { Capacitor?: { Plugins?: { KesherSpeech?: NativeVoice } } }).Capacitor?.Plugins?.KesherSpeech;
 
-/** Stops whatever is being read aloud. */
+/** A two-host talk being played (each line its own speak); stopping from outside ends it. */
+let dialog = 0;
+
+const OPENAI_VOICES = ["onyx", "nova", "echo", "shimmer"];
+// Kokoro's speaker ids: Michael (a man) for the second host, or Heart (a woman) when she chose a man.
+const LOCAL_VOICES = ["16", "3"];
+/** Another voice from the list than the one she chose (the second host). */
+const otherVoice = (mine: string, list: string[]) => list.find((v) => v !== mine) ?? mine;
+
+/**
+ * Plays a talk between two hosts line by line, each host in its own voice (design Podcast). Stop (or any other
+ * reading) ends it; `done` is called at the end or when stopped.
+ *
+ * @param lines - The talk's lines.
+ * @param done - Called once at the end.
+ * @param rate - The speed (0.25–4).
+ * @param from - The line to start at.
+ * @param onLine - Told each line as it starts (to show it).
+ */
+export function speakDialog(lines: Array<{ host: 0 | 1; text: string }>, done?: () => void, rate = 1, from = 0, onLine?: (i: number) => void): void {
+  stopSpeaking();
+  const mine = dialog;
+  const next = (i: number) => {
+    if (mine !== dialog || i >= lines.length) {
+      done?.();
+      return;
+    }
+    onLine?.(i);
+    void speak(lines[i]!.text, () => next(i + 1), rate, lines[i]!.host, true);
+  };
+  next(from);
+}
+
+/** Stops whatever is being read aloud (and a two-host talk). */
 export function stopSpeaking(): void {
+  dialog++;
+  stopNow();
+}
+
+/** Stops the voice now, keeping a two-host talk going (its next line starts after). */
+function stopNow(): void {
   gen++;
   loading?.abort();
   loading = null;
@@ -86,9 +125,11 @@ export function stopSpeaking(): void {
  * @param text - What to say.
  * @param onEnd - Called when it finishes or stops.
  * @param rate - The speed (0.25–4; the lecture video and audio overview pass their player's).
+ * @param host - In a two-host talk, the second host gets another voice (or, with one voice, a higher pitch).
  */
-export async function speak(text: string, done?: () => void, rate = 1): Promise<void> {
-  stopSpeaking();
+export async function speak(text: string, done?: () => void, rate = 1, host: 0 | 1 = 0, inner = false): Promise<void> {
+  if (inner) stopNow();
+  else stopSpeaking();
   const say = speakable(text);
   if (!say) return done?.();
   const my = ++gen;
@@ -118,13 +159,13 @@ export async function speak(text: string, done?: () => void, rate = 1): Promise<
   const voice = read(VOICE_KEY);
   // The natural voice on this computer (Kokoro) speaks English; Hebrew goes to the system's voice.
   if (voice.startsWith("local:") && !/[֐-׿]/.test(say)) {
-    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "local", voice: voice.slice(6) }), signal }).catch(() => undefined);
+    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "local", voice: host ? otherVoice(voice.slice(6), LOCAL_VOICES) : voice.slice(6) }), signal }).catch(() => undefined);
     if (stale()) return onEnd();
     if (res?.ok) return playAudio(res);
   }
   if (voice.startsWith("cloud:")) {
     const [, provider, name] = voice.split(":");
-    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider, voice: name }), signal }).catch(() => undefined);
+    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider, voice: host && provider === "openai" ? otherVoice(name ?? "", OPENAI_VOICES) : name }), signal }).catch(() => undefined);
     if (stale()) return onEnd();
     if (res?.ok) return playAudio(res);
     // Fall back to the computer's voice if the cloud fails.
@@ -154,6 +195,13 @@ export async function speak(text: string, done?: () => void, rate = 1): Promise<
   const chosen = voice.startsWith("system:") ? voices.find((v) => v.voiceURI === voice.slice(7)) : undefined;
   const hebrew = /[֐-׿]/.test(say);
   u.voice = chosen ?? voices.find((v) => (hebrew ? /^he|^iw/i.test(v.lang) : v.lang.startsWith(getLocale() === "he" ? "en" : "en"))) ?? null;
+  // The second host: another voice in the same language when there is one, else the same voice a little higher.
+  if (host) {
+    const lang = (u.voice?.lang ?? (hebrew ? "he" : "en")).slice(0, 2).toLowerCase();
+    const other = voices.find((v) => v !== u.voice && v.lang.slice(0, 2).toLowerCase().replace("iw", "he") === lang.replace("iw", "he"));
+    if (other) u.voice = other;
+    else u.pitch = 1.45;
+  } else u.pitch = 0.95;
   u.lang = u.voice?.lang ?? (hebrew ? "he-IL" : "en-US");
   u.onend = () => { current = null; onEnd(); };
   u.onerror = () => { current = null; onEnd(); };

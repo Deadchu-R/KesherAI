@@ -470,3 +470,13 @@ test("memory palace: checked, and kept through a sync by the newer one", async (
   const base = { course: { id: "c", name: "c", createdAt: 1 }, lectures: [], cards: [], reviews: [], quizzes: [] };
   assert.equal(mergeCourseData({ ...base, palace: { ...p!, t: 1 } }, { ...base, palace: { ...p!, place: "new", t: 9 } }).palace?.place, "new");
 });
+
+test("parsePodcast: two hosts' lines, by letter or name", async () => {
+  const { parsePodcast } = await import("./study.js");
+  assert.deepEqual(parsePodcast("**A:** שלום, היום על הלב.\nB: מה זה דופק?\nוגם למה הוא משתנה?\n\nנועה: שאלה טובה.\nאיתי: הבנתי!"), [
+    { host: 0, text: "שלום, היום על הלב." },
+    { host: 1, text: "מה זה דופק? וגם למה הוא משתנה?" },
+    { host: 0, text: "שאלה טובה." },
+    { host: 1, text: "הבנתי!" },
+  ]);
+});

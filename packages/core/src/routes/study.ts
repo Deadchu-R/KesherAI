@@ -138,6 +138,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<L & { Body: { text?: string; kind?: string } }>("/api/study/courses/:id/lectures/:lid/explain", async (req) => st.explainPassage(req.params.id, req.params.lid, String(req.body?.text ?? "").slice(0, 3000), req.body?.kind === "simple" ? "simple" : req.body?.kind === "example" ? "example" : "explain"));
   /** A lecture's spoken review (audio overview), written by the chat model and kept. */
   app.post<L>("/api/study/courses/:id/lectures/:lid/audio", async (req) => st.audioOverview(req.params.id, req.params.lid));
+  app.post<L>("/api/study/courses/:id/lectures/:lid/podcast", async (req) => st.podcast(req.params.id, req.params.lid));
   // ---- Video lectures (design VideoLecture): her MP4, or a Panopto/Kaltura/Vimeo video, kept and split into chapters.
   const speechDeps = () => ({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg: () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }) });
   /** A video's speech as text with a [m:ss] mark per line (whisper on this computer, or the chosen cloud service). */

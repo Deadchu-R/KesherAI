@@ -3568,3 +3568,5 @@ div.slide-list { padding-inline-start: 0; }
 .study-palace-list { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 10px; }
 .study-palace-list li { display: flex; flex-direction: column; gap: 2px; }
 .study-palace-scene { padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent, #a5b4ff) 12%, transparent); line-height: 1.6; }
+.study-podcast-line { margin: 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent, #a5b4ff) 12%, transparent); line-height: 1.6; }
+.study-podcast-line.host1 { background: color-mix(in srgb, var(--ok, #2e9e6a) 14%, transparent); }

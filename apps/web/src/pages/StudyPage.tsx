@@ -21,9 +21,9 @@ import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
 import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
-import { SIMILAR_MARK, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
+import { SIMILAR_MARK, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
-import { speak, stopSpeaking } from "../Speak";
+import { speak, speakDialog, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { RichText } from "../RichText";
@@ -1409,6 +1409,27 @@ function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { 
   const base = `/api/study/courses/${courseId}/lectures/${lectureId}`;
   useEffect(() => void api<StudyLecture>(base).then(setL, (e: Error) => toast(e.message)), [base]);
   const [playing, setPlaying] = useState(false);
+  // The two-voice podcast (design Podcast): the line being heard, or null when it is not playing.
+  const [talkLine, setTalkLine] = useState<number | null>(null);
+  const podcast = async () => {
+    if (talkLine !== null) {
+      stopSpeaking();
+      setTalkLine(null);
+      return;
+    }
+    setPlaying(false);
+    let text = l?.podcast;
+    if (!text) {
+      setBusy("podcast");
+      const r = await call(api<StudyLecture>(`${base}/podcast`, { method: "POST" }));
+      setBusy("");
+      if (!r?.podcast) return;
+      setL(r);
+      text = r.podcast;
+    }
+    setTalkLine(0);
+    speakDialog(parsePodcast(text), () => setTalkLine(null), speakRate, 0, setTalkLine);
+  };
   useEffect(() => () => stopSpeaking(), []);
   if (!l) return <p className="muted">…</p>;
   const run = async (what: string, p: () => Promise<unknown>) => {
@@ -1489,8 +1510,10 @@ function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { 
       )}
       <div className="study-actions">
         <button type="button" className={playing ? "primary" : ""} disabled={busy === "audio"} onClick={() => void listen()}>{busy === "audio" ? L("כותב סקירה קולית…", "Writing the audio review…") : playing ? L("⏹ עצירה", "⏹ Stop") : L("🎧 האזנה לסקירה (כ-3 דקות)", "🎧 Listen to a review (about 3 minutes)")}</button>
+        <button type="button" className={talkLine !== null ? "primary" : ""} disabled={busy === "podcast"} onClick={() => void podcast()}>{busy === "podcast" ? L("כותב שיחה בין שני מגישים…", "Writing a talk between two hosts…") : talkLine !== null ? L("⏹ עצירה", "⏹ Stop") : L("🎙 פודקאסט בשני קולות", "🎙 A two-voice podcast")}</button>
         <SpeedSelect rate={speakRate} onRate={setSpeakRate} />
       </div>
+      {talkLine !== null && l.podcast && (() => { const line = parsePodcast(l.podcast)[talkLine]; return line ? <p className={`study-podcast-line host${line.host}`} dir="auto"><b>{line.host ? L("איתי", "Itai") : L("נועה", "Noa")}:</b> {line.text}</p> : null; })()}
       {l.summary && view !== "text" && <button type="button" className="small ghost" disabled={!!busy} onClick={() => void summarize()}>{busy === "summary" ? "…" : L("סכם מחדש", "Summarize again")}</button>}
       <h3>{L("להפוך לכרטיסיות, בפורמט:", "Make cards, studied as:")}</h3>
       <div className="study-formats" role="radiogroup" aria-label={L("פורמט", "Format")}>

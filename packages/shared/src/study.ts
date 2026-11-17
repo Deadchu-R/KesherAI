@@ -75,6 +75,8 @@ export interface StudyLecture {
   recording?: { t: number; bytes: number; mime: string };
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
+  /** The same review as a talk between two hosts (design Podcast, students part 29 #2): lines "A: …" / "B: …". */
+  podcast?: string;
   /** The web page it was saved from (design SaveToCourse). */
   web?: string;
   /** The YouTube video the lecture came from (its id): the text's minute marks open it at that minute. */
@@ -1921,6 +1923,23 @@ export function cleanPalace(raw: unknown): StudyPalace | undefined {
     return it.spot && it.term && it.scene ? [it] : [];
   });
   return items.length ? { place: t(o.place, 60), items, t: Number(o.t) || Date.now() } : undefined;
+}
+
+/** A two-host talk about a lecture (design Podcast, like NotebookLM's Audio Overview and Coconote's podcasts). */
+export const PODCAST_PROMPT =
+  "Write a lively talk between two hosts about this lecture, for a student to listen to on the bus, about 4 minutes (500-700 words), in the lecture's language. Host A (Noa) explains; host B (Itai) is curious, asks the questions a student would ask, sums up in his own words and sometimes gets something a little wrong so A can fix it. Open with what the lecture is about, go through the main ideas in order with one concrete example, say key terms clearly (the English name in brackets the first time, for medical terms), and end with each host giving one thing to remember. Every line starts with \"A:\" or \"B:\" and is 1-3 spoken sentences. No headings, lists, symbols or markdown. Use only what is in the lecture; never invent numbers, doses or values.";
+
+/** A podcast's lines (A = host 0, B = host 1), from the model's answer; lines without a host join the line before. */
+export function parsePodcast(text: string): Array<{ host: 0 | 1; text: string }> {
+  const out: Array<{ host: 0 | 1; text: string }> = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/[*_#>`]/g, "").trim();
+    if (!line) continue;
+    const m = /^(A|B|נועה|איתי|Noa|Itai)\s*[:：]\s*(.*)$/i.exec(line);
+    if (m) out.push({ host: /^(B|איתי|Itai)$/i.test(m[1]!) ? 1 : 0, text: m[2]!.trim() });
+    else if (out.length) out[out.length - 1]!.text += ` ${line}`;
+  }
+  return out.filter((l) => l.text).slice(0, 200);
 }
 
 /** "What should I learn from this quiz?": a short plan from the questions she missed (design QuizTalk). */
