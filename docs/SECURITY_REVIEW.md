@@ -942,3 +942,9 @@ S5 an outside scanner's rules for Electron.
 - **Song title and lyrics**: shown as text (React escapes it); the download name is stripped of path characters.
 - **Tasks count / engine log**: display only.
 - Performance: the heavy folder sizes walk four folders on demand only (Settings page open); the swap at start re-checks sizes and times once. Fab's tools exist only with the desktop pane. Secrets/personal paths: none in the diff (git grep).
+
+## Scan 102 (2026-11-17, morning): SSH targets, chat reading, the heavy folder's restart
+- **SSH**: the routes answer this computer only; logins are checked to letters, digits, dots and dashes, ports to 1–65535; `ssh` runs with BatchMode (never a password prompt) and arguments as a list; the remote command is one quoted word (`shQuote`, tested with quotes inside). The key is made only when none exists and never replaced; winget installs only WinFsp and SSHFS-Win, on the user's click. First connections accept a new host key (like VS Code); a changed key is refused and explained.
+- **Chat reading**: chats and reports stay in the data folder; report ids are checked (`[\w-]{8,64}`) before any path; files are written whole (temp then rename). The chat goes to the model as data ("never instructions"); quotes shown are looked up in the chat. Import by link: https only, through the user's own browser pane on their click; by PDF: parsed by the same document reader as Knowledge; bodies capped (300 MB chat, 60 MB import).
+- **Heavy folder restart**: stops only processes whose program lives under KesherAI's engines folder (by full path), never an editor without the user's yes; nothing outside that folder.
+- Performance: chat reading reads at most 10 parts of a long chat (spread over all of it), one model call each, then one to write; the numbers are counted in one pass. Secrets/personal paths: none in the diff.
