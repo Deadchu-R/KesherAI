@@ -1915,3 +1915,8 @@ Already covered (checked): notes and summaries, flashcards with spaced repetitio
 - Competitors: AudioPen, Voicenotes, Cleft Notes, TalkNotes, Voicethoughts and Spokenly turn rambling voice notes into clean notes, lists or tasks; none sorts ideas by value, checks whether you already tried them, matches them to your own projects, or researches each. Idea-scoring tools (Ideanote, Ezassi, IdeaFlow, startup validators) score typed ideas against criteria but start from one written idea, not a recording.
 - Built (#/ideas, under Work): a recorder with a chosen length (5/10/15/30 minutes or until stopped), pause, a level meter; the audio streams to disk without a length cap and is deleted once transcribed. The chat model pulls out every idea as a ready prompt, with good/maybe/weak and why, her projects it fits (only from her real project list), audience and category. "Tried before" comes from searching her past chats (incognito left out) and the model judging the matches, with links to those chats. Research: one idea, or all in a row (good ones first, one at a time, stoppable), each as a chat with the web and a deep-research request ending in go / change / drop. Text can be pasted instead of recording.
 - Stopped at: built; to check on the PC with a real recording.
+
+## Students, part 24: a study game (2026-11-17)
+- Quizlet Match (tap a term and its meaning against the clock, a wrong pair adds a second, best time kept) is the reference; Kahoot and Blooket are for groups.
+- Built: "🎯 Game" in the course: six of her terms (from summarized lectures) and their meanings shuffled; tap one then its pair; a wrong pair shakes and adds a second; her best time per course on this device.
+- Stopped at: built; next is the slide deck from a lecture.

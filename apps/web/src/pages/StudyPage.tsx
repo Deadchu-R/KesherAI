@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
@@ -375,6 +376,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["ask", ["שאלי את הקורס", "Ask the course"]],
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
+  ["game", ["🎯 משחק", "🎯 Game"]],
   ["drugs", ["תרופות", "Drugs"]],
   ["labs", ["ערכי מעבדה", "Lab values"]],
   ["progress", ["מה עובד בשבילי", "What works for me"]],
@@ -493,6 +495,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
+        : on === "game" ? <StudyMatch courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
         : on === "summary" ? <CourseSummary id={id} info={info} onChange={load} />
         : on === "tools" ? <FieldTools id={id} info={info} onChange={load} />
         : on === "drugs" ? <Drugs courseId={id} info={info} onChange={load} />

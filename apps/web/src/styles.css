@@ -3137,3 +3137,17 @@ html.handheld .palette-list button { min-height: 44px; }
 .ideas-paste textarea { width: 100%; margin: 6px 0; }
 .ideas-transcript { margin-top: 12px; }
 .ideas-transcript p { white-space: pre-wrap; line-height: 1.7; }
+/* The match game (design StudyMatch). */
+.study-match { display: flex; flex-direction: column; gap: 10px; }
+.study-match-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.study-match-time { font-size: 20px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.study-match-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 600px) { .study-match-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.study-match-tile { min-height: 64px; padding: 6px; border-radius: 10px; border: 1.5px solid var(--border-strong); background: var(--panel, #1a1a1d); font-size: 13px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+.study-match-tile.term { font-size: 15px; font-weight: 700; }
+.study-match-tile.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.study-match-tile.bad { border-color: #ff7a7a; background: #ff7a7a22; animation: match-shake 0.3s; }
+.study-match-tile.gone { border: 1px dashed var(--border); background: none; min-height: 64px; }
+@keyframes match-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@media (prefers-reduced-motion: reduce) { .study-match-tile.bad { animation: none; } }
+.study-match-done { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px; font-size: 18px; }
