@@ -1875,3 +1875,10 @@ Missing (by value, Israeli university student):
 9. **Read any PDF aloud with OCR** (Speechify): textbook chapters and scanned articles, in Hebrew too, with the place kept.
 10. **Comparison tables** (NotebookLM data tables): e.g. drugs, theories, cases side by side, exportable to Sheets.
 - Stopped at: research done; designs and building not started (after the chat stages 1–5, or when Roee picks).
+
+## Students, part 19: Moodle (2026-11-17, first on the students list)
+- Israeli universities run Moodle (TAU, HUJI, Technion, BGU, BIU, Open University…), each on its own address, mostly with university sign-in (SSO), so a password or a token from login/token.php is not the way (and KesherAI never types passwords).
+- The Moodle web page itself calls its own AJAX endpoint with the signed-in session: `POST {wwwroot}/lib/ajax/service.php?sesskey={M.cfg.sesskey}` with `[{index, methodname, args}]`. The dashboard uses `core_course_get_enrolled_courses_by_timeline_classification` (classification inprogress/all, sort fullname) and the timeline block `core_calendar_get_action_events_by_timesort` (timesortfrom, limittonumber) for what is due. `core_course_get_contents` is usually not open to AJAX, so a course's files come from its page (`course/view.php?id=`: links to `mod/resource/view.php`, `mod/folder`, `mod/url`, `pluginfile.php`), downloaded with the same session.
+- Others: Moodle MCP servers (e.g. moodle-mcp-sernobre, 44 tools) use a web-service token, aimed at teachers; the Moodle app uses login/token.php or SSO with a launch URL.
+- Plan: the same path as Fab. KesherAI's browser pane opens the student's Moodle (she signs in there once, as on any site); a "Moodle" card in Study lists her current courses and what is due; she ticks which course goes to which KesherAI course; lecture files (PDF, PPTX, DOCX) come in as lectures (deduplicated by file), assignments as deadlines. Runs on her click, and again when she opens Study (no background crawling); read-only: KesherAI never submits, posts or changes anything in Moodle.
+- Stopped at: research done; design next, then building.
