@@ -111,7 +111,7 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ✅ A mind map of a course or a topic (2026-11-17)
 - ✅ Oral exam practice by voice (2026-11-17); ✅ presentation practice (rehearsal, 2026-11-17)
 - ✅ Read-along for lectures from PDFs (2026-11-17); ✅ OCR for scans (scanned PDFs, 2026-11-17)
-- ✅ Comparison tables (2026-11-17); ⬜ export to a sheet
+- ✅ Comparison tables (2026-11-17); ✅ open as a sheet (2026-11-17)
 - ✅ A YouTube lecture as a lecture
 - ✅ Teach-back (Feynman)
 - ✅ Mastery per topic, and a nudge when one drops

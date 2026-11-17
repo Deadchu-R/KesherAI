@@ -30,7 +30,7 @@ import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
 import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
-import { SIMILAR_MARK, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
+import { SIMILAR_MARK, markdownTableCsv, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, speakDialog, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -1087,6 +1087,9 @@ function FieldTools({ id, info, onChange }: { id: string; info: CourseInfo; onCh
         <button type="button" className="primary" disabled={busy || (tool.input === "text" ? text.trim().length < 10 : !info.lectures.length) || (tool.id === "compare" && text.trim().length < 3)} onClick={() => void run()}>{busy ? L("עובד…", "Working…") : L(tool.he, tool.en)}</button>
         {out && <button type="button" onClick={() => void keep()}>{L("שמירה כהרצאה בקורס", "Keep as a lecture")}</button>}
         {out && <button type="button" className="ghost" onClick={() => void navigator.clipboard.writeText(out).then(() => toast(L("הועתק", "Copied")))}>{L("העתקה", "Copy")}</button>}
+        {out && markdownTableCsv(out) && (
+          <button type="button" onClick={() => void api<{ id: string }>("/api/sheets", { method: "POST", body: { title: `${info.course.name}: ${tool ? L(tool.he, tool.en) : ""}${text.trim() ? ` · ${text.trim().slice(0, 60)}` : ""}`, csv: markdownTableCsv(out) } }).then((r) => { location.hash = `#/sheets/${r.id}`; }, (e: Error) => toast(e.message))}>📊 {L("פתיחה כגיליון", "Open as a sheet")}</button>
+        )}
       </div>
       {out && <div dir="auto" className="study-summary-text"><RichText text={out} /></div>}
       <p className="muted small">{L("הכלי עובד רק ממה שהדבקת או מההרצאות שלך. מה שחסר מסומן [חסר]. כדאי לבדוק מול המקור.", "The tool works only from what you pasted or your lectures; anything missing is marked [missing]. Check against the source.")}</p>

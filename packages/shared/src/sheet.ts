@@ -305,6 +305,27 @@ export function sheetCsv(s: Pick<Sheet, "cells" | "cols" | "rows">): string {
   return lines.join("\n");
 }
 
+/**
+ * The first Markdown table in a text as CSV (a comparison table from Study's tools, opened as a sheet), or "" when
+ * there is none. Bold and code marks are dropped; the separator row is skipped.
+ */
+export function markdownTableCsv(text: string): string {
+  const rows: string[][] = [];
+  for (const line of String(text).split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith("|")) {
+      if (rows.length) break;
+      continue;
+    }
+    const cells = t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim().replace(/\*\*|__|`/g, ""));
+    if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+    rows.push(cells);
+  }
+  if (rows.length < 2) return "";
+  const q = (c: string) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+  return rows.map((r) => r.map(q).join(",")).join("\n");
+}
+
 /** CSV into cells (from A1), as typed text. */
 export function csvCells(csv: string): Record<string, string> {
   const cells: Record<string, string> = {};

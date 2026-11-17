@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanCells, colIndex, colName, computeSheet, csvCells, parseFormula, parseRef, sheetCsv, showValue } from "./sheet.js";
+import { cleanCells, colIndex, colName, computeSheet, csvCells, markdownTableCsv, parseFormula, parseRef, sheetCsv, showValue } from "./sheet.js";
 
 test("addresses", () => {
   assert.equal(colName(0), "A");
@@ -44,4 +44,10 @@ test("CSV in and out, and clean cells", () => {
   assert.equal(sheetCsv({ cells: { ...cells, C2: "=B2*2" }, cols: 3, rows: 3 }), 'קורס,ציון,\n"פיזיולוגיה, א",88,176\nסטטיסטיקה,"7""8",');
   assert.equal(sheetCsv({ cells: { A1: '="=cmd|calc"', B1: "-5", C1: "@x" }, cols: 3, rows: 1 }), "'=cmd|calc,-5,'@x");
   assert.deepEqual(cleanCells({ a1: 5, "../x": "1", B2: "", ZZ1: "x", C3: { x: 1 } }), { A1: "5" });
+});
+
+test("markdownTableCsv: a comparison table becomes CSV for a sheet", () => {
+  const md = "Here:\n\n| | Beta blockers | Calcium blockers |\n|---|:---:|---|\n| **Mechanism** | block β1 | block L-type, \"slow\" |\n| Use | angina | angina |\n\nThe main difference…";
+  assert.equal(markdownTableCsv(md), ',Beta blockers,Calcium blockers\nMechanism,block β1,"block L-type, ""slow"""\nUse,angina,angina');
+  assert.equal(markdownTableCsv("no table"), "");
 });
