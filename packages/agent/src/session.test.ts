@@ -660,6 +660,9 @@ test("one file of a run can be put back; the rest stays and Undo all takes the o
   );
   session.send("make two");
   const r = (await waitFor(session, (e) => e.type === "receipt")) as Extract<AgentEvent, { type: "receipt" }>;
+  const diff = await session.runDiff(r.run);
+  assert.deepEqual(diff.map((f) => f.path), ["a.txt", "b.txt"]);
+  assert.match(diff[0]!.diff, /\+A/);
   assert.deepEqual((await session.undoRun(r.run, false, "a.txt")).files, ["a.txt"]);
   assert.equal(await readFile(join(workspace, "a.txt"), "utf8").catch(() => "gone"), "gone");
   assert.equal(await readFile(join(workspace, "b.txt"), "utf8"), "B\n");

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { api, withToken } from "./api";
 import { openArtifact } from "./ArtifactPanel";
+import { Diff } from "./ChatCards";
+import { createPortal } from "react-dom";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 
@@ -20,6 +22,8 @@ export interface ReceiptEvent {
 export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; ev: ReceiptEvent; busy: boolean; undoneFiles?: Set<string> }) {
   const undone = !!undoneFiles && ev.files.every((f) => undoneFiles.has(f.path));
   const [working, setWorking] = useState(false);
+  const [review, setReview] = useState<Array<{ path: string; diff: string }> | null>(null);
+  const openReview = () => void api<{ files: Array<{ path: string; diff: string }> }>(`/api/conversations/${convId}/runs/${encodeURIComponent(ev.run)}/diff`).then((r) => setReview(r.files), (e: Error) => toast(e.message));
   const [open, setOpen] = useState(ev.files.length <= 5);
   const added = ev.files.reduce((n, f) => n + f.added, 0);
   const removed = ev.files.reduce((n, f) => n + f.removed, 0);
@@ -60,6 +64,7 @@ export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; 
           <span className="receipt-minus" dir="ltr">−{removed}</span>
         </button>
         {pages.length === 1 && <button type="button" className="primary small" onClick={() => void openLive(pages[0]!.path)}>{L("פתח חי ▸", "Open live ▸")}</button>}
+        {!undone && <button type="button" className="small" onClick={openReview} title={L("כל השינויים של הריצה במקום אחד", "Every change of this run in one place")}>{L("סקירה", "Review")}</button>}
         {undone ? (
           <span className="muted small">{L("בוטל", "Undone")}</span>
         ) : (
@@ -81,6 +86,27 @@ export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; 
             </li>
           ))}
         </ul>
+      )}
+      {review && createPortal(
+        <div className="dialog-backdrop" role="presentation" onClick={() => setReview(null)}>
+          <div className="dialog card run-review" role="dialog" aria-modal="true" aria-label={L("סקירת השינויים", "Review the changes")} onClick={(e) => e.stopPropagation()}>
+            <header className="row">
+              <strong className="grow">{L(`סקירה: ${review.length} קבצים`, `Review: ${review.length} files`)} <span className="receipt-plus small" dir="ltr">+{added}</span> <span className="receipt-minus small" dir="ltr">−{removed}</span></strong>
+              <button type="button" className="ghost" onClick={() => setReview(null)} aria-label={L("סגירה", "Close")}>✕</button>
+            </header>
+            <div className="run-review-body">
+              {review.map((f) => (
+                <section key={f.path} className="run-review-file">
+                  <div className="row"><span className="mono grow" dir="ltr">{f.path}</span>
+                    {undoneFiles?.has(f.path) ? <span className="muted small">{L("הוחזר", "Put back")}</span> : <button type="button" className="ghost small" disabled={busy || working} onClick={() => void undo(f.path).then(openReview)}>↶ {L("החזר", "Put back")}</button>}
+                  </div>
+                  <Diff diff={f.diff} />
+                </section>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

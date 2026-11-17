@@ -16,7 +16,7 @@ import type {
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { ASK_USER_TOOL, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+import { ASK_USER_TOOL, makeDiff, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
 const PLAN_NOTE =
@@ -996,6 +996,29 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.runs.set(run, kept);
     await this.undoStore?.save(run, kept).catch(() => undefined);
     this.push({ type: "receipt", run, files: shown });
+  }
+
+  /**
+   * Every change of a run in one place (the receipt's "Review", like Zed's multibuffer): each file's diff from before
+   * the run to after it, in the run's order. Large diffs are cut so the page stays light.
+   *
+   * @param run - The id on the run's receipt.
+   */
+  async runDiff(run: string): Promise<Array<{ path: string; diff: string }>> {
+    const kept = this.runs.get(run) ?? (await this.undoStore?.load(run).catch(() => undefined));
+    if (!kept) throw new Error("This run's earlier files are no longer kept.");
+    const show = (p: string) => (this.workspace ? displayPath(this.workspace, p) : p);
+    let room = 400_000;
+    const out: Array<{ path: string; diff: string }> = [];
+    for (const f of kept.files) {
+      // Before the run (kept) to the file as it is now (only a fingerprint of "after" is kept).
+      const now = await readFile(f.path, "utf8").catch(() => "");
+      const d = makeDiff(show(f.path), f.before, now);
+      const diff = d.length > room ? `${d.slice(0, Math.max(0, room))}\n… (cut: the diff is too long to show here)` : d;
+      room = Math.max(0, room - diff.length);
+      out.push({ path: show(f.path), diff });
+    }
+    return out;
   }
 
   /**

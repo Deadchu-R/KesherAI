@@ -3028,3 +3028,8 @@ html.handheld .palette-list button { min-height: 44px; }
 /* The ↓ button when she read up (Conversation.tsx) */
 .jump-down { position: sticky; bottom: 12px; margin-inline-start: auto; margin-inline-end: auto; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2, 0 8px 24px rgb(0 0 0 / .35)); font-size: 18px; z-index: 5; }
 .jump-dot { position: absolute; top: 4px; inset-inline-end: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+/* A run's changes in one place (RunReceipt "Review") */
+.run-review { width: min(980px, 96vw); max-height: 88vh; display: flex; flex-direction: column; gap: 8px; }
+.run-review-body { overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+.run-review-file { display: flex; flex-direction: column; gap: 4px; }
+.run-review-file .diff { margin: 0; max-height: none; }
