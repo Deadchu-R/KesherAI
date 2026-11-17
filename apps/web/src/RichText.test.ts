@@ -17,3 +17,9 @@ test("simple TeX reads as text", async () => {
   assert.equal(texText("\\frac{a}{b} + x_1"), "(a)/(b) + x₁");
   assert.equal(texText("\\unknown{x}"), "\\unknown{x}");
 });
+
+test("a code block written inside a list loses its shared indentation", async () => {
+  const { dedent } = await import("./RichText.js");
+  assert.equal(dedent("   graph LR\n     A --> B\n"), "graph LR\n  A --> B\n");
+  assert.equal(dedent("x\n  y\n"), "x\n  y\n");
+});

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api } from "./api";
+import { api, withToken } from "./api";
+import { openArtifact } from "./ArtifactPanel";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 
@@ -40,6 +41,13 @@ export function RunReceipt({ convId, ev, busy, undone }: { convId: string; ev: R
     }
   };
   const mark = { new: L("חדש", "new"), changed: "", deleted: L("נמחק", "deleted") };
+  // A page the run wrote opens live beside the chat, like a page written in the answer (ArtifactPanel).
+  const pages = ev.files.filter((f) => f.kind !== "deleted" && /\.(html?|svg)$/i.test(f.path));
+  const openLive = async (path: string) => {
+    const r = await fetch(withToken(`/api/conversations/${encodeURIComponent(convId)}/files/download?path=${encodeURIComponent(path)}`)).catch(() => undefined);
+    if (!r?.ok) return toast(L("לא הצלחתי לפתוח את הקובץ.", "Could not open the file."));
+    openArtifact(await r.text());
+  };
   return (
     <div className={`receipt card${undone ? " undone" : ""}`}>
       <div className="row receipt-head">
@@ -48,6 +56,7 @@ export function RunReceipt({ convId, ev, busy, undone }: { convId: string; ev: R
           <span className="receipt-plus" dir="ltr">+{added}</span>
           <span className="receipt-minus" dir="ltr">−{removed}</span>
         </button>
+        {pages.length === 1 && <button type="button" className="primary small" onClick={() => void openLive(pages[0]!.path)}>{L("פתח חי ▸", "Open live ▸")}</button>}
         {undone ? (
           <span className="muted small">{L("בוטל", "Undone")}</span>
         ) : (
@@ -64,6 +73,7 @@ export function RunReceipt({ convId, ev, busy, undone }: { convId: string; ev: R
               {mark[f.kind] && <span className={`pill small ${f.kind}`}>{mark[f.kind]}</span>}
               <span className="receipt-plus small" dir="ltr">+{f.added}</span>
               <span className="receipt-minus small" dir="ltr">−{f.removed}</span>
+              {pages.includes(f) && pages.length > 1 && <button type="button" className="ghost small" onClick={() => void openLive(f.path)}>{L("פתח חי", "Open live")}</button>}
             </li>
           ))}
         </ul>

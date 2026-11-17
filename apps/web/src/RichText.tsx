@@ -180,6 +180,8 @@ export function RichText({ text }: { text: string }) {
       flush(`l${i}-end`);
     }
     if (parts[i + 2] !== undefined) {
+      // A block written inside a list is indented: the code itself starts at its own left edge.
+      parts[i + 2] = dedent(parts[i + 2]!);
       // A ```chart block with complete JSON is drawn; while it is still being written (or if it is not a chart) it shows as code.
       const chart = parts[i + 1] === "chart" ? parseChart(parts[i + 2]!) : undefined;
       const code = <CodeBlock key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />;
@@ -234,4 +236,11 @@ function AnswerImage({ src, alt }: { src: string; alt: string }) {
   }
   if (!show) return <button type="button" className="md-img-ask" onClick={() => setShow(true)}>🖼️ {L(`תמונה מ-${host}: הצג`, `A picture from ${host}: show`)}{alt ? ` · ${alt}` : ""}</button>;
   return <a href={src} target="_blank" rel="noreferrer"><img className="md-img" src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" /></a>;
+}
+
+/** Code without the indentation every line shares (a block written inside a list item). */
+export function dedent(code: string): string {
+  const lines = code.replace(/\s+$/, "").split("\n");
+  const pad = Math.min(...lines.filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)![0].length));
+  return pad > 0 && Number.isFinite(pad) ? `${lines.map((l) => l.slice(pad)).join("\n")}\n` : code;
 }
