@@ -3,6 +3,7 @@
  * `#/settings/<category>`, `#/models`…). There is no router library: `useHash` reads `location.hash` and `App`
  * picks the page. Pages load lazily (their code is fetched the first time they open).
  */
+import { ArtifactPanel } from "./ArtifactPanel";
 import { clearPhoneNotes } from "./phoneNotify";
 import { CommandPalette } from "./CommandPalette";
 import { VersionWatch } from "./VersionWatch";
@@ -343,6 +344,7 @@ export function App() {
       <PadHints />
       <AppBar hash={hash} online={online} sidebarOpen={narrow() ? menuOpen : !sidebarHidden} onSidebar={toggleSidebar} onLocale={() => rerender((n) => n + 1)} />
       <Sidebar hash={hash} online={online} open={menuOpen} onLocale={() => rerender((n) => n + 1)} />
+      <ArtifactPanel />
       <PairPrompt />
       <Reconnecting />
       <PcDrop />

@@ -89,6 +89,7 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
   }
   // Charts inside the answer (audit F18): the chat draws this block as a chart.
   parts.push('To show numbers as a chart, write a ```chart block with JSON: {"type": "bar" | "line" | "pie", "title": "...", "labels": [...], "series": [{"name": "...", "values": [...]}], "unit": "%"}. Use real numbers only.');
+  parts.push("For an interactive page, a small tool, a game or a visual (when the user asks for one), write one complete, self-contained HTML document in a ```html block (styles and scripts inside it, no outside files or network): the app shows it live beside the chat. For a diagram of steps or parts, a ```mermaid block. For math, $…$ inline and $$…$$ on its own lines.");
   if (opts.toolNotes?.length) parts.push(opts.toolNotes.join("\n"));
   if (opts.projectInstructions) parts.push(`Instructions for this project:\n${opts.projectInstructions}`);
   if (opts.persona) parts.push(opts.persona);

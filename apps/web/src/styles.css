@@ -2953,3 +2953,17 @@ html.handheld .palette-list button { min-height: 44px; }
 .md-katex .katex { font-size: 1.05em; }
 .md-mermaid { margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); overflow-x: auto; text-align: center; }
 .md-mermaid svg { max-width: 100%; height: auto; }
+/* Artifacts (ArtifactPanel.tsx): a page from the chat, live beside it */
+.artifact-panel { position: fixed; z-index: 45; inset-block: calc(var(--bar-h, 48px) + 8px) 8px; inset-inline-end: 8px; width: min(48vw, 760px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border-strong); border-radius: calc(14px * var(--r-scale, 1)); box-shadow: var(--shadow-2, 0 16px 40px rgb(0 0 0 / .45)); overflow: hidden; }
+.artifact-panel.full { inset: 8px; width: auto; z-index: 70; }
+.artifact-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.artifact-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-bar select { width: auto; }
+.artifact-tabs { display: flex; border: 1px solid var(--border); border-radius: calc(9px * var(--r-scale, 1)); overflow: hidden; }
+.artifact-tabs button { border: none; border-radius: 0; padding: 4px 12px; background: transparent; }
+.artifact-tabs button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.artifact-frame { flex: 1; width: 100%; border: none; background: #fff; }
+.artifact-code { flex: 1; overflow: auto; }
+.artifact-note { margin: 0; padding: 6px 10px; border-top: 1px solid var(--border); }
+@media (min-width: 1100px) { body.artifact-open .chat { margin-inline-end: calc(min(48vw, 760px) + 16px); margin-inline-start: 0; } }
+@media (max-width: 1099px) { .artifact-panel { inset: 0; width: auto; border-radius: 0; z-index: 70; } }

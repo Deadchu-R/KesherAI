@@ -4,6 +4,7 @@ import { CodeView } from "./ide/CodeView";
 import { getLocale, he$ } from "./i18n";
 import { ChartView } from "./ChartView";
 import { MathView, MermaidView } from "./MathMermaid";
+import { artifactKey, isArtifact, openArtifact } from "./ArtifactPanel";
 import { parseChart } from "./chart";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -208,10 +209,11 @@ function LinkCard({ href }: { href: string }) {
 /** A code block with its language and a copy button above it. */
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
+  const live = isArtifact(language, code);
   const copy = () => void navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => undefined);
   return (
-    <div className="md-code">
-      <div className="md-code-bar"><span className="muted small" dir="ltr">{language || L("קוד", "code")}</span><button type="button" className="ghost small" onClick={copy}>{copied ? L("הועתק ✓", "Copied ✓") : L("העתק", "Copy")}</button></div>
+    <div className="md-code" {...(live ? { "data-artifact": artifactKey(code) } : {})}>
+      <div className="md-code-bar"><span className="muted small" dir="ltr">{language || L("קוד", "code")}</span><span className="row" style={{ gap: 4 }}>{live && <button type="button" className="primary small" onClick={() => openArtifact(code)}>{L("פתח חי ▸", "Open live ▸")}</button>}<button type="button" className="ghost small" onClick={copy}>{copied ? L("הועתק ✓", "Copied ✓") : L("העתק", "Copy")}</button></span></div>
       <CodeView code={code} language={language} />
     </div>
   );
