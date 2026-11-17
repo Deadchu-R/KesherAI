@@ -309,6 +309,9 @@ function secretBox(): { seal(text: string): string; unseal(text: string): string
 /** `--worker`: the window-less self-work KesherAI (see worker.ts); it has its own profile, so it is not "another window". */
 const workerMode = process.argv.includes("--worker");
 if (workerMode) app.setPath("userData", join(app.getPath("userData"), "worker"));
+// A separate data folder (KESHER_DATA_DIR, e.g. a test profile) gets its own window profile too, so it runs beside
+// the everyday KesherAI instead of only focusing it.
+else if (process.env.KESHER_DATA_DIR) app.setPath("userData", join(process.env.KESHER_DATA_DIR, "ui"));
 
 /** The app's own log (logs/main.log), once this copy runs. */
 let mainLog: ((line: string) => void) | undefined;

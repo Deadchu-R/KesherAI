@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { goalToday, weekRecap, studyBadges, topicMastery, studyStreak, studyDays, backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { goalToday, weekRecap, studyBadges, topicMastery, studyStreak, studyDays, backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, QUESTION_CHECK_PROMPT, parseQuestionCheck, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -210,16 +210,47 @@ export function studyPlus(x) {
   // ---------- quizzes and homework ----------
   /** After a quiz: what to learn from the questions she missed. */
   function quizTalk(c, z) {
-    const missed = z.questions.filter((q, i) => z.picked[i] !== q.answer);
+    const missed = z.questions.filter((q, i) => !q.dropped && z.picked[i] !== q.answer);
     if (!missed.length) return "";
     const out = el("p", { dir: "auto", style: "white-space: pre-wrap" });
     const b = el("button", { type: "button" }, L("💬 מה ללמוד מזה?", "💬 What should I learn from this?"));
     b.onclick = async () => {
       const text = missed.map((q) => `- ${q.q}\n  Her answer: ${q.options[z.picked[z.questions.indexOf(q)]] ?? "(none)"}\n  Right: ${q.options[q.answer]}. ${q.explain || ""}${q.lectureId ? `\n  Lecture: ${c.lectures.find((l) => l.id === q.lectureId)?.title ?? ""}` : ""}`).join("\n");
-      const r = await need([{ role: "system", content: QUIZ_TALK_PROMPT }, { role: "user", content: `Score: ${z.questions.length - missed.length} of ${z.questions.length}.\nQuestions she missed:\n${text}` }], b);
+      const r = await need([{ role: "system", content: QUIZ_TALK_PROMPT }, { role: "user", content: `Score: ${z.questions.filter((q) => !q.dropped).length - missed.length} of ${z.questions.filter((q) => !q.dropped).length}.\nQuestions she missed:\n${text}` }], b);
       if (r !== undefined) { out.textContent = String(r).trim(); b.hidden = true; }
     };
     return el("div", {}, b, out);
+  }
+
+  /**
+   * "This question looks wrong" under a missed question (design QuestionCheckPhone): the phone's model checks it against
+   * its lecture and fixes the key or takes the question out of the score; or she says her answer is the right one.
+   */
+  function questionCheck(c, q, picked) {
+    if (q.fixed || q.dropped) return el("p", { class: "muted small", dir: "auto" }, q.checkNote || (q.dropped ? L("השאלה הוצאה מהציון.", "The question is out of the score.") : q.fixed.by === "her" ? L("✎ תוקן לפי התשובה שלך", "✎ Fixed to your answer") : L("✎ תוקן לפי ההרצאה", "✎ Fixed by the lecture")));
+    if (q.checkNote) return el("p", { class: "muted small", dir: "auto" }, q.checkNote);
+    const box = el("div", { class: "api", "aria-live": "polite", hidden: true });
+    const done = (note) => { q.checkNote = note; x.draw(); };
+    const check = el("button", { type: "button", class: "primary" }, L("🔎 לבדוק מול ההרצאה", "🔎 Check against the lecture"));
+    check.onclick = async () => {
+      const l = c.lectures.find((y) => y.id === q.lectureId) ?? (c.lectures.length === 1 ? c.lectures[0] : undefined);
+      if (!l) return done(L("אין לשאלה הזאת הרצאה לבדוק מולה.", "This question has no lecture to check it against."));
+      const user = `Question: ${q.q}\nOptions:\n${q.options.map((o, k) => `${k + 1}. ${o}`).join("\n")}\nAnswer key: ${q.answer + 1}\nShe answered: ${picked + 1}\n\n### Lecture: ${l.title}\n${l.text.slice(0, 12000)}`;
+      const r = await need([{ role: "system", content: QUESTION_CHECK_PROMPT }, { role: "user", content: user }], check);
+      if (r === undefined) return;
+      const got = parseQuestionCheck(String(r), q.options.length, q.answer);
+      if (!got) return done(L("המודל לא נתן תשובה ברורה. אפשר לנסות שוב או להחליט בעצמך.", "The model gave no clear answer. Try again, or decide yourself."));
+      const why = [got.quote ? `"${got.quote}"` : "", got.explain].filter(Boolean).join(" ");
+      if (got.verdict === "fix") { q.fixed = { was: q.answer, by: "model" }; q.answer = got.answer; if (got.explain) q.explain = got.explain; }
+      if (got.verdict === "broken") q.dropped = true;
+      done(got.verdict === "right" ? L(`המפתח נכון לפי ההרצאה. ${why}`, `The key is right by the lecture. ${why}`)
+        : got.verdict === "broken" ? L(`השאלה לא טובה, אז היא לא נספרת בציון. ${why}`, `The question is not a good one, so it does not count. ${why}`)
+        : L(`צדקת: תיקנתי את המפתח. ${why}`, `You were right: the key is fixed. ${why}`));
+    };
+    const mine = el("button", { type: "button", onclick: () => { q.fixed = { was: q.answer, by: "her" }; q.answer = picked; done(L("סימנתי את התשובה שלך כנכונה.", "Your answer is marked right.")); } }, L("✓ התשובה שלי נכונה", "✓ My answer is right"));
+    box.append(el("p", { class: "small" }, L("המודל יכול לטעות. בודקים מול ההרצאה, או מסמנים שהתשובה שלך היא הנכונה.", "The model can be wrong. Check it against the lecture, or mark your answer as the right one.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, check, mine));
+    const open = el("button", { type: "button", onclick: () => { open.hidden = true; box.hidden = false; } }, L("⚠️ נראה לי שהשאלה שגויה", "⚠️ I think this question is wrong"));
+    return el("div", {}, open, box);
   }
 
   /** Homework: a similar problem to practise, and the exercise from a photo. */
@@ -1288,5 +1319,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { goalReminder, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
+  return { goalReminder, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, questionCheck, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
 }

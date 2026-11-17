@@ -2121,8 +2121,16 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built (2026-11-18): computer and phone (designs BackOnTrack / BackOnTrackPhone).
 - Stopped at: built.
 
+## Students, part 40: a quiz question that is wrong (2026-11-18)
+- Gemini Notebook's November update lets a student edit quiz questions afterwards and ask where she fell short (Digital Trends). Quizlet and Knowt have "report this question". With a local model the risk is larger: it writes the key itself, and a wrong key teaches the wrong fact and lowers her score and her mastery.
+- KesherAI had: "What should I learn from this?" after a quiz (QuizTalk), calculation questions checked by code; nothing for a wrong key.
+- Plan (design QuestionCheck / QuestionCheckPhone): under a missed question, "I think this question is wrong" → "Check against the lecture" (the model reads the lecture it came from and answers right / fix / broken with a quote) or "My answer is right". A fix moves the key and recounts the score; a broken question leaves the quiz and the score, so weak topics and mastery stay true. Computer and phone.
+- Built (2026-11-18): computer and phone.
+- Stopped at: built.
+
 ## Models for Hebrew study (2026-11-18)
 - Dicta-LM 3.0 (Dicta, Apache 2.0) comes in three: 24B (on Mistral Small 3.1, the strongest), Nemotron 12B (on NVIDIA's Nemotron Nano V2, a hybrid-SSM that holds very long contexts in little memory) and 1.7B (on Qwen3, for weak laptops). Official GGUFs: dicta-il/DictaLM-3.0-Nemotron-12B-Instruct-GGUF (Q4_K_M 7.5 GB; the most downloaded), dicta-il/DictaLM-3.0-24B-Thinking-GGUF, dicta-il/DictaLM-3.0-1.7B-Thinking-GGUF (Q4_K_M 1.1 GB).
 - Tonight's failures ("Context size has been exceeded" on long Hebrew reports with a 32K context) are the case for the 12B: long contexts cheaply.
 - Built: the 12B in "Start here", offered in Study's setup beside a non-Hebrew model. Next (future list): tools suggest a better model when they start; a check that llama.cpp runs Nemotron-H on the PC after the download.
-- Stopped at: built; to check on the PC.
+- Checked on the PC (2026-11-18): llama.cpp b12110 loads the 12B (Nemotron-H) and answers in correct, fluent Hebrew (a CPU-only test beside the busy card: 3.3 tokens a second; on the card it will be far faster).
+- Stopped at: built and checked.

@@ -2620,6 +2620,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-explain { display: flex; flex-direction: column; gap: 8px; }
 .study-quiz-review { display: flex; flex-direction: column; gap: 10px; padding-inline-start: 20px; margin: 0; }
 .study-quiz-review li { display: flex; flex-direction: column; gap: 3px; }
+.study-quiz-review li > button.small { align-self: flex-start; }
+.study-qcheck { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: var(--panel-2); }
 .study-quiz-review li.good > span:first-of-type { color: var(--good); }
 .study-quiz-review li.bad > b { color: var(--bad); }
 .study-calc .card { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }

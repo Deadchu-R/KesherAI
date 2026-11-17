@@ -203,6 +203,8 @@ export interface StudyQuestion {
   answer: number;
   explain: string;
   lectureId?: string;
+  /** Its answer key was changed after the quiz (design QuestionCheck): what it was, and who changed it. */
+  fixed?: { was: number; by: "model" | "her"; note?: string };
 }
 
 /** A quiz and, once taken, its result. */
@@ -2151,6 +2153,68 @@ export const LEECH_PROMPT: Record<LeechFix, string> = {
 
 /** "What should I learn from this quiz?": a short plan from the questions she missed (design QuizTalk). */
 export const QUIZ_TALK_PROMPT = "A student finished a quiz. From the questions she missed (her answer, the right one and the lecture), write a short, warm plan in her language: (1) the one or two ideas behind most of the mistakes, in plain words; (2) what to review first, naming the lecture; (3) one next step she can do in ten minutes (e.g. a few cards, re-reading one part, a quiz on that lecture). At most 8 short lines, no headings. Never add facts that are not in what is given.";
+
+/**
+ * "This question looks wrong" after a quiz (design QuestionCheck): a local model can get its own answer key wrong, so
+ * she can have a question checked against the lecture it came from. The model answers in JSON only.
+ */
+export const QUESTION_CHECK_PROMPT = 'A student thinks a multiple-choice question from her quiz is wrong. Using ONLY the lecture text given, check the question and its answer key. Reply with JSON only, no other text: {"verdict": "right" | "fix" | "broken", "answer": <the number of the right option, from 1>, "quote": "<a short quote from the lecture that decides it, at most 25 words>", "explain": "<one or two sentences in the language of the question>"}. "right": the key is right. "fix": another option is the right one (give its number). "broken": the question cannot be answered from the lecture, or two options are right, or none is.';
+
+/** The model's check of one question (from QUESTION_CHECK_PROMPT). */
+export interface QuestionCheck {
+  verdict: "right" | "fix" | "broken";
+  /** The right option (from 0), for "right" and "fix". */
+  answer?: number;
+  quote?: string;
+  explain: string;
+}
+
+/**
+ * Reads the model's reply to QUESTION_CHECK_PROMPT.
+ *
+ * @param raw - The model's reply.
+ * @param options - How many options the question has.
+ * @param key - The current answer key (from 0): a "fix" to the same option reads as "right".
+ * @returns The check, or undefined when the reply is not usable (a "fix" must name another valid option).
+ */
+export function parseQuestionCheck(raw: string, options: number, key: number): QuestionCheck | undefined {
+  const j = jsonIn(raw) as { verdict?: unknown; answer?: unknown; quote?: unknown; explain?: unknown } | undefined;
+  if (!j || typeof j !== "object") return undefined;
+  const verdict = j.verdict === "right" || j.verdict === "fix" || j.verdict === "broken" ? j.verdict : undefined;
+  if (!verdict) return undefined;
+  const explain = String(j.explain ?? "").trim().slice(0, 600);
+  const quote = String(j.quote ?? "").trim().slice(0, 300);
+  const n = Number(j.answer) - 1;
+  const answer = Number.isInteger(n) && n >= 0 && n < options ? n : undefined;
+  if (verdict === "fix" && (answer === undefined || answer === key)) return answer === key ? { verdict: "right", answer, explain, ...(quote ? { quote } : {}) } : undefined;
+  return { verdict, ...(verdict !== "broken" && answer !== undefined ? { answer } : {}), explain, ...(quote ? { quote } : {}) };
+}
+
+/**
+ * Changes a multiple-choice quiz after a question was found wrong: "fix" moves the answer key (and keeps what it was),
+ * "broken" takes the question out (with her answer), so the score, the weak topics and the mastery stay true.
+ *
+ * @param quiz - The quiz, changed in place.
+ * @param index - The question.
+ * @param change - The new key, or "remove".
+ * @param by - Who decided: the model's check against the lecture, or she.
+ * @param note - Why (the model's explanation), shown under the question.
+ * @returns The quiz.
+ */
+export function fixQuizQuestion(quiz: StudyQuiz, index: number, change: number | "remove", by: "model" | "her", note = ""): StudyQuiz {
+  const q = quiz.questions[index];
+  if (!q || quiz.kind) return quiz;
+  if (change === "remove") {
+    quiz.questions.splice(index, 1);
+    quiz.answers?.splice(index, 1);
+  } else if (change >= 0 && change < q.options.length && change !== q.answer) {
+    q.fixed = { was: q.answer, by, ...(note ? { note: note.slice(0, 600) } : {}) };
+    q.answer = change;
+    if (note) q.explain = note.slice(0, 2000);
+  }
+  if (quiz.answers) quiz.score = quiz.questions.filter((x, i) => quiz.answers![i] === x.answer).length;
+  return quiz;
+}
 
 /** How "a similar problem to practice" starts, so the tutor and the problem it wrote are recognised (design SimilarProblem). */
 export const SIMILAR_MARK = "🔁";

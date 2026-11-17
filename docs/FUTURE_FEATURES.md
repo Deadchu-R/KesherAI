@@ -121,6 +121,7 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ✅ A study game: match terms to meanings against the clock
 - ✅ A guided first setup of Study in four explained steps, and a Getting started list (computer, remote, phone alone; students part 38, 2026-11-17)
 - ✅ Back on track after days off: a backlog cleared a little each day with an end date (computer and phone; students part 39, 2026-11-18)
+- ✅ "This question is wrong" after a quiz: checked against the lecture, the key fixed or the question taken out, or her own answer marked right (computer and phone; students part 40, 2026-11-18)
 - ✅ On the phone alone too: explain it back, writing coach, My week, highlights, My mistakes, the 5-minute lesson, match, image cards from a photo (2026-11-17)
 
 ## Next after the students' list (Roee, 2026-11-17)

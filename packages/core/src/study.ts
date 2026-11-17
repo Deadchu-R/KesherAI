@@ -10,7 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { backlogPlan, backlogOrder, type BacklogPlan, cleanStudyPrefs, type StudyPrefs, parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { QUESTION_CHECK_PROMPT, parseQuestionCheck, fixQuizQuestion, type QuestionCheck, backlogPlan, backlogOrder, type BacklogPlan, cleanStudyPrefs, type StudyPrefs, parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -1876,6 +1876,41 @@ export class Study {
     });
     if (!missed.length) return "";
     return (await this.ask(QUIZ_TALK_PROMPT, `Score: ${z.score} of ${z.questions.length}.\nQuestions she missed:\n${missed.join("\n").slice(0, 20_000)}`, signal, d.course)).trim().slice(0, 4000);
+  }
+
+  /**
+   * "This question looks wrong" (design QuestionCheck): the model checks one multiple-choice question against the lecture
+   * it came from and fixes the key or takes the question out; or she says her own answer is the right one.
+   *
+   * @param index - The question in the quiz.
+   * @param mine - Her own call: this option is the right one (no model).
+   * @returns The quiz after the change, and the check (its verdict and why).
+   */
+  async checkQuestion(id: string, quizId: string, index: number, mine?: number, signal?: AbortSignal): Promise<{ quiz: StudyQuiz; check: QuestionCheck }> {
+    const d = await this.get(id);
+    const z = d.quizzes.find((q) => q.id === quizId);
+    const q = z?.questions[index];
+    if (!z || z.kind || !q) throw Object.assign(new Error("No such question."), { statusCode: 404 });
+    let check: QuestionCheck;
+    if (mine !== undefined) {
+      if (!(Number.isInteger(mine) && mine >= 0 && mine < q.options.length)) throw Object.assign(new Error("No such option."), { statusCode: 400 });
+      check = mine === q.answer ? { verdict: "right", answer: mine, explain: "" } : { verdict: "fix", answer: mine, explain: "" };
+    } else {
+      const l = d.lectures.find((x) => x.id === q.lectureId) ?? (d.lectures.length === 1 ? d.lectures[0] : undefined);
+      if (!l) throw Object.assign(new Error("This question has no lecture to check it against."), { statusCode: 400 });
+      const her = z.answers?.[index];
+      const user = `Question: ${q.q}\nOptions:\n${q.options.map((o, k) => `${k + 1}. ${o}`).join("\n")}\nAnswer key: ${q.answer + 1}${her !== undefined && her >= 0 && her !== q.answer ? `\nShe answered: ${her + 1}` : ""}\n\n### Lecture: ${l.title}\n${l.text.slice(0, 40_000)}`;
+      const raw = await this.ask(QUESTION_CHECK_PROMPT, user, signal, d.course);
+      const got = parseQuestionCheck(raw, q.options.length, q.answer);
+      if (!got) throw Object.assign(new Error("The model did not give a clear answer. Try again, or decide yourself."), { statusCode: 502 });
+      check = got;
+    }
+    const fresh = await this.get(id);
+    const fz = fresh.quizzes.find((x) => x.id === quizId) ?? z;
+    if (check.verdict === "fix") fixQuizQuestion(fz, index, check.answer!, mine !== undefined ? "her" : "model", check.explain);
+    if (check.verdict === "broken") fixQuizQuestion(fz, index, "remove", "model");
+    if (check.verdict !== "right") await this.save(fresh);
+    return { quiz: fz, check };
   }
 
   /** Grades her multiple-choice answers by code. */

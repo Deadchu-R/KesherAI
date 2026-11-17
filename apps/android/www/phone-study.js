@@ -1433,14 +1433,16 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     }
     if (z.kind) return openQuizView(c, z);
     if (z.i >= z.questions.length) {
-      const score = z.questions.filter((q, k) => z.picked[k] === q.answer).length;
+      // A question found wrong ("broken", design QuestionCheckPhone) is left out of the score and of the saved quiz.
+      const kept = z.questions.map((q, k) => [q, z.picked[k]]).filter(([q]) => !q.dropped);
+      const score = kept.filter(([q, p]) => p === q.answer).length;
       if (!z.saved) {
         z.saved = true;
         c.quizzes ??= [];
-        c.quizzes.push({ id: uid(), t: Date.now(), questions: z.questions, answers: z.picked, score });
+        c.quizzes.push({ id: uid(), t: Date.now(), questions: kept.map(([q]) => ({ q: q.q, options: q.options, answer: q.answer, explain: q.explain, ...(q.lectureId ? { lectureId: q.lectureId } : {}), ...(q.fixed ? { fixed: q.fixed } : {}) })), answers: kept.map(([, p]) => p), score });
         commit();
       }
-      return root.append(el("section", { class: "api" }, el("h2", {}, L(`${score} מתוך ${z.questions.length}`, `${score} of ${z.questions.length}`)), plus.quizTalk(c, z), el("button", { type: "button", class: "primary", onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן נוסף", "Another quiz"))));
+      return root.append(el("section", { class: "api" }, el("h2", {}, L(`${score} מתוך ${kept.length}`, `${score} of ${kept.length}`)), plus.quizTalk(c, z), el("button", { type: "button", class: "primary", onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן נוסף", "Another quiz"))));
     }
     const q = z.questions[z.i];
     const picked = z.picked[z.i];
@@ -1449,6 +1451,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       el("p", { dir: "auto", style: "font-size: 17px" }, q.q),
       ...q.options.map((o, k) => el("button", { type: "button", dir: "auto", style: "display: block; width: 100%; text-align: start; margin: 6px 0; min-height: 48px; " + (picked === undefined ? "" : k === q.answer ? "border-color: #6fd3a5" : k === picked ? "border-color: #f08a8a" : ""), disabled: picked !== undefined, onclick: () => { z.picked[z.i] = k; draw(); } }, String(o))),
       picked !== undefined && el("p", { dir: "auto" }, (picked === q.answer ? L("✓ נכון. ", "✓ Right. ") : L("לא נכון. ", "Not right. ")) + String(q.explain || "")),
+      picked !== undefined && (picked !== q.answer || q.fixed) && plus.questionCheck(c, q, picked),
       picked !== undefined && el("button", { type: "button", class: "primary", onclick: () => { z.i++; draw(); } }, L("הבא", "Next"))));
   }
 

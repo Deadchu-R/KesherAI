@@ -15,6 +15,7 @@ const fake = () => ({
     if (sys.includes("photos of study material")) return { text: (req.messages[1] as { images?: unknown[] }).images?.length ? "לוח: לחץ דם 120/80" : "NO-IMAGE" };
     if (sys.includes("drug cards")) return { text: '[{"name":"Digoxin","drugClass":"Cardiac glycoside","nursing":"Apical pulse a full minute; hold under 60","sideEffects":"Nausea, visual changes"},{"name":""}]' };
     if (sys.includes("flashcards")) return { text: '```json\n[{"front":"מה עושה אינסולין?","back":"מוריד סוכר בדם","kind":"drug"},{"front":"Normal K+?","back":"3.5–5.0 mEq/L","kind":"concept"},{"front":"bad"}]\n```' };
+    if (sys.includes("thinks a multiple-choice question")) return { text: '{"verdict":"fix","answer":1,"quote":"Insulin.","explain":"The lecture says a."}' };
     if (sys.includes("multiple-choice")) return { text: 'Here: [{"q":"Q1","options":["a","b","c","d"],"answer":2,"explain":"because","lecture":1},{"q":"broken","options":["a"],"answer":0}]' };
     return { text: '{"summary":"סיכום","terms":[{"term":"אינסולין","en":"Insulin","explain":"הורמון"}],"diagram":"flowchart LR\\nA-->B"}' };
   }) as never,
@@ -45,6 +46,16 @@ test("a course: lecture, summary, cards, review and quiz", async () => {
     assert.equal(quiz.questions[0]!.lectureId, l.id);
     const graded = await st.answerQuiz(c.id, quiz.id, [2]);
     assert.equal(graded.score, 1);
+    // "This question looks wrong": the model's check moves the key; her own call moves it back.
+    const checked = await st.checkQuestion(c.id, quiz.id, 0);
+    assert.equal(checked.check.verdict, "fix");
+    assert.equal(checked.quiz.questions[0]!.answer, 0);
+    assert.equal(checked.quiz.score, 0);
+    assert.equal((await st.get(c.id)).quizzes[0]!.questions[0]!.fixed?.by, "model");
+    const mine = await st.checkQuestion(c.id, quiz.id, 0, 2);
+    assert.equal(mine.quiz.score, 1);
+    assert.equal(mine.quiz.questions[0]!.fixed?.by, "her");
+    await assert.rejects(st.checkQuestion(c.id, quiz.id, 0, 9), /No such option/);
 
     const drugs = await st.makeDrugs(c.id, l.id);
     assert.equal(drugs.length, 1);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SIMILAR_MARK, detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, pictureQueries, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { SIMILAR_MARK, detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, pictureQueries, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview, parseQuestionCheck, fixQuizQuestion, type StudyQuiz } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -601,4 +601,33 @@ test("back on track: a plan only for a real backlog, and young cards first", asy
   assert.equal(backlogPlan({ ...base, cards: Array.from({ length: 140 }, (_, i) => card(i, 5, 1)) } as never, now, "gentle")!.perDay, 25);
   const order = backlogOrder([card(1, 30, 10), card(2, 1, 9), card(3, 1, 2)] as never).map((c) => c.id);
   assert.deepEqual(order, ["c3", "c2", "c1"]);
+});
+
+test("parseQuestionCheck reads the model's verdict and keeps a fix to a real, other option", () => {
+  assert.deepEqual(parseQuestionCheck('{"verdict":"fix","answer":2,"quote":"beta cells make insulin","explain":"Insulin."}', 4, 0), { verdict: "fix", answer: 1, explain: "Insulin.", quote: "beta cells make insulin" });
+  assert.deepEqual(parseQuestionCheck('```json\n{"verdict":"right","answer":1,"explain":"As in the lecture."}\n```', 4, 0), { verdict: "right", answer: 0, explain: "As in the lecture." });
+  // A "fix" to the key it already has is a "right"; a fix to no option is not usable.
+  assert.equal(parseQuestionCheck('{"verdict":"fix","answer":1,"explain":"x"}', 4, 0)?.verdict, "right");
+  assert.equal(parseQuestionCheck('{"verdict":"fix","answer":9,"explain":"x"}', 4, 0), undefined);
+  assert.deepEqual(parseQuestionCheck('{"verdict":"broken","answer":3,"explain":"Two are right."}', 4, 0), { verdict: "broken", explain: "Two are right." });
+  assert.equal(parseQuestionCheck("I think it is fine.", 4, 0), undefined);
+});
+
+test("fixQuizQuestion moves the key or removes the question, and recounts the score", () => {
+  const quiz = (): StudyQuiz => ({ id: "z", t: 1, questions: [
+    { q: "a", options: ["1", "2"], answer: 0, explain: "" },
+    { q: "b", options: ["1", "2"], answer: 0, explain: "" },
+    { q: "c", options: ["1", "2"], answer: 1, explain: "" },
+  ], answers: [0, 1, 0], score: 1 });
+  const fixed = fixQuizQuestion(quiz(), 1, 1, "model", "The lecture says 2.");
+  assert.equal(fixed.questions[1]!.answer, 1);
+  assert.deepEqual(fixed.questions[1]!.fixed, { was: 0, by: "model", note: "The lecture says 2." });
+  assert.equal(fixed.score, 2);
+  const removed = fixQuizQuestion(quiz(), 2, "remove", "model");
+  assert.equal(removed.questions.length, 2);
+  assert.deepEqual(removed.answers, [0, 1]);
+  assert.equal(removed.score, 1);
+  // Not taken yet: no score appears.
+  const fresh = quiz(); delete fresh.answers; delete fresh.score;
+  assert.equal(fixQuizQuestion(fresh, 0, 1, "her").score, undefined);
 });

@@ -551,6 +551,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Her written answers to an open or case quiz, graded one by one. */
   app.post<{ Params: { id: string; qid: string }; Body: { texts?: string[] } }>("/api/study/courses/:id/quiz/:qid/open-answers", { bodyLimit: 1024 * 1024 }, async (req) => st.answerOpenQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.texts) ? req.body.texts.map((t) => String(t ?? "")).slice(0, 30) : []));
   app.post<{ Params: { id: string; qid: string } }>("/api/study/courses/:id/quiz/:qid/advice", async (req) => ({ text: await st.quizAdvice(req.params.id, req.params.qid) }));
+  app.post<{ Params: { id: string; qid: string; n: string }; Body: { mine?: number } }>("/api/study/courses/:id/quiz/:qid/questions/:n/check", async (req) => st.checkQuestion(req.params.id, req.params.qid, Number(req.params.n), typeof req.body?.mine === "number" ? req.body.mine : undefined));
   app.post<{ Params: { id: string; qid: string }; Body: { answers?: number[] } }>("/api/study/courses/:id/quiz/:qid/answers", async (req) => st.answerQuiz(req.params.id, req.params.qid, Array.isArray(req.body?.answers) ? req.body.answers : []));
 
   app.get<C>("/api/study/courses/:id/progress", async (req) => {
