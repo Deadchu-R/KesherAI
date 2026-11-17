@@ -1103,3 +1103,13 @@ S5 an outside scanner's rules for Electron.
 - **Slides, image occlusion**: picture names checked (`^[\w-]{1,80}\.(png|jpg|webp)$`) and read only from the course's own image folder; slide files go through the same import path as before (85 MB limit).
 - **Players' speed**: a remembered number from a fixed list; no new input reaches the server.
 - **Performance**: quiz phones poll once a second and focus rooms every 5 s, each answer a small in-memory read; no polling once a room is gone (404 stops the pages).
+
+## Scan 123 (2026-11-17): degree progress, a similar problem, where a term appears, problem photos, EPUB/ODT, quiz talk, memory palace, the two-voice podcast, topic videos, scanned PDFs
+- **EPUB / ODT / ODP**: read in memory through the same zip reader as Office files (entry count and total unpacked size capped, no file is written), at most 400 chapters; the markup is turned into plain text by our own code (scripts and styles dropped, entities decoded only in the valid code-point range) and is shown only as text.
+- **Scanned PDFs**: the PDF and its page pictures stay in a temporary folder removed afterwards; the PowerShell script gets the paths through environment variables (no user text is put into the script; the page limit is our own number); at most 60 pages with Windows OCR, 15 with the vision model; 5-minute limit.
+- **Topic videos**: the search words go to yt-dlp as one argument after `ytsearchN:` (so they cannot become options), with `--ignore-config`, names only (nothing downloaded); ids checked (`^[\w-]{11}$`) before links are built from them; adding one goes through the existing YouTube lecture route.
+- **Where a term appears**: the term is cut to 100 characters, matching is plain substring search on folded text, at most 500 hits per lecture and 30 lectures returned.
+- **Quiz talk, memory palace, podcast, "similar problem"**: model answers are shown as text; the palace and podcast are checked and cut before they are kept (12 spots, 600 characters per scene; 20 000 characters, 200 lines); the palace request body is limited to 64 KB.
+- **Problem photo**: the same extract route as lecture photos (resized in the page first).
+- **Degree progress**: numbers clamped (credits 0–400 per kind, total 0–600, pass mark 0–100), at most 12 kinds, ids checked.
+- **Performance**: "where else" runs only when asked, over the course's own text; the podcast is written once and kept.
