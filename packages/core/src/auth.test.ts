@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import { allowedOrigin, isLocalRequest, registerRemoteAuth } from "./auth.js";
+import { allowedOrigin, clientAddress, isLocalRequest, registerRemoteAuth } from "./auth.js";
 
 async function app() {
   const a = Fastify();
@@ -66,4 +66,12 @@ test("the Unreal Editor's socket may send a bare loopback Origin; nothing else m
   assert.equal(allowedOrigin("http://127.0.0.1", "127.0.0.1:7420", "/api/unreal/ws"), true);
   assert.equal(allowedOrigin("127.0.0.1", "127.0.0.1:7420", "/api/conversations"), false);
   assert.equal(allowedOrigin("https://evil.example", "127.0.0.1:7420", "/api/unreal/ws"), false);
+});
+
+test("clientAddress: a Funnel visitor is counted by their own address, not as this computer", () => {
+  assert.equal(clientAddress({ ip: "127.0.0.1", headers: { "tailscale-funnel-request": "?1", "x-forwarded-for": "203.0.113.9, 100.64.0.1" } }), "203.0.113.9");
+  assert.equal(clientAddress({ ip: "127.0.0.1", headers: { "cf-connecting-ip": "198.51.100.4" } }), "198.51.100.4");
+  // From the network, the header is not believed.
+  assert.equal(clientAddress({ ip: "192.168.1.5", headers: { "tailscale-funnel-request": "?1", "x-forwarded-for": "203.0.113.9" } }), "192.168.1.5");
+  assert.equal(clientAddress({ ip: "127.0.0.1", headers: {} }), "127.0.0.1");
 });

@@ -5,7 +5,9 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
+import { hostname } from "node:os";
 import { LinkWatch } from "./link-watch.js";
+import { LinkBeaconPoster } from "./link-beacon-post.js";
 import { LipSync } from "./lipsync.js";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -16,7 +18,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { branding, features } from "@kesher/shared";
+import { beaconSecret, branding, features } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
@@ -240,7 +242,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   };
   study.switchNow = () => studySwitch.now();
   // Photos (a board, a schedule) need a model that sees pictures: the loaded one when it has its vision file, else the
-  // largest local model under 24 GB that has one (found on the PC: the active Hebrew model has none, so photos
+  // smallest local model over 4 GB (and under 24 GB) that has one (found on the PC: the active Hebrew model has none, so photos
   // came back empty). Loaded when free, like a course's model; none found → the active chat model.
   study.visionModel = () => {
     const active = config.activeModels.chat;
@@ -248,7 +250,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const pick = async () => {
       const st = engine.status();
       if (st.running && st.modelPath && (await findMmproj(st.modelPath))) return st.modelPath;
-      for (const m of (await localGgufs()).filter((x) => x.size < 24 * 1024 ** 3).sort((a, b) => b.size - a.size)) if (await findMmproj(m.path)) return m.path;
+      // The smallest that is not tiny: a 12B loads in seconds where a 31B took ten minutes on the PC.
+      for (const m of (await localGgufs()).filter((x) => x.size > 4 * 1024 ** 3 && x.size < 24 * 1024 ** 3).sort((a, b) => a.size - b.size)) if (await findMmproj(m.path)) return m.path;
       return undefined;
     };
     const turn: ReturnType<typeof modelTurnFor> = async (req, signal, onText) => {
@@ -649,6 +652,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   startEngines({ app, services, guard, engine, comfy, config, faults, registry, afterTerminate });
 
   let linkWatch: LinkWatch | undefined;
+  let linkBeacon: LinkBeaconPoster | undefined;
   return {
     app,
     services,
@@ -666,11 +670,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           await telegram.broadcast(`🔗 KesherAI: the link to your computer changed. Open this on the phone to connect again (it holds the access key; keep it private):\n${link}`).catch(() => undefined);
         }, () => config.remote.token ?? "");
         void linkWatch.start();
+        linkBeacon = new LinkBeaconPoster(
+          () => (config.remote.anywhere && config.remote.linkBeacon ? services.tunnel.status().url : undefined),
+          async () => [...config.remote.devices.filter((d) => !d.scope).map((d) => d.hash), ...(config.remote.token ? [await beaconSecret(config.remote.token)] : [])],
+          () => hostname(),
+        );
+        linkBeacon.start();
       }
       return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${config.port}`;
     },
     async close() {
       linkWatch?.stop();
+      linkBeacon?.stop();
       // A restart (from the phone, or to install an update) keeps the tunnel, so its address stays the same.
       if (services.restarting) services.tunnel.detach();
       else services.tunnel.stop();

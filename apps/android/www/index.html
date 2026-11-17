@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <script src="vendor/address.js"></script>
+  <script src="link-beacon.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121213" />
   <link rel="stylesheet" href="theme.css" />
@@ -158,6 +159,7 @@
     lastUsed: { he: "שימוש אחרון: ", en: "Last used: " },
     removeComputer: { he: "להסיר את המחשב הזה מהרשימה?", en: "Remove this computer from the list?" },
     tryingNext: { he: "מנסה כתובת אחרת…", en: "Trying another address…" },
+    findingNew: { he: "מחפש את הכתובת החדשה של המחשב…", en: "Looking for the computer's new address…" },
     installingScanner: { he: "מכין את הסורק (פעם ראשונה בלבד)…", en: "Preparing the scanner (first time only)…" },
     notKesher: { he: "זה לא קוד של KesherAI. סרוק את הקוד שבמחשב: הגדרות ← טלפון.", en: "That is not a KesherAI code. Scan the code on the computer: Settings → Phone." },
     scanFailed: { he: "הסריקה לא הצליחה: ", en: "Scanning did not work: " },
@@ -272,6 +274,21 @@
           }
         }
         return connect(linkFor(c, c.links[i]));
+      }
+    }
+    // None answered: the computer's internet address may have changed (a restart, an update). It leaves the new one,
+    // encrypted with this phone's own key, where only this phone can find it (link-beacon.js); taken when it answers.
+    if (!cancelled && globalThis.KesherBeacon) {
+      $("status").className = "";
+      $("status").textContent = tr.findingNew[lang];
+      const found = await globalThis.KesherBeacon.find([c.token, c.shared]).catch(() => undefined);
+      const ok = found && !c.links.includes(found.url) && !cancelled && await fetch(`${found.url}/api/health`, { headers: { authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(8000) }).then((r) => r.ok).catch(() => false);
+      if (ok) {
+        const list = loadComputers();
+        const entry = list.find((x) => x.token === c.token);
+        c.links = [found.url, ...c.links.filter((l) => l !== found.url)].slice(0, 8);
+        if (entry) { entry.links = c.links; saveComputers(list); }
+        return connect(linkFor(c, found.url));
       }
     }
     if (!cancelled) connect(linkFor(c, c.links[0])); // shows the error and the wake button

@@ -282,6 +282,8 @@ export const KesherConfigSchema = z.object({
       anywhereDevicesOnly: z.boolean().default(false),
       /** Through the internet link, a device key not used for this many days stops working (0 = never). */
       anywhereIdleDays: z.number().int().min(0).max(365).default(30),
+      /** The internet address, encrypted for each paired phone, in an ntfy topic only that phone can name, so it finds the computer after the address changes (link-beacon.ts). */
+      linkBeacon: z.boolean().default(true),
     })
     .prefault({}),
   /** Speech: how the microphone button turns speech into text. */

@@ -45,7 +45,16 @@ export function clientAddress(request: Pick<FastifyRequest, "ip" | "headers">): 
   // network could send that header to look like someone else and dodge the limit on wrong tokens.
   if (!isLoopback(request.ip)) return request.ip;
   const cf = request.headers["cf-connecting-ip"];
-  return (Array.isArray(cf) ? cf[0] : cf) ?? request.ip;
+  if (cf !== undefined) return (Array.isArray(cf) ? cf[0] : cf) ?? request.ip;
+  // Tailscale Funnel connects from this computer too and names the visitor in X-Forwarded-For (the first address).
+  // Without this every visitor through the Funnel was "127.0.0.1": a scanner's wrong tokens (seen on the PC within
+  // minutes of turning it on) locked out the user's own phone.
+  if (request.headers["tailscale-funnel-request"] !== undefined) {
+    const xff = request.headers["x-forwarded-for"];
+    const first = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim();
+    if (first && /^[\d.:a-f]{2,45}$/i.test(first)) return first;
+  }
+  return request.ip;
 }
 
 const failures = new Map<string, { count: number; since: number }>();
@@ -96,7 +105,7 @@ export function registerRemoteAuth(
       const status = reply.statusCode;
       if (status < 400 && /^\/api\/(downloads\/events|activity|computer\/status)/.test(path)) return;
       const device = deviceOf.get(request.raw);
-      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] ? "tunnel" : "network", ms: Math.round(reply.elapsedTime), ...(device ? { device } : {}), ...(status >= 400 ? { kind: refusedKind.get(request.raw) ?? "none" } : {}), ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
+      log({ address: clientAddress(request), method: request.method, path, status: status === 401 || status === 403 || status === 429 ? status : status >= 400 ? 200 : status, via: request.headers["cf-connecting-ip"] || request.headers["tailscale-funnel-request"] ? "tunnel" : "network", ms: Math.round(reply.elapsedTime), ...(device ? { device } : {}), ...(status >= 400 ? { kind: refusedKind.get(request.raw) ?? "none" } : {}), ...(typeof request.headers["user-agent"] === "string" ? { agent: request.headers["user-agent"] } : {}) });
     });
   }
   app.addHook("onRequest", async (request, reply) => {
