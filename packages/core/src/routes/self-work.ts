@@ -92,7 +92,7 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
       if (host) {
         // The worker uses this app's models.
         const model = chosen;
-        const r = await toWorker<{ run: SelfWorkState }>("/api/self-work/start", "POST", { ...start, ...(model ? { modelId: `main/${model}` } : {}) }, true);
+        const r = await toWorker<{ run: SelfWorkState }>("/api/self-work/start", "POST", { ...start, ...(model ? { modelId: model.startsWith("main/") ? model : `main/${model}` } : {}) }, true);
         return { ...r, ...(auto && !b.modelId ? { picked: auto } : {}), ...(contextNote ? { contextNote } : {}) };
       }
       const sw = s.selfWork;

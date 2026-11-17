@@ -252,7 +252,10 @@ export class SelfWork {
     const head = await this.d.git(o.repo, ["rev-parse", "--verify", "HEAD"]);
     if (head.code !== 0) throw new Error(`git could not read the project: ${head.out.slice(0, 300)}`);
     const hours = Math.min(12, Math.max(0.25, Number(o.hours ?? 2) || 2));
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    // To the minute, with the seconds added when that branch already exists (two starts in one minute).
+    let stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const taken = await this.d.git(o.repo, ["rev-parse", "--verify", "--quiet", `refs/heads/kesher-self/${stamp}`]);
+    if (taken.code === 0 && /^[0-9a-f]{40}/.test(taken.out.trim())) stamp += new Date().toISOString().slice(17, 19);
     const branch = `kesher-self/${stamp}`;
     // A separate working folder next to the project: the user's checkout (and the running app) stay as they are.
     const worktree = o.worktrees ? join(o.worktrees, basename(o.repo), stamp) : join(dirname(o.repo), `${basename(o.repo)}-self-work`, stamp);
