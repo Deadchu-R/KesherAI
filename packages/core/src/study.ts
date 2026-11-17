@@ -801,7 +801,7 @@ export class Study {
       if (!text || /^NO-IMAGE/.test(text)) throw bad("The chosen chat model cannot see pictures. Choose a model with vision (for example Gemma 3 or Qwen-VL), or send the slides as a PDF.");
       return { title, text: text.slice(0, 400_000) };
     }
-    if (![".pdf", ".pptx", ".docx", ".txt", ".md", ".srt", ".vtt"].includes(ext)) throw bad("This kind of file cannot be read: send a PDF, PowerPoint, Word, text file or a photo.");
+    if (![".pdf", ".pptx", ".docx", ".epub", ".odt", ".odp", ".txt", ".md", ".srt", ".vtt"].includes(ext)) throw bad("This kind of file cannot be read: send a PDF, PowerPoint, Word, an EPUB book, a LibreOffice file, text or a photo.");
     const doc = await documentText(data, name);
     // Each page or slide keeps its number (a lecture's "slide 12" can be found again).
     const text = doc.pages.map((p, i) => [i + 1, p.trim()] as const).filter(([, p]) => p).map(([n, p]) => (doc.pages.length > 1 ? `— ${n} —\n${p}` : p)).join("\n\n");

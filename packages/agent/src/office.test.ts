@@ -102,3 +102,20 @@ test("CSV and TSV rows: quotes, commas and line breaks inside a field, and the l
   assert.equal(many.rows.length, 5);
   assert.equal(many.more, 15);
 });
+
+test("an EPUB book's chapters in spine order, and a LibreOffice document's text", async () => {
+  const book = zip({
+    "mimetype": "application/epub+zip",
+    "META-INF/container.xml": '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>',
+    "OEBPS/content.opf": '<package><manifest><item id="c2" href="text/ch2.xhtml"/><item id="c1" href="text/ch1.xhtml"/><item id="css" href="s.css"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>',
+    "OEBPS/text/ch1.xhtml": "<html><head><title>x</title><style>p{}</style></head><body><h1>פרק 1: הלב</h1><p>הלב שואב&nbsp;דם &amp; חמצן.</p><script>alert(1)</script></body></html>",
+    "OEBPS/text/ch2.xhtml": "<html><body><h1>Chapter 2</h1><p>Kidneys&#x2019; work<br/>line two</p></body></html>",
+  });
+  const { epubChapters, odfText } = await import("./office.js");
+  assert.deepEqual(epubChapters(book), ["פרק 1: הלב\n\nהלב שואב דם & חמצן.", "Chapter 2\n\nKidneys’ work\nline two"]);
+  const doc = await documentText(book, "book.epub");
+  assert.equal(doc.pages.length, 2);
+  const odt = zip({ "content.xml": '<office:document-content><office:body><office:text><text:h>כותרת</text:h><text:p>שורה<text:tab/>אחת</text:p><text:p>שתיים</text:p></office:text></office:body></office:document-content>' });
+  assert.equal(odfText(odt), "כותרת\n\nשורה אחת\n\nשתיים");
+  assert.equal((await documentText(odt, "a.odt")).pages[0], "כותרת\n\nשורה אחת\n\nשתיים");
+});

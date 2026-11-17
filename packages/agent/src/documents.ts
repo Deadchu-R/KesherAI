@@ -16,7 +16,7 @@ export interface DocumentText {
 }
 
 /**
- * Extracts the text of a PDF, Word (.docx) or text file.
+ * Extracts the text of a PDF, Word (.docx), PowerPoint, Excel, EPUB book, LibreOffice (.odt/.odp) or text file.
  *
  * @param data - The file's bytes.
  * @param name - Its name (the extension picks the reader).
@@ -43,6 +43,15 @@ export async function documentText(data: Uint8Array, name: string): Promise<Docu
   if (ext === ".pptx") {
     const { pptxSlides } = await import("./office.js");
     return { name, kind: "pptx", pages: pptxSlides(data).map((t, i) => `Slide ${i + 1}\n${t}`) };
+  }
+  if (ext === ".epub") {
+    // A chapter is a part (long chapters cut into parts).
+    const { epubChapters } = await import("./office.js");
+    return { name, kind: "text", pages: epubChapters(data).flatMap((c) => chunk(c, 6000)) };
+  }
+  if (ext === ".odt" || ext === ".odp") {
+    const { odfText } = await import("./office.js");
+    return { name, kind: "docx", pages: chunk(odfText(data), 3000) };
   }
   return { name, kind: "text", pages: chunk(Buffer.from(data).toString("utf8"), 3000) };
 }

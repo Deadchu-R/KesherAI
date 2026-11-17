@@ -217,3 +217,59 @@ export function csvRows(text: string, maxRows = 500, sep?: string): { rows: stri
   if (cell || row.length) endRow();
   return { rows, more };
 }
+
+/** The readable text of an XHTML or ODF XML part: blocks on their own lines, tags dropped, entities decoded. */
+export function markupText(xml: string): string {
+  const named: Record<string, string> = { nbsp: " ", lt: "<", gt: ">", amp: "&", quot: '"', apos: "'", shy: "", ndash: "–", mdash: "—", hellip: "…", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“" };
+  return xml
+    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(?:\w+:)?(?:br|tab)\b[^>]*\/?>/gi, (t) => (/tab/i.test(t) ? " " : "\n"))
+    .replace(/<\/?(?:\w+:)?(?:p|div|h[1-6]|li|tr|section|article|blockquote|h|list-item|table-row)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&([a-z]+|#\d{1,7}|#x[0-9a-f]{1,6});/gi, (m, e: string) => {
+      if (e[0] !== "#") return named[e.toLowerCase()] ?? m;
+      const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+      return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "";
+    })
+    .replace(/[ \t\u00a0]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * An EPUB book's chapters in reading order (the OPF spine), as text; at most 400 chapters.
+ *
+ * @param data - The .epub file's bytes.
+ */
+export function epubChapters(data: Uint8Array): string[] {
+  const zip = openZip(data);
+  const container = zip.read("META-INF/container.xml")?.toString("utf8") ?? "";
+  const opfPath = /full-path="([^"]+)"/.exec(container)?.[1] ?? zip.names.find((n) => n.endsWith(".opf"));
+  const opf = opfPath ? zip.read(opfPath)?.toString("utf8") ?? "" : "";
+  const base = opfPath?.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/") + 1) : "";
+  const items = new Map<string, string>();
+  for (const m of opf.matchAll(/<(?:\w+:)?item\b[^>]*>/g)) {
+    const id = /\bid="([^"]+)"/.exec(m[0])?.[1];
+    const href = /\bhref="([^"]+)"/.exec(m[0])?.[1];
+    if (id && href) items.set(id, href);
+  }
+  const join = (href: string) => {
+    const parts = `${base}${decodeURIComponent(href.split("#")[0]!)}`.split("/");
+    const out: string[] = [];
+    for (const p of parts) if (p === "..") out.pop(); else if (p && p !== ".") out.push(p);
+    return out.join("/");
+  };
+  let order = [...opf.matchAll(/<(?:\w+:)?itemref\b[^>]*idref="([^"]+)"/g)].map((m) => items.get(m[1]!)).filter((h): h is string => !!h).map(join);
+  if (!order.length) order = zip.names.filter((n) => /\.x?html?$/i.test(n)).sort();
+  return order.slice(0, 400).map((n) => markupText(zip.read(n)?.toString("utf8") ?? "")).filter((t) => t.length > 0);
+}
+
+/**
+ * A LibreOffice document's (.odt, .odp) text from its content.xml.
+ *
+ * @param data - The file's bytes.
+ */
+export function odfText(data: Uint8Array): string {
+  return markupText(openZip(data).read("content.xml")?.toString("utf8") ?? "");
+}

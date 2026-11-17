@@ -1199,7 +1199,7 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
             <button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void save()}>{busy ? L("קורא את הקובץ…", "Reading the file…") : L("שמור הרצאה", "Save lecture")}</button>
             <button type="button" disabled={busy} onClick={() => file.current?.click()}>{L("מקובץ: מצגת, PDF, Word", "From a file: slides, PDF, Word")}</button>
             <button type="button" disabled={busy} onClick={() => photo.current?.click()}>{L("📷 צילום לוח או מחברת", "📷 Photo of the board or notebook")}</button>
-            <input ref={file} type="file" accept=".pdf,.pptx,.docx,.txt,.md,.srt,.vtt,image/*" hidden onChange={(e) => void fromFile(e.target.files?.[0], e.target)} />
+            <input ref={file} type="file" accept=".pdf,.pptx,.docx,.epub,.odt,.odp,.txt,.md,.srt,.vtt,image/*" hidden onChange={(e) => void fromFile(e.target.files?.[0], e.target)} />
             <input ref={photo} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void fromFile(e.target.files?.[0], e.target)} />
             <button type="button" onClick={() => { setAdding(false); setRecording(true); }}>{L("או: הקלט הרצאה", "Or: record a lecture")}</button>
             {info.lectures.length > 0 && <button type="button" className="ghost" onClick={() => setAdding(false)}>{L("ביטול", "Cancel")}</button>}
