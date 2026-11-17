@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { celebrate, chime } from "./celebrate";
 import type { StudyTerm } from "@kesher/shared";
 import { getLocale, he$ } from "./i18n";
 
@@ -78,7 +79,9 @@ export function StudyMatch({ courseId, courseName, terms }: { courseId: string; 
       const next = new Set(done).add(t.pair);
       setDone(next);
       setSel(null);
+      if (next.size !== pairs) chime("right");
       if (next.size === pairs) {
+        celebrate();
         const ms = Date.now() - (start ?? Date.now()) + penalty;
         setFinished(ms);
         if (!best || ms < best) {

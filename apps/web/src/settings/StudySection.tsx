@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { muteStudySounds, studySoundsMuted } from "../celebrate";
 import { GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -61,6 +62,7 @@ function ViewSettings() {
   return (
     <section className="card">
       <h2>🧹 {L("תצוגה", "View")}</h2>
+      <label className="study-check"><input type="checkbox" defaultChecked={!studySoundsMuted()} onChange={(e) => muteStudySounds(!e.target.checked)} /> {L("צלילי הצלחה עדינים (במכשיר הזה)", "Soft success sounds (on this device)")}</label>
       <label className="study-check"><input type="checkbox" checked={p.easyRead} onChange={(e) => set({ easyRead: e.target.checked })} /> {L("קריאה נוחה: טקסט גדול ומרווח יותר בלימודים", "Easy reading: larger, more spaced text in Study")}</label>
       <label className="study-check"><input type="checkbox" checked={p.simple} onChange={(e) => set({ simple: e.target.checked })} /> {L("תצוגה פשוטה: רק הכלים של כל יום, השאר תחת \"עוד כלים\"", "Simple view: only the everyday tools, the rest under \"More tools\"")}</label>
     </section>

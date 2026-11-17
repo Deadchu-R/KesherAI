@@ -3239,3 +3239,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .path-steps span { opacity: 0.3; }
 .path-steps span.ok { opacity: 1; }
 .path-node .button { margin-top: 6px; display: inline-block; }
+/* Celebration (students part 25 #5). */
+.confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
+.confetti i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; animation: confetti-fall 1.8s ease-in forwards; }
+@keyframes confetti-fall { to { transform: translate(var(--x), 105vh) rotate(var(--r)); opacity: 0.6; } }

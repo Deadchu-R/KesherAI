@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { celebrate } from "../celebrate";
 import { StudyMistakes } from "../StudyMistakes";
 import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from "../focus-sounds";
 import { ReadAlong } from "../ReadAlong";
@@ -353,6 +354,23 @@ function GoalCard() {
       removeEventListener("focus", load);
     };
   }, []);
+  // The goal reached while she is here: a small celebration, once a day.
+  const wasDone = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!p?.goal.on) return;
+    if (wasDone.current === false && p.today.done) {
+      try {
+        const k = `kesher-goal-celebrated:${new Date().toDateString()}`;
+        if (!localStorage.getItem(k)) {
+          localStorage.setItem(k, "1");
+          celebrate();
+        }
+      } catch {
+        celebrate();
+      }
+    }
+    wasDone.current = p.today.done;
+  }, [p]);
   const energy = async (level: "high" | "ok" | "low") => {
     try {
       setP(await api<NonNullable<typeof p>>("/api/study/energy", { method: "PUT", body: { level } }));

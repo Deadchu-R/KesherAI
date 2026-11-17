@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { celebrate, chime } from "./celebrate";
 import type { StudyCard, StudyQuestion } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
@@ -48,6 +49,11 @@ export function StudyMistakes({ courseId, courseName, onClose, quick }: { course
   );
   const cur = left[i % left.length]!;
   const answer = async (ok: boolean) => {
+    if (ok) {
+      // The last one right: the whole session is done.
+      if (cur.right + 1 >= NEED && left.length === 1) celebrate();
+      else chime("right");
+    }
     if (cur.card) void api(`/api/study/courses/${courseId}/cards/${cur.card.id}/review`, { method: "POST", body: { rating: ok ? 3 : 1 } }).catch(() => undefined);
     setItems(items.map((x) => (x.key === cur.key ? { ...x, right: ok ? x.right + 1 : 0 } : x)));
     setShown(false);
