@@ -5,6 +5,9 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createKesherServer } from "./server.js";
 
+// The flow is what is tested here, not the free-space rule (build machines are often fuller than 5 GB free).
+process.env.KESHER_SELF_WORK_MIN_GB = "0";
+
 test("the main app passes self-work to the worker; both share one task board; the worker uses the main app's models", async () => {
   const mainRoot = await mkdtemp(join(tmpdir(), "main-"));
   let workerAt = "";

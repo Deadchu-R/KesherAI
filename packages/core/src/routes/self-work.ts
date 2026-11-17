@@ -67,7 +67,9 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     // The copies' folder: this app's setting (a worker gets it from the main app, which is a local request).
     const worktrees = (isLocalRequest(req) && typeof b.worktrees === "string" && isAbsolute(b.worktrees) ? b.worktrees : undefined) ?? s.config.selfWorkDir;
     const free = await freeSpace(worktrees ?? repo).catch(() => undefined);
-    if (free !== undefined && free < 5 * 1024 ** 3) return reply.code(507).send({ error: `The drive has only ${(free / 1024 ** 3).toFixed(1)} GB free. Self-work needs at least 5 GB (a copy of the project and its packages). Free some space first.` });
+    // 5 GB; the tests set KESHER_SELF_WORK_MIN_GB=0 (they only check the flow, and build machines are often fuller).
+    const minGb = Number(process.env.KESHER_SELF_WORK_MIN_GB ?? 5);
+    if (free !== undefined && free < minGb * 1024 ** 3) return reply.code(507).send({ error: `The drive has only ${(free / 1024 ** 3).toFixed(1)} GB free. Self-work needs at least ${minGb} GB (a copy of the project and its packages). Free some space first.` });
     if (b.modelId !== undefined && typeof b.modelId !== "string") return reply.code(400).send({ error: "modelId is text." });
     const start = { repo, goal: String(b.goal ?? ""), ...(b.hours !== undefined ? { hours: Number(b.hours) } : {}), check, ...(worktrees ? { worktrees } : {}) };
     try {
