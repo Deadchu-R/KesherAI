@@ -271,12 +271,25 @@ export class BrowserPane {
    * Fab's own search, run inside a fab.com tab (the user's Fab sign-in; Fab has no public API and answers only a real
    * browser). Only its search route; a fab.com tab is opened when there is none.
    */
+  /** The fab.com tab KesherAI opened for searching, and when it closes. */
+  private fabTab?: number;
+  private fabTimer?: ReturnType<typeof setTimeout>;
+
   private async fabSearch(path: string): Promise<{ status: number; json?: unknown }> {
     if (!/^\/i\/listings\/search\?[\w%.=&+-]*$/.test(path)) throw new Error("Only Fab's listing search.");
     let t = this.tabs.find((x) => /^https:\/\/www\.fab\.com\//.test(x.view.webContents.getURL()));
     if (!t) {
       t = await this.open("https://www.fab.com/", undefined, true);
+      this.fabTab = t.id;
       await this.settle(t, 20_000);
+    }
+    // A tab KesherAI opened for the search closes by itself two minutes after the last search (kept for the next ones).
+    if (this.fabTab === t.id) {
+      clearTimeout(this.fabTimer);
+      this.fabTimer = setTimeout(() => {
+        if (this.fabTab !== undefined && this.tabs.some((x) => x.id === this.fabTab)) this.close(this.fabTab);
+        this.fabTab = undefined;
+      }, 120_000);
     }
     const code = `fetch(${JSON.stringify(path)}, { credentials: "include", headers: { accept: "application/json" } }).then(async (r) => ({ status: r.status, json: r.ok && (r.headers.get("content-type") || "").includes("json") ? await r.json() : undefined }), () => ({ status: 0 }))`;
     return (await t.view.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code }], true)) as { status: number; json?: unknown };
