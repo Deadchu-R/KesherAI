@@ -1268,17 +1268,24 @@ export class Study {
     const outer = signal ?? AbortSignal.timeout(600_000);
     if (outer.aborted) stop.abort();
     else outer.addEventListener("abort", () => stop.abort(), { once: true });
-    let so = "";
-    try {
-      const r = await m.turn({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, stop.signal, (d) => {
-        so += d;
-        if (so.length > maxChars && !stop.signal.aborted) stop.abort();
-      });
-      return r.text;
-    } catch (err) {
-      // Stopped for running on (not by her or the timeout): what it wrote is the answer.
-      if (so.length > maxChars && !outer.aborted) return so;
-      throw err;
+    // A context that is too small for the material (a local model; Hebrew takes many tokens): the material is cut to a
+    // half, then a quarter, keeping its start (the instructions and the first lectures) - one place for every Study
+    // feature, after "Context size has been exceeded" on the PC (2026-11-18).
+    let text = user;
+    for (let tries = 0; ; tries++) {
+      let so = "";
+      try {
+        const r = await m.turn({ messages: [{ role: "system", content: system }, { role: "user", content: text }], tools: [] }, stop.signal, (d) => {
+          so += d;
+          if (so.length > maxChars && !stop.signal.aborted) stop.abort();
+        });
+        return r.text;
+      } catch (err) {
+        // Stopped for running on (not by her or the timeout): what it wrote is the answer.
+        if (so.length > maxChars && !outer.aborted) return so;
+        if (tries >= 2 || outer.aborted || text.length < 4000 || !/context (size|length|window)|exceed|n_ctx|too many tokens/i.test((err as Error).message)) throw err;
+        text = `${text.slice(0, Math.floor(text.length / 2))}\n\n[The rest was cut to fit the model's memory.]`;
+      }
     }
   }
 

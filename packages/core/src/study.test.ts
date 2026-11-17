@@ -346,3 +346,28 @@ test("grades sync with the phone: the later copy wins", async () => {
   assert.equal((await st.grades()).t, 2000);
   await rm(dir, { recursive: true, force: true });
 });
+
+test("a small model context: the material is cut down and the answer still comes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-"));
+  try {
+    const sizes: number[] = [];
+    const small = () => ({
+      id: "small",
+      turn: (async (req: { messages: Array<{ role: string; content: string }> }) => {
+        const user = req.messages[1]!.content;
+        sizes.push(user.length);
+        if (user.length > 9_000) throw new Error("Context size has been exceeded.");
+        return { text: '{"summary":"קצר","terms":[]}' };
+      }) as never,
+    });
+    const st = new Study(dir, small);
+    const c = await st.addCourse("פרמקולוגיה");
+    // Under the 12,000 characters a summary reads at once, but over the model's 9,000.
+    const l = await st.addLecture(c.id, { title: "ארוכה", text: "משפט על תרופות. ".repeat(700) });
+    const s = await st.summarize(c.id, l.id);
+    assert.equal(s.summary, "קצר");
+    assert.ok(sizes.length >= 2 && sizes.at(-1)! <= 9_000, String(sizes));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
