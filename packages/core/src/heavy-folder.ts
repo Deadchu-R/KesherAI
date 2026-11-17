@@ -261,3 +261,27 @@ export function suggestHeavyDir(modelsDir: string, root: string): string | undef
   if ((m + sep).startsWith(r + sep)) return undefined;
   return dirname(m);
 }
+
+/** Programs under the engines folder that are editors the user works in (never closed without asking). */
+export const EDITOR = /godot|unity|unreal|blender/i;
+
+/**
+ * KesherAI's programs running from a folder (Windows: by their path), to stop before the folder moves.
+ *
+ * @param dir - The engines folder.
+ */
+export async function enginesRunning(dir: string): Promise<Array<{ id: number; name: string }>> {
+  if (process.platform !== "win32") return [];
+  const { execFile } = await import("node:child_process");
+  const prefix = `${resolve(dir).toLowerCase()}\\`;
+  const out = await new Promise<string>((ok) => execFile("powershell", ["-NoProfile", "-Command", "Get-Process | Where-Object { $_.Path } | ForEach-Object { \"$($_.Id)`t$($_.ProcessName)`t$($_.Path)\" }"], { windowsHide: true, timeout: 20_000, maxBuffer: 8 * 1024 * 1024 }, (_e, stdout) => ok(String(stdout ?? ""))));
+  return out.split(/\r?\n/).map((l) => l.split("\t")).filter((x) => x.length === 3 && x[2]!.toLowerCase().startsWith(prefix)).map(([id, name]) => ({ id: Number(id), name: name! })).filter((p) => p.id > 0 && p.id !== process.pid);
+}
+
+/** Stops processes by id (with their children), and waits a moment for their files to be let go. */
+export async function stopProcesses(ids: number[]): Promise<void> {
+  if (!ids.length || process.platform !== "win32") return;
+  const { execFile } = await import("node:child_process");
+  for (const id of ids) await new Promise((ok) => execFile("taskkill", ["/PID", String(id), "/T", "/F"], { windowsHide: true, timeout: 15_000 }, () => ok(undefined)));
+  await new Promise((r) => setTimeout(r, 1500));
+}

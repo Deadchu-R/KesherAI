@@ -13,7 +13,7 @@ import { findMmproj } from "../llamacpp.js";
 import { isLocalRequest } from "../auth.js";
 import { assertWritableFolder } from "../library.js";
 import { ModelsMove } from "../models-move.js";
-import { HEAVY_FOLDERS, HeavyFolder, suggestHeavyDir, type HeavyName } from "../heavy-folder.js";
+import { EDITOR, HEAVY_FOLDERS, HeavyFolder, enginesRunning, stopProcesses, suggestHeavyDir, type HeavyName } from "../heavy-folder.js";
 import { engineRoutes } from "./engine.js";
 
 /** The one move of the models folder that may run at a time. */
@@ -266,8 +266,17 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
     heavy.cancel();
     return heavy.status();
   });
-  app.post("/api/heavy/restart", async (req, reply) => {
+  app.post<{ Body: { closeEditors?: boolean } }>("/api/heavy/restart", async (req, reply) => {
     if (!isLocalRequest(req) || !s.restartApp) return reply.code(403).send({ error: "Restart KesherAI yourself to finish." });
+    // KesherAI's own engines keep running across a restart (the chat model, ComfyUI, the tunnel), and a running program
+    // holds its folder: they are stopped first so the engines folder can move. An editor (Godot, …) the user may be
+    // working in is not closed without their say.
+    if (s.config.heavyPending.some((p) => p.name === "engines")) {
+      const running = await enginesRunning(join(s.paths.root, "engines"));
+      const editors = running.filter((p) => EDITOR.test(p.name));
+      if (editors.length && !req.body?.closeEditors) return reply.code(409).send({ error: "Close these first, or let KesherAI close them.", code: "editors-open", category: [...new Set(editors.map((e) => e.name))].join(", ") });
+      await stopProcesses(running.map((p) => p.id));
+    }
     setTimeout(() => s.restartApp?.(), 300);
     return { restarting: true };
   });

@@ -49,6 +49,16 @@ export function HeavyFolderSection() {
     }
   };
   const c = info.copy;
+  const restart = async (closeEditors: boolean) => {
+    try {
+      await api("/api/heavy/restart", { method: "POST", body: { closeEditors } });
+    } catch (e) {
+      const err = e as { code?: string; category?: string; message: string };
+      if (err.code === "editors-open") {
+        if (confirm(L(`כדי להעביר את המנועים צריך לסגור: ${err.category ?? ""}. שמור שם עבודה פתוחה, ואז לחץ אישור וקשר יסגור אותם.`, `To move the engines these must close: ${err.category ?? ""}. Save any open work there, then press OK and KesherAI closes them.`))) await restart(true);
+      } else toast(err.message);
+    }
+  };
   return (
     <section className="card stack">
       <h2>{L("תיקייה לדברים כבדים", "Folder for heavy things")}</h2>
@@ -76,7 +86,7 @@ export function HeavyFolderSection() {
         {!c.running && onC.length > 0 && <button type="button" className="primary" disabled={!dir.trim()} onClick={() => void move()}>{L(`העבר לשם (${gb(onC.reduce((n, f) => n + f.bytes, 0))})`, `Move there (${gb(onC.reduce((n, f) => n + f.bytes, 0))})`)}</button>}
         {c.running && <button type="button" onClick={() => void api("/api/heavy", { method: "DELETE" }).then(load)}>{L("עצור", "Stop")}</button>}
         {!c.running && info.pending.length > 0 && (info.canRestart
-          ? <button type="button" onClick={() => void api("/api/heavy/restart", { method: "POST" })}>{L("הפעל מחדש כדי לסיים", "Restart to finish")}</button>
+          ? <button type="button" onClick={() => void restart(false)}>{L("הפעל מחדש כדי לסיים", "Restart to finish")}</button>
           : <span className="muted small">{L("הפעל מחדש את KesherAI כדי לסיים.", "Restart KesherAI to finish.")}</span>)}
       </div>
     </section>
