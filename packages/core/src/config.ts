@@ -83,6 +83,10 @@ export const KesherConfigSchema = z.object({
   modelsDir: z.string().optional(),
   /** Where self-work makes its copies of a project (a folder per run). Defaults to `<project>-self-work` next to it. */
   selfWorkDir: z.string().optional(),
+  /** The folder for heavy things on another drive (engines, the worker's data, Unreal builds, outputs move there). */
+  heavyDir: z.string().optional(),
+  /** Heavy folders copied and waiting for the next start to finish moving (heavy-folder.ts). */
+  heavyPending: z.array(z.object({ name: z.enum(["engines", "worker", "unreal", "outputs"]), to: z.string() })).default([]),
   /** Other folders with models (from "Scan computer" or added by hand). KesherAI only reads them. */
   modelFolders: z.array(z.object({ folder: z.string(), source: z.string() })).default([]),
   /**

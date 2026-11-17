@@ -3,8 +3,9 @@
  * and what the options and worker mode change in them.
  */
 import { mkdir } from "node:fs/promises";
-import { dataPaths, loadConfig, useSecretBox, type DataPaths, type KesherConfig } from "../config.js";
+import { dataPaths, loadConfig, saveConfig, useSecretBox, type DataPaths, type KesherConfig } from "../config.js";
 import { applyPendingReset } from "../reset.js";
+import { finishPending } from "../heavy-folder.js";
 import type { KesherServerOptions } from "./options.js";
 
 /**
@@ -23,6 +24,14 @@ export async function openDataDir(options: KesherServerOptions): Promise<{ paths
   if (config.modelsDir) {
     paths.models = config.modelsDir;
     await mkdir(paths.models, { recursive: true }).catch(() => undefined);
+  }
+  // Heavy folders copied to another drive finish moving now, before any engine runs (the main app only).
+  if (!options.worker && config.heavyPending.length) {
+    const left = await finishPending(paths.root, config.heavyPending, (l) => console.log(l)).catch(() => config.heavyPending);
+    if (left.length !== config.heavyPending.length) {
+      config.heavyPending = left;
+      await saveConfig(paths, config).catch(() => undefined);
+    }
   }
   if (options.port !== undefined) config.port = options.port;
   if (options.worker) {

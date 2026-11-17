@@ -3,7 +3,7 @@ import { activeFractionOf } from "../gguf.js";
 import { mkdir, readdir, rmdir, stat, unlink } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
@@ -13,6 +13,7 @@ import { findMmproj } from "../llamacpp.js";
 import { isLocalRequest } from "../auth.js";
 import { assertWritableFolder } from "../library.js";
 import { ModelsMove } from "../models-move.js";
+import { HEAVY_FOLDERS, HeavyFolder, suggestHeavyDir, type HeavyName } from "../heavy-folder.js";
 import { engineRoutes } from "./engine.js";
 
 /** The one move of the models folder that may run at a time. */
@@ -213,6 +214,10 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
    * Moves the models of one of the extra folders into the download folder (another drive too): `{ from }`. Only from
    * this computer. Progress at GET; DELETE stops it. A folder emptied completely leaves the list by itself.
    */
+  const heavy = new HeavyFolder(s.paths.root, async (pending) => {
+    s.config.heavyPending = pending;
+    await s.saveConfig();
+  });
   app.post<{ Body: { from?: string } }>("/api/models/move", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Models can only be moved on this computer." });
     const from = String(req.body?.from ?? "");
@@ -233,6 +238,38 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.delete("/api/models/move", async () => {
     mover.cancel();
     return mover.status();
+  });
+
+  /**
+   * The folder for heavy things (heavy-folder.ts): GET each heavy folder's size and where it lives; POST `{ dir, names }`
+   * copies them there (this computer only) and they finish moving at the next start; DELETE stops the copy.
+   */
+  app.get("/api/heavy", async () => ({
+    dir: s.config.heavyDir ?? suggestHeavyDir(s.paths.models, s.paths.root),
+    saved: !!s.config.heavyDir,
+    folders: await heavy.folders(),
+    pending: s.config.heavyPending,
+    copy: heavy.status(),
+    canRestart: !!s.restartApp,
+  }));
+  app.post<{ Body: { dir?: string; names?: string[] } }>("/api/heavy", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on this computer." });
+    const dir = String(req.body?.dir ?? "").trim();
+    if (!isAbsolute(dir)) return reply.code(400).send({ error: "Write a full folder path, e.g. E:\\KesherAI." });
+    const names = (Array.isArray(req.body?.names) ? req.body.names : HEAVY_FOLDERS).map(String) as HeavyName[];
+    const st = heavy.start(dir, names);
+    s.config.heavyDir = dir;
+    await s.saveConfig();
+    return st;
+  });
+  app.delete("/api/heavy", async () => {
+    heavy.cancel();
+    return heavy.status();
+  });
+  app.post("/api/heavy/restart", async (req, reply) => {
+    if (!isLocalRequest(req) || !s.restartApp) return reply.code(403).send({ error: "Restart KesherAI yourself to finish." });
+    setTimeout(() => s.restartApp?.(), 300);
+    return { restarting: true };
   });
 
   /** The download folder and the extra folders KesherAI reads models from. */
