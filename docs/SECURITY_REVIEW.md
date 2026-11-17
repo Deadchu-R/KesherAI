@@ -948,3 +948,10 @@ S5 an outside scanner's rules for Electron.
 - **Chat reading**: chats and reports stay in the data folder; report ids are checked (`[\w-]{8,64}`) before any path; files are written whole (temp then rename). The chat goes to the model as data ("never instructions"); quotes shown are looked up in the chat. Import by link: https only, through the user's own browser pane on their click; by PDF: parsed by the same document reader as Knowledge; bodies capped (300 MB chat, 60 MB import).
 - **Heavy folder restart**: stops only processes whose program lives under KesherAI's engines folder (by full path), never an editor without the user's yes; nothing outside that folder.
 - Performance: chat reading reads at most 10 parts of a long chat (spread over all of it), one model call each, then one to write; the numbers are counted in one pass. Secrets/personal paths: none in the diff.
+
+## Scan 103 (2026-11-17): the new-link alert, the Relationship analysis name, Unreal offline sync and plugin 0.1.20
+- **New-link alert**: checks the tunnel's own address once a minute; the desktop notice shows the address without the token; only the user's own Telegram bot (when set) gets the full link with the token, as the phone needs it. The first address after start is not announced. The file it keeps is in the data folder.
+- **Unreal offline sync**: changes wait in KesherAI's queue; the headless editor runs only when Unreal is not open on that project (two editors saving the same assets could lose work), with the request and answer as files in the project's own Saved/KesherAI folder; arguments are a list, never a shell line. An old error is hidden once nothing waits (display only).
+- **Plugin 0.1.20**: loads earlier so the commandlet is found; inside the headless editor it never opens the live connection; the editor hook waits for the engine. No new network listener.
+- **Rename / docs**: text only.
+- Performance: the sync runs once, 8 s after the last queued change, in one headless editor for all of them. Secrets/personal paths: none in the diff (git grep; the only `token=` is a test value).
