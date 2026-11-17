@@ -1756,3 +1756,15 @@ tools' own pages, against what was added tonight:
   `fab_open` shows a listing in the pane beside the chat. He clicks "Add to my library" himself; KesherAI never adds,
   claims or buys. In Unreal, Window → Fab adds library assets to the project.
 - Stopped at: built; to check on the PC (the route may change; the tool says so when Fab answers with a challenge).
+
+## SSH targets (2026-11-17, morning)
+- VS Code Remote-SSH: installs a VS Code server on the remote over SSH, files and terminals through it (heavy, its own
+  protocol). Zed: a small remote server binary, same idea. JetBrains Gateway: a full backend on the remote.
+- KesherAI already does WSL the light way: files through Windows' own path to them, commands in the distribution. The
+  same works for SSH with SSHFS-Win (WinFsp + SSHFS, GPL/open source, `winget install WinFsp.WinFsp SSHFS-Win.SSHFS-Win`):
+  `\\sshfs\user@host[!port]\path` (home), `\\sshfs.r\…` (root), `.k` / `.kr` with the key in `%USERPROFILE%\.ssh\id_rsa`.
+  Commands go through Windows' built-in `ssh` with BatchMode (never asks for a password) into the project's folder.
+- Built: shell commands for such a path run on the remote; a "Another computer (SSH)" part in the new project dialog
+  that checks SSHFS-Win, the key and the connection, makes the key once and shows the line to add on the server.
+  Optional: nothing changes for anyone who never opens such a project.
+- Stopped at: built; to check on the PC against a real SSH server (Roee's Windows OpenSSH server or WSL's sshd).

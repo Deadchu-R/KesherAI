@@ -38,6 +38,31 @@ export function wslTarget(cwd: string): { distro: string; dir: string } | undefi
 }
 
 /**
+ * A project on another computer, opened through SSHFS-Win's path to it (\\sshfs.kr\user@host!22\home\me\game; the
+ * `.r` forms are from the root, the others from the user's home): commands run there over Windows' own `ssh`.
+ *
+ * @returns The login, host, port and the folder there (absolute, or relative to home), or undefined.
+ */
+export function sshTarget(cwd: string): { user: string; host: string; port: number; dir: string; fromRoot: boolean } | undefined {
+  const m = /^\\\\sshfs(\.k?r?)?\\([\w.-]{1,64})@([\w.-]{1,253})(?:!(\d{1,5}))?(\\.*)?$/i.exec(cwd);
+  if (!m) return undefined;
+  const fromRoot = /r/i.test(m[1] ?? "");
+  const rest = (m[5] ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  return { user: m[2]!, host: m[3]!, port: Number(m[4] ?? 22), dir: fromRoot ? `/${rest}` : rest, fromRoot };
+}
+
+/** A string as one POSIX shell word. */
+export function shQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/** The `ssh` arguments that run a command in a project's folder on another computer (never asks for a password). */
+export function sshArgs(t: NonNullable<ReturnType<typeof sshTarget>>, command: string): string[] {
+  const cd = t.fromRoot ? shQuote(t.dir || "/") : t.dir ? `"$HOME"/${shQuote(t.dir)}` : `"$HOME"`;
+  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-p", String(t.port), `${t.user}@${t.host}`, `cd ${cd} && exec bash -lc ${shQuote(command)}`];
+}
+
+/**
  * Runs a shell command (cmd on Windows, sh elsewhere), collecting its output.
  * Stopped on timeout or when `signal` aborts, with its child processes.
  *
@@ -54,9 +79,13 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
     const env = { ...process.env, ...extraEnv, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY };
     // A WSL project: the command runs in its Linux distribution, in the project's folder (a login shell, so its PATH).
     const wsl = process.platform === "win32" ? wslTarget(cwd) : undefined;
+    // A project on another computer (SSHFS-Win's path): the command runs there over ssh, in the project's folder.
+    const ssh = wsl ? undefined : sshTarget(cwd);
     const child = wsl
       ? spawn("wsl.exe", ["-d", wsl.distro, "--cd", wsl.dir, "--", "bash", "-lc", command], { windowsHide: true, env })
-      : spawn(command, { cwd, shell: true, windowsHide: true, env });
+      : ssh
+        ? spawn("ssh", sshArgs(ssh, command), { windowsHide: true, env })
+        : spawn(command, { cwd, shell: true, windowsHide: true, env });
     let out = "";
     const onData = (b: Buffer) => {
       const text = b.toString();

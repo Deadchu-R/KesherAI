@@ -10,6 +10,7 @@ import { useAppMenu } from "./AppMenu";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
+import { SshFolder } from "./SshFolder";
 import { NEW_CODE_EVENT } from "./AppBar";
 import { usePluginUi } from "./plugins";
 import { pageHidden, simpleHidden } from "@kesher/shared";
@@ -93,6 +94,7 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
             </div>
           </label>
         )}
+        {!(kind === "code" && project?.workspace) && <SshFolder onPath={setFolder} />}
         {kind === "project" && (
           <label>
             {t("instructions")}
