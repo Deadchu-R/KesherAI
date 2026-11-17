@@ -1054,3 +1054,9 @@ S5 an outside scanner's rules for Electron.
 - **Fill-in-the-blank cards**: the same card route with one more boolean; model output kept only when the front has a blank and does not contain the answer.
 - **Confidence**: one optional boolean on a review.
 - Result: no open issues.
+
+## Scan 116 (2026-11-17): reading with highlights, the one-page sheet, questions during a recording
+- **Highlights**: `PUT …/lectures/:lid/highlights` (2 MB limit) is cleaned (at most 300, text and note trimmed, page a positive integer, ids checked) into her own course file; the phone sync's cleaner keeps them the same way (and a review's confidence). Cards from highlights go to her chosen model with the highlights and the lecture as data; each highlight is marked once.
+- **The sheet**: built in the page from her summary, terms and diagram as React text nodes (the diagram through the existing parser, never HTML); "PDF" is the browser's print of the page with only the sheet visible. No model call, nothing sent.
+- **Questions during a recording**: the question (600 characters) and the transcript so far (the last 30,000 characters, 1 MB body limit) go to her chosen model with an instruction to answer from the transcript only; the answer is shown as text.
+- Result: no open issues.
