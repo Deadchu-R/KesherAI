@@ -1336,8 +1336,8 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
     setPlaying(true);
     void speak(text, () => setPlaying(false));
   };
-  const makeCards = () => run("cards", async () => {
-    const r = await call(api<{ cards: StudyCard[] }>(`${base}/cards`, { method: "POST", body: { format, count: 12 } }));
+  const makeCards = (cloze = false) => run(cloze ? "cloze" : "cards", async () => {
+    const r = await call(api<{ cards: StudyCard[] }>(`${base}/cards`, { method: "POST", body: { format, count: 12, ...(cloze ? { cloze: true } : {}) } }));
     if (r) { toast(L(`נוצרו ${r.cards.length} כרטיסיות`, `${r.cards.length} cards made`)); onChange(); }
   });
   return (
@@ -1390,6 +1390,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       </div>
       <div className="study-actions">
         <button type="button" className="primary" disabled={!!busy} onClick={() => void makeCards()}>{busy === "cards" ? L("יוצר כרטיסיות…", "Making cards…") : L("צור 12 כרטיסיות", "Make 12 cards")}</button>
+        <button type="button" disabled={!!busy} onClick={() => void makeCards(true)}>{busy === "cloze" ? L("יוצר…", "Making…") : L("השלמת משפטים (_____)", "Fill in the blank (_____)")}</button>
         <a className="button" href={`#/study/${courseId}/quiz?l=${l.id}`}>{L("בוחן על ההרצאה", "Quiz on this lecture")}</a>
         <button type="button" onClick={() => askChat(L(
           `מצא 3–5 סרטונים ומאמרים טובים על "${l.title}"${l.terms?.length ? ` (${l.terms.slice(0, 6).map((t) => t.en || t.term).join(", ")})` : ""}: עדיף בעברית, אחרת באנגלית, ממקורות אמינים (אוניברסיטאות, ארגוני בריאות, ספרות מקצועית). לכל אחד: קישור, מקור, אורך, ומשפט למה הוא עוזר.`,
@@ -1504,25 +1505,28 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
   const [cards, setCards] = useState<StudyCard[] | null>(null);
   const [mistakes, setMistakes] = useState(false);
   const [shown, setShown] = useState(false);
+  // "How sure are you?" before the answer (students part 27 #4); undefined when she just opened it.
+  const [sure, setSure] = useState<boolean>();
   const [done, setDone] = useState(0);
   // The last missed card's explanation (shown above the next card).
-  const [why, setWhy] = useState<{ front: string; text?: string }>();
+  const [why, setWhy] = useState<{ front: string; text?: string; sure?: boolean }>();
   useEffect(() => void api<{ cards: StudyCard[] }>(`/api/study/courses/${courseId}/review`).then((r) => setCards(r.cards), (e: Error) => toast(e.message)), [courseId]);
   const card = cards?.[0];
   const rate = useCallback(async (rating: number) => {
     if (!card) return;
-    const ok = await call(api(`/api/study/courses/${courseId}/cards/${card.id}/review`, { method: "POST", body: { rating } }));
+    const ok = await call(api(`/api/study/courses/${courseId}/cards/${card.id}/review`, { method: "POST", body: { rating, ...(sure !== undefined ? { sure } : {}) } }));
     if (!ok) return;
     setShown(false);
+    setSure(undefined);
     setDone((d) => d + 1);
     // "Again" comes back in this session (after the others), with a line on why the answer is right.
     setCards((cs) => (cs ? [...cs.slice(1), ...(rating === 1 ? [card] : [])] : cs));
     if (rating === 1) {
-      setWhy({ front: card.front });
-      void api<{ text: string }>(`/api/study/courses/${courseId}/cards/${card.id}/explain`, { method: "POST", body: {} }).then((r) => setWhy((w) => (w?.front === card.front ? { front: card.front, text: r.text } : w)), () => setWhy(undefined));
+      setWhy({ front: card.front, ...(sure ? { sure: true } : {}) });
+      void api<{ text: string }>(`/api/study/courses/${courseId}/cards/${card.id}/explain`, { method: "POST", body: {} }).then((r) => setWhy((w) => (w?.front === card.front ? { ...w, text: r.text } : w)), () => setWhy(undefined));
     } else setWhy(undefined);
     onChange();
-  }, [card, courseId, onChange]);
+  }, [card, courseId, onChange, sure]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea")) return;
@@ -1541,6 +1545,7 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
       <p className="muted small">{L(`נשארו ${cards.length}`, `${cards.length} left`)} · {fmtName(card.format)} · {toMistakes}</p>
       {why && (
         <div className="study-why" aria-live="polite" dir="auto">
+          {why.sure && <p className="small"><b>{L("היית בטוחה וטעית: זו בדיוק הטעות שנזכרת הכי טוב כשמתקנים אותה. הכרטיסייה תחזור עוד פעם היום.", "You were sure and it was wrong: exactly the mistake that sticks best once corrected. The card comes back again today.")}</b></p>}
           <strong>{L("למה? ", "Why? ")}</strong>{why.front}
           <p>{why.text ?? L("מסבירה…", "Explaining…")}</p>
         </div>
@@ -1549,6 +1554,13 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
         <span className="study-card-front" dir="auto">{card.front}</span>
         {shown ? <span className="study-card-back" dir="auto"><RichText text={card.back} /></span> : <span className="muted small">{L("הקישי או לחצי רווח כדי לראות את התשובה", "Tap or press space to see the answer")}</span>}
       </button>
+      {!shown && (
+        <div className="study-sure" role="group" aria-label={L("כמה את בטוחה?", "How sure are you?")}>
+          <span className="muted small">{L("לפני שרואים: כמה את בטוחה?", "Before you look: how sure are you?")}</span>
+          <button type="button" className="ghost small" onClick={() => { setSure(true); setShown(true); }}>🙂 {L("בטוחה", "Sure")}</button>
+          <button type="button" className="ghost small" onClick={() => { setSure(false); setShown(true); }}>🤔 {L("לא בטוחה", "Not sure")}</button>
+        </div>
+      )}
       {shown && (
         <div className="study-ratings" role="group" aria-label={L("כמה זכרת?", "How well did you remember?")}>
           {RATINGS.map(([r, n, tone]) => <button key={r} type="button" className={`study-rate ${tone}`} onClick={() => void rate(r)}>{L(...n)}<small>{r}</small></button>)}

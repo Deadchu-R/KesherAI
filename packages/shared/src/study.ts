@@ -90,6 +90,8 @@ export interface StudyReview {
   kind?: string;
   /** Days since the card was last seen (0 for a card seen the same day). */
   elapsedDays: number;
+  /** She said she was sure before seeing the answer (true) or not sure (false); missing when she did not say. */
+  sure?: boolean;
 }
 
 /** A multiple-choice question (graded by code, not by the model). */
@@ -1263,7 +1265,8 @@ export function recentMistakes(d: StudyCourseData, now = Date.now(), days = 30):
     const after = rs.slice(lastMiss + 1);
     if (after.length >= 2 && after.slice(-2).every((r) => r.rating >= 3)) continue;
     const c = d.cards.find((x) => x.id === id);
-    if (c) cards.push({ c, t: rs[lastMiss]!.t });
+    // A confident mistake first (students part 27 #4): corrected, it is the one that sticks best.
+    if (c) cards.push({ c, t: rs[lastMiss]!.t + (rs[lastMiss]!.sure ? 1e13 : 0) });
   }
   const seen = new Set<string>();
   const questions: Array<StudyQuestion & { t: number }> = [];

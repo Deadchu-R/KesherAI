@@ -425,7 +425,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
   app.post<L>("/api/study/courses/:id/lectures/:lid/summarize", async (req) => st.summarize(req.params.id, req.params.lid));
-  app.post<L & { Body: { format?: StudyFormat; count?: number } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, req.body ?? {}) }));
+  app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true }) }));
 
   app.post<L>("/api/study/courses/:id/lectures/:lid/drugs", async (req) => ({ drugs: await st.makeDrugs(req.params.id, req.params.lid) }));
   app.delete<{ Params: { id: string; did: string } }>("/api/study/courses/:id/drugs/:did", async (req) => {
@@ -456,7 +456,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
   /** "My mistakes" (design MyMistakes): cards she forgot and quiz questions she got wrong lately. */
   app.get<C>("/api/study/courses/:id/mistakes", async (req) => recentMistakes(await st.get(req.params.id)));
-  app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
+  app.post<{ Params: { id: string; cid: string }; Body: { rating?: number; sure?: unknown } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating), typeof req.body?.sure === "boolean" ? req.body.sure : undefined));
 
   app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: string; level?: string; mock?: { group?: unknown; minutes?: unknown; extra?: unknown } } }>("/api/study/courses/:id/quiz", async (req) => {
     const b = req.body ?? {};

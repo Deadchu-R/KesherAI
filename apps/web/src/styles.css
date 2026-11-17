@@ -3382,3 +3382,4 @@ div.slide-list { padding-inline-start: 0; }
 .study-tt-form input:not([type]) { width: 90px; }
 .study-tt-block { height: auto; min-height: 0; justify-content: flex-start; }
 .study-tt-block > * { flex: none; }
+.study-sure { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }

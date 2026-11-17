@@ -69,6 +69,13 @@ Each card tests one fact or idea; the front is a question, the back a short answ
 Give each card a kind: anatomy, drug, process, calculation, concept or other.
 Answer with JSON only: [{"front": "...", "back": "...", "kind": "..."}]`;
 
+/** Fill-in-the-blank cards (students part 27 #4, like RemNote and NotebookLM): a key sentence with its key term out. */
+const CLOZE_PROMPT = `You write fill-in-the-blank flashcards for a student from lecture material. ${LANG} ${ONLY_MATERIAL}
+Each card is one important sentence from the material (rewrite it short if needed) with its single most important term or number replaced by _____ (five underscores) on the front; the back is the missing term only.
+Choose terms worth remembering (a mechanism, a name, a value, a cause or effect), not small words.
+Give each card a kind: anatomy, drug, process, calculation, concept or other.
+Answer with JSON only: [{"front": "sentence with _____", "back": "the missing term", "kind": "..."}]`;
+
 const QUIZ_PROMPT = `You write a multiple-choice quiz for a student from lecture material. ${LANG} ${ONLY_MATERIAL}
 Each question has 4 options, exactly one right; wrong options are plausible. Mix recall, understanding and short clinical cases where the material allows.
 For a calculation, solve it first; the right option must equal your result exactly, and the other options are plausible mistakes. The explanation says why the right answer is right, from the material, in at most three sentences. Write everything in the material's language.
@@ -1050,19 +1057,21 @@ export class Study {
   }
 
   /** Makes flashcards from a lecture, studied in one format. */
-  async makeCards(id: string, lectureId: string, p: { format?: StudyFormat; count?: number }, signal?: AbortSignal): Promise<StudyCard[]> {
+  async makeCards(id: string, lectureId: string, p: { format?: StudyFormat; count?: number; cloze?: boolean }, signal?: AbortSignal): Promise<StudyCard[]> {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     const format: StudyFormat = STUDY_FORMATS.includes(p.format as StudyFormat) ? p.format! : "text";
     const count = Math.max(3, Math.min(40, Number(p.count) || 12));
     const material = (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
-    const raw = await this.ask(`${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course);
+    const raw = await this.ask(p.cloze ? CLOZE_PROMPT : `${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return cards. Try again, or another model."), { statusCode: 502 });
     const now = new Date();
     const made: StudyCard[] = [];
     for (const x of list as Array<{ front?: string; back?: string; kind?: string }>) {
       if (!x?.front || !x.back) continue;
+      // A blank card without its blank (or giving its answer away) is not one.
+      if (p.cloze && (!/_{3,}/.test(String(x.front)) || String(x.front).includes(String(x.back).trim()))) continue;
       const c = createEmptyCard(now);
       made.push({ id: randomUUID(), front: String(x.front).slice(0, 2000), back: String(x.back).slice(0, 6000), format, ...(x.kind ? { kind: String(x.kind).slice(0, 30) } : {}), lectureId, createdAt: now.getTime(), due: c.due.toISOString(), fsrs: fromCard(c) });
       if (made.length >= count) break;
@@ -1189,7 +1198,7 @@ export class Study {
   }
 
   /** Records a review (1 again … 4 easy) and schedules the card's next one. */
-  async review(id: string, cardId: string, rating: number): Promise<StudyCard> {
+  async review(id: string, cardId: string, rating: number, sure?: boolean): Promise<StudyCard> {
     if (!isGrade(rating)) throw Object.assign(new Error("Rating is 1 to 4."), { statusCode: 400 });
     const d = await this.get(id);
     const card = d.cards.find((c) => c.id === cardId);
@@ -1200,7 +1209,7 @@ export class Study {
     const next = this.scheduler.next(before, now, rating).card;
     card.fsrs = fromCard(next);
     card.due = next.due.toISOString();
-    d.reviews.push({ cardId, t: now.getTime(), rating, format: card.format, ...(card.kind ? { kind: card.kind } : {}), elapsedDays });
+    d.reviews.push({ cardId, t: now.getTime(), rating, format: card.format, ...(card.kind ? { kind: card.kind } : {}), elapsedDays, ...(typeof sure === "boolean" ? { sure } : {}) });
     if (d.reviews.length > 50_000) d.reviews.splice(0, d.reviews.length - 50_000);
     await this.save(d);
     return card;
