@@ -1072,3 +1072,10 @@ S5 an outside scanner's rules for Electron.
 - **Import** (`POST /api/import`, 45 MB body, 30 MB file): the file's type is taken from its name's extension and only .docx .pdf .md .txt .pptx .xlsx .csv are read, by the existing readers (unpdf; our own zip reader for Office XML, reading text only — no macros, no external links, no embedded objects are followed); only the text is kept, as a new document, deck or sheet (with the stores' own caps); the file itself is not written to disk.
 - **Word / Excel out**: built in the page from her own text; every value XML-escaped and control characters dropped; sheet names stripped of characters Excel refuses; a formula goes out as its text with its computed value (Excel recomputes).
 - Result: no open issues.
+
+## Scan 119 (2026-11-17): screen lens, Windows file replace retries
+- **Capture**: `POST /api/lens/capture` answers only requests from this computer (the key's handler); the phone sends its own picture to `/api/lens/shot`. Pictures are PNG only (checked by signature, 20 MB), kept in memory (at most five, ten minutes), never written to disk except a marked part she sends on to a chat (into that chat's own folder).
+- **The lens window**: frameless over the primary display, same sandbox, preload and navigation lock as the text helper; its IPC (`kesher:lens`) answers only that window and opens only a `#/c/<id>` chat (checked by pattern, set as text).
+- **Actions**: the marked part goes to her chosen chat model; Windows OCR runs PowerShell with a fixed script (the file path passed in an environment variable, never in the command), a 20-second limit, the temporary folder removed after.
+- **Replace retries**: a busy file (EPERM/EBUSY) is tried again at most 20 times with a growing wait, then the error stands.
+- Result: no open issues.
