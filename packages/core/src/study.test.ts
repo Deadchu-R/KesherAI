@@ -322,3 +322,16 @@ test("image occlusion: one picture kept, a card per box, boxes checked", async (
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("the timetable syncs with the phone: the later copy wins", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-tt-"));
+  const st = new Study(dir, () => undefined);
+  const c = await st.addCourse("Physiology");
+  await st.setTimetable({ slots: [{ id: "a", courseId: c.id, day: 1, start: "10:00", end: "12:00" }] }, undefined, 1000);
+  const older = await st.sync([], [], { slots: [{ id: "b", courseId: c.id, day: 2, start: "08:00", end: "09:00" }], t: 500 });
+  assert.equal(older.timetable.slots[0]?.id, "a");
+  const newer = await st.sync([], [], { slots: [{ id: "b", courseId: c.id, day: 2, start: "08:00", end: "09:00" }], t: 2000 });
+  assert.deepEqual(newer.timetable.slots.map((s) => s.id), ["b"]);
+  assert.equal((await st.timetable()).t, 2000);
+  await rm(dir, { recursive: true, force: true });
+});

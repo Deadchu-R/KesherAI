@@ -283,10 +283,10 @@ export class Study {
   }
 
   /** Saves her timetable (classes of courses she has; the reminder state is kept). */
-  async setTimetable(raw: unknown, lastReminded?: string): Promise<Timetable> {
+  async setTimetable(raw: unknown, lastReminded?: string, at = Date.now()): Promise<Timetable> {
     const cur = await this.timetable();
     const ids = new Set((await this.list()).map((c) => c.id));
-    const t = cleanTimetable({ ...(raw && typeof raw === "object" ? raw : {}), lastReminded: lastReminded ?? cur.lastReminded });
+    const t = cleanTimetable({ ...(raw && typeof raw === "object" ? raw : {}), lastReminded: lastReminded ?? cur.lastReminded, t: at });
     t.slots = t.slots.filter((s) => ids.has(s.courseId));
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, "_timetable.json"), JSON.stringify(t), { mode: 0o600 });
@@ -298,7 +298,7 @@ export class Study {
     const t = await this.timetable();
     const due = classRemindNow(t, now);
     if (!due) return false;
-    await this.setTimetable(t, due.key);
+    await this.setTimetable(t, due.key, t.t);
     const course = (await this.list()).find((c) => c.id === due.slot.courseId);
     if (!course) return false;
     const he = /[\u0590-\u05FF]/.test(course.name);
@@ -702,7 +702,7 @@ export class Study {
    * @param removedCourses - Courses deleted on the phone.
    * @returns All courses here after the merge, and the courses deleted on either side.
    */
-  async sync(courses: unknown[], removedCourses: unknown[]): Promise<{ courses: CourseData[]; removedCourses: string[] }> {
+  async sync(courses: unknown[], removedCourses: unknown[], timetable?: unknown): Promise<{ courses: CourseData[]; removedCourses: string[]; timetable: Timetable }> {
     for (const id of arr<string>(removedCourses, 2000)) if (typeof id === "string" && /^[a-z0-9-]{8,40}$/.test(id)) await this.removeCourse(id);
     const gone = new Set(await this.removedCourses());
     for (const raw of arr<unknown>(courses, 500)) {
@@ -717,7 +717,11 @@ export class Study {
     }
     const all = [];
     for (const c of await this.list()) all.push(await this.get(c.id));
-    return { courses: all, removedCourses: [...gone] };
+    // The timetable: the copy changed later wins (the phone's own, or this computer's).
+    let table = await this.timetable();
+    const theirs = timetable === undefined ? undefined : cleanTimetable(timetable);
+    if (theirs?.t && theirs.t > (table.t ?? 0)) table = await this.setTimetable({ ...theirs, remind: table.remind, phone: table.phone }, undefined, theirs.t);
+    return { courses: all, removedCourses: [...gone], timetable: table };
   }
 
   /** Adds a lecture's text (typed, pasted, or a transcript). */

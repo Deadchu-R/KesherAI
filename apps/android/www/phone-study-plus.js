@@ -509,7 +509,8 @@ export function studyPlus(x) {
 
   // ---------- the timetable, typed or read from a photo ----------
   const loadTable = () => { try { return cleanTimetable(JSON.parse(localStorage.getItem(TABLE_KEY) || "{}")); } catch { return cleanTimetable({}); } };
-  const saveTable = (t) => { try { localStorage.setItem(TABLE_KEY, JSON.stringify(t)); return true; } catch { alert(L("אין מקום לשמור.", "No room to save.")); return false; } };
+  // Her changes carry the time, so the phone's and the computer's copies sync (the later one wins).
+  const saveTable = (t, at = Date.now()) => { try { localStorage.setItem(TABLE_KEY, JSON.stringify({ ...t, t: at })); return true; } catch { alert(L("אין מקום לשמור.", "No room to save.")); return false; } };
   const courseName = (id) => x.db().courses.find((c) => c.id === id)?.name ?? "";
 
   /** On the home page: the class she is in now, or one starting within 10 minutes. */
@@ -577,5 +578,11 @@ export function studyPlus(x) {
     }
   }
 
-  return { courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english, timetable }, classBanner };
+  /** The timetable for a sync with the computer, and the computer's answer taken when it is newer. */
+  const tableSync = {
+    out: () => { const t = loadTable(); return t.t ? t : undefined; },
+    in: (theirs) => { const t = theirs && cleanTimetable(theirs); if (t?.t && t.t > (loadTable().t ?? 0)) saveTable(t, t.t); },
+  };
+
+  return { tableSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english, timetable }, classBanner };
 }

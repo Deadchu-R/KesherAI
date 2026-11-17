@@ -30,6 +30,8 @@ export interface Timetable {
   phone?: boolean;
   /** The last class reminded ("slotId@YYYY-MM-DD"), so each is reminded once. */
   lastReminded?: string;
+  /** When she last changed it (ms), so the phone's and the computer's copies sync (the later one wins). */
+  t?: number;
 }
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -60,6 +62,7 @@ export function cleanTimetable(raw: unknown): Timetable {
     ...(o.remind === true ? { remind: true } : {}),
     ...(o.phone === true ? { phone: true } : {}),
     ...(typeof o.lastReminded === "string" && o.lastReminded.length <= 80 ? { lastReminded: o.lastReminded } : {}),
+    ...(Number.isFinite(Number(o.t)) && Number(o.t) > 0 ? { t: Number(o.t) } : {}),
   };
 }
 
