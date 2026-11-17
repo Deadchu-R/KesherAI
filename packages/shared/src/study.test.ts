@@ -513,3 +513,11 @@ test("readingPortion: portions end at paragraphs, the place is kept, the last on
   assert.equal(last.to, text.length);
   assert.deepEqual(readingPortion("", 0), { from: 0, to: 0, part: 1, parts: 1 });
 });
+
+test("parseLetter: the subject line and the body", async () => {
+  const { parseLetter, letterPrompt } = await import("./study.js");
+  assert.deepEqual(parseLetter("**Subject:** בקשת הארכה\nשלום ד״ר כהן,\nאבקש..."), { subject: "בקשת הארכה", body: "שלום ד״ר כהן,\nאבקש..." });
+  assert.deepEqual(parseLetter("נושא: ערעור\n\nשלום רב"), { subject: "ערעור", body: "שלום רב" });
+  assert.equal(parseLetter("רק גוף").subject, "");
+  assert.match(letterPrompt("reserve"), /מילואים/);
+});

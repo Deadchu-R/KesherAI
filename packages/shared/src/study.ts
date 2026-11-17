@@ -1988,6 +1988,27 @@ export function readingPortion(text: string, pos: number, size = 6000): { from: 
   return { from: k ? ends[k - 1]! : 0, to: ends[k]!, part: k + 1, parts: ends.length };
 }
 
+/** Letters to the lecturer or the secretariat (design Letters, students part 31 #4). */
+export type LetterKind = "extension" | "reserve" | "appeal" | "special" | "other";
+export const LETTER_KINDS: LetterKind[] = ["extension", "reserve", "appeal", "special", "other"];
+const LETTER_ASK: Record<LetterKind, string> = {
+  extension: "asks for an extension of a submission date, says why briefly and proposes a new date",
+  reserve: "asks for the accommodations a student gets after reserve duty (מילואים): what she missed and what she asks for (an extension, a make-up exam date, recordings, a lighter assignment), and that she can send the reserve-duty certificate",
+  appeal: "appeals a grade: which exam or assignment, which questions she asks to re-check and why, politely and to the point, and asks to see the exam if that helps",
+  special: "asks for a special exam date (מועד מיוחד), says why briefly and that she can send documents",
+  other: "asks what she describes",
+};
+/** The instruction for a letter of this kind; the answer is "Subject: …" then the body. */
+export function letterPrompt(kind: LetterKind): string {
+  return `Write a short, polite email from a university student to her lecturer or the faculty secretariat that ${LETTER_ASK[kind]}. Use only the details she gives; where a detail is missing write a short placeholder in square brackets for her to fill in. Respectful and clear, not grovelling, 80-180 words, in the language of her details (Hebrew by default: פנייה מכבדת, "שלום ד״ר …" or "שלום רב"). First line "Subject: …" (in the same language), then the body, ending with her name or [השם שלך]. No markdown.`;
+}
+/** A letter from the model's answer: its subject and body. */
+export function parseLetter(text: string): { subject: string; body: string } {
+  const t = text.replace(/\r/g, "").trim();
+  const m = /^(?:\*\*)?(?:subject|נושא)\s*[:：]\s*(.+?)(?:\*\*)?\s*\n([\s\S]*)$/i.exec(t);
+  return m ? { subject: m[1]!.replace(/\*+/g, "").trim().slice(0, 200), body: m[2]!.trim().slice(0, 4000) } : { subject: "", body: t.slice(0, 4000) };
+}
+
 /** Fixing a hard card: simpler, split in two, or a memory hook added to its answer. */
 export type LeechFix = "simpler" | "split" | "hook";
 export const LEECH_PROMPT: Record<LeechFix, string> = {

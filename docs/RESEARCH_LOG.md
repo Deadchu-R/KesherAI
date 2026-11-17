@@ -2008,7 +2008,8 @@ Missing:
 3. **Timetable from a photo** (MyStudyLife's schedule scan): a photo or screenshot of her weekly schedule becomes the timetable.
 4. **Letters to the lecturer or the secretariat** (Eduplanner's emails, Israeli reserve-duty accommodations): an extension, accommodations after reserve duty (מילואים), a grade appeal or a special exam date, drafted politely in Hebrew from what she fills in, for her to send herself.
 - Not taken: lecturer reviews (community data KesherAI does not have), syncing a university's messages (Moodle covers it once its address is set), dual degrees (a course list per degree is a later step if asked).
-- Stopped at: list made; building from (1).
+- Built (2026-11-17): all four (design IsraeliStudent). Checked on the PC in 0.6.341: topic videos (6 found, Hebrew ones first for a Hebrew topic), where a term appears.
+- Stopped at: built; next research round (32).
 
 ## Screen lens, part 1: capture part of the screen and hand it to the AI (2026-11-17, Roee asked)
 - Google: Circle to Search on Android (hold home, circle anything; search, translate in place, AI overview); Lens in desktop Chrome (a region on the page → search, "translate" puts the translation over the picture, text selection by OCR, AI Mode follow-ups). Microsoft: Click to Do on Windows 11 (Win+click or Win+Q; local OCR, text actions — summarize, rewrite, search — run on the PC with Phi Silica on Copilot+ PCs; image actions: visual search, erase, remove background; nothing kept after the action), Copilot Vision (shares a window with Copilot), Edge Lens (experimental). Snipping Lens (open source): Snipping Tool region → uploaded to an image host → Google image search (cloud, privacy cost). ChatGPT/Claude desktop apps: a hotkey to attach a screenshot or a window to a chat.

@@ -80,6 +80,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   /** Cards from the "term :: meaning" lines of the lecture's notes (design NoteCards). */
   app.post<L>("/api/study/courses/:id/lectures/:lid/note-cards", async (req) => st.cardsFromNotes(req.params.id, req.params.lid));
+  /** A letter to the lecturer or the secretariat (design Letters): drafted only; she sends it herself. */
+  app.post<C & { Body: { kind?: string; to?: string; details?: string; name?: string } }>("/api/study/courses/:id/letter", { bodyLimit: 16 * 1024 }, async (req) => st.letter(req.params.id, String(req.body?.kind ?? "other") as "other", req.body ?? {}));
   /** Her classes from a photo of her schedule (design TimetablePhoto); she picks each one's course before saving. */
   app.post<{ Body: { image?: string; mime?: string } }>("/api/study/timetable/photo", { bodyLimit: 16 * 1024 * 1024 }, async (req) => ({ classes: await st.timetableFromPhoto(Buffer.from(String(req.body?.image ?? ""), "base64"), String(req.body?.mime ?? "image/jpeg")) }));
   /** Her hard cards and their fixes (design HardCards). */

@@ -16,6 +16,7 @@ import { StudyPalace } from "../StudyPalace";
 import { StudyTopicVideos } from "../StudyTopicVideos";
 import { StudyLeeches } from "../StudyLeeches";
 import { StudyPortions } from "../StudyPortions";
+import { StudyLetter } from "../StudyLetter";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -716,6 +717,8 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
   const [info, setInfo] = useState<CourseInfo | null>(null);
   const [prefs] = useStudyPrefs();
   const [allTabs, setAllTabs] = useState(false);
+  // A letter to the lecturer (design Letters).
+  const [letter, setLetter] = useState(false);
   const load = useCallback(() => void api<CourseInfo>(`/api/study/courses/${id}`).then(setInfo, (e: Error) => toast(e.message)), [id]);
   useEffect(load, [load]);
   if (!info) return <div className="page study-page"><BackLink to="#/study" /><p className="muted">…</p></div>;
@@ -739,6 +742,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
           <input type="date" value={info.course.examDate ?? ""} onChange={async (e) => { if (await call(api(`/api/study/courses/${id}`, { method: "PATCH", body: { examDate: e.target.value } }))) load(); }} />
         </label>
         <button type="button" className="small" onClick={() => void shareCourseFile(id, info.course.name)}>{L("שיתוף הקורס", "Share the course")}</button>
+        <button type="button" className="small" aria-expanded={letter} onClick={() => setLetter(!letter)}>✉️ {L("מכתב למרצה", "Letter to the lecturer")}</button>
         {info.cards > 0 && <button type="button" className="small" title={L("קובץ טקסט שנכנס ל-Anki (ייבוא ← הערות בטקסט פשוט) ול-Quizlet", "A text file for Anki (Import → Notes in plain text) and Quizlet")} onClick={() => void ankiFile(id, info.course.name)}>{L("ייצוא ל-Anki / Quizlet", "Export to Anki / Quizlet")}</button>}
         <label className="button small" title={L("קובץ ייצוא של Anki או Quizlet (טקסט מופרד בטאבים)", "An Anki or Quizlet export (tab-separated text)")}>{L("ייבוא כרטיסיות", "Import cards")}
           <input type="file" hidden accept=".txt,.tsv,.csv,text/plain" onChange={async (e) => {
@@ -754,6 +758,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
           if (await call(api(`/api/study/courses/${id}`, { method: "DELETE" }))) go("#/study");
         }}>{L("מחק קורס", "Delete course")}</button>
       </div>
+      {letter && <StudyLetter courseId={id} onClose={() => setLetter(false)} />}
       {info.plan && !lectureId && <ExamPlanCard id={id} plan={info.plan} />}
       {!lectureId && <SyllabusCard id={id} syllabus={info.syllabus ?? null} onChange={load} />}
       <ModelWait />
