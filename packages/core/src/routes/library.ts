@@ -740,6 +740,15 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     await s.saveConfig();
     return { on };
   });
+  // The model team (design ModelTeam): which model translates an answer written in another language than the user's.
+  app.get("/api/model-team", async () => ({ translator: s.config.translator ?? "main" }));
+  app.put<{ Body: { translator?: string } }>("/api/model-team", async (req, reply) => {
+    const t = String(req.body?.translator ?? "").trim();
+    if (!t || t.length > 300) return reply.code(400).send({ error: "Choose a translator." });
+    s.config.translator = t;
+    await s.saveConfig();
+    return { translator: t };
+  });
   app.delete<{ Params: { index: string } }>("/api/permissions/:index", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Approvals can only be changed on this computer." });
     const i = Number(req.params.index);

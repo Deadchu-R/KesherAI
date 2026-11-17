@@ -21,6 +21,7 @@ import { ComputerSection } from "../ComputerSection";
 import { GpuSection } from "../GpuSection";
 import { GuardSection } from "../GuardSection";
 import { HeavyFolderSection } from "../HeavyFolderSection";
+import { ModelTeamSection } from "../settings/ModelTeamSection";
 import { BusinessSection, CopilotSection } from "../BusinessSection";
 import { openWelcome } from "../Welcome";
 import { NotificationsSection } from "../NotificationsSection";
@@ -51,7 +52,7 @@ import { ChatsAtOnce } from "../ChatsAtOnce";
  */
 const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; words: string; render: () => React.ReactNode }> = [
   { id: "general", icon: "⚙", en: "General", he: "כללי", words: "name about you gender address male female שם עלייך פנייה זכר נקבה model models default chat image voice speech microphone read aloud מודל מודלים ברירת מחדל צאט קול דיבור הקראה מיקרופון", render: () => <><AboutYou /><ActiveModels /><SpeechSection /></> },
-  { id: "chats", icon: "💬", en: "Chats", he: "צ'אטים", words: "chat buttons bar toolbar show hide steps browser files coach context team group כפתורים צאט סרגל להציג להסתיר שלבים דפדפן קבצים מאמן הקשר צוות", render: () => <ChatBarSection /> },
+  { id: "chats", icon: "💬", en: "Chats", he: "צ'אטים", words: "model team translator translation language hebrew english צוות מודלים מתרגם תרגום שפה עברית אנגלית chat buttons bar toolbar show hide steps browser files coach context team group כפתורים צאט סרגל להציג להסתיר שלבים דפדפן קבצים מאמן הקשר צוות", render: () => <><ModelTeamSection /><ChatBarSection /></> },
   { id: "study", icon: "🎓", en: "Study", he: "לימודים", words: "study lectures recordings audio delete semester keep student לימודים הרצאות הקלטות אודיו מחיקה סמסטר לשמור סטודנט", render: () => <StudySection /> },
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },

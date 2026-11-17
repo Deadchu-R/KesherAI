@@ -69,6 +69,11 @@ export interface ExternalAgent {
 /** How a session is set up. */
 export interface AgentSessionOptions {
   id: string;
+  /**
+   * The model team's language layer (core answer-language.ts): the final answer in the user's language when the model
+   * answered in another one or mixed alphabets. Undefined leaves the answer as it is.
+   */
+  polishAnswer?: (answer: string, userText: string, signal: AbortSignal) => Promise<string | undefined>;
   modelId: string;
   model: ModelTurn;
   /** Set for a conversation run by an outside agent: `model` and the tools are then not used. */
@@ -211,6 +216,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly onChange?: (s: AgentSession) => void;
   private statusValue: AgentStatus = "idle";
   private readonly reviewerOf?: () => Reviewer | undefined;
+  private readonly polishAnswer?: AgentSessionOptions["polishAnswer"];
   private abort?: AbortController;
   private turn = 0;
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
@@ -265,6 +271,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.reviewerOf = opts.reviewer;
+    this.polishAnswer = opts.polishAnswer;
     this.onAlwaysScope = opts.onAlwaysScope;
     this.envOf = opts.env;
     this.webOf = opts.web;
@@ -896,7 +903,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           } else throw err;
         }
         this.recordUsage(this.modelId, "main", conversation, result, firstAt ? { waitMs: firstAt - askedAt, writeMs: Date.now() - firstAt } : undefined);
-        if (result.text) this.push({ type: "assistant", turn, text: result.text });
+        let shown = result.text;
+        // The final answer (no more tool calls) in the user's language, when the model wrote it in another one.
+        if (result.toolCalls.length === 0 && shown.trim() && this.polishAnswer && !abort.signal.aborted) {
+          const asked = [...this.messages].reverse().find((m) => m.role === "user");
+          const userText = typeof asked?.content === "string" ? asked.content : "";
+          const better = await this.polishAnswer(shown, userText, abort.signal).catch(() => undefined);
+          if (better) shown = better;
+        }
+        if (shown) this.push({ type: "assistant", turn, text: shown });
         this.lastSaid = result.text.trim();
         this.messages.push({ role: "assistant", content: result.text, ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {}) });
         if (result.toolCalls.length === 0) {

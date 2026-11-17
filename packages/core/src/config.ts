@@ -153,6 +153,12 @@ export const KesherConfigSchema = z.object({
   figma: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Smart auto approvals (F10): in "auto-edit" chats, the chat's model reviews a plain command before you are asked. */
   autoReview: z.boolean().default(false),
+  /**
+   * The model team's translator (answer-language.ts): when a final answer is in another language than the user wrote
+   * in (or mixes alphabets), its prose is translated. "main" uses the chat's own model, a model id a small translation
+   * model (TranslateGemma), "off" turns it off. Unset: "main".
+   */
+  translator: z.string().max(300).optional(),
   /** Tool search for local models (only everyday tools in full; the rest loaded on demand). On unless false. */
   toolSearch: z.boolean().optional(),
   /**

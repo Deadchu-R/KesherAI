@@ -24,6 +24,7 @@ import { computerGroup, forTelegram } from "./chat-tool-groups.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
+import { answerInUserLanguage } from "./answer-language.js";
 import { ruleAllows } from "./approval-rules.js";
 import { runIn } from "./run-in.js";
 import { filingPrompt, parseFiling, worthFiling } from "./memory-store.js";
@@ -618,6 +619,14 @@ export class ConversationManager {
         // ~1,600 tokens of Unity tools plus its guide (found on the PC: 8,300 tokens before the first word).
         const unityHere = this.unityInChat(id);
         return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.available ? UNREAL_GRAPH_TOOLS : [])];
+      },
+      // The model team's translator: a final answer written in another language than the user's is put into theirs.
+      polishAnswer: async (answer, userText, signal) => {
+        const pick = this.deps.config.translator ?? "main";
+        const model = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
+        if (pick === "off" || model.startsWith("agent/")) return undefined;
+        const turnOf = modelTurnFor(this.deps.registry, pick === "main" ? model : pick);
+        return answerInUserLanguage(answer, userText, async (system, text) => (await turnOf({ messages: [{ role: "system", content: system }, { role: "user", content: text }], tools: [] }, signal, () => undefined)).text);
       },
       // Smart auto approvals (F10): the chat's own model reviews a plain command first, when turned on in Settings.
       reviewer: () => {
