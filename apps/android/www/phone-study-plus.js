@@ -226,16 +226,16 @@ export function studyPlus(x) {
    * "This question looks wrong" under a missed question (design QuestionCheckPhone): the phone's model checks it against
    * its lecture and fixes the key or takes the question out of the score; or she says her answer is the right one.
    */
-  function questionCheck(c, q, picked) {
+  function questionCheck(c, q, picked, after) {
     if (q.fixed || q.dropped) return el("p", { class: "muted small", dir: "auto" }, q.checkNote || (q.dropped ? L("השאלה הוצאה מהציון.", "The question is out of the score.") : q.fixed.by === "her" ? L("✎ תוקן לפי התשובה שלך", "✎ Fixed to your answer") : L("✎ תוקן לפי ההרצאה", "✎ Fixed by the lecture")));
     if (q.checkNote) return el("p", { class: "muted small", dir: "auto" }, q.checkNote);
     const box = el("div", { class: "api", "aria-live": "polite", hidden: true });
-    const done = (note) => { q.checkNote = note; x.draw(); };
+    const done = (note) => { q.checkNote = note; after?.(); x.draw(); };
     const check = el("button", { type: "button", class: "primary" }, L("🔎 לבדוק מול ההרצאה", "🔎 Check against the lecture"));
     check.onclick = async () => {
       const l = c.lectures.find((y) => y.id === q.lectureId) ?? (c.lectures.length === 1 ? c.lectures[0] : undefined);
       if (!l) return done(L("אין לשאלה הזאת הרצאה לבדוק מולה.", "This question has no lecture to check it against."));
-      const user = `Question: ${q.q}\nOptions:\n${q.options.map((o, k) => `${k + 1}. ${o}`).join("\n")}\nAnswer key: ${q.answer + 1}\nShe answered: ${picked + 1}\n\n### Lecture: ${l.title}\n${l.text.slice(0, 12000)}`;
+      const user = `Question: ${q.q}\nOptions:\n${q.options.map((o, k) => `${k + 1}. ${o}`).join("\n")}\nAnswer key: ${q.answer + 1}${picked >= 0 ? `\nShe answered: ${picked + 1}` : ""}\n\n### Lecture: ${l.title}\n${l.text.slice(0, 12000)}`;
       const r = await need([{ role: "system", content: QUESTION_CHECK_PROMPT }, { role: "user", content: user }], check);
       if (r === undefined) return;
       const got = parseQuestionCheck(String(r), q.options.length, q.answer);
@@ -248,7 +248,7 @@ export function studyPlus(x) {
         : L(`צדקת: תיקנתי את המפתח. ${why}`, `You were right: the key is fixed. ${why}`));
     };
     const mine = el("button", { type: "button", onclick: () => { q.fixed = { was: q.answer, by: "her" }; q.answer = picked; done(L("סימנתי את התשובה שלך כנכונה.", "Your answer is marked right.")); } }, L("✓ התשובה שלי נכונה", "✓ My answer is right"));
-    box.append(el("p", { class: "small" }, L("המודל יכול לטעות. בודקים מול ההרצאה, או מסמנים שהתשובה שלך היא הנכונה.", "The model can be wrong. Check it against the lecture, or mark your answer as the right one.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, check, mine));
+    box.append(el("p", { class: "small" }, L("המודל יכול לטעות. בודקים מול ההרצאה, או מסמנים שהתשובה שלך היא הנכונה.", "The model can be wrong. Check it against the lecture, or mark your answer as the right one.")), el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, check, picked >= 0 && mine));
     const open = el("button", { type: "button", onclick: () => { open.hidden = true; box.hidden = false; } }, L("⚠️ נראה לי שהשאלה שגויה", "⚠️ I think this question is wrong"));
     return el("div", {}, open, box);
   }
@@ -673,9 +673,20 @@ export function studyPlus(x) {
     x.root.append(section(res ? L(`ציון: ${res.grade}`, `Grade: ${res.grade}`) : L("נבדק", "Checked"),
       res ? el("p", {}, L(`${res.right}/${res.choice} אמריקאיות נכונות${res.openMax ? ` · פתוחות: ${res.open}/${res.openMax}` : ""}`, `${res.right}/${res.choice} multiple choice right${res.openMax ? ` · open: ${res.open}/${res.openMax}` : ""}`)) : "",
       ...(res?.byLecture ?? []).slice(0, 5).map((b) => el("p", { class: "small", dir: "auto" }, `${title(b.lectureId) || L("הרצאה", "Lecture")}: ${b.got}/${b.of}`)),
-      ...z.qs.map((q, i) => z.picked[i] === q.answer ? "" : el("details", {}, el("summary", { dir: "auto" }, `✗ ${i + 1}. ${q.q.slice(0, 80)}`), el("p", { dir: "auto", class: "small" }, `${L("נכון: ", "Right: ")}${q.options[q.answer]}. ${q.explain || ""}`))),
+      ...z.qs.map((q, i) => z.picked[i] === q.answer && !q.fixed ? "" : el("details", { open: !!q.checkNote }, el("summary", { dir: "auto" }, `${z.picked[i] === q.answer ? "✎" : "✗"} ${i + 1}. ${q.q.slice(0, 80)}`), el("p", { dir: "auto", class: "small" }, `${L("נכון: ", "Right: ")}${q.options[q.answer]}. ${q.explain || ""}`), questionCheck(c, q, z.picked[i] ?? -1, () => mockFix(c, z)))),
       ...z.openQs.map((q, i) => el("details", {}, el("summary", { dir: "auto" }, `${z.qs.length + i + 1}. ${q.q.slice(0, 80)}`), el("p", { dir: "auto", class: "small" }, z.feedback?.[i] ?? ""))),
       btns(el("button", { type: "button", class: "primary", onclick: () => x.go({ at: "mock", course: c.id }) }, L("מבחן דמה נוסף", "Another mock exam")))));
+  }
+
+  /** After a mock exam question was checked: its saved part leaves out a broken question and recounts the score. */
+  function mockFix(c, z) {
+    const saved = (c.quizzes ?? []).find((q) => q.mock?.group === z.group && !q.kind);
+    if (!saved) return;
+    const kept = z.qs.map((q, i) => [q, z.picked[i] ?? -1]).filter(([q]) => !q.dropped);
+    saved.questions = kept.map(([q]) => ({ q: q.q, options: q.options, answer: q.answer, explain: q.explain, ...(q.lectureId ? { lectureId: q.lectureId } : {}), ...(q.fixed ? { fixed: q.fixed } : {}) }));
+    saved.answers = kept.map(([, p]) => p);
+    saved.score = kept.filter(([q, p]) => p === q.answer).length;
+    commit();
   }
 
   // ---------- the first setup on the phone alone (design StudySetupWizardPhone, students part 38) ----------
