@@ -3597,3 +3597,21 @@ div.slide-list { padding-inline-start: 0; }
 .study-letter-who label { flex: 1 1 160px; }
 .study-letter-out { display: flex; flex-direction: column; gap: 8px; }
 .study-letter-out textarea { width: 100%; box-sizing: border-box; line-height: 1.6; }
+.study-rehearse { display: flex; flex-direction: column; gap: 10px; }
+.study-rehearse h2 { margin: 0; }
+.study-rehearse-go { gap: 12px; align-items: center; }
+.study-rehearse-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.study-rehearse-stats > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border, #333); border-radius: 10px; }
+.study-rehearse-stats b { font-size: 22px; }
+.study-rehearse-feedback { white-space: pre-wrap; line-height: 1.6; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.study-eve { display: flex; flex-direction: column; gap: 10px; border-color: var(--accent); }
+.study-eve h2 { margin: 0; }
+.study-eve-do, .study-eve-check { display: flex; flex-direction: column; gap: 6px; }
+.study-eve-do .button { text-align: start; }
+.study-eve-sheet { display: block; padding: 4px 0; }
+.study-eve-breath { gap: 10px; align-items: center; }
+.study-eve-ball { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); transition: transform 4s ease-in-out; }
+.study-eve-ball.in, .study-eve-ball.hold { transform: scale(1.8); }
+.study-eve-ball.out { transform: scale(1); transition-duration: 6s; }
+@media (prefers-reduced-motion: reduce) { .study-eve-ball { transition: none; } }
+.study-eve-ball { margin-inline: 14px; flex: none; }

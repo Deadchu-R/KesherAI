@@ -10,7 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -865,6 +865,18 @@ export class Study {
     return `${out.join("\n\n")}${note}`.slice(0, 400_000);
   }
 
+  /** A presentation rehearsal (design Rehearse): her numbers, and the model's feedback against her lectures. */
+  async rehearse(id: string, text: string, seconds: number, target: number, signal?: AbortSignal): Promise<{ stats: ReturnType<typeof speechStats>; feedback: string }> {
+    const d = await this.get(id);
+    const said = text.replace(/\s+/g, " ").trim().slice(0, 30_000);
+    if (said.length < 20) throw Object.assign(new Error("Say a little more first."), { statusCode: 400 });
+    const stats = speechStats(said, Math.max(1, Math.round(seconds)));
+    const passages = findPassages(d.lectures, said.slice(0, 2000), 6000).map((p) => `[${p.title}]\n${p.text}`).join("\n\n");
+    const nums = `Seconds: ${Math.round(seconds)}${target ? ` (her time: ${target} minutes)` : ""}. Words: ${stats.words}. Words a minute: ${stats.wpm}. Filler words: ${stats.fillers.map((f) => `${f.word} ×${f.n}`).join(", ") || "none"} (${stats.fillerShare}% of the words).`;
+    const feedback = (await this.ask(REHEARSE_PROMPT, `${nums}\n\nHer talk:\n${said}\n\nLecture passages:\n${passages || "(none match)"}`, signal, d.course, 8000)).trim();
+    return { stats, feedback };
+  }
+
   /** A letter to the lecturer or the secretariat (design Letters), drafted for her to check and send herself. */
   async letter(id: string, kind: LetterKind, p: { to?: string; details?: string; name?: string }, signal?: AbortSignal): Promise<{ subject: string; body: string }> {
     const d = await this.get(id);
@@ -904,9 +916,12 @@ export class Study {
     const l = this.lecture(d, lectureId);
     const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture (start):\n${l.text.slice(0, 20_000)}` : l.text.slice(0, 40_000);
     const he = hebrewLecture(l.text);
-    const say = async (extra: string) => (await this.ask(`${PODCAST_PROMPT}${extra}`, `Lecture: ${l.title}\n\n${material}`, signal, d.course)).trim().slice(0, 20_000);
-    let text = await say(he ? " Write it in Hebrew; keep the A: and B: marks." : "");
-    if (he && latinMostly(text)) text = await say(" Answer in Hebrew only (עברית), every line, keeping A: and B:.");
+    // Hebrew: said in the system and the user turn, with a Hebrew first line to follow (found on the PC: Gemma wrote
+    // the talk in English twice when told only in English).
+    const heRule = " Write the whole talk in Hebrew (עברית), every line. The hosts are נועה (A) and איתי (B). The first line looks like: A: שלום! היום נדבר על …";
+    const say = async (extra: string) => (await this.ask(`${PODCAST_PROMPT}${extra}`, `${he ? "כתבו את כל השיחה בעברית.\n\n" : ""}Lecture: ${l.title}\n\n${material}${he ? "\n\nהשיחה (בעברית):\nA:" : ""}`, signal, d.course)).trim().replace(/^(?![AB]\s*:)/, he ? "A: " : "").slice(0, 20_000);
+    let text = await say(he ? heRule : "");
+    if (he && latinMostly(text)) text = await say(`${heRule} Answer in Hebrew only; an English line is a mistake.`);
     if (parsePodcast(text).length < 4) throw Object.assign(new Error("The model did not write a talk between two hosts. Try again."), { statusCode: 502 });
     l.podcast = text;
     await this.save(d);

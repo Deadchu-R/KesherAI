@@ -521,3 +521,12 @@ test("parseLetter: the subject line and the body", async () => {
   assert.equal(parseLetter("רק גוף").subject, "");
   assert.match(letterPrompt("reserve"), /מילואים/);
 });
+
+test("speechStats: words a minute and filler words, Hebrew and English", async () => {
+  const { speechStats } = await import("./study.js");
+  const s = speechStats("אממ אז היום כאילו נדבר על הלב, בעצם על המדורים. You know, like the heart. אממ", 30);
+  assert.equal(s.words, 16);
+  assert.equal(s.wpm, 32);
+  assert.deepEqual(s.fillers.map((f) => [f.word, f.n]), [["אממ", 2], ["כאילו", 1], ["בעצם", 1], ["like", 1], ["you know", 1]]);
+  assert.equal(s.fillerShare, 43.8);
+});

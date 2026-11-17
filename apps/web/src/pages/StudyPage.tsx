@@ -17,6 +17,8 @@ import { StudyTopicVideos } from "../StudyTopicVideos";
 import { StudyLeeches } from "../StudyLeeches";
 import { StudyPortions } from "../StudyPortions";
 import { StudyLetter } from "../StudyLetter";
+import { StudyRehearse } from "../StudyRehearse";
+import { StudyExamEve } from "../StudyExamEve";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -648,6 +650,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["terms", ["מילון", "Glossary"]],
   ["game", ["🎯 משחק", "🎯 Game"]],
   ["together", ["👥 לומדים יחד", "👥 Study together"]],
+  ["rehearse", ["🎤 חזרה על הצגה", "🎤 Rehearse a talk"]],
   ["writing", ["✍ כתיבה", "✍ Writing"]],
   ["papers", ["📚 מאמרים ומקורות", "📚 Papers and sources"]],
   ["drugs", ["תרופות", "Drugs"]],
@@ -759,6 +762,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
         }}>{L("מחק קורס", "Delete course")}</button>
       </div>
       {letter && <StudyLetter courseId={id} onClose={() => setLetter(false)} />}
+      {!lectureId && <StudyExamEve courseId={id} {...(info.course.examDate ? { examDate: info.course.examDate } : {})} lectures={info.lectures.map((l) => ({ id: l.id, title: l.title }))} />}
       {info.plan && !lectureId && <ExamPlanCard id={id} plan={info.plan} />}
       {!lectureId && <SyllabusCard id={id} syllabus={info.syllabus ?? null} onChange={load} />}
       <ModelWait />
@@ -773,6 +777,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
       {lectureId ? <LectureView key={`${lectureId}-${startAt ?? ""}`} courseId={id} lectureId={lectureId} courseField={info.course.field} {...(startAt !== undefined ? { startAt } : {})} onChange={load} />
         : on === "notes" ? <StudyNotesTab courseId={id} />
         : on === "papers" ? <StudyPapers courseId={id} courseName={info.course.name} />
+        : on === "rehearse" ? <StudyRehearse courseId={id} />
         : on === "together" ? <StudyTogether courseId={id} courseName={info.course.name} groups={info.course.groups ?? []} onChange={load} />
         : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
@@ -1738,7 +1743,7 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
         </div>
       )}
       <button type="button" className="study-card card" onClick={() => setShown(true)} aria-label={shown ? undefined : L("הצג תשובה", "Show answer")}>
-        {card.occlusion ? <OcclusionCard courseId={courseId} occ={card.occlusion} shown={shown} /> : <span className="study-card-front" dir="auto">{card.front}</span>}
+        {card.occlusion ? <OcclusionCard courseId={courseId} occ={card.occlusion} shown={shown} /> : <span className="study-card-front" dir="auto"><RichText text={card.front} /></span>}
         {shown ? <span className="study-card-back" dir="auto"><RichText text={card.back} /></span> : <span className="muted small">{L("הקישי או לחצי רווח כדי לראות את התשובה", "Tap or press space to see the answer")}</span>}
       </button>
       {!shown && (

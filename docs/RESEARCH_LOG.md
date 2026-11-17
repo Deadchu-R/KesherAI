@@ -2011,6 +2011,16 @@ Missing:
 - Built (2026-11-17): all four (design IsraeliStudent). Checked on the PC in 0.6.341: topic videos (6 found, Hebrew ones first for a Hebrew topic), where a term appears.
 - Stopped at: built; next research round (32).
 
+## Students, part 32: the days before the exam, presenting, formulas (2026-11-17, the loop)
+Sources: exam-countdown and last-minute revision apps 2026 (Exam Countdown, Exanix, iatroX's last-minute medical revision list), AI speech coaches (Yoodli, Orai, Prezi's round-up: pace, filler words, length), math flashcards (Anki with MathJax, RemNote's LaTeX); checked against the code.
+Missing:
+1. **Presentation rehearsal** (Yoodli, Orai): she says her talk; KesherAI measures words per minute, filler words (אממ, כאילו, בעצם… and English ones) and length against her time, and the model comments on structure and clarity against her material. The oral exam covers answering, not presenting.
+2. **The last days before an exam** (exam countdown and last-minute revision apps): from two days before the exam date, a "toward the exam" card: the countdown, her hard cards and mistakes first, the one-page sheets, a short practice test, and a small checklist for the day.
+3. **Formulas in a card's question** (Anki MathJax, RemNote LaTeX): the answer showed formulas, the question did not.
+- Not taken: GCSE-style marking boards (Israeli universities differ by course; open questions are already graded against her material).
+- Built (2026-11-17): all three (design ExamEveRehearse). Also found on the PC: the two-voice podcast came out in English for a Hebrew lecture with Gemma; the Hebrew rule now goes in both turns with a Hebrew first line to follow.
+- Stopped at: built; next research round (33).
+
 ## Screen lens, part 1: capture part of the screen and hand it to the AI (2026-11-17, Roee asked)
 - Google: Circle to Search on Android (hold home, circle anything; search, translate in place, AI overview); Lens in desktop Chrome (a region on the page → search, "translate" puts the translation over the picture, text selection by OCR, AI Mode follow-ups). Microsoft: Click to Do on Windows 11 (Win+click or Win+Q; local OCR, text actions — summarize, rewrite, search — run on the PC with Phi Silica on Copilot+ PCs; image actions: visual search, erase, remove background; nothing kept after the action), Copilot Vision (shares a window with Copilot), Edge Lens (experimental). Snipping Lens (open source): Snipping Tool region → uploaded to an image host → Google image search (cloud, privacy cost). ChatGPT/Claude desktop apps: a hotkey to attach a screenshot or a window to a chat.
 - What makes them good: one global shortcut, the screen frozen and dimmed with a free drag (or circle) to select, actions right next to the selection, results shown over the screen (translation in place), the text in the picture selectable, follow-up questions, nothing stored after the action.

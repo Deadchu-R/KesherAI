@@ -2009,6 +2009,23 @@ export function parseLetter(text: string): { subject: string; body: string } {
   return m ? { subject: m[1]!.replace(/\*+/g, "").trim().slice(0, 200), body: m[2]!.trim().slice(0, 4000) } : { subject: "", body: t.slice(0, 4000) };
 }
 
+/** Filler words counted in a rehearsal (Hebrew and English; multi-word ones as phrases). */
+export const FILLERS = ["אממ", "אמ", "אהה", "אה", "כאילו", "בעצם", "כזה", "כזאת", "יעני", "זאת אומרת", "נו", "um", "uh", "erm", "like", "you know", "basically", "actually", "kind of", "sort of"];
+
+/**
+ * A presentation rehearsal's numbers (design Rehearse, students part 32 #1, like Yoodli and Orai): words, words per
+ * minute, filler words (most first) and their share of the words.
+ */
+export function speechStats(text: string, seconds: number): { words: number; wpm: number; fillers: Array<{ word: string; n: number }>; fillerShare: number } {
+  const words = text.toLowerCase().split(/[^\p{L}\p{N}']+/u).filter(Boolean);
+  const joined = ` ${words.join(" ")} `;
+  const fillers = FILLERS.map((f) => ({ word: f, n: joined.split(` ${f} `).length - 1 })).filter((f) => f.n > 0).sort((a, b) => b.n - a.n);
+  const nf = fillers.reduce((x, f) => x + f.n * f.word.split(" ").length, 0);
+  return { words: words.length, wpm: seconds > 0 ? Math.round((words.length / seconds) * 60) : 0, fillers, fillerShare: words.length ? Math.round((nf / words.length) * 1000) / 10 : 0 };
+}
+
+export const REHEARSE_PROMPT = "A student rehearsed a talk (her words, transcribed, below), with numbers about her pace and filler words. Give short, kind, specific feedback in her language: (1) structure: does it open with what it is about, go in a clear order and end with a summary; (2) clarity: one or two sentences that were hard to follow, rewritten; (3) content: anything the lecture passages say that she got wrong or left out that matters; (4) delivery: pace (about 120-160 words a minute is comfortable) and filler words, from the numbers; (5) one thing to do in the next run. At most 12 short lines, no headings beyond the numbers.";
+
 /** Fixing a hard card: simpler, split in two, or a memory hook added to its answer. */
 export type LeechFix = "simpler" | "split" | "hook";
 export const LEECH_PROMPT: Record<LeechFix, string> = {

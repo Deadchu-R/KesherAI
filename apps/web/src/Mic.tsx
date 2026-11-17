@@ -43,14 +43,16 @@ const native = (): NativeSpeech | undefined => (window as unknown as { Capacitor
  * consent), or a connected cloud service, or the phone's own recognizer in
  * the Android app.
  *
- * @param props.onText - Receives the recognized text.
+ * @param props.onText - Receives the recognized text (and about how many seconds were spoken).
  */
-export function Mic({ onText }: { onText: (text: string) => void }) {
+export function Mic({ onText }: { onText: (text: string, seconds?: number) => void }) {
   const [state, setState] = useState<"idle" | "recording" | "working">("idle");
   const [secs, setSecs] = useState(0);
   const [level, setLevel] = useState(0);
   const [setup, setSetup] = useState<SttInfo | null>(null);
   const rec = useRef<{ stop: () => void; cancel: () => void } | null>(null);
+  // When the recording started, for how long she spoke (a presentation's pace).
+  const began = useRef(0);
 
   useEffect(() => {
     if (state !== "recording") return;
@@ -67,6 +69,7 @@ export function Mic({ onText }: { onText: (text: string) => void }) {
   const lang = () => "";
 
   const send = async (wav: Blob) => {
+    const spoke = Math.round((Date.now() - began.current) / 1000);
     setState("working");
     try {
       const res = await fetch(withToken(`/api/speech/transcribe${lang() ? `?lang=${lang()}` : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
@@ -76,7 +79,7 @@ export function Mic({ onText }: { onText: (text: string) => void }) {
         return;
       }
       if (!res.ok) throw new Error(j.error ?? String(res.status));
-      if (j.text) onText(j.text);
+      if (j.text) onText(j.text, spoke);
       else toast(t("micNothing"));
     } catch (e) {
       toast((e as Error).message);
@@ -91,10 +94,11 @@ export function Mic({ onText }: { onText: (text: string) => void }) {
       // Inside the Android app: the phone recognizes speech itself.
       setState("recording");
       setSecs(0);
+      began.current = Date.now();
       rec.current = { stop: () => void n.stop(), cancel: () => void n.stop() };
       try {
         const r = await n.start({ language: getLocale() === "he" ? "he-IL" : "" });
-        if (r.text) onText(r.text);
+        if (r.text) onText(r.text, Math.round((Date.now() - began.current) / 1000));
       } catch (e) {
         toast((e as Error).message);
       } finally {
@@ -141,6 +145,7 @@ export function Mic({ onText }: { onText: (text: string) => void }) {
     rec.current = { stop: () => finish(true), cancel: () => finish(false) };
     setSecs(0);
     setState("recording");
+    began.current = Date.now();
   };
 
   const prepare = async () => {

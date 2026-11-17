@@ -1113,3 +1113,12 @@ S5 an outside scanner's rules for Electron.
 - **Problem photo**: the same extract route as lecture photos (resized in the page first).
 - **Degree progress**: numbers clamped (credits 0–400 per kind, total 0–600, pass mark 0–100), at most 12 kinds, ids checked.
 - **Performance**: "where else" runs only when asked, over the course's own text; the podcast is written once and kept.
+
+## Scan 124 (2026-11-17): hard cards, card timer, note cards, reading in portions, reading font, Moed B, pass/fail, timetable photo, letters, rehearsal, exam eve
+- **Hard cards**: the fix only replaces her own card in her course with what the model wrote, checked (front 2000, back 6000 characters, at most 4 cards); the old id goes to `removed` so a sync does not bring it back; the "how" is one of three fixed words.
+- **Note cards and portions**: the notes are parsed by our own line pattern (at most 200 cards, lengths capped); `readPos` must be a whole number within the text; a portion's range is clamped to the text and to 40 000 characters before it goes to the model.
+- **Timetable photo**: the picture is limited (16 MB body, 12 MB image), its type is one of three image types, and the model's answer is checked (days 0–6, HH:MM, end after start, 80 classes, short names); she picks each class's course before anything is saved; new courses go through the normal course route.
+- **Letters**: drafts only; KesherAI never sends mail. The mail link is built with `encodeURIComponent` and has no address (she picks it in her mail app). Inputs are cut (2000 characters of details) and the body limit is 16 KB.
+- **Rehearsal**: only the transcribed text and the seconds go to the server (256 KB limit, 30 000 characters used); no recording is kept. The Mic change only adds a time measured on the page.
+- **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
+- **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.

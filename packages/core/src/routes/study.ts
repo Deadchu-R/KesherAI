@@ -80,6 +80,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
   /** Cards from the "term :: meaning" lines of the lecture's notes (design NoteCards). */
   app.post<L>("/api/study/courses/:id/lectures/:lid/note-cards", async (req) => st.cardsFromNotes(req.params.id, req.params.lid));
+  /** A presentation rehearsal (design Rehearse): her transcribed words and how long she spoke. */
+  app.post<C & { Body: { text?: string; seconds?: number; target?: number } }>("/api/study/courses/:id/rehearse", { bodyLimit: 256 * 1024 }, async (req) => st.rehearse(req.params.id, String(req.body?.text ?? ""), Number(req.body?.seconds) || 0, Math.max(0, Math.min(120, Number(req.body?.target) || 0))));
   /** A letter to the lecturer or the secretariat (design Letters): drafted only; she sends it herself. */
   app.post<C & { Body: { kind?: string; to?: string; details?: string; name?: string } }>("/api/study/courses/:id/letter", { bodyLimit: 16 * 1024 }, async (req) => st.letter(req.params.id, String(req.body?.kind ?? "other") as "other", req.body ?? {}));
   /** Her classes from a photo of her schedule (design TimetablePhoto); she picks each one's course before saving. */
