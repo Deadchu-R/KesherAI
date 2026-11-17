@@ -630,8 +630,8 @@ ipcMain.handle("kesher:keys", async (event, reload: unknown) => {
 let lensWin: BrowserWindow | undefined;
 
 /**
- * The screen lens (design ScreenLens, like Circle to Search and Click to Do): the key captures the screen, then shows
- * it frozen over the whole primary display, where she marks a part and picks an action. Pressed again, it closes.
+ * The screen lens (design ScreenLens, like Circle to Search and Click to Do): the key captures the screen the cursor
+ * is on, then shows it frozen over that whole display, where she marks a part and picks an action. Pressed again, it closes.
  *
  * @param coreUrl - KesherAI's local address.
  */
@@ -641,11 +641,17 @@ async function toggleLens(coreUrl: string): Promise<void> {
     return;
   }
   const base = coreUrl.replace(/\/$/, "");
-  const r = (await fetch(`${base}/api/lens/capture`, { method: "POST", signal: AbortSignal.timeout(15_000) })
+  // The screen the cursor is on (with several screens), at its full resolution.
+  const d = displays.getDisplayNearestPoint(displays.getCursorScreenPoint());
+  const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
+  const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: size }).catch(() => []);
+  const src = sources.find((x) => x.display_id === String(d.id)) ?? sources[0];
+  if (!src) return;
+  const r = (await fetch(`${base}/api/lens/shot`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data: src.thumbnail.toPNG().toString("base64") }), signal: AbortSignal.timeout(15_000) })
     .then((x) => x.json())
     .catch(() => ({}))) as { id?: string };
   if (!r.id) return;
-  const bounds = displays.getPrimaryDisplay().bounds;
+  const bounds = d.bounds;
   if (!lensWin || lensWin.isDestroyed()) {
     lensWin = new BrowserWindow({
       ...bounds,
