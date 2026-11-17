@@ -142,6 +142,8 @@ function StudyHome() {
   };
   const due = courses?.reduce((n, c) => n + c.due, 0) ?? 0;
   const firstDue = courses?.find((c) => c.due > 0);
+  // A 5-minute lesson in the course with the most due cards, else the one with the most cards.
+  const quickCourse = firstDue ?? [...(courses ?? [])].sort((a, b) => b.cards - a.cards).find((c) => c.cards > 0);
   if (courses && !courses.length && prefs && !prefs.welcomed) {
     return (
       <div className="page study-page">
@@ -162,6 +164,7 @@ function StudyHome() {
         <h2>{L("להיום", "Today")}</h2>
         <div className="study-actions">
           {firstDue ? <a className="button primary" href={`#/study/${firstDue.id}/review`}>{L(`חזרה על ${due} כרטיסיות`, `Review ${due} cards`)} ▶</a> : <span className="muted">{L("אין כרטיסיות לחזרה עכשיו.", "No cards to review now.")}</span>}
+          {quickCourse && <a className="button" href={`#/study/${quickCourse.id}/quick`}>⏱ {L("שיעור של 5 דקות", "A 5-minute lesson")}</a>}
           {courses?.some((c) => clinicalField(c.field)) && <>
             <a className="button" href="#/study/calc">{L("תרגול חישובי תרופות", "Medication calculations")}</a>
             <a className="button" href="#/study/labs">{L("ערכי מעבדה", "Lab values")}</a>
@@ -686,6 +689,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
       </div>
       {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
         : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
+        : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />

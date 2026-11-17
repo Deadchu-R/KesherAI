@@ -7,19 +7,21 @@ import { RichText } from "./RichText";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type Item = { key: string; card?: StudyCard; q?: StudyQuestion & { t: number }; right: number };
-const NEED = 2;
+
 
 /**
  * "My mistakes" (design MyMistakes, like Duolingo's practice hub): the cards she forgot and the quiz questions she got
  * wrong lately, mixed; each comes back until it is right twice. A card she rates also counts in spaced review.
  */
-export function StudyMistakes({ courseId, courseName, onClose }: { courseId: string; courseName: string; onClose: () => void }) {
+export function StudyMistakes({ courseId, courseName, onClose, quick }: { courseId: string; courseName: string; onClose: () => void; quick?: boolean }) {
+  // A quick lesson asks each once; mistakes until right twice.
+  const NEED = quick ? 1 : 2;
   const [items, setItems] = useState<Item[] | null>(null);
   const [i, setI] = useState(0);
   const [shown, setShown] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
   useEffect(() => {
-    void api<{ cards: StudyCard[]; questions: Array<StudyQuestion & { t: number }> }>(`/api/study/courses/${courseId}/mistakes`).then((r) => {
+    void api<{ cards: StudyCard[]; questions: Array<StudyQuestion & { t: number }> }>(`/api/study/courses/${courseId}/${quick ? "quick" : "mistakes"}`).then((r) => {
       const all: Item[] = [...r.cards.map((card) => ({ key: `c${card.id}`, card, right: 0 })), ...r.questions.map((q, n) => ({ key: `q${n}`, q, right: 0 }))];
       // Mixed, so it is not all cards and then all questions.
       for (let a = all.length - 1; a > 0; a--) {
@@ -28,19 +30,19 @@ export function StudyMistakes({ courseId, courseName, onClose }: { courseId: str
       }
       setItems(all);
     }, (e: Error) => toast(e.message));
-  }, [courseId]);
+  }, [courseId, quick]);
   if (!items) return <p className="muted">…</p>;
   const left = items.filter((x) => x.right < NEED);
   const done = items.length - left.length;
   if (!items.length) return (
     <section className="card mistakes-done">
-      <b>🎉 {L("אין טעויות מהזמן האחרון!", "No recent mistakes!")}</b>
+      <b>{quick ? L("עוד אין כרטיסיות או בחנים בקורס. סכמי הרצאה וצרי כרטיסיות קודם.", "No cards or quizzes in the course yet. Summarize a lecture and make cards first.") : `🎉 ${L("אין טעויות מהזמן האחרון!", "No recent mistakes!")}`}</b>
       <button type="button" onClick={onClose}>{L("חזרה", "Back")}</button>
     </section>
   );
   if (!left.length) return (
     <section className="card mistakes-done">
-      <b>🏆 {L(`כל ${items.length} הטעויות נכונות עכשיו פעמיים`, `All ${items.length} mistakes are now right twice`)}</b>
+      <b>{quick ? `🎉 ${L("השיעור הקצר הושלם! 5 דקות טובות.", "The quick lesson is done! 5 good minutes.")}` : `🏆 ${L(`כל ${items.length} הטעויות נכונות עכשיו פעמיים`, `All ${items.length} mistakes are now right twice`)}`}</b>
       <button type="button" className="primary" onClick={onClose}>{L("סיום", "Done")}</button>
     </section>
   );
@@ -56,13 +58,13 @@ export function StudyMistakes({ courseId, courseName, onClose }: { courseId: str
   return (
     <section className="study-mistakes">
       <div className="mistakes-head">
-        <b>❌ {L("הטעויות שלי", "My mistakes")} · {courseName}</b>
-        <span className="muted small">{L(`${done} מתוך ${items.length} נכונות פעמיים`, `${done} of ${items.length} right twice`)}</span>
+        <b>{quick ? `⏱ ${L("שיעור של 5 דקות", "A 5-minute lesson")}` : `❌ ${L("הטעויות שלי", "My mistakes")}`} · {courseName}</b>
+        <span className="muted small">{quick ? L(`${done} מתוך ${items.length}`, `${done} of ${items.length}`) : L(`${done} מתוך ${items.length} נכונות פעמיים`, `${done} of ${items.length} right twice`)}</span>
         <button type="button" className="link" onClick={onClose}>{L("לעצור", "Stop")}</button>
       </div>
       <div className="mistakes-bar"><span style={{ width: `${(done / items.length) * 100}%` }} /></div>
       <div className="card mistakes-item">
-        <span className="muted small">{cur.card ? L("כרטיסייה ששכחת", "A card you forgot") : L(`שאלה מבוחן מ-${new Date(cur.q!.t).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}`, `A quiz question from ${new Date(cur.q!.t).toLocaleDateString("en-GB", { day: "numeric", month: "numeric" })}`)}{cur.right ? ` · ✓ ${L("פעם אחת נכון", "right once")}` : ""}</span>
+        <span className="muted small">{cur.card ? (quick ? L("כרטיסייה", "A card") : L("כרטיסייה ששכחת", "A card you forgot")) : L(`שאלה מבוחן מ-${new Date(cur.q!.t).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}`, `A quiz question from ${new Date(cur.q!.t).toLocaleDateString("en-GB", { day: "numeric", month: "numeric" })}`)}{cur.right ? ` · ✓ ${L("פעם אחת נכון", "right once")}` : ""}</span>
         {cur.card ? (
           <>
             <div dir="auto" className="mistakes-front"><RichText text={cur.card.front} /></div>
@@ -93,7 +95,7 @@ export function StudyMistakes({ courseId, courseName, onClose }: { courseId: str
           </>
         )}
       </div>
-      <p className="muted small">{L("כל טעות מ-30 הימים האחרונים חוזרת עד שעונים עליה נכון פעמיים.", "Every mistake from the last 30 days comes back until you get it right twice.")}</p>
+      {!quick && <p className="muted small">{L("כל טעות מ-30 הימים האחרונים חוזרת עד שעונים עליה נכון פעמיים.", "Every mistake from the last 30 days comes back until you get it right twice.")}</p>}
     </section>
   );
 }

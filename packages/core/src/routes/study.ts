@@ -428,6 +428,15 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
   app.get<C>("/api/study/courses/:id/review", async (req) => ({ cards: await st.due(req.params.id) }));
+  /** A 5-minute lesson (RESEARCH_LOG students part 25 #4): up to 5 cards (due first, else any) and 2 questions from her past quizzes. */
+  app.get<C>("/api/study/courses/:id/quick", async (req) => {
+    const d = await st.get(req.params.id);
+    const due = await st.due(req.params.id, 5);
+    const shuffle = <T,>(a: T[]) => a.map((x) => [Math.random(), x] as const).sort((x, y) => x[0] - y[0]).map(([, x]) => x);
+    const cards = due.length >= 3 ? due : [...due, ...shuffle(d.cards.filter((c) => !due.some((x) => x.id === c.id))).slice(0, 5 - due.length)];
+    const pool = d.quizzes.filter((z) => !z.kind).flatMap((z) => z.questions.filter((q) => q.answer >= 0 && q.options.length > 1).map((q) => ({ ...q, t: z.t })));
+    return { cards, questions: shuffle(pool).slice(0, 2) };
+  });
   /** "My mistakes" (design MyMistakes): cards she forgot and quiz questions she got wrong lately. */
   app.get<C>("/api/study/courses/:id/mistakes", async (req) => recentMistakes(await st.get(req.params.id)));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
