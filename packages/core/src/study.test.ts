@@ -282,3 +282,24 @@ test("a question during a recording needs a transcript and answers from it", asy
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("slides: a PowerPoint lines up with the recording's minutes", async () => {
+  const { zipSync, strToU8 } = await import("fflate");
+  const { pptxFiles } = await import("@kesher/shared");
+  const dir = await mkdtemp(join(tmpdir(), "study-slides-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("פרמקולוגיה");
+    const l = await st.addLecture(c.id, { title: "לב", text: "[00:00] שלום, היום על הלב\n[05:00] חוסמי בטא חוסמים קולטני בטא ולכן הדופק יורד\n[12:00] משתנים מורידים נפח דם דרך הכליות" });
+    const files = pptxFiles("לב", [{ title: "חוסמי בטא", bullets: ["קולטני בטא", "הדופק יורד"] }, { title: "משתנים", bullets: ["נפח דם", "כליות"] }]);
+    const pptx = Buffer.from(zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === "string" ? strToU8(v) : v]))));
+    const slides = await st.addSlides(c.id, l.id, "לב.pptx", pptx);
+    assert.equal(slides.length, 3);
+    assert.deepEqual(slides.slice(1).map((s) => s.sec), [300, 720]);
+    await assert.rejects(() => st.addSlides(c.id, l.id, "x.docx", pptx), /PowerPoint/);
+    await st.removeSlides(c.id, l.id);
+    assert.equal((await st.get(c.id)).lectures[0]!.slides, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

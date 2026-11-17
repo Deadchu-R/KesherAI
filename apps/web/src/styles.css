@@ -3454,3 +3454,9 @@ div.slide-list { padding-inline-start: 0; }
 .study-audio-tools { gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 .study-audio-tools .chip { min-width: 0; width: auto; height: auto; padding: 2px 8px; }
 .study-text .study-now { background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 4px; }
+/* Slides beside the recording (design SlidesSync). */
+.study-slides { display: flex; flex-direction: column; gap: 8px; }
+.study-slide-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.study-slide-list li { border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px; }
+.study-slide-list li.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.study-slide-list p { margin: 3px 0 0; }

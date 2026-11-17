@@ -428,6 +428,12 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true, highlights: req.body?.highlights === true }) }));
   /** A question during a recording, from the transcript so far (design LiveAsk). */
   app.post<C & { Body: { question?: string; transcript?: string } }>("/api/study/courses/:id/ask-live", { bodyLimit: 1024 * 1024 }, async (req) => ({ answer: await st.askLive(req.params.id, String(req.body?.question ?? ""), String(req.body?.transcript ?? "")) }));
+  /** The lecture's slides (a .pptx or .pdf, base64), lined up with the recording (design SlidesSync). */
+  app.post<L & { Body: { name?: string; data?: string } }>("/api/study/courses/:id/lectures/:lid/slides", { bodyLimit: 85 * 1024 * 1024 }, async (req) => ({ slides: await st.addSlides(req.params.id, req.params.lid, String(req.body?.name ?? ""), Buffer.from(String(req.body?.data ?? ""), "base64")) }));
+  app.delete<L>("/api/study/courses/:id/lectures/:lid/slides", async (req) => {
+    await st.removeSlides(req.params.id, req.params.lid);
+    return { ok: true };
+  });
   /** Her highlights in a lecture (design ReadHighlights): the whole list. */
   app.put<L & { Body: { highlights?: unknown } }>("/api/study/courses/:id/lectures/:lid/highlights", { bodyLimit: 2 * 1024 * 1024 }, async (req) => ({ highlights: await st.setHighlights(req.params.id, req.params.lid, req.body?.highlights) }));
 

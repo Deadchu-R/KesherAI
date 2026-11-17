@@ -66,6 +66,8 @@ export interface StudyLecture {
   notesT?: number;
   /** What she highlighted while reading (design ReadHighlights, students part 27 #5). */
   highlights?: StudyHighlight[];
+  /** The lecture's slides (a PowerPoint or PDF she added), each with the minute it is talked about. */
+  slides?: StudySlide[];
 }
 
 /** A highlight in a lecture's text, with the page it is on and her note. */
@@ -1644,13 +1646,69 @@ export function pageAt(text: string, at: number): number | undefined {
   return page;
 }
 
+/** A slide of the lecture's file, matched to the minute of the recording where it is talked about (students part 28 #1). */
+export interface StudySlide {
+  n: number;
+  /** Its text (title first). */
+  text: string;
+  /** The second of the recording it matches, when one does. */
+  sec?: number;
+}
+
+/** The transcript as pieces by their minute marks ("[12:30] …"). */
+export function stampedChunks(text: string): Array<{ sec: number; text: string }> {
+  const out: Array<{ sec: number; text: string }> = [];
+  for (const line of text.split("\n")) {
+    const m = /^\[(?:(\d+):)?(\d+):(\d\d)\]\s*(.*)$/.exec(line);
+    if (m) out.push({ sec: Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]), text: m[4] ?? "" });
+    else if (out.length && line.trim()) out.at(-1)!.text += ` ${line.trim()}`;
+  }
+  return out;
+}
+
+/**
+ * Lines the slides up with the recording (like Genio and Notability): each slide's words against each piece of the
+ * transcript, in order (a later slide never before an earlier one), best total overlap; a slide with no shared words
+ * stays without a minute.
+ *
+ * @param slides - The slides' text, in order.
+ * @param chunks - The transcript's pieces with their seconds.
+ */
+export function alignSlides(slides: string[], chunks: Array<{ sec: number; text: string }>): Array<number | undefined> {
+  if (!slides.length || !chunks.length) return slides.map(() => undefined);
+  const cw = chunks.map((c) => new Set(words(c.text)));
+  const score = slides.map((t) => {
+    const ws = [...new Set(words(t))];
+    return cw.map((set) => (ws.length ? ws.filter((w) => set.has(w)).length / Math.sqrt(ws.length) : 0));
+  });
+  // best[i][j]: the best total for slides 0..i with slide i at piece j or before.
+  const S = slides.length;
+  const C = chunks.length;
+  const best = Array.from({ length: S }, () => new Float64Array(C));
+  const from = Array.from({ length: S }, () => new Int32Array(C));
+  for (let i = 0; i < S; i++)
+    for (let j = 0; j < C; j++) {
+      const here = score[i]![j]! + (i ? best[i - 1]![j]! : 0);
+      const keep = j ? best[i]![j - 1]! : -1;
+      if (here >= keep) { best[i]![j] = here; from[i]![j] = j; } else { best[i]![j] = keep; from[i]![j] = from[i]![j - 1]!; }
+    }
+  const at: Array<number | undefined> = new Array(S);
+  let j = C - 1;
+  for (let i = S - 1; i >= 0; i--) {
+    const k = from[i]![j]!;
+    at[i] = score[i]![k]! > 0 ? chunks[k]!.sec : undefined;
+    j = k;
+  }
+  return at;
+}
+
 /** A passage's label for the model: its lecture, and its page when known (so the answer can cite "p. 12"). */
 export const passageLabel = (p: StudyPassage) => `[Lecture: ${p.title}${p.page ? `, p. ${p.page}` : ""}]`;
 
 const STOP = new Set(["the", "and", "what", "how", "why", "is", "are", "of", "to", "in", "a", "an", "את", "של", "על", "מה", "איך", "למה", "זה", "זו", "הוא", "היא", "עם", "או", "גם", "כי", "אם", "לא", "יש", "אין", "כל", "אני", "מתי", "איזה", "אילו"]);
 
 /** Words of a text for matching: lower case, Hebrew prefixes (ו ה ב ל מ ש כ) off longer words. */
-function words(text: string): string[] {
+export function words(text: string): string[] {
   return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).map((w) => (/^[֐-׿]/.test(w) && w.length > 3 ? w.replace(/^[והבלמשכ]{1,2}(?=[֐-׿]{3})/, "") : w)).filter((w) => w.length > 1 && !STOP.has(w));
 }
 

@@ -12,6 +12,7 @@ import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
 import { StudyHighlights } from "../StudyHighlights";
 import { StudySheet } from "../StudySheet";
+import { StudySlides } from "../StudySlides";
 import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
@@ -1305,7 +1306,7 @@ function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { course
 
 function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
-  const [view, setView] = useState<"watch" | "summary" | "terms" | "diagram" | "video" | "teach" | "read" | "sheet" | "text">("summary");
+  const [view, setView] = useState<"watch" | "summary" | "terms" | "diagram" | "video" | "teach" | "read" | "sheet" | "slides" | "text">("summary");
   // A video lecture opens on its video.
   useEffect(() => {
     if (l?.youtube || l?.videoFile) setView("watch");
@@ -1377,9 +1378,9 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       {l.web && <p className="muted small">🔗 {L("נשמר מ:", "Saved from:")} <a href={l.web} target="_blank" rel="noopener noreferrer" dir="ltr">{l.web.replace(/^https?:\/\//, "").slice(0, 80)}</a></p>}
       {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} onTime={(t) => setHeard(Math.floor(t))} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
-        {(["watch", "summary", "terms", "diagram", "sheet", "video", "teach", "read", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (
+        {(["watch", "summary", "terms", "diagram", "sheet", "slides", "video", "teach", "read", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
-            {{ watch: L("▶ הרצאה בווידאו", "▶ Video lecture"), summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), read: L("🖍 קריאה והדגשה", "🖍 Read and highlight"), sheet: L("📄 דף סיכום", "📄 One-page sheet"), text: L("הטקסט המלא", "Full text") }[v]}
+            {{ watch: L("▶ הרצאה בווידאו", "▶ Video lecture"), summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), read: L("🖍 קריאה והדגשה", "🖍 Read and highlight"), sheet: L("📄 דף סיכום", "📄 One-page sheet"), slides: L("📑 שקפים", "📑 Slides"), text: L("הטקסט המלא", "Full text") }[v]}
           </button>
         ))}
       </div>
@@ -1387,6 +1388,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
         {view === "watch" ? <StudyVideoLecture base={base} lecture={l} onLecture={setL} />
           : view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
           : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
+          : view === "slides" ? <StudySlides base={base} slides={l.slides ?? []} heard={heard} hasRecording={!!l.recording} onSlides={(sl) => setL({ ...l, slides: sl })} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} />
           : view === "sheet" ? <StudySheet lecture={l} {...(l.diagram ? { diagram: <FlowView src={l.diagram} /> } : {})} />
           : view === "read" ? <StudyHighlights key={l.id} base={base} text={l.text} initial={l.highlights ?? []} onCards={onChange} />
           : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} {...(heard !== undefined ? { now: heard } : {})} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : <ReadAlong text={l.text} plain />}</div>

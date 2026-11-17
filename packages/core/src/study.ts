@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -40,6 +40,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(Array.isArray(l.chapters) ? { chapters: parseChapters({ chapters: l.chapters }, Number(l.chapters.at(-1)?.end) || 0) } : {}),
     ...(l.notes ? { notes: str(l.notes, 50_000), notesT: Number(l.notesT) || Date.now() } : {}),
     ...(Array.isArray(l.highlights) && l.highlights.length ? { highlights: cleanHighlights(l.highlights) } : {}),
+    ...(Array.isArray(l.slides) && l.slides.length ? { slides: l.slides.slice(0, 300).map((x, i) => ({ n: Number(x?.n) || i + 1, text: str(x?.text, 2000), ...(Number.isFinite(Number(x?.sec)) && x?.sec !== undefined ? { sec: Math.max(0, Number(x.sec)) } : {}) })) } : {}),
   }));
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
     id: k.id, front: str(k.front, 4000), back: str(k.back, 8000), format: STUDY_FORMATS.includes(k.format) ? k.format : "text", ...(k.kind ? { kind: str(k.kind, 40) } : {}),
@@ -1105,6 +1106,31 @@ export class Study {
       40_000,
     );
     return raw.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+  }
+
+  /**
+   * The lecture's slides (design SlidesSync, students part 28 #1): a PowerPoint or PDF she adds; each slide's text is
+   * kept and lined up with the minute of the recording where it is talked about.
+   */
+  async addSlides(id: string, lectureId: string, name: string, data: Buffer): Promise<StudySlide[]> {
+    const ext = (/\.[a-z0-9]+$/i.exec(name)?.[0] ?? "").toLowerCase();
+    if (ext !== ".pptx" && ext !== ".pdf") throw Object.assign(new Error("Add the slides as a PowerPoint (.pptx) or a PDF."), { statusCode: 400 });
+    if (data.length > 60 * 1024 * 1024) throw Object.assign(new Error("The file is larger than 60 MB."), { statusCode: 400 });
+    const pages = (await documentText(data, name)).pages.map((p) => p.replace(/^Slide \d+\n/, "").trim()).slice(0, 300);
+    if (!pages.some(Boolean)) throw Object.assign(new Error("No text was found in the slides (pictures only)."), { statusCode: 400 });
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const at = alignSlides(pages, stampedChunks(l.text));
+    l.slides = pages.map((text, i) => ({ n: i + 1, text: text.slice(0, 2000), ...(at[i] !== undefined ? { sec: at[i] } : {}) }));
+    await this.save(d);
+    return l.slides;
+  }
+
+  /** Removes the lecture's slides. */
+  async removeSlides(id: string, lectureId: string): Promise<void> {
+    const d = await this.get(id);
+    delete this.lecture(d, lectureId).slides;
+    await this.save(d);
   }
 
   /** Saves her highlights in a lecture (the whole list, checked). */
