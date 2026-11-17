@@ -92,6 +92,7 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
       <div className="row video-deck">
         <button type="button" className="primary" onClick={() => void stage.current?.requestFullscreen?.().catch(() => undefined)}>🖥 {L("להציג (מסך מלא)", "Present (full screen)")}</button>
         <button type="button" onClick={() => printDeck(lecture.title, slides)}>⬇ PDF</button>
+        <button type="button" onClick={() => void api<{ id: string }>("/api/decks", { method: "POST", body: { title: lecture.title, slides: [{ layout: "title", title: lecture.title, bullets: [] }, ...slides.map((x) => ({ layout: "bullets", title: x.title, bullets: x.bullets, notes: x.say }))] } }).then((d) => { location.hash = `#/slides/${d.id}`; }, (e: Error) => toast(e.message))}>📑 {L("לעריכה במצגות", "Edit in Slides")}</button>
         <button type="button" className="link small" onClick={() => downloadDeck(lecture.title, slides)}>{L("גם כקובץ PowerPoint (לא חובה)", "Also as a PowerPoint file (optional)")}</button>
       </div>
     </div>

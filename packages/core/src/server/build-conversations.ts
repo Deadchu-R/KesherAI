@@ -9,6 +9,7 @@ import { ConversationManager } from "../conversations.js";
 import { browserTools } from "../browser-bridge.js";
 import { fabTools } from "../fab-tools.js";
 import { canvasTools } from "../canvas.js";
+import { deckStoreFor, deckTools } from "../decks.js";
 import { timerTools } from "../chat-timers.js";
 import { Checkpoints } from "../checkpoints.js";
 import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
@@ -255,7 +256,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
     memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
     // None in an incognito chat: a timer is written to disk (scan 65).
-    canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : canvasTools(canvases, convId, () => library.summary(convId)?.title ?? "")),
+    // The chat's canvas and its slide deck (design DeckEditor): none in an incognito chat.
+    canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? "")]),
     timerTools: (convId) => (library.summary(convId)?.incognito ? [] : timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined))),
     memory,
   });
