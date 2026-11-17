@@ -119,3 +119,35 @@ export function cleanReadClasses(raw: unknown): ReadClass[] {
     return [{ name, day, start, end, ...(room ? { room } : {}), ...(kind ? { kind } : {}) }];
   });
 }
+
+/**
+ * When to study on a day around her classes (students part 37, like Reclaim.ai's free slots): for each length asked,
+ * the earliest free time between `from` and `to` that does not overlap a class (with 15 minutes' rest after each
+ * class) or a time already given; today, not before `now`. Undefined for one that does not fit.
+ *
+ * @param t - Her timetable.
+ * @param date - The day, "YYYY-MM-DD".
+ * @param minutes - The study pieces of that day, in order.
+ * @param opts - The day's window ("HH:MM") and the current time.
+ */
+export function freeSlots(t: Timetable, date: string, minutes: number[], opts: { from?: string; to?: string; now?: Date } = {}): Array<string | undefined> {
+  const day = new Date(`${date}T12:00`).getDay();
+  const now = opts.now ?? new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  let start = mins(opts.from ?? "16:00");
+  const end = mins(opts.to ?? "22:00");
+  if (date === today) start = Math.max(start, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15);
+  const busy = classesOn(t, day).map((s) => [mins(s.start), mins(s.end) + 15] as [number, number]);
+  const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return minutes.map((len) => {
+    let at = start;
+    for (;;) {
+      if (at + len > end) return undefined;
+      const hit = busy.find(([a, b]) => at < b && at + len > a);
+      if (!hit) break;
+      at = hit[1];
+    }
+    busy.push([at, at + len + 10]);
+    return hm(at);
+  });
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cleanTimetable, freeSlots, type Timetable } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -32,6 +33,9 @@ export function StudyPlans() {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: "", course: "", date: "" });
   const [busy, setBusy] = useState("");
+  // Her classes, so each step gets a suggested time in the free hours around them.
+  const [table, setTable] = useState<Timetable>(cleanTimetable({}));
+  useEffect(() => void api<Timetable>("/api/study/timetable").then((t) => setTable(cleanTimetable(t)), () => undefined), []);
   const load = () => void api<{ plans: Plan[]; calendar: boolean }>("/api/study/plans").then(setData, () => undefined);
   useEffect(() => {
     load();
@@ -68,11 +72,11 @@ export function StudyPlans() {
             <div key={k} className="plan-day">
               <span className="muted small plan-day-name">{dayName(k)}</span>
               <div className="plan-day-items">
-                {days.get(k)!.map(({ plan, step, i, tone }) => (
+                {(() => { const open = days.get(k)!.filter((x) => !x.step.done); const at = freeSlots(table, k, open.map((x) => x.step.minutes)); return days.get(k)!.map((x) => ({ ...x, at: x.step.done ? undefined : at[open.indexOf(x)] })); })().map(({ plan, step, i, tone, at }) => (
                   <label key={`${plan.id}-${i}`} className={`plan-step${step.done ? " done" : ""}`} style={{ borderColor: tone }}>
                     <input type="checkbox" checked={!!step.done} onChange={(e) => void run(`s${plan.id}${i}`, () => api(`/api/study/plans/${plan.id}/steps/${i}`, { method: "POST", body: { done: e.target.checked } }))} />
                     <span className="grow" dir="auto">{step.title}<span className="muted small"> · {plan.title}</span></span>
-                    <span className="muted small">{step.minutes}{L(" דק׳", " min")}</span>
+                    <span className="muted small">{at && <span title={L("זמן פנוי מוצע, מחוץ לשיעורים", "A suggested free time, outside your classes")}>🕓 {at} · </span>}{step.minutes}{L(" דק׳", " min")}</span>
                   </label>
                 ))}
               </div>

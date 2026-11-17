@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classNow, classRemindNow, classesOn, cleanTimetable } from "./timetable.js";
+import { classNow, classRemindNow, classesOn, cleanTimetable, freeSlots } from "./timetable.js";
 
 const t = cleanTimetable({
   slots: [
@@ -52,4 +52,12 @@ test("classes read from a schedule photo are checked", async () => {
     { name: "תרגול", day: 3, start: "14:00", end: "15:30" },
   ]);
   assert.deepEqual(cleanReadClasses("no"), []);
+});
+
+test("freeSlots: study time after classes, not on top of them or of each other", () => {
+  const t = cleanTimetable({ slots: [{ id: "a", courseId: "c1", day: 2, start: "16:00", end: "18:00" }] });
+  // 2026-11-17 is a Tuesday (day 2).
+  assert.deepEqual(freeSlots(t, "2026-11-17", [45, 30], { now: new Date("2026-11-10T09:00") }), ["18:15", "19:10"]);
+  assert.deepEqual(freeSlots(t, "2026-11-18", [60], { now: new Date("2026-11-10T09:00") }), ["16:00"]);
+  assert.deepEqual(freeSlots(t, "2026-11-17", [400], { now: new Date("2026-11-10T09:00") }), [undefined]);
 });

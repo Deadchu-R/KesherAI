@@ -2097,4 +2097,5 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - MyStudyLife (10M+ students): add classes by hand (days, times, rotation weeks), then exams and tasks; its 2026 "AI Schedule Scan" turns a photo of the timetable into the schedule. Eduplanner: a syllabus file becomes a board of deadlines and topics. Reclaim.ai puts study goals into free calendar slots.
 - KesherAI has: a timetable from a photo (computer and phone), a syllabus reader (exams, assignments, weekly topics), Moodle, "My week", goals; but the first visit asked for one course by name.
 - Built (2026-11-17, design StudyWelcomePhoto): the first visit offers "all my courses from a photo of the timetable": each course is opened and every class goes into the timetable, then the goal step as before.
-- Stopped at: built; next idea (not built): study time put into the free hours between classes (Reclaim-like) inside "My week".
+- Built too: "My week" suggests a time for each step in the free hours around her classes (after 16:00, 15 minutes after a class, not on top of another step).
+- Stopped at: done.
