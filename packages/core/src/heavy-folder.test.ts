@@ -36,6 +36,7 @@ test("heavy folders: refuses a place inside the data folder, and suggests next t
   const root = await mkdtemp(join(tmpdir(), "kesher-root-"));
   const h = new HeavyFolder(root, async () => undefined);
   assert.throws(() => h.start(join(root, "big"), ["engines"]), /outside/);
-  assert.equal(suggestHeavyDir("/mnt/e/KesherAI/models", root), "/mnt/e/KesherAI");
+  const elsewhere = await mkdtemp(join(tmpdir(), "kesher-e-"));
+  assert.equal(suggestHeavyDir(join(elsewhere, "models"), root), elsewhere);
   assert.equal(suggestHeavyDir(join(root, "models"), root), undefined);
 });
