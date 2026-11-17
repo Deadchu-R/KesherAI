@@ -28,6 +28,11 @@ const load = async () => {
 };
 
 const pw = await load();
+// Accessibility (board t44, docs/DESIGN_RESEARCH.md §3 step 4): axe-core on every screen at computer width; "serious" and
+// "critical" findings fail the check, the others are listed. Rules can be skipped with a reason in A11Y_SKIP.
+const axeSource = await import("node:fs/promises").then((fs) => fs.readFile(createRequire(join(root, "package.json")).resolve("axe-core/axe.min.js"), "utf8"));
+const A11Y_SKIP = {};
+const a11yNotes = [];
 await mkdir(out, { recursive: true });
 const data = await mkdtemp(join(tmpdir(), "kesher-ui-"));
 const server = spawn(process.execPath, [join(root, "packages/core/dist/main.js"), "--port", String(port), "--data-dir", data, "--no-autodetect"], { stdio: "ignore", env: { ...process.env, KESHER_NO_BEACON: "1" } });
@@ -49,7 +54,8 @@ try {
   const pages = [...PAGES, `#/c/${fake.id}`];
   const browser = await pw.chromium.launch();
   for (const [w, h, name] of [[1280, 800, "computer"], [390, 844, "phone"], [360, 780, "small-phone"]]) {
-    const page = await browser.newPage({ viewport: { width: w, height: h } });
+    // axe runs as a script added to the page, which the app's own CSP would refuse (only at computer width).
+    const page = await browser.newPage({ viewport: { width: w, height: h }, ...(name === "computer" ? { bypassCSP: true } : {}) });
     await page.route(`**/api/conversations/${fake.id}`, fakeChat);
     let current = "";
     page.on("pageerror", (e) => problems.push(`${name} ${current}: page error: ${e.message}`));
@@ -86,6 +92,18 @@ try {
         }
         return { wide: document.documentElement.scrollWidth - W, bad };
       });
+      if (name === "computer") {
+        await page.addScriptTag({ content: axeSource });
+        const found = await page.evaluate(async (skip) => {
+          const r = await window.axe.run(document, { resultTypes: ["violations"], rules: Object.fromEntries(Object.keys(skip).map((k) => [k, { enabled: false }])) });
+          return r.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, where: v.nodes.slice(0, 2).map((n) => n.target.join(" ")).join(" | "), n: v.nodes.length }));
+        }, A11Y_SKIP);
+        for (const v of found) {
+          const line = `${p}: ${v.id} (${v.impact}, ${v.n}×): ${v.help} — ${v.where}`;
+          if (v.impact === "serious" || v.impact === "critical") problems.push(`accessibility ${line}`);
+          else a11yNotes.push(line);
+        }
+      }
       if (measured.wide > 2) problems.push(`${name} ${p}: the page is ${measured.wide}px wider than the screen (it scrolls sideways)`);
       if (measured.bad.length) problems.push(`${name} ${p}: past the screen's edge: ${measured.bad.join(", ")}`);
       const file = `${name}-${p.replace(/^#\//, "").replace(/[^\w-]+/g, "_") || "home"}.png`;
@@ -196,6 +214,7 @@ try {
 } finally {
   server.kill();
 }
+if (a11yNotes.length) console.log(`Accessibility notes (not failing):\n${a11yNotes.map((n) => `- ${n}`).join("\n")}`);
 if (problems.length) {
   console.error(`Interface check: ${problems.length} problem(s)\n${problems.map((p) => `- ${p}`).join("\n")}\nPictures: ${out}`);
   process.exit(1);

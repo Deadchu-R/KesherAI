@@ -157,7 +157,7 @@ function DeckList() {
     location.hash = `#/slides/${d.id}`;
   };
   return (
-    <main className="page slides-page">
+    <div className="page slides-page">
       <header className="page-head row">
         <h1>📑 {L("מצגות", "Slides")}</h1>
         <span className="grow" />
@@ -168,7 +168,7 @@ function DeckList() {
       {!decks ? <p className="muted">…</p> : !decks.length ? <p className="muted">{L("עוד אין מצגות.", "No decks yet.")}</p> : (
         <ul className="slides-list">{decks.map((d) => <li key={d.id}><a href={`#/slides/${d.id}`} className="card"><b dir="auto">{d.title}</b><span className="muted small">{L(`${d.slides} שקופיות`, `${d.slides} slides`)} · {new Date(d.updatedAt).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB")}</span></a></li>)}</ul>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -214,7 +214,7 @@ function DeckEditor({ id }: { id: string }) {
       }
     }, 700);
   };
-  if (!deck) return <main className="page"><p className="muted">…</p></main>;
+  if (!deck) return <div className="page"><p className="muted">…</p></div>;
   const slides = deck.slides;
   const cur = slides[Math.min(at, slides.length - 1)];
   const setSlides = (s: Slide[]) => save({ ...deck, slides: s });
@@ -250,7 +250,7 @@ function DeckEditor({ id }: { id: string }) {
     }
   };
   return (
-    <main className="page slides-editor">
+    <div className="page slides-editor">
       <div className="slides-bar">
         <a href="#/slides" className="link">‹</a>
         <Editable edit value={deck.title} onChange={(v) => save({ ...deck, title: v || deck.title })} className="slides-name" placeholder={L("שם המצגת", "Deck name")} />
@@ -319,6 +319,6 @@ function DeckEditor({ id }: { id: string }) {
         )}
       </div>
       {present && <Present deck={deck} from={at} onClose={() => { setPresent(false); if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined); }} />}
-    </main>
+    </div>
   );
 }

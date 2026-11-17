@@ -155,7 +155,7 @@ export function PersonasPage() {
       {!draft && <PersonaFile />}
       {!draft && (
         <section className="card">
-          <h3>{L("להתחיל מתבנית", "Start from a template")}</h3>
+          <h2>{L("להתחיל מתבנית", "Start from a template")}</h2>
           <div className="persona-templates">
             {templates.map((tp) => (
               <button key={tp.name} type="button" onClick={() => setDraft({ ...tp, name: localName(tp.name) })}>
@@ -202,7 +202,7 @@ function FoundPersonas() {
   };
   return (
     <section className="card stack">
-      <h3>{L("נמצאו באפליקציות אחרות במחשב", "Found in other apps on this computer")}</h3>
+      <h2>{L("נמצאו באפליקציות אחרות במחשב", "Found in other apps on this computer")}</h2>
       <p className="muted small">{L("presets של LM Studio ומודלים של Ollama שנבנו עם Modelfile. ההוראות, ההגדרות והדוגמאות שלהם עוברים, והקבצים המקוריים רק נקראים.", "LM Studio presets and Ollama models built with a Modelfile. Their instructions, settings and examples come along; the original files are only read.")}</p>
       <ul className="list">
         {found.map((f) => (

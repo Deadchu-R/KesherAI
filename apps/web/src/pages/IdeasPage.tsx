@@ -26,7 +26,7 @@ export function IdeasPage() {
   const load = () => void api<{ sessions: Row[] }>("/api/ideas").then((r) => setSessions(r.sessions), (e: Error) => toast(e.message));
   useEffect(load, []);
   return (
-    <main className="page ideas-page">
+    <div className="page ideas-page">
       <header className="page-head">
         <h1>🧠 {L("מוח פתוח", "Open mind")}</h1>
         <p className="muted">{L("ממלמלים כל רעיון שעולה, בלי לסנן. בסוף KesherAI מוציא את הרעיונות, ממיין אותם ומציע מחקר.", "Mumble every idea that comes, unfiltered. Then KesherAI pulls out the ideas, sorts them and offers research.")}</p>
@@ -53,7 +53,7 @@ export function IdeasPage() {
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
 

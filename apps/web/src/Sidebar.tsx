@@ -706,6 +706,9 @@ function SidebarGrip() {
       className="sidebar-grip"
       role="separator"
       aria-orientation="vertical"
+      aria-valuenow={Math.round(width())}
+      aria-valuemin={SIDE_MIN}
+      aria-valuemax={SIDE_MAX}
       aria-label={getLocale() === "he" ? "שינוי רוחב סרגל הצד" : "Resize the sidebar"}
       tabIndex={0}
       onPointerDown={start}

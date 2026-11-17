@@ -89,7 +89,7 @@ function DocList() {
     location.hash = `#/docs/${d.id}`;
   };
   return (
-    <main className="page slides-page">
+    <div className="page slides-page">
       <header className="page-head row">
         <h1>📝 {L("מסמכים", "Documents")}</h1>
         <span className="grow" />
@@ -100,7 +100,7 @@ function DocList() {
       {!docs ? <p className="muted">…</p> : !docs.length ? <p className="muted">{L("עוד אין מסמכים.", "No documents yet.")}</p> : (
         <ul className="slides-list">{docs.map((d) => <li key={d.id}><a href={`#/docs/${d.id}`} className="card"><b dir="auto">{d.title}</b><span className="muted small">{L(`${d.words} מילים`, `${d.words} words`)} · {new Date(d.updatedAt).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB")}</span></a></li>)}</ul>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -148,7 +148,7 @@ function DocEditor({ id }: { id: string }) {
       }
     }, 800);
   };
-  if (!doc) return <main className="page"><p className="muted">…</p></main>;
+  if (!doc) return <div className="page"><p className="muted">…</p></div>;
   const blocks = toBlocks(doc.body);
   const setBlocks = (b: string[]) => save({ ...doc, body: b.filter((x) => x.trim()).join("\n\n") });
   const commit = () => {
@@ -222,7 +222,7 @@ function DocEditor({ id }: { id: string }) {
     }
   };
   return (
-    <main className="page docs-editor">
+    <div className="page docs-editor">
       <div className="slides-bar">
         <a href="#/docs" className="link">‹</a>
         <input className="docs-title" dir="auto" value={doc.title} onChange={(e) => save({ ...doc, title: e.target.value })} aria-label={L("שם המסמך", "Document name")} />
@@ -263,6 +263,6 @@ function DocEditor({ id }: { id: string }) {
         <input dir="auto" value={ask} onChange={(e) => setAsk(e.target.value)} placeholder={`✨ ${L("לבקש מהמודל: \"תקצר את הסעיף על…\", \"תוסיף טבלת השוואה\"", "Ask the model: \"shorten the part on…\", \"add a comparison table\"")}`} />
         <button type="submit" disabled={!ask.trim()}>{L("שליחה", "Send")}</button>
       </form>
-    </main>
+    </div>
   );
 }

@@ -625,6 +625,8 @@ export function ConversationPage({ id }: { id: string }) {
           </div>,
           document.body,
         )}
+      {/* The page's heading for screen readers (the title shows in the top bar). */}
+      <h1 className="sr-only">{title}</h1>
       {slot && createPortal(
         editingTitle ? (
           <form className="bar-rename" onSubmit={(e) => { e.preventDefault(); setEditingTitle(false); void patch({ title: (e.currentTarget.elements.namedItem("title") as HTMLInputElement).value }); }}>

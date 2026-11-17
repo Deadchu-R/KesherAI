@@ -1367,7 +1367,8 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: calc(12px * var
 .welcome-tool-text b { font-weight: 600; }
 .app-tile-pin { height: auto; }
 .foot-btn { padding: 0; height: 34px; border: 0; background: none; font-size: 13px; font-weight: 600; }
-.sidebar-foot .brand.small-brand { opacity: 0.8; }
+/* Full opacity: at 0.8 its small text fell under the contrast minimum (axe, t44). */
+.sidebar-foot .brand.small-brand { color: var(--muted); }
 .sidebar-foot .brand.small-brand small { font-size: 10.5px; }
 .phone-tabs button.tab { height: auto; padding: 6px 0; border: 0; background: none; }
 .phone-tabs { touch-action: none; user-select: none; -webkit-user-select: none; }

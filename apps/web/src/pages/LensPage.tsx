@@ -132,11 +132,11 @@ export function LensPage({ id }: { id?: string }) {
   };
   if (!shot)
     return (
-      <main className="page lens-pick">
+      <div className="page lens-pick">
         <h1>🔍 {L("עדשה", "Lens")}</h1>
         <p className="muted">{L("בוחרים צילום מסך או תמונה, מסמנים חלק, ושואלים, מחפשים, מתרגמים או מסכמים. במחשב: Ctrl+Alt+L מכל מקום.", "Choose a screenshot or a picture, mark a part, then ask, search, translate or summarize. On the computer: Ctrl+Alt+L from anywhere.")}</p>
         <label className="button primary">{L("בחירת תמונה", "Choose a picture")}<input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void pick(f); }} /></label>
-      </main>
+      </div>
     );
   const down = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest(".lens-bar, .lens-card")) return;

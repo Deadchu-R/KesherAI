@@ -36,7 +36,7 @@ function SheetList() {
     location.hash = `#/sheets/${s.id}`;
   };
   return (
-    <main className="page slides-page">
+    <div className="page slides-page">
       <header className="page-head row">
         <h1>📊 {L("גיליונות", "Sheets")}</h1>
         <span className="grow" />
@@ -47,7 +47,7 @@ function SheetList() {
       {!sheets ? <p className="muted">…</p> : !sheets.length ? <p className="muted">{L("עוד אין גיליונות.", "No sheets yet.")}</p> : (
         <ul className="slides-list">{sheets.map((d) => <li key={d.id}><a href={`#/sheets/${d.id}`} className="card"><b dir="auto">{d.title}</b><span className="muted small">{L(`${d.cells} תאים`, `${d.cells} cells`)} · {new Date(d.updatedAt).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB")}</span></a></li>)}</ul>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -93,7 +93,7 @@ function SheetEditor({ id }: { id: string }) {
       }
     }, 600);
   };
-  if (!sheet) return <main className="page"><p className="muted">…</p></main>;
+  if (!sheet) return <div className="page"><p className="muted">…</p></div>;
   const set = (a: string, v: string) => {
     const cells = { ...sheet.cells };
     if (v === "") delete cells[a];
@@ -153,7 +153,7 @@ function SheetEditor({ id }: { id: string }) {
   };
   const raw = sheet.cells[cur] ?? "";
   return (
-    <main className="page docs-editor sheets-editor">
+    <div className="page docs-editor sheets-editor">
       <div className="slides-bar">
         <a href="#/sheets" className="link">‹</a>
         <input className="docs-title" dir="auto" value={sheet.title} onChange={(e) => { setSheet({ ...sheet, title: e.target.value }); meta.current.title = e.target.value; flush(); }} aria-label={L("שם הגיליון", "Sheet name")} />
@@ -206,6 +206,6 @@ function SheetEditor({ id }: { id: string }) {
         <input dir="auto" value={ask} onChange={(e) => setAsk(e.target.value)} placeholder={`✨ ${L("לבקש מהמודל: \"תוסיף עמודה של ציון מבוקש\", \"תמיין לפי ציון\"", "Ask the model: \"add a column for the grade I need\", \"sort by grade\"")}`} />
         <button type="submit" disabled={!ask.trim()}>{L("שליחה", "Send")}</button>
       </form>
-    </main>
+    </div>
   );
 }
