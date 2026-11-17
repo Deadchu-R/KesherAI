@@ -1123,6 +1123,13 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 135 (2026-11-18): "this question is wrong", asking the course by voice, the test profile
+- **Question check (computer)**: `POST /api/study/courses/:id/quiz/:qid/questions/:n/check` finds the question by index (a number that is not a question gives 404); her own answer must be a whole number within the options (400 otherwise). The model's reply is read as JSON only: the verdict is one of three words, the option is bounds-checked, the quote and the explanation are cut to 300 and 600 characters. A lecture that tries to steer the model can at most change the key of a question in her own quiz, which she sees marked "fixed". It sends one model call per tap (lecture cut to 40,000 characters, with the context fallback from scan 134). The answers are shown as text (React and a toast; no HTML).
+- **Question check (phone)**: the same prompt and parser on the phone's model; the result is drawn with text nodes. A removed question leaves the saved quiz, which copies only the question's known fields.
+- **Ask by voice (phone)**: the microphone opens only on her tap and closes on the second tap (the tracks stopped, the audio context closed); the audio is transcribed on the phone and not kept. 🔊 hands only the answer's text to the phone's own voice.
+- **Test profile**: a set `KESHER_DATA_DIR` now also moves the window profile (`<data>/ui`), so a test copy does not share cookies or storage with the everyday KesherAI. The self-work worker keeps its own rule; without the variable nothing changes.
+- **Performance**: nothing runs until she taps; no new background work.
+
 ## Scan 134 (2026-11-18): fitting the model's context everywhere, Try again on a report, check_code's Unreal scope
 - **Context fallbacks (computer Study, the course tutor, chat reports, the phone)**: each is bounded (two or three more tries, each shorter; aborting stops them) and only on errors that name the context; any other error is reported as before. The cut keeps the start of the material and says that the rest was cut, so the model is not misled into thinking it saw everything. No new data is kept.
 - **Try again on a failed report**: `POST /api/chat-reports/:id/retry` works only for a report in the error state, refuses one being written (409), reads the chat already stored for it; it uses the same model choice rules as the first run.
