@@ -7,10 +7,12 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB } from "./vendor/study-core.js";
+import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
+const TABLE_KEY = "kesherai-timetable";
+const DAYS = [["א׳", "Sun"], ["ב׳", "Mon"], ["ג׳", "Tue"], ["ד׳", "Wed"], ["ה׳", "Thu"], ["ו׳", "Fri"], ["ש׳", "Sat"]];
 
 /**
  * The extra study views and pieces, drawn with the phone page's own helpers.
@@ -343,6 +345,7 @@ export function studyPlus(x) {
     const b = el("button", { type: "button", class: "primary" }, L("🎙 להתחיל", "🎙 Start"));
     b.onclick = async () => {
       if (rec) { const r = rec; rec = null; return r.stop(); }
+      if (!(await x.speech.available?.().catch(() => false))) return alert(L("בגרסה הזאת של האפליקציה אין מנוע דיבור. עדכני את האפליקציה.", "This build of the app has no speech engine. Update the app."));
       if (!(await x.speech.hasModel().catch(() => false))) return alert(L("קודם הכיני את זיהוי הדיבור בטלפון: הקליטי הרצאה פעם אחת (🎙 הקלט הרצאה) והאפליקציה תוריד אותו.", "First set up speech on the phone: record a lecture once (🎙 Record a lecture) and the app downloads it."));
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return alert(L("אין גישה למיקרופון.", "No microphone access.")); }
@@ -504,5 +507,75 @@ export function studyPlus(x) {
     x.root.append(section("", text, b), out);
   }
 
-  return { courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english } };
+  // ---------- the timetable, typed or read from a photo ----------
+  const loadTable = () => { try { return cleanTimetable(JSON.parse(localStorage.getItem(TABLE_KEY) || "{}")); } catch { return cleanTimetable({}); } };
+  const saveTable = (t) => { try { localStorage.setItem(TABLE_KEY, JSON.stringify(t)); return true; } catch { alert(L("אין מקום לשמור.", "No room to save.")); return false; } };
+  const courseName = (id) => x.db().courses.find((c) => c.id === id)?.name ?? "";
+
+  /** On the home page: the class she is in now, or one starting within 10 minutes. */
+  function classBanner() {
+    const t = loadTable();
+    const n = t.slots.length && classNow(t, new Date());
+    if (!n) return "";
+    const name = courseName(n.slot.courseId);
+    return el("section", { class: "api" }, el("b", { dir: "auto" }, n.state === "now" ? L(`🏫 עכשיו: ${name} · עוד ${n.minutes} דק׳`, `🏫 Now: ${name} · ${n.minutes} min left`) : L(`🏫 בעוד ${n.minutes} דק׳: ${name}`, `🏫 In ${n.minutes} min: ${name}`)), n.slot.room ? el("small", { class: "muted" }, n.slot.room) : "",
+      btns(x.speech && el("button", { type: "button", onclick: () => go({ at: "record", course: n.slot.courseId }) }, L("🎙 להקליט את השיעור", "🎙 Record the class")), el("button", { type: "button", onclick: () => go({ at: "course", course: n.slot.courseId }) }, L("לקורס", "To the course"))));
+  }
+
+  /** Her week: classes by day, added by hand or read from a photo of the schedule (the phone reads it, its model sorts it). */
+  function timetable() {
+    const t = loadTable();
+    const courses = x.db().courses;
+    x.root.append(back({ at: "home" }), el("h2", {}, L("🗓 מערכת שעות", "🗓 Timetable")));
+    const days = [0, 1, 2, 3, 4, 5].filter((d) => classesOn(t, d).length);
+    x.root.append(section("", ...(days.length ? days.map((d) => el("div", {}, el("b", {}, L(`יום ${DAYS[d][0]}`, DAYS[d][1])),
+      ...classesOn(t, d).map((s) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, `${s.start}–${s.end} · ${courseName(s.courseId) || L("קורס שנמחק", "A deleted course")}${s.room ? ` · ${s.room}` : ""}`),
+        el("button", { type: "button", "aria-label": L("להסיר", "Remove"), onclick: () => { t.slots = t.slots.filter((y) => y.id !== s.id); if (saveTable(t)) x.draw(); } }, "✕"))))) : [el("p", { class: "muted" }, L("עוד אין שיעורים. אפשר להוסיף ידנית או מצילום של המערכת.", "No classes yet. Add them by hand or from a photo of your schedule."))])));
+    if (courses.length) {
+      const course = el("select", { "aria-label": L("קורס", "Course") }, ...courses.map((c) => el("option", { value: c.id }, c.name)));
+      const day = el("select", { "aria-label": L("יום", "Day") }, ...[0, 1, 2, 3, 4, 5].map((d) => el("option", { value: String(d) }, L(`יום ${DAYS[d][0]}`, DAYS[d][1]))));
+      const start = el("input", { type: "time", value: "10:00", "aria-label": L("התחלה", "Start") });
+      const end = el("input", { type: "time", value: "12:00", "aria-label": L("סוף", "End") });
+      const room = el("input", { dir: "auto", placeholder: L("חדר", "Room"), style: "width: 90px" });
+      x.root.append(section(L("הוספת שיעור", "Add a class"), el("div", { class: "ph-filter", style: "flex-wrap: wrap" }, course, day, start, end, room,
+        el("button", { type: "button", class: "primary", onclick: () => {
+          const next = cleanTimetable({ ...t, slots: [...t.slots, { id: `t${uid().slice(0, 8)}`, courseId: course.value, day: Number(day.value), start: start.value, end: end.value, room: room.value }] });
+          if (next.slots.length === t.slots.length) return alert(L("השעות לא תקינות: הסוף צריך להיות אחרי ההתחלה.", "The times are not valid: the end must be after the start."));
+          if (saveTable(next)) x.draw();
+        } }, L("הוספה", "Add")))));
+    }
+    if (x.extract) {
+      const found = el("div");
+      const shot = el("input", { type: "file", accept: "image/*", hidden: true, onchange: async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        found.replaceChildren(el("p", { class: "muted small" }, L("קורא את הצילום… (בטלפון זה לוקח זמן)", "Reading the photo… (this takes a while on a phone)")));
+        let text;
+        try { text = (await x.extract({ name: "timetable.jpg", data: globalThis.btoa(bin) }))?.text; } catch (err) { return found.replaceChildren(el("p", { class: "muted" }, String(err?.message || err))); }
+        if (!text) return found.replaceChildren(el("p", { class: "muted" }, L("לקריאת צילום: בחרי מודל שרואה תמונות (כמו Gemma 4), או התחברי למחשב.", "To read a photo: choose a model that sees pictures (like Gemma 4), or connect to the computer.")));
+        const r = await need([{ role: "system", content: TIMETABLE_PHOTO_PROMPT.replace("You read a photo or screenshot", "You read the text of a photo or screenshot") }, { role: "user", content: `The schedule's text:\n${String(text).slice(0, 6000)}` }]);
+        const list = r === undefined ? [] : cleanReadClasses(jsonIn(r));
+        if (!list.length) return found.replaceChildren(el("p", { class: "muted" }, L("לא נמצאו שיעורים בצילום. נסי צילום חד יותר או צילום מסך של המערכת.", "No classes were found. Try a sharper photo or a screenshot of the schedule.")));
+        const match = (name) => courses.find((c) => c.name.trim() === name.trim() || c.name.includes(name) || name.includes(c.name));
+        found.replaceChildren(section(L(`נמצאו ${list.length} שיעורים`, `${list.length} classes found`),
+          ...list.map((k) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, `${L(`יום ${DAYS[k.day][0]}`, DAYS[k.day][1])} ${k.start}–${k.end} · ${k.name}${k.room ? ` · ${k.room}` : ""}`), el("small", { class: "muted" }, match(k.name) ? L("✓ קורס קיים", "✓ Existing course") : L("+ קורס חדש", "+ New course")))),
+          el("button", { type: "button", class: "primary", onclick: () => {
+            const slots = [...t.slots];
+            for (const k of list) {
+              let c = match(k.name);
+              if (!c) { c = { id: uid(), name: k.name.slice(0, 80), createdAt: Date.now(), field: detectField(k.name, ""), lectures: [], cards: [], reviews: [], quizzes: [] }; x.db().courses.push(c); courses.push(c); }
+              slots.push({ id: `t${uid().slice(0, 8)}`, courseId: c.id, day: k.day, start: k.start, end: k.end, ...(k.room ? { room: k.room } : {}), ...(k.kind ? { kind: k.kind } : {}) });
+            }
+            if (commit() && saveTable(cleanTimetable({ ...t, slots }))) x.draw();
+          } }, L("להוסיף את כולם למערכת", "Add them all to the timetable"))));
+      } });
+      x.root.append(section(L("מצילום של המערכת", "From a photo of the schedule"), el("p", { class: "muted small" }, L("צילום מסך מהפורטל או צילום של הדף. קורסים חדשים נוצרים לבד.", "A screenshot from the portal or a photo of the page. New courses are made for you.")), shot, el("button", { type: "button", onclick: () => shot.click() }, L("📷 בחירת צילום", "📷 Choose a photo")), found));
+    }
+  }
+
+  return { courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english, timetable }, classBanner };
 }

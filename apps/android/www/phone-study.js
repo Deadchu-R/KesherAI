@@ -515,7 +515,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
 
   function home() {
     scheduleReminders();
-    if (db.courses.length) root.append(searchBox(), nextCard(), focusCard());
+    if (db.courses.length) root.append(plus.classBanner(), searchBox(), nextCard(), focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);
@@ -526,6 +526,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", onclick: () => go({ at: "calc" }) }, L("חישובי תרופות", "Medication calculations")),
         el("button", { type: "button", onclick: () => go({ at: "labs" }) }, L("ערכי מעבדה", "Lab values"))),
       el("div", { class: "ph-btns", style: "flex-wrap: wrap" },
+        el("button", { type: "button", onclick: () => go({ at: "timetable" }) }, L("🗓 מערכת שעות", "🗓 Timetable")),
         el("button", { type: "button", onclick: () => go({ at: "grades" }) }, L("🎓 ציונים ותואר", "🎓 Grades and degree")),
         el("button", { type: "button", onclick: () => go({ at: "english" }) }, L("📘 אנגלית אקדמית", "📘 Academic English"))),
       el("button", { type: "button", onclick: () => go({ at: "benefits" }) }, L("הטבות לסטודנטים", "Student benefits")),
