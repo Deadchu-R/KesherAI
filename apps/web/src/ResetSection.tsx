@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
-import { toast } from "./library";
+import { desktop, toast } from "./library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -34,6 +34,12 @@ export function ResetSection() {
       <h2>{L("איפוס והתקנה מחדש", "Reset and reinstall")}</h2>
       {info.justReset && <p className="good small">{L("KesherAI התחיל מאפס. הגיבוי של מה שהיה נמצא ב:", "KesherAI started over. The backup of what was there is in:")} <code dir="ltr">{info.justReset}</code></p>}
       <p className="muted small">{L("כל איפוס שומר גיבוי, ושום דבר לא נמחק.", "Every reset keeps a backup; nothing is deleted.")}</p>
+      {!isRemote() && desktop()?.openPath && (
+        <div className="row">
+          <span className="muted small grow">{L("יומן האפליקציה (main.log): מה קרה ולמה האפליקציה נסגרה, אם נסגרה.", "The app log (main.log): what happened, and why the app closed if it did.")}</span>
+          <button type="button" className="ghost" onClick={() => void api<{ folder: string }>("/api/logs/folder").then((r) => desktop()!.openPath!(r.folder), (e: Error) => toast(e.message))}>{L("פתח את תיקיית היומן", "Open the log folder")}</button>
+        </div>
+      )}
 
       <div className="reset-row">
         <div>

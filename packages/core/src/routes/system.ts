@@ -192,6 +192,12 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
     });
 
     /** HTTPS through Tailscale (a real certificate for this computer's tailnet name). */
+    /** Where the app's log (main.log) is, for "Open the app log's folder" (this computer only; t129). */
+    app.get("/api/logs/folder", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      return { folder: join(s.paths.root, "logs") };
+    });
+
     app.get("/api/remote/https", async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
       return tailscale.status(s.config.port);
