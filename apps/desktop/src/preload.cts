@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
     return () => ipcRenderer.removeListener("kesher:dictate-stop", on);
   },
   /** The global keys' state ("ok", "taken" by another program, "off"); `true` registers them again after a change. */
+  /** The screen lens window: "close", or "open" a chat (#/c/<id>) in the main window. */
+  lens: (cmd: "close" | "open", hash?: string): Promise<{ ok?: boolean; error?: string }> => ipcRenderer.invoke("kesher:lens", cmd, hash),
   keys: (reload?: boolean): Promise<Record<string, "ok" | "taken" | "off">> => ipcRenderer.invoke("kesher:keys", reload === true),
   /** The dictation key was pressed again with the bar hidden: listen again (the bar stays loaded). */
   onDictateStart: (fn: () => void): (() => void) => {

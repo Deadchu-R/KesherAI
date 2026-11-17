@@ -74,6 +74,7 @@ const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default:
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
 const StremioPage = lazy(() => import("./pages/StremioPage").then((m) => ({ default: m.StremioPage })));
+const LensPage = lazy(() => import("./pages/LensPage").then((m) => ({ default: m.LensPage })));
 const SheetsPage = lazy(() => import("./pages/SheetsPage").then((m) => ({ default: m.SheetsPage })));
 const DocsPage = lazy(() => import("./pages/DocsPage").then((m) => ({ default: m.DocsPage })));
 const SlidesPage = lazy(() => import("./pages/SlidesPage").then((m) => ({ default: m.SlidesPage })));
@@ -342,6 +343,8 @@ export function App() {
   if (hash.startsWith("#/game/")) return <GameHelper hash={hash} />;
   if (hash.startsWith("#/text/")) return <TextHelper hash={hash} />;
   if (hash === "#/dictate") return <Dictate />;
+  // The screen lens: the frozen screen (its own window) or a chosen picture, nothing else on the page.
+  if (hash === "#/lens" || hash.startsWith("#/lens/") || hash.startsWith("#/lens?")) { const lid = /^#\/lens\/([\w-]+)/.exec(hash)?.[1]; return <Suspense fallback={null}><LensPage key={lid ?? "pick"} {...(lid ? { id: lid } : {})} /></Suspense>; }
   // The avatar camera for OBS: only the video.
   if (hash === "#/avatar-feed") return <AvatarFeed />;
   return (

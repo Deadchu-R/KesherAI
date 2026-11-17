@@ -381,6 +381,9 @@ function rememberWindow(win: BrowserWindow): void {
   win.on("close", save);
 }
 
+/** The app's main window (the lens's "continue in chat" opens there). */
+let mainWin: BrowserWindow | undefined;
+
 async function createWindow(url: string): Promise<void> {
   const last = lastWindow();
   const win = new BrowserWindow({
@@ -398,6 +401,7 @@ async function createWindow(url: string): Promise<void> {
       preload: join(import.meta.dirname, "preload.cjs"),
     },
   });
+  mainWin = win;
 
   // Recording a meeting: KesherAI's own page asks for the screen's sound ("loopback": what the call
   // plays) without a picker; the page keeps only the audio. Only for KesherAI's own address.
@@ -595,6 +599,7 @@ async function registerGlobalKeys(): Promise<Record<string, "ok" | "taken" | "of
     gameHelper: () => void toggleGameHelper(base),
     textHelper: () => void toggleTextHelper(base),
     dictate: () => void toggleDictation(base),
+    screenLens: () => void toggleLens(base),
   };
   globalShortcut.unregisterAll();
   const state: Record<string, "ok" | "taken" | "off"> = {};
@@ -620,6 +625,65 @@ async function registerGlobalKeys(): Promise<Record<string, "ok" | "taken" | "of
 ipcMain.handle("kesher:keys", async (event, reload: unknown) => {
   if (!fromApp(event)) return {};
   return reload === true ? await registerGlobalKeys() : globalKeyState;
+});
+
+let lensWin: BrowserWindow | undefined;
+
+/**
+ * The screen lens (design ScreenLens, like Circle to Search and Click to Do): the key captures the screen, then shows
+ * it frozen over the whole primary display, where she marks a part and picks an action. Pressed again, it closes.
+ *
+ * @param coreUrl - KesherAI's local address.
+ */
+async function toggleLens(coreUrl: string): Promise<void> {
+  if (lensWin && !lensWin.isDestroyed() && lensWin.isVisible()) {
+    lensWin.hide();
+    return;
+  }
+  const base = coreUrl.replace(/\/$/, "");
+  const r = (await fetch(`${base}/api/lens/capture`, { method: "POST", signal: AbortSignal.timeout(15_000) })
+    .then((x) => x.json())
+    .catch(() => ({}))) as { id?: string };
+  if (!r.id) return;
+  const bounds = displays.getPrimaryDisplay().bounds;
+  if (!lensWin || lensWin.isDestroyed()) {
+    lensWin = new BrowserWindow({
+      ...bounds,
+      frame: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      resizable: false,
+      movable: false,
+      backgroundColor: "#000000",
+      show: false,
+      icon: appIcon(),
+      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(import.meta.dirname, "preload.cjs") },
+    });
+    lensWin.setAlwaysOnTop(true, "screen-saver");
+    lensWin.webContents.setWindowOpenHandler(({ url: target }) => {
+      if (/^https?:\/\//.test(target)) void shell.openExternal(target);
+      return { action: "deny" };
+    });
+    lensWin.webContents.on("will-navigate", (event, target) => {
+      if (!target.startsWith(`${base}/`)) event.preventDefault();
+    });
+  } else lensWin.setBounds(bounds);
+  await lensWin.loadURL(`${base}/#/lens/${encodeURIComponent(r.id)}?overlay=1`);
+  lensWin.show();
+  lensWin.focus();
+}
+
+// The lens window: close itself, or open a chat in the main window ("continue in chat"). Only from the lens window.
+ipcMain.handle("kesher:lens", async (event, cmd: unknown, arg: unknown) => {
+  if (!fromApp(event) || !lensWin || lensWin.isDestroyed() || event.sender !== lensWin.webContents) return { error: "Not allowed." };
+  lensWin.hide();
+  if (cmd === "open" && typeof arg === "string" && /^#\/c\/[\w-]{1,80}$/.test(arg) && mainWin && !mainWin.isDestroyed()) {
+    // The hash was checked above (a chat id only), so it is safe to set as text.
+    await mainWin.webContents.executeJavaScript(`location.hash = ${JSON.stringify(arg)}`).catch(() => undefined);
+    mainWin.show();
+    mainWin.focus();
+  }
+  return { ok: true };
 });
 
 let dictWin: BrowserWindow | undefined;

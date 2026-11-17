@@ -21,6 +21,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "palette", scope: "app", key: "Ctrl+K", en: "Search and commands", he: "חיפוש ופקודות" },
   { id: "closePanes", scope: "app", key: "Ctrl+\\", en: "Close the chat's side panes", he: "סגירת החלוניות שליד הצ'אט" },
   { id: "textHelper", scope: "global", key: "Ctrl+Alt+K", mac: "Ctrl+Alt+K", en: "Text helper (selected text in any app)", he: "עוזר טקסט (טקסט מסומן בכל אפליקציה)" },
+  { id: "screenLens", scope: "global", key: "Ctrl+Alt+L", mac: "Ctrl+Alt+L", en: "Screen lens (ask, search, translate a part of the screen)", he: "עדשת מסך (לשאול, לחפש, לתרגם חלק מהמסך)" },
   { id: "dictate", scope: "global", key: "Ctrl+Alt+D", mac: "Ctrl+Alt+D", en: "Dictation into any app", he: "הכתבה לכל אפליקציה" },
   { id: "gameHelper", scope: "global", key: "Ctrl+Alt+G", mac: "Cmd+Alt+G", en: "Game helper", he: "עוזר משחקים" },
   { id: "stopComputer", scope: "global", key: "Ctrl+Alt+Escape", mac: "Cmd+Shift+Escape", en: "Stop computer control", he: "עצירת שליטה במחשב" },

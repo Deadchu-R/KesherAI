@@ -64,6 +64,8 @@ interface DesktopBridge {
   openDevice?(id: string): Promise<{ name?: string; error?: string }>;
   /** The Text Helper's "Replace" (only in its own window). Missing before 0.6.199. */
   textPaste?(text: string): Promise<{ pasted?: boolean; error?: string }>;
+  /** The screen lens window (Ctrl+Alt+L): close it, or open a chat in the main window. Missing before 0.6.337. */
+  lens?(cmd: "close" | "open", hash?: string): Promise<{ ok?: boolean; error?: string }>;
   /** The dictation bar (Ctrl+Alt+D). Missing before 0.6.205. */
   dictateDone?(text: string): Promise<{ pasted?: boolean; error?: string }>;
   onDictateStop?(fn: () => void): () => void;
