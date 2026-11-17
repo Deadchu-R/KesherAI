@@ -243,6 +243,7 @@ export class BrowserPane {
       await this.settle(t, 20_000);
       return this.inPage(t, "readPage()");
     }
+    if (action === "fab-search") return this.fabSearch(String(a.path ?? ""));
     const t = this.tab(a.tabId);
     if (action === "read") return this.inPage(t, "readPage()");
     if (action === "click") {
@@ -264,6 +265,21 @@ export class BrowserPane {
       return { dataUrl: img.toDataURL() };
     }
     throw new Error(`Unknown action ${action}`);
+  }
+
+  /**
+   * Fab's own search, run inside a fab.com tab (the user's Fab sign-in; Fab has no public API and answers only a real
+   * browser). Only its search route; a fab.com tab is opened when there is none.
+   */
+  private async fabSearch(path: string): Promise<{ status: number; json?: unknown }> {
+    if (!/^\/i\/listings\/search\?[\w%.=&+-]*$/.test(path)) throw new Error("Only Fab's listing search.");
+    let t = this.tabs.find((x) => /^https:\/\/www\.fab\.com\//.test(x.view.webContents.getURL()));
+    if (!t) {
+      t = await this.open("https://www.fab.com/", undefined, true);
+      await this.settle(t, 20_000);
+    }
+    const code = `fetch(${JSON.stringify(path)}, { credentials: "include", headers: { accept: "application/json" } }).then(async (r) => ({ status: r.status, json: r.ok && (r.headers.get("content-type") || "").includes("json") ? await r.json() : undefined }), () => ({ status: 0 }))`;
+    return (await t.view.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code }], true)) as { status: number; json?: unknown };
   }
 
   /**

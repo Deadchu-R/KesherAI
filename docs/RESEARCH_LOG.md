@@ -1743,3 +1743,16 @@ tools' own pages, against what was added tonight:
 - **Fab**: no public search API (the site's JSON search refuses plain requests); claiming and installing go through the Epic launcher or the Fab plugin inside Unreal 5.x with the user's sign-in. Plan: a chat tool that opens a Fab search in the browser and, for assets already in the library, Unreal's Fab plugin; nothing bought or claimed by KesherAI. Not built.
 - **Magic Tab** (suggestions while typing in any app): the apps that do it (Cotypist, Typeahead, Windows' own text suggestions) read the text around the caret through the accessibility API (UI Automation on Windows, AX on macOS), draw a small overlay at the caret and take a global key hook so Tab accepts only while a suggestion shows. In KesherAI that is a native piece (a key hook and UI Automation, a new dependency) plus a small model always loaded (~1 GB, e.g. Qwen 2.5 0.5B). Designed, not built tonight: it needs testing at the keyboard.
 - **UEFN/Verse**: Verse files live in Documents\Fortnite Projects\<P>\Plugins\<P>\Content and only UEFN compiles them (Verse → Build Verse Code). Built: list projects, read and write .verse devices from the chat.
+
+## Fab through KesherAI's browser pane (2026-11-17, morning; Roee's idea)
+- Roee: "open a channel behind the scenes and mirror its screen". Fab still has no public API; its site searches through
+  an undocumented JSON route, `/i/listings/search` (`q`, `is_free=1`, repeated `channels` / `listing_types` /
+  `categories`, `sort_by` such as `-relevance` or `-ratings.averageRating`, `count`, `currency`, `cursor`), which
+  Cloudflare answers for a real browser and refuses to plain requests.
+- Compared: threenative-asset-mcp (MIT, jonit-dev/fab-mcp) drives its own headless browser profile for the same route and
+  falls back to clicking; Epic's Fab plugin inside Unreal 5.4+ lists and adds owned assets.
+- Plan built: KesherAI's own browser pane (a real Chromium with his Fab sign-in) keeps a fab.com tab; `fab_search` runs
+  that search inside the tab (same site, his cookies) and returns titles, sellers, prices, ratings and links;
+  `fab_open` shows a listing in the pane beside the chat. He clicks "Add to my library" himself; KesherAI never adds,
+  claims or buys. In Unreal, Window → Fab adds library assets to the project.
+- Stopped at: built; to check on the PC (the route may change; the tool says so when Fab answers with a challenge).

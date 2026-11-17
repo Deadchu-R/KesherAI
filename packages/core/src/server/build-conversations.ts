@@ -7,6 +7,7 @@
 import { aboutUserNote } from "../user-profile.js";
 import { ConversationManager } from "../conversations.js";
 import { browserTools } from "../browser-bridge.js";
+import { fabTools } from "../fab-tools.js";
 import { canvasTools } from "../canvas.js";
 import { timerTools } from "../chat-timers.js";
 import { Checkpoints } from "../checkpoints.js";
@@ -152,6 +153,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
       ...googleTools(google),
       ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
       ...(config.parts.browser === false ? [] : browserTools(browser)),
+      ...(config.parts.browser === false || !browser.status().pane ? [] : fabTools(browser)),
       ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) })),
       ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
         spec,
