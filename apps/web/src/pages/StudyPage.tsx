@@ -9,6 +9,7 @@ import { parseFlow } from "../study-diagram";
 import { StudyRecorder } from "../StudyRecorder";
 import { AvatarCamera } from "./AvatarCamera";
 import { MoodleCard } from "../MoodleCard";
+import { StudyPlans } from "../StudyPlans";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -146,6 +147,7 @@ function StudyHome() {
       </section>
       <a className="study-avatar-link" href="#/study/benefits">{L("הטבות לסטודנטים: הנחה בתחבורה, תוכנות ו-AI בחינם", "Student benefits: transport discount, free software and AI")}</a>
       <a className="study-avatar-link" href="#/study/avatar">{L("מצלמת אווטאר לשיעורים בזום", "Avatar camera for Zoom lessons")}</a>
+      <StudyPlans />
       <MoodleCard courses={(courses ?? []).map((c) => ({ id: c.id, name: c.name }))} onAdded={load} />
       <h2>{L("הקורסים שלי", "My courses")}</h2>
       <label className="study-import small">

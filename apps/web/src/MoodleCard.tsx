@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
+import { planDue } from "./StudyPlans";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -92,6 +93,7 @@ export function MoodleCard({ courses, onAdded }: { courses: Array<{ id: string; 
                 <a key={d.id} className="moodle-due" href={d.url} target="_blank" rel="noreferrer" style={{ borderInlineStartColor: w.tone }}>
                   <span className="grow"><span dir="auto">{d.name}</span><span className="muted small" dir="auto">{d.course}</span></span>
                   <span className="moodle-when" style={{ color: w.tone, borderColor: w.tone }}>{w.text}</span>
+                  <button type="button" className="ghost small" title={L("פרק לשלבים בשבוע", "Break into steps in the week")} disabled={!!busy} onClick={(ev) => { ev.preventDefault(); void run(`plan${d.id}`, async () => { await planDue(d.name, d.course, d.due); toast(L("תוכנן ✓ ראה \"השבוע שלי\"", "Planned ✓ see \"My week\"")); }); }}>{busy === `plan${d.id}` ? "…" : "📅"}</button>
                 </a>
               );
             })}
