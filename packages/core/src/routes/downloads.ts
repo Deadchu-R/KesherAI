@@ -41,7 +41,9 @@ export function destinationFor(s: Pick<KesherServices, "paths" | "config">, body
     dest = join(base, "loras", fileName);
   } else {
     base = s.paths.models;
-    dest = join(base, body.category ?? "other", body.repo, body.path);
+    // A model file asked for without a category (the API, a script): a .gguf is a chat model, which is where the chat
+    // and Study look (found on the PC: a vision model landed in "other" and photos could not find it).
+    dest = join(base, body.category ?? (/\.gguf$/i.test(body.path) ? "chat" : "other"), body.repo, body.path);
   }
   const normalized = normalize(dest);
   if (!normalized.startsWith(normalize(base) + sep)) throw new Error("Invalid file path");
