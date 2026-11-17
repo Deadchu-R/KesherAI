@@ -89,7 +89,7 @@ const FROM_TEXT: Record<string, string> = {
   "+": "plus", "＋": "plus", "</>": "code", "▦": "grid", "⚙": "gear", "⚙️": "gear", "🔗": "link", "🎮": "gamepad", "🕹": "joystick", "🧠": "layers",
   "📁": "folder", "💬": "chat", "🎨": "palette", "✏": "pencil", "✏️": "pencil", "✎": "pencil", "🤖": "bot", "🛡": "shield", "🛡️": "shield", "🗑": "trash", "🗑️": "trash",
   "🖥": "monitor", "🖥️": "monitor", "📎": "paperclip", "🌐": "globe", "⬇": "download", "⟳": "refresh", "↻": "refresh", "🧩": "nodes", "🖍": "crayon", "🔬": "microscope",
-  "🔧": "wrench", "🔔": "bell", "🔌": "plug", "📷": "camera", "📱": "phone", "📲": "phone", "📦": "box", "📜": "scroll", "📚": "book", "📋": "clipboard", "📄": "page", "📝": "page", "📑": "chart",
+  "🔧": "wrench", "🔔": "bell", "🔌": "plug", "📷": "camera", "📱": "phone", "📲": "phone", "📦": "box", "📜": "scroll", "📚": "book", "📋": "clipboard", "📄": "page", "📝": "page", "📑": "chart", "🔍": "microscope",
   "🏢": "building", "🌙": "moon", "⭐": "star", "✨": "sparkle", "✦": "sparkle", "✕": "close", "✅": "check", "☁": "cloud", "☁️": "cloud", "◐": "half", "▶": "play", "⇄": "swap", "⌨": "keyboard", "⑂": "branch", "🔊": "speaker", "■": "stop", "⌨️": "keyboard",
   "🖼": "image", "🖼️": "image", "🗂": "stack", "🗂️": "stack", "🏋": "dumbbell", "🏋️": "dumbbell", "📅": "calendar", "⚖": "compare", "⚖️": "compare", "⛓": "flow", "⛓️": "flow",
   "🎭": "person", "👥": "people", "📊": "chart", "🧷": "puzzle", "🎛": "sliders", "🎛️": "sliders", "🩺": "pulse", "🎓": "cap", "⬆": "upload",
