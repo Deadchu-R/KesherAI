@@ -2061,7 +2061,8 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - NotebookLM: a deck from sources, each slide exported as one picture (not editable).
 - KesherAI already has: an Excalidraw canvas the model draws on live (canvas.ts: a JSON store, model tools, a live stream), HTML artifacts with versions, lecture slides (video overview), a PPTX writer and PDF printing.
 - Plan: a Deck document like the canvas: JSON slides (layouts: title, bullets, two columns, quote, picture; speaker notes; a theme), a store with versions and a live stream, model tools (deck_create, deck_update_slide, deck_add_slide…), an editor where she clicks any text to edit it, adds, removes and reorders slides, picks a theme, asks the AI to change one slide; present full screen with notes for the presenter; export PDF (no other program), PPTX optional; import a PPTX's text. A lecture's slides open as a deck. Docs and Sheets follow the same way.
-- Stopped at: research done; design next.
+- Built (2026-11-17, design DeckEditor, DocEditor, SheetEditor): decks.ts, docs.ts, sheets.ts with the chat's tools, the editors, present mode, PDF/PPTX (see part 2).
+- Stopped at: done.
 
 ## Students, part 36: the phone alone (2026-11-17, Roee: "everything that can work alone on the phone should")
 - Checked each study feature from parts 25-34 against what the phone has by itself: the shared code (study-core), its own model (chat and vision), speech to text, the phone's voice (pitch and rate), the internet.
