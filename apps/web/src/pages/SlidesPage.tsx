@@ -4,6 +4,7 @@ import { strToU8, zipSync } from "fflate";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { ImportFile } from "../ImportFile";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const LAYOUT_NAMES: Record<SlideLayout, [string, string]> = { title: ["כותרת", "Title"], bullets: ["נקודות", "Bullets"], two: ["שתי עמודות", "Two columns"], quote: ["ציטוט", "Quote"], picture: ["תמונה", "Picture"] };
@@ -160,6 +161,7 @@ function DeckList() {
       <header className="page-head row">
         <h1>📑 {L("מצגות", "Slides")}</h1>
         <span className="grow" />
+        <ImportFile accept=".pptx" label={L("ייבוא PowerPoint", "Import PowerPoint")} />
         <button type="button" className="primary" onClick={() => void create()}>＋ {L("מצגת חדשה", "New deck")}</button>
       </header>
       <p className="muted">{L("מצגות שנשמרות ב-KesherAI: עורכים, מציגים ומורידים כ-PDF, בלי PowerPoint. אפשר גם לבקש מהצ'אט \"תכין לי מצגת על…\".", "Decks kept in KesherAI: edit, present and save as PDF, no PowerPoint needed. You can also ask a chat to \"make slides about…\".")}</p>

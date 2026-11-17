@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { ImportFile } from "../ImportFile";
 import { RichText } from "../RichText";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -81,6 +82,7 @@ function DocList() {
       <header className="page-head row">
         <h1>📝 {L("מסמכים", "Documents")}</h1>
         <span className="grow" />
+        <ImportFile accept=".docx,.pdf,.md,.txt" label={L("ייבוא Word / PDF", "Import Word / PDF")} />
         <button type="button" className="primary" onClick={() => void create()}>＋ {L("מסמך חדש", "New document")}</button>
       </header>
       <p className="muted">{L("מסמכים שנשמרים ב-KesherAI: כותבים, עורכים ומורידים כ-PDF, בלי Word. אפשר גם לבקש מהצ'אט \"תכתוב לי מסמך על…\".", "Documents kept in KesherAI: write, edit and save as PDF, no Word needed. You can also ask a chat to \"write a document about…\".")}</p>

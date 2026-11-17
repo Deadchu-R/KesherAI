@@ -3,6 +3,7 @@ import { addr, colName, computeSheet, parseRef, sheetCsv, showValue, type Sheet 
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { ImportFile } from "../ImportFile";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const safeName = (t: string) => t.replace(/[\\/:*?"<>|]+/g, "").slice(0, 80) || "sheet";
@@ -19,7 +20,6 @@ export function SheetsPage({ id }: { id?: string }) {
 
 function SheetList() {
   const [sheets, setSheets] = useState<Array<{ id: string; title: string; cells: number; updatedAt: string }> | null>(null);
-  const file = useRef<HTMLInputElement>(null);
   useEffect(() => void api<{ sheets: NonNullable<typeof sheets> }>("/api/sheets").then((r) => setSheets(r.sheets), (e: Error) => toast(e.message)), []);
   const create = async (body: Record<string, unknown>) => {
     const s = await api<Sheet>("/api/sheets", { method: "POST", body });
@@ -30,8 +30,7 @@ function SheetList() {
       <header className="page-head row">
         <h1>📊 {L("גיליונות", "Sheets")}</h1>
         <span className="grow" />
-        <button type="button" onClick={() => file.current?.click()}>{L("פתיחת CSV", "Open a CSV")}</button>
-        <input ref={file} type="file" accept=".csv,text/csv" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) await create({ title: f.name.replace(/\.csv$/i, ""), csv: await f.text() }).catch((er: Error) => toast(er.message)); }} />
+        <ImportFile accept=".xlsx,.csv" label={L("ייבוא Excel / CSV", "Import Excel / CSV")} />
         <button type="button" className="primary" onClick={() => void create({ title: L("גיליון חדש", "New sheet") })}>＋ {L("גיליון חדש", "New sheet")}</button>
       </header>
       <p className="muted">{L("טבלאות עם נוסחאות שנשמרות ב-KesherAI, בלי Excel: תקציב, ציונים, מעקב. אפשר גם לבקש מהצ'אט \"תבנה לי טבלה של…\".", "Tables with formulas kept in KesherAI, no Excel needed: a budget, grades, a tracker. You can also ask a chat to \"make a table of…\".")}</p>
