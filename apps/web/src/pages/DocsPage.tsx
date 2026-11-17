@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { strToU8, zipSync } from "fflate";
+import { docxFiles } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -34,6 +36,15 @@ const NEW_BLOCKS: Array<[string, string, string]> = [
   ["| | |\n|---|---|\n| | |", "טבלה", "Table"],
   ["```\n\n```", "קוד", "Code"],
 ];
+
+/** Zips Office files and saves them (Word or Excel, optional: KesherAI keeps its own format). */
+function saveOffice(files: Record<string, string>, name: string, mime: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])))], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
 
 /** The writing buttons on the block being edited (its selected text, or the whole block). */
 const WRITE_ACTIONS: Array<[string, string, string]> = [
@@ -225,6 +236,7 @@ function DocEditor({ id }: { id: string }) {
         <span className="grow" />
         <button type="button" onClick={() => printDoc(doc.title, view.current?.innerHTML ?? "")}>⬇ PDF</button>
         <button type="button" onClick={download}>Markdown</button>
+        <button type="button" onClick={() => saveOffice(docxFiles(doc.title, doc.body), `${doc.title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 80) || "document"}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}>Word</button>
         <button type="button" className="link small" onClick={() => void copyRich()}>{L("העתקה ל-Word / Google Docs", "Copy for Word / Google Docs")}</button>
       </div>
       <article className="docs-page" ref={view}>

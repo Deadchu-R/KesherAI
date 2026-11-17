@@ -32,3 +32,4 @@ export * from "./deck.js";
 export * from "./grades.js";
 export * from "./timetable.js";
 export * from "./sheet.js";
+export * from "./office-out.js";

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addr, colName, computeSheet, parseRef, sheetCsv, showValue, type Sheet } from "@kesher/shared";
+import { strToU8, zipSync } from "fflate";
+import { addr, colName, computeSheet, parseRef, sheetCsv, showValue, xlsxFiles, type Sheet } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -7,6 +8,15 @@ import { ImportFile } from "../ImportFile";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const safeName = (t: string) => t.replace(/[\\/:*?"<>|]+/g, "").slice(0, 80) || "sheet";
+
+/** Zips Office files and saves them (Word or Excel, optional: KesherAI keeps its own format). */
+function saveOffice(files: Record<string, string>, name: string, mime: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])))], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
 
 /**
  * KesherAI's own spreadsheets (#/sheets and #/sheets/<id>, design SheetEditor): the list (new, or open a CSV), and the
@@ -154,6 +164,7 @@ function SheetEditor({ id }: { id: string }) {
         )}
         <span className="grow" />
         <button type="button" onClick={download}>⬇ CSV</button>
+        <button type="button" onClick={() => saveOffice(xlsxFiles(sheet), `${safeName(sheet.title)}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}>Excel</button>
       </div>
       <div className="row sheets-fx">
         <span className="chip" dir="ltr">{cur}</span>
