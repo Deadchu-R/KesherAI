@@ -2890,9 +2890,9 @@ html.handheld .palette-list button { min-height: 44px; }
 .cr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .cr-big { font-size: 42px; font-weight: 900; line-height: 1; color: var(--c); margin: 0; }
 .cr-big small { display: block; font-size: 14px; font-weight: 600; color: var(--text-2); margin-top: 8px; line-height: 1.4; }
-.cr-share { display: flex; align-items: center; gap: 24px; }
-.cr-donut { width: 128px; height: 128px; border-radius: 50%; flex: none; -webkit-mask: radial-gradient(circle, transparent 46%, #000 47%); mask: radial-gradient(circle, transparent 46%, #000 47%); }
-.cr-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; flex: 1; min-width: 0; }
+.cr-share { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.cr-donut { width: 112px; height: 112px; border-radius: 50%; flex: none; -webkit-mask: radial-gradient(circle, transparent 46%, #000 47%); mask: radial-gradient(circle, transparent 46%, #000 47%); }
+.cr-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; flex: 1 1 160px; min-width: 0; }
 .cr-rank li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .cr-bars { display: flex; align-items: flex-end; gap: 3px; height: 90px; direction: ltr; }
 .cr-bars div { flex: 1; background: var(--c); border-radius: 3px 3px 0 0; opacity: 0.85; }
