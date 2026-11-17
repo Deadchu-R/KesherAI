@@ -2092,3 +2092,9 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - KesherAI has: the phone plugin KesherScreen (MediaProjection start/frame/stop), Share → KesherAI into the phone's chat with the lens's four actions (built today), the computer's lens with a circle.
 - Plan: (1) "KesherAI as the default assistant" (an ASSIST intent: home long-press opens the phone's lens on a fresh screen capture), no overlay permission needed; (2) an optional bubble later. Both need native Android code tested on a real phone.
 - Stopped at: research done; waiting for a phone test session (the code cannot be checked without a device).
+
+## Students, part 37: the first day of the semester (2026-11-17)
+- MyStudyLife (10M+ students): add classes by hand (days, times, rotation weeks), then exams and tasks; its 2026 "AI Schedule Scan" turns a photo of the timetable into the schedule. Eduplanner: a syllabus file becomes a board of deadlines and topics. Reclaim.ai puts study goals into free calendar slots.
+- KesherAI has: a timetable from a photo (computer and phone), a syllabus reader (exams, assignments, weekly topics), Moodle, "My week", goals; but the first visit asked for one course by name.
+- Built (2026-11-17, design StudyWelcomePhoto): the first visit offers "all my courses from a photo of the timetable": each course is opened and every class goes into the timetable, then the goal step as before.
+- Stopped at: built; next idea (not built): study time put into the free hours between classes (Reclaim-like) inside "My week".

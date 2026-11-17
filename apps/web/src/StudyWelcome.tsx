@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { StudyCourse } from "@kesher/shared";
+import type { ReadClass, StudyCourse } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -27,18 +27,42 @@ export function StudyWelcome({ onSkip }: { onSkip: () => void }) {
   const [phone, setPhone] = useState(false);
   const [simple, setSimple] = useState(true);
   const [busy, setBusy] = useState(false);
+  // All her courses at once from a photo of the timetable (like MyStudyLife's "schedule scan"): made here, not in finish.
+  const [made, setMade] = useState<StudyCourse[]>([]);
+  const [reading, setReading] = useState(false);
+  const fromPhoto = async (f: File | undefined) => {
+    if (!f) return;
+    setReading(true);
+    try {
+      const data = await new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] ?? ""); r.onerror = () => bad(r.error); r.readAsDataURL(f); });
+      const { classes } = await api<{ classes: ReadClass[] }>("/api/study/timetable/photo", { method: "POST", body: { image: data, mime: f.type || "image/jpeg" } });
+      if (!classes.length) return toast(L("לא נמצאו שיעורים בצילום. נסי צילום מסך מהפורטל, או כתבי קורס אחד.", "No classes were found. Try a screenshot from the portal, or type one course."));
+      const courses: StudyCourse[] = [];
+      for (const n of [...new Set(classes.map((c) => c.name.trim()))].slice(0, 20)) courses.push(await api<StudyCourse>("/api/study/courses", { method: "POST", body: { name: n } }));
+      const byName = new Map(courses.map((c) => [c.name.trim(), c.id]));
+      await api("/api/study/timetable", { method: "PUT", body: { slots: classes.map((c, i) => ({ id: `w${i}`, courseId: byName.get(c.name.trim()), day: c.day, start: c.start, end: c.end, ...(c.room ? { room: c.room } : {}), ...(c.kind ? { kind: c.kind } : {}) })) } });
+      setMade(courses);
+      setName(courses[0]?.name ?? "");
+      toast(L(`נוצרו ${courses.length} קורסים ו-${classes.length} שיעורים במערכת`, `${courses.length} courses and ${classes.length} classes made`));
+      setStep(1);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setReading(false);
+    }
+  };
 
   const finish = async () => {
     setBusy(true);
     try {
-      const c = await api<StudyCourse>("/api/study/courses", { method: "POST", body: { name: name.trim() } });
-      if (exam) await api(`/api/study/courses/${c.id}`, { method: "PATCH", body: { examDate: exam } }).catch(() => undefined);
+      const c = made[0] ?? (await api<StudyCourse>("/api/study/courses", { method: "POST", body: { name: name.trim() } }));
+      if (exam && !made.length) await api(`/api/study/courses/${c.id}`, { method: "PATCH", body: { examDate: exam } }).catch(() => undefined);
       await api("/api/study/goal", {
         method: "PUT",
         body: goal === "none" ? { on: false } : { on: true, targets: { minutes: goal === "m15" ? 15 : goal === "m30" ? 30 : 0, cards: goal === "c20" ? 20 : 0 }, remind, phone },
       });
       await api("/api/study/prefs", { method: "PUT", body: { simple, welcomed: true } });
-      location.hash = `#/study/${c.id}`;
+      location.hash = made.length > 1 ? "#/study" : `#/study/${c.id}`;
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -59,6 +83,14 @@ export function StudyWelcome({ onSkip }: { onSkip: () => void }) {
           <div className="row">
             <button type="submit" className="primary" disabled={!name.trim()}>{L("הבא ›", "Next ›")}</button>
             <button type="button" className="link" onClick={onSkip}>{L("לדלג, אסתדר לבד", "Skip, I'll find my way")}</button>
+          </div>
+          <div className="study-welcome-or">
+            <span className="muted small">{L("או בבת אחת:", "Or all at once:")}</span>
+            <label className={`button${reading ? " disabled" : ""}`}>
+              {reading ? L("קורא את המערכת… (עד דקה)", "Reading the timetable… (up to a minute)") : L("📷 כל הקורסים מצילום מערכת השעות", "📷 All my courses from a photo of the timetable")}
+              <input type="file" accept="image/*" hidden disabled={reading} onChange={(e) => { void fromPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>
+            <span className="muted small">{L("צילום מסך מהפורטל או צילום של הדף. כל קורס נפתח לבד, והשיעורים נכנסים למערכת השעות.", "A screenshot from the portal or a photo of the page. Each course is opened for you, and the classes go into the timetable.")}</span>
           </div>
         </form>
       )}

@@ -3173,6 +3173,8 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-welcome-steps li.now { width: 26px; }
 .study-welcome-body { display: flex; flex-direction: column; gap: 10px; }
 .study-welcome-body h2 { margin: 0; }
+.study-welcome-or { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line, #2a2a2e); }
+.study-welcome-or .button { align-self: flex-start; }
 .study-welcome-body label { display: flex; flex-direction: column; gap: 4px; }
 .study-welcome-opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .study-welcome-opts button { padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; }
