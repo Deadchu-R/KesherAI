@@ -22,6 +22,9 @@ test("study words, and the noun לחץ stays a noun", async () => {
   assert.equal(hebrewFor("בלי לחץ", "f"), "בלי לחץ");
   assert.equal(hebrewFor("לחץ על הכפתור", "p"), "לחצו על הכפתור");
   assert.equal(hebrewFor("מודדים לחץ דם", "p"), "מודדים לחץ דם");
+  assert.equal(hebrewFor("איך את היום?", "m"), "איך אתה היום?");
+  assert.equal(hebrewFor("בקשי רמז כשנתקעת, ופתרון מלא כשתרצי.", "m"), "בקש רמז כשנתקעת, ופתרון מלא כשתרצה.");
+  assert.equal(hebrewFor("הראי לי את הפתרון", "p"), "הראו לי את הפתרון");
   assert.equal(hebrewFor("לחצי על הכפתור", "m"), "לחץ על הכפתור");
   assert.equal(hebrewFor("הכרטיסיות שלמדת לאחרונה", "p"), "הכרטיסיות שלמדתם לאחרונה");
 });
