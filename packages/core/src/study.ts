@@ -600,7 +600,9 @@ export class Study {
     const list = cleanSources(papers).filter((p) => p.abstract).slice(0, 10);
     if (!list.length) throw Object.assign(new Error("None of these papers has an abstract to read."), { statusCode: 400 });
     const material = list.map((p, i) => `[${i + 1}] ${p.title} (${p.authors.slice(0, 3).join(", ")}${p.authors.length > 3 ? " et al." : ""}, ${p.year ?? "n.d."})\n${p.abstract}`).join("\n\n");
-    return (await this.ask(PAPERS_PROMPT, `Question: ${question.slice(0, 500)}\n\nPapers:\n${material}`, signal, d.course)).trim().slice(0, 6000);
+    // The abstracts are mostly English; a Hebrew question gets a Hebrew answer (found on the PC: it answered in English).
+    const he = /[\u0590-\u05ff]/.test(question) || (!question.trim() && hebrewLecture(d.lectures[0]?.text ?? ""));
+    return (await this.ask(`${PAPERS_PROMPT}${he ? " Write the whole answer in Hebrew (עברית), keeping technical terms in English in brackets." : ""}`, `Question: ${question.slice(0, 500)}\n\nPapers:\n${material}`, signal, d.course)).trim().slice(0, 6000);
   }
 
   /** Her study groups' links for a course (design StudyTogether): the whole list, checked. */
