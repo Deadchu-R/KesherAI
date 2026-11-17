@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { matchRecommended, scanComputer, type FoundModel } from "./model-scan.js";
@@ -53,6 +53,8 @@ test("scan finds LM Studio, Ollama and Hugging Face models without copying them"
     assert.equal(s.services.config.modelsDir, dir);
   } finally {
     await s.close();
+    // The fake models are real bytes on Windows (no sparse files), so the folder is removed.
+    await rm(home, { recursive: true, force: true }).catch(() => undefined);
   }
 });
 

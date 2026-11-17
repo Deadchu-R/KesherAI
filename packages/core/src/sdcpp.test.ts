@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { familyFor, pickSdAssets } from "./sdcpp.js";
@@ -62,6 +62,7 @@ test("downloaded image models show up under Images and generate through the buil
     assert.match(q.body, /getting ready/);
   } finally {
     await s.close();
+    await rm(data, { recursive: true, force: true }).catch(() => undefined);
   }
 });
 
@@ -94,6 +95,8 @@ test("LoRAs: downloads go to models/loras, are listed by name, and are not image
     assert.equal(((await s.app.inject({ method: "GET", url: "/api/loras" })).json() as { loras: unknown[] }).loras.length, 0);
   } finally {
     await s.app.close();
+    // The fake models are real bytes on Windows (no sparse files): 2 GB a run was left in Temp (2026-11-17).
+    await rm(data, { recursive: true, force: true }).catch(() => undefined);
   }
 });
 
@@ -112,6 +115,8 @@ test("upscale route: asks for a PNG, and for setup before the upscaler is downlo
     assert.equal((res.json() as { code: string }).code, "needs-setup");
   } finally {
     await s.app.close();
+    // The fake models are real bytes on Windows (no sparse files): 2 GB a run was left in Temp (2026-11-17).
+    await rm(data, { recursive: true, force: true }).catch(() => undefined);
   }
 });
 
@@ -141,6 +146,8 @@ test("send a model to the phone: lists chat GGUFs that fit, serves them with res
     assert.equal(head.headers["content-length"], String(60 * 1024 ** 2));
   } finally {
     await s.app.close();
+    // The fake models are real bytes on Windows (no sparse files): 2 GB a run was left in Temp (2026-11-17).
+    await rm(data, { recursive: true, force: true }).catch(() => undefined);
   }
 });
 
