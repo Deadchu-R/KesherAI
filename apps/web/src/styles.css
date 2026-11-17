@@ -3393,3 +3393,26 @@ div.slide-list { padding-inline-start: 0; }
 .study-hl-item { display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; }
 .study-hl-item input { flex: 1; min-width: 0; }
 @media (min-width: 761px) { .study-hl-list { grid-column: 2; grid-row: 1 / span 2; } .study-hl-text { grid-column: 1; grid-row: 1; } }
+/* One-page sheet (design LectureSheet). */
+.study-sheet-wrap { display: flex; flex-direction: column; gap: 8px; }
+.study-sheet { background: #fbfaf7; color: #1d1d22; border-radius: 10px; padding: 24px 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; max-width: 900px; }
+.study-sheet header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; border-bottom: 3px solid #3d5afe; padding-bottom: 6px; }
+.study-sheet h2 { margin: 0; font-size: 24px; }
+.study-sheet h3 { margin: 0 0 6px; font-size: 15px; color: #3d5afe; }
+.study-sheet .muted { color: #5b5e6b; }
+.study-sheet ol { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.6; }
+.study-sheet-terms > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.study-sheet-term { background: #eceaf3; border-radius: 8px; padding: 6px 8px; }
+.study-sheet-term p { margin: 2px 0 0; }
+.study-sheet-diagram { grid-column: 1 / -1; }
+@media (max-width: 700px) { .study-sheet { grid-template-columns: 1fr; padding: 16px; } .study-sheet-terms > div { grid-template-columns: 1fr; } }
+@media print {
+  body.printing-sheet * { visibility: hidden; }
+  body.printing-sheet .study-sheet, body.printing-sheet .study-sheet * { visibility: visible; }
+  body.printing-sheet .study-sheet { position: absolute; inset: 0 auto auto 0; width: 100%; max-width: none; border-radius: 0; }
+  @page { size: A4; margin: 12mm; }
+}
+.study-sheet-diagram .study-flow { background: #eceaf3; color: #1d1d22; }
+.study-sheet-term > span { margin-inline-start: 6px; }
+.study-sheet .study-flow-box { background: #fff; color: #1d1d22; border-color: #b9bcc8; }
+.study-sheet .study-flow-arrow { color: #3d5afe; }
