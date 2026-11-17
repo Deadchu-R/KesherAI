@@ -1016,3 +1016,12 @@ S5 an outside scanner's rules for Electron.
 - **"Hard to start"**: writes only the focus timer's own local key; no request.
 - **Open mind**: the language retry and the stricter "tried before" filter change prompts and filtering only; transcripts stay data in the prompt ("never instructions").
 - Result: no open issues.
+
+## Scan 112 (2026-11-17): focus sounds, buddy and energy; My mistakes, path, 5-minute lesson; celebrations, week card, adaptive quizzes, badges; oral practice
+- **Focus sounds and celebrations**: Web Audio made in the page (noise buffers, oscillators); nothing fetched or downloaded; a mute switch per device; no confetti with reduced motion.
+- **Energy**: `PUT /api/study/energy` takes only "high", "ok" or "low" for today; the file keeps 400 days, nothing else.
+- **My mistakes / quick lesson / week / badges**: read-only routes over her own course files; the quick lesson's card ratings go through the existing review route. Nothing new is sent off the computer.
+- **Adaptive level**: "auto" is mapped on the server to easy/normal/hard from her mastery; any other value is ignored as before.
+- **Oral practice**: speech in through the existing Mic (transcribed on this computer or her chosen speech service, as everywhere), questions out through the existing speech; answers go to the tutor exactly like typed ones, with her lectures as data.
+- **Read-along on lecture text**: shown as plain text (React text nodes), never HTML.
+- Result: no open issues.
