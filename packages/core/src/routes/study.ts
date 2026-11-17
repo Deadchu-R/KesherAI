@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { cardsToTsv, examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import { cleanYoutube, ensureYtDlp, youtubeId, youtubeLecture } from "../youtube-lecture.js";
+import { readMedia } from "../speech-tools.js";
+import { ensureFfmpeg } from "../ffmpeg.js";
 import WebSocket from "ws";
 
 /**
@@ -92,6 +95,24 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<L & { Body: { text?: string; kind?: string } }>("/api/study/courses/:id/lectures/:lid/explain", async (req) => st.explainPassage(req.params.id, req.params.lid, String(req.body?.text ?? "").slice(0, 3000), req.body?.kind === "simple" ? "simple" : req.body?.kind === "example" ? "example" : "explain"));
   /** A lecture's spoken review (audio overview), written by the chat model and kept. */
   app.post<L>("/api/study/courses/:id/lectures/:lid/audio", async (req) => st.audioOverview(req.params.id, req.params.lid));
+  /** A YouTube lecture by its link: its captions (or its sound, through whisper) become a lecture with minute marks. */
+  app.post<C & { Body: { url?: string } }>("/api/study/courses/:id/lectures/youtube", async (req, reply) => {
+    const id = youtubeId(String(req.body?.url ?? ""));
+    if (!id) return reply.code(400).send({ error: "A YouTube link (youtube.com/watch?v=… or youtu.be/…)." });
+    const ytdlp = await ensureYtDlp({ dir: s.paths.engines, downloads: s.downloads });
+    const got = await youtubeLecture(ytdlp, id, [s.config.speech?.language && s.config.speech.language !== "auto" ? s.config.speech.language : "he", "iw", "en"]);
+    try {
+      let text = got.text;
+      if (!text && got.audio) {
+        const r = await readMedia({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg: () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }) }, got.audio, 0);
+        text = r.transcript;
+      }
+      if (!text?.trim()) return reply.code(422).send({ error: "This video has no captions and no speech was found in it." });
+      return await st.addLecture(req.params.id, { title: got.title, text, youtube: id });
+    } finally {
+      await cleanYoutube(got.tmp);
+    }
+  });
   app.post<L>("/api/study/courses/:id/lectures/:lid/video", async (req) => st.videoOverview(req.params.id, req.params.lid));
   /** The course as a file to share with classmates, and a shared file opened as a new course. */
   app.get<C>("/api/study/courses/:id/export", async (req, reply) => {

@@ -50,6 +50,8 @@ export interface StudyLecture {
   recording?: { t: number; bytes: number; mime: string };
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
+  /** The YouTube video the lecture came from (its id): the text's minute marks open it at that minute. */
+  youtube?: string;
   /** A video overview: narrated slides made from the lecture (design VideoOverview), once made. */
   video?: VideoSlide[];
   /** Her own notes beside the summary (what the lecturer stressed, what to ask, what she did not get). */

@@ -34,6 +34,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(l.diagram ? { diagram: str(l.diagram, 20_000) } : {}),
     ...(l.audio ? { audio: str(l.audio, 20_000) } : {}),
     ...(Array.isArray(l.video) ? { video: parseVideoSlides({ slides: l.video }) } : {}),
+    ...(typeof l.youtube === "string" && /^[\w-]{11}$/.test(l.youtube) ? { youtube: l.youtube } : {}),
     ...(l.notes ? { notes: str(l.notes, 50_000), notesT: Number(l.notesT) || Date.now() } : {}),
   }));
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
@@ -440,11 +441,11 @@ export class Study {
   }
 
   /** Adds a lecture's text (typed, pasted, or a transcript). */
-  async addLecture(id: string, p: { title?: string; text: string; date?: string }): Promise<StudyLecture> {
+  async addLecture(id: string, p: { title?: string; text: string; date?: string; youtube?: string }): Promise<StudyLecture> {
     const d = await this.get(id);
     const text = String(p.text ?? "").slice(0, 400_000);
     if (!text.trim()) throw Object.assign(new Error("The lecture has no text."), { statusCode: 400 });
-    const lecture: StudyLecture = { id: randomUUID(), title: (p.title ?? "").trim().slice(0, 200) || `${d.lectures.length + 1}`, date: /^\d{4}-\d{2}-\d{2}$/.test(p.date ?? "") ? p.date! : new Date().toISOString().slice(0, 10), text };
+    const lecture: StudyLecture = { id: randomUUID(), title: (p.title ?? "").trim().slice(0, 200) || `${d.lectures.length + 1}`, date: /^\d{4}-\d{2}-\d{2}$/.test(p.date ?? "") ? p.date! : new Date().toISOString().slice(0, 10), text, ...(p.youtube && /^[\w-]{11}$/.test(p.youtube) ? { youtube: p.youtube } : {}) };
     d.lectures.push(lecture);
     if (!d.course.fieldChosen) {
       const guess = detectField(d.course.name, d.lectures.map((x) => `${x.title} ${x.text.slice(0, 3000)}`).join(" "));

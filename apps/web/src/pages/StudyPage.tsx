@@ -736,6 +736,16 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
     // Several photos (the board, then the notebook) add up in one lecture.
     if (r) setText((t) => (t.trim() ? `${t}\n\n${r.text}` : r.text));
   };
+  const [yt, setYt] = useState("");
+  const fromYoutube = async () => {
+    setBusy(true);
+    const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures/youtube`, { method: "POST", body: { url: yt } }));
+    setBusy(false);
+    if (!l) return;
+    setYt("");
+    onChange();
+    go(`#/study/${courseId}/l/${l.id}`);
+  };
   const save = async () => {
     setBusy(true);
     const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures`, { method: "POST", body: { title, text } }));
@@ -773,6 +783,12 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
             <button type="button" onClick={() => { setAdding(false); setRecording(true); }}>{L("או: הקלט הרצאה", "Or: record a lecture")}</button>
             {info.lectures.length > 0 && <button type="button" className="ghost" onClick={() => setAdding(false)}>{L("ביטול", "Cancel")}</button>}
           </div>
+          <form className="row study-youtube" onSubmit={(e) => { e.preventDefault(); void fromYoutube(); }}>
+            <span aria-hidden className="yt-mark">▶</span>
+            <input className="grow" dir="ltr" value={yt} onChange={(e) => setYt(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" aria-label={L("קישור להרצאה ב-YouTube", "A YouTube lecture link")} />
+            <button type="submit" disabled={busy || !yt.trim()}>{busy && yt ? L("מביא את הכתוביות…", "Getting the captions…") : L("הרצאה מ-YouTube", "Lecture from YouTube")}</button>
+          </form>
+          <p className="muted small">{L("הכתוביות של הסרטון (או הדיבור, כשאין) נכנסות כהרצאה, וכל דקה בטקסט פותחת את הסרטון באותו מקום. בפעם הראשונה קשר מוריד את yt-dlp (חינם, קוד פתוח).", "The video's captions (or its speech, when there are none) become the lecture, and each minute in the text opens the video at that point. The first time, KesherAI downloads yt-dlp (free, open source).")}</p>
         </section>
       ) : (
         <div className="study-actions">
@@ -954,7 +970,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       </div>
       <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
         {view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
-          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.text}</div>
+          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : l.text}</div>
           : !l.summary ? (
             <div className="study-empty">
               <p className="muted">{L("עוד לא סוכם. הסיכום, המונחים והתרשים נכתבים מהטקסט של ההרצאה בלבד.", "Not summarized yet. The summary, terms and diagram come from the lecture's text only.")}</p>
