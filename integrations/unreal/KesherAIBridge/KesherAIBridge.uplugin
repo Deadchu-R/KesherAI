@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
-  "Version": 20,
-  "VersionName": "0.1.19",
+  "Version": 21,
+  "VersionName": "0.1.20",
   "FriendlyName": "KesherAI Bridge",
   "Description": "Connects the Unreal Editor to KesherAI on this computer: see your Blueprints in KesherAI and change them in words with your local model. Every change is one undo step.",
   "Category": "Editor",
@@ -16,7 +16,7 @@
     {
       "Name": "KesherAIBridge",
       "Type": "Editor",
-      "LoadingPhase": "PostEngineInit"
+      "LoadingPhase": "Default"
     }
   ]
 }

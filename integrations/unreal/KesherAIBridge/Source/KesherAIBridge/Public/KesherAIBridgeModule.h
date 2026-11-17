@@ -39,6 +39,7 @@ private:
 	TSharedPtr<IWebSocket> Socket;
 	FTSTicker::FDelegateHandle TickHandle;
 	FDelegateHandle CompiledHandle;
+	FDelegateHandle EngineReadyHandle;
 	double NextTry = 0;
 	bool bConnecting = false;
 };

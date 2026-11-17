@@ -9,6 +9,7 @@
 #include "KesherPlay.h"
 #include "KesherWidget.h"
 #include "Misc/App.h"
+#include "Misc/CoreDelegates.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/Paths.h"
 #include "FileHelpers.h"
@@ -26,18 +27,26 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.19");
+static const TCHAR* BridgeVersion = TEXT("0.1.20");
 
 void FKesherAIBridgeModule::StartupModule()
 {
+	// The module loads early (LoadingPhase Default) so the headless editor finds the KesherBridge commandlet; that
+	// editor works from files and never connects to KesherAI as a second editor.
+	if (IsRunningCommandlet()) return;
 	FModuleManager::LoadModuleChecked<FWebSocketsModule>("WebSockets");
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FKesherAIBridgeModule::Tick), 1.0f);
-	if (GEditor) CompiledHandle = GEditor->OnBlueprintCompiled().AddRaw(this, &FKesherAIBridgeModule::OnBlueprintCompiled);
+	// The editor exists only after the engine is up.
+	EngineReadyHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+	{
+		if (GEditor) CompiledHandle = GEditor->OnBlueprintCompiled().AddRaw(this, &FKesherAIBridgeModule::OnBlueprintCompiled);
+	});
 }
 
 void FKesherAIBridgeModule::ShutdownModule()
 {
-	FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+	FCoreDelegates::OnPostEngineInit.Remove(EngineReadyHandle);
+	if (TickHandle.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
 	KesherPlay::Shutdown();
 	if (GEditor) GEditor->OnBlueprintCompiled().Remove(CompiledHandle);
 	if (Socket.IsValid())
