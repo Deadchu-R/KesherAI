@@ -171,7 +171,7 @@ export function RichText({ text }: { text: string }) {
             flush(`l${k}`);
             list = { ordered, items: [] };
           }
-          list.items.push(<li key={k} dir="auto">{inline(li[3]!, k)}</li>);
+          list.items.push(<li key={k} dir="auto" {...(ordered ? { value: Number(li[2]) } : {})}>{inline(li[3]!, k)}</li>);
         } else {
           flush(`l${k}`);
           if (line.trim()) out.push(<p key={k} dir="auto">{inline(line, k)}</p>);

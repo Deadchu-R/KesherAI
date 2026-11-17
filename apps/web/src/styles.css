@@ -3025,3 +3025,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .video-chapters button.on { background: var(--panel-2); color: var(--accent); font-weight: 600; }
 .video-say { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 700px) { .video-overview { grid-template-columns: 1fr; } .video-slide { flex-direction: column; padding: 14px; } .video-stage { aspect-ratio: auto; min-height: 380px; } .video-chapters { flex-direction: row; overflow-x: auto; } .video-chapters button { white-space: nowrap; } }
+/* The ↓ button when she read up (Conversation.tsx) */
+.jump-down { position: sticky; bottom: 12px; margin-inline-start: auto; margin-inline-end: auto; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2, 0 8px 24px rgb(0 0 0 / .35)); font-size: 18px; z-index: 5; }
+.jump-dot { position: absolute; top: 4px; inset-inline-end: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }

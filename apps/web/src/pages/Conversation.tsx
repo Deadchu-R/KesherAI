@@ -225,6 +225,8 @@ export function ConversationPage({ id }: { id: string }) {
   // Follow new messages and steps while the user is at the bottom (reading further up stays put). The composer is
   // sticky over the end of the list, so the marker keeps a margin of its height (else it counts as already visible).
   const following = useRef(true);
+  // Far from the end (read up): a ↓ button brings her back, as in ChatGPT and Claude.
+  const [farUp, setFarUp] = useState(false);
   // When the page itself last scrolled to the end (its scroll events are not the user's).
   const autoAtRef = useRef(0);
   useEffect(() => {
@@ -243,6 +245,7 @@ export function ConversationPage({ id }: { id: string }) {
       const top = s().scrollTop;
       if (top < lastTop - 2 && Date.now() - autoAtRef.current > 150) following.current = false;
       else if (gap() < 80) following.current = true;
+      setFarUp(gap() > 400);
       lastTop = top;
     };
     const onWheel = (e: WheelEvent) => {
@@ -950,6 +953,11 @@ export function ConversationPage({ id }: { id: string }) {
           )}
           {error && <p className="error">{error}</p>}
           <div ref={bottom} style={{ scrollMarginBottom: "240px" }} />
+          {farUp && (
+            <button type="button" className="jump-down" aria-label={L("לסוף השיחה", "To the end of the chat")} onClick={() => { following.current = true; autoAtRef.current = Date.now(); bottom.current?.scrollIntoView({ block: "end", behavior: "smooth" }); setFarUp(false); }}>
+              ↓{Object.keys(streaming).length ? <span className="jump-dot" aria-hidden /> : null}
+            </button>
+          )}
         </div>
         <form
           className={`composer ${dragging ? "dragging" : ""}`}
