@@ -269,3 +269,16 @@ test("highlights: saved checked, made into cards once, and the cloze filter", as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a question during a recording needs a transcript and answers from it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-live-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("פיזיולוגיה");
+    await assert.rejects(() => st.askLive(c.id, "מה הוא אמר?", " "), /Nothing has been transcribed/);
+    await assert.rejects(() => st.askLive(c.id, " ", "[00:30] לחץ דם"), /Ask a question/);
+    assert.ok((await st.askLive(c.id, "מה הוא אמר על לחץ דם?", "[00:30] לחץ דם תקין הוא 120/80")).length > 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

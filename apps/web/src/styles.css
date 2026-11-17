@@ -3416,3 +3416,6 @@ div.slide-list { padding-inline-start: 0; }
 .study-sheet-term > span { margin-inline-start: 6px; }
 .study-sheet .study-flow-box { background: #fff; color: #1d1d22; border-color: #b9bcc8; }
 .study-sheet .study-flow-arrow { color: #3d5afe; }
+.study-rec-ask { display: flex; flex-direction: column; gap: 6px; }
+.study-rec-ask p { margin: 0; background: var(--panel-2); border-radius: 8px; padding: 6px 8px; }
+.study-rec-ask input { flex: 1; min-width: 0; }

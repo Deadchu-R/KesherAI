@@ -18,7 +18,18 @@ const PIECE_SEC = 30;
  *   when it is kept.
  * @param props.onCancel - Called when the person closes it before starting.
  */
-export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string, audio?: Blob) => void; onCancel: () => void }) {
+export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: string, audio?: Blob) => void; onCancel: () => void; courseId?: string }) {
+  // A question during the class, answered from the transcript so far (design LiveAsk, students part 27 #8).
+  const [q, setQ] = useState("");
+  const [answers, setAnswers] = useState<Array<{ q: string; a?: string }>>([]);
+  const askLive = async () => {
+    const question = q.trim();
+    if (!question || !courseId) return;
+    setQ("");
+    setAnswers((x) => [...x, { q: question }]);
+    const a = await api<{ answer: string }>(`/api/study/courses/${courseId}/ask-live`, { method: "POST", body: { question, transcript: lines.join("\n") } }).then((r) => r.answer, (e: Error) => `⚠ ${e.message}`);
+    setAnswers((x) => x.map((y) => (y.q === question && y.a === undefined ? { q: question, a } : y)));
+  };
   const [state, setState] = useState<"idle" | "recording" | "paused" | "finishing">("idle");
   const [lines, setLines] = useState<string[]>([]);
   const [secs, setSecs] = useState(0);
@@ -229,6 +240,15 @@ export function StudyRecorder({ onDone, onCancel }: { onDone: (text: string, aud
       <p className="study-rec-clock" dir="ltr">{Math.floor(mm / 60) ? `${Math.floor(mm / 60)}:` : ""}{String(mm % 60).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}</p>
       <div className="study-rec-text" dir="auto" aria-live="polite">{lines.length ? lines.slice(-6).join("\n") : L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute.")}</div>
       {translateTo && <div className="study-rec-text study-rec-trans" dir={translateTo === "he" ? "rtl" : "ltr"} aria-live="polite" aria-label={L("תרגום", "Translation")}>{translated.length ? translated.slice(-6).join("\n") : L("התרגום מגיע כמה שניות אחרי כל קטע.", "The translation follows a few seconds after each piece.")}</div>}
+      {courseId && state !== "finishing" && (
+        <div className="study-rec-ask">
+          {answers.slice(-3).map((x, i) => <p key={i} className="small" dir="auto"><b>{x.q}</b><br />{x.a ?? L("מחפש בתמלול…", "Looking in the transcript…")}</p>)}
+          <form className="row" onSubmit={(e) => { e.preventDefault(); void askLive(); }}>
+            <input dir="auto" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("לשאול על מה שנאמר: \"מה הוא אמר על…?\"", "Ask about what was said: \"what did he say about…?\"")} aria-label={L("שאלה על השיעור", "A question about the class")} />
+            <button type="submit" disabled={!q.trim() || !lines.length}>{L("לשאול", "Ask")}</button>
+          </form>
+        </div>
+      )}
       {error && <p className="error small">{error}</p>}
       {state !== "finishing" && (
         <div className="study-actions">

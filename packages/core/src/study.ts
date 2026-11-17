@@ -1087,6 +1087,26 @@ export class Study {
     return made;
   }
 
+  /**
+   * A question during a recording (students part 27 #8, like StudyFetch's LiveLecture): answered from the transcript
+   * so far only, short, with the minute when the transcript has marks.
+   */
+  async askLive(id: string, question: string, transcript: string, signal?: AbortSignal): Promise<string> {
+    const q = question.trim().slice(0, 600);
+    if (!q) throw Object.assign(new Error("Ask a question."), { statusCode: 400 });
+    if (!transcript.trim()) throw Object.assign(new Error("Nothing has been transcribed yet: wait for the first half minute."), { statusCode: 400 });
+    const d = await this.get(id);
+    const he = /[\u0590-\u05FF]/.test(q);
+    const raw = await this.ask(
+      `A student is in class, recording the lecture, and asks about what was said so far. Answer from the transcript below only, in two or three short sentences${he ? ", in Hebrew" : ""}; quote the lecturer's words briefly when it helps and give the minute ([mm:ss]) when the transcript has it. If the transcript does not cover it, say it was not said yet (or not caught) — never answer from general knowledge.`,
+      `The transcript so far (the newest at the end):\n${transcript.slice(-30_000)}\n\nHer question: ${q}`,
+      signal,
+      d.course,
+      40_000,
+    );
+    return raw.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+  }
+
   /** Saves her highlights in a lecture (the whole list, checked). */
   async setHighlights(id: string, lectureId: string, raw: unknown): Promise<StudyHighlight[]> {
     const d = await this.get(id);

@@ -1136,7 +1136,7 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
     <div className="study-lectures">
       {!adding && !recording && showPath && <CoursePath courseId={courseId} lectures={info.lectures} />}
       {recording ? (
-        <StudyRecorder onCancel={() => setRecording(false)} onDone={async (t, audio) => {
+        <StudyRecorder courseId={courseId} onCancel={() => setRecording(false)} onDone={async (t, audio) => {
           setRecording(false);
           if (!t.trim()) return toast(L("לא נשמע דיבור בהקלטה.", "No speech was heard in the recording."));
           const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures`, { method: "POST", body: { title: L(`הרצאה ${info.lectures.length + 1}`, `Lecture ${info.lectures.length + 1}`), text: t } }));
