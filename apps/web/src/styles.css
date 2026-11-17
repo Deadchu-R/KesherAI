@@ -3460,3 +3460,20 @@ div.slide-list { padding-inline-start: 0; }
 .study-slide-list li { border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px; }
 .study-slide-list li.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .study-slide-list p { margin: 3px 0 0; }
+/* Image occlusion cards (design ImageOcclusion). */
+.study-occ { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.study-occ label.button { align-self: flex-start; }
+.study-occ-pic { position: relative; touch-action: none; user-select: none; cursor: crosshair; max-width: 100%; }
+.study-occ-pic.view { cursor: inherit; }
+.study-occ-pic img { display: block; width: 100%; height: auto; border-radius: 8px; pointer-events: none; }
+.study-occ-box { position: absolute; background: #e9e4d8; border: 2px solid #8a7f63; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #3a3428; font-weight: 700; font-size: 12px; }
+.study-occ-box.ask { background: #ffb27a; border-color: #c96a2a; color: #3a2210; font-size: 16px; }
+.study-occ-box.open { background: transparent; border: 3px solid #2e9e6a; }
+.study-occ-row { gap: 6px; align-items: center; }
+.study-occ-row input { flex: 1; min-width: 0; }
+/* Playback speed on every player (0.25×–4×). */
+.media-box { display: flex; flex-direction: column; gap: 4px; max-width: 100%; }
+.media-box > video, .media-box > audio { max-width: 100%; }
+.media-speed { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; align-self: flex-start; }
+.media-speed select { padding: 2px 6px; height: auto; min-height: 28px; }
+.vl-speed { justify-content: flex-end; margin-bottom: 4px; }

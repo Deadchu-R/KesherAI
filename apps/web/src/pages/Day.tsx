@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SpeedSelect, useSpeed } from "../MediaSpeed";
 import { api, isRemote, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { createConversation, toast } from "../library";
@@ -294,6 +295,7 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
   const [busy, setBusy] = useState(false);
   // A kept recording: the transcript follows playback, and a line jumps the player to it.
   const player = useRef<HTMLAudioElement>(null);
+  const [rate, setRate] = useSpeed();
   const [now, setNow] = useState(-1);
   const rec = m.recording;
   const at = (t: number) => (rec ? Math.max(0, (t - rec.start) / 1000) : 0);
@@ -323,6 +325,7 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
         </>
       )}
       {m.error && <p className="error small">{m.error}</p>}
+      {rec && <SpeedSelect rate={rate} onRate={(r) => { setRate(r); if (player.current) player.current.playbackRate = r; }} />}
       {rec && (
         <audio
           ref={player}
@@ -332,6 +335,7 @@ function MeetingCard({ day, m, reload }: { day: string; m: Meeting; reload: () =
           src={withToken(`/api/journal/meetings/${day}/${m.id}/recording`)}
           onPlay={() => setOpen(true)}
           onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => (e.currentTarget.playbackRate = rate)}
         />
       )}
       <div className="row small">

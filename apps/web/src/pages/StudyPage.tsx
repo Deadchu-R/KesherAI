@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SpeedSelect, useSpeed } from "../MediaSpeed";
 import { StudyWriting } from "../StudyWriting";
 import { Mic } from "../Mic";
 import { celebrate } from "../celebrate";
@@ -13,6 +14,7 @@ import { StudyTimetable } from "../StudyTimetable";
 import { StudyHighlights } from "../StudyHighlights";
 import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
+import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
@@ -1257,11 +1259,10 @@ type RecordingSettings = { keep: boolean; deleteAfter: "never" | "30" | "90" | "
 /** The kept recording: a player (the text's minute marks play from there), delete, and the first-time question. */
 function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { courseId: string; lecture: StudyLecture; player: React.RefObject<HTMLAudioElement | null>; onRemoved: () => void; onTime?: (sec: number) => void }) {
   const [settings, setSettings] = useState<RecordingSettings | null>(null);
-  // Listening speed, remembered on this device (Genio, Notability: 0.75–2×).
-  const [rate, setRate] = useState(() => { try { return Number(localStorage.getItem("kesher-audio-rate")) || 1; } catch { return 1; } });
+  // Listening speed, the same for every player, remembered on this device (0.25×–4×).
+  const [rate, setRate] = useSpeed();
   useEffect(() => {
     if (player.current) player.current.playbackRate = rate;
-    try { localStorage.setItem("kesher-audio-rate", String(rate)); } catch { /* a convenience */ }
   }, [rate, player]);
   const skip = (d: number) => { const a = player.current; if (a) a.currentTime = Math.max(0, a.currentTime + d); };
   useEffect(() => void api<RecordingSettings>("/api/study/recordings").then(setSettings, () => undefined), []);
@@ -1278,7 +1279,7 @@ function LectureAudio({ courseId, lecture, player, onRemoved, onTime }: { course
         <button type="button" className="ghost small" onClick={() => skip(-10)} aria-label={L("10 שניות אחורה", "Back 10 seconds")}>↺ 10</button>
         <button type="button" className="ghost small" onClick={() => skip(10)} aria-label={L("10 שניות קדימה", "Forward 10 seconds")}>10 ↻</button>
         <span className="grow" />
-        {[0.75, 1, 1.25, 1.5, 2].map((r) => <button key={r} type="button" className={`chip small${rate === r ? " on" : ""}`} aria-pressed={rate === r} onClick={() => setRate(r)}>{r}×</button>)}
+        <SpeedSelect rate={rate} onRate={setRate} />
       </div>
       <div className="row small">
         <span className="muted">{L(`ההקלטה נשמרה במחשב (${mb}MB). לחיצה על דקה בטקסט המלא מנגנת משם.`, `The recording is kept on the computer (${mb} MB). A minute in the full text plays from there.`)}</span>
@@ -1314,6 +1315,10 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
   const player = useRef<HTMLAudioElement>(null);
   // Where the recording is (the full text marks the line being heard).
   const [heard, setHeard] = useState<number>();
+  // The audio review's speed (0.25×–4×), the same as every player.
+  const [speakRate, setSpeakRate] = useSpeed();
+  // Making image occlusion cards (design ImageOcclusion).
+  const [occ, setOcc] = useState(false);
   // "Explain this": text she selected in the lecture, and its explanation.
   const [sel, setSel] = useState("");
   const [explained, setExplained] = useState("");
@@ -1366,7 +1371,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       text = r.audio;
     }
     setPlaying(true);
-    void speak(text, () => setPlaying(false));
+    void speak(text, () => setPlaying(false), speakRate);
   };
   const makeCards = (cloze = false) => run(cloze ? "cloze" : "cards", async () => {
     const r = await call(api<{ cards: StudyCard[] }>(`${base}/cards`, { method: "POST", body: { format, count: 12, ...(cloze ? { cloze: true } : {}) } }));
@@ -1417,6 +1422,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       )}
       <div className="study-actions">
         <button type="button" className={playing ? "primary" : ""} disabled={busy === "audio"} onClick={() => void listen()}>{busy === "audio" ? L("כותב סקירה קולית…", "Writing the audio review…") : playing ? L("⏹ עצירה", "⏹ Stop") : L("🎧 האזנה לסקירה (כ-3 דקות)", "🎧 Listen to a review (about 3 minutes)")}</button>
+        <SpeedSelect rate={speakRate} onRate={setSpeakRate} />
       </div>
       {l.summary && view !== "text" && <button type="button" className="small ghost" disabled={!!busy} onClick={() => void summarize()}>{busy === "summary" ? "…" : L("סכם מחדש", "Summarize again")}</button>}
       <h3>{L("להפוך לכרטיסיות, בפורמט:", "Make cards, studied as:")}</h3>
@@ -1425,6 +1431,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       </div>
       <div className="study-actions">
         <button type="button" className="primary" disabled={!!busy} onClick={() => void makeCards()}>{busy === "cards" ? L("יוצר כרטיסיות…", "Making cards…") : L("צור 12 כרטיסיות", "Make 12 cards")}</button>
+        <button type="button" disabled={!!busy} aria-expanded={occ} onClick={() => setOcc(!occ)}>🖼 {L("כרטיסיות הסתרה על תמונה", "Image occlusion cards")}</button>
         <button type="button" disabled={!!busy} onClick={() => void makeCards(true)}>{busy === "cloze" ? L("יוצר…", "Making…") : L("השלמת משפטים (_____)", "Fill in the blank (_____)")}</button>
         <a className="button" href={`#/study/${courseId}/quiz?l=${l.id}`}>{L("בוחן על ההרצאה", "Quiz on this lecture")}</a>
         <button type="button" onClick={() => askChat(L(
@@ -1440,6 +1447,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
           if (await call(api(base, { method: "DELETE" }))) { onChange(); go(`#/study/${courseId}`); }
         }}>{L("מחק הרצאה", "Delete lecture")}</button>
       </div>
+      {occ && <OcclusionEditor courseId={courseId} lectureId={l.id} onDone={(n) => { setOcc(false); toast(L(`נוצרו ${n} כרטיסיות הסתרה`, `${n} occlusion cards made`)); onChange(); }} />}
     </article>
   );
 }
@@ -1586,7 +1594,7 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
         </div>
       )}
       <button type="button" className="study-card card" onClick={() => setShown(true)} aria-label={shown ? undefined : L("הצג תשובה", "Show answer")}>
-        <span className="study-card-front" dir="auto">{card.front}</span>
+        {card.occlusion ? <OcclusionCard courseId={courseId} occ={card.occlusion} shown={shown} /> : <span className="study-card-front" dir="auto">{card.front}</span>}
         {shown ? <span className="study-card-back" dir="auto"><RichText text={card.back} /></span> : <span className="muted small">{L("הקישי או לחצי רווח כדי לראות את התשובה", "Tap or press space to see the answer")}</span>}
       </button>
       {!shown && (

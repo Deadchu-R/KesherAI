@@ -107,6 +107,29 @@ export interface StudyCard {
   createdAt: number;
   due: string;
   fsrs: Record<string, unknown>;
+  /** An image occlusion card (students part 28 #2): a picture of the course, its boxes, and which one hides the answer. */
+  occlusion?: StudyOcclusion;
+}
+
+/** A box on a picture, as fractions of its width and height (0–1). */
+export interface OcclusionBox { x: number; y: number; w: number; h: number; label?: string }
+
+/** The picture (kept in the course's folder) and the boxes; `i` is the box this card asks about. */
+export interface StudyOcclusion { image: string; boxes: OcclusionBox[]; i: number }
+
+/** Boxes from the page, checked: inside the picture, at most 40, labels trimmed. */
+export function cleanBoxes(raw: unknown): OcclusionBox[] {
+  const f = (v: unknown) => Math.max(0, Math.min(1, Number(v) || 0));
+  return (Array.isArray(raw) ? raw : []).slice(0, 40).flatMap((b): OcclusionBox[] => {
+    const o = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+    const x = f(o.x);
+    const y = f(o.y);
+    const w = Math.min(f(o.w), 1 - x);
+    const h = Math.min(f(o.h), 1 - y);
+    if (w < 0.005 || h < 0.005) return [];
+    const label = typeof o.label === "string" ? o.label.trim().slice(0, 200) : "";
+    return [{ x, y, w, h, ...(label ? { label } : {}) }];
+  });
 }
 
 /** One review of a card. */

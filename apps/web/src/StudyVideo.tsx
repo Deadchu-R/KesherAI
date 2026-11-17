@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SpeedSelect, useSpeed } from "./MediaSpeed";
 import { pptxFiles, type StudyLecture, type StudyPicture, type VideoSlide } from "@kesher/shared";
 import { strToU8, zipSync } from "fflate";
 import { api } from "./api";
@@ -27,6 +28,10 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
     if (!slides.some((s) => s.picture) || pics) return;
     void api<{ pictures: StudyPicture[] }>(`${base}/pictures?kind=picture`).then((r) => setPics(r.pictures.filter((p) => !p.video)), () => setPics([]));
   }, [slides.length]);
+  // The narration's speed (0.25×–4×), the same as every player.
+  const [rate, setRate] = useSpeed();
+  const rateNow = useRef(rate);
+  rateNow.current = rate;
   const play = (from: number) => {
     const token = ++run.current;
     setAt(from);
@@ -40,7 +45,7 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
         return;
       }
       setAt(i);
-      void speak(slides[i]!.say, () => next(i + 1));
+      void speak(slides[i]!.say, () => next(i + 1), rateNow.current);
     };
     stopSpeaking();
     next(from);
@@ -82,6 +87,7 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
           <button type="button" className="ghost" aria-label={playing ? L("עצור", "Pause") : L("נגן", "Play")} onClick={() => (playing ? pause() : play(at))}>{playing ? "⏸" : "▶"}</button>
           <button type="button" className="ghost" aria-label={L("הקודמת", "Previous")} disabled={at === 0} onClick={() => (playing ? play(at - 1) : setAt(at - 1))}>⏮</button>
           <span className="video-progress"><span style={{ width: `${((at + 1) / slides.length) * 100}%` }} /></span>
+          <SpeedSelect rate={rate} onRate={setRate} />
           <button type="button" className="ghost" aria-label={L("הבאה", "Next")} disabled={at >= slides.length - 1} onClick={() => (playing ? play(at + 1) : setAt(at + 1))}>⏭</button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Media } from "./MediaSpeed";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { desktop } from "./library";
@@ -173,7 +174,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
           {sounds.map(({ id, title, lyrics }) => (
             <div key={id} className="audio-card">
               {title && <strong className="audio-title" dir="auto">{title}</strong>}
-              <audio src={withToken(`/api/assets/${id}`)} controls preload="metadata" />
+              <Media kind="audio" src={withToken(`/api/assets/${id}`)} controls preload="metadata" />
               <a href={withToken(`/api/assets/${id}`)} download={`${title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || `kesher-music-${id.slice(0, 8)}`}.mp3`}>{t("download")}</a>
               {lyrics && (
                 <details className="audio-lyrics">
@@ -189,7 +190,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
         <div className="activity-images">
           {videos.map((id) => (
             <div key={id} className="video-card">
-              <video src={withToken(`/api/assets/${id}`)} controls loop autoPlay muted playsInline className="asset" />
+              <Media kind="video" src={withToken(`/api/assets/${id}`)} controls loop autoPlay muted playsInline className="asset" />
               <a href={withToken(`/api/assets/${id}`)} download={`kesher-video-${id.slice(0, 8)}.webm`}>{t("download")}</a>
             </div>
           ))}

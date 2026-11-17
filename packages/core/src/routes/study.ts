@@ -426,6 +426,15 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
   app.post<L>("/api/study/courses/:id/lectures/:lid/summarize", async (req) => st.summarize(req.params.id, req.params.lid));
   app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true, highlights: req.body?.highlights === true }) }));
+  /** Image occlusion cards: a picture and its boxes (design ImageOcclusion). */
+  app.post<C & { Body: { image?: string; mime?: string; boxes?: unknown; lectureId?: string; title?: string } }>("/api/study/courses/:id/occlusion", { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
+    const b = req.body ?? {};
+    return { cards: await st.addOcclusion(req.params.id, { image: String(b.image ?? ""), mime: String(b.mime ?? ""), boxes: b.boxes, ...(typeof b.lectureId === "string" ? { lectureId: b.lectureId } : {}), ...(typeof b.title === "string" ? { title: b.title } : {}) }) };
+  });
+  app.get<C & { Params: { name: string } }>("/api/study/courses/:id/images/:name", async (req, reply) => {
+    const img = await st.image(req.params.id, req.params.name);
+    return reply.type(img.mime).header("cache-control", "private, max-age=86400").send(img.data);
+  });
   /** A question during a recording, from the transcript so far (design LiveAsk). */
   app.post<C & { Body: { question?: string; transcript?: string } }>("/api/study/courses/:id/ask-live", { bodyLimit: 1024 * 1024 }, async (req) => ({ answer: await st.askLive(req.params.id, String(req.body?.question ?? ""), String(req.body?.transcript ?? "")) }));
   /** The lecture's slides (a .pptx or .pdf, base64), lined up with the recording (design SlidesSync). */

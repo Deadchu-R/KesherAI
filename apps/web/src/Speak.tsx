@@ -85,8 +85,9 @@ export function stopSpeaking(): void {
  *
  * @param text - What to say.
  * @param onEnd - Called when it finishes or stops.
+ * @param rate - The speed (0.25–4; the lecture video and audio overview pass their player's).
  */
-export async function speak(text: string, done?: () => void): Promise<void> {
+export async function speak(text: string, done?: () => void, rate = 1): Promise<void> {
   stopSpeaking();
   const say = speakable(text);
   if (!say) return done?.();
@@ -108,6 +109,8 @@ export async function speak(text: string, done?: () => void): Promise<void> {
     if (stale()) return onEnd();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    // The player's speed (0.25×–4×) where the caller has one (the lecture video and audio overview).
+    audio.playbackRate = rate;
     current = { stop: () => { audio.pause(); URL.revokeObjectURL(url); onEnd(); } };
     audio.onended = () => { URL.revokeObjectURL(url); current = null; onEnd(); };
     await audio.play().catch(() => onEnd());
@@ -146,6 +149,7 @@ export async function speak(text: string, done?: () => void): Promise<void> {
   }
   if (typeof speechSynthesis === "undefined" || typeof SpeechSynthesisUtterance === "undefined") return onEnd();
   const u = new SpeechSynthesisUtterance(say);
+  u.rate = Math.max(0.25, Math.min(4, rate));
   const voices = speechSynthesis.getVoices();
   const chosen = voice.startsWith("system:") ? voices.find((v) => v.voiceURI === voice.slice(7)) : undefined;
   const hebrew = /[֐-׿]/.test(say);

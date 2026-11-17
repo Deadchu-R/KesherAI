@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -45,6 +45,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
     id: k.id, front: str(k.front, 4000), back: str(k.back, 8000), format: STUDY_FORMATS.includes(k.format) ? k.format : "text", ...(k.kind ? { kind: str(k.kind, 40) } : {}),
     ...(okId(k.lectureId) ? { lectureId: k.lectureId } : {}), createdAt: Number(k.createdAt) || Date.now(), due: str(k.due, 40), fsrs: k.fsrs && typeof k.fsrs === "object" ? JSON.parse(JSON.stringify(k.fsrs).slice(0, 2000)) as Record<string, unknown> : {},
+    ...(k.occlusion && typeof k.occlusion.image === "string" && /^[\w-]{1,80}\.(png|jpg|webp)$/.test(k.occlusion.image) ? { occlusion: { image: k.occlusion.image, boxes: cleanBoxes(k.occlusion.boxes), i: Math.max(0, Math.round(Number(k.occlusion.i) || 0)) } } : {}),
   }));
   const reviews = arr<StudyReview>(d.reviews, 200_000).filter((r) => okId(r?.cardId) && Number.isFinite(r.t)).map((r) => ({ cardId: r.cardId, t: r.t, rating: Math.min(4, Math.max(1, Math.round(Number(r.rating) || 3))), format: STUDY_FORMATS.includes(r.format) ? r.format : "text", elapsedDays: Math.max(0, Number(r.elapsedDays) || 0), ...(r.kind ? { kind: str(r.kind, 40) } : {}), ...(typeof r.sure === "boolean" ? { sure: r.sure } : {}) }));
   const quizzes = arr<StudyQuiz>(d.quizzes, 500).filter((q) => okId(q?.id) && Array.isArray(q.questions)).map((q) => JSON.parse(JSON.stringify(q).slice(0, 200_000)) as StudyQuiz);
@@ -589,6 +590,7 @@ export class Study {
   async removeCourse(id: string): Promise<void> {
     await rm(this.file(id), { force: true });
     await rm(this.recDir(id), { recursive: true, force: true }).catch(() => undefined);
+    await rm(this.imgDir(id), { recursive: true, force: true }).catch(() => undefined);
     this.cache.delete(id);
     const gone = await this.removedCourses();
     if (!gone.includes(id)) await writeFile(join(this.dir, "_removed.json"), JSON.stringify([...gone, id].slice(-2000)));
@@ -1223,6 +1225,59 @@ export class Study {
     d.cards.push(card);
     await this.save(d);
     return card;
+  }
+
+  /** Where a course's pictures are (image occlusion cards). */
+  private imgDir(id: string): string {
+    if (!/^[\w-]{1,80}$/.test(id)) throw Object.assign(new Error("No such course."), { statusCode: 404 });
+    return join(this.dir, "images", id);
+  }
+
+  /**
+   * Image occlusion cards (students part 28 #2, like Anki and RemNote): the picture is kept once in the course's
+   * folder; each box she drew becomes a card that hides it (the others hidden too) and asks what is there.
+   *
+   * @param p - The picture (PNG/JPEG/WebP, base64, at most 8 MB), its boxes with optional labels, and the lecture.
+   */
+  async addOcclusion(id: string, p: { image: string; mime: string; boxes: unknown; lectureId?: string; title?: string }): Promise<StudyCard[]> {
+    const ext = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as Record<string, string>)[p.mime];
+    if (!ext) throw Object.assign(new Error("A PNG, JPEG or WebP picture."), { statusCode: 400 });
+    const data = Buffer.from(p.image, "base64");
+    if (!data.length || data.length > 8 * 1024 * 1024) throw Object.assign(new Error("The picture is empty or larger than 8 MB."), { statusCode: 400 });
+    const boxes = cleanBoxes(p.boxes);
+    if (!boxes.length) throw Object.assign(new Error("Draw at least one box over what to hide."), { statusCode: 400 });
+    const d = await this.get(id);
+    const name = `${randomUUID()}.${ext}`;
+    await mkdir(this.imgDir(id), { recursive: true });
+    await writeFile(join(this.imgDir(id), name), data);
+    const now = new Date();
+    const title = (p.title ?? "").trim().slice(0, 200);
+    const made = boxes.map((b, i): StudyCard => {
+      const c = createEmptyCard(now);
+      return {
+        id: randomUUID(),
+        front: `🖼 ${title || "?"} — ${i + 1}/${boxes.length}`,
+        back: b.label || `#${i + 1}`,
+        format: "diagram",
+        kind: "anatomy",
+        ...(p.lectureId && d.lectures.some((l) => l.id === p.lectureId) ? { lectureId: p.lectureId } : {}),
+        createdAt: now.getTime(),
+        due: c.due.toISOString(),
+        fsrs: fromCard(c),
+        occlusion: { image: name, boxes, i },
+      };
+    });
+    d.cards.push(...made);
+    await this.save(d);
+    return made;
+  }
+
+  /** A course picture (for its occlusion cards). */
+  async image(id: string, name: string): Promise<{ data: Buffer; mime: string }> {
+    if (!/^[\w-]{1,80}\.(png|jpg|webp)$/.test(name)) throw Object.assign(new Error("No such picture."), { statusCode: 404 });
+    const data = await readFile(join(this.imgDir(id), name)).catch(() => undefined);
+    if (!data) throw Object.assign(new Error("No such picture."), { statusCode: 404 });
+    return { data, mime: name.endsWith(".png") ? "image/png" : name.endsWith(".webp") ? "image/webp" : "image/jpeg" };
   }
 
   /**

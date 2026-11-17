@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SpeedSelect, useSpeed } from "./MediaSpeed";
 import type { StudyLecture, VideoChapter } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
@@ -32,7 +33,7 @@ function useYouTube(frame: React.RefObject<HTMLIFrameElement | null>, id: string
       clearInterval(t);
     };
   }, [id]);
-  return (func: "playVideo" | "pauseVideo" | "seekTo", args: unknown[] = []) => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube-nocookie.com");
+  return (func: "playVideo" | "pauseVideo" | "seekTo" | "setPlaybackRate", args: unknown[] = []) => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube-nocookie.com");
 }
 
 /**
@@ -51,6 +52,13 @@ export function StudyVideoLecture({ base, lecture, onLecture }: { base: string; 
   const [, rerender] = useState(0);
   const chapters: VideoChapter[] = lecture.chapters ?? [];
   const yt = useYouTube(frame, lecture.videoFile ? undefined : lecture.youtube, (t) => setNow(t));
+  const [rate, setRate] = useSpeed();
+  const ytNow = useRef(yt);
+  ytNow.current = yt;
+  useEffect(() => {
+    if (video.current) video.current.playbackRate = rate;
+    else ytNow.current("setPlaybackRate", [Math.min(2, rate)]);
+  }, [rate]);
   const seek = (t: number) => {
     if (video.current) {
       video.current.currentTime = t;
@@ -93,9 +101,13 @@ export function StudyVideoLecture({ base, lecture, onLecture }: { base: string; 
   };
   return (
     <div className="video-lecture">
+      <div className="row vl-speed">
+        {/* Speed for the kept video (0.25×–4×); YouTube's own player goes from 0.25× to 2×. */}
+        <SpeedSelect rate={rate} onRate={setRate} {...(lecture.videoFile ? {} : { max: 2 })} />
+      </div>
       <div className="vl-stage">
         {lecture.videoFile ? (
-          <video ref={video} src={withToken(`${base}/video-file`)} controls preload="metadata" onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+          <video ref={video} src={withToken(`${base}/video-file`)} controls preload="metadata" onLoadedMetadata={(e) => (e.currentTarget.playbackRate = rate)} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
         ) : lecture.youtube ? (
           <iframe ref={frame} title={lecture.title} src={`https://www.youtube-nocookie.com/embed/${lecture.youtube}?enablejsapi=1&rel=0&origin=${encodeURIComponent(location.origin)}`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
         ) : null}

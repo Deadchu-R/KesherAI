@@ -303,3 +303,22 @@ test("slides: a PowerPoint lines up with the recording's minutes", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("image occlusion: one picture kept, a card per box, boxes checked", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-occ-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("אנטומיה");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const cards = await st.addOcclusion(c.id, { image: png.toString("base64"), mime: "image/png", title: "הלב", boxes: [{ x: 0.1, y: 0.1, w: 0.2, h: 0.1, label: "אאורטה" }, { x: 0.5, y: 0.5, w: 0.9, h: 0.9 }, { x: 0, y: 0, w: 0, h: 0 }] });
+    assert.equal(cards.length, 2);
+    assert.equal(cards[0]!.back, "אאורטה");
+    assert.equal(cards[1]!.occlusion!.boxes[1]!.w, 0.5);
+    assert.equal(cards[0]!.occlusion!.image, cards[1]!.occlusion!.image);
+    assert.equal((await st.image(c.id, cards[0]!.occlusion!.image)).data.length, png.length);
+    await assert.rejects(() => st.image(c.id, "../x.png"), /No such picture/);
+    await assert.rejects(() => st.addOcclusion(c.id, { image: png.toString("base64"), mime: "image/gif", boxes: [] }), /PNG/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
