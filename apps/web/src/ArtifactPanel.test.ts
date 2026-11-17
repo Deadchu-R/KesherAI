@@ -21,3 +21,10 @@ test("a refresh to another site is taken out, and forms cannot post anywhere", (
   assert.doesNotMatch(f, /refresh/);
   assert.match(f, /form-action 'none'/);
 });
+
+test("a screen's size on the design canvas", async () => {
+  const { frameSize } = await import("./design-frame.js");
+  assert.deepEqual(frameSize(`<meta name="kesher-frame" content="phone">`), { w: 390, h: 844, phone: true });
+  assert.equal(frameSize(`<meta name="viewport" content="width=390">`).phone, true);
+  assert.equal(frameSize("<html></html>").w, 1280);
+});

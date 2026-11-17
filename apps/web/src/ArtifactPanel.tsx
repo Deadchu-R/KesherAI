@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { CodeView } from "./ide/CodeView";
 import { getLocale, he$ } from "./i18n";
+
+const DesignBoard = lazy(() => import("./DesignBoard").then((m) => ({ default: m.DesignBoard })));
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -60,7 +62,7 @@ export function framed(given: string): string {
 /** The panel; rendered once by the app, hidden until something opens it. */
 export function ArtifactPanel() {
   const [, tick] = useState(0);
-  const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [tab, setTab] = useState<"preview" | "code" | "canvas">("preview");
   const [full, setFull] = useState(false);
   const [reload, setReload] = useState(0);
   useEffect(() => {
@@ -108,13 +110,16 @@ export function ArtifactPanel() {
         <div className="artifact-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "preview"} className={tab === "preview" ? "on" : ""} onClick={() => setTab("preview")}>{L("תצוגה", "Preview")}</button>
           <button type="button" role="tab" aria-selected={tab === "code"} className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>{L("קוד", "Code")}</button>
+          <button type="button" role="tab" aria-selected={tab === "canvas"} className={tab === "canvas" ? "on" : ""} onClick={() => { setTab("canvas"); setFull(true); }}>🎨 {L("קנבס", "Canvas")}</button>
         </div>
         <button type="button" className="ghost" title={L("טען מחדש", "Reload")} aria-label={L("טען מחדש", "Reload")} onClick={() => setReload((n) => n + 1)}>↻</button>
         <button type="button" className="ghost" title={L("מסך מלא", "Full screen")} aria-label={L("מסך מלא", "Full screen")} onClick={() => setFull((f) => !f)}>⛶</button>
         <button type="button" className="ghost" title={L("הורד HTML", "Download HTML")} aria-label={L("הורד HTML", "Download HTML")} onClick={download}>⬇</button>
         <button type="button" className="ghost" title={L("סגור", "Close")} aria-label={L("סגור", "Close")} onClick={close}>✕</button>
       </div>
-      {tab === "preview" ? (
+      {tab === "canvas" ? (
+        <Suspense fallback={<p className="muted small">…</p>}><DesignBoard screens={versions} onPick={(i) => { current = i; changed(); }} /></Suspense>
+      ) : tab === "preview" ? (
         <iframe key={`${current}-${reload}`} className="artifact-frame" title={title} sandbox="allow-scripts allow-forms allow-modals" srcDoc={framed(code)} />
       ) : (
         <div className="artifact-code"><CodeView code={code} language="html" /></div>
