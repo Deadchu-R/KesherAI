@@ -19,7 +19,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
 interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null; courseSummary?: StudyCourseSummary | null }
-interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; reviews: number }
+interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; mastery?: Array<{ lectureId: string; title: string; mastery: number; n: number; change: number }>; reviews: number }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
   text: ["טקסט", "Text"],
@@ -1493,6 +1493,39 @@ function CalcPractice() {
   );
 }
 
+/** Mastery per topic (design "TopicMastery"): a colored bar per lecture, weakest first, and a nudge when one dropped this week. */
+function TopicMasteryCard({ courseId, rows }: { courseId: string; rows: NonNullable<Progress["mastery"]> }) {
+  const tone = (v: number) => (v < 50 ? "low" : v < 80 ? "mid" : "high");
+  const drop = rows.filter((r) => r.change <= -10).sort((a, b) => a.change - b.change)[0];
+  return (
+    <>
+      <div className="card">
+        <h2>{L("שליטה לפי נושא", "Mastery by topic")}</h2>
+        <p className="muted">{L("מהחזרות על הכרטיסיות ומהבחנים שלך. תשובות אחרונות שוקלות יותר.", "From your card reviews and quizzes. Recent answers count more.")}</p>
+        <ul className="mastery-bars">
+          {rows.map((r) => (
+            <li key={r.lectureId}>
+              <a href={`#/study/${courseId}/l/${r.lectureId}`} dir="auto">{r.title}</a>
+              <span className={`mastery-track ${tone(r.mastery)}`}><span style={{ width: `${r.mastery}%` }} /></span>
+              <small dir="ltr" className={tone(r.mastery)}><b>{r.mastery}%</b>{r.change ? <span className={r.change < 0 ? "low" : "high"}> {r.change < 0 ? "▼" : "▲"}{Math.abs(r.change)}</span> : null}</small>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {drop && (
+        <div className="card mastery-drop">
+          <p dir="auto">📉 {L(`"${drop.title}" ירד ב-${-drop.change} נקודות השבוע.`, `"${drop.title}" dropped ${-drop.change} points this week.`)}</p>
+          <div className="row">
+            <a className="button primary" href={`#/study/${courseId}/quiz?l=${drop.lectureId}`}>{L("בוחן קצר על הנושא", "Short quiz on it")}</a>
+            <a className="button" href={`#/study/${courseId}/l/${drop.lectureId}`}>{L("להרצאה", "Open the lecture")}</a>
+          </div>
+        </div>
+      )}
+      {rows.some((r) => r.mastery < 80) && <a className="button" href={`#/study/${courseId}/quiz`}>{L("בוחן על הנושאים החלשים", "Quiz on weak topics")}</a>}
+    </>
+  );
+}
+
 function ProgressView({ courseId }: { courseId: string }) {
   const [p, setP] = useState<Progress | null>(null);
   useEffect(() => void api<Progress>(`/api/study/courses/${courseId}/progress`).then(setP, (e: Error) => toast(e.message)), [courseId]);
@@ -1518,7 +1551,8 @@ function ProgressView({ courseId }: { courseId: string }) {
         )}
         {best && <p dir="auto"><b>{L("המלצה", "Suggestion")}:</b> {L(`${fmtName(best.format)} עבד לך הכי טוב (${Math.round(best.recall * 100)}%). חזרה מרווחת ובחנים נשארים תמיד — הם עוזרים לכולם.`, `${fmtName(best.format)} worked best for you (${Math.round(best.recall * 100)}%). Spaced review and quizzes stay on: they help everyone.`)}</p>}
       </div>
-      {p.weak.length > 0 && (
+      {!!p.mastery?.length && <TopicMasteryCard courseId={courseId} rows={p.mastery} />}
+      {p.weak.length > 0 && !p.mastery?.length && (
         <div className="card">
           <h2>{L("נושאים חלשים", "Weak topics")}</h2>
           <ul className="study-list">{p.weak.map((w) => <li key={w.lectureId}><a href={`#/study/${courseId}/l/${w.lectureId}`}><b dir="auto">{w.title}</b><small className="warn">{Math.round(w.correct * 100)}%</small></a></li>)}</ul>

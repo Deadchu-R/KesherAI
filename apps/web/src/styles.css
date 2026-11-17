@@ -2626,6 +2626,18 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .study-bars li { display: grid; grid-template-columns: 150px 1fr auto; gap: 10px; align-items: center; }
 .study-bars meter { width: 100%; height: 10px; }
+.mastery-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mastery-bars li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(70px, 140px) 64px; gap: 10px; align-items: center; }
+.mastery-bars a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.mastery-track { height: 9px; border-radius: 5px; background: var(--border, #2a2a30); overflow: hidden; }
+.mastery-track > span { display: block; height: 100%; border-radius: 5px; }
+.mastery-track.low > span, .mastery-bars .low { color: #ff7a7a; background: none; }
+.mastery-track.low > span { background: #ff7a7a; }
+.mastery-track.mid > span { background: #f0a830; }
+.mastery-track.high > span { background: #7fd8a8; }
+.mastery-bars .mid { color: #f0a830; }
+.mastery-bars .high { color: #7fd8a8; }
+.mastery-drop { border-color: #ff7a7a; }
 .study-bars meter.thin { opacity: 0.55; }
 .study-progress .card { display: flex; flex-direction: column; gap: 12px; }
 @media (max-width: 480px) {

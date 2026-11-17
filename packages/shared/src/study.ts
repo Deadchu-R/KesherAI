@@ -219,6 +219,54 @@ export function weakLectures(quizzes: StudyQuiz[]): Array<{ lectureId: string; c
   return [...by].filter(([, s]) => s.n >= 2).map(([lectureId, s]) => ({ lectureId, correct: s.ok / s.n, n: s.n })).sort((a, b) => a.correct - b.correct);
 }
 
+/** Mastery of one lecture (a topic): 0–100 from her recent cards and quiz answers, and how it moved in the last week. */
+export interface TopicMastery { lectureId: string; mastery: number; n: number; change: number }
+
+/**
+ * Mastery per lecture (RESEARCH_LOG "Students, part 20" #3, like SaveMyGPA and Quizlet Learn): her card reviews
+ * (good/easy count, hard half, again none; recent ones weigh more) and her quiz answers on that lecture, blended;
+ * `change` is now against a week ago (a drop is what Study warns about). Lectures with fewer than 3 answers are left out.
+ *
+ * @param cards - The course's cards (for their lectures).
+ * @param reviews - Her card reviews.
+ * @param quizzes - Her taken quizzes.
+ * @param now - Now (ms).
+ */
+export function topicMastery(cards: StudyCard[], reviews: StudyReview[], quizzes: StudyQuiz[], now = Date.now()): TopicMastery[] {
+  const lectureOf = new Map(cards.map((c) => [c.id, c.lectureId]));
+  const WEEK = 7 * 86_400_000;
+  const score = (until: number) => {
+    const by = new Map<string, { w: number; ok: number; n: number }>();
+    const add = (lid: string | undefined, ok: number, t: number) => {
+      if (!lid || t > until) return;
+      // Recent answers count more (half weight after 30 days).
+      const w = 0.5 ** ((until - t) / (30 * 86_400_000));
+      const s = by.get(lid) ?? { w: 0, ok: 0, n: 0 };
+      s.w += w;
+      s.ok += ok * w;
+      s.n++;
+      by.set(lid, s);
+    };
+    for (const r of reviews) add(lectureOf.get(r.cardId), r.rating >= 3 ? 1 : r.rating === 2 ? 0.5 : 0, r.t);
+    for (const z of quizzes) {
+      const answers = z.answers;
+      if (!answers && !z.marks) continue;
+      z.questions.forEach((q, i) => add(q.lectureId, z.marks ? (z.marks[i] ?? 0) : answers?.[i] === q.answer ? 1 : 0, z.t));
+    }
+    return by;
+  };
+  const nowS = score(now);
+  const then = score(now - WEEK);
+  return [...nowS]
+    .filter(([, s]) => s.n >= 3)
+    .map(([lectureId, s]) => {
+      const mastery = Math.round((s.ok / s.w) * 100);
+      const before = then.get(lectureId);
+      return { lectureId, mastery, n: s.n, change: before && before.n >= 3 ? mastery - Math.round((before.ok / before.w) * 100) : 0 };
+    })
+    .sort((a, b) => a.mastery - b.mastery);
+}
+
 /**
  * The first JSON array or object in a model's answer (models wrap JSON in prose or code fences).
  *

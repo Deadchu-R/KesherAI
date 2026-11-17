@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { cardsToTsv, examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
+import { cardsToTsv, examPlan, formatStats, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -391,6 +391,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       formats: formatStats(d.reviews),
       byKind: kinds.map((kind) => ({ kind, formats: formatStats(d.reviews.filter((r) => r.kind === kind)) })),
       weak: weakLectures(d.quizzes).map((w) => ({ ...w, title: d.lectures.find((l) => l.id === w.lectureId)?.title ?? "" })),
+      mastery: topicMastery(d.cards, d.reviews, d.quizzes)
+        .map((m) => ({ ...m, title: d.lectures.find((l) => l.id === m.lectureId)?.title ?? "" }))
+        .filter((m) => m.title),
       reviews: d.reviews.length,
     };
   });
