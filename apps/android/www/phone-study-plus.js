@@ -758,7 +758,8 @@ export function studyPlus(x) {
         [courses.some((c) => c.lectures.length), L("ההרצאה הראשונה", "The first lecture"), L("ממנה נעשים סיכום, כרטיסיות ובוחן", "It becomes a summary, cards and a quiz"), courses[0] ? () => go({ at: "course", course: courses[0].id }) : null, L("להוסיף", "Add")],
       ];
       const done = items.filter((i) => i[0]).length;
-      if (done === items.length) return box.remove();
+      // All done: hidden for good, so the model check does not load the phone model engine on every visit.
+      if (done === items.length) { saveSetup({ checklistHidden: true }); return box.remove(); }
       box.replaceChildren(section("",
         el("div", { class: "ph-row" }, el("h2", { style: "margin: 0" }, L(`🧭 מתחילים: ${done} מתוך ${items.length}`, `🧭 Getting started: ${done} of ${items.length}`)),
           el("button", { type: "button", class: "link", onclick: () => { saveSetup({ checklistHidden: true }); box.remove(); } }, L("להסתיר", "Hide"))),

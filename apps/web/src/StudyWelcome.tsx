@@ -22,9 +22,10 @@ type Recommended = { id: string; name: string; sizeGb: number; downloaded: boole
  * any chosen chat model works) and speech-to-text for recordings. With no chat model, the largest recommended model
  * that runs well here is suggested; nothing is downloaded until she taps.
  */
-export function useModelStatus(): [ModelStatus | null, () => void] {
+export function useModelStatus(on = true): [ModelStatus | null, () => void] {
   const [st, setSt] = useState<ModelStatus | null>(null);
   const load = () => {
+    if (!on) return;
     void Promise.all([
       api<{ activeModels?: Record<string, string> }>("/api/settings").catch(() => ({ activeModels: {} as Record<string, string> })),
       api<Array<{ name: string; gguf?: boolean }>>("/api/models/local").catch(() => []),
@@ -44,7 +45,7 @@ export function useModelStatus(): [ModelStatus | null, () => void] {
       });
     });
   };
-  useEffect(load, []);
+  useEffect(load, [on]);
   return [st, load];
 }
 
@@ -250,14 +251,15 @@ export function StudyWelcome({ prefs, onPrefs, onSkip }: { prefs: StudyPrefs; on
  * helps and one button. Skipped setup steps wait here; it hides itself when all is done, or when she hides it.
  */
 export function StudySetupChecklist({ prefs, onPrefs, courses }: { prefs: StudyPrefs; onPrefs: (p: StudyPrefs) => void; courses: Array<{ id: string; lectures: number }> }) {
-  const [models, reloadModels] = useModelStatus();
+  const [models, reloadModels] = useModelStatus(!prefs.checklistHidden);
   const [goalOn, setGoalOn] = useState<boolean | null>(null);
   const [phones, setPhones] = useState<number | null>(null);
   const [fieldOpen, setFieldOpen] = useState(false);
   useEffect(() => {
+    if (prefs.checklistHidden) return;
     void api<{ on: boolean }>("/api/study/goal").then((g) => setGoalOn(!!g.on), () => setGoalOn(null));
     void api<{ devices: unknown[] }>("/api/remote/devices").then((d) => setPhones(d.devices.length), () => setPhones(null));
-  }, []);
+  }, [prefs.checklistHidden]);
   if (prefs.checklistHidden || !models) return null;
   const set = (change: Partial<StudyPrefs>) => void api<StudyPrefs>("/api/study/prefs", { method: "PUT", body: change }).then(onPrefs, (e: Error) => toast(e.message));
   const firstLecture = courses.some((c) => c.lectures > 0);
@@ -271,7 +273,11 @@ export function StudySetupChecklist({ prefs, onPrefs, courses }: { prefs: StudyP
     ...(goalOn !== null ? [{ id: "goal", done: goalOn, title: L("יעד יומי ותזכורת", "A daily goal and reminder"), why: L("10–15 דקות ביום מספיקות לחזרה", "10–15 minutes a day is enough for review"), act: <button type="button" onClick={() => void api("/api/study/goal", { method: "PUT", body: { on: true, targets: { minutes: 15, cards: 0 }, remind: "20:30" } }).then(() => setGoalOn(true), (e: Error) => toast(e.message))}>{L("15 דקות, תזכורת ב־20:30", "15 minutes, reminder at 20:30")}</button> }] : []),
   ];
   const done = items.filter((i) => i.done).length;
-  if (done === items.length) return null;
+  // All done: hidden for good, so the model check (a hardware and disk scan) does not run on every visit.
+  if (done === items.length) {
+    if (goalOn !== null && phones !== null) set({ checklistHidden: true });
+    return null;
+  }
   const modelOpen = items.some((i) => (i.id === "model" || i.id === "stt") && !i.done);
   return (
     <section className="card study-setup-list" aria-label={L("מתחילים", "Getting started")}>
