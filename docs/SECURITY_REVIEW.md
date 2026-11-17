@@ -927,3 +927,10 @@ S5 an outside scanner's rules for Electron.
 - **Unattended self-work**: ask_user and request_access no longer wait in a self-work session; folders outside the project are refused there (stricter than before).
 - **UEFN**: writes only `.verse` files inside a UEFN project's Content folder (checked with `relative()`; `../` refused, tested).
 - Performance: the mod and UEFN tools add ~300 tokens; UEFN's only when its projects folder exists.
+
+## Scan 100 (2026-11-17, 05:10): the five changes after 0.6.316
+- **Films for you at 390 px, course model names**: display only; no new input or route.
+- **Voice engine fix**: one more pinned package (`setuptools<81`) from PyPI into the voice engine's own Python, so the audio watermark (Perth, marks speech as made by AI) loads again; it is kept on, not bypassed. A marker file stops it running twice.
+- **MCP "has its own view" tag; Knowledge base size**: the tag reads `_meta.ui.resourceUri` the server already sends (shown only, never opened from the list); the size is two `stat` calls on KesherAI's own index files per base, inside the list call (cheap: no reads).
+- **Lip sync microphones**: names come from Windows' audio list (WASAPI) and are matched back to a device by prefix; the name is only compared, never run. Self-work's version of this task was not taken: it also added an `open any path` route and a desktop zoom hook outside the task.
+- Secrets/personal paths: none in the diff (checked with git grep).
