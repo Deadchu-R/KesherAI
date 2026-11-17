@@ -194,6 +194,7 @@ function SheetEditor({ id }: { id: string }) {
           </tbody>
         </table>
       </div>
+      <p className="muted small sheets-tip">{L("לחיצה על תא בוחרת אותו, ולחיצה נוספת (או הקלדה) פותחת אותו לעריכה. נוסחה מתחילה ב-=.", "Tap a cell to pick it; tap again (or type) to edit. A formula starts with =.")}</p>
       <div className="row sheets-more">
         <button type="button" className="ghost small" onClick={() => grow("rows")}>＋ {L("10 שורות", "10 rows")}</button>
         <button type="button" className="ghost small" onClick={() => grow("cols")}>＋ {L("עמודה", "Column")}</button>
