@@ -30,10 +30,13 @@ export function QuestionCheck({ courseId, quizId, index, mine, onQuiz }: { cours
     setBusy(false);
     if (!r) return;
     const why = [r.check.quote ? `"${r.check.quote}"` : "", r.check.explain].filter(Boolean).join(" ");
-    setSaid(r.check.verdict === "right" ? L(`המפתח נכון לפי ההרצאה. ${why}`, `The key is right by the lecture. ${why}`)
+    const line = r.check.verdict === "right" ? L(`המפתח נכון לפי ההרצאה. ${why}`, `The key is right by the lecture. ${why}`)
       : r.check.verdict === "broken" ? L(`השאלה לא טובה, אז הוצאתי אותה מהבוחן ומהציון. ${why}`, `The question is not a good one, so it is out of the quiz and the score. ${why}`)
       : body.mine !== undefined ? L("סימנתי את התשובה שלך כנכונה, והציון עודכן.", "Your answer is marked right, and the score is updated.")
-      : L(`צדקת: תיקנתי את המפתח, והציון עודכן. ${why}`, `You were right: the key is fixed and the score is updated. ${why}`));
+      : L(`צדקת: תיקנתי את המפתח, והציון עודכן. ${why}`, `You were right: the key is fixed and the score is updated. ${why}`);
+    setSaid(line);
+    // A fixed or removed question leaves this row (it shows "fixed" or goes), so the answer also comes as a toast.
+    if (r.check.verdict !== "right") toast(line);
     onQuiz(r.quiz);
   };
   if (!open) return <button type="button" className="small" onClick={() => setOpen(true)}>⚠️ {L("נראה לי שהשאלה שגויה", "I think this question is wrong")}</button>;
