@@ -480,3 +480,20 @@ test("parsePodcast: two hosts' lines, by letter or name", async () => {
     { host: 1, text: "הבנתי!" },
   ]);
 });
+
+test("leechCards: cards forgotten three times or more, most first; occlusion cards left out", async () => {
+  const { leechCards } = await import("./study.js");
+  const card = (id: string, extra = {}) => ({ id, front: id, back: "b", format: "text" as const, createdAt: 0, due: "", fsrs: {}, ...extra });
+  const rev = (cardId: string, rating: number) => ({ cardId, rating, t: 0, format: "text" as const, elapsedDays: 0 });
+  const cards = [card("a"), card("b"), card("c", { occlusion: { image: "x.png", boxes: [], i: 0 } })];
+  const reviews = [rev("a", 1), rev("a", 1), rev("a", 1), rev("b", 1), rev("b", 1), rev("b", 1), rev("b", 1), rev("b", 3), rev("c", 1), rev("c", 1), rev("c", 1)];
+  assert.deepEqual(leechCards(cards, reviews).map((x) => [x.card.id, x.lapses]), [["b", 4], ["a", 3]]);
+});
+
+test("noteCards: \"term :: meaning\" lines in her notes", async () => {
+  const { noteCards } = await import("./study.js");
+  assert.deepEqual(noteCards("סתם שורה\n- ברדיקרדיה :: דופק מתחת ל-60\n• Tachycardia::over 100 \nריק ::\n:: בלי מונח"), [
+    { front: "ברדיקרדיה", back: "דופק מתחת ל-60" },
+    { front: "Tachycardia", back: "over 100" },
+  ]);
+});

@@ -78,6 +78,11 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** The course's tutor: `{ question, history? }` → an answer from her lectures, with the lectures it used. */
   app.post<C & { Body: { question?: string; history?: Array<{ role: "user" | "assistant"; content: string }>; mode?: string } }>("/api/study/courses/:id/ask", async (req) => st.askCourse(req.params.id, String(req.body?.question ?? ""), Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [], undefined, req.body?.mode === "study" ? "study" : req.body?.mode === "homework" ? "homework" : "ask"));
   /** Why a card she got wrong has that answer (a sentence or two, from her lecture). */
+  /** Cards from the "term :: meaning" lines of the lecture's notes (design NoteCards). */
+  app.post<L>("/api/study/courses/:id/lectures/:lid/note-cards", async (req) => st.cardsFromNotes(req.params.id, req.params.lid));
+  /** Her hard cards and their fixes (design HardCards). */
+  app.get<C>("/api/study/courses/:id/leeches", async (req) => ({ leeches: await st.leeches(req.params.id) }));
+  app.post<C & { Params: { cid: string }; Body: { how?: string } }>("/api/study/courses/:id/cards/:cid/fix", async (req) => ({ cards: await st.fixLeech(req.params.id, req.params.cid, (["simpler", "split", "hook"].includes(String(req.body?.how)) ? req.body!.how : "simpler") as "simpler") }));
   app.post<C & { Params: { cid: string } }>("/api/study/courses/:id/cards/:cid/explain", async (req) => st.explainCard(req.params.id, req.params.cid));
   /** Cards for Anki or Quizlet (tab-separated text), and cards from their exports (`{ text }`). */
   app.get<C>("/api/study/courses/:id/anki", async (req, reply) => {

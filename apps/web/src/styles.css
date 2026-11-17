@@ -3575,3 +3575,8 @@ div.slide-list { padding-inline-start: 0; }
 .study-video-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--border, #333); }
 .study-video-row:last-of-type { border-bottom: 0; }
 .study-video-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.study-leeches { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; text-align: start; }
+.study-leech { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border, #333); border-radius: 10px; overflow-wrap: anywhere; }
+.study-card-timer { flex-direction: row; align-items: center; gap: 6px; }
+.study-card-clock { height: 4px; border-radius: 2px; background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; margin: 4px 0; }
+.study-card-clock span { display: block; height: 100%; background: var(--accent, #a5b4ff); transition: width 1s linear; }

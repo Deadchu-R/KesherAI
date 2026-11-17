@@ -10,7 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -1041,7 +1041,63 @@ export class Study {
     return { text: cleanScript(r.text.trim(), /[\u0590-\u05ff]/.test(selection)) };
   }
 
+  /** Cards from the "term :: meaning" lines of a lecture's notes (design NoteCards); lines already made are skipped. */
+  async cardsFromNotes(id: string, lectureId: string): Promise<{ added: number }> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const have = new Set(d.cards.map((c) => c.front.trim().toLowerCase()));
+    let added = 0;
+    for (const n of noteCards(l.notes ?? "")) {
+      if (have.has(n.front.toLowerCase())) continue;
+      const c = createEmptyCard(new Date());
+      d.cards.push({ id: randomUUID(), front: n.front, back: n.back, format: "text", lectureId, createdAt: Date.now(), due: c.due.toISOString(), fsrs: fromCard(c) });
+      have.add(n.front.toLowerCase());
+      added++;
+    }
+    if (added) await this.save(d);
+    return { added };
+  }
+
+  /** Her hard cards (design HardCards): forgotten three times or more. */
+  async leeches(id: string): Promise<Array<{ card: StudyCard; lapses: number }>> {
+    const d = await this.get(id);
+    return leechCards(d.cards, d.reviews).slice(0, 50);
+  }
+
   /**
+   * Fixes a hard card (design HardCards) with the chat model, from the card and its lecture: simpler (the card
+   * rewritten), split (new small cards in its place) or a memory hook (its answer with a hook). New cards start fresh.
+   */
+  async fixLeech(id: string, cardId: string, how: LeechFix, signal?: AbortSignal): Promise<StudyCard[]> {
+    const d = await this.get(id);
+    const card = d.cards.find((c) => c.id === cardId);
+    if (!card) throw Object.assign(new Error("No such card."), { statusCode: 404 });
+    if (!LEECH_PROMPT[how]) throw Object.assign(new Error("Unknown fix."), { statusCode: 400 });
+    const passage = findPassages(d.lectures.filter((l) => !card.lectureId || l.id === card.lectureId), `${card.front} ${card.back}`, 2500).map((p) => p.text).join("\n");
+    const raw = await this.ask(LEECH_PROMPT[how], `Card: ${card.front}\nAnswer: ${card.back}${passage ? `\n\nLecture passage:\n${passage}` : ""}`, signal ?? AbortSignal.timeout(180_000), d.course);
+    const list = jsonIn(raw);
+    const made = (Array.isArray(list) ? list : []).flatMap((x) => {
+      const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const front = typeof o.front === "string" ? o.front.trim().slice(0, 2000) : "";
+      const back = typeof o.back === "string" ? o.back.trim().slice(0, 6000) : "";
+      return front && back ? [{ front, back }] : [];
+    }).slice(0, how === "split" ? 4 : 1);
+    if (!made.length) throw Object.assign(new Error("The model did not write a card. Try again."), { statusCode: 502 });
+    const fresh = await this.get(id);
+    const i = fresh.cards.findIndex((c) => c.id === cardId);
+    if (i < 0) throw Object.assign(new Error("No such card."), { statusCode: 404 });
+    const old = fresh.cards[i]!;
+    const cards: StudyCard[] = made.map((m) => {
+      const c = createEmptyCard(new Date());
+      return { id: randomUUID(), front: m.front, back: m.back, format: old.format, ...(old.kind ? { kind: old.kind } : {}), ...(old.lectureId ? { lectureId: old.lectureId } : {}), createdAt: Date.now(), due: c.due.toISOString(), fsrs: fromCard(c) };
+    });
+    fresh.cards.splice(i, 1, ...cards);
+    fresh.removed = [...(fresh.removed ?? []), cardId].slice(-5000);
+    await this.save(fresh);
+    return cards;
+  }
+
+/**
    * Why a missed card's answer is right, in a sentence or two, from her lecture.
    *
    * @param id - The course.

@@ -1942,6 +1942,35 @@ export function parsePodcast(text: string): Array<{ host: 0 | 1; text: string }>
   return out.filter((l) => l.text).slice(0, 200);
 }
 
+/**
+ * Her hard cards ("leeches", like Anki's, design HardCards, students part 30 #1): cards she answered "again" at
+ * least `min` times, most forgotten first. Image occlusion cards are left out (their fix is the picture).
+ */
+export function leechCards(cards: StudyCard[], reviews: StudyReview[], min = 3): Array<{ card: StudyCard; lapses: number }> {
+  const again = new Map<string, number>();
+  for (const r of reviews) if (r.rating === 1) again.set(r.cardId, (again.get(r.cardId) ?? 0) + 1);
+  return cards.filter((c) => !c.occlusion && (again.get(c.id) ?? 0) >= min).map((card) => ({ card, lapses: again.get(card.id)! })).sort((a, b) => b.lapses - a.lapses);
+}
+
+/**
+ * Cards written in her notes (design NoteCards, students part 30 #2, like RemNote): each line "term :: meaning" is a
+ * card (a leading "- " or "• " is fine); at most 200.
+ */
+export function noteCards(text: string): Array<{ front: string; back: string }> {
+  return text.split("\n").flatMap((line) => {
+    const m = /^\s*(?:[-•*]\s+)?(.+?)\s*::\s*(.+?)\s*$/.exec(line);
+    return m && m[1]!.length <= 500 && m[2]!.length <= 2000 ? [{ front: m[1]!, back: m[2]! }] : [];
+  }).slice(0, 200);
+}
+
+/** Fixing a hard card: simpler, split in two, or a memory hook added to its answer. */
+export type LeechFix = "simpler" | "split" | "hook";
+export const LEECH_PROMPT: Record<LeechFix, string> = {
+  simpler: "A flashcard keeps being forgotten. Rewrite it so it is easier to remember: one clear question, a short answer (one idea), plain words, from the card and the lecture passage only. Same language as the card. JSON only: [{\"front\":\"…\",\"back\":\"…\"}]",
+  split: "A flashcard keeps being forgotten because it asks too much at once. Split it into 2-4 small cards, each one fact or step, from the card and the lecture passage only. Same language as the card. JSON only: [{\"front\":\"…\",\"back\":\"…\"}, …]",
+  hook: "A flashcard keeps being forgotten. Keep its question; write its answer again with a short memory hook after it (a vivid image, a mnemonic, or a link to something familiar), from the card and the lecture passage only. Same language as the card. JSON only: [{\"front\":\"…\",\"back\":\"…\"}]",
+};
+
 /** "What should I learn from this quiz?": a short plan from the questions she missed (design QuizTalk). */
 export const QUIZ_TALK_PROMPT = "A student finished a quiz. From the questions she missed (her answer, the right one and the lecture), write a short, warm plan in her language: (1) the one or two ideas behind most of the mistakes, in plain words; (2) what to review first, naming the lecture; (3) one next step she can do in ten minutes (e.g. a few cards, re-reading one part, a quiz on that lecture). At most 8 short lines, no headings. Never add facts that are not in what is given.";
 

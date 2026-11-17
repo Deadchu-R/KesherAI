@@ -14,6 +14,7 @@ import { StudyTogether } from "../StudyTogether";
 import { StudyPapers } from "../StudyPapers";
 import { StudyPalace } from "../StudyPalace";
 import { StudyTopicVideos } from "../StudyTopicVideos";
+import { StudyLeeches } from "../StudyLeeches";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -22,7 +23,7 @@ import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
 import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
-import { SIMILAR_MARK, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
+import { SIMILAR_MARK, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, speakDialog, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -1599,6 +1600,12 @@ function LectureNotes({ base, notes }: { base: string; notes: string }) {
     <details className="study-notes" open={!!notes}>
       <summary>{L("ההערות שלי", "My notes")}{state === "saving" ? L(" · שומר…", " · saving…") : state === "saved" ? L(" · נשמר", " · saved") : ""}</summary>
       <textarea rows={4} dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={L("מה המרצה הדגיש, מה לשאול, מה לא הבנתי…", "What the lecturer stressed, what to ask, what I did not get…")} aria-label={L("ההערות שלי", "My notes")} />
+      {(() => {
+        const n = noteCards(text).length;
+        return n ? (
+          <button type="button" className="small" onClick={async () => { await api(base, { method: "PATCH", body: { notes: text } }).catch(() => undefined); const r = await call(api<{ added: number }>(`${base}/note-cards`, { method: "POST" })); if (r) toast(r.added ? L(`נוספו ${r.added} כרטיסיות`, `${r.added} cards added`) : L("כל השורות כבר כרטיסיות", "Every line is a card already")); }}>📇 {L(`להפוך ${n} שורות עם :: לכרטיסיות`, `Make cards from ${n} lines with ::`)}</button>
+        ) : <span className="muted small">{L("טיפ: שורה כמו \"ברדיקרדיה :: דופק מתחת ל-60\" הופכת לכרטיסייה.", "Tip: a line like \"bradycardia :: a pulse under 60\" becomes a card.")}</span>;
+      })()}
     </details>
   );
 }
@@ -1670,6 +1677,16 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
   const [done, setDone] = useState(0);
   // The last missed card's explanation (shown above the next card).
   const [why, setWhy] = useState<{ front: string; text?: string; sure?: boolean }>();
+  // A timer per card (design CardTimer, students part 30 #3, like Anki's Speed Focus Mode): 0 is off; the answer shows by itself.
+  const [limit, setLimit] = useState(() => { try { return Number(localStorage.getItem("kesher-card-timer")) || 0; } catch { return 0; } });
+  const [left, setLeft] = useState(0);
+  const cardKey = cards?.[0]?.id;
+  useEffect(() => {
+    if (!limit || shown || !cardKey) return;
+    setLeft(limit);
+    const t = setInterval(() => setLeft((n) => { if (n <= 1) { clearInterval(t); setShown(true); return 0; } return n - 1; }), 1000);
+    return () => clearInterval(t);
+  }, [limit, shown, cardKey]);
   useEffect(() => void api<{ cards: StudyCard[] }>(`/api/study/courses/${courseId}/review`).then((r) => setCards(r.cards), (e: Error) => toast(e.message)), [courseId]);
   const card = cards?.[0];
   const rate = useCallback(async (rating: number) => {
@@ -1699,10 +1716,13 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
   if (mistakes) return <StudyMistakes courseId={courseId} courseName={courseName} onClose={() => { setMistakes(false); onChange(); }} />;
   const toMistakes = <button type="button" className="study-mistakes-btn" onClick={() => setMistakes(true)}>❌ {L("הטעויות שלי", "My mistakes")}</button>;
   if (!cards) return <p className="muted">…</p>;
-  if (!card) return <div className="study-empty">{toMistakes}<p>{done ? L(`סיימת! חזרת על ${done} כרטיסיות.`, `Done! You reviewed ${done} cards.`) : L("אין כרטיסיות לחזרה עכשיו. כרטיסיות חדשות נוצרות מהרצאה.", "No cards to review now. New cards are made from a lecture.")}</p></div>;
+  if (!card) return <div className="study-empty">{toMistakes}<StudyLeeches courseId={courseId} onChange={onChange} /><p>{done ? L(`סיימת! חזרת על ${done} כרטיסיות.`, `Done! You reviewed ${done} cards.`) : L("אין כרטיסיות לחזרה עכשיו. כרטיסיות חדשות נוצרות מהרצאה.", "No cards to review now. New cards are made from a lecture.")}</p></div>;
   return (
     <section className="study-review">
       <p className="muted small">{L(`נשארו ${cards.length}`, `${cards.length} left`)} · {fmtName(card.format)} · {toMistakes}</p>
+      {done === 0 && !shown && <StudyLeeches courseId={courseId} onChange={onChange} />}
+      <label className="small study-card-timer">⏱ {L("טיימר לכרטיסייה", "Timer per card")} <select value={limit} onChange={(e) => { const v = Number(e.target.value); setLimit(v); try { localStorage.setItem("kesher-card-timer", String(v)); } catch { /* a convenience */ } }}>{[0, 5, 10, 20, 30, 60].map((n) => <option key={n} value={n}>{n ? L(`${n} שניות`, `${n} s`) : L("כבוי", "Off")}</option>)}</select></label>
+      {limit > 0 && !shown && <div className="study-card-clock" role="timer" aria-label={L(`נשארו ${left} שניות`, `${left} seconds left`)}><span style={{ width: `${(left / limit) * 100}%` }} /></div>}
       {why && (
         <div className="study-why" aria-live="polite" dir="auto">
           {why.sure && <p className="small"><b>{L("היית בטוחה וטעית: זו בדיוק הטעות שנזכרת הכי טוב כשמתקנים אותה. הכרטיסייה תחזור עוד פעם היום.", "You were sure and it was wrong: exactly the mistake that sticks best once corrected. The card comes back again today.")}</b></p>}
