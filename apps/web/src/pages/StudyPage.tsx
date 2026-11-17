@@ -19,6 +19,7 @@ import { StudyPortions } from "../StudyPortions";
 import { StudyLetter } from "../StudyLetter";
 import { StudyRehearse } from "../StudyRehearse";
 import { StudyExamEve } from "../StudyExamEve";
+import { StudyEnglish } from "../StudyEnglish";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -210,6 +211,7 @@ function StudyHome() {
       <MoreTools simple={simple}>
       {!!courses?.length && <StudyTimetable part="card" courses={courses.map((c) => ({ id: c.id, name: c.name }))} onCourses={load} />}
       {!!courses?.length && <StudyGrades courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
+      <StudyEnglish courses={(courses ?? []).map((c) => ({ id: c.id, name: c.name }))} />
       <section className="study-life card">
         <h2>{L("שאלה על הלימודים", "A question about your studies")}</h2>
         <p className="muted small">{L("שאלות מעשיות מקבלות תשובה עדכנית מהרשת, עם מקור רשמי.", "Practical questions get a current answer from the web, with an official source.")}</p>

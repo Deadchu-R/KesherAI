@@ -2009,6 +2009,33 @@ export function parseLetter(text: string): { subject: string; body: string } {
   return m ? { subject: m[1]!.replace(/\*+/g, "").trim().slice(0, 200), body: m[2]!.trim().slice(0, 4000) } : { subject: "", body: t.slice(0, 4000) };
 }
 
+/** Academic English practice (design AcademicEnglish, students part 33 #1, the AMIRNET / exemption style). */
+export interface EnglishPractice {
+  questions: Array<{ q: string; options: string[]; answer: number; explain: string }>;
+  words: Array<{ en: string; he: string }>;
+}
+export const ENGLISH_PROMPT = "A Hebrew-speaking university student practises academic English reading (the Israeli exemption level, AMIRNET style). From the English text given: write 4 reading-comprehension questions in English with 4 options each, one right, asking about the main idea, a detail, a word's meaning in context and what the writer implies; each with a one-sentence explanation in Hebrew of why the answer is right, pointing to the sentence. Then list up to 12 words or phrases from the text that are hard for her level, each with its meaning here in short Hebrew. Use only the text. Answer with JSON only: {\"questions\":[{\"q\":\"…\",\"options\":[\"…\",\"…\",\"…\",\"…\"],\"answer\":0,\"explain\":\"…\"}],\"words\":[{\"en\":\"…\",\"he\":\"…\"}]}";
+
+/** The practice from the model's answer, checked. */
+export function cleanEnglish(raw: unknown): EnglishPractice {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const t = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const questions = (Array.isArray(o.questions) ? o.questions : []).slice(0, 8).flatMap((x) => {
+    const y = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    const options = (Array.isArray(y.options) ? y.options : []).map((v) => t(v, 300)).filter(Boolean).slice(0, 5);
+    const answer = Number(y.answer);
+    const q = t(y.q, 600);
+    return q && options.length >= 2 && Number.isInteger(answer) && answer >= 0 && answer < options.length ? [{ q, options, answer, explain: t(y.explain, 600) }] : [];
+  });
+  const words = (Array.isArray(o.words) ? o.words : []).slice(0, 20).flatMap((x) => {
+    const y = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    const en = t(y.en, 80);
+    const he = t(y.he, 200);
+    return en && he ? [{ en, he }] : [];
+  });
+  return { questions, words };
+}
+
 /** Filler words counted in a rehearsal (Hebrew and English; multi-word ones as phrases). */
 export const FILLERS = ["אממ", "אמ", "אהה", "אה", "כאילו", "בעצם", "כזה", "כזאת", "יעני", "זאת אומרת", "נו", "um", "uh", "erm", "like", "you know", "basically", "actually", "kind of", "sort of"];
 

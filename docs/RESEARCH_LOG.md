@@ -2021,6 +2021,15 @@ Missing:
 - Built (2026-11-17): all three (design ExamEveRehearse). Also found on the PC: the two-voice podcast came out in English for a Hebrew lecture with Gemma; the Hebrew rule now goes in both turns with a Hebrew first line to follow.
 - Stopped at: built; next research round (33).
 
+## Students, part 33: English for the degree, the course as a web, group projects (2026-11-17, the loop)
+Sources: NITE's AMIRNET tips and FAQ and the universities' English requirements (TAU, BIU, HUJI, Haifa: every Israeli student must reach exemption, mostly by reading academic texts), knowledge-graph note apps (Obsidian's graph view, RemNote, the 2026 PKM round-ups), group-project tools for students (Wrike for students, Taskphase, Superthread, Pronto); checked against the code.
+Missing:
+1. **Academic English practice** (AMIRNET / exemption courses): from a text she brings (an article, a paper's abstract from her sources) reading-comprehension questions in the exam's style and its hard words with their Hebrew meaning, the words into cards.
+2. **The course as a web** (Obsidian's graph view): lectures as points joined by the terms they share, a tap opens a lecture or shows the shared terms.
+3. **A group project board** (Taskphase, Wrike for students): a course project's tasks with who does what and by when, and a link teammates open (no account) to take a task and mark it done.
+- Not taken: a full notes app with backlinks (KesherAI's documents and "where else a term appears" cover it).
+- Stopped at: list made; building from (1).
+
 ## Screen lens, part 1: capture part of the screen and hand it to the AI (2026-11-17, Roee asked)
 - Google: Circle to Search on Android (hold home, circle anything; search, translate in place, AI overview); Lens in desktop Chrome (a region on the page → search, "translate" puts the translation over the picture, text selection by OCR, AI Mode follow-ups). Microsoft: Click to Do on Windows 11 (Win+click or Win+Q; local OCR, text actions — summarize, rewrite, search — run on the PC with Phi Silica on Copilot+ PCs; image actions: visual search, erase, remove background; nothing kept after the action), Copilot Vision (shares a window with Copilot), Edge Lens (experimental). Snipping Lens (open source): Snipping Tool region → uploaded to an image host → Google image search (cloud, privacy cost). ChatGPT/Claude desktop apps: a hotkey to attach a screenshot or a window to a chat.
 - What makes them good: one global shortcut, the screen frozen and dimmed with a free drag (or circle) to select, actions right next to the selection, results shown over the screen (translation in place), the text in the picture selectable, follow-up questions, nothing stored after the action.

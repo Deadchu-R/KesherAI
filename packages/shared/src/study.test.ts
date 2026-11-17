@@ -530,3 +530,10 @@ test("speechStats: words a minute and filler words, Hebrew and English", async (
   assert.deepEqual(s.fillers.map((f) => [f.word, f.n]), [["אממ", 2], ["כאילו", 1], ["בעצם", 1], ["like", 1], ["you know", 1]]);
   assert.equal(s.fillerShare, 43.8);
 });
+
+test("cleanEnglish: questions with a valid answer, words with both sides", async () => {
+  const { cleanEnglish } = await import("./study.js");
+  const r = cleanEnglish({ questions: [{ q: "What is the main idea?", options: ["a", "b", "c", "d"], answer: 2, explain: "כי…" }, { q: "bad", options: ["a"], answer: 0 }, { q: "bad2", options: ["a", "b"], answer: 5 }], words: [{ en: "albeit", he: "אף על פי ש" }, { en: "", he: "x" }] });
+  assert.equal(r.questions.length, 1);
+  assert.deepEqual(r.words, [{ en: "albeit", he: "אף על פי ש" }]);
+});

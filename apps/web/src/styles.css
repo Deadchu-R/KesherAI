@@ -3615,3 +3615,11 @@ div.slide-list { padding-inline-start: 0; }
 .study-eve-ball.out { transform: scale(1); transition-duration: 6s; }
 @media (prefers-reduced-motion: reduce) { .study-eve-ball { transition: none; } }
 .study-eve-ball { margin-inline: 14px; flex: none; }
+.study-english { display: flex; flex-direction: column; gap: 10px; }
+.study-english textarea { width: 100%; box-sizing: border-box; }
+.study-english-qs { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 12px; }
+.study-english-qs li { display: flex; flex-direction: column; gap: 6px; }
+.study-english-qs .vl-option { text-align: left; }
+.study-english-words dl { display: grid; grid-template-columns: 1fr; gap: 4px; margin: 6px 0; }
+.study-english-words dl > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 8px; border-bottom: 1px solid var(--border, #333); }
+.study-english-words dt { font-weight: 600; } .study-english-words dd { margin: 0; }
