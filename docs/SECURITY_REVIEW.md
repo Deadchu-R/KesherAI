@@ -955,3 +955,10 @@ S5 an outside scanner's rules for Electron.
 - **Plugin 0.1.20**: loads earlier so the commandlet is found; inside the headless editor it never opens the live connection; the editor hook waits for the engine. No new network listener.
 - **Rename / docs**: text only.
 - Performance: the sync runs once, 8 s after the last queued change, in one headless editor for all of them. Secrets/personal paths: none in the diff (git grep; the only `token=` is a test value).
+
+## Scan 104 (2026-11-17): report language and "measured", the dialog portal, margins, the plugin update reopen, the Fab tab
+- **Relationship analysis**: the language check and the "measured" check read the model's own JSON with simple, bounded patterns (no nested repeats); a second model call happens at most once per report. The "mixed alphabets" note is shown as text.
+- **New project dialog**: moved to `document.body` with a portal; the same form, nothing new reaches the server.
+- **Plugin update**: Unreal is opened again only when it was open before; no new process is started otherwise.
+- **Fab tab**: only the tab KesherAI opened for the search is closed (by its id), never a tab the user opened.
+- Performance: the language check is one pass over the report's text; the Fab timer is one per pane. Secrets/personal paths: none in the diff (git grep).
