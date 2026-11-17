@@ -4,6 +4,7 @@ import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { celebrate } from "./celebrate";
+import { QuestionCheck } from "./StudyQuestionCheck";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const EXTRA_KEY = "kesher-mock-extra";
@@ -151,7 +152,7 @@ export function StudyMock({ courseId, lectures, pastExams, clinical, history, on
             {done.flatMap((p) => p.questions.map((q, k) => {
               const ok = p.kind ? (p.marks?.[k] ?? 0) >= 1 : p.answers?.[k] === q.answer;
               return (
-                <li key={`${p.id}${k}`} className={ok ? "good" : "bad"}>
+                <li key={`${p.id}${q.q}`} className={ok ? "good" : "bad"}>
                   <b dir="auto" style={{ whiteSpace: "pre-wrap" }}>{q.q}</b>
                   {p.kind ? <>
                     {p.texts?.[k] && <span dir="auto" className="muted">{L("ענית", "You answered")}: {p.texts[k]}</span>}
@@ -162,6 +163,8 @@ export function StudyMock({ courseId, lectures, pastExams, clinical, history, on
                     {!ok && (p.answers?.[k] ?? -1) >= 0 && <span dir="auto" className="muted">{L("ענית", "You answered")}: {q.options[p.answers![k]!]}</span>}
                     {!ok && (p.answers?.[k] ?? -1) < 0 && <span className="muted">{L("לא ענית", "Not answered")}</span>}
                     <small dir="auto">{q.explain}</small>
+                    {q.fixed ? <small className="muted">{q.fixed.by === "her" ? L("✎ תוקן לפי התשובה שלך", "✎ Fixed to your answer") : L("✎ תוקן לפי ההרצאה", "✎ Fixed by the lecture")}</small>
+                      : !ok && <QuestionCheck courseId={courseId} quizId={p.id} index={k} mine={p.answers?.[k]} onQuiz={(z) => setDone((all) => all && all.map((x) => (x.id === z.id ? z : x)))} />}
                   </>}
                 </li>
               );
