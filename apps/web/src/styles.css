@@ -3192,6 +3192,11 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-more > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
 .study-more-tabs { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .study-welcome-steps li { transition: none; } }
+/* After days off: a pile of due cards cleared a little each day (design BackOnTrack). */
+.study-back-on-track { display: flex; flex-direction: column; gap: 8px; border-inline-start: 4px solid #7fd8a8; }
+.study-back-on-track h2 { margin: 0; font-size: 1.05rem; }
+.study-back-on-track p { margin: 0; }
+.study-back-on-track .button { align-self: flex-start; }
 /* The first setup of Study (design StudySetupWizard) and its "Getting started" list (design StudySetupChecklist). */
 .study-setup { max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
 .study-setup-progress { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

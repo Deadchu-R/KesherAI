@@ -498,7 +498,11 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     await st.removeCard(req.params.id, req.params.cid);
     return { ok: true };
   });
-  app.get<C>("/api/study/courses/:id/review", async (req) => ({ cards: await st.due(req.params.id) }));
+  // ?limit=N&backlog=1: today's portion of a backlog, in its order (design BackOnTrack).
+  app.get<C & { Querystring: { limit?: string; backlog?: string } }>("/api/study/courses/:id/review", async (req) => {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50));
+    return { cards: await st.due(req.params.id, limit, req.query.backlog === "1") };
+  });
   /** A 5-minute lesson (RESEARCH_LOG students part 25 #4): up to 5 cards (due first, else any) and 2 questions from her past quizzes. */
   app.get<C>("/api/study/courses/:id/quick", async (req) => {
     const d = await st.get(req.params.id);

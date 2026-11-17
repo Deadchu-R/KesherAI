@@ -2539,3 +2539,50 @@ export function cleanStudyPrefs(raw: unknown): StudyPrefs {
     checklistHidden: j.checklistHidden === true,
   };
 }
+
+/** How fast to clear a backlog: a little more each day (+20%) or more (+50%). */
+export type BacklogPace = "gentle" | "steady";
+
+/** "Back on track" after days off (design BackOnTrack, students part 39). */
+export interface BacklogPlan {
+  /** Cards due now. */
+  due: number;
+  /** Her usual reviews a day (the last two weeks, at least 10). */
+  usual: number;
+  /** Cards a day at the chosen pace. */
+  perDay: number;
+  /** Days until the backlog is gone (new cards keep coming at the usual rate). */
+  days: number;
+  /** That day, "YYYY-MM-DD". */
+  finish: string;
+}
+
+/**
+ * A plan to clear a pile of due cards without a long session: undefined when there is no backlog (due cards at most
+ * twice her usual day, or under 40). Each day she does her usual reviews plus 20% or 50% more, so the extra cards
+ * shrink the pile while new ones keep coming.
+ *
+ * @param d - The course.
+ * @param now - Now (ms).
+ * @param pace - gentle (+20%) or steady (+50%).
+ */
+export function backlogPlan(d: StudyCourseData, now = Date.now(), pace: BacklogPace = "steady"): BacklogPlan | undefined {
+  const due = d.cards.filter((c) => Date.parse(c.due) <= now).length;
+  const recent = d.reviews.filter((r) => r.t >= now - 14 * 86_400_000).length;
+  const usual = Math.max(10, Math.round(recent / 14));
+  if (due <= Math.max(40, usual * 2)) return undefined;
+  const extra = pace === "gentle" ? Math.max(5, Math.ceil(usual * 0.2)) : Math.max(10, Math.ceil(usual * 0.5));
+  const days = Math.max(1, Math.ceil((due - usual) / extra));
+  return { due, usual, perDay: usual + extra, days, finish: dayKey(now + days * 86_400_000) };
+}
+
+/**
+ * The order to clear a backlog in: the young cards first (learned lately, still weak: low stability), then those due
+ * most recently (older ones are mostly mature cards, which take a long gap better).
+ *
+ * @param cards - The due cards.
+ */
+export function backlogOrder(cards: StudyCard[]): StudyCard[] {
+  const stab = (c: StudyCard) => Number((c.fsrs as { stability?: number }).stability ?? 0);
+  return [...cards].sort((a, b) => stab(a) - stab(b) || Date.parse(b.due) - Date.parse(a.due));
+}

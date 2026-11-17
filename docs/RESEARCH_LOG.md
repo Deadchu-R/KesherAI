@@ -2113,3 +2113,9 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   - Each step says in one line why it is asked. A "Getting set up" checklist on Study's home keeps what was skipped plus the extras (connect the phone with a QR code, a daily goal and reminder, simple or all tools), each with its reason; it goes away when done or dismissed.
 - Built (2026-11-17): the computer wizard and list (design StudySetupWizard / StudySetupChecklist) and the phone-alone wizard and list (StudySetupWizardPhone). Tested end to end at 1280 and 390 and in study-check.
 - Stopped at: built; left to do: a pass on Roee's PC in a separate test profile after the 06:00 release, and on his phone in the morning.
+
+## Students, part 39: coming back after a few days off (2026-11-18)
+- Why people leave spaced repetition: after 4–5 days away they come back to hundreds of due cards with no idea when it ends, and some quit (Anki forum "Backlog Recovery Planner" proposal; medical-school backlog guides). What helps: a chosen pace (about +20% or +50% a day over the usual reviews), a date when the backlog ends, a cap per session, the young cards (learned lately, few reviews) and those due most recently first, new cards going on as usual. Duolingo keeps habits with visible progress and commitment, not with bigger piles.
+- KesherAI had: FSRS due cards per course, oldest first, up to 50 a session; the home said "Review 240 cards" with nothing else.
+- Plan (design BackOnTrack, computer and phone): when a course's due cards pass twice her usual day (and at least 40), a card "Back on track": her usual day (reviews a day over the last two weeks), a pace (gentle +20% / steady +50%), "N a day, back on track by <day>", and "Today's N" that reviews only today's portion, young and recent cards first. The rest waits without a red number.
+- Stopped at: research done; next the design board, the shared plan and order (tested), the computer, then the phone.

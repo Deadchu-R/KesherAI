@@ -10,7 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { cleanStudyPrefs, type StudyPrefs, parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { backlogPlan, backlogOrder, type BacklogPlan, cleanStudyPrefs, type StudyPrefs, parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -186,7 +186,7 @@ export class Study {
   }
 
   /** @returns Every course with its counts, newest first. */
-  async list(): Promise<Array<StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number }>> {
+  async list(): Promise<Array<StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number; backlog?: { steady: BacklogPlan; gentle: BacklogPlan } }>> {
     await mkdir(this.dir, { recursive: true });
     const names = (await readdir(this.dir)).filter((n) => n.endsWith(".json"));
     const out = [];
@@ -195,7 +195,10 @@ export class Study {
       const d = await this.get(n.slice(0, -5)).catch(() => undefined);
       if (d) {
         const plan = examPlan(d, now);
-        out.push({ ...d.course, lectures: d.lectures.length, cards: d.cards.length, due: d.cards.filter((c) => Date.parse(c.due) <= now).length, ...(plan ? { daysLeft: plan.daysLeft, perDay: plan.perDay } : {}) });
+        // A pile of due cards after days off (design BackOnTrack): both paces, so the page can offer them.
+        const steady = backlogPlan(d, now, "steady");
+        const gentle = steady && backlogPlan(d, now, "gentle");
+        out.push({ ...d.course, lectures: d.lectures.length, cards: d.cards.length, due: d.cards.filter((c) => Date.parse(c.due) <= now).length, ...(plan ? { daysLeft: plan.daysLeft, perDay: plan.perDay } : {}), ...(steady && gentle ? { backlog: { steady, gentle } } : {}) });
       }
     }
     return out.sort((a, b) => b.createdAt - a.createdAt);
@@ -1655,8 +1658,11 @@ export class Study {
   }
 
   /** @returns Cards due now, earliest first (at most `limit`). */
-  async due(id: string, limit = 50): Promise<StudyCard[]> {
-    return cardsToReview(await this.get(id), Date.now(), limit);
+  async due(id: string, limit = 50, backlog = false): Promise<StudyCard[]> {
+    const d = await this.get(id);
+    // Today's portion of a backlog: the young and most recently due cards first (design BackOnTrack).
+    if (backlog) return backlogOrder(cardsToReview(d, Date.now(), 100_000)).slice(0, limit);
+    return cardsToReview(d, Date.now(), limit);
   }
 
   /** Records a review (1 again … 4 easy) and schedules the card's next one. */

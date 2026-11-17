@@ -30,7 +30,7 @@ import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
 import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
-import { cleanStudyPrefs, type StudyPrefs, SIMILAR_MARK, markdownTableCsv, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
+import { cleanStudyPrefs, type StudyPrefs, type BacklogPlan, SIMILAR_MARK, markdownTableCsv, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, speakDialog, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -47,7 +47,7 @@ import { StudyPlans } from "../StudyPlans";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
+type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number; backlog?: { steady: BacklogPlan; gentle: BacklogPlan } };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
 interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null; courseSummary?: StudyCourseSummary | null; mocks?: Array<{ t: number; grade: number }> }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; mastery?: Array<{ lectureId: string; title: string; mastery: number; n: number; change: number }>; reviews: number; quizzed?: string[] }
@@ -140,6 +140,35 @@ function MoreTools({ simple, children }: { simple: boolean; children: React.Reac
   );
 }
 
+/**
+ * "Back on track" (design BackOnTrack, students part 39): after days off, a pile of due cards is cleared a little more
+ * each day instead of in one long session. Her usual day, a pace (gentle / steady, remembered on this device), the day
+ * it ends, and "Today's N".
+ */
+function BackOnTrack({ courses }: { courses: CourseRow[] }) {
+  const [pace, setPace] = useState<"steady" | "gentle">(() => { try { return localStorage.getItem("kesher-backlog-pace") === "gentle" ? "gentle" : "steady"; } catch { return "steady"; } });
+  const c = [...courses].filter((x) => x.backlog).sort((a, b) => b.backlog!.steady.due - a.backlog!.steady.due)[0];
+  if (!c?.backlog) return null;
+  const pick = (p: "steady" | "gentle") => { setPace(p); try { localStorage.setItem("kesher-backlog-pace", p); } catch { /* this visit only */ } };
+  const day = (k: string) => new Date(`${k}T12:00`).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB", { weekday: "long", day: "numeric", month: "numeric" });
+  const plan = c.backlog[pace];
+  return (
+    <section className="card study-back-on-track" aria-label={L("חוזרים למסלול", "Back on track")}>
+      <h2>🌱 {L("חוזרים למסלול", "Back on track")}: <span dir="auto">{c.name}</span></h2>
+      <p>{L(`מחכות ${plan.due} כרטיסיות. בלי לחץ: לא צריך הכול היום.`, `${plan.due} cards are waiting. No pressure: not all today.`)}</p>
+      <div className="study-welcome-opts" role="radiogroup" aria-label={L("קצב", "Pace")}>
+        {(["gentle", "steady"] as const).map((p) => (
+          <button type="button" key={p} role="radio" aria-checked={pace === p} className={pace === p ? "on" : ""} onClick={() => pick(p)}>
+            {pace === p ? "✓ " : ""}{p === "gentle" ? L("🐢 בנחת", "🐢 Gentle") : L("🚶 בקצב", "🚶 Steady")} · {L(`${c.backlog![p].perDay} ביום`, `${c.backlog![p].perDay} a day`)}
+          </button>
+        ))}
+      </div>
+      <p className="muted small">{L(`ביום רגיל את עושה בערך ${plan.usual}. ככה חוזרים למסלול עד ${day(plan.finish)}; החדשות ממשיכות כרגיל, וקודם הכרטיסיות שלמדת לאחרונה.`, `On a usual day you do about ${plan.usual}. This way you are back on track by ${day(plan.finish)}; new cards go on as usual, and the ones you learned lately come first.`)}</p>
+      <a className="button primary" href={`#/study/${c.id}/review/today-${plan.perDay}`}>▶ {L(`${plan.perDay} של היום`, `Today's ${plan.perDay}`)}</a>
+    </section>
+  );
+}
+
 function BackLink({ to }: { to: string }) {
   return <a className="study-back" href={to}>{L("› חזרה", "‹ Back")}</a>;
 }
@@ -185,6 +214,7 @@ function StudyHome() {
       {!!courses?.length && <StudySearch />}
       {/* "Now: <class>" first, the timetable itself lower with the other set-up cards (simple mode: under "more"). */}
       {!!courses?.length && <StudyTimetable part="now" courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
+      {!!courses?.length && <BackOnTrack courses={courses} />}
       {!!courses?.length && <NextStep />}
       {!!courses?.length && <GoalCard />}
       {!!courses?.length && <FocusCard courses={courses} />}
@@ -1712,7 +1742,9 @@ function Review({ courseId, courseName, onChange }: { courseId: string; courseNa
     const t = setInterval(() => setLeft((n) => { if (n <= 1) { clearInterval(t); setShown(true); return 0; } return n - 1; }), 1000);
     return () => clearInterval(t);
   }, [limit, shown, cardKey]);
-  useEffect(() => void api<{ cards: StudyCard[] }>(`/api/study/courses/${courseId}/review`).then((r) => setCards(r.cards), (e: Error) => toast(e.message)), [courseId]);
+  // "#/study/<id>/review/today-30": only today's portion of a backlog, young and recent cards first (design BackOnTrack).
+  const today = Number(/\/review\/today-(\d{1,3})\b/.exec(location.hash)?.[1] ?? 0);
+  useEffect(() => void api<{ cards: StudyCard[] }>(`/api/study/courses/${courseId}/review${today ? `?limit=${today}&backlog=1` : ""}`).then((r) => setCards(r.cards), (e: Error) => toast(e.message)), [courseId, today]);
   const card = cards?.[0];
   const rate = useCallback(async (rating: number) => {
     if (!card) return;

@@ -585,3 +585,20 @@ test("Study prefs: checked values, setup step and skipped steps", async () => {
   assert.equal(bad.year, undefined);
   assert.equal(bad.setupStep, 0);
 });
+
+test("back on track: a plan only for a real backlog, and young cards first", async () => {
+  const { backlogPlan, backlogOrder } = await import("./study.js");
+  const now = Date.parse("2026-11-18T08:00:00Z");
+  const card = (i: number, stability: number, dueDaysAgo: number) => ({ id: `c${i}`, front: "f", back: "b", format: "text", createdAt: 0, due: new Date(now - dueDaysAgo * 86_400_000).toISOString(), fsrs: { stability } });
+  const reviews = Array.from({ length: 280 }, (_, i) => ({ cardId: "x", t: now - (i % 14) * 86_400_000 - 1000, rating: 3 }));
+  const base = { course: { id: "k", name: "k", createdAt: 0 }, lectures: [], reviews, quizzes: [] };
+  assert.equal(backlogPlan({ ...base, cards: Array.from({ length: 30 }, (_, i) => card(i, 5, 1)) } as never, now), undefined);
+  const plan = backlogPlan({ ...base, cards: Array.from({ length: 140 }, (_, i) => card(i, 5, 1)) } as never, now)!;
+  assert.equal(plan.usual, 20);
+  assert.equal(plan.perDay, 30);
+  assert.equal(plan.days, 12);
+  assert.equal(plan.finish, "2026-11-30");
+  assert.equal(backlogPlan({ ...base, cards: Array.from({ length: 140 }, (_, i) => card(i, 5, 1)) } as never, now, "gentle")!.perDay, 25);
+  const order = backlogOrder([card(1, 30, 10), card(2, 1, 9), card(3, 1, 2)] as never).map((c) => c.id);
+  assert.deepEqual(order, ["c3", "c2", "c1"]);
+});
