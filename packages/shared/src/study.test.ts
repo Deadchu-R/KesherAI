@@ -416,3 +416,11 @@ test("a video overview's slides are checked", async () => {
   const s = parseVideoSlides({ slides: [{ title: "## חוסמי בטא", bullets: ["β1", "", 3], say: "חוסמי בטא מורידים דופק.", picture: true }, { title: "no say" }] });
   assert.deepEqual(s, [{ title: "חוסמי בטא", bullets: ["β1"], say: "חוסמי בטא מורידים דופק.", picture: true }]);
 });
+
+test("a teach-back check is parsed and trimmed", async () => {
+  const { parseTeachBack } = await import("./study.js");
+  const r = parseTeachBack({ score: 140, covered: ["β1"], missing: [{ point: "תפוקת לב", card: { front: "מה קורה לתפוקת הלב?", back: "יורדת" } }, { point: "" }], wrong: [{ said: "מרחיבים כלי דם", right: "לא ישירות" }], tip: "טוב" });
+  assert.equal(r?.score, 100);
+  assert.equal(r?.missing.length, 1);
+  assert.equal(parseTeachBack({ score: 50 }), undefined);
+});

@@ -8,7 +8,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -861,6 +861,21 @@ export class Study {
     d.cards.push(...made);
     await this.save(d);
     return made;
+  }
+
+  /**
+   * Teach-back (the Feynman technique, design TeachBack): her explanation of a topic checked against the lecture —
+   * what she got right, what she left out (each with a card she can add), what is wrong, a score and a tip.
+   */
+  async teachBack(id: string, lectureId: string, topic: string, explanation: string, signal?: AbortSignal): Promise<TeachBackResult> {
+    if (explanation.trim().length < 20) throw Object.assign(new Error("Explain it in a few sentences first."), { statusCode: 400 });
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture:\n${l.text.slice(0, 20_000)}` : l.text.slice(0, 30_000);
+    const he = hebrewLecture(`${explanation} ${l.text.slice(0, 2000)}`);
+    const r = parseTeachBack(jsonIn(await this.ask(`${TEACH_BACK_PROMPT}${he ? " Write it all in Hebrew." : ""}`, `Lecture: ${l.title}\n\n${material}\n\nTopic: ${topic.slice(0, 200) || l.title}\n\nHer explanation:\n${explanation.slice(0, 6000)}`, signal, d.course)));
+    if (!r) throw Object.assign(new Error("The model did not check it in the expected form; try again or pick another model."), { statusCode: 502 });
+    return r;
   }
 
   /** Adds a card by hand. */

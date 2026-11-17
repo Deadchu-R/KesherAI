@@ -1485,6 +1485,35 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
 export const AUDIO_PROMPT =
   "Write a spoken review of this lecture for a student to listen to on the bus, about 3 minutes long (400-550 words), in the lecture's language. Talk to her directly and warmly, like a good tutor: open with what the lecture is about in one sentence, go through the main ideas in a sensible order with one concrete example, say the key terms clearly (with the English name in brackets the first time, for medical terms), and end with three short questions to think about, each followed by its answer. Plain spoken sentences only: no headings, lists, symbols, tables or markdown. Use only what is in the lecture; never invent numbers, doses or values.";
 
+/** A teach-back check (the Feynman technique): what her explanation got right, missed and got wrong. */
+export interface TeachBackResult { score: number; covered: string[]; missing: Array<{ point: string; card?: { front: string; back: string } }>; wrong: Array<{ said: string; right: string }>; tip: string }
+
+export const TEACH_BACK_PROMPT =
+  "A student explains a topic in her own words (the Feynman technique). Check her explanation against the lecture only. List what she got right (short points), what important points from the lecture she left out (each with a flashcard: a question on the front and the answer from the lecture on the back), what she said that is wrong or inaccurate (what she said and what the lecture says), a score from 0 to 100 for how well she understands it, and one short tip. Be warm and specific, in the student's language. Never add facts that are not in the lecture. Answer with JSON only: {\"score\":72,\"covered\":[\"…\"],\"missing\":[{\"point\":\"…\",\"card\":{\"front\":\"…\",\"back\":\"…\"}}],\"wrong\":[{\"said\":\"…\",\"right\":\"…\"}],\"tip\":\"…\"}";
+
+/** A teach-back check from the model's answer, checked and trimmed. */
+export function parseTeachBack(raw: unknown): TeachBackResult | undefined {
+  const o = raw as Record<string, unknown> | undefined;
+  if (!o || typeof o !== "object") return undefined;
+  const t = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+  const covered = arr(o.covered).map((x) => t(x, 300)).filter(Boolean).slice(0, 10);
+  const missing = arr(o.missing).slice(0, 8).flatMap((x) => {
+    const m = x as { point?: unknown; card?: { front?: unknown; back?: unknown } };
+    const point = t(m.point, 300);
+    const front = t(m.card?.front, 400);
+    const back = t(m.card?.back, 800);
+    return point ? [{ point, ...(front && back ? { card: { front, back } } : {}) }] : [];
+  });
+  const wrong = arr(o.wrong).slice(0, 8).flatMap((x) => {
+    const w = x as { said?: unknown; right?: unknown };
+    return t(w.said, 300) && t(w.right, 400) ? [{ said: t(w.said, 300), right: t(w.right, 400) }] : [];
+  });
+  const score = Math.max(0, Math.min(100, Math.round(Number(o.score) || 0)));
+  if (!covered.length && !missing.length && !wrong.length) return undefined;
+  return { score, covered, missing, wrong, tip: t(o.tip, 400) };
+}
+
 /** One slide of a video overview: what it shows and what the narrator says over it. */
 export interface VideoSlide { title: string; bullets: string[]; say: string; picture?: boolean }
 

@@ -10,6 +10,7 @@ import { StudyRecorder } from "../StudyRecorder";
 import { AvatarCamera } from "./AvatarCamera";
 import { MoodleCard } from "../MoodleCard";
 import { StudyVideo } from "../StudyVideo";
+import { StudyTeachBack } from "../StudyTeachBack";
 import { StudyPlans } from "../StudyPlans";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -897,7 +898,7 @@ function LectureAudio({ courseId, lecture, player, onRemoved }: { courseId: stri
 
 function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
-  const [view, setView] = useState<"summary" | "terms" | "diagram" | "video" | "text">("summary");
+  const [view, setView] = useState<"summary" | "terms" | "diagram" | "video" | "teach" | "text">("summary");
   const player = useRef<HTMLAudioElement>(null);
   // "Explain this": text she selected in the lecture, and its explanation.
   const [sel, setSel] = useState("");
@@ -962,14 +963,15 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       <h2 dir="auto">{l.title}</h2>
       {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
-        {(["summary", "terms", "diagram", "video", "text"] as const).map((v) => (
+        {(["summary", "terms", "diagram", "video", "teach", "text"] as const).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
-            {{ summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), text: L("הטקסט המלא", "Full text") }[v]}
+            {{ summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), text: L("הטקסט המלא", "Full text") }[v]}
           </button>
         ))}
       </div>
       <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
         {view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
+          : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
           : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : l.text}</div>
           : !l.summary ? (
             <div className="study-empty">

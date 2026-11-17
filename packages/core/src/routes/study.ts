@@ -113,6 +113,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       await cleanYoutube(got.tmp);
     }
   });
+  app.post<L & { Body: { topic?: string; text?: string } }>("/api/study/courses/:id/lectures/:lid/teach-back", async (req) => st.teachBack(req.params.id, req.params.lid, String(req.body?.topic ?? ""), String(req.body?.text ?? "")));
   app.post<L>("/api/study/courses/:id/lectures/:lid/video", async (req) => st.videoOverview(req.params.id, req.params.lid));
   /** The course as a file to share with classmates, and a shared file opened as a new course. */
   app.get<C>("/api/study/courses/:id/export", async (req, reply) => {
