@@ -1123,6 +1123,14 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 130 (2026-11-17): the phone's teach-back, writing coach, My week, highlights, mistakes and match, occlusion pictures
+- **Teach-back and writing coach on the phone**: her text and the lecture passages (found on the phone with `findPassages`) go only to the phone's own chosen model; the answers go through the shared `parseTeachBack` / `parseWritingFeedback` (lists and lengths capped, levels in range) and are shown as text through `el()`. "Missing" points become cards through the normal card path.
+- **My week**: plans live in the phone's storage (at most 40); the model's steps go through the shared `checkPlan` (dates only between today and the due day, 10–240 minutes, at most 8 steps, no day over 3 hours). Moving `planPrompt`/`checkPlan` to @kesher/shared changed no behaviour on the computer (its tests pass).
+- **Highlights**: kept on the lecture through `cleanHighlights` (300 a lecture, 2000 characters, ids checked), so they sync like the rest of the lecture.
+- **My mistakes, 5-minute lesson, match**: computed from her own course data on the phone; nothing is sent anywhere; the best time is one number in local storage.
+- **Occlusion pictures on the phone**: the image name is checked against `^[\w-]{1,80}\.(png|jpg|webp)$` before the URL is built, and the computer's route checks it again; the device key rides in `?token=` like the recording player, and the access log keeps only the path (the query is cut), so the key is not written to logs.
+- **Fixed while working**: a lecture with no diagram or terms printed "nullundefinedundefined" (the DOM's append writes null as text); study-check now fails on any stray null/undefined text on the pages it opens.
+
 ## Scan 129 (2026-11-17): the welcome's timetable photo, My week's times, axe in the UI check, grades sync, the phone's mock exam
 - **Welcome from a photo**: the picture goes to the local vision model only (the same route as the timetable card); at most 20 courses are made, names from `cleanReadClasses` (cut, checked); slots go through `setTimetable` (only her courses' ids, valid times).
 - **My week's times**: computed in the page from her own timetable (no request), nothing new stored.
