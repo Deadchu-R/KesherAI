@@ -1281,6 +1281,27 @@ export function studyPlus(x) {
     })));
   }
 
+  /**
+   * "Were you there?" as a note 5 minutes after each class of a course with an attendance rule, for the next week
+   * (only while she tracks attendance). Fixed text with the course's name; nothing else leaves the phone.
+   */
+  function attendanceReminders() {
+    const t = loadTable();
+    if (!t.trackSince || !t.limits) return [];
+    const out = [];
+    const now = new Date();
+    for (let ahead = 0; ahead < 7; ahead++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead);
+      for (const s of classesOn(t, d.getDay())) {
+        if (!t.limits[s.courseId] || !courseName(s.courseId)) continue;
+        const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Number(s.end.slice(0, 2)), Number(s.end.slice(3, 5)) + 5).getTime();
+        if (at <= now.getTime()) continue;
+        out.push({ id: `att-${s.id}-${d.getMonth() + 1}-${d.getDate()}`, at, title: L(`✋ היית ב${courseName(s.courseId)}?`, `✋ Were you at ${courseName(s.courseId)}?`), body: L("לסמן בלימודים, כדי לדעת כמה חיסורים נשארו", "Mark it in Study, to know how many absences are left") });
+      }
+    }
+    return out;
+  }
+
   /** On the home page: the class she is in now, or one starting within 10 minutes; and "were you there?" after one. */
   function classBanner() {
     const t = loadTable();
@@ -1429,5 +1450,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { goalReminder, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, questionCheck, micButton, sayButton, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
+  return { goalReminder, attendanceReminders, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, questionCheck, micButton, sayButton, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
 }

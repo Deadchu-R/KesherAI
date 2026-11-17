@@ -401,6 +401,11 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       want.push(g.id);
       N.remind({ id: g.id, at: g.at, title: g.title, body: g.body }).catch?.(() => undefined);
     }
+    // Attendance (design AttendancePhone): "were you there?" after the classes of courses with a rule.
+    for (const r of plus.attendanceReminders()) {
+      want.push(r.id);
+      N.remind(r).catch?.(() => undefined);
+    }
     for (const id of before) if (!want.includes(id)) N.remindCancel?.({ id }).catch?.(() => undefined);
     localStorage.setItem(KEYR, JSON.stringify(want));
   }
