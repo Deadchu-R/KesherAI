@@ -48,6 +48,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - 👤 DeepSeek V4-Flash test (board t59; downloading on the PC)
 
 ## Models and hardware
+- ⬜ Tools suggest a better model when they start (Roee, 2026-11-18): each tool (Study, chat reports, the code agent, pictures, voice…) knows what it needs (Hebrew, context length, vision, tool use, speed) and, when a model on the computer (or one to download) fits the job better than the one loaded, says so in one line with its size and "switch" / "keep"; it never switches by itself. Seen tonight: a 32K context was too small for long Hebrew reports, and Study is best with DictaLM.
 - ✅ Training picture LoRAs from the interface
 - ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent); checked on the PC 2026-11-17: Hebrew WAV on the graphics card after the setuptools<81 fix; the engines moved to E:
 - ✅ Game helper over a running game
