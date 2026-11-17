@@ -82,3 +82,36 @@ describe("list_files in a granted folder", () => {
     assert.match(hit.output, /README\.md:1: # hi/);
   });
 });
+
+describe("read_file on long lines", () => {
+  it("returns whole lines up to the budget and says where to read on, never cutting the middle out", async () => {
+    const { mkdtemp, writeFile: wf, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: j } = await import("node:path");
+    const { CODE_TOOLS } = await import("./tools.js");
+    const dir = await mkdtemp(j(tmpdir(), "kesher-read-"));
+    try {
+      // 500 lines of 200 characters: about 100 KB, far over the 30 KB budget; the target is in the middle.
+      const lines = Array.from({ length: 500 }, (_, i) => (i === 250 ? "function target() {}" : `const x${i} = "${"a".repeat(190)}";`));
+      await wf(j(dir, "big.js"), lines.join("\n"));
+      const tool = CODE_TOOLS.find((t) => t.spec.name === "read_file")!;
+      const ctx = { workspace: dir } as unknown as Parameters<typeof tool.run>[1];
+      const first = await tool.run({ path: "big.js", offset: 1, limit: 500 }, ctx);
+      assert.ok(first.output.length <= 30_000);
+      assert.doesNotMatch(first.output, /characters cut/);
+      const next = Number(/read on with offset (\d+)/.exec(first.output)?.[1]);
+      assert.ok(next > 100 && next < 250, String(next));
+      // Reading on reaches the target, in full.
+      let at = next;
+      let seen = "";
+      while (at && !seen.includes("function target")) {
+        const part = await tool.run({ path: "big.js", offset: at, limit: 500 }, ctx);
+        seen = part.output;
+        at = Number(/read on with offset (\d+)/.exec(part.output)?.[1]);
+      }
+      assert.match(seen, /\s251 {2}function target\(\) \{\}/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

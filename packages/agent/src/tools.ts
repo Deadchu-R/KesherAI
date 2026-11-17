@@ -211,9 +211,19 @@ const readFileTool: AgentTool = {
     const start = Math.max(1, Number(input.offset ?? 1));
     const count = Math.max(1, Number(input.limit ?? MAX_READ_LINES));
     const slice = lines.slice(start - 1, start - 1 + count);
-    const body = slice.map((l, i) => `${String(start + i).padStart(5)}  ${l}`).join("\n");
-    const more = start - 1 + count < lines.length ? `\n… ${lines.length - (start - 1 + count)} more lines (use offset)` : "";
-    return { output: truncate(body + more) };
+    // Whole lines up to the output budget, then where to read on. (Cutting the middle out, as other tools' output is,
+    // hid exactly the part asked for in files with long lines, and local models read the same lines again and again.)
+    const out: string[] = [];
+    let used = 0;
+    for (const [i, l] of slice.entries()) {
+      const line = `${String(start + i).padStart(5)}  ${l.length > 4000 ? `${l.slice(0, 4000)} … [${l.length - 4000} more characters on this line]` : l}`;
+      if (out.length && used + line.length + 1 > MAX_OUTPUT - 200) break;
+      out.push(line);
+      used += line.length + 1;
+    }
+    const next = start + out.length;
+    const more = next - 1 < lines.length && (out.length < slice.length || start - 1 + count < lines.length) ? `\n… ${lines.length - (next - 1)} more lines: read on with offset ${next}` : "";
+    return { output: out.join("\n") + more };
   },
 };
 
