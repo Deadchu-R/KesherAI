@@ -383,6 +383,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         }
       }
     }
+    // The daily goal (design PhoneProgress): one reminder at 20:30 on a day it is not reached yet.
+    const g = plus.goalReminder();
+    if (g) {
+      want.push(g.id);
+      N.remind({ id: g.id, at: g.at, title: g.title, body: g.body }).catch?.(() => undefined);
+    }
     for (const id of before) if (!want.includes(id)) N.remindCancel?.({ id }).catch?.(() => undefined);
     localStorage.setItem(KEYR, JSON.stringify(want));
   }

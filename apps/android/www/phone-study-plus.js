@@ -799,6 +799,16 @@ export function studyPlus(x) {
       el("p", { class: "small", style: "margin: 0" }, parts.map(([k, icon, he, en]) => `${icon} ${L(`${Math.min(t.counts[k], t.targets[k])} מתוך ${t.targets[k]} ${he}`, `${Math.min(t.counts[k], t.targets[k])} of ${t.targets[k]} ${en}`)}${t.counts[k] >= t.targets[k] ? " ✓" : ""}`).join(" · ")),
       t.streak ? el("p", { class: "muted small", style: "margin: 4px 0 0" }, L(`🔥 ${t.streak} ימים ברצף`, `🔥 ${t.streak} days in a row`)) : "");
   }
+  /** The goal's reminder (20:30, like the computer's): today when it is not reached yet, else tomorrow. */
+  function goalReminder() {
+    const g = loadGoal();
+    if (!g.on || !x.db().courses.length) return null;
+    const t = goalToday(datas(), [], { on: true, targets: g.targets });
+    const d = new Date();
+    d.setHours(20, 30, 0, 0);
+    if (t.done || d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+    return { id: `goal-${dayKey(d)}`, at: d.getTime(), title: L("🎯 עוד לא הגעת ליעד של היום", "🎯 Today's goal is not reached yet"), body: L("כמה דקות של חזרה מספיקות.", "A few minutes of review are enough.") };
+  }
   function progress() {
     x.root.append(back({ at: "home" }), el("h2", {}, L("📈 ההתקדמות שלי", "📈 My progress")));
     const g = loadGoal();
@@ -1278,5 +1288,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
+  return { goalReminder, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
 }
