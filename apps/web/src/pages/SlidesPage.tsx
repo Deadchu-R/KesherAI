@@ -82,6 +82,7 @@ export function printDeckPdf(d: Pick<Deck, "title" | "theme" | "slides">) {
   const page = (s: Slide) => `<section class="${s.layout}"><h1>${esc(s.title)}</h1>${s.layout === "two" ? `<div class="two">${li(s.bullets)}${li(s.more ?? [])}</div>` : li(s.layout === "quote" ? s.more ?? [] : s.bullets)}${s.layout === "picture" && s.image?.startsWith("data:") ? `<img src="${s.image}">` : ""}${s.notes ? `<p class="say">${esc(s.notes)}</p>` : ""}</section>`;
   const html = `<!doctype html><html dir="${he ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${esc(d.title)}</title><style>@page{size:A4 landscape;margin:0}body{margin:0;font-family:Heebo,Arial,sans-serif}section{box-sizing:border-box;width:297mm;height:210mm;padding:20mm 24mm;background:${t.bg};color:${t.fg};page-break-after:always;display:flex;flex-direction:column;-webkit-print-color-adjust:exact;print-color-adjust:exact}section.title,section.quote{justify-content:center;text-align:center}h1{font-size:30pt;margin:0 0 10mm;color:${t.fg}}section.title h1{font-size:40pt}section.quote h1{font-style:italic}li{font-size:19pt;line-height:1.65}.two{display:grid;grid-template-columns:1fr 1fr;gap:12mm}img{max-height:110mm;max-width:100%;object-fit:contain}.say{margin-top:auto;font-size:10pt;color:${t.muted}}</style></head><body>${d.slides.map(page).join("")}</body></html>`;
   const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-same-origin allow-modals"); // no scripts in the print copy
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0";
   frame.srcdoc = html;
   frame.onload = () => {
@@ -239,7 +240,7 @@ function DeckEditor({ id }: { id: string }) {
     if (!ask.trim() || !cur) return;
     try {
       const conv = deck.convId ?? (await api<{ id: string }>("/api/conversations", { method: "POST", body: { kind: "chat" } })).id;
-      await api(`/api/conversations/${conv}/messages`, { method: "POST", body: { text: `${L("במצגת", "In the deck")} "${deck.title}" (#/slides/${deck.id}), ${L("שקופית", "slide")} [${cur.id}]: ${ask.trim()}\n${L("השתמש בכלי slides (קודם read, אחר כך change).", "Use the slides tool (read first, then change).")}` } });
+      await api(`/api/conversations/${conv}/messages`, { method: "POST", body: { text: `${L("במצגת", "In the deck")} "${deck.title}" (#/slides/${deck.id}), ${L("שקופית", "slide")} [${cur.id}]: ${ask.trim()}\n${L("השתמש בכלי slides עם", "Use the slides tool with")} id "${deck.id}" (${L("קודם read, אחר כך change", "read first, then change")}).` } });
       setAsk("");
       toast(L("נשלח לצ'אט. השינוי יופיע כאן כשיסתיים.", "Sent to the chat. The change appears here when it is done."));
     } catch (e) {

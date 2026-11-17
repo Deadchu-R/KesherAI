@@ -45,3 +45,18 @@ test("importPages: the older pages become documents once, with the same id", asy
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("document tool: edits another document by its id, refuses an unknown one", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-docs-"));
+  try {
+    const store = new DocStore(dir);
+    const other = await store.create({ title: "שלי", body: "א" });
+    const [tool] = docTools(store, "c1", () => "chat");
+    await tool!.run({ action: "append", id: other.id, body: "ב" }, {} as never);
+    assert.equal((await store.get(other.id))?.body, "א\n\nב");
+    assert.equal(await store.get("chat-c1"), undefined);
+    await assert.rejects(() => Promise.resolve(tool!.run({ action: "read", id: "nope" }, {} as never)));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

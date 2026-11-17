@@ -120,9 +120,10 @@ export class DocStore extends EventEmitter {
     for (const name of (await readdir(pagesDir).catch(() => [] as string[])).filter((x) => x.endsWith(".json"))) {
       const id = name.slice(0, -5);
       if (!ID.test(id) || (await this.get(id).catch(() => undefined))) continue;
-      let p: { title?: unknown; content?: unknown; updatedAt?: unknown } | null = null;
+      type Old = { title?: unknown; content?: unknown; updatedAt?: unknown } | null;
+      let p: Old;
       try {
-        p = JSON.parse(await readFile(join(pagesDir, name), "utf8")) as typeof p;
+        p = JSON.parse(await readFile(join(pagesDir, name), "utf8")) as Old;
       } catch {
         continue; // A broken or unreadable file is skipped, not the rest.
       }
@@ -191,18 +192,27 @@ export function docStoreFor(dir: string): DocStore {
  */
 export function docTools(store: DocStore, convId: string, title: () => string): AgentTool[] {
   const id = `chat-${convId}`;
-  const own = async (t?: string) => (await store.get(id)) ?? store.create({ title: t || title() || "Document", convId });
+  const own = async (t?: string, other?: unknown) => {
+    // A document opened in KesherAI (its "✨ ask" sends its id), or else this chat's own.
+    if (typeof other === "string" && other && other !== id) {
+      const d = await store.get(other).catch(() => undefined);
+      if (!d) throw new Error(`No document "${other}".`);
+      return d;
+    }
+    return (await store.get(id)) ?? store.create({ title: t || title() || "Document", convId });
+  };
   return [
     {
       risk: "read",
       spec: {
         name: "document",
         description:
-          "This chat's document, which the user sees and edits in KesherAI (no Word needed): use it when the user wants a document, summary, report, essay outline, letter or notes to keep. Markdown: # headings, lists, > quotes, tables, code. action 'read' returns it. 'write' replaces it all (title, body). 'append' adds text at the end. 'section' replaces the section under a heading (heading: its text; body: the new section, including its heading line); a heading not found is added at the end. Write in the user's language. Read first when the user may have edited it.",
+          "This chat's document, which the user sees and edits in KesherAI (no Word needed): use it when the user wants a document, summary, report, essay outline, letter or notes to keep. Markdown: # headings, lists, > quotes, tables, code. action 'read' returns it. 'write' replaces it all (title, body). 'append' adds text at the end. 'section' replaces the section under a heading (heading: its text; body: the new section, including its heading line); a heading not found is added at the end. Write in the user's language. Read first when the user may have edited it. id: another document's id (when the user names one, as in #/docs/<id>); leave it out for this chat's own.",
         inputSchema: {
           type: "object",
           properties: {
             action: { type: "string", enum: ["read", "write", "append", "section"] },
+            id: { type: "string" },
             title: { type: "string" },
             body: { type: "string" },
             heading: { type: "string" },
@@ -212,7 +222,7 @@ export function docTools(store: DocStore, convId: string, title: () => string): 
       },
       async run(input) {
         const action = String(input.action ?? "read");
-        const d = await own(typeof input.title === "string" ? input.title : undefined);
+        const d = await own(typeof input.title === "string" ? input.title : undefined, input.id);
         if (action === "read") return { output: `# ${d.title}\n\n${d.body || "(empty)"}` };
         const body = typeof input.body === "string" ? input.body.replace(/\r/g, "") : "";
         if (!body.trim()) throw new Error("Give the text (body).");

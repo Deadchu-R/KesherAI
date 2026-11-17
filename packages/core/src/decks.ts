@@ -147,18 +147,27 @@ export class DeckStore extends EventEmitter {
  */
 export function deckTools(store: DeckStore, convId: string, title: () => string): AgentTool[] {
   const id = `chat-${convId}`;
-  const own = async (t?: string) => (await store.get(id)) ?? store.create({ title: t || title() || "Slides", convId });
+  const own = async (t?: string, other?: unknown) => {
+    // A deck opened in KesherAI (its "✨ ask" sends its id), or else this chat's own.
+    if (typeof other === "string" && other && other !== id) {
+      const d = await store.get(other).catch(() => undefined);
+      if (!d) throw new Error(`No deck "${other}".`);
+      return d;
+    }
+    return (await store.get(id)) ?? store.create({ title: t || title() || "Slides", convId });
+  };
   return [
     {
       risk: "read",
       spec: {
         name: "slides",
         description:
-          "This chat's slide deck, which the user sees, edits and presents in KesherAI (no PowerPoint needed). Use it whenever the user wants a presentation or slides. action 'read' shows the slides (ids, layouts, text). 'write' replaces the whole deck: title, theme (night, paper, ocean, sunset, forest) and slides. 'change' replaces one slide by id. 'add' adds slides (after the slide id in 'after', or at the end). 'delete' removes slides by id. A slide: {id (short, yours), layout: title | bullets | two | quote | picture, title, bullets: [short points, a few words each, at most 6], more: [the second column for 'two', the source for 'quote', the caption for 'picture'], image: an https picture URL for 'picture', notes: what the presenter says}. Write in the user's language. Read first when the user may have edited it.",
+          "This chat's slide deck, which the user sees, edits and presents in KesherAI (no PowerPoint needed). Use it whenever the user wants a presentation or slides. action 'read' shows the slides (ids, layouts, text). 'write' replaces the whole deck: title, theme (night, paper, ocean, sunset, forest) and slides. 'change' replaces one slide by id. 'add' adds slides (after the slide id in 'after', or at the end). 'delete' removes slides by id. A slide: {id (short, yours), layout: title | bullets | two | quote | picture, title, bullets: [short points, a few words each, at most 6], more: [the second column for 'two', the source for 'quote', the caption for 'picture'], image: an https picture URL for 'picture', notes: what the presenter says}. Write in the user's language. Read first when the user may have edited it. id: another deck's id (when the user names one, as in #/slides/<id>); leave it out for this chat's own.",
         inputSchema: {
           type: "object",
           properties: {
             action: { type: "string", enum: ["read", "write", "change", "add", "delete"] },
+            id: { type: "string" },
             title: { type: "string" },
             theme: { type: "string", enum: Object.keys(DECK_THEMES) },
             slides: { type: "array", items: { type: "object" }, description: "For 'write' and 'add'." },
@@ -171,7 +180,7 @@ export function deckTools(store: DeckStore, convId: string, title: () => string)
       },
       async run(input) {
         const action = String(input.action ?? "read");
-        const d = await own(typeof input.title === "string" ? input.title : undefined);
+        const d = await own(typeof input.title === "string" ? input.title : undefined, input.id);
         if (action === "read") return { output: describeDeck(d) };
         const stamp = Date.now().toString(36);
         const saved = await store.update(d.id, (x) => {

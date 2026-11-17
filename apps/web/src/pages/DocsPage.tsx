@@ -48,6 +48,8 @@ const WRITE_ACTIONS: Array<[string, string, string]> = [
 function printDoc(title: string, html: string) {
   const he = /[֐-׿]/.test(title);
   const frame = document.createElement("iframe");
+  // No scripts run in the print copy (the document's text is hers or the model's).
+  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
   frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0";
   frame.srcdoc = `<!doctype html><html dir="${he ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${title.replace(/</g, "&lt;")}</title><style>@page{size:A4;margin:18mm}body{font-family:Heebo,Arial,sans-serif;font-size:12pt;line-height:1.7;color:#1d1d22}h1,h2,h3{line-height:1.3}table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 8px}blockquote{border-inline-start:3px solid #3d5afe;margin:0;padding-inline-start:12px;color:#555}pre{background:#f3f3f6;padding:8px;white-space:pre-wrap}button,svg{display:none}</style></head><body><h1>${title.replace(/</g, "&lt;")}</h1>${html}</body></html>`;
   frame.onload = () => {
@@ -182,7 +184,7 @@ function DocEditor({ id }: { id: string }) {
     if (!ask.trim()) return;
     try {
       const conv = doc.convId ?? (await api<{ id: string }>("/api/conversations", { method: "POST", body: { kind: "chat" } })).id;
-      await api(`/api/conversations/${conv}/messages`, { method: "POST", body: { text: `${L("במסמך", "In the document")} "${doc.title}" (#/docs/${doc.id}): ${ask.trim()}\n${L("השתמש בכלי document (קודם read).", "Use the document tool (read first).")}` } });
+      await api(`/api/conversations/${conv}/messages`, { method: "POST", body: { text: `${L("במסמך", "In the document")} "${doc.title}" (#/docs/${doc.id}): ${ask.trim()}\n${L("השתמש בכלי document עם", "Use the document tool with")} id "${doc.id}" (${L("קודם read", "read first")}).` } });
       setAsk("");
       toast(L("נשלח לצ'אט. השינוי יופיע כאן כשיסתיים.", "Sent to the chat. The change appears here when it is done."));
     } catch (e) {
