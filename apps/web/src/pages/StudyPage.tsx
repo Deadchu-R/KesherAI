@@ -12,7 +12,7 @@ import { StudyMock } from "../StudyMock";
 import { StudyLive } from "../StudyLive";
 import { StudyTogether } from "../StudyTogether";
 import { StudyPapers } from "../StudyPapers";
-import { StudyNotesTab, StudyTimeNotes } from "../StudyTimeNotes";
+import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
 import { StudyHighlights } from "../StudyHighlights";
@@ -20,7 +20,7 @@ import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
 import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
-import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
+import { SIMILAR_MARK, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -769,7 +769,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} clinical={clinicalField(info.course.field)} mocks={info.mocks ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
-        : on === "terms" ? <Glossary lectures={info.lectures} />
+        : on === "terms" ? <Glossary courseId={id} lectures={info.lectures} />
         : on === "writing" ? <StudyWriting courseId={id} />
         : on === "game" ? <StudyMatch courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
         : on === "summary" ? <CourseSummary id={id} info={info} onChange={load} />
@@ -833,6 +833,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
         <div className="study-actions">
           <button type="button" onClick={() => void send(false, L("רמז, בבקשה", "A hint, please"))}>{L("רמז", "Hint")}</button>
           <button type="button" onClick={() => void send(false, L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"))}>{L("פתרון מלא", "Full solution")}</button>
+          <button type="button" onClick={() => void send(false, `${SIMILAR_MARK} ${L("תרגיל דומה לתרגול, בבקשה (בלי הפתרון)", "A similar problem to practice, please (without the solution)")}`)}>{SIMILAR_MARK} {L("תרגיל דומה", "A similar problem")}</button>
         </div>
       )}
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
@@ -1414,7 +1415,7 @@ function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { 
               <button type="button" className="primary" disabled={!!busy} onClick={() => void summarize()}>{busy === "summary" ? L("מסכם… (הרצאה ארוכה לוקחת כמה דקות)", "Summarizing… (a long lecture takes a few minutes)") : L("סכם את ההרצאה", "Summarize the lecture")}</button>
             </div>
           ) : view === "summary" ? <ReadAlong text={l.summary} />
-          : view === "terms" ? <TermList terms={l.terms ?? []} />
+          : view === "terms" ? <TermList terms={l.terms ?? []} courseId={courseId} />
           : l.diagram ? <FlowView src={l.diagram} /> : <p className="muted">{L("בהרצאה הזאת אין תהליך שמתאים לתרשים.", "This lecture has no process that fits a diagram.")}</p>}
       </div>
       <LectureNotes key={l.id} base={base} notes={l.notes ?? ""} />
@@ -1522,7 +1523,8 @@ function LectureNotes({ base, notes }: { base: string; notes: string }) {
   );
 }
 
-function TermList({ terms }: { terms: StudyTerm[] }) {
+function TermList({ terms, courseId }: { terms: StudyTerm[]; courseId?: string }) {
+  const [open, setOpen] = useState<number | null>(null);
   if (!terms.length) return <p className="muted">{L("אין מונחים.", "No terms.")}</p>;
   return (
     <dl className="study-terms">
@@ -1530,20 +1532,44 @@ function TermList({ terms }: { terms: StudyTerm[] }) {
         <div key={i}>
           <dt dir="auto">{t.term}{t.en && t.en !== t.term ? <span className="muted" dir="ltr"> · {t.en}</span> : null}</dt>
           <dd dir="auto">{t.explain}</dd>
+          {courseId && <dd><button type="button" className="ghost small" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)}>🔎 {L("איפה עוד המונח מופיע", "Where else it appears")}</button></dd>}
+          {courseId && open === i && <dd><WhereTerm courseId={courseId} term={t.term} {...(t.en ? { en: t.en } : {})} /></dd>}
         </div>
       ))}
     </dl>
   );
 }
 
-function Glossary({ lectures }: { lectures: LectureRow[] }) {
+/** Where else a term appears in the course (design WhereTerm): each lecture with the places, opening at the minute. */
+function WhereTerm({ courseId, term, en }: { courseId: string; term: string; en?: string }) {
+  const [places, setPlaces] = useState<TermPlace[] | null>(null);
+  useEffect(() => void api<{ places: TermPlace[] }>(`/api/study/courses/${courseId}/where?term=${encodeURIComponent(term)}${en ? `&en=${encodeURIComponent(en)}` : ""}`).then((r) => setPlaces(r.places), (e: Error) => toast(e.message)), [courseId, term, en]);
+  if (!places) return <p className="muted small">…</p>;
+  if (!places.length) return <p className="muted small">{L("המונח לא מופיע בטקסט של ההרצאות.", "The term does not appear in the lectures' text.")}</p>;
+  return (
+    <ul className="study-where">
+      {places.map((p) => (
+        <li key={p.lectureId}>
+          <a href={`#/study/${courseId}/l/${p.lectureId}`}><b dir="auto">{p.title}</b></a> <span className="muted small">{L(`· ${p.count} פעמים`, `· ${p.count} times`)}</span>
+          {p.spots.map((s, j) => (
+            <a key={j} className="study-where-spot small" href={`#/study/${courseId}/l/${p.lectureId}${s.at !== undefined ? `/${s.at}` : ""}`}>
+              {s.at !== undefined && <span className="study-stamp" dir="ltr">▶ {clockOf(s.at)}</span>}{s.page ? <span className="muted">{L(`עמ׳ ${s.page} `, `p. ${s.page} `)}</span> : null}<span dir="auto">{s.text}</span>
+            </a>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Glossary({ courseId, lectures }: { courseId: string; lectures: LectureRow[] }) {
   const [q, setQ] = useState("");
   const all = lectures.flatMap((l) => (l.terms ?? []).map((t) => ({ ...t, from: l.title })));
   const shown = all.filter((t) => !q || `${t.term} ${t.en ?? ""} ${t.explain}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => a.term.localeCompare(b.term, "he"));
   return (
     <section className="study-glossary">
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("חיפוש מונח, בעברית או באנגלית", "Search a term, Hebrew or English")} aria-label={L("חיפוש", "Search")} dir="auto" />
-      {!all.length ? <p className="muted">{L("המילון מתמלא מהמונחים של כל הרצאה שסוכמה.", "The glossary fills from the terms of every summarized lecture.")}</p> : <TermList terms={shown} />}
+      {!all.length ? <p className="muted">{L("המילון מתמלא מהמונחים של כל הרצאה שסוכמה.", "The glossary fills from the terms of every summarized lecture.")}</p> : <TermList terms={shown} courseId={courseId} />}
     </section>
   );
 }

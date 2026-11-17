@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
+import { whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -444,6 +444,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     await st.removeSlides(req.params.id, req.params.lid);
     return { ok: true };
   });
+  /** Where else a term appears in the course's lectures (design WhereTerm). */
+  app.get<C & { Querystring: { term?: string; en?: string } }>("/api/study/courses/:id/where", async (req) => ({ places: whereTerm((await st.get(req.params.id)).lectures, String(req.query.term ?? "").slice(0, 100), typeof req.query.en === "string" ? req.query.en.slice(0, 100) : undefined).slice(0, 30) }));
   /** Her sources library (design Papers): the list, find papers (OpenAlex), save, remove, "what the studies say". */
   app.get<C>("/api/study/courses/:id/sources", async (req) => ({ sources: await st.sources(req.params.id) }));
   app.get<C & { Querystring: { q?: string } }>("/api/study/courses/:id/papers", async (req) => ({ papers: await st.findPapers(String(req.query.q ?? "")) }));

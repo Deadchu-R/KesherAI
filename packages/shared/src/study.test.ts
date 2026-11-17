@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, pictureQueries, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
+import { SIMILAR_MARK, detectField, STUDY_FIELDS, STUDY_FIELD_HINTS, pictureQuery, pictureQueries, commonsSearchUrl, parseCommonsPictures, pageAt, passageLabel, toolsFor, toolMaterial, STUDY_TOOLS, searchStudy, parseOpenQuestions, openMark, openGradeMessages, weakLectures as weakL, courseSummaryInput, parseCourseSummary, type StudyLecture, type StudyCourseData, tutorMessages, cardsToTsv, cardsFromTsv, studyNext, checkCalcQuestion, parseSyllabus, syllabusNow, pastExamStyle, explainMessages, studyStreak, studyDays, focusWeek, dayKey, gradeLine, gradeMessages, cleanScript, calcCorrect, doseByWeight, dropRate, formatStats, infusionRate, jsonIn, mergeCourseData, examPlan, cardsToReview, findPassages, shareCourse, openSharedCourse, practiceProblem, pumpRate, tabletsToGive, volumeToGive, weakLectures, type CalcKind, type StudyReview } from "./study.js";
 
 test("medication calculations: the textbook answers", () => {
   assert.equal(volumeToGive(500, 250, 5).value, 10);
@@ -197,6 +197,11 @@ test("tutorMessages homework: the problem stays in view; steps and hints follow 
   assert.match(first.messages.at(-1)!.content, /The problem: 1000/);
   const later = tutorMessages({ lectures, question: "רמז", mode: "homework", history: [{ role: "user", content: "1000 מ״ל ב-8 שעות, פקטור 20. מה קצב הטפטוף?" }, { role: "assistant", content: "מה כבר ניסית?" }] });
   assert.match(later.messages.at(-1)!.content, /The problem: 1000[\s\S]*Her message: רמז/);
+  // After "a similar problem", her steps are checked against the problem the tutor wrote.
+  const history = [{ role: "user" as const, content: "1000 מ״ל ב-8 שעות, פקטור 20. מה קצב הטפטוף?" }, { role: "assistant" as const, content: "41.7" }, { role: "user" as const, content: `${SIMILAR_MARK} תרגיל דומה` }, { role: "assistant" as const, content: "500 מ״ל ב-4 שעות, פקטור 15. מה הקצב?" }];
+  const similar = tutorMessages({ lectures, question: "500 כפול 15", mode: "homework", history });
+  assert.match(similar.messages.at(-1)!.content, /The problem: 500 מ״ל ב-4 שעות[\s\S]*Her message: 500 כפול 15/);
+  assert.match(similar.messages[0]!.content, /similar problem/);
 });
 
 test("explainMessages: the selection with the lecture as context, by kind", () => {
@@ -439,4 +444,20 @@ test("time notes keep a note's moment and find the line heard then", async () =>
   assert.equal(lineAt(text, 75), "חוסמי בטא");
   assert.equal(lineAt(text, 3700), "סוף");
   assert.equal(lineAt("no marks", 5), "");
+});
+
+test("whereTerm: every lecture that mentions a term, with its page and minute", async () => {
+  const { whereTerm } = await import("./study.js");
+  const lectures = [
+    { id: "a", title: "לב", text: "— 3 —\n[0:10] בהיפרקלמיה רואים גלי T מחודדים.\n" + "x ".repeat(200) + "\n[12:05] ההיפרקלמיה מסוכנת. Hyperkalemia is dangerous." },
+    { id: "b", title: "כליה", text: "[1:00] כשל כלייתי גורם להיפרקלמיה." },
+    { id: "c", title: "ריאות", text: "אין כאן" },
+  ];
+  const w = whereTerm(lectures, "היפרקלמיה", "Hyperkalemia");
+  assert.deepEqual(w.map((p) => [p.lectureId, p.count]), [["a", 3], ["b", 1]]);
+  assert.equal(w[0]!.spots[0]!.page, 3);
+  assert.equal(w[0]!.spots[0]!.at, 10);
+  assert.equal(w[0]!.spots[1]!.at, 725);
+  assert.equal(w[1]!.spots[0]!.at, 60);
+  assert.deepEqual(whereTerm(lectures, "x"), []);
 });

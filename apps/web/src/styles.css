@@ -3545,3 +3545,10 @@ div.slide-list { padding-inline-start: 0; }
 .degree-bar .done { background: var(--ok, #2e9e6a); }
 .degree-bar .doing { background: repeating-linear-gradient(45deg, var(--accent, #a5b4ff) 0 4px, transparent 4px 7px); opacity: .8; }
 .study-grade-kind { display: flex; gap: 6px; align-items: center; }
+/* Where else a term appears (design WhereTerm). */
+.study-where { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.study-where > li { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border, #333); border-radius: 10px; min-width: 0; }
+.study-where-spot { display: flex; gap: 6px; align-items: baseline; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.study-where-spot:hover { color: var(--accent, #a5b4ff); }
+.study-where-spot .study-stamp { flex: none; }
+.study-where-spot > .muted { white-space: nowrap; flex: none; }

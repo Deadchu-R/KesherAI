@@ -1151,6 +1151,49 @@ export function searchStudy(courses: Array<Pick<StudyCourseData, "course" | "lec
   return out.sort((x, y) => x.rank - y.rank).slice(0, limit).map(({ rank: _r, ...h }) => h);
 }
 
+/** Where a term appears in one lecture (design WhereTerm). */
+export interface TermPlace {
+  lectureId: string;
+  title: string;
+  /** How many times it is mentioned. */
+  count: number;
+  /** Up to three places: the words around it, with the page or the recording's minute when the text marks them. */
+  spots: Array<{ text: string; page?: number; at?: number }>;
+}
+
+/**
+ * Where else a term appears in the course (design WhereTerm, students part 28 #9, like RemNote's references): every
+ * lecture that mentions it (the Hebrew term or its English name; Hebrew prefixes are fine), most mentions first, each
+ * with up to three short places, their page and the minute of the recording.
+ */
+export function whereTerm(lectures: Array<Pick<StudyLecture, "id" | "title" | "text">>, term: string, en?: string): TermPlace[] {
+  const names = [term, en ?? ""].map((n) => fold(n).trim()).filter((n) => n.length > 1);
+  if (!names.length) return [];
+  const out: TermPlace[] = [];
+  for (const l of lectures) {
+    const f = fold(l.text);
+    const hits: number[] = [];
+    for (const n of names) for (let i = f.indexOf(n); i >= 0 && hits.length < 500; i = f.indexOf(n, i + n.length)) hits.push(i);
+    if (!hits.length) continue;
+    hits.sort((a, b) => a - b);
+    const spots: TermPlace["spots"] = [];
+    let last = -1000;
+    for (const i of hits) {
+      if (spots.length >= 3) break;
+      if (i - last < 200) continue;
+      last = i;
+      const from = Math.max(0, i - 70);
+      const before = l.text.slice(0, i);
+      const stamps = [...before.matchAll(/^\[(?:(\d+):)?(\d{1,2}):(\d\d)\]/gm)];
+      const st = stamps.at(-1);
+      const page = pageAt(l.text, i);
+      spots.push({ text: `${from ? "…" : ""}${l.text.slice(from, i + 110).replace(/\s+/g, " ").trim()}${l.text.length > i + 110 ? "…" : ""}`, ...(page ? { page } : {}), ...(st ? { at: Number(st[1] ?? 0) * 3600 + Number(st[2]) * 60 + Number(st[3]) } : {}) });
+    }
+    out.push({ lectureId: l.id, title: l.title, count: hits.length, spots });
+  }
+  return out.sort((a, b) => b.count - a.count);
+}
+
 /** A course's syllabus, read once from its file and confirmed by her. Dates are YYYY-MM-DD. */
 export interface StudySyllabus {
   exams: Array<{ title: string; date: string }>;
@@ -1853,9 +1896,12 @@ export function checkCalcQuestion<T extends { options: string[]; answer: number;
 export const STUDY_MODE_PROMPT =
   "You are a tutor quizzing a student on her own lecture passages (given). Do not lecture. Ask ONE short question at a time about the passages, then stop and wait for her answer. When she answers: judge it only by what the passages say (not by general knowledge): if the passages say something else, it is not right, even if it could be true elsewhere. Say plainly whether it is right, give the passages' answer briefly and name the lecture in square brackets, like [Lecture: <title>], then ask the next question: a little harder if she was right, simpler if not. If she asks for help, give a hint as a question before the answer. Write only in her language (the lectures' language when she has not written yet), with no words in other languages or scripts. Never invent numbers, doses or values.";
 
+/** How "a similar problem to practice" starts, so the tutor and the problem it wrote are recognised (design SimilarProblem). */
+export const SIMILAR_MARK = "🔁";
+
 /** Homework help: step by step, one hint at a time, the full solution only when she asks (Khanmigo-like, without the wall). */
 export const HOMEWORK_PROMPT =
-  "You help a student with a homework problem step by step, like a good tutor. Do not solve it at once. First, in two short lines, say what the problem asks and ask what she tried, or give only the first step as a question. When she writes a step, say whether it is right and why, then point to the next step. When she asks for a hint, give ONE short hint (each hint a little more direct than the last). Only when she asks for the full solution, give it worked out step by step, then one line on the idea to remember. Use the lecture passages when they help (name the lecture in square brackets, like [Lecture: <title>]); general knowledge is allowed for homework, but never invent numbers, doses or values that the problem does not give. Write math as plain text (like 1000 × 20 ÷ 480 = 41.7), never LaTeX. Write only in her language.";
+  "You help a student with a homework problem step by step, like a good tutor. Do not solve it at once. First, in two short lines, say what the problem asks and ask what she tried, or give only the first step as a question. When she writes a step, say whether it is right and why, then point to the next step. When she asks for a hint, give ONE short hint (each hint a little more direct than the last). Only when she asks for the full solution, give it worked out step by step, then one line on the idea to remember. When her message starts with 🔁 she wants a similar problem to practice: write ONE new problem of the same kind and difficulty with different numbers or a different case, only the problem (no hint, no solution), and from then on help with that problem the same way. Use the lecture passages when they help (name the lecture in square brackets, like [Lecture: <title>]); general knowledge is allowed for homework, but never invent numbers, doses or values that the problem does not give. Write math as plain text (like 1000 × 20 ÷ 480 = 41.7), never LaTeX. Write only in her language.";
 
 /** Live translation of a lecture's transcript, half a minute at a time. */
 export const TRANSLATE_PROMPT = (to: "he" | "en") =>
@@ -1980,7 +2026,9 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
   const homework = o.mode === "homework";
   const system = `${study ? STUDY_MODE_PROMPT : homework ? HOMEWORK_PROMPT : TUTOR_PROMPT}${study ? "" : `\n${GRAPH_RULE}`}${o.hint ? `\n${o.hint}` : ""}`;
   // Homework: the problem is the first thing she wrote; her later messages are steps, hints asked for, or "full solution".
-  const problem = homework ? (turns.find((h) => h.role === "user")?.content ?? q) : "";
+  // After "a similar problem" (her message starting with 🔁), the problem is the one the tutor wrote in answer.
+  const asked = turns.map((h) => h.role === "user" && h.content.trimStart().startsWith(SIMILAR_MARK)).lastIndexOf(true);
+  const problem = homework ? (asked >= 0 && turns[asked + 1]?.role === "assistant" ? turns[asked + 1]!.content : (turns.find((h) => h.role === "user")?.content ?? q)) : "";
   const user = homework ? `Passages from her lectures:\n\n${material}\n\n${turns.length ? `The problem: ${problem.slice(0, 3000)}\n\nHer message: ${q}` : `The problem: ${q}`}` : study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\n${turns.length ? "Ask her the next question (a new one, not asked above). Only the question." : "Start: ask her the first question."}`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;
   return { messages: [{ role: "system", content: system }, ...turns, { role: "user", content: `${user}${hebrewAsk(`${q} ${o.lectures[0]?.text.slice(0, 300) ?? ""}`)}` }], passages };
 }
