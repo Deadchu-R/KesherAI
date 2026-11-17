@@ -45,10 +45,12 @@ export function isArtifact(language: string | undefined, code: string): boolean 
   return /<!doctype html|<html[\s>]/i.test(code) || (code.split("\n").length >= 6 && /<(div|canvas|body|script|style|button|svg|main|section)[\s>]/i.test(code));
 }
 
-const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:">`;
+const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'">`;
 
 /** The page as the frame gets it: the content policy first, before anything of the page. */
-export function framed(code: string): string {
+export function framed(given: string): string {
+  // A refresh that would move the frame to another site goes (its address could carry the page's text out).
+  const code = given.replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh[^>]*>/gi, "");
   if (/^\s*<svg[\s>]/i.test(code)) return `<!doctype html><html><head>${POLICY}<style>html,body{margin:0;height:100%;display:grid;place-items:center;background:#fff}</style></head><body>${code}</body></html>`;
   if (/<head[^>]*>/i.test(code)) return code.replace(/<head[^>]*>/i, (m) => `${m}${POLICY}`);
   if (/<html[^>]*>/i.test(code)) return code.replace(/<html[^>]*>/i, (m) => `${m}<head>${POLICY}</head>`);

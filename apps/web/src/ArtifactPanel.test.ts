@@ -15,3 +15,9 @@ test("the content policy comes before anything of the page", () => {
   assert.match(framed("<div>x</div>"), /default-src 'none'/);
   assert.match(framed("<svg></svg>"), /^<!doctype html>.*Content-Security-Policy.*<svg><\/svg>/s);
 });
+
+test("a refresh to another site is taken out, and forms cannot post anywhere", () => {
+  const f = framed(`<html><head><meta http-equiv="refresh" content="0;url=https://x.example/?d=1"></head></html>`);
+  assert.doesNotMatch(f, /refresh/);
+  assert.match(f, /form-action 'none'/);
+});

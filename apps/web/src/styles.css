@@ -2967,3 +2967,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .artifact-note { margin: 0; padding: 6px 10px; border-top: 1px solid var(--border); }
 @media (min-width: 1100px) { body.artifact-open .chat { margin-inline-end: calc(min(48vw, 760px) + 16px); margin-inline-start: 0; } }
 @media (max-width: 1099px) { .artifact-panel { inset: 0; width: auto; border-radius: 0; z-index: 70; } }
+.md-img-ask { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0; padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); font-size: 13.5px; }

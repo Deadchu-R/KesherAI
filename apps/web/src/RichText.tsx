@@ -49,7 +49,7 @@ function inline(text: string, key: string): React.ReactNode[] {
     else if (tok.startsWith("![")) {
       const [, alt, src] = /!\[([^\]]*)\]\(([^)]+)\)/.exec(tok)!;
       const ok = imageSrc(src!);
-      out.push(ok ? <a key={k} href={ok} target="_blank" rel="noreferrer"><img className="md-img" src={ok} alt={alt} loading="lazy" /></a> : alt);
+      out.push(ok ? <AnswerImage key={k} src={ok} alt={alt ?? ""} /> : alt);
     } else if (/^https?:/.test(tok)) out.push(<a key={k} href={tok} target="_blank" rel="noreferrer" dir="ltr">{tok}</a>);
     else if (tok.startsWith("[")) {
       const [, label, href] = /\[([^\]]+)\]\(([^)]+)\)/.exec(tok)!;
@@ -217,4 +217,21 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
       <CodeView code={code} language={language} />
     </div>
   );
+}
+
+/**
+ * A picture in an answer. KesherAI's own pictures show at once; a picture from another site waits for a tap (an
+ * address the model wrote could carry data out to that site, the known Markdown-image leak).
+ */
+function AnswerImage({ src, alt }: { src: string; alt: string }) {
+  const own = src.startsWith("/api/");
+  const [show, setShow] = useState(own);
+  let host = "";
+  try {
+    host = own ? "" : new URL(src).hostname;
+  } catch {
+    return <>{alt}</>;
+  }
+  if (!show) return <button type="button" className="md-img-ask" onClick={() => setShow(true)}>🖼️ {L(`תמונה מ-${host}: הצג`, `A picture from ${host}: show`)}{alt ? ` · ${alt}` : ""}</button>;
+  return <a href={src} target="_blank" rel="noreferrer"><img className="md-img" src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" /></a>;
 }

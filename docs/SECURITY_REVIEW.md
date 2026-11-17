@@ -962,3 +962,12 @@ S5 an outside scanner's rules for Electron.
 - **Plugin update**: Unreal is opened again only when it was open before; no new process is started otherwise.
 - **Fab tab**: only the tab KesherAI opened for the search is closed (by its id), never a tab the user opened.
 - Performance: the language check is one pass over the report's text; the Fab timer is one per pane. Secrets/personal paths: none in the diff (git grep).
+
+## Scan 105 (2026-11-17): the richer answer, "+" reading every file, the translator, KaTeX/Mermaid, artifacts
+- **Fixed: pictures from other sites in an answer** waited for nothing: an address the model wrote (after reading a page that told it to) could carry data out to that site when the picture loads (the known Markdown-image leak). Now only KesherAI's own pictures show at once; another site's picture shows its host and loads on a tap, with no referrer.
+- **Artifacts**: the frame is sandboxed without same-origin (no KesherAI API, files, key or cookies), with a content policy blocking every request (`default-src 'none'`, `form-action 'none'`); a meta refresh is removed. What is left: a page script can still move its own frame to another address; it can only carry what the model wrote into the page, which the user sees anyway.
+- **KaTeX / Mermaid**: their own output only (KaTeX's safe defaults, no `\href`; Mermaid with `securityLevel: "strict"`, sanitized labels). Loaded only when an answer has math or a diagram.
+- **Link cards**: nothing is fetched from the linked site.
+- **"+" files**: recordings, videos and code are read only inside the chat's folders (the same check as documents); ffmpeg and whisper get the path as an argument list; frames and transcripts stay on this computer unless the user chose a cloud speech service.
+- **Translator**: the answer's prose only; code, inline code and links leave as markers and must come back unchanged, or the original answer stays.
+- Performance: KaTeX and Mermaid are their own chunks; the translator runs only when the final answer is in another language or mixes alphabets (one extra model call). Secrets/personal paths: none in the diff.
