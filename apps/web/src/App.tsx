@@ -364,7 +364,7 @@ export function App() {
   if (hash === "#/avatar-feed") return <AvatarFeed />;
   return (
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
-      <a className="skip-link" href="#/" onClick={(e) => { e.preventDefault(); focusMain(); }}>{getLocale() === "he" ? "דילוג לתוכן" : "Skip to content"}</a>
+      <a className="skip-link" href="#main-content" onClick={(e) => { e.preventDefault(); focusMain(); }}>{getLocale() === "he" ? "דילוג לתוכן" : "Skip to content"}</a>
       <RemoteBanner />
       <ExtensionPage />
       <AskFromUrl />
@@ -377,7 +377,7 @@ export function App() {
       <Reconnecting />
       <PcDrop />
       <VersionWatch />
-      <main className="main">
+      <main className="main" id="main-content">
         <PhoneUpdateBanner />
         <UpdatedCard hash={hash} />
         <GuardBanner />
