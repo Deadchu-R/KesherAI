@@ -145,3 +145,23 @@ test("checkReport: a Hebrew report with other alphabets is marked mixed", () => 
   assert.equal(checkReport({ headline: "זוג שبنוי על רתיחות", read: "", findings: [] }, [], n, "he").mixed, true);
   assert.equal(checkReport({ headline: "זוג שבנוי על שגרה", read: "", findings: [] }, [], n, "he").mixed, undefined);
 });
+
+test("a long Brandon report is read in parts when the model's context is small", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  const calls: Array<{ system: string; n: number }> = [];
+  const ask = async (system: string, user: string) => {
+    calls.push({ system, n: user.length });
+    if (user.length > 8_000) throw new Error("Context size has been exceeded.");
+    if (system.includes("one part of a long")) return `Finding: part with ${user.length} characters.`;
+    return JSON.stringify({ title: "Long one", headline: "h", read: "r", findings: [{ title: "Parts", body: "Read in parts.", quotes: [] }] });
+  };
+  const text = Array.from({ length: 300 }, (_, i) => `פסקה ${i}: ${"מילים ".repeat(15)}`).join("\n\n");
+  assert.ok(text.length > 25_000);
+  const r = await reports.importReport(text, "he", ask);
+  assert.equal((await reports.get(r.id)).report?.findings[0]?.title, "Parts");
+  assert.ok(calls.some((c) => c.system.includes("one part of a long")));
+  assert.ok(calls.filter((c) => c.system.includes("one part of a long")).every((c) => c.n <= 6_000 || c.n > 8_000));
+  // A model too small even for the smallest parts: a clear 422, not a server error.
+  const tiny = async () => { throw new Error("Context size has been exceeded."); };
+  await assert.rejects(reports.importReport(text, "he", tiny), (e: Error & { statusCode?: number }) => e.statusCode === 422);
+});

@@ -385,6 +385,31 @@ export const IMPORT_PROMPT =
 /** Asks the model (system, user) and returns its answer. */
 export type Ask = (system: string, user: string, signal?: AbortSignal) => Promise<string>;
 
+/** For a long imported report: one part at a time, what the final reading needs, in the report's own words. */
+export const IMPORT_NOTES_PROMPT =
+  "This is one part of a long relationship report about a chat. Copy out of it, in the report's own language and words: its title if it is here, every finding (its heading and its full explanation), and every quote exactly as written with who said it. Plain text, no commentary, nothing added.";
+
+/**
+ * A long text in parts of at most `size` characters, cut at a paragraph or line where it can be.
+ *
+ * @param text - The text.
+ * @param size - The longest part.
+ */
+export function importParts(text: string, size: number): string[] {
+  const out: string[] = [];
+  let rest = text;
+  while (rest.length > size) {
+    const cut = Math.max(rest.lastIndexOf("\n\n", size), rest.lastIndexOf("\n", size));
+    const at = cut > size / 2 ? cut : size;
+    out.push(rest.slice(0, at).trim());
+    rest = rest.slice(at);
+  }
+  if (rest.trim()) out.push(rest.trim());
+  return out;
+}
+
+const CONTEXT_FULL = /context (size|length|window)|exceed|too (long|many tokens)|n_ctx/i;
+
 /** The reports, in KesherAI's data folder (a folder per report: report.json and chat.json). */
 export class ChatReports {
   private running = new Map<string, AbortController>();
@@ -548,7 +573,28 @@ export class ChatReports {
   async importReport(text: string, lang: "he" | "en", ask: Ask): Promise<StoredReport> {
     const body = text.replace(/\s+\n/g, "\n").trim().slice(0, 60_000);
     if (body.length < 200) throw Object.assign(new Error("That is too short to be a report."), { statusCode: 400 });
-    const raw = jsonOf(await ask(IMPORT_PROMPT, body));
+    // A long report does not fit a local model's context ("Context size has been exceeded" from the phone, 2026-11-18):
+    // its parts are read one at a time into notes, and the report is made from the notes. On a context error the parts
+    // get smaller.
+    const read = async (size: number): Promise<string> => {
+      if (body.length <= size) return ask(IMPORT_PROMPT, body);
+      const notes: string[] = [];
+      for (const part of importParts(body, size)) notes.push((await ask(IMPORT_NOTES_PROMPT, part)).trim().slice(0, size));
+      return ask(IMPORT_PROMPT, notes.join("\n\n---\n\n").slice(0, size * 2));
+    };
+    let answer: string | undefined;
+    for (const size of [12_000, 6_000, 3_000]) {
+      try {
+        answer = await read(size);
+        break;
+      } catch (err) {
+        if (!CONTEXT_FULL.test((err as Error).message) || size === 3_000) {
+          if (CONTEXT_FULL.test((err as Error).message)) throw Object.assign(new Error("The report is too long for the chosen model's memory (context). Load the model with a larger context, or choose a model with a bigger one, and try again."), { statusCode: 422 });
+          throw err;
+        }
+      }
+    }
+    const raw = jsonOf(answer ?? "");
     if (!raw) throw new Error("The model could not read the report; try again or paste its text.");
     const asQuotes = (v: unknown): Quote[] => arr(v).map((q) => ({ who: str((q as { who?: unknown }).who, 80), at: "", text: str((q as { text?: unknown }).text, 400) })).filter((q) => q.text).slice(0, 3);
     const report: ChatReport = {
