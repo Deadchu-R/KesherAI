@@ -41,6 +41,19 @@ export const RECOMMENDED_MODELS: readonly RecommendedModel[] = [
     note: { en: "Small and fast. Runs on almost any computer.", he: "קטן ומהיר. רץ כמעט על כל מחשב." },
   },
   {
+    // Dicta's Hebrew model (Dicta-LM 3.0, on NVIDIA's Nemotron Nano: a hybrid that keeps long contexts with little
+    // memory): Study's first choice for Hebrew (the course model "auto" takes a DictaLM when there is one).
+    id: "dictalm-12b",
+    name: "DictaLM 3.0 12B (עברית)",
+    category: "chat",
+    repo: "dicta-il/DictaLM-3.0-Nemotron-12B-Instruct-GGUF",
+    filePattern: "Q4_K_M\\.gguf$",
+    sizeGb: 7.5,
+    memoryGb: 10,
+    goodForCode: false,
+    note: { en: "Dicta's Hebrew model: the best for studying and writing in Hebrew, and long texts fit in little memory.", he: "המודל העברי של דיקטה: הכי טוב ללמידה ולכתיבה בעברית, וטקסטים ארוכים נכנסים בזיכרון קטן." },
+  },
+  {
     id: "qwen3-8b",
     name: "Qwen3 8B",
     category: "chat",

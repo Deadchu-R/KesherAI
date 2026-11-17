@@ -13,6 +13,8 @@ const FIRST_FIELDS = ["nursing", "medicine", "law", "engineering", "cs", "psycho
 interface ModelStatus {
   chat: { ready: boolean; name?: string; hebrew: boolean };
   suggest?: { id: string; name: string; sizeGb: number };
+  /** With a chat model that is not Dicta's: the Hebrew one, to offer beside it. */
+  hebrew?: { id: string; name: string; sizeGb: number };
   stt?: { ready: boolean; busy: boolean; name: string; sizeGb: number; setup: string | null };
 }
 type Recommended = { id: string; name: string; sizeGb: number; downloaded: boolean; estimate?: { rating: string } };
@@ -37,10 +39,12 @@ export function useModelStatus(on = true): [ModelStatus | null, () => void] {
       const ready = !!dicta || !!active;
       const rank = (r?: string) => (r === "good" ? 0 : r === "ok" ? 1 : 9);
       const pick = [...rec].filter((m) => !m.downloaded && rank(m.estimate?.rating) < 9).sort((a, b) => rank(a.estimate?.rating) - rank(b.estimate?.rating) || b.sizeGb - a.sizeGb)[0];
+      const dictaOffer = rec.find((m) => m.id === "dictalm-12b" && !m.downloaded && rank(m.estimate?.rating) < 9);
       const stt = kinds?.["speech-to-text"];
       setSt({
         chat: { ready, ...(dicta || active ? { name: dicta?.name ?? active!.split("/").pop()! } : {}), hebrew: !!dicta },
         ...(!ready && pick ? { suggest: { id: pick.id, name: pick.name, sizeGb: pick.sizeGb } } : {}),
+        ...(ready && !dicta && dictaOffer ? { hebrew: { id: dictaOffer.id, name: dictaOffer.name, sizeGb: dictaOffer.sizeGb } } : {}),
         ...(stt ? { stt: { ready: stt.ready, busy: !!stt.busy, name: stt.name, sizeGb: stt.sizeGb, setup: stt.setup ?? null } } : {}),
       });
     });
@@ -68,7 +72,11 @@ function ModelCheck({ st, reload }: { st: ModelStatus | null; reload: () => void
       <div className={`study-setup-check${st.chat.ready ? " ok" : ""}`}>
         <b>{st.chat.ready ? "✅" : "⬜"} {L("מודל שמבין ועונה", "A model that understands and answers")}</b>
         {st.chat.ready ? (
-          <span className="small" dir="auto">{st.chat.name}{st.chat.hebrew ? L(" — מצוין בעברית", " — excellent in Hebrew") : L(" — עובד. לעברית הכי טובה: DictaLM, בעמוד המודלים.", " — works. For the best Hebrew: DictaLM, on the Models page.")}</span>
+          <>
+            <span className="small" dir="auto">{st.chat.name}{st.chat.hebrew ? L(" — מצוין בעברית", " — excellent in Hebrew") : L(" — עובד.", " — works.")}</span>
+            {st.hebrew && <><span className="small">{L(`לעברית הכי טובה: ${st.hebrew.name} של דיקטה · ‏${st.hebrew.sizeGb}GB, ירוץ טוב במחשב הזה.`, `For the best Hebrew: Dicta's ${st.hebrew.name} · ${st.hebrew.sizeGb} GB; it runs well on this computer.`)}</span>
+              <button type="button" disabled={started.includes("hebrew")} onClick={() => void start("hebrew", `/api/models/recommended/${st.hebrew!.id}/run`)}>{started.includes("hebrew") ? L("✓ יורד ברקע", "✓ Downloading") : L(`⬇ להוסיף את DictaLM (${st.hebrew.sizeGb}GB)`, `⬇ Add DictaLM (${st.hebrew.sizeGb} GB)`)}</button></>}
+          </>
         ) : st.suggest ? (
           <>
             <span className="small">{L(`מוצע: ${st.suggest.name} · ‏${st.suggest.sizeGb}GB. ירוץ טוב במחשב הזה.`, `Suggested: ${st.suggest.name} · ${st.suggest.sizeGb} GB. It runs well on this computer.`)}</span>
