@@ -376,7 +376,15 @@ export class ChatReports {
 
   /** @returns One report. */
   async get(id: string): Promise<StoredReport> {
-    return JSON.parse(await readFile(join(this.folder(id), "report.json"), "utf8")) as StoredReport;
+    // Read again when the file is being replaced at that moment (Windows).
+    for (let i = 0; ; i++) {
+      try {
+        return JSON.parse(await readFile(join(this.folder(id), "report.json"), "utf8")) as StoredReport;
+      } catch (e) {
+        if (i >= 10 || !["EPERM", "EBUSY", "EACCES"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e;
+        await new Promise((ok) => setTimeout(ok, 25));
+      }
+    }
   }
 
   private async put(r: StoredReport): Promise<void> {
@@ -384,7 +392,16 @@ export class ChatReports {
     // Whole or not at all (the page reads it while the model writes).
     const tmp = join(this.folder(r.id), `report.${process.pid}.${Date.now()}.tmp`);
     await writeFile(tmp, JSON.stringify(r));
-    await rename(tmp, join(this.folder(r.id), "report.json"));
+    // Windows refuses to replace a file while the page is reading it (EPERM / EBUSY): try again a few times.
+    for (let i = 0; ; i++) {
+      try {
+        await rename(tmp, join(this.folder(r.id), "report.json"));
+        break;
+      } catch (e) {
+        if (i >= 20 || !["EPERM", "EBUSY", "EACCES"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e;
+        await new Promise((ok) => setTimeout(ok, 25 + i * 25));
+      }
+    }
   }
 
   private async chat(id: string): Promise<PeopleChat> {
