@@ -1034,3 +1034,23 @@ S5 an outside scanner's rules for Electron.
 - **Comparison and mind map**: the same tool route as the field tools (her lectures as data); the mind map renders through Mermaid in strict security mode.
 - **Path toggle**: one more boolean in the Study preferences.
 - Result: no open issues.
+
+## Scan 114 (2026-11-17): KesherAI's slides and documents, the older Pages merged into documents
+- **Stores**: decks and documents are one JSON file each under the data folder, named by an id checked against `^[\w-]{1,80}$` (no path from the request); writes go through a temporary file and a rename, mode 0600, under one write lock; a save carries the revision it started from and an older one is refused (409), so the page never overwrites the model's edit unseen.
+- **Size**: a document is at most 2 MB, a deck 20 MB with pictures only from https or a `data:image/(png|jpeg|webp|gif)` URL; the routes' body limits match.
+- **Live updates**: the SSE stream sends only revision numbers; the page loads the document itself.
+- **The chats' tools**: "slides" and "document" act on the chat's own file, or on one the user named by id (the "✨ ask" box sends the open file's id). **Found and fixed**: before this, "✨ ask" on a file not tied to a chat made the new chat edit its own copy, not the open file; the tools now take the id, and refuse an unknown one.
+- **Writing buttons**: the selected text goes to her chosen chat model only (the same prompt as Pages had); the answer replaces the selection in the editor, as text.
+- **Print to PDF**: **found and fixed**: the print copy (documents and slides) is now a sandboxed frame (`allow-same-origin allow-modals`, no scripts) — the document's HTML is hers or the model's, rendered by RichText, but no script can run in the copy either way.
+- **Copy for Word / Google Docs**: puts the rendered HTML and the Markdown on the clipboard on her click only.
+- **Pages → documents**: each old page is read from her pages folder once (ids checked, a broken file skipped) and written as a document with the same id; the old files stay.
+- Result: two found and fixed, no open issues.
+
+## Scan 115 (2026-11-17): mock exam, grades, timetable, fill-in-the-blank cards and confidence
+- **Mock exam**: a quiz request's `mock` is kept only with a group id matching `^[\w-]{4,40}$` and minutes clamped to 5–300; the number of questions stays capped (60); grading is the existing code (multiple choice) and grader (open answers).
+- **Grades**: `PUT /api/study/grades` (512 KB limit) is cleaned field by field (at most 200 courses of 10 parts, numbers clamped to their range, text trimmed) and written mode 0600; nothing leaves the computer.
+- **Timetable**: cleaned the same way (at most 80 classes, HH:MM times, the end after the start); classes of a course she does not have are dropped; the reminder's "already sent" key is kept by the server, not taken from the page. The note goes through the existing notifier (computer only unless she turns on the phone) and links to her own course page.
+- **"Record the class" link**: `?record=1` only opens the recorder in that course; recording still starts on her click and the microphone permission prompt, as before.
+- **Fill-in-the-blank cards**: the same card route with one more boolean; model output kept only when the front has a blank and does not contain the answer.
+- **Confidence**: one optional boolean on a review.
+- Result: no open issues.
