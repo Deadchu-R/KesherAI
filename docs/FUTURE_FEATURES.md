@@ -104,17 +104,21 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 ## Students, still missing (RESEARCH_LOG "Students, part 18", 2026-11-17)
 - ✅ Moodle: courses, what is due and lecture files through the browser pane on her sign-in (built 2026-11-17, to check on the PC)
 - ✅ My week: deadlines broken into steps and placed in her week, Google Calendar when connected (built 2026-11-17)
-- ⬜ A video overview of a lecture (narrated slides)
-- ⬜ A slide deck from her material (PPTX)
-- ⬜ A writing coach on her own draft (never writes it for her)
-- ⬜ A sources library with APA 7 / Chicago references (Zotero import)
-- ⬜ A mind map of a course
-- ⬜ Oral exam and presentation practice by voice
-- ⬜ Read any PDF aloud, OCR for scans
-- ⬜ Comparison tables, exportable to Sheets
-- ⬜ A YouTube lecture as a lecture (transcript with times, summary lines link to the minute)
-- ⬜ Teach-back (Feynman): she explains in her own words, KesherAI names the gaps and makes cards from them
-- ⬜ Mastery per topic, and a nudge when one drops
-- ⬜ Graphs of functions and more than one way to solve
-- ⬜ Save a page or a selection from the browser to a course
-- ⬜ A study game: match terms to meanings against the clock
+- ✅ A video overview of a lecture (narrated slides)
+- ✅ A slide deck from her material: present in KesherAI, PDF, PPTX optional (2026-11-17)
+- ✅ A writing coach on her own draft (never writes it for her) (2026-11-17)
+- ✅ The course's sources with an APA 7 list (2026-11-17); ⬜ Zotero import, Chicago
+- ✅ A mind map of a course or a topic (2026-11-17)
+- ✅ Oral exam practice by voice (2026-11-17); ⬜ presentation practice
+- ✅ Read-along for lectures from PDFs (2026-11-17); ⬜ OCR for scans
+- ✅ Comparison tables (2026-11-17); ⬜ export to a sheet
+- ✅ A YouTube lecture as a lecture
+- ✅ Teach-back (Feynman)
+- ✅ Mastery per topic, and a nudge when one drops
+- ✅ Graphs of functions with sliders; ⬜ more than one way to solve
+- ✅ Save a page or a selection from the browser to a course
+- ✅ A study game: match terms to meanings against the clock
+
+## Next after the students' list (Roee, 2026-11-17)
+- ⬜ KesherAI's own document types on the canvas, like Claude's (Roee: "alternatives at the canvas level", as little dependence on PowerPoint/Word/Excel as possible): Slides (edit, present, PDF), Docs (editor, export), Sheets (a grid with formulas, CSV). The model fills them and she edits them herself. Slides first (a lecture's slides open there). Waiting for Roee to confirm this reading.
+- ⬜ Screen lens (RESEARCH_LOG "Screen lens, part 1"): a global shortcut freezes the screen, select a region, then ask / search / translate (shown over it) / summarize / copy text; Windows OCR on the PC, a vision model for pictures; the same in the browser extension and KesherAI's browser; the phone later.

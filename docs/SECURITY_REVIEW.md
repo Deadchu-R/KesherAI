@@ -1025,3 +1025,12 @@ S5 an outside scanner's rules for Electron.
 - **Oral practice**: speech in through the existing Mic (transcribed on this computer or her chosen speech service, as everywhere), questions out through the existing speech; answers go to the tutor exactly like typed ones, with her lectures as data.
 - **Read-along on lecture text**: shown as plain text (React text nodes), never HTML.
 - Result: no open issues.
+
+## Scan 113 (2026-11-17): model deletion of split models, the translator beside the main model, slides as PDF/PPTX, writing coach, comparison and mind map tools, the optional path
+- **Deleting a split model**: the parts are found only in the same folder as the chosen file, by its exact name pattern and part count (a model with a similar name and another count is not touched), and the route still accepts only files inside KesherAI's models folder; the loaded model (any of its parts) is refused.
+- **Translator beside the main model**: only a GGUF path the user chose in Settings is loaded, through the existing beside engine (its own port and key, never exposed); a model id is used as before.
+- **Slides**: the PPTX is built in the page from the slides' text with every value XML-escaped and control characters dropped; the PDF is a print of an HTML page built with every text escaped, in a sandbox-free but script-free srcdoc frame (no script in it), removed after printing.
+- **Writing coach**: her text goes to her chosen model only; the answer's comments are kept only when the quote is really in her text; the page shows them as text nodes. Her draft is kept in this device's local storage only.
+- **Comparison and mind map**: the same tool route as the field tools (her lectures as data); the mind map renders through Mermaid in strict security mode.
+- **Path toggle**: one more boolean in the Study preferences.
+- Result: no open issues.
