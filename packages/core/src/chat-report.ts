@@ -505,7 +505,20 @@ export class ChatReports {
         if (signal.aborted) return;
         r.progress = { part: i + 1, parts: parts.length, total };
         await this.put(r);
-        const j = jsonOf(await ask(NOTES_PROMPT, parts[i]!, signal));
+        // A part too big for the model's context (Hebrew takes more tokens a character): read in halves, then quarters.
+        const readPart = async (text: string, depth = 0): Promise<Record<string, unknown> | undefined> => {
+          try {
+            return jsonOf(await ask(NOTES_PROMPT, text, signal));
+          } catch (err) {
+            if (depth >= 2 || signal.aborted || !CONTEXT_FULL.test((err as Error).message)) throw err;
+            const found = text.lastIndexOf("\n", Math.floor(text.length / 2));
+            const mid = found > 0 ? found : Math.floor(text.length / 2);
+            const a = await readPart(text.slice(0, mid), depth + 1);
+            const b = await readPart(text.slice(mid), depth + 1);
+            return { notes: [...arr(a?.notes), ...arr(b?.notes)], moments: [...arr(a?.moments), ...arr(b?.moments)], quotes: [...arr(a?.quotes), ...arr(b?.quotes)] };
+          }
+        };
+        const j = await readPart(parts[i]!);
         const lines = [
           ...arr(j?.notes).map((x) => `- ${str(x, 300)}`),
           ...arr(j?.moments).map((x) => `- ${str((x as { when?: unknown }).when, 20)}: ${str((x as { what?: unknown }).what, 200)}`),
@@ -520,8 +533,20 @@ export class ChatReports {
         ...(r.added?.length ? [`What the reader added after the earlier report (take it into account):\n${r.added.map((a) => `- ${a}`).join("\n")}`] : []),
         ...(r.imported ? [`An earlier report on this chat by another app (a second opinion, not proof):\n${r.imported.slice(0, 6000)}`] : []),
       ];
-      const user = `Numbers (exact):\n${JSON.stringify(r.numbers)}\n\nNotes from reading the chat:\n${notes.join("\n\n").slice(0, 40_000)}${extra.length ? `\n\n${extra.join("\n\n")}` : ""}`;
-      let raw = jsonOf(await ask(reportPrompt(r), user, signal));
+      // The notes, cut down when the model's context is full (40,000 characters of Hebrew notes did not fit a 32K
+      // context: "Context size has been exceeded" on a 35,715-message chat, 2026-11-18).
+      const userFor = (cap: number) => `Numbers (exact):\n${JSON.stringify(r.numbers)}\n\nNotes from reading the chat:\n${notes.join("\n\n").slice(0, cap)}${extra.length ? `\n\n${extra.join("\n\n").slice(0, Math.floor(cap / 4))}` : ""}`;
+      let user = userFor(40_000);
+      let raw: Record<string, unknown> | undefined;
+      for (const cap of [40_000, 20_000, 10_000]) {
+        user = userFor(cap);
+        try {
+          raw = jsonOf(await ask(reportPrompt(r), user, signal));
+          break;
+        } catch (err) {
+          if (cap === 10_000 || signal.aborted || !CONTEXT_FULL.test((err as Error).message)) throw err;
+        }
+      }
       // Some local models answer in English whatever they are told: once more, with the language first.
       if (raw && r.lang === "he" && mostlyLatin(raw) && !signal.aborted) raw = jsonOf(await ask(`Answer in Hebrew only (עברית).\n${reportPrompt(r)}`, user, signal)) ?? raw;
       if (!raw) throw new Error("The model did not write the report in the expected form; try again or pick another model.");

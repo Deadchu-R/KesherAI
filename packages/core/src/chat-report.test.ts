@@ -165,3 +165,23 @@ test("a long Brandon report is read in parts when the model's context is small",
   const tiny = async () => { throw new Error("Context size has been exceeded."); };
   await assert.rejects(reports.importReport(text, "he", tiny), (e: Error & { statusCode?: number }) => e.statusCode === 422);
 });
+
+test("a long chat is written even when the model's context is small (parts split, notes cut down)", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  const messages = [];
+  for (let d = 0; d < 400; d++) for (let i = 0; i < 6; i++) messages.push({ at: `2026-0${1 + (d % 9)}-${String(1 + (d % 28)).padStart(2, "0")}T1${i}:00:00`, sender: i % 2 ? "Roee" : "Dana", text: `הודעה ארוכה מספר ${d}-${i} ${"מילים ".repeat(8)}` });
+  let biggestFinal = 0;
+  const ask = async (system: string, user: string) => {
+    // A small context: anything over 15,000 characters does not fit.
+    if (user.length > 15_000) throw new Error("Context size has been exceeded.");
+    if (system.includes("part of a chat")) return JSON.stringify({ notes: [`note ${"x".repeat(2000)}`] });
+    biggestFinal = Math.max(biggestFinal, user.length);
+    return JSON.stringify({ headline: "ארוך", read: "נקרא בחלקים.", findings: [{ title: "חלקים", body: "עבד.", measured: false, quotes: [] }] });
+  };
+  const r = await reports.start({ source: "whatsapp", title: "Dana", messages }, { kind: "couple", voice: "friend", lang: "he", me: "Roee" }, ask);
+  for (let i = 0; i < 200 && !["done", "error"].includes((await reports.get(r.id)).status); i++) await new Promise((x) => setTimeout(x, 20));
+  const done = await reports.get(r.id);
+  assert.equal(done.status, "done", done.error);
+  assert.equal(done.report?.headline, "ארוך");
+  assert.ok(biggestFinal > 0 && biggestFinal <= 15_000);
+});

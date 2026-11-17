@@ -1695,14 +1695,24 @@ export class Study {
     }
     if (!chosen.length) throw Object.assign(new Error("Add a lecture first."), { statusCode: 400 });
     const count = Math.max(p.mock ? 1 : 3, Math.min(p.style === "licensing" || p.mock ? 60 : 30, Number(p.count) || 10));
-    const budget = Math.floor(48_000 / chosen.length);
-    const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
+    const materialOf = (total: number) => {
+      const budget = Math.floor(total / chosen.length);
+      return chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
+    };
+    const material = materialOf(48_000);
+    // One more try with a third of the material and fewer questions when the first gives nothing usable or the
+    // model's context is full (the fault log on the PC: "did not return usable questions" with a local model).
+    const again = async <T,>(first: () => Promise<T[]>, second: () => Promise<T[]>): Promise<T[]> => {
+      let got: T[] = [];
+      try { got = await first(); } catch (err) { if (signal?.aborted || !/context|exceed|did not return|n_ctx/i.test((err as Error).message)) throw err; }
+      return got.length ? got : second();
+    };
     const level = p.level && p.level !== "normal" ? `\n${LEVEL_RULE[p.level]}` : "";
     if (p.kind) {
       // Open or case questions: fewer (each is answered in writing), graded later against a model answer.
       const n = Math.min(count, 10);
-      const raw = await this.ask(`${OPEN_QUIZ_PROMPT(p.kind)}${level}`, `Write exactly ${n} questions, then stop.\n\n${material}`, signal, d.course, n * 1800 + 2000);
-      const questions = parseOpenQuestions(raw, chosen.map((l) => l.id), n);
+      const open = async (m: string, k: number) => parseOpenQuestions(await this.ask(`${OPEN_QUIZ_PROMPT(p.kind!)}${level}`, `Write exactly ${k} questions, then stop.\n\n${m}`, signal, d.course, k * 1800 + 2000), chosen.map((l) => l.id), k);
+      const questions = await again(() => open(material, n), () => open(materialOf(16_000), Math.min(n, 4)));
       if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
       const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, kind: p.kind, ...(p.level ? { level: p.level } : {}), ...(p.mock ? { mock: p.mock } : {}) };
       d.quizzes.push(quiz);
@@ -1713,23 +1723,27 @@ export class Study {
     const past = p.style === "past" ? pastExamStyle(d.pastExams ?? []) : "";
     if (p.style === "past" && !past) throw Object.assign(new Error("Add a past exam first."), { statusCode: 400 });
     // About 1500 characters a question is plenty; past that the model is running on.
-    const raw = await this.ask(`${p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT}${level}`, `Write exactly ${count} questions, then stop.\n\n${material}`, signal, d.course, count * 1500 + 2000);
-    // A list cut off mid-way: keep the questions that were finished.
-    const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
-    if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return a quiz. Try again, or another model."), { statusCode: 502 });
-    const questions: StudyQuestion[] = [];
-    for (const x of list as Array<{ q?: string; options?: unknown[]; answer?: number; explain?: string; lecture?: number }>) {
-      const options = Array.isArray(x?.options) ? x.options.map((o) => String(o).slice(0, 600)).filter(Boolean) : [];
-      const answer = Number(x?.answer);
-      if (!x?.q || options.length < 2 || !(answer >= 0 && answer < options.length)) continue;
-      // A long, wandering explanation means the model was not sure of its own answer (found on the PC): drop it.
-      if (String(x.explain ?? "").length > 900) continue;
-      const lec = chosen[Number(x.lecture) - 1] ?? (chosen.length === 1 ? chosen[0] : undefined);
-      const checked = checkCalcQuestion({ q: String(x.q).slice(0, 2000), options, answer, explain: String(x.explain ?? "").slice(0, 2000), ...(lec ? { lectureId: lec.id } : {}) });
-      if (!checked) continue;
-      questions.push(checked);
-      if (questions.length >= count) break;
-    }
+    const choice = async (m: string, k: number): Promise<StudyQuestion[]> => {
+      const raw = await this.ask(`${p.style === "licensing" ? `${QUIZ_PROMPT}\n${LICENSING}` : past ? `${QUIZ_PROMPT}\n${past}` : QUIZ_PROMPT}${level}`, `Write exactly ${k} questions, then stop.\n\n${m}`, signal, d.course, k * 1500 + 2000);
+      // A list cut off mid-way: keep the questions that were finished.
+      const list = jsonIn(raw) ?? (raw.includes("[") && raw.lastIndexOf("}") > raw.indexOf("[") ? jsonIn(`${raw.slice(raw.indexOf("["), raw.lastIndexOf("}") + 1)}]`) : undefined);
+      if (!Array.isArray(list)) return [];
+      const out: StudyQuestion[] = [];
+      for (const x of list as Array<{ q?: string; options?: unknown[]; answer?: number; explain?: string; lecture?: number }>) {
+        const options = Array.isArray(x?.options) ? x.options.map((o) => String(o).slice(0, 600)).filter(Boolean) : [];
+        const answer = Number(x?.answer);
+        if (!x?.q || options.length < 2 || !(answer >= 0 && answer < options.length)) continue;
+        // A long, wandering explanation means the model was not sure of its own answer (found on the PC): drop it.
+        if (String(x.explain ?? "").length > 900) continue;
+        const lec = chosen[Number(x.lecture) - 1] ?? (chosen.length === 1 ? chosen[0] : undefined);
+        const checked = checkCalcQuestion({ q: String(x.q).slice(0, 2000), options, answer, explain: String(x.explain ?? "").slice(0, 2000), ...(lec ? { lectureId: lec.id } : {}) });
+        if (!checked) continue;
+        out.push(checked);
+        if (out.length >= k) break;
+      }
+      return out;
+    };
+    const questions = await again(() => choice(material, count), () => choice(materialOf(16_000), Math.min(count, 5)));
     if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
     const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, ...(p.level ? { level: p.level } : {}), ...(p.mock ? { mock: p.mock } : {}) };
     d.quizzes.push(quiz);
