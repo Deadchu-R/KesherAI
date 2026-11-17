@@ -6,3 +6,10 @@ packages:
 onlyBuiltDependencies:
   - electron
   - esbuild
+
+# Advisories checked and not reachable in KesherAI (security scan 127):
+# GHSA-fc5q-39xc-vjpf: picomatch ReDoS, no fixed version yet; only through @excalidraw/excalidraw > sass > chokidar,
+# the Sass compiler's file watcher, which the built interface never runs (glob patterns are never given by a user).
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
