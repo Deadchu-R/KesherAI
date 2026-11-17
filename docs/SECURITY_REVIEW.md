@@ -1067,3 +1067,8 @@ S5 an outside scanner's rules for Electron.
 - **CSV in**: parsed in our own code from text (6 MB), into cells as typed text — a CSV cell that starts with "=" becomes a formula in KesherAI only (computed by the same safe engine). **CSV out**: values, quoted; **found and fixed**: text that Excel would read as a formula (starting with = + - @) gets a leading apostrophe (CSV injection); numbers stay numbers.
 - **The chat's "sheet" tool**: acts on the chat's own sheet or one the user named by id (unknown ids refused), cells cleaned the same way.
 - Result: one found and fixed, no open issues.
+
+## Scan 118 (2026-11-17): importing Office files, Word and Excel out
+- **Import** (`POST /api/import`, 45 MB body, 30 MB file): the file's type is taken from its name's extension and only .docx .pdf .md .txt .pptx .xlsx .csv are read, by the existing readers (unpdf; our own zip reader for Office XML, reading text only — no macros, no external links, no embedded objects are followed); only the text is kept, as a new document, deck or sheet (with the stores' own caps); the file itself is not written to disk.
+- **Word / Excel out**: built in the page from her own text; every value XML-escaped and control characters dropped; sheet names stripped of characters Excel refuses; a formula goes out as its text with its computed value (Excel recomputes).
+- Result: no open issues.
