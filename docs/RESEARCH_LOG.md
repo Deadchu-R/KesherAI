@@ -1791,3 +1791,17 @@ tools' own pages, against what was added tonight:
   read; follow-up questions answered with search over the chat; a not-therapy line and no "will it last"
   percentages (made-up precision); an optional part (Settings → parts), off for anyone who does not want it.
 - Stopped at: research done; design next, then build.
+- **Brandon's whole path** (the open-source recreation's notes on the original, whatbrandonthinks.com): a 7-step setup, one question
+  per screen with "3 of 7": the context (what chat it is) → the app → the evidence (upload, opened on the device, media
+  dropped) → the people (tap which one is you; optional in groups) → the names (nicknames and emojis to plain first names)
+  → the report's language (can differ from the chat's) → the backstory ("a little context goes a long way", optional).
+  The report: verdict with a kinder second reading and one fix; conversation facts; a five-part read with "chat moments
+  behind this score"; six findings, each with a "messages behind this" panel; "your next move" as keep / stop / try saying;
+  follow-up questions answered from the report plus the relevant messages, citing them, saying when evidence is thin.
+- **Roee asked (08:25)**: like Brandon, after the report it asks whether you want to know more and suggests what to give,
+  from what you gave before, the whole process; and importing a Brandon report (PDF or the site).
+- **Import options**: (1) the report's private link opened in KesherAI's own browser pane (renders their page with the
+  user's own sign-in; a plain fetch gets only an empty app shell), its text read and mapped to our report; (2) a PDF saved
+  from the report page (Print → Save as PDF), its text extracted; (3) pasted text. All three end in the same mapping by
+  the model into our report form, marked "from Brandon"; adding the chat itself then allows follow-ups and an update.
+- Stopped at: research done for the whole path and import; design v2 next.
