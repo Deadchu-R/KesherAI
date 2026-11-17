@@ -1317,10 +1317,17 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     if (missed) root.append(el("div", { class: "ph-why", "aria-live": "polite", dir: "auto" }, el("strong", {}, L("למה? ", "Why? ")), missed.front, el("p", {}, missed.text ?? L("מסביר… (בטלפון זה לוקח זמן)", "Explaining… (this takes a while on a phone)"))));
     const showBtn = el("button", { type: "button", class: "primary" }, L("הצג תשובה", "Show answer"));
     const show = () => { answer.hidden = false; rates.hidden = false; showBtn.hidden = true; };
-    showBtn.onclick = show;
+    // An image occlusion card made on the computer: its picture comes from there, every box hidden, the asked one marked.
+    const occ = card.occlusion;
+    const picSrc = occ && sync?.imageUrl?.(c.id, occ.image);
+    const pct = (n) => `${Math.max(0, Math.min(100, n * 100))}%`;
+    const occBoxes = occ ? occ.boxes.map((b, i) => el("div", { style: `position: absolute; left: ${pct(b.x)}; top: ${pct(b.y)}; width: ${pct(b.w)}; height: ${pct(b.h)}; border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: #111; background: ${i === occ.i ? "#f0a830" : "#a5b4ff"}` }, i === occ.i ? "?" : "")) : [];
+    const occPic = picSrc ? el("div", { style: "position: relative; max-width: 100%" }, el("img", { src: picSrc, alt: "", crossorigin: "anonymous", style: "display: block; width: 100%; border-radius: 8px; background: #fff" }), ...occBoxes)
+      : occ ? el("p", { class: "muted small" }, L("את התמונה של הכרטיסייה רואים כשהטלפון מחובר למחשב.", "The card's picture shows when the phone is connected to the computer.")) : null;
+    showBtn.onclick = () => { show(); const box = occBoxes[occ?.i ?? -1]; if (box) { box.style.background = "transparent"; box.style.outline = "3px solid #f0a830"; box.textContent = ""; } };
     root.append(el("section", { class: "api" },
-      plus.cardTimer(() => { if (!showBtn.hidden) show(); }),
-      el("p", { dir: "auto", style: "font-size: 18px" }, card.front), answer, showBtn, rates), plus.hardCards(c));
+      plus.cardTimer(() => { if (!showBtn.hidden) showBtn.onclick(); }),
+      el("p", { dir: "auto", style: "font-size: 18px" }, card.front), occPic ?? "", answer, showBtn, rates), plus.hardCards(c));
   }
 
   function quiz() {

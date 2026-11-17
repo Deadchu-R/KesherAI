@@ -1017,6 +1017,11 @@
     const r = await fetch(`${c.base}/api/study/courses/${encodeURIComponent(courseId)}/lectures/${encodeURIComponent(lectureId)}/recording`, { method: "POST", headers: { Authorization: `Bearer ${c.token}`, "Content-Type": blob.type || "audio/webm" }, body: blob }).catch(() => undefined);
     return !!r?.ok;
   };
+  // A course picture kept on the computer (image occlusion cards), or undefined with no computer.
+  studySync.imageUrl = (courseId, name) => {
+    const c = computer();
+    return c && /^[\w-]{1,80}\.(png|jpg|webp)$/.test(name) ? `${c.base}/api/study/courses/${encodeURIComponent(courseId)}/images/${encodeURIComponent(name)}?token=${encodeURIComponent(c.token)}` : undefined;
+  };
   // Where the phone plays a recording kept on the computer from (undefined with no computer).
   studySync.audioUrl = (courseId, lectureId) => {
     const c = computer();
