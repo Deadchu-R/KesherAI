@@ -88,3 +88,24 @@ test("a failed session keeps its error", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Hebrew speech gets Hebrew ideas: an English answer is asked again", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ideas-"));
+  try {
+    let calls = 0;
+    const ideas = new Ideas(dir, deps({
+      ask: async (system, user) => {
+        if (!system.includes("thinking aloud")) return "[]";
+        calls++;
+        assert.match(user, /IN HEBREW/);
+        return user.includes("was in English") ? '[{"title":"מצב הסבר קוד","prompt":"בנה מצב שבו אני מסביר קוד","verdict":"good"}]' : '[{"title":"Code explain mode","prompt":"Build a mode","verdict":"good"}]';
+      },
+    }));
+    const s = await ideas.start({ text: "אממ חשבתי שאולי אפשר לעשות מצב שבו אני מסביר קוד בקול והמערכת בודקת אם הבנתי" });
+    await wait(async () => (await ideas.get(s.id)).status === "done");
+    assert.equal(calls, 2);
+    assert.equal((await ideas.get(s.id)).ideas[0]!.title, "מצב הסבר קוד");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

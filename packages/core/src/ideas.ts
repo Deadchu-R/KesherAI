@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { IDEAS_PROMPT, TRIED_PROMPT, cleanIdeas, ideaQuery, jsonIn, researchPrompt, type Idea, type IdeaSession } from "@kesher/shared";
+import { IDEAS_PROMPT, TRIED_PROMPT, cleanIdeas, ideaQuery, jsonIn, mostlyHebrew, researchPrompt, type Idea, type IdeaSession } from "@kesher/shared";
 
 /** What the ideas need from the rest of KesherAI (fakes in the tests). */
 export interface IdeasDeps {
@@ -99,8 +99,15 @@ export class Ideas {
       }
       if (!s.transcript?.trim()) throw new Error("No speech was found in the recording.");
       const projects = this.deps.projects().slice(0, 80);
-      const raw = await this.deps.ask(IDEAS_PROMPT, `THEIR PROJECTS: ${projects.length ? projects.join(" | ") : "(none)"}\n\nTRANSCRIPT:\n<<<\n${s.transcript.slice(0, 120_000)}\n>>>`);
-      const ideas = cleanIdeas(jsonIn(raw), projects, () => randomUUID());
+      // They spoke Hebrew: everything is written in Hebrew (small local models drift to English), checked and asked again once.
+      const he = mostlyHebrew(s.transcript);
+      const lang = he ? "\nLANGUAGE: they spoke Hebrew. Write title, prompt, why, audience and category IN HEBREW." : "";
+      const user = `THEIR PROJECTS: ${projects.length ? projects.join(" | ") : "(none)"}${lang}\n\nTRANSCRIPT:\n<<<\n${s.transcript.slice(0, 120_000)}\n>>>`;
+      let ideas = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, user)), projects, () => randomUUID());
+      if (he && ideas.length && ideas.filter((i) => !mostlyHebrew(`${i.title} ${i.prompt}`)).length > ideas.length / 2) {
+        const again = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, `${user}\n\nYour last answer was in English. Answer again with every text field in Hebrew.`).catch(() => "")), projects, () => randomUUID());
+        if (again.length) ideas = again;
+      }
       if (!ideas.length) throw new Error("No ideas were found in what was said.");
       await this.markTried(ideas);
       s = { ...(await this.get(id)), ideas, status: "done" };
@@ -118,7 +125,10 @@ export class Ideas {
   private async markTried(ideas: Idea[]): Promise<void> {
     const found: Array<{ i: number; hits: Array<{ id: string; title: string; snippet: string }> }> = [];
     for (const [i, idea] of ideas.entries()) {
-      const hits = (await this.deps.search(ideaQuery(idea)).catch(() => [])).filter((h) => h.score > 0).slice(0, 3);
+      // Only strong matches go to the model (a few shared words match almost any chat).
+      const all = await this.deps.search(ideaQuery(idea)).catch(() => []);
+      const top = all[0]?.score ?? 0;
+      const hits = all.filter((h) => h.score > 0 && h.score >= top * 0.6).slice(0, 3);
       if (hits.length) found.push({ i, hits });
     }
     if (!found.length) return;
