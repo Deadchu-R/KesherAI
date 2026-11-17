@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { goalRemindNow, goalToday, recentMistakes, type StudyCourseData, type StudyGoal } from "./study.js";
+import { goalRemindNow, goalToday, recentMistakes, weekRecap, type StudyCourseData, type StudyGoal } from "./study.js";
 
 const at = (day: number, hour = 12) => new Date(2026, 10, day, hour).getTime();
 const course = (focus: Array<[number, number]>, reviews: number[]) => ({ focus: focus.map(([t, minutes]) => ({ t, minutes })), reviews: reviews.map((t) => ({ t, cardId: "c", rating: 3 })) }) as unknown as StudyCourseData;
@@ -57,5 +57,17 @@ describe("my mistakes", () => {
     const m = recentMistakes(d, now);
     assert.deepEqual(m.cards.map((c) => c.id), ["c", "a"]);
     assert.deepEqual(m.questions.map((q) => q.q), ["Q1"]);
+  });
+});
+
+describe("week recap", () => {
+  it("adds up the last 7 days and counts the days studied", () => {
+    const now = at(17, 18);
+    const c = { ...course([[at(17), 20], [at(15), 10], [at(5), 99]], [at(16), at(16)]), course: { name: "x" }, cards: [], lectures: [], quizzes: [] } as unknown as StudyCourseData;
+    const w = weekRecap([c], [{ t: at(14), kind: "lectures" }], now);
+    assert.equal(w.counts.minutes, 30);
+    assert.equal(w.counts.cards, 2);
+    assert.equal(w.counts.lectures, 1);
+    assert.equal(w.days, 4);
   });
 });

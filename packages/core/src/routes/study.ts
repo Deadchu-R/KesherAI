@@ -61,6 +61,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   const remind = setInterval(() => void st.remindIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["dart"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined), 60_000);
   remind.unref?.();
   app.addHook("onClose", async () => clearInterval(remind));
+  /** The week in one card. */
+  app.get("/api/study/week", async () => st.week());
   /** "What to study now": one next step (or null without courses). */
   app.get("/api/study/next", async () => ({ next: await st.next() }));
   /** A finished focus-timer session: `{ minutes }`. */

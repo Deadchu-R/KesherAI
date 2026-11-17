@@ -3243,3 +3243,5 @@ html.handheld .palette-list button { min-height: 44px; }
 .confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
 .confetti i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; animation: confetti-fall 1.8s ease-in forwards; }
 @keyframes confetti-fall { to { transform: translate(var(--x), 105vh) rotate(var(--r)); opacity: 0.6; } }
+.study-week > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.study-week p { margin: 6px 0 0; }

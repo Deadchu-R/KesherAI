@@ -1190,6 +1190,37 @@ export function recentMistakes(d: StudyCourseData, now = Date.now(), days = 30):
   return { cards: cards.sort((a, b) => b.t - a.t).map((x) => x.c).slice(0, 40), questions: questions.slice(0, 30) };
 }
 
+/**
+ * The week in one card (RESEARCH_LOG students part 25 #6): the last 7 days' focus minutes, cards, new lectures,
+ * quizzes and summaries, how many days she studied, and the topics that rose or dropped 10+ points.
+ *
+ * @param courses - Her courses.
+ * @param activity - What she did.
+ * @param now - Now.
+ */
+export function weekRecap(courses: StudyCourseData[], activity: StudyActivity[], now = Date.now()): { counts: Record<GoalKind, number>; days: number; rose: Array<{ course: string; title: string; change: number }>; dropped: Array<{ course: string; title: string; change: number }> } {
+  const days = goalCounts(courses, activity);
+  const counts: Record<GoalKind, number> = { minutes: 0, cards: 0, lectures: 0, videos: 0, quizzes: 0, summaries: 0 };
+  let studied = 0;
+  for (let i = 0; i < 7; i++) {
+    const c = days.get(dayKey(now - i * 86_400_000));
+    if (!c) continue;
+    let any = false;
+    for (const k of GOAL_KINDS) {
+      counts[k] += c[k];
+      if (c[k]) any = true;
+    }
+    if (any) studied++;
+  }
+  const moved = courses.flatMap((d) => topicMastery(d.cards, d.reviews, d.quizzes, now).map((m) => ({ course: d.course.name, title: d.lectures.find((l) => l.id === m.lectureId)?.title ?? "", change: m.change }))).filter((m) => m.title);
+  return {
+    counts,
+    days: studied,
+    rose: moved.filter((m) => m.change >= 10).sort((a, b) => b.change - a.change).slice(0, 3),
+    dropped: moved.filter((m) => m.change <= -10).sort((a, b) => a.change - b.change).slice(0, 3),
+  };
+}
+
 /** What a daily goal can count (Roee, 2026-11-17: minutes, lectures, videos, scripts…). */
 export type GoalKind = "minutes" | "cards" | "lectures" | "videos" | "quizzes" | "summaries";
 export const GOAL_KINDS: GoalKind[] = ["minutes", "cards", "lectures", "videos", "quizzes", "summaries"];
