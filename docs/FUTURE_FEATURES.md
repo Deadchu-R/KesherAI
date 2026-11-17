@@ -123,3 +123,9 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ✅ Students part 27 (all eight): mock exam, grades and weighted average, timetable, fill-in-the-blank and confidence, reading with highlights, one-page sheet, questions during a recording (the video overview was already there).
 - ✅ KesherAI's own document types on the canvas, like Claude's (Roee: "alternatives at the canvas level", as little dependence on PowerPoint/Word/Excel as possible): Slides (edit, present, PDF), Docs (editor, export), Sheets (a grid with formulas, CSV). The model fills them and she edits them herself. Slides first (a lecture's slides open there). Waiting for Roee to confirm this reading. — Slides, Docs (Pages joined in) and Sheets built (0.6.335–0.6.336). Still open: import of PPTX/DOCX/XLSX text, XLSX export, Google Docs/Slides when connected.
 - ✅ Screen lens (RESEARCH_LOG "Screen lens, part 1"): Ctrl+Alt+L on the screen under the cursor, ask / search / translate (drawn over the lines by Windows OCR) / summarize / copy text, continue in chat; the browser extension marks a part of the page; the phone with a screenshot (0.6.337). Still open: a circle selection, the phone app's share sheet straight into the lens, the lens on the phone's own screen (Android overlay).
+
+## Open source: easier to change and extend (RESEARCH_LOG "Open source for users and developers", 2026-11-17)
+- ⬜ Publish `@kesher/plugin-sdk` to npm and a template repository, so a plugin lives in its own repo (like obsidian-sample-plugin).
+- ⬜ Settings → Plugins → "Load a folder (development)": runs a plugin from any folder, reloads it when its files change, shows its log.
+- ⬜ `pnpm plugin:check <folder>`: the manifest, the permissions asked, the size, and one load in a test core, before publishing.
+- ⬜ "good first issue" labels on small tasks, and a 10-minute "your first change" walk-through in CONTRIBUTING.md.
