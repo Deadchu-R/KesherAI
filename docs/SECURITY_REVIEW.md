@@ -1123,6 +1123,14 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 129 (2026-11-17): the welcome's timetable photo, My week's times, axe in the UI check, grades sync, the phone's mock exam
+- **Welcome from a photo**: the picture goes to the local vision model only (the same route as the timetable card); at most 20 courses are made, names from `cleanReadClasses` (cut, checked); slots go through `setTimetable` (only her courses' ids, valid times).
+- **My week's times**: computed in the page from her own timetable (no request), nothing new stored.
+- **axe-core**: a dev dependency used only by scripts/ui-check.mjs; it is injected with bypassCSP only into the check's own headless browser at computer width; the shipped app and its CSP are unchanged. The release audit (`pnpm audit --prod`) does not include it.
+- **Grades sync**: the phone's copy goes through `cleanGrades` (200 rows, numbers in range, ids checked) and wins only when its time is later; the web's own saves stamp the computer's time, so an old copy from a page cannot win.
+- **Phone mock exam**: model answers are parsed with `jsonIn`, each question checked (options, a valid answer, calculations re-checked), shown as text through `el()`; stored in the course's quizzes like any quiz.
+- **Performance**: ui-check now takes about a minute longer (axe on 22 screens).
+
 ## Scan 128 (2026-11-17): sources import, a table as a sheet, the phone's share lens, the circle lens
 - **BibTeX/RIS import (fixed while scanning)**: the first BibTeX reader matched whole entries with one lazy pattern over the file, which a broken file (many "@" and no closing brace) could make slow; it now splits the file at each "@" line (at most 2000 entries, 50 KB each) and reads one entry at a time (a 20,000-entry broken file: 5 ms). Up to 4 MB a request; every source goes through `cleanSources` (lengths, DOI shape, http(s) links only); at most 500 sources a course.
 - **Comparison table → sheet**: only the first Markdown table's cells, as CSV, through the existing sheet route (its limits); no formulas are made from model text unless a cell starts with "=" as typed by the model — sheets compute locally and only reference other cells (no outside calls).
