@@ -62,7 +62,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 ## Content and import
 - ✅ WhatsApp and Instagram chats imported, with the relationship-analyst persona (AskBrandon style)
 - ✅ Films for you (#/stremio): taste from a Letterboxd export and ratings in KesherAI, recommendations by the chat model matched on Stremio's catalogue (Cinemeta), and a Stremio addon row "KesherAI: for you" (its address holds a revocable app key). ⬜ Stremio's own watch history (Stremio gives addons no access to it)
-- ⬜ MyAnimeList in Films for you (Roee, 2026-11-17): taste from his MAL list (an export, or his public list by username through MAL's API v2 with a Client ID), like the Letterboxd import, so the Stremio addon "KesherAI: for you" also recommends anime (matched on Stremio's anime catalogues by title and year)
+- ✅ MyAnimeList in Films for you (Roee, 2026-11-17; built: the export .xml/.gz or his public list by name with his Client ID, anime picks in their own Stremio row "KesherAI: anime for you"): taste from his MAL list (an export, or his public list by username through MAL's API v2 with a Client ID), like the Letterboxd import, so the Stremio addon "KesherAI: for you" also recommends anime (matched on Stremio's anime catalogues by title and year)
 
 ## Research to do
 - ⬜ A deep look at open-source projects (Roee, 2026-11-17): how the code, editing it, adding to it (plugins, forks, contributions) feels for users and for developers elsewhere (VS Code, Zed, Godot, Blender, Obsidian, ComfyUI, LobeHub, Open WebUI…), and how it feels in KesherAI: getting started, reading the code, CODE_GUIDE, plugin and skill authoring, forking, tests, the PR path; then a list of what to change, in the future list.

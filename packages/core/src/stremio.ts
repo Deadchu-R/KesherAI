@@ -18,7 +18,9 @@ export interface Rated {
   /** 0.5–5 stars. */
   rating?: number;
   kind?: "movie" | "series";
-  from: "letterboxd" | "kesher";
+  from: "letterboxd" | "kesher" | "mal";
+  /** An anime (from MyAnimeList): its own row in Stremio. */
+  anime?: boolean;
 }
 
 /** A recommendation, matched on Stremio's catalogue. */
@@ -34,7 +36,9 @@ export interface Pick {
 
 interface Store {
   rated: Rated[];
-  picks: { movie: Pick[]; series: Pick[]; t?: number };
+  picks: { movie: Pick[]; series: Pick[]; anime?: Pick[]; t?: number };
+  /** Her MyAnimeList API client id (to read her public list by name), kept on this computer only. */
+  malClientId?: string;
 }
 
 const CINEMETA = "https://v3-cinemeta.strem.io";
@@ -61,6 +65,44 @@ export function parseLetterboxd(csv: string): Rated[] {
     })
     .filter((x): x is Rated => !!x)
     .slice(0, 5000);
+}
+
+const xmlText = (block: string, tag: string) => {
+  const m = new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${tag}>`).exec(block);
+  return (m?.[1] ?? "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").trim();
+};
+
+/**
+ * Reads a MyAnimeList export (Profile → Export → the .xml inside the .gz): each anime she watched, dropped or is
+ * watching, with her score (out of 10, as 0.5–5 stars). "Plan to watch" is left out (not seen yet).
+ *
+ * @param xml - The file's text.
+ */
+export function parseMalXml(xml: string): Rated[] {
+  const out: Rated[] = [];
+  for (const m of xml.matchAll(/<anime>([\s\S]*?)<\/anime>/g)) {
+    const b = m[1]!;
+    const title = xmlText(b, "series_title").slice(0, 200);
+    const status = xmlText(b, "my_status").toLowerCase();
+    if (!title || status.startsWith("plan")) continue;
+    const score = Number(xmlText(b, "my_score"));
+    out.push({ title, ...(score > 0 && score <= 10 ? { rating: Math.round(score) / 2 } : {}), kind: /movie/i.test(xmlText(b, "series_type")) ? "movie" : "series", from: "mal", anime: true });
+    if (out.length >= 5000) break;
+  }
+  return out;
+}
+
+/** One page of MyAnimeList's API list (users/{name}/animelist), as her ratings. */
+export function malApiItems(j: unknown): Rated[] {
+  const data = (j as { data?: Array<{ node?: { title?: string; media_type?: string; start_season?: { year?: number }; alternative_titles?: { en?: string } }; list_status?: { status?: string; score?: number } }> })?.data ?? [];
+  return data.flatMap((d): Rated[] => {
+    const n = d.node ?? {};
+    const title = String(n.alternative_titles?.en || n.title || "").trim().slice(0, 200);
+    if (!title || String(d.list_status?.status ?? "").startsWith("plan")) return [];
+    const score = Number(d.list_status?.score ?? 0);
+    const year = Number(n.start_season?.year ?? 0);
+    return [{ title, ...(year > 1900 && year < 2100 ? { year } : {}), ...(score > 0 && score <= 10 ? { rating: Math.round(score) / 2 } : {}), kind: n.media_type === "movie" ? "movie" : "series", from: "mal", anime: true }];
+  });
 }
 
 /** CSV rows with quoted fields ("a, b" and "" inside quotes). */
@@ -100,9 +142,13 @@ export function tasteSummary(rated: Rated[]): string {
   const loved = withRating.filter((r) => r.rating! >= 4).slice(0, 60);
   const disliked = withRating.filter((r) => r.rating! <= 2).slice(0, 30);
   const seen = rated.slice(0, 300).map((r) => r.title);
-  const line = (r: Rated) => `${r.title}${r.year ? ` (${r.year})` : ""}${r.rating ? ` ${r.rating}★` : ""}`;
+  const line = (r: Rated) => `${r.title}${r.year ? ` (${r.year})` : ""}${r.anime ? " [anime]" : ""}${r.rating ? ` ${r.rating}★` : ""}`;
   return `Loved:\n${loved.map(line).join("\n") || "(none rated)"}\n\nDisliked:\n${disliked.map(line).join("\n") || "(none)"}\n\nAlready seen (do not recommend): ${seen.join("; ")}`;
 }
+
+/** Added to the prompt when her taste has anime (MyAnimeList). */
+export const ANIME_PROMPT =
+  'Also add "anime": 10 anime she has not seen, close to the anime she loved (series or films), each {"title":"its English title as on IMDb","year":2019,"type":"series" or "movie","why":"..."}.';
 
 export const RECOMMEND_PROMPT =
   'You recommend films and series to one person from their own ratings. Recommend titles they have not seen, close to what they loved and far from what they disliked; mix well-known and less-known titles. Answer with JSON only: {"movies":[{"title":"exact original title","year":2014,"why":"one short line"}],"series":[{"title":"...","year":2016,"why":"..."}]} with 12 movies and 8 series.';
@@ -112,12 +158,13 @@ export const STREMIO_MANIFEST = {
   id: "ai.kesher.foryou",
   version: "1.0.0",
   name: "KesherAI: for you",
-  description: "Films and series picked by KesherAI from your own ratings (Letterboxd and KesherAI).",
+  description: "Films, series and anime picked by KesherAI from your own ratings (Letterboxd, MyAnimeList and KesherAI).",
   resources: ["catalog"],
   types: ["movie", "series"],
   catalogs: [
     { type: "movie", id: "kesher-for-you", name: "KesherAI: for you" },
     { type: "series", id: "kesher-for-you", name: "KesherAI: for you" },
+    { type: "series", id: "kesher-anime", name: "KesherAI: anime for you" },
   ],
   idPrefixes: ["tt"],
 };
@@ -141,7 +188,7 @@ export class StremioTaste {
   async load(): Promise<Store> {
     try {
       const j = JSON.parse(await readFile(this.file(), "utf8")) as Partial<Store>;
-      return { rated: Array.isArray(j.rated) ? j.rated : [], picks: { movie: j.picks?.movie ?? [], series: j.picks?.series ?? [], ...(j.picks?.t ? { t: j.picks.t } : {}) } };
+      return { rated: Array.isArray(j.rated) ? j.rated : [], picks: { movie: j.picks?.movie ?? [], series: j.picks?.series ?? [], anime: j.picks?.anime ?? [], ...(j.picks?.t ? { t: j.picks.t } : {}) }, ...(typeof j.malClientId === "string" ? { malClientId: j.malClientId } : {}) };
     } catch {
       return { rated: [], picks: { movie: [], series: [] } };
     }
@@ -149,16 +196,56 @@ export class StremioTaste {
 
   private async save(s: Store): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    await writeFile(this.file(), JSON.stringify(s));
+    await writeFile(this.file(), JSON.stringify(s), { mode: 0o600 });
   }
 
   /** Adds a Letterboxd export (films already there are updated, not doubled). */
-  async importLetterboxd(csv: string): Promise<{ added: number; total: number }> {
+  importLetterboxd(csv: string): Promise<{ added: number; total: number }> {
+    return this.add(parseLetterboxd(csv));
+  }
+
+  /** Adds a MyAnimeList export (the .xml). */
+  importMal(xml: string): Promise<{ added: number; total: number }> {
+    const list = parseMalXml(xml);
+    if (!list.length) throw Object.assign(new Error("No anime were found in this file (MyAnimeList: Profile → Export → My Anime List, the .xml inside)."), { statusCode: 400 });
+    return this.add(list);
+  }
+
+  /**
+   * Adds her public MyAnimeList list by user name, through MyAnimeList's API with her own client id (made once at
+   * myanimelist.net/apiconfig; kept on this computer).
+   */
+  async importMalUser(user: string, clientId?: string): Promise<{ added: number; total: number }> {
+    const name = user.trim();
+    if (!/^[\w-]{2,32}$/.test(name)) throw Object.assign(new Error("A MyAnimeList user name has 2–32 letters, digits, _ or -."), { statusCode: 400 });
+    const s = await this.load();
+    const id = (clientId ?? "").trim() || s.malClientId;
+    if (!id || !/^[0-9a-f]{20,64}$/i.test(id)) throw Object.assign(new Error("Add your MyAnimeList client id first (myanimelist.net/apiconfig → Create ID)."), { statusCode: 400 });
+    if (clientId && clientId.trim() !== s.malClientId) {
+      s.malClientId = clientId.trim();
+      await this.save(s);
+    }
+    const all: Rated[] = [];
+    let url: string | undefined = `https://api.myanimelist.net/v2/users/${encodeURIComponent(name)}/animelist?fields=list_status,media_type,start_season,alternative_titles&limit=1000&nsfw=true`;
+    for (let page = 0; url && page < 10; page++) {
+      const res = await this.fetcher(url, { headers: { "X-MAL-CLIENT-ID": id }, signal: AbortSignal.timeout(20_000) });
+      if (res.status === 403 || res.status === 404) throw Object.assign(new Error("MyAnimeList did not show this list: check the name, and that the list is public."), { statusCode: 400 });
+      if (!res.ok) throw Object.assign(new Error(`MyAnimeList answered ${res.status}.`), { statusCode: 502 });
+      const j = (await res.json()) as { paging?: { next?: string } };
+      all.push(...malApiItems(j));
+      // Only MyAnimeList's own next page.
+      url = typeof j.paging?.next === "string" && j.paging.next.startsWith("https://api.myanimelist.net/v2/") ? j.paging.next : undefined;
+    }
+    return this.add(all);
+  }
+
+  /** Adds ratings (titles already there are updated, not doubled). */
+  private async add(list: Rated[]): Promise<{ added: number; total: number }> {
     const s = await this.load();
     const key = (r: Rated) => `${r.title.toLowerCase()}|${r.year ?? ""}`;
     const have = new Map(s.rated.map((r) => [key(r), r]));
     let added = 0;
-    for (const r of parseLetterboxd(csv)) {
+    for (const r of list) {
       const old = have.get(key(r));
       if (old) {
         if (r.rating !== undefined) old.rating = r.rating;
@@ -191,8 +278,9 @@ export class StremioTaste {
   async refresh(ask: (system: string, user: string) => Promise<string>): Promise<Store["picks"]> {
     const s = await this.load();
     if (!s.rated.length) throw Object.assign(new Error("Add your Letterboxd export or rate a few titles first."), { statusCode: 400 });
-    const raw = await ask(RECOMMEND_PROMPT, tasteSummary(s.rated));
-    const j = jsonObject(raw) as { movies?: Array<{ title?: string; year?: number; why?: string }>; series?: Array<{ title?: string; year?: number; why?: string }> } | undefined;
+    const anime = s.rated.some((r) => r.anime);
+    const raw = await ask(anime ? `${RECOMMEND_PROMPT} ${ANIME_PROMPT}` : RECOMMEND_PROMPT, tasteSummary(s.rated));
+    const j = jsonObject(raw) as { movies?: Array<{ title?: string; year?: number; why?: string }>; series?: Array<{ title?: string; year?: number; why?: string }>; anime?: Array<{ title?: string; year?: number; why?: string; type?: string }> } | undefined;
     const seen = new Set(s.rated.map((r) => r.title.toLowerCase()));
     const match = async (type: "movie" | "series", list: Array<{ title?: string; year?: number; why?: string }> = []) => {
       const out: Pick[] = [];
@@ -206,7 +294,10 @@ export class StremioTaste {
       }
       return out;
     };
-    s.picks = { movie: await match("movie", j?.movies), series: await match("series", j?.series), t: Date.now() };
+    // Anime: each matched as the series or film the model says it is.
+    const animeList = j?.anime ?? [];
+    const animePicks = anime ? [...(await match("series", animeList.filter((x) => x?.type !== "movie"))), ...(await match("movie", animeList.filter((x) => x?.type === "movie")))] : [];
+    s.picks = { movie: await match("movie", j?.movies), series: await match("series", j?.series), anime: animePicks, t: Date.now() };
     await this.save(s);
     return s.picks;
   }
