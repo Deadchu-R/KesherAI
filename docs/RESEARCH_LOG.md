@@ -2031,6 +2031,15 @@ Missing:
 - Built (2026-11-17): all three (design Part33).
 - Stopped at: built; next research round (34).
 
+## Students, part 34: what is left in the AI study-app field (2026-11-17, the loop)
+Sources: Lynote's "Gizmo AI alternatives" (Gizmo, Lynote, Knowt, RemNote, Quizlet, NotebookLM, Anki, StudyFetch, Turbo AI) and Mindomax's "Turbolearn alternatives" (Laxu, Jungle AI, Scholarly, Voovo, Notability, Goodnotes, Otter, Coconote, Genio, NoteGPT, Mindgrasp, Studley, ScrollToStudy, Algor, Studocu, Mochi); every feature checked against parts 1–33 and the code.
+Missing:
+1. **A study feed** (ScrollToStudy): her material as a social-media-style vertical feed of short bites (a term, a card to flip, a question, a line of the summary), swiped on the phone.
+- Not taken: Anki .apkg import/export (a SQLite reader would be a new dependency, and the desktop's Node has none built in; the text export/import covers decks), Gizmo's "hearts" that stop practice (the opposite of KesherAI's kind approach), Studocu's shared-notes library (community content KesherAI does not have), handwriting notes (Goodnotes and Notability territory).
+- Already there (checked): podcasts, audio overviews, lecture recording with live transcript, YouTube and browser capture, concept maps, case questions, image occlusion, notes into cards, exam-date scheduling, Quizlet/Anki text import, an AI tutor.
+- Built (2026-11-17): the study feed (design StudyFeed).
+- Stopped at: built; the AI study-app field is covered as far as this sweep finds; next: test everything on the PC and one more sweep from a different angle (35).
+
 ## Screen lens, part 1: capture part of the screen and hand it to the AI (2026-11-17, Roee asked)
 - Google: Circle to Search on Android (hold home, circle anything; search, translate in place, AI overview); Lens in desktop Chrome (a region on the page → search, "translate" puts the translation over the picture, text selection by OCR, AI Mode follow-ups). Microsoft: Click to Do on Windows 11 (Win+click or Win+Q; local OCR, text actions — summarize, rewrite, search — run on the PC with Phi Silica on Copilot+ PCs; image actions: visual search, erase, remove background; nothing kept after the action), Copilot Vision (shares a window with Copilot), Edge Lens (experimental). Snipping Lens (open source): Snipping Tool region → uploaded to an image host → Google image search (cloud, privacy cost). ChatGPT/Claude desktop apps: a hotkey to attach a screenshot or a window to a chat.
 - What makes them good: one global shortcut, the screen frozen and dimmed with a free drag (or circle) to select, actions right next to the selection, results shown over the screen (translation in place), the text in the picture selectable, follow-up questions, nothing stored after the action.

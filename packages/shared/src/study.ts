@@ -1228,6 +1228,43 @@ export function whereTerm(lectures: Array<Pick<StudyLecture, "id" | "title" | "t
   return out.sort((a, b) => b.count - a.count);
 }
 
+/** One bite in the study feed (design StudyFeed, students part 34 #1, like ScrollToStudy). */
+export type FeedItem =
+  | { kind: "term"; term: string; en?: string; explain: string; lecture: string }
+  | { kind: "card"; front: string; back: string; lecture: string }
+  | { kind: "question"; q: string; options: string[]; answer: number; explain: string; lecture: string }
+  | { kind: "line"; text: string; lecture: string };
+
+/**
+ * The course as a feed of short bites (design StudyFeed): its terms, cards (no picture ones), multiple-choice
+ * questions from her quizzes and lines of the lectures' summaries, mixed by `seed` so each day differs; at most `n`.
+ */
+export function studyFeed(d: Pick<StudyCourseData, "lectures" | "cards" | "quizzes">, seed = 1, n = 60): FeedItem[] {
+  const title = (id?: string) => d.lectures.find((l) => l.id === id)?.title ?? "";
+  const items: FeedItem[] = [];
+  for (const l of d.lectures) {
+    for (const t of l.terms ?? []) items.push({ kind: "term", term: t.term, ...(t.en ? { en: t.en } : {}), explain: t.explain, lecture: l.title });
+    for (const line of (l.summary ?? "").split("\n")) {
+      const text = line.replace(/^[\s#*>•-]+/, "").replace(/[*_`]/g, "").trim();
+      if (text.length >= 40 && text.length <= 300) items.push({ kind: "line", text, lecture: l.title });
+    }
+  }
+  for (const c of d.cards) if (!c.occlusion) items.push({ kind: "card", front: c.front, back: c.back, lecture: title(c.lectureId) });
+  const seenQ = new Set<string>();
+  for (const z of d.quizzes) for (const q of z.questions) if (q.options.length >= 2 && q.answer >= 0 && !seenQ.has(q.q)) { seenQ.add(q.q); items.push({ kind: "question", q: q.q, options: q.options, answer: q.answer, explain: q.explain, lecture: title(q.lectureId) }); }
+  // A small seeded shuffle (mulberry32), then no two of a kind in a row where it can be helped.
+  let x = seed >>> 0;
+  const rnd = () => { x = (x + 0x6d2b79f5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [items[i], items[j]] = [items[j]!, items[i]!]; }
+  const out: FeedItem[] = [];
+  const rest = items.slice(0, n * 2);
+  while (rest.length && out.length < n) {
+    const k = rest.findIndex((it) => it.kind !== out.at(-1)?.kind);
+    out.push(rest.splice(k < 0 ? 0 : k, 1)[0]!);
+  }
+  return out;
+}
+
 /**
  * The course as a web (design CourseWeb, students part 33 #2, like Obsidian's graph view): lectures joined by the
  * terms they share (a lecture's term mentioned in another lecture's text), the strongest links first.

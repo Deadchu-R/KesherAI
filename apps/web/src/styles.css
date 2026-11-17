@@ -3648,3 +3648,16 @@ div.slide-list { padding-inline-start: 0; }
 .study-project-add { gap: 6px; flex-wrap: wrap; }
 .study-project-add input:not([type=date]) { flex: 1 1 160px; min-width: 0; }
 .study-project-add .study-project-who { flex: 0 1 100px; }
+/* The study feed (design StudyFeed): one bite per screen, snapped. */
+.study-feed { height: calc(100dvh - 190px); min-height: 420px; overflow-y: auto; scroll-snap-type: y mandatory; display: flex; flex-direction: column; gap: 12px; overscroll-behavior: contain; }
+.study-bite { scroll-snap-align: start; flex: 0 0 calc(100% - 12px); box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 22px; border-radius: 18px; border: 1px solid var(--border, #333); background: var(--panel); position: relative; overflow-wrap: anywhere; }
+.study-bite.term { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.study-bite.line { background: color-mix(in srgb, #7fd8a8 9%, var(--panel)); }
+.study-bite.end { align-items: center; text-align: center; }
+.study-bite-top { position: absolute; top: 14px; inset-inline: 22px; }
+.study-bite-big { font-size: 24px; line-height: 1.35; }
+.study-bite-line { font-size: 20px; line-height: 1.6; margin: 0; }
+.study-bite-flip { display: flex; flex-direction: column; gap: 12px; text-align: start; background: transparent; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.study-bite-hint { position: absolute; bottom: 12px; inset-inline: 22px; text-align: center; }
+.study-bite button.small { align-self: flex-start; }
+.study-bite-en { align-self: flex-start; }

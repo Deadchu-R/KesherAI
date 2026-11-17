@@ -556,3 +556,17 @@ test("cleanProject: tasks checked, the share key kept only when valid", async ()
   assert.equal(p?.token, undefined);
   assert.equal(cleanProject({}), undefined);
 });
+
+test("studyFeed: terms, cards, questions and summary lines, mixed by the seed, kinds not repeated where it can be helped", async () => {
+  const { studyFeed } = await import("./study.js");
+  const d = {
+    lectures: [{ id: "a", title: "לב", date: "", text: "", summary: "# כותרת\n- הלב שואב דם לכל הגוף דרך העורקים, ומקבל אותו בחזרה בוורידים.\nקצר", terms: [{ term: "סיסטולה", explain: "התכווצות" }, { term: "דיאסטולה", explain: "הרפיה" }] }],
+    cards: [{ id: "c", front: "מה זה דופק?", back: "פעימות", format: "text" as const, createdAt: 0, due: "", fsrs: {}, lectureId: "a" }, { id: "o", front: "x", back: "y", format: "text" as const, createdAt: 0, due: "", fsrs: {}, occlusion: { image: "i.png", boxes: [], i: 0 } }],
+    quizzes: [{ id: "q", t: 0, questions: [{ q: "כמה מדורים?", options: ["2", "4"], answer: 1, explain: "" }, { q: "פתוחה", options: [], answer: -1, explain: "" }] }],
+  };
+  const f = studyFeed(d as never, 7);
+  assert.deepEqual(f.map((x) => x.kind).sort(), ["card", "line", "question", "term", "term"]);
+  assert.equal(f.find((x) => x.kind === "card")?.lecture, "לב");
+  assert.deepEqual(studyFeed(d as never, 7), f);
+  for (let i = 1; i < f.length - 1; i++) assert.ok(!(f[i]!.kind === "term" && f[i - 1]!.kind === "term"));
+});

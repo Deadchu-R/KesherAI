@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { courseWeb, whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
+import { studyFeed, courseWeb, whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { youtubeSearch, cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -464,6 +464,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     await st.removeSlides(req.params.id, req.params.lid);
     return { ok: true };
   });
+  /** The course as a feed of short bites (design StudyFeed), mixed differently each day. */
+  app.get<C>("/api/study/courses/:id/feed", async (req) => ({ items: studyFeed(await st.get(req.params.id), Math.floor(Date.now() / 86_400_000)) }));
   /** The course as a web of lectures joined by shared terms (design CourseWeb). */
   app.get<C>("/api/study/courses/:id/web", async (req) => courseWeb((await st.get(req.params.id)).lectures));
   /** Where else a term appears in the course's lectures (design WhereTerm). */

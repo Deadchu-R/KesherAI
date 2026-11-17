@@ -21,6 +21,7 @@ import { StudyRehearse } from "../StudyRehearse";
 import { StudyExamEve } from "../StudyExamEve";
 import { StudyEnglish } from "../StudyEnglish";
 import { StudyWeb } from "../StudyWeb";
+import { StudyFeed } from "../StudyFeed";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -151,7 +152,7 @@ function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
   return [p, setP];
 }
 /** The course tabs of simple mode; the rest are under "More tools". */
-const SIMPLE_TABS = new Set(["lectures", "review", "quiz", "notes", "ask", "game", "progress"]);
+const SIMPLE_TABS = new Set(["lectures", "review", "quiz", "notes", "ask", "game", "feed", "progress"]);
 
 function StudyHome() {
   const [courses, setCourses] = useState<CourseRow[] | null>(null);
@@ -653,6 +654,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["terms", ["מילון", "Glossary"]],
   ["web", ["🕸 מפת הקורס", "🕸 Course web"]],
   ["game", ["🎯 משחק", "🎯 Game"]],
+  ["feed", ["📱 פיד", "📱 Feed"]],
   ["together", ["👥 לומדים יחד", "👥 Study together"]],
   ["rehearse", ["🎤 חזרה על הצגה", "🎤 Rehearse a talk"]],
   ["writing", ["✍ כתיבה", "✍ Writing"]],
@@ -788,6 +790,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} clinical={clinicalField(info.course.field)} mocks={info.mocks ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "web" ? <StudyWeb courseId={id} />
+        : on === "feed" ? <StudyFeed courseId={id} />
         : on === "terms" ? <Glossary courseId={id} lectures={info.lectures} />
         : on === "writing" ? <StudyWriting courseId={id} />
         : on === "game" ? <StudyGames courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
