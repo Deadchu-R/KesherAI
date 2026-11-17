@@ -4,7 +4,8 @@
  * versions are kept.
  */
 import { EventEmitter } from "node:events";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { replaceFile } from "./replace-file.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
@@ -134,7 +135,7 @@ export class DeckStore extends EventEmitter {
     const file = this.file(d.id);
     const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
     await writeFile(tmp, JSON.stringify(d), { mode: 0o600 });
-    await rename(tmp, file);
+    await replaceFile(tmp, file);
   }
 }
 

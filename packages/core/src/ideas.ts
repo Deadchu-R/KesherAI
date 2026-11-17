@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { replaceFile } from "./replace-file.js";
 import { join } from "node:path";
 import { IDEAS_PROMPT, TRIED_PROMPT, cleanIdeas, ideaQuery, jsonIn, mostlyHebrew, researchPrompt, type Idea, type IdeaSession } from "@kesher/shared";
 
@@ -68,7 +69,7 @@ export class Ideas {
     await mkdir(this.dir, { recursive: true });
     const tmp = `${this.file(s.id)}.${randomUUID()}.tmp`;
     await writeFile(tmp, JSON.stringify(s, null, 1));
-    await rename(tmp, this.file(s.id));
+    await replaceFile(tmp, this.file(s.id));
   }
 
   /** Deletes a session (its research chats stay). */
