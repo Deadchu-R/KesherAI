@@ -74,6 +74,7 @@ const NodesPage = lazy(() => import("./pages/NodesPage").then((m) => ({ default:
 const TrainingPage = lazy(() => import("./pages/TrainingPage").then((m) => ({ default: m.TrainingPage })));
 const UnrealPage = lazy(() => import("./pages/UnrealPage").then((m) => ({ default: m.UnrealPage })));
 const StremioPage = lazy(() => import("./pages/StremioPage").then((m) => ({ default: m.StremioPage })));
+const SheetsPage = lazy(() => import("./pages/SheetsPage").then((m) => ({ default: m.SheetsPage })));
 const DocsPage = lazy(() => import("./pages/DocsPage").then((m) => ({ default: m.DocsPage })));
 const SlidesPage = lazy(() => import("./pages/SlidesPage").then((m) => ({ default: m.SlidesPage })));
 const IdeasPage = lazy(() => import("./pages/IdeasPage").then((m) => ({ default: m.IdeasPage })));
@@ -300,6 +301,7 @@ export function App() {
   else if (hash === "#/stremio") page = <StremioPage />;
   else if (hash === "#/chat-reports") page = <ChatReportsPage />;
   else if (hash === "#/ideas") page = <IdeasPage />;
+  else if (hash === "#/sheets" || hash.startsWith("#/sheets/")) page = <SheetsPage key={hash} {...(hash.length > 9 ? { id: hash.slice(9) } : {})} />;
   else if (hash === "#/docs" || hash.startsWith("#/docs/")) page = <DocsPage key={hash} {...(hash.length > 7 ? { id: hash.slice(7) } : {})} />;
   else if (hash === "#/slides" || hash.startsWith("#/slides/")) page = <SlidesPage key={hash} {...(hash.length > 9 ? { id: hash.slice(9) } : {})} />;
   else if (hash === "#/training") page = <TrainingPage />;

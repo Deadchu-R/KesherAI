@@ -3419,3 +3419,19 @@ div.slide-list { padding-inline-start: 0; }
 .study-rec-ask { display: flex; flex-direction: column; gap: 6px; }
 .study-rec-ask p { margin: 0; background: var(--panel-2); border-radius: 8px; padding: 6px 8px; }
 .study-rec-ask input { flex: 1; min-width: 0; }
+/* KesherAI's own sheets (design SheetEditor). */
+.sheets-fx { gap: 6px; align-items: center; }
+.sheets-fx input { flex: 1; min-width: 0; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.sheets-grid { overflow: auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 8px; outline: none; }
+.sheets-grid:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.sheets-grid table { border-collapse: collapse; font-size: 13px; }
+.sheets-grid th { position: sticky; background: var(--panel-2, #24252b); color: var(--muted, #9a9caa); font-weight: 600; padding: 3px 6px; border: 1px solid var(--border); z-index: 1; min-width: 34px; }
+.sheets-grid thead th { top: 0; }
+.sheets-grid tbody th { inset-inline-start: 0; }
+.sheets-grid th.on { color: var(--accent); }
+.sheets-grid td { border: 1px solid var(--border); min-width: 96px; max-width: 220px; height: 26px; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: cell; }
+.sheets-grid td.num { text-align: end; font-variant-numeric: tabular-nums; }
+.sheets-grid td.err { color: #ff8a8a; }
+.sheets-grid td.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sheets-grid td input { width: 100%; border: 0; padding: 0; height: 24px; background: transparent; font: inherit; color: inherit; outline: none; }
+.sheets-more { gap: 6px; }

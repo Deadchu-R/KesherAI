@@ -69,6 +69,8 @@ import { deckRoutes } from "../routes/decks.js";
 import { deckStoreFor } from "../decks.js";
 import { docRoutes } from "../routes/docs.js";
 import { docStoreFor } from "../docs.js";
+import { sheetRoutes } from "../routes/sheets.js";
+import { sheetStoreFor } from "../sheets.js";
 import { canvasRoutes } from "../routes/canvas.js";
 import { shareRoutes } from "../routes/shares.js";
 import { ShareStore } from "../shares.js";
@@ -139,6 +141,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
     await docs.importPages(join(paths.root, "pages")).catch(() => 0);
     await docRoutes(app, docs, services);
   }
+  await sheetRoutes(app, sheetStoreFor(join(paths.root, "sheets")));
   // Share links: a chat as a read-only page at /s/<token> (never an incognito chat).
   await shareRoutes(app, new ShareStore(join(paths.root, "shares.json")), async (convId) => {
     const summary = library.summary(convId);
