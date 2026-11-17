@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -777,6 +777,26 @@ export function studyPlus(x) {
     return box;
   }
 
+  // ---------- back on track after days off (design BackOnTrack, students part 39) ----------
+  /** On the home: the course with the biggest pile of due cards, cleared a little each day; null when there is none. */
+  function backOnTrack() {
+    let pace = "steady";
+    try { pace = localStorage.getItem("kesherai-backlog-pace") === "gentle" ? "gentle" : "steady"; } catch { /* steady */ }
+    const found = x.db().courses.map((c) => ({ c, steady: backlogPlan(x.toData(c), Date.now(), "steady"), gentle: backlogPlan(x.toData(c), Date.now(), "gentle") })).filter((y) => y.steady).sort((a, b) => b.steady.due - a.steady.due)[0];
+    if (!found) return null;
+    const plan = found[pace];
+    const day = new Date(`${plan.finish}T12:00`).toLocaleDateString(L("he-IL", "en-GB"), { weekday: "long", day: "numeric", month: "numeric" });
+    const set = (p) => { try { localStorage.setItem("kesherai-backlog-pace", p); } catch { /* this visit */ } x.draw(); };
+    return el("section", { class: "api", style: "border-inline-start: 4px solid #7fd8a8" },
+      el("h2", {}, L("🌱 חוזרים למסלול: ", "🌱 Back on track: "), el("span", { dir: "auto" }, found.c.name)),
+      el("p", {}, L(`מחכות ${plan.due} כרטיסיות. בלי לחץ: לא צריך הכול היום.`, `${plan.due} cards are waiting. No pressure: not all today.`)),
+      el("div", { role: "radiogroup", "aria-label": L("קצב", "Pace"), style: "display: flex; flex-wrap: wrap; gap: 6px" },
+        chip(pace === "gentle", L(`🐢 בנחת · ${found.gentle.perDay} ביום`, `🐢 Gentle · ${found.gentle.perDay} a day`), () => set("gentle")),
+        chip(pace === "steady", L(`🚶 בקצב · ${found.steady.perDay} ביום`, `🚶 Steady · ${found.steady.perDay} a day`), () => set("steady"))),
+      el("p", { class: "muted small" }, L(`ביום רגיל את עושה בערך ${plan.usual}. ככה חוזרים למסלול עד ${day}; קודם הכרטיסיות שלמדת לאחרונה.`, `On a usual day you do about ${plan.usual}. This way you are back on track by ${day}; the ones you learned lately come first.`)),
+      el("button", { type: "button", class: "primary", onclick: () => go({ at: "review", course: found.c.id, today: plan.perDay, done: 0 }) }, L(`▶ ${plan.perDay} של היום`, `▶ Today's ${plan.perDay}`)));
+  }
+
   // ---------- image cards (image occlusion) made on the phone (design PhoneOcclusion) ----------
   // The picture is kept once on the phone (IndexedDB, at most 1600 px), named "ph-….jpg" so a synced card is accepted
   // by the computer too (which shows its text there); boxes are drawn with a finger, each box becomes a card.
@@ -1213,5 +1233,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week }, classBanner };
+  return { backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week }, classBanner };
 }

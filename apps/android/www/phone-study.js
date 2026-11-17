@@ -5,7 +5,7 @@
  * model is the one chosen on the phone (Chat tab). Everything is kept on this phone (localStorage).
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
-import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { backlogOrder, calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
 import { studyPlus } from "./phone-study-plus.js";
 
 const KEY = "kesherai-study";
@@ -519,7 +519,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     // The first setup (design StudySetupWizardPhone) until she finishes or closes it.
     if (plus.needsSetup()) return plus.setupView();
     scheduleReminders();
-    if (db.courses.length) root.append(plus.setupList() ?? "", plus.classBanner(), searchBox(), nextCard(), focusCard());
+    if (db.courses.length) root.append(plus.setupList() ?? "", plus.backOnTrack() ?? "", plus.classBanner(), searchBox(), nextCard(), focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);
@@ -1289,8 +1289,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const c = course();
     if (!c) return go({ at: "home" });
     const now = Date.now();
-    const card = cardsToReview(toData(c), now, 1)[0];
+    // Today's portion of a backlog (design BackOnTrack): young and recent cards first, and it ends after N.
+    const portion = view.today ? { n: view.today, done: view.done ?? 0 } : null;
+    const card = portion ? (portion.done < portion.n ? backlogOrder(cardsToReview(toData(c), now, 100000))[0] : undefined) : cardsToReview(toData(c), now, 1)[0];
     root.append(back({ at: "course", course: c.id }));
+    if (portion) root.append(el("p", { class: "muted small", "aria-live": "polite" }, L(`של היום: ${Math.min(portion.done, portion.n)} מתוך ${portion.n}`, `Today's: ${Math.min(portion.done, portion.n)} of ${portion.n}`)));
+    if (!card && portion && portion.done >= portion.n) return root.append(el("p", {}, L("🌱 סיימת את של היום! השאר מחכות למחר, בלי לחץ.", "🌱 Today's portion is done! The rest wait for tomorrow, no pressure.")));
     if (!card) return root.append(el("p", {}, L("סיימת! אין עוד כרטיסיות לחזרה עכשיו.", "Done! No more cards to review now.")), plus.hardCards(c));
     const answer = el("p", { dir: "auto", hidden: true, style: "white-space: pre-wrap" }, card.back);
     const rate = (r) => {
@@ -1313,6 +1317,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
           if (view.at === "review") draw();
         }, () => { if (missed === mine) missed = undefined; });
       }
+      if (portion) view.done = portion.done + 1;
       if (commit()) draw();
     };
     const rates = el("div", { class: "ph-btns", hidden: true }, ...[[1, "שוב", "Again"], [2, "קשה", "Hard"], [3, "טוב", "Good"], [4, "קל", "Easy"]].map(([r, h, e]) => el("button", { type: "button", onclick: () => rate(r) }, L(h, e))));
