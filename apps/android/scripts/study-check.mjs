@@ -103,7 +103,7 @@ const look = async (where) => { if (/\b(undefined|null|NaN)\b|\[object /.test(aw
 const open = async (label, wait = 300) => { await sec.locator("button", { hasText: label }).first().click(); await pg.waitForTimeout(wait); await look(label); };
 await backTo();
 checks.plusButtons = (await sec.locator("button", { hasText: "📱 פיד" }).count()) > 0 && (await sec.locator("button", { hasText: "✉️ מכתב למרצה" }).count()) > 0;
-for (const [name, label, look] of [["mock", "📝 מבחן דמה", "button:has-text('לבנות את המבחן')"], ["feed", "📱 פיד", "text=הפיד מתמלא"], ["web", "🕸 מפת הקורס", "text=המפה נבנית"], ["palace", "🏛 ארמון זיכרון", "text=ארמון זיכרון נבנה"], ["papers", "📚 מאמרים ומקורות", "input[type=search]"], ["letter", "✉️ מכתב למרצה", "select[aria-label='סוג המכתב']"], ["writing", "✍️ מאמן כתיבה", "select[aria-label='שלב']"]]) {
+for (const [name, label, look] of [["mock", "📝 מבחן דמה", "button:has-text('לבנות את המבחן')"], ["feed", "📱 פיד", "text=הפיד מתמלא"], ["web", "🕸 מפת הקורס", "text=המפה נבנית"], ["palace", "🏛 ארמון זיכרון", "text=ארמון זיכרון נבנה"], ["papers", "📚 מאמרים ומקורות", "input[type=search]"], ["letter", "✉️ מכתב למרצה", "select[aria-label='סוג המכתב']"], ["writing", "✍️ מאמן כתיבה", "select[aria-label='שלב']"], ["practice", "⚡ 5 דקות", "text=שיעור של 5 דקות"], ["mistakes", "🔁 הטעויות שלי", "text=הטעויות שלי"], ["match", "🧩 התאמה", "text=משחק התאמה"]]) {
   await open(label);
   checks[name] = (await sec.locator(look).count()) > 0 && (await wide());
   await backTo();

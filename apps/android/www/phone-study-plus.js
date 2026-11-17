@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -35,6 +35,9 @@ export function studyPlus(x) {
   /** The buttons for the extra views on the course page. */
   function courseButtons(c) {
     return btns(
+      el("button", { type: "button", onclick: () => go({ at: "practice", course: c.id, mode: "quick" }) }, L("⚡ 5 דקות", "⚡ 5 minutes")),
+      el("button", { type: "button", onclick: () => go({ at: "practice", course: c.id, mode: "mistakes" }) }, L("🔁 הטעויות שלי", "🔁 My mistakes")),
+      el("button", { type: "button", onclick: () => go({ at: "match", course: c.id }) }, L("🧩 התאמה", "🧩 Match")),
       el("button", { type: "button", onclick: () => go({ at: "mock", course: c.id }) }, L("📝 מבחן דמה", "📝 Mock exam")),
       el("button", { type: "button", onclick: () => go({ at: "feed", course: c.id }) }, L("📱 פיד", "📱 Feed")),
       el("button", { type: "button", onclick: () => go({ at: "web", course: c.id }) }, L("🕸 מפת הקורס", "🕸 Course web")),
@@ -635,6 +638,127 @@ export function studyPlus(x) {
       btns(el("button", { type: "button", class: "primary", onclick: () => x.go({ at: "mock", course: c.id }) }, L("מבחן דמה נוסף", "Another mock exam")))));
   }
 
+  // ---------- my mistakes, the 5-minute lesson and the match game: from what is already on the phone ----------
+  const scheduler = fsrs();
+  const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+  /** Rates a card in spaced review, as the review page does. */
+  const rateCard = (c, card, r) => {
+    const f = card.fsrs;
+    const before = { ...f, due: new Date(f.due), ...(f.last_review ? { last_review: new Date(f.last_review) } : {}) };
+    const elapsedDays = before.last_review ? Math.floor((Date.now() - before.last_review.getTime()) / 86400000) : 0;
+    const next = scheduler.next(before, new Date(), r).card;
+    card.fsrs = JSON.parse(JSON.stringify(next));
+    card.due = next.due.toISOString();
+    c.reviews.push({ cardId: card.id, t: Date.now(), rating: r, format: card.format, elapsedDays });
+  };
+  /**
+   * "My mistakes" (the cards she forgot and the questions she got wrong lately; each until right twice) or the
+   * 5-minute lesson (up to 5 cards, due first, and 2 questions from her quizzes; each once). Same as the computer's.
+   */
+  function practice(c) {
+    const quick = x.view.mode === "quick";
+    const need = quick ? 1 : 2;
+    let items;
+    if (quick) {
+      const d = x.toData(c);
+      const due = cardsToReview(d, Date.now(), 5);
+      const cards = due.length >= 3 ? due : [...due, ...shuffle(c.cards.filter((k) => !due.some((y) => y.id === k.id))).slice(0, 5 - due.length)];
+      const pool = c.quizzes.filter((z) => !z.kind).flatMap((z) => z.questions.filter((q) => q.answer >= 0 && q.options?.length > 1));
+      items = [...cards.map((card) => ({ card })), ...shuffle(pool).slice(0, 2).map((q) => ({ q }))];
+    } else {
+      const m = recentMistakes(x.toData(c));
+      items = [...m.cards.map((card) => ({ card })), ...m.questions.map((q) => ({ q }))];
+    }
+    items = shuffle(items).map((it, i) => ({ ...it, key: i, right: 0 }));
+    const total = items.length;
+    x.root.append(back({ at: "course", course: c.id }), el("h2", {}, quick ? L("⚡ שיעור של 5 דקות", "⚡ 5-minute lesson") : L("🔁 הטעויות שלי", "🔁 My mistakes")));
+    const box = el("section", { class: "api", "aria-live": "polite" });
+    x.root.append(box);
+    if (!total) return box.append(el("p", { class: "muted" }, quick ? L("עוד אין כרטיסיות או בחנים בקורס.", "No cards or quizzes in the course yet.") : L("אין טעויות מהחודש האחרון. כל הכבוד!", "No mistakes from the last month. Well done!")));
+    const show = () => {
+      const left = items.filter((it) => it.right < need);
+      if (!left.length) {
+        commit();
+        return box.replaceChildren(el("p", {}, el("b", {}, L("🎉 סיימת!", "🎉 Done!"))), el("p", { class: "muted" }, quick ? L(`עברת על ${total} דברים.`, `You went over ${total} things.`) : L(`כל ${total} הטעויות נענו נכון פעמיים.`, `All ${total} mistakes answered right twice.`)), el("button", { type: "button", onclick: () => go({ at: "course", course: c.id }) }, L("חזרה לקורס", "Back to the course")));
+      }
+      const it = left[0];
+      const progress = el("p", { class: "muted small" }, L(`נשארו ${left.length} מתוך ${total}`, `${left.length} of ${total} left`));
+      const after = (ok) => {
+        it.right = ok ? it.right + 1 : 0;
+        // A miss goes a few places back, so it comes again soon but not at once.
+        items.splice(items.indexOf(it), 1);
+        items.splice(ok ? items.length : Math.min(items.length, 2), 0, it);
+        show();
+      };
+      if (it.card) {
+        const ans = el("p", { dir: "auto", hidden: true, style: "white-space: pre-wrap" }, it.card.back);
+        const rates = el("div", { class: "ph-btns", hidden: true }, ...[[1, "שוב", "Again"], [2, "קשה", "Hard"], [3, "טוב", "Good"], [4, "קל", "Easy"]].map(([rt, h, e]) => el("button", { type: "button", onclick: () => { rateCard(c, it.card, rt); after(rt >= 3); } }, L(h, e))));
+        const showBtn = el("button", { type: "button", class: "primary", onclick: () => { ans.hidden = false; rates.hidden = false; showBtn.hidden = true; } }, L("הצגת התשובה", "Show the answer"));
+        box.replaceChildren(progress, el("p", { dir: "auto", style: "white-space: pre-wrap" }, el("b", {}, it.card.front)), showBtn, ans, rates);
+      } else {
+        const q = it.q;
+        const out = el("p", { dir: "auto" });
+        const opts = q.options.map((o, i) => el("button", { type: "button", dir: "auto", style: "display: block; width: 100%; text-align: start; margin: 4px 0", onclick: () => {
+          opts.forEach((b, j) => { b.disabled = true; if (j === q.answer) b.style.outline = "2px solid #7fd8a8"; else if (j === i) b.style.outline = "2px solid #e88"; });
+          const ok = i === q.answer;
+          out.textContent = `${ok ? L("✓ נכון. ", "✓ Right. ") : L("✗ לא נכון. ", "✗ Not right. ")}${q.explain ?? ""}`;
+          box.append(el("button", { type: "button", class: "primary", onclick: () => after(ok) }, L("הבא", "Next")));
+        } }, o));
+        box.replaceChildren(progress, el("p", { dir: "auto" }, el("b", {}, q.q)), ...opts, out);
+      }
+    };
+    show();
+  }
+
+  /** The match game: six terms from her lectures and their meanings; tap a term, then its meaning. Best time kept. */
+  function match(c) {
+    x.root.append(back({ at: "course", course: c.id }), el("h2", {}, L("🧩 משחק התאמה", "🧩 Match game")));
+    const seen = new Set();
+    const pool = c.lectures.flatMap((l) => l.terms ?? []).filter((t) => t.term?.trim() && t.explain?.trim() && !seen.has(t.term) && seen.add(t.term));
+    const box = el("section", { class: "api" });
+    x.root.append(box);
+    if (pool.length < 3) return box.append(el("p", { class: "muted" }, L("צריך לפחות 3 מונחים. סכמי הרצאה (הסיכום מוציא מונחים) ואז חזרי למשחק.", "At least 3 terms are needed. Summarize a lecture (summaries pull out terms), then come back.")));
+    const bestKey = `kesher-match-best:${c.id}`;
+    const fmt = (ms) => `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(1).padStart(4, "0")}`;
+    const short = (t) => { const f = t.split(/(?<=[.!?])\s/)[0] ?? t; return f.length > 70 ? `${f.slice(0, 68)}…` : f; };
+    const round = () => {
+      const picked = shuffle(pool).slice(0, 6);
+      const tiles = shuffle(picked.flatMap((t, i) => [{ pair: i, text: t.term, term: true }, { pair: i, text: short(t.explain), term: false }]));
+      let sel, start, penalty = 0, done = 0, timer;
+      let best = 0;
+      try { best = Number(localStorage.getItem(bestKey)) || 0; } catch { best = 0; }
+      const clock = el("b", { class: "ph-clock" }, "0:00.0");
+      const grid = el("div", { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 6px" });
+      const btns = tiles.map((t) => {
+        const b = el("button", { type: "button", dir: "auto", style: `min-height: 64px; white-space: normal; overflow-wrap: anywhere; font-size: ${t.term ? "15px" : "13px"}${t.term ? "; font-weight: 600" : ""}` }, t.text);
+        b.onclick = () => {
+          if (b.disabled) return;
+          if (!start) { start = Date.now(); timer = setInterval(() => { clock.textContent = fmt(Date.now() - start + penalty); }, 100); }
+          if (!sel || sel.t.term === t.term) { if (sel) sel.b.style.outline = ""; sel = sel?.b === b ? undefined : { t, b }; if (sel) b.style.outline = "2px solid var(--accent)"; return; }
+          if (sel.t.pair === t.pair) {
+            sel.b.disabled = b.disabled = true; sel.b.style.visibility = b.style.visibility = "hidden"; sel = undefined; done++;
+            if (done === picked.length) {
+              clearInterval(timer);
+              const ms = Date.now() - start + penalty;
+              const record = !best || ms < best;
+              if (record) try { localStorage.setItem(bestKey, String(ms)); } catch { /* kept for this round only */ }
+              box.replaceChildren(el("p", {}, el("b", {}, L(`🎉 ${fmt(ms)}`, `🎉 ${fmt(ms)}`))), el("p", { class: "muted" }, record ? L("שיא חדש!", "A new best!") : L(`השיא: ${fmt(best)}`, `Best: ${fmt(best)}`)), el("button", { type: "button", class: "primary", onclick: round }, L("עוד סיבוב", "Another round")));
+            }
+          } else {
+            penalty += 1000;
+            const a = sel.b; a.style.outline = "2px solid #e88"; b.style.outline = "2px solid #e88";
+            globalThis.setTimeout(() => { a.style.outline = ""; b.style.outline = ""; }, 400);
+            sel = undefined;
+          }
+        };
+        return b;
+      });
+      grid.append(...btns);
+      box.replaceChildren(el("div", { class: "ph-row" }, clock, el("small", { class: "muted" }, best ? L(`השיא: ${fmt(best)} · טעות מוסיפה שנייה`, `Best: ${fmt(best)} · a mistake adds a second`) : L("טעות מוסיפה שנייה", "A mistake adds a second"))), grid);
+    };
+    round();
+  }
+
   // ---------- highlights while reading (the computer's ReadHighlights), on the phone ----------
   /** Keeps the words she selected as a highlight of the lecture, with an optional note. */
   function addHighlight(l, text, note = "") {
@@ -855,5 +979,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing }, homeViews: { grades, english, timetable, week }, classBanner };
+  return { addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match }, homeViews: { grades, english, timetable, week }, classBanner };
 }
