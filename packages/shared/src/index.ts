@@ -32,6 +32,7 @@ export * from "./pptx.js";
 export * from "./deck.js";
 export * from "./grades.js";
 export * from "./timetable.js";
+export * from "./study-plan.js";
 export * from "./link-beacon.js";
 export * from "./sheet.js";
 export * from "./office-out.js";

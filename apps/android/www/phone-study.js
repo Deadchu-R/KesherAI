@@ -528,6 +528,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", onclick: () => go({ at: "calc" }) }, L("חישובי תרופות", "Medication calculations")),
         el("button", { type: "button", onclick: () => go({ at: "labs" }) }, L("ערכי מעבדה", "Lab values"))),
       el("div", { class: "ph-btns", style: "flex-wrap: wrap" },
+        el("button", { type: "button", onclick: () => go({ at: "week" }) }, L("📅 השבוע שלי", "📅 My week")),
         el("button", { type: "button", onclick: () => go({ at: "timetable" }) }, L("🗓 מערכת שעות", "🗓 Timetable")),
         el("button", { type: "button", onclick: () => go({ at: "grades" }) }, L("🎓 ציונים ותואר", "🎓 Grades and degree")),
         el("button", { type: "button", onclick: () => go({ at: "english" }) }, L("📘 אנגלית אקדמית", "📘 Academic English"))),

@@ -7,5 +7,6 @@ export * from "../../packages/shared/src/study.ts";
 export * from "../../packages/shared/src/grades.ts";
 export * from "../../packages/shared/src/papers.ts";
 export * from "../../packages/shared/src/timetable.ts";
+export * from "../../packages/shared/src/study-plan.ts";
 export { createEmptyCard, fsrs, Rating } from "ts-fsrs";
 export { parseFlow } from "../web/src/study-diagram.ts";

@@ -7,11 +7,12 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
 const TABLE_KEY = "kesherai-timetable";
+const PLANS_KEY = "kesherai-plans";
 const DAYS = [["א׳", "Sun"], ["ב׳", "Mon"], ["ג׳", "Tue"], ["ד׳", "Wed"], ["ה׳", "Thu"], ["ו׳", "Fri"], ["ש׳", "Sat"]];
 
 /**
@@ -751,6 +752,58 @@ export function studyPlus(x) {
     }
   }
 
+  // ---------- my week: each assignment broken into steps in the days before it is due ----------
+  const TONES = ["#a5b4ff", "#7fd8a8", "#f0a830", "#e88ad8", "#6ac0d0"];
+  const loadPlans = () => { try { const p = JSON.parse(localStorage.getItem(PLANS_KEY) || "[]"); return Array.isArray(p) ? p.slice(0, 40) : []; } catch { return []; } };
+  const savePlans = (p) => { try { localStorage.setItem(PLANS_KEY, JSON.stringify(p)); return true; } catch { alert(L("אין מקום לשמור.", "No room to save.")); return false; } };
+  const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  /** Asks the phone's model for the steps and checks them (checkPlan, as on the computer); an even plan when it cannot. */
+  async function makePlan(p, button) {
+    const lang = L("he", "en");
+    const busy = {};
+    for (const o of loadPlans()) if (o.id !== p.id) for (const st of o.steps) if (!st.done) busy[st.date] = (busy[st.date] ?? 0) + st.minutes;
+    const now = Date.now();
+    const r = await need([{ role: "system", content: planPrompt(lang) }, { role: "user", content: `Assignment: ${p.title}\nCourse: ${p.course}\nToday: ${dayKey(new Date(now))}\nDue: ${new Date(p.due).toISOString().slice(0, 16)}\nAlready planned (minutes per day): ${JSON.stringify(busy)}` }], button);
+    if (r === undefined) return undefined;
+    let raw;
+    try { raw = jsonIn(r); } catch { raw = undefined; }
+    return { ...p, steps: checkPlan(raw, now, p.due, busy, lang), createdAt: now };
+  }
+  function week() {
+    x.root.append(back({ at: "home" }), el("h2", {}, L("📅 השבוע שלי", "📅 My week")));
+    const plans = loadPlans().sort((a, b) => a.due - b.due);
+    const table = loadTable();
+    const days = new Map();
+    plans.forEach((plan, n) => plan.steps.forEach((step, i) => { const list = days.get(step.date) ?? []; list.push({ plan, step, i, tone: TONES[n % TONES.length] }); days.set(step.date, list); }));
+    const today = dayKey(new Date());
+    const keys = [...days.keys()].filter((k) => k >= today || days.get(k).some((e) => !e.step.done)).sort().slice(0, 10);
+    const name = (k) => k === today ? L("היום", "Today") : new Date(`${k}T12:00`).toLocaleDateString(L("he-IL", "en-GB"), { weekday: "long", day: "numeric", month: "numeric" });
+    const save = (fn) => { const all = loadPlans(); fn(all); if (savePlans(all)) x.draw(); };
+    x.root.append(section("", ...(keys.length ? keys.map((k) => {
+      const list = days.get(k);
+      const times = table.slots.length ? freeSlots(table, k, list.map((e) => e.step.minutes)) : [];
+      return el("div", {}, el("b", {}, name(k)), ...list.map((e, j) => el("label", { class: "ph-row", style: `border-inline-start: 4px solid ${e.tone}; padding-inline-start: 8px` },
+        el("input", { type: "checkbox", checked: e.step.done ? "" : undefined, onchange: (ev) => save((all) => { const pl = all.find((y) => y.id === e.plan.id); if (pl?.steps[e.i]) pl.steps[e.i].done = ev.currentTarget.checked; }) }),
+        el("span", { dir: "auto", style: `flex: 1; min-width: 0; overflow-wrap: anywhere${e.step.done ? "; text-decoration: line-through; opacity: .6" : ""}` }, `${times[j] ? `${times[j]} · ` : ""}${e.step.title} (${e.step.minutes} ${L("דק׳", "min")}) · ${e.plan.title}`))));
+    }) : [el("p", { class: "muted" }, L("אין עדיין הגשות. הוסיפי מטלה, והמודל בטלפון יפרק אותה לצעדים עד ההגשה.", "No assignments yet. Add one, and the phone's model breaks it into steps until it is due."))])));
+    if (plans.length) x.root.append(section(L("ההגשות", "Assignments"), ...plans.map((p) => el("div", { class: "ph-row" },
+      el("span", { dir: "auto", style: "flex: 1; min-width: 0; overflow-wrap: anywhere" }, `${p.title}${p.course ? ` · ${p.course}` : ""} · ${new Date(p.due).toLocaleDateString(L("he-IL", "en-GB"))}`),
+      el("button", { type: "button", onclick: async (ev) => { const n = await makePlan(p, ev.currentTarget); if (n) save((all) => { const i = all.findIndex((y) => y.id === p.id); if (i >= 0) all[i] = n; }); } }, L("🔁 לתכנן מחדש", "🔁 Plan again")),
+      el("button", { type: "button", "aria-label": L(`למחוק את ${p.title}`, `Delete ${p.title}`), onclick: () => confirm(L("למחוק את התכנית?", "Delete the plan?")) && save((all) => all.splice(all.findIndex((y) => y.id === p.id), 1)) }, "✕")))));
+    const title = el("input", { dir: "auto", "aria-label": L("מה מגישים", "What is due"), placeholder: L("למשל: עבודה מסכמת", "e.g. Final paper"), style: "flex: 1 1 100%; min-width: 0" });
+    const course = el("select", { "aria-label": L("קורס", "Course") }, el("option", { value: "" }, L("בלי קורס", "No course")), ...x.db().courses.map((c) => el("option", { value: c.name }, c.name)));
+    const date = el("input", { type: "date", "aria-label": L("תאריך הגשה", "Due date"), min: today });
+    const add = el("button", { type: "button", class: "primary" }, L("לתכנן", "Plan it"));
+    add.onclick = async () => {
+      const due = date.value ? new Date(`${date.value}T23:59`).getTime() : NaN;
+      if (!title.value.trim() || !(due > Date.now())) return alert(L("כתבי מה מגישים ומתי.", "Write what is due and when."));
+      const p = await makePlan({ id: `p${uid().slice(0, 10)}`, title: title.value.trim().slice(0, 160), course: course.value.slice(0, 120), due }, add);
+      if (p) save((all) => all.push(p));
+    };
+    x.root.append(section(L("+ הגשה", "+ Assignment"), el("div", { class: "ph-filter", style: "flex-wrap: wrap" }, title, course, date, add),
+      table.slots.length ? "" : el("p", { class: "muted small" }, L("עם מערכת שעות, לכל צעד תוצע שעה פנויה סביב השיעורים.", "With a timetable, each step gets a free time around your classes."))));
+  }
+
   /** The timetable for a sync with the computer, and the computer's answer taken when it is newer. */
   const tableSync = {
     out: () => { const t = loadTable(); return t.t ? t : undefined; },
@@ -768,5 +821,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing }, homeViews: { grades, english, timetable }, classBanner };
+  return { teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing }, homeViews: { grades, english, timetable, week }, classBanner };
 }
