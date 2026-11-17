@@ -934,3 +934,11 @@ S5 an outside scanner's rules for Electron.
 - **MCP "has its own view" tag; Knowledge base size**: the tag reads `_meta.ui.resourceUri` the server already sends (shown only, never opened from the list); the size is two `stat` calls on KesherAI's own index files per base, inside the list call (cheap: no reads).
 - **Lip sync microphones**: names come from Windows' audio list (WASAPI) and are matched back to a device by prefix; the name is only compared, never run. Self-work's version of this task was not taken: it also added an `open any path` route and a desktop zoom hook outside the task.
 - Secrets/personal paths: none in the diff (checked with git grep).
+
+## Scan 101 (2026-11-17, morning): the log folder, the heavy folder, Fab, song lyrics, the Tasks count
+- **Log folder (t129)**: `GET /api/logs/folder` answers this computer only and returns a fixed folder; the button opens it with the desktop's open-folder bridge, which opens folders only. Self-work's "open any path" route was not taken.
+- **Heavy folder**: `POST /api/heavy` is this computer only, takes a full path outside the data folder and only the four known folder names. Files are copied and size-checked; the old folder is removed only after the link to the new one is made, and comes back if the link fails. The swap runs in the main app only, before engines start; a folder in use stays pending. Links inside are made again as links, never followed.
+- **Fab**: the pane runs only Fab's search path (checked by a strict pattern) inside a fab.com tab, in an isolated world, with that site's own cookies; `fab_open` opens only `www.fab.com/listings/<uid>` (uid checked). The tools never click, add or buy; the description tells the model so, and browser clicks still ask per site.
+- **Song title and lyrics**: shown as text (React escapes it); the download name is stripped of path characters.
+- **Tasks count / engine log**: display only.
+- Performance: the heavy folder sizes walk four folders on demand only (Settings page open); the swap at start re-checks sizes and times once. Fab's tools exist only with the desktop pane. Secrets/personal paths: none in the diff (git grep).
