@@ -1271,7 +1271,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       homework && turns.length ? el("div", { class: "ph-btns" },
         el("button", { type: "button", onclick: (e) => void send(L("רמז, בבקשה", "A hint, please"), e.currentTarget) }, L("רמז", "Hint")),
         el("button", { type: "button", onclick: (e) => void send(L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"), e.currentTarget) }, L("פתרון מלא", "Full solution")),
-        el("button", { type: "button", onclick: (e) => hw.similar(e.currentTarget) }, L("🔁 תרגיל דומה", "🔁 A similar problem"))) : "",
+        el("button", { type: "button", onclick: (e) => hw.similar(e.currentTarget) }, L("🔁 תרגיל דומה", "🔁 A similar problem")),
+        el("button", { type: "button", onclick: (e) => void send(L("הראי לי דרך אחרת לפתור את אותו תרגיל (שיטה אחרת), צעד אחר צעד, ומתי כדאי כל דרך", "Show me another way to solve the same problem (a different method), step by step, and when each way is better"), e.currentTarget) }, L("🔀 דרך אחרת", "🔀 Another way"))) : "",
       form);
     if (!startBtn) q.focus();
   }

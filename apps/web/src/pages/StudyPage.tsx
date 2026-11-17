@@ -881,6 +881,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
           <button type="button" onClick={() => void send(false, L("רמז, בבקשה", "A hint, please"))}>{L("רמז", "Hint")}</button>
           <button type="button" onClick={() => void send(false, L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"))}>{L("פתרון מלא", "Full solution")}</button>
           <button type="button" onClick={() => void send(false, `${SIMILAR_MARK} ${L("תרגיל דומה לתרגול, בבקשה (בלי הפתרון)", "A similar problem to practice, please (without the solution)")}`)}>{SIMILAR_MARK} {L("תרגיל דומה", "A similar problem")}</button>
+          <button type="button" onClick={() => void send(false, L("הראי לי דרך אחרת לפתור את אותו תרגיל (שיטה אחרת), צעד אחר צעד, ומתי כדאי כל דרך", "Show me another way to solve the same problem (a different method), step by step, and when each way is better"))}>🔀 {L("דרך אחרת", "Another way")}</button>
         </div>
       )}
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>

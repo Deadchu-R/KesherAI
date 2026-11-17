@@ -115,7 +115,7 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ✅ A YouTube lecture as a lecture
 - ✅ Teach-back (Feynman)
 - ✅ Mastery per topic, and a nudge when one drops
-- ✅ Graphs of functions with sliders; ⬜ more than one way to solve
+- ✅ Graphs of functions with sliders; ✅ another way to solve (homework, 2026-11-17)
 - ✅ Save a page or a selection from the browser to a course
 - ✅ A study game: match terms to meanings against the clock
 
