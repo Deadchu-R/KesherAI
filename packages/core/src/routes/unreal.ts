@@ -700,7 +700,8 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     }
     if (!file) return reply.code(409).send({ error: "Open the project in Unreal first (with the plugin connected), or use Install into a project." });
     try {
-      await installer.update(dirname(file), () => unreal.closeForUpdate(), file);
+      // Opened again afterwards only when it was open now: an update with Unreal closed leaves it closed.
+      await installer.update(dirname(file), () => unreal.closeForUpdate(), unreal.connected ? file : undefined);
       return { job: installer.status() };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
