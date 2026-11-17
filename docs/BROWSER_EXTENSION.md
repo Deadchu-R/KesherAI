@@ -17,7 +17,7 @@ The same zips are available from the server: `GET /api/browser/package?for=chrom
 
 ## Publishing it in the stores (free)
 
-The Chrome Web Store charges a one-time $5 developer fee, so KesherAI uses the free stores first:
+The Chrome Web Store charges a one-time $5 developer fee (steps and the listing in [CHROME_WEB_STORE.md](CHROME_WEB_STORE.md)); the free stores:
 
 - **Microsoft Edge Add-ons:** sign up at [Partner Center](https://partner.microsoft.com/dashboard/microsoftedge/overview) (free) and upload the Chrome zip. Chrome, Brave and Opera users can also install from the Edge store.
 - **Firefox Add-ons (AMO):** sign in at [addons.mozilla.org/developers](https://addons.mozilla.org/developers/) (free) and upload the Firefox zip. You can list it publicly, or keep it unlisted, where Mozilla signs it so Firefox installs it permanently from a file.
