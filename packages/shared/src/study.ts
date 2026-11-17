@@ -64,7 +64,34 @@ export interface StudyLecture {
   notes?: string;
   /** When her notes were last changed (a sync keeps the newer notes). */
   notesT?: number;
+  /** What she highlighted while reading (design ReadHighlights, students part 27 #5). */
+  highlights?: StudyHighlight[];
 }
+
+/** A highlight in a lecture's text, with the page it is on and her note. */
+export interface StudyHighlight {
+  id: string;
+  text: string;
+  /** The page or slide (from the text's "— N —" marks), when known. */
+  page?: number;
+  note?: string;
+  t: number;
+  /** Made into cards already. */
+  carded?: boolean;
+}
+
+/** Highlights from the page, checked: at most 300, text and note trimmed. */
+export function cleanHighlights(raw: unknown): StudyHighlight[] {
+  return (Array.isArray(raw) ? raw : []).slice(0, 300).flatMap((h, i): StudyHighlight[] => {
+    const x = (h && typeof h === "object" ? h : {}) as Record<string, unknown>;
+    const text = typeof x.text === "string" ? x.text.replace(/\r/g, "").trim().slice(0, 2000) : "";
+    if (!text) return [];
+    const page = Number(x.page);
+    const note = typeof x.note === "string" ? x.note.trim().slice(0, 2000) : "";
+    return [{ id: typeof x.id === "string" && /^[\w-]{1,40}$/.test(x.id) ? x.id : `h${i}${Date.now().toString(36)}`, text, ...(Number.isInteger(page) && page > 0 && page < 100_000 ? { page } : {}), ...(note ? { note } : {}), t: Number(x.t) || Date.now(), ...(x.carded === true ? { carded: true } : {}) }];
+  });
+}
+
 
 /** A flashcard. `fsrs` is the scheduler's state (ts-fsrs Card, dates as ISO strings). */
 export interface StudyCard {

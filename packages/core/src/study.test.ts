@@ -250,3 +250,22 @@ test("timetable: only her courses' classes, and one reminder per class a day", a
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("highlights: saved checked, made into cards once, and the cloze filter", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-hl-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("פרמקולוגיה");
+    const l = await st.addLecture(c.id, { title: "אינסולין", text: "— 1 —\nאינסולין מוריד סוכר בדם." });
+    const hs = await st.setHighlights(c.id, l.id, [{ id: "h1", text: " אינסולין מוריד סוכר ", page: 1, note: "חשוב" }, { text: "" }, "x"]);
+    assert.deepEqual(hs.map((h) => [h.id, h.text, h.page, h.note]), [["h1", "אינסולין מוריד סוכר", 1, "חשוב"]]);
+    const made = await st.makeCards(c.id, l.id, { highlights: true });
+    assert.ok(made.length > 0);
+    assert.equal((await st.get(c.id)).lectures[0]!.highlights![0]!.carded, true);
+    await assert.rejects(() => st.makeCards(c.id, l.id, { highlights: true }), /No new highlights/);
+    // The fake model's cards have no blank: none is kept as a fill-in-the-blank card.
+    await assert.rejects(() => st.makeCards(c.id, l.id, { cloze: true }));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

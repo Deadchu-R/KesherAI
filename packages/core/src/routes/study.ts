@@ -425,7 +425,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
   app.post<L>("/api/study/courses/:id/lectures/:lid/summarize", async (req) => st.summarize(req.params.id, req.params.lid));
-  app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true }) }));
+  app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true, highlights: req.body?.highlights === true }) }));
+  /** Her highlights in a lecture (design ReadHighlights): the whole list. */
+  app.put<L & { Body: { highlights?: unknown } }>("/api/study/courses/:id/lectures/:lid/highlights", { bodyLimit: 2 * 1024 * 1024 }, async (req) => ({ highlights: await st.setHighlights(req.params.id, req.params.lid, req.body?.highlights) }));
 
   app.post<L>("/api/study/courses/:id/lectures/:lid/drugs", async (req) => ({ drugs: await st.makeDrugs(req.params.id, req.params.lid) }));
   app.delete<{ Params: { id: string; did: string } }>("/api/study/courses/:id/drugs/:did", async (req) => {

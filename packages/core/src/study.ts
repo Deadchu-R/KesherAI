@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -39,12 +39,13 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(l.videoFile && typeof l.videoFile === "object" ? { videoFile: { mime: str(l.videoFile.mime, 40) || "video/mp4", bytes: Number(l.videoFile.bytes) || 0, ...(l.videoFile.from ? { from: str(l.videoFile.from, 200) } : {}) } } : {}),
     ...(Array.isArray(l.chapters) ? { chapters: parseChapters({ chapters: l.chapters }, Number(l.chapters.at(-1)?.end) || 0) } : {}),
     ...(l.notes ? { notes: str(l.notes, 50_000), notesT: Number(l.notesT) || Date.now() } : {}),
+    ...(Array.isArray(l.highlights) && l.highlights.length ? { highlights: cleanHighlights(l.highlights) } : {}),
   }));
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
     id: k.id, front: str(k.front, 4000), back: str(k.back, 8000), format: STUDY_FORMATS.includes(k.format) ? k.format : "text", ...(k.kind ? { kind: str(k.kind, 40) } : {}),
     ...(okId(k.lectureId) ? { lectureId: k.lectureId } : {}), createdAt: Number(k.createdAt) || Date.now(), due: str(k.due, 40), fsrs: k.fsrs && typeof k.fsrs === "object" ? JSON.parse(JSON.stringify(k.fsrs).slice(0, 2000)) as Record<string, unknown> : {},
   }));
-  const reviews = arr<StudyReview>(d.reviews, 200_000).filter((r) => okId(r?.cardId) && Number.isFinite(r.t)).map((r) => ({ cardId: r.cardId, t: r.t, rating: Math.min(4, Math.max(1, Math.round(Number(r.rating) || 3))), format: STUDY_FORMATS.includes(r.format) ? r.format : "text", elapsedDays: Math.max(0, Number(r.elapsedDays) || 0), ...(r.kind ? { kind: str(r.kind, 40) } : {}) }));
+  const reviews = arr<StudyReview>(d.reviews, 200_000).filter((r) => okId(r?.cardId) && Number.isFinite(r.t)).map((r) => ({ cardId: r.cardId, t: r.t, rating: Math.min(4, Math.max(1, Math.round(Number(r.rating) || 3))), format: STUDY_FORMATS.includes(r.format) ? r.format : "text", elapsedDays: Math.max(0, Number(r.elapsedDays) || 0), ...(r.kind ? { kind: str(r.kind, 40) } : {}), ...(typeof r.sure === "boolean" ? { sure: r.sure } : {}) }));
   const quizzes = arr<StudyQuiz>(d.quizzes, 500).filter((q) => okId(q?.id) && Array.isArray(q.questions)).map((q) => JSON.parse(JSON.stringify(q).slice(0, 200_000)) as StudyQuiz);
   const drugs = arr<StudyDrug>(d.drugs, 1000).filter((g) => okId(g?.id)).map((g) => JSON.parse(JSON.stringify(g).slice(0, 20_000)) as StudyDrug);
   const removed = arr<string>(d.removed, 5000).filter(okId);
@@ -1057,12 +1058,15 @@ export class Study {
   }
 
   /** Makes flashcards from a lecture, studied in one format. */
-  async makeCards(id: string, lectureId: string, p: { format?: StudyFormat; count?: number; cloze?: boolean }, signal?: AbortSignal): Promise<StudyCard[]> {
+  async makeCards(id: string, lectureId: string, p: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean }, signal?: AbortSignal): Promise<StudyCard[]> {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
+    // From her highlights (students part 27 #5): only the ones not made into cards yet, a card or two each.
+    const marked = p.highlights ? (l.highlights ?? []).filter((h) => !h.carded) : [];
+    if (p.highlights && !marked.length) throw Object.assign(new Error("No new highlights to make cards from."), { statusCode: 400 });
     const format: StudyFormat = STUDY_FORMATS.includes(p.format as StudyFormat) ? p.format! : "text";
-    const count = Math.max(3, Math.min(40, Number(p.count) || 12));
-    const material = (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
+    const count = p.highlights ? Math.min(40, Math.max(1, Math.round(marked.length * 1.5))) : Math.max(3, Math.min(40, Number(p.count) || 12));
+    const material = p.highlights ? `What the student highlighted (each with its page and her note); write the cards about these only, using the lecture below for context:\n${marked.map((h) => `- ${h.page ? `(p. ${h.page}) ` : ""}${h.text}${h.note ? ` [her note: ${h.note}]` : ""}`).join("\n")}\n\nThe lecture:\n${l.text.slice(0, 20_000)}` : (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
     const raw = await this.ask(p.cloze ? CLOZE_PROMPT : `${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return cards. Try again, or another model."), { statusCode: 502 });
@@ -1076,9 +1080,21 @@ export class Study {
       made.push({ id: randomUUID(), front: String(x.front).slice(0, 2000), back: String(x.back).slice(0, 6000), format, ...(x.kind ? { kind: String(x.kind).slice(0, 30) } : {}), lectureId, createdAt: now.getTime(), due: c.due.toISOString(), fsrs: fromCard(c) });
       if (made.length >= count) break;
     }
+    if (!made.length && (p.cloze || p.highlights)) throw Object.assign(new Error("The model did not return usable cards. Try again, or another model."), { statusCode: 502 });
     d.cards.push(...made);
+    if (p.highlights) for (const h of marked) h.carded = true;
     await this.save(d);
     return made;
+  }
+
+  /** Saves her highlights in a lecture (the whole list, checked). */
+  async setHighlights(id: string, lectureId: string, raw: unknown): Promise<StudyHighlight[]> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    l.highlights = cleanHighlights(raw);
+    if (!l.highlights.length) delete l.highlights;
+    await this.save(d);
+    return l.highlights ?? [];
   }
 
   /**
