@@ -8,7 +8,7 @@ import { documentText } from "@kesher/agent";
 
 /**
  * Chat reading (#/chat-reports; chat-report.ts): a WhatsApp or Instagram chat read into a report by the model on this
- * computer, and follow-up questions about it. An optional part (Settings → Parts → "Chat reading").
+ * computer, and follow-up questions about it. An optional part (Settings → Parts → "Relationship analysis").
  */
 export async function chatReportRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const reports = new ChatReports(join(s.paths.root, "chat-reports"));
@@ -38,7 +38,7 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
     }
   });
   app.post<{ Body: { source?: string; title?: string; text?: string; parts?: unknown[]; kind?: string; voice?: string; lang?: string; me?: string; backstory?: string; model?: string; names?: Record<string, string> } }>("/api/chat-reports", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
-    if (off()) return reply.code(409).send({ error: "Chat reading is off (Settings → Parts)." });
+    if (off()) return reply.code(409).send({ error: "Relationship analysis is off (Settings → Parts)." });
     const b = req.body ?? {};
     let chat: PeopleChat;
     try {
@@ -71,7 +71,7 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
    * the page is built by script, so a plain download is empty), a PDF saved from it, or its text.
    */
   app.post<{ Body: { url?: string; pdf?: string; text?: string; lang?: string; model?: string } }>("/api/chat-reports/import", { bodyLimit: 60 * 1024 * 1024 }, async (req, reply) => {
-    if (off()) return reply.code(409).send({ error: "Chat reading is off (Settings → Parts)." });
+    if (off()) return reply.code(409).send({ error: "Relationship analysis is off (Settings → Parts)." });
     const b = req.body ?? {};
     let text = String(b.text ?? "");
     if (b.url) {

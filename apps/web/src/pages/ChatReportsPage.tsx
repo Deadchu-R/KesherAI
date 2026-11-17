@@ -46,7 +46,7 @@ export function ChatReportsPage() {
   return (
     <div className="chat-reports">
       <aside className="card stack cr-list">
-        <h2>{L("קריאת צ'אט", "Chat reading")}</h2>
+        <h2>{L("אנליזת מערכות יחסים", "Relationship analysis")}</h2>
         <button type="button" className="primary" onClick={() => setOpen("new")}>{L("+ דוח חדש", "+ New report")}</button>
         {items.map((it) => (
           <button key={it.id} type="button" className={`cr-item${open === it.id ? " active" : ""}`} onClick={() => setOpen(it.id)}>
