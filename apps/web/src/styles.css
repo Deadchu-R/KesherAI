@@ -2982,3 +2982,6 @@ html.handheld .palette-list button { min-height: 44px; }
 .design-note { position: absolute; width: 44px; height: 44px; border-radius: 50% 50% 50% 0; background: #f0a830; color: #121213; display: grid; place-items: center; font-weight: 800; font-size: 20px; box-shadow: 0 4px 12px rgb(0 0 0 / .4); cursor: pointer; }
 .design-ask { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); flex-wrap: wrap; }
 .design-ask input { flex: 1; min-width: 180px; }
+.translated-note { margin: 2px 0 6px; }
+.translated-note > summary { cursor: pointer; list-style: none; display: inline-flex; padding: 2px 10px; border-radius: 999px; background: color-mix(in srgb, #3fbf7f 14%, transparent); color: #7fd8a8; }
+.translated-note[open] > .msg-text { margin-top: 6px; padding-inline-start: 10px; border-inline-start: 2px solid #3fbf7f55; opacity: .85; }

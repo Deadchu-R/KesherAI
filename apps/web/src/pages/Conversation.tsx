@@ -795,6 +795,12 @@ export function ConversationPage({ id }: { id: string }) {
                   <div key={e.seq} className="msg">
                     <h3 className="sr-only">{L("תשובה", "Answer")}</h3>
                     <RichText text={e.text} />
+                    {e.original && (
+                      <details className="translated-note">
+                        <summary className="muted small">🗣️ {L("תורגם לשפה שלך. המקור של המודל", "Translated into your language. The model's own words")}</summary>
+                        <RichText text={e.original} />
+                      </details>
+                    )}
                     {voicePart && <SpeakButton text={e.text} />}
                     {!busy && <button type="button" className="say-btn branch-btn" title={t("branchHere")} aria-label={t("branchHere")} onClick={() => void branchAt(e.seq)}><LineIcon name="branch" size={15} /></button>}
                     {(() => {

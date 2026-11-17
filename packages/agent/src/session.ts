@@ -911,7 +911,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           const better = await this.polishAnswer(shown, userText, abort.signal).catch(() => undefined);
           if (better) shown = better;
         }
-        if (shown) this.push({ type: "assistant", turn, text: shown });
+        if (shown) this.push({ type: "assistant", turn, text: shown, ...(shown !== result.text ? { original: result.text } : {}) });
         this.lastSaid = result.text.trim();
         this.messages.push({ role: "assistant", content: result.text, ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {}) });
         if (result.toolCalls.length === 0) {
