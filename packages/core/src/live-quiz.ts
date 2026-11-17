@@ -48,7 +48,7 @@ export function createRoom(title: string, questions: StudyQuestion[], seconds = 
   const qs = questions.filter((q) => q.options.length >= 2 && q.answer >= 0).slice(0, 40);
   if (!qs.length) throw Object.assign(new Error("No multiple-choice questions for a live quiz."), { statusCode: 400 });
   while (rooms.size >= MAX_ROOMS) rooms.delete(rooms.keys().next().value!);
-  const token = randomBytes(9).toString("base64url");
+  const token = randomBytes(16).toString("base64url");
   const room: LiveRoom = { token, title: title.slice(0, 120), questions: qs, stage: "lobby", qi: 0, openedAt: 0, seconds: Math.max(5, Math.min(120, Math.round(seconds))), players: new Map(), createdAt: now };
   rooms.set(token, room);
   return room;
@@ -81,7 +81,7 @@ export function join(r: LiveRoom, name: string): string {
   const n = [...name].filter((c) => c >= " " && c !== "<" && c !== ">").join("").trim().slice(0, 24);
   if (!n) throw Object.assign(new Error("Type a name."), { statusCode: 400 });
   if (r.players.size >= MAX_PLAYERS) throw Object.assign(new Error("The room is full."), { statusCode: 409 });
-  const pid = randomBytes(9).toString("base64url");
+  const pid = randomBytes(16).toString("base64url");
   r.players.set(pid, { name: n, score: 0, answers: [] });
   return pid;
 }

@@ -1094,3 +1094,12 @@ S5 an outside scanner's rules for Electron.
 - **MyAnimeList export**: parsed in our own code from text (30 MB body limit), titles trimmed; the .gz is opened in the page.
 - **Lens**: a missing OCR language is reported as a fixed word, never as raw command output.
 - Result: no open issues.
+
+## Scan 122 (2026-11-17): listening controls, slides, image occlusion, players' speed, live quiz, time notes, studying together, papers
+- **Live quiz and focus room (public pages)**: `/q/<token>` and `/f/<token>` are outside /api, so the token is the key: 128 random bits (raised from 72 in this scan), checked against `^[\w-]{8,40}$` before any lookup, so it is safe inside the page's script. Rooms live in memory only (at most 5 of each; 3 hours for a quiz, 12 for a focus room), players at most 60 / members 40, names and tasks stripped of control characters and `<>` and cut short, join bodies 2 KB. The pages run only their own nonce'd script (CSP `default-src 'none'`, `connect-src 'self'`, `frame-ancestors 'none'`, no-referrer, noindex, no-store) and put every name, question and option in through an escaper. A quiz's answer is never sent before the host reveals it; an answer counts once, only for the question showing and only in time. Opening, moving on and closing a room are under /api with her key.
+- **Time notes**: kept in the lecture's highlights (at most 300, 2 MB body), a moment only as a whole number of seconds under a day; the course's notes list is read-only and its links are built from ids.
+- **Study group links**: https only, no user/password in the address, at most 12, opened with `noopener noreferrer`.
+- **Papers**: only her search words or a DOI (checked) go to a fixed address (`api.openalex.org`), encoded, no redirects, 20 s; the answer is parsed as data and every field checked (titles cut, links http(s) only, years in range). "What the studies say" sends only the found abstracts to the local model, and its answer is shown as text. Sources at most 500 per course; BibTeX values escaped, RIS lines kept on one line.
+- **Slides, image occlusion**: picture names checked (`^[\w-]{1,80}\.(png|jpg|webp)$`) and read only from the course's own image folder; slide files go through the same import path as before (85 MB limit).
+- **Players' speed**: a remembered number from a fixed list; no new input reaches the server.
+- **Performance**: quiz phones poll once a second and focus rooms every 5 s, each answer a small in-memory read; no polling once a room is gone (404 stops the pages).

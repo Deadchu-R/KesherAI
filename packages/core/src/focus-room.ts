@@ -43,7 +43,7 @@ const text = (s: unknown, n: number) => [...String(s ?? "")].filter((c) => c >= 
 export function createFocusRoom(title: string, focus = 25, rest = 5, now = Date.now()): FocusRoom {
   clean(now);
   while (rooms.size >= MAX_ROOMS) rooms.delete(rooms.keys().next().value!);
-  const r: FocusRoom = { token: randomBytes(9).toString("base64url"), title: text(title, 80) || "Study together", focus: Math.max(5, Math.min(120, Math.round(focus) || 25)), rest: Math.max(1, Math.min(60, Math.round(rest) || 5)), pausedAt: 0, members: new Map(), createdAt: now };
+  const r: FocusRoom = { token: randomBytes(16).toString("base64url"), title: text(title, 80) || "Study together", focus: Math.max(5, Math.min(120, Math.round(focus) || 25)), rest: Math.max(1, Math.min(60, Math.round(rest) || 5)), pausedAt: 0, members: new Map(), createdAt: now };
   rooms.set(r.token, r);
   return r;
 }
@@ -77,7 +77,7 @@ export function joinFocus(r: FocusRoom, name: string, task: string, now = Date.n
   if (!n) throw Object.assign(new Error("Type a name."), { statusCode: 400 });
   for (const [k, m] of r.members) if (now - m.seen > LIFE / 2) r.members.delete(k);
   if (r.members.size >= MAX_MEMBERS) throw Object.assign(new Error("The room is full."), { statusCode: 409 });
-  const id = randomBytes(9).toString("base64url");
+  const id = randomBytes(16).toString("base64url");
   r.members.set(id, { name: n, task: text(task, 80), seen: now });
   return id;
 }
