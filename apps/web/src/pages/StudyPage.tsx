@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Mic } from "../Mic";
 import { celebrate } from "../celebrate";
 import { StudyMistakes } from "../StudyMistakes";
 import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from "../focus-sounds";
@@ -765,6 +766,8 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
   // "ask": she asks, answers come from her lectures. "study": the tutor asks her, waits, then corrects.
   const [mode, setMode] = useState<"ask" | "study" | "homework">("ask");
   const switchMode = (m: "ask" | "study" | "homework") => { setMode(m); setTurns([]); setQ(""); };
+  // Oral exam (design OralExam): in study mode, each question is read aloud and she answers by voice.
+  const [oral, setOral] = useState(false);
   const send = async (start = false, preset?: string) => {
     const question = (preset ?? q).trim();
     if ((!question && !start) || busy) return;
@@ -774,7 +777,10 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
     if (question) setTurns((t) => [...t, { role: "user", content: question }]);
     const r = await call(api<{ answer: string; sources: Array<{ lectureId: string; title: string; page?: number }> }>(`/api/study/courses/${courseId}/ask`, { method: "POST", body: { question, history, mode } }));
     setBusy(false);
-    if (r) setTurns((t) => [...t, { role: "assistant", content: r.answer, sources: r.sources }]);
+    if (r) {
+      setTurns((t) => [...t, { role: "assistant", content: r.answer, sources: r.sources }]);
+      if (oral && mode === "study") void speak(r.answer);
+    }
   };
   if (!hasLectures) return <p className="muted">{L("קודם הוסיפי הרצאה: התשובות מגיעות רק מההרצאות שלך.", "Add a lecture first: answers come only from your lectures.")}</p>;
   return (
@@ -785,6 +791,9 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
         <button type="button" role="tab" aria-selected={mode === "homework"} className={mode === "homework" ? "on" : ""} onClick={() => switchMode("homework")}>{L("שיעורי בית: צעד אחר צעד", "Homework: step by step")}</button>
       </div>
       <p className="muted small">{mode === "homework" ? L("הדביקי את התרגיל. המורה עוזרת צעד אחר צעד: כתבי כל צעד שעשית והיא תבדוק, בקשי רמז כשנתקעת, ופתרון מלא כשתרצי.", "Paste the exercise. The tutor helps step by step: write each step you took and it checks it, ask for a hint when stuck, and for the full solution when you want it.") : mode === "ask" ? L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.") : L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.")}</p>
+      {mode === "study" && (
+        <label className="study-check"><input type="checkbox" checked={oral} onChange={(e) => { setOral(e.target.checked); if (!e.target.checked) stopSpeaking(); }} /> 🗣 {L("בעל פה: השאלות מוקראות ועונים בקול, כמו מבחן בעל פה", "Oral: questions read aloud, you answer by voice, like an oral exam")}</label>
+      )}
       {mode === "study" && turns.length === 0 && !busy && <button type="button" className="primary" onClick={() => void send(true)}>{L("התחילי תרגול", "Start practising")}</button>}
       <div className="study-ask-turns" aria-live="polite">
         {turns.map((t, i) => (
@@ -803,6 +812,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
       )}
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={mode === "study" ? L("התשובה שלך", "Your answer") : L("שאלה", "Question")} placeholder={mode === "homework" ? (turns.length ? L("הצעד שעשית, או שאלה", "Your step, or a question") : L("התרגיל (הדביקי את הנוסח)", "The exercise (paste it)")) : mode === "study" ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
+        {oral && mode === "study" && <Mic onText={(t) => { stopSpeaking(); void send(false, t); }} />}
         <button type="submit" className="primary" disabled={busy || !q.trim()}>{mode === "study" ? L("שליחת תשובה", "Answer") : mode === "homework" ? L("שליחה", "Send") : L("שאלי", "Ask")}</button>
       </form>
     </section>
