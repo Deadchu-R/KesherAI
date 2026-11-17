@@ -1252,7 +1252,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const key = `${c.id}:${mode}`;
     const turns = tutor.get(key) || [];
     tutor.set(key, turns);
-    const list = el("div", { class: "ph-ask", "aria-live": "polite" }, ...turns.map((t) => el("div", { class: `ph-ask-turn ${t.role}`, dir: "auto" }, t.content, t.sources?.length ? el("small", { class: "muted" }, el("br"), L("מתוך: ", "From: ") + t.sources.join(" · ")) : "")));
+    const list = el("div", { class: "ph-ask", "aria-live": "polite" }, ...turns.map((t) => el("div", { class: `ph-ask-turn ${t.role}`, dir: "auto" }, t.content, t.role === "assistant" ? [" ", plus.sayButton(t.content)] : "", t.sources?.length ? el("small", { class: "muted" }, el("br"), L("מתוך: ", "From: ") + t.sources.join(" · ")) : "")));
     const study = mode === "study";
     const homework = mode === "homework";
     // An empty box takes its direction from the page (dir=auto would show the Hebrew example left to right).
@@ -1287,7 +1287,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       e.preventDefault();
       const question = q.value.trim();
       if (question) void send(question, btn);
-    } }, hw?.photo, q, btn);
+    } }, hw?.photo, q, plus.micButton((t) => { q.value = t; void send(t, btn); }), btn);
     const seg = el("div", { class: "ph-btns", role: "tablist" }, ...[["ask", "השאלות שלי", "My questions"], ["study", "מצב תרגול", "Study mode"], ["homework", "שיעורי בית", "Homework"]].map(([m, h, e]) =>
       el("button", { type: "button", role: "tab", "aria-selected": String(m === mode), class: m === mode ? "primary" : "", onclick: () => { tutorMode.set(c.id, m); draw(); } }, L(h, e))));
     const startBtn = study && !turns.length ? el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 48px", onclick: (e) => void send("", e.currentTarget) }, L("התחילי תרגול", "Start practising")) : "";

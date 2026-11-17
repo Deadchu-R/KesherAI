@@ -377,6 +377,61 @@ export function studyPlus(x) {
     x.root.append(section("", kind, to, name, details, b, subject, body, out));
   }
 
+  /**
+   * 🎤 Ask by voice (like Gemini Notebook's voice conversations): tap, speak, tap again; transcribed on the phone and
+   * handed to `onText`. Nothing is kept. Hidden when the app has no speech engine.
+   */
+  function micButton(onText) {
+    if (!x.speech?.transcribe) return "";
+    let rec = null;
+    const b = el("button", { type: "button", "aria-label": L("לשאול בקול", "Ask by voice"), title: L("לשאול בקול", "Ask by voice") }, "🎤");
+    b.onclick = async () => {
+      if (rec) { const r = rec; rec = null; return r.stop(); }
+      if (!(await x.speech.available?.().catch(() => false))) return alert(L("בגרסה הזאת של האפליקציה אין מנוע דיבור. עדכני את האפליקציה.", "This build of the app has no speech engine. Update the app."));
+      if (!(await x.speech.hasModel().catch(() => false))) return alert(L("קודם הכיני את זיהוי הדיבור בטלפון: הקליטי הרצאה פעם אחת (🎙 הקלט הרצאה) והאפליקציה תוריד אותו.", "First set up speech on the phone: record a lecture once (🎙 Record a lecture) and the app downloads it."));
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return alert(L("אין גישה למיקרופון.", "No microphone access.")); }
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      const src = ctx.createMediaStreamSource(stream);
+      const node = ctx.createScriptProcessor(4096, 1, 1);
+      const chunks = [];
+      node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      src.connect(node);
+      node.connect(ctx.destination);
+      b.textContent = "⏹";
+      b.setAttribute("aria-label", L("סיימתי לדבר", "Done speaking"));
+      rec = { stop: async () => {
+        node.disconnect();
+        src.disconnect();
+        stream.getTracks().forEach((t) => t.stop());
+        await ctx.close();
+        b.textContent = "…";
+        b.disabled = true;
+        const text = (await x.speech.transcribe(x.wavBase64(chunks, ctx.sampleRate), "auto").catch(() => "")).trim();
+        b.textContent = "🎤";
+        b.disabled = false;
+        b.setAttribute("aria-label", L("לשאול בקול", "Ask by voice"));
+        if (!text) return alert(L("לא נשמע דיבור.", "No speech was heard."));
+        onText(text);
+      } };
+    };
+    return b;
+  }
+
+  /** 🔊 Reads one of the tutor's answers aloud (the phone's voice); a second tap stops it. */
+  function sayButton(text) {
+    if (!x.say) return "";
+    let on = false;
+    const b = el("button", { type: "button", class: "link", "aria-label": L("להקריא", "Read aloud") }, "🔊");
+    b.onclick = async () => {
+      if (on) { on = false; x.say.stop?.(); b.textContent = "🔊"; return; }
+      on = true;
+      b.textContent = "⏹";
+      try { await x.say(text.replace(/\[(?:Lecture|הרצאה)[^\]]*\]/g, "")); } finally { on = false; b.textContent = "🔊"; }
+    };
+    return b;
+  }
+
   /** Presentation rehearsal: recorded on the phone, transcribed on the phone, numbers and the model's notes. */
   function rehearse(c) {
     x.root.append(back({ at: "course", course: c.id }), el("h2", {}, L("🎤 חזרה על הצגה", "🎤 Rehearse a talk")));
@@ -1330,5 +1385,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { goalReminder, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, questionCheck, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
+  return { goalReminder, goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, questionCheck, micButton, sayButton, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
 }

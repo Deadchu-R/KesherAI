@@ -93,6 +93,7 @@ await pg.waitForTimeout(300);
 await sec.locator("button", { hasText: "שאלי את הקורס" }).click();
 await pg.waitForTimeout(400);
 checks.ask = (await sec.locator("text=התשובות רק מההרצאות שלך").count()) > 0;
+checks.askVoice = (await sec.locator("button[aria-label='לשאול בקול']").count()) > 0 && (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 await sec.locator("button", { hasText: "מצב תרגול" }).click();
 await pg.waitForTimeout(300);
 checks.studyMode = (await sec.locator("button", { hasText: "התחילי תרגול" }).count()) > 0;
