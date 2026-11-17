@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StudyWriting } from "../StudyWriting";
 import { Mic } from "../Mic";
 import { celebrate } from "../celebrate";
 import { StudyMistakes } from "../StudyMistakes";
@@ -624,6 +625,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
   ["game", ["🎯 משחק", "🎯 Game"]],
+  ["writing", ["✍ כתיבה", "✍ Writing"]],
   ["drugs", ["תרופות", "Drugs"]],
   ["labs", ["ערכי מעבדה", "Lab values"]],
   ["progress", ["מה עובד בשבילי", "What works for me"]],
@@ -746,6 +748,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
+        : on === "writing" ? <StudyWriting courseId={id} />
         : on === "game" ? <StudyMatch courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
         : on === "summary" ? <CourseSummary id={id} info={info} onChange={load} />
         : on === "tools" ? <FieldTools id={id} info={info} onChange={load} />

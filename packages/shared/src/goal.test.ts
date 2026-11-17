@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { goalRemindNow, goalToday, recentMistakes, studyBadges, weekRecap, type StudyCourseData, type StudyGoal } from "./study.js";
+import { goalRemindNow, goalToday, parseWritingFeedback, recentMistakes, studyBadges, weekRecap, type StudyCourseData, type StudyGoal } from "./study.js";
 
 const at = (day: number, hour = 12) => new Date(2026, 10, day, hour).getTime();
 const course = (focus: Array<[number, number]>, reviews: number[]) => ({ focus: focus.map(([t, minutes]) => ({ t, minutes })), reviews: reviews.map((t) => ({ t, cardId: "c", rating: 3 })) }) as unknown as StudyCourseData;
@@ -77,5 +77,16 @@ describe("badges", () => {
     const d = { course: { name: "x" }, lectures: [{ id: "l", summary: "s" }], cards: [], reviews: Array.from({ length: 100 }, (_, i) => ({ cardId: "c", t: i, rating: 3 })), quizzes: [], focus: [] } as unknown as StudyCourseData;
     const ids = studyBadges([d], [], 8).map((b) => b.id);
     assert.deepEqual(ids, ["first-lecture", "first-summary", "cards-100", "streak-7"]);
+  });
+});
+
+describe("writing feedback", () => {
+  it("keeps only quotes that are in her text, and levels 1-4", () => {
+    const text = "חוסמי בטא משמשים לטיפול ביתר לחץ דם. הם תמיד בטוחים לכל החולים.";
+    const f = parseWritingFeedback({ summary: "טוב", dimensions: [{ name: "דיוק", level: 9, note: "x" }, { name: "", level: 2 }], comments: [{ quote: "«הם תמיד בטוחים לכל החולים»", note: "באסתמה?" }, { quote: "לא קיים", note: "y" }], next: ["לתקן"] }, text)!;
+    assert.equal(f.dimensions.length, 1);
+    assert.equal(f.dimensions[0]!.level, 4);
+    assert.deepEqual(f.comments.map((c) => c.quote), ["הם תמיד בטוחים לכל החולים"]);
+    assert.equal(parseWritingFeedback("nope", text), undefined);
   });
 });

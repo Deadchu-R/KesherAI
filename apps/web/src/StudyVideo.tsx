@@ -90,11 +90,31 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
       </ol>
       <p className="muted small video-say" dir="auto">{s.say}</p>
       <div className="row video-deck">
-        <button type="button" onClick={() => void stage.current?.requestFullscreen?.().catch(() => undefined)}>🖥 {L("להציג (מסך מלא)", "Present (full screen)")}</button>
-        <button type="button" onClick={() => downloadDeck(lecture.title, slides)}>⬇ {L("PowerPoint עם הערות דובר", "PowerPoint with speaker notes")}</button>
+        <button type="button" className="primary" onClick={() => void stage.current?.requestFullscreen?.().catch(() => undefined)}>🖥 {L("להציג (מסך מלא)", "Present (full screen)")}</button>
+        <button type="button" onClick={() => printDeck(lecture.title, slides)}>⬇ PDF</button>
+        <button type="button" className="link small" onClick={() => downloadDeck(lecture.title, slides)}>{L("גם כקובץ PowerPoint (לא חובה)", "Also as a PowerPoint file (optional)")}</button>
       </div>
     </div>
   );
+}
+
+/**
+ * The slides as a PDF without any other program (Roee: as little dependence on PowerPoint as possible): one page per
+ * slide with the narration under it, through the system's "Save as PDF".
+ */
+function printDeck(title: string, slides: VideoSlide[]) {
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const he = /[\u0590-\u05FF]/.test(title + slides.map((x) => x.title).join(""));
+  const page = (h: string, list: string[], say = "") => `<section><h1>${esc(h)}</h1>${list.length ? `<ul>${list.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}${say ? `<p class="say">${esc(say)}</p>` : ""}</section>`;
+  const html = `<!doctype html><html dir="${he ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4 landscape;margin:0}body{margin:0;font-family:Heebo,Arial,sans-serif}section{box-sizing:border-box;width:297mm;height:210mm;padding:22mm 26mm;background:#1b2140;color:#fff;page-break-after:always;display:flex;flex-direction:column;-webkit-print-color-adjust:exact;print-color-adjust:exact}h1{font-size:30pt;margin:0 0 12mm}li{font-size:20pt;line-height:1.7}.say{margin-top:auto;font-size:11pt;color:#c9cdf0}</style></head><body>${page(title, [])}${slides.map((x) => page(x.title, x.bullets, x.say)).join("")}</body></html>`;
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0";
+  frame.srcdoc = html;
+  frame.onload = () => {
+    frame.contentWindow?.print();
+    setTimeout(() => frame.remove(), 60_000);
+  };
+  document.body.appendChild(frame);
 }
 
 /** The slides as an editable .pptx (the narration in the speaker notes), downloaded. */

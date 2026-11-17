@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -1036,6 +1036,23 @@ export class Study {
     const he = hebrewLecture(`${explanation} ${l.text.slice(0, 2000)}`);
     const r = parseTeachBack(jsonIn(await this.ask(`${TEACH_BACK_PROMPT}${he ? " Write it all in Hebrew." : ""}`, `Lecture: ${l.title}\n\n${material}\n\nTopic: ${topic.slice(0, 200) || l.title}\n\nHer explanation:\n${explanation.slice(0, 6000)}`, signal, d.course)));
     if (!r) throw Object.assign(new Error("The model did not check it in the expected form; try again or pick another model."), { statusCode: 502 });
+    return r;
+  }
+
+  /**
+   * The writing coach (design WritingCoach): feedback on her assignment, outline, draft or revision, with passages of
+   * her course's lectures as the evidence she could use. It never writes the work for her.
+   */
+  async writingFeedback(id: string, p: { stage: WritingStage; text: string; assignment?: string }, signal?: AbortSignal): Promise<WritingFeedback> {
+    const text = p.text.trim();
+    if (text.length < 30) throw Object.assign(new Error("Write or paste a few sentences first."), { statusCode: 400 });
+    const d = await this.get(id);
+    const passages = findPassages(d.lectures, `${p.assignment ?? ""} ${text}`.slice(0, 4000), 6000);
+    const material = passages.length ? passages.map((x) => `[${x.title}]\n${x.text}`).join("\n\n---\n\n") : "(No lecture passage matches.)";
+    const he = hebrewLecture(text);
+    const user = `${p.assignment?.trim() ? `The assignment:\n${p.assignment.trim().slice(0, 4000)}\n\n` : ""}Her text:\n<<<\n${text.slice(0, 20_000)}\n>>>\n\nPassages from her course's lectures:\n${material}`;
+    const r = parseWritingFeedback(jsonIn(await this.ask(`${WRITING_PROMPT(p.stage)}${he ? " Write it all in Hebrew." : ""}`, user, signal, d.course)), text);
+    if (!r) throw Object.assign(new Error("The coach did not answer in the expected form; try again or pick another model."), { statusCode: 502 });
     return r;
   }
 

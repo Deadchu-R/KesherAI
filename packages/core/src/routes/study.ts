@@ -439,6 +439,12 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     const pool = d.quizzes.filter((z) => !z.kind).flatMap((z) => z.questions.filter((q) => q.answer >= 0 && q.options.length > 1).map((q) => ({ ...q, t: z.t })));
     return { cards, questions: shuffle(pool).slice(0, 2) };
   });
+  /** The writing coach (design WritingCoach). */
+  app.post<C & { Body: { stage?: string; text?: string; assignment?: string } }>("/api/study/courses/:id/writing", { bodyLimit: 1024 * 1024 }, async (req) => {
+    const b = req.body ?? {};
+    const stage = b.stage === "assignment" || b.stage === "outline" || b.stage === "revision" ? b.stage : "draft";
+    return st.writingFeedback(req.params.id, { stage, text: String(b.text ?? "").slice(0, 60_000), assignment: String(b.assignment ?? "").slice(0, 8000) });
+  });
   /** "My mistakes" (design MyMistakes): cards she forgot and quiz questions she got wrong lately. */
   app.get<C>("/api/study/courses/:id/mistakes", async (req) => recentMistakes(await st.get(req.params.id)));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
