@@ -1123,6 +1123,13 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 132 (2026-11-17): image cards on the phone, self-work start, the devcontainer, small phone items
+- **Image cards on the phone**: the picture is re-drawn on a canvas and saved as a JPEG (at most 1600 px), which also drops the photo's metadata (EXIF, including where it was taken) before it is kept; it stays in the phone's IndexedDB and never leaves the phone (sync carries only the card, with a name that matches the computer's `^[\w-]{1,80}\.(png|jpg|webp)$` check). At most 40 boxes, labels cut to 200 characters, shown as text. The computer does not request a "ph-" picture; it says the picture is on the phone.
+- **Self-work start**: the "branch taken" check runs `git rev-parse --verify --quiet refs/heads/kesher-self/<digits>` (a fixed pattern, no user text in the command); a model id gets "main/" only when it lacks it.
+- **Devcontainer**: the Microsoft Node 22 image, `pnpm install` from the lockfile (the same packages as everywhere); no secrets or mounts.
+- **Phone**: the letter's name and the English score live only in the phone's storage (try/catch, 80 characters).
+- **Performance**: picture cards load their image from IndexedDB once per card shown; a 1600 px JPEG is about 200–400 KB.
+
 ## Scan 131 (2026-11-17): the NVDA pass, Temp filling drive C, the guided Study setup (computer and phone)
 - **Drive C filled by our own tests (fixed)**: the phone-models test made a 2.1 GB fake model (and others 150 MB) with `truncate`, which on Windows (no sparse files) writes real bytes, and never removed its folder. Self-work runs the tests after every step on Roee's PC, so Temp grew to 112 GB and C fell to 3.9 GB (updates and installs fail when C is full). The model tests now remove their folders; 108 GB was cleared. Self-work's older branch still has the old tests, so Temp is cleaned at each night check until it is merged.
 - **NVDA pass**: a portable NVDA outside the repo (E:\KesherAI\tools), muted, its speech log read and then deleted, because a screen reader's log records everything spoken, including notifications from other apps (it caught a private chat notification). Nothing from it went into git or the docs.
