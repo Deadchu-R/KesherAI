@@ -3077,3 +3077,20 @@ html.handheld .palette-list button { min-height: 44px; }
 .vl-q { color: #f0a830; font-weight: 800; }
 .vl-summary { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); }
 @media (max-width: 760px) { .video-lecture { grid-template-columns: 1fr; } .vl-side { max-height: none; } }
+/* Function graphs in answers (design "FunctionGraph"). */
+.fgraph { margin: 8px 0; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel, #161619); display: flex; flex-direction: column; gap: 8px; max-width: 720px; }
+.fgraph-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fgraph-fn { font-size: 12px; padding: 2px 9px; border: 1px solid; border-radius: 999px; font-family: var(--mono, monospace); white-space: nowrap; }
+.fgraph-reset { margin-inline-start: auto; padding: 2px 10px; }
+.fgraph-svg { display: block; width: 100%; touch-action: none; cursor: grab; background: #111114; border-radius: 9px; user-select: none; }
+.fgraph-svg:active { cursor: grabbing; }
+.fg-grid { stroke: #26262c; stroke-width: 1; }
+.fg-axis { stroke: #6a6a72; stroke-width: 1.3; }
+.fg-tick { fill: #8a8a92; font-size: 11px; }
+.fg-probe { fill: #121213; }
+.fg-probe-text { fill: #eee; font-size: 12px; }
+.fgraph-params { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.fgraph-params label { display: flex; flex-direction: row; align-items: center; margin: 0; gap: 8px; font-size: 13px; flex: 1 1 160px; }
+.fgraph-params input { flex: 1; min-width: 80px; }
+.fgraph-params output { min-width: 3em; text-align: end; font-variant-numeric: tabular-nums; }
+.fgraph figcaption { text-align: start; }

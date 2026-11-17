@@ -45,6 +45,8 @@ export function disconnectComputer(): void {
 }
 
 (() => {
+  // Outside a browser (the tests import pages that import this), there is no address to read.
+  if (typeof location === "undefined") return;
   const params = new URLSearchParams(location.search);
   // The Android app opens this page with ?app=<its own address>, so the menu can offer "Switch computer".
   const app = params.get("app");

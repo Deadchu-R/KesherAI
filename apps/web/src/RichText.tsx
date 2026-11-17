@@ -5,8 +5,10 @@ import { getLocale, he$ } from "./i18n";
 import { withToken } from "./api";
 import { ChartView } from "./ChartView";
 import { MathView, MermaidView } from "./MathMermaid";
+import { FunctionGraph } from "./FunctionGraph";
 import { artifactKey, isArtifact, openArtifact } from "./ArtifactPanel";
 import { parseChart } from "./chart";
+import { parseGraph } from "@kesher/shared";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -185,8 +187,9 @@ export function RichText({ text }: { text: string }) {
       parts[i + 2] = dedent(parts[i + 2]!);
       // A ```chart block with complete JSON is drawn; while it is still being written (or if it is not a chart) it shows as code.
       const chart = parts[i + 1] === "chart" ? parseChart(parts[i + 2]!) : undefined;
+      const graph = parts[i + 1] === "graph" || parts[i + 1] === "plot" ? parseGraph(parts[i + 2]!) : undefined;
       const code = <CodeBlock key={`c${i}`} code={parts[i + 2]!} language={parts[i + 1] || undefined} />;
-      out.push(chart ? <ChartView key={`c${i}`} spec={chart} /> : parts[i + 1] === "mermaid" ? <MermaidView key={`c${i}`} code={parts[i + 2]!} fallback={code} /> : code);
+      out.push(graph ? <FunctionGraph key={`c${i}`} spec={graph} /> : chart ? <ChartView key={`c${i}`} spec={chart} /> : parts[i + 1] === "mermaid" ? <MermaidView key={`c${i}`} code={parts[i + 2]!} fallback={code} /> : code);
     }
   }
   return <div className="msg-text">{out}</div>;

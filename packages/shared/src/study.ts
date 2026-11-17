@@ -1491,6 +1491,9 @@ export interface TutorMessage {
   content: string;
 }
 
+/** How a tutor answer draws a function (the app shows a ```graph block with sliders, design "FunctionGraph"). */
+export const GRAPH_RULE = 'When the shape of a function helps (a curve, a root, how a parameter changes it), add a ```graph block: one function per line ("y = a*x^2 + b"), optionally "x: -10..10", and a slider per parameter as "a = 1 (-3..3)".';
+
 /**
  * The messages for the course tutor, the same on the computer and on the phone.
  *
@@ -1526,7 +1529,7 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
   }
   const material = passages.length ? passages.map((p) => `${passageLabel(p)}\n${p.text}`).join("\n\n---\n\n") : "(No passage of her lectures matches this question.)";
   const homework = o.mode === "homework";
-  const system = `${study ? STUDY_MODE_PROMPT : homework ? HOMEWORK_PROMPT : TUTOR_PROMPT}${o.hint ? `\n${o.hint}` : ""}`;
+  const system = `${study ? STUDY_MODE_PROMPT : homework ? HOMEWORK_PROMPT : TUTOR_PROMPT}${study ? "" : `\n${GRAPH_RULE}`}${o.hint ? `\n${o.hint}` : ""}`;
   // Homework: the problem is the first thing she wrote; her later messages are steps, hints asked for, or "full solution".
   const problem = homework ? (turns.find((h) => h.role === "user")?.content ?? q) : "";
   const user = homework ? `Passages from her lectures:\n\n${material}\n\n${turns.length ? `The problem: ${problem.slice(0, 3000)}\n\nHer message: ${q}` : `The problem: ${q}`}` : study ? (q ? `Passages from her lectures:\n\n${material}\n\nHer answer: ${q}` : `Passages from her lectures:\n\n${material}\n\n${turns.length ? "Ask her the next question (a new one, not asked above). Only the question." : "Start: ask her the first question."}`) : `Passages from her lectures:\n\n${material}\n\nHer question: ${q}`;

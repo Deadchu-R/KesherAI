@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { topicMastery, type StudyCard, type StudyQuiz, type StudyReview } from "./study.js";
 
 const D = 86_400_000;
@@ -12,14 +13,14 @@ describe("topicMastery", () => {
     const reviews = [r("a", 4, now - D), r("a", 3, now - D), r("a", 4, now - D), r("b", 1, now - D), r("b", 2, now - D), r("c", 4, now)];
     const quizzes = [{ id: "q", t: now - D, questions: [{ q: "", options: ["x", "y"], answer: 0, explain: "", lectureId: "L2" }], answers: [1] }] as StudyQuiz[];
     const m = topicMastery(cards, reviews, quizzes, now);
-    expect(m.map((x) => x.lectureId)).toEqual(["L2", "L1"]);
-    expect(m[0]!.mastery).toBeLessThan(30);
-    expect(m[1]!.mastery).toBe(100);
+    assert.deepEqual(m.map((x) => x.lectureId), ["L2", "L1"]);
+    assert.ok(m[0]!.mastery < 30);
+    assert.equal(m[1]!.mastery, 100);
   });
   it("reports a drop against a week ago", () => {
     const cards = [card("a", "L1")];
     const reviews = [...[1, 2, 3, 4].map(() => r("a", 4, now - 10 * D)), ...[1, 2, 3, 4].map(() => r("a", 1, now - D))];
     const [m] = topicMastery(cards, reviews, [], now);
-    expect(m!.change).toBeLessThan(-30);
+    assert.ok(m!.change < -30);
   });
 });
