@@ -9,6 +9,7 @@ import { parseFlow } from "../study-diagram";
 import { StudyRecorder } from "../StudyRecorder";
 import { AvatarCamera } from "./AvatarCamera";
 import { MoodleCard } from "../MoodleCard";
+import { StudyVideo } from "../StudyVideo";
 import { StudyPlans } from "../StudyPlans";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -880,7 +881,7 @@ function LectureAudio({ courseId, lecture, player, onRemoved }: { courseId: stri
 
 function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
-  const [view, setView] = useState<"summary" | "terms" | "diagram" | "text">("summary");
+  const [view, setView] = useState<"summary" | "terms" | "diagram" | "video" | "text">("summary");
   const player = useRef<HTMLAudioElement>(null);
   // "Explain this": text she selected in the lecture, and its explanation.
   const [sel, setSel] = useState("");
@@ -945,14 +946,15 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       <h2 dir="auto">{l.title}</h2>
       {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
-        {(["summary", "terms", "diagram", "text"] as const).map((v) => (
+        {(["summary", "terms", "diagram", "video", "text"] as const).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
-            {{ summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), text: L("הטקסט המלא", "Full text") }[v]}
+            {{ summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), text: L("הטקסט המלא", "Full text") }[v]}
           </button>
         ))}
       </div>
       <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
-        {view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.text}</div>
+        {view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
+          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.text}</div>
           : !l.summary ? (
             <div className="study-empty">
               <p className="muted">{L("עוד לא סוכם. הסיכום, המונחים והתרשים נכתבים מהטקסט של ההרצאה בלבד.", "Not summarized yet. The summary, terms and diagram come from the lecture's text only.")}</p>

@@ -50,6 +50,8 @@ export interface StudyLecture {
   recording?: { t: number; bytes: number; mime: string };
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
+  /** A video overview: narrated slides made from the lecture (design VideoOverview), once made. */
+  video?: VideoSlide[];
   /** Her own notes beside the summary (what the lecturer stressed, what to ask, what she did not get). */
   notes?: string;
   /** When her notes were last changed (a sync keeps the newer notes). */
@@ -1480,6 +1482,25 @@ export function tutorMessages(o: { lectures: StudyLecture[]; question: string; h
 /** The spoken review of a lecture: written to be heard, not read. */
 export const AUDIO_PROMPT =
   "Write a spoken review of this lecture for a student to listen to on the bus, about 3 minutes long (400-550 words), in the lecture's language. Talk to her directly and warmly, like a good tutor: open with what the lecture is about in one sentence, go through the main ideas in a sensible order with one concrete example, say the key terms clearly (with the English name in brackets the first time, for medical terms), and end with three short questions to think about, each followed by its answer. Plain spoken sentences only: no headings, lists, symbols, tables or markdown. Use only what is in the lecture; never invent numbers, doses or values.";
+
+/** One slide of a video overview: what it shows and what the narrator says over it. */
+export interface VideoSlide { title: string; bullets: string[]; say: string; picture?: boolean }
+
+export const VIDEO_PROMPT =
+  "Make a short narrated slide video (a \"video overview\") of this lecture for a student, in the lecture's language: 5 to 8 slides in a sensible order (an opening, the main ideas with one concrete example, what to remember, a closing). Each slide: a short title, 2 to 4 short bullet points (a few words each), and what the narrator says over it (2 to 4 spoken sentences, warm and clear, saying key terms with their English name in brackets the first time for medical terms). Mark picture: true on at most 3 slides where a real photo or diagram of the topic would help. Use only what is in the lecture; never invent numbers, doses or values. Answer with JSON only: {\"slides\":[{\"title\":\"…\",\"bullets\":[\"…\"],\"say\":\"…\",\"picture\":false}]}";
+
+/** A video overview's slides from the model's answer, checked (5–8 slides kept at most 10, text trimmed). */
+export function parseVideoSlides(raw: unknown): VideoSlide[] {
+  const list = Array.isArray((raw as { slides?: unknown })?.slides) ? (raw as { slides: unknown[] }).slides : [];
+  const clean = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/[#*_`>|]/g, "").replace(/\s+/g, " ").trim().slice(0, n) : "");
+  return list.slice(0, 10).flatMap((x) => {
+    const o = x as { title?: unknown; bullets?: unknown; say?: unknown; picture?: unknown };
+    const title = clean(o.title, 100);
+    const say = clean(o.say, 900);
+    const bullets = (Array.isArray(o.bullets) ? o.bullets : []).map((b) => clean(b, 120)).filter(Boolean).slice(0, 4);
+    return title && say ? [{ title, bullets, say, ...(o.picture === true ? { picture: true } : {}) }] : [];
+  });
+}
 
 /** A course as a file to share with classmates: its material, without her own answers and review history. */
 export interface SharedCourse {

@@ -410,3 +410,9 @@ test("pictures: only files whose name has a word of the search are kept", async 
   assert.deepEqual(relevantPictures(pics, "Cardiac output").map((p) => p.page.slice(-24)), ["iac_Output_Animation.gif"]);
   assert.equal(relevantPictures(pics, "a b").length, 2);
 });
+
+test("a video overview's slides are checked", async () => {
+  const { parseVideoSlides } = await import("./study.js");
+  const s = parseVideoSlides({ slides: [{ title: "## חוסמי בטא", bullets: ["β1", "", 3], say: "חוסמי בטא מורידים דופק.", picture: true }, { title: "no say" }] });
+  assert.deepEqual(s, [{ title: "חוסמי בטא", bullets: ["β1"], say: "חוסמי בטא מורידים דופק.", picture: true }]);
+});

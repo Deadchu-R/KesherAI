@@ -92,6 +92,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<L & { Body: { text?: string; kind?: string } }>("/api/study/courses/:id/lectures/:lid/explain", async (req) => st.explainPassage(req.params.id, req.params.lid, String(req.body?.text ?? "").slice(0, 3000), req.body?.kind === "simple" ? "simple" : req.body?.kind === "example" ? "example" : "explain"));
   /** A lecture's spoken review (audio overview), written by the chat model and kept. */
   app.post<L>("/api/study/courses/:id/lectures/:lid/audio", async (req) => st.audioOverview(req.params.id, req.params.lid));
+  app.post<L>("/api/study/courses/:id/lectures/:lid/video", async (req) => st.videoOverview(req.params.id, req.params.lid));
   /** The course as a file to share with classmates, and a shared file opened as a new course. */
   app.get<C>("/api/study/courses/:id/export", async (req, reply) => {
     const f = await st.exportCourse(req.params.id);
