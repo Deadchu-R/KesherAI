@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PeopleChat } from "./people-chats.js";
-import { ChatReports, chatNumbers, chatParts, checkReport, findQuote, realMessages } from "./chat-report.js";
+import { ChatReports, chatNumbers, chatParts, checkReport, findQuote, realMessages, numbersFrom, mostlyLatin } from "./chat-report.js";
 
 const chat = (): PeopleChat => {
   const messages = [];
@@ -125,4 +125,17 @@ test("a Brandon report is brought in without its chat, and the chat added later 
   assert.equal(after.hasChat, true);
   assert.equal(after.report?.headline, "now with the chat");
   assert.equal(after.numbers.messages, 60);
+});
+
+test("numbersFrom: measured only when every number was counted", () => {
+  const n = chatNumbers({ source: "whatsapp", title: "t", messages: [{ sender: "A", text: "hi", at: "2026-10-01T08:00:00" }, { sender: "B", text: "yo", at: "2026-10-01T08:05:00" }] });
+  assert.equal(numbersFrom("A sent 1 message, on 2026-10-01 at 08:00.", n), true);
+  assert.equal(numbersFrom(`They sent ${n.messages} messages.`, n), true);
+  assert.equal(numbersFrom("They sent 977 messages.", n), false);
+  assert.equal(numbersFrom("No numbers here.", n), false);
+});
+
+test("mostlyLatin: English words when Hebrew was asked", () => {
+  assert.equal(mostlyLatin({ headline: "They speak the same language", read: "You and Noah", findings: [] }), true);
+  assert.equal(mostlyLatin({ headline: "אתם מדברים באותה שפה", read: "את ונועה, עם קצת emoji", findings: [] }), false);
 });

@@ -242,6 +242,8 @@ export function reportPrompt(o: { kind: ChatKind; voice: ReportVoice; lang: "he"
     'Answer with JSON only: {"headline":"one striking sentence","read":"3-5 sentences","kinder":"a kinder second reading of the same pattern, 1-2 sentences","scores":[{"name":"Warmth","of5":4,"value":"a short phrase"},{"name":"Repair after tension","of5":3,"value":"…"},{"name":"Directness","of5":4,"value":"…"},{"name":"Playfulness","of5":5,"value":"…"},{"name":"Private language","of5":4,"value":"…"}],"findings":[{"title":"short","body":"2-3 sentences","measured":false,"quotes":[{"who":"exact name","text":"exact line from the chat"}]}],"turningPoint":{"when":"YYYY-MM-DD or a period","what":"1-2 sentences","quotes":[{"who":"…","text":"…"}]},"roles":[{"name":"exact name","role":"their part in the chat, one line"}],"next":"what to say or do next, 1-3 sentences","moves":{"keep":["…"],"stop":["…"],"say":["a sentence to try saying"]},"askMore":["3 questions worth asking next about this chat, short"],"wouldHelp":[{"ask":"what would help you read it better, from what is missing or unclear (a date where things changed, a gap, an earlier period, the other side of a story)","kind":"text or export"}]}',
     "askMore: 3 short questions in the reader's voice (\"What changed after March?\"). wouldHelp: at most 3, each about something specific you saw (a date, a silence, a person); kind export when another chat export would help, else text.",
     "Give 4 to 6 findings. Mark a finding measured:true only when it rests on the given numbers. Every quote must be copied exactly from the chat lines or notes; a quote that is not in the chat is removed.",
+    "Names: write every person's name exactly as it appears in the chat, in its own script (never translated or spelled in another alphabet).",
+    `Every text value in the JSON is in ${o.lang === "he" ? "Hebrew (only the quotes stay as written)" : "English (only the quotes and names stay as written)"}.`,
   ].join("\n");
 }
 
@@ -261,6 +263,32 @@ export function jsonOf(text: string): Record<string, unknown> | undefined {
 const str = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/[*_`#]/g, "").trim().slice(0, n) : "");
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const list = (v: unknown) => arr(v).map((x) => str(x, 300)).filter(Boolean).slice(0, 4);
+
+/**
+ * Whether every number in a finding (dates and times aside) is one of the counted numbers, so "measured" is never
+ * shown on a number the model worked out or made up.
+ *
+ * @param text - The finding's text.
+ * @param n - The counted numbers.
+ */
+export function numbersFrom(text: string, n: ChatNumbers): boolean {
+  const known = new Set((JSON.stringify(n).match(/\d+(?:\.\d+)?/g) ?? []).flatMap((x) => [x, String(Math.round(Number(x)))]));
+  const plain = text.replace(/\d{4}-\d{2}-\d{2}|\d{1,2}[:/.]\d{2}(?:[/.]\d{2,4})?/g, " ");
+  const found = plain.match(/\d+(?:\.\d+)?/g) ?? [];
+  return found.length > 0 && found.every((x) => known.has(x) || Number(x) <= 1);
+}
+
+/**
+ * Whether a report's own words (not its quotes) are mostly Latin letters, i.e. written in English when Hebrew was asked.
+ *
+ * @param raw - The model's JSON.
+ */
+export function mostlyLatin(raw: Record<string, unknown>): boolean {
+  const own = [raw.headline, raw.read, ...arr(raw.findings).map((f) => `${(f as { title?: unknown }).title ?? ""} ${(f as { body?: unknown }).body ?? ""}`)].filter((x) => typeof x === "string").join(" ");
+  const latin = (own.match(/[A-Za-z]/g) ?? []).length;
+  const hebrew = (own.match(/[\u0590-\u05FF]/g) ?? []).length;
+  return latin > hebrew * 2;
+}
 
 /**
  * The model's report, checked: quotes looked up in the chat (missing ones dropped), the measured scores added from the
@@ -288,7 +316,8 @@ export function checkReport(raw: Record<string, unknown> | undefined, msgs: Pers
     }).filter((x) => x.name && (x.value || ("of5" in x && x.of5)))],
     findings: arr(raw?.findings).slice(0, 6).map((f) => {
       const o = f as Record<string, unknown>;
-      return { title: str(o.title, 120), body: str(o.body, 800), measured: o.measured === true, quotes: quotes(o.quotes) };
+      const body = str(o.body, 800);
+      return { title: str(o.title, 120), body, measured: o.measured === true && numbersFrom(body, n), quotes: quotes(o.quotes) };
     }).filter((f) => f.title && f.body),
     ...(t && str(t.what, 400) ? { turningPoint: { when: str(t.when, 40), what: str(t.what, 400), quotes: quotes(t.quotes) } } : {}),
     roles: arr(raw?.roles).slice(0, 12).map((x) => ({ name: str((x as { name?: unknown }).name, 80), role: str((x as { role?: unknown }).role, 200) })).filter((x) => x.name && x.role),
@@ -463,7 +492,9 @@ export class ChatReports {
         ...(r.imported ? [`An earlier report on this chat by another app (a second opinion, not proof):\n${r.imported.slice(0, 6000)}`] : []),
       ];
       const user = `Numbers (exact):\n${JSON.stringify(r.numbers)}\n\nNotes from reading the chat:\n${notes.join("\n\n").slice(0, 40_000)}${extra.length ? `\n\n${extra.join("\n\n")}` : ""}`;
-      const raw = jsonOf(await ask(reportPrompt(r), user, signal));
+      let raw = jsonOf(await ask(reportPrompt(r), user, signal));
+      // Some local models answer in English whatever they are told: once more, with the language first.
+      if (raw && r.lang === "he" && mostlyLatin(raw) && !signal.aborted) raw = jsonOf(await ask(`Answer in Hebrew only (עברית).\n${reportPrompt(r)}`, user, signal)) ?? raw;
       if (!raw) throw new Error("The model did not write the report in the expected form; try again or pick another model.");
       if (r.report) (r.history ??= []).push(r.report);
       r.report = checkReport(raw, msgs, r.numbers, r.lang);
