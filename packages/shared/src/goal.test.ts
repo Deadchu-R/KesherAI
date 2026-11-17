@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { goalRemindNow, goalToday, recentMistakes, weekRecap, type StudyCourseData, type StudyGoal } from "./study.js";
+import { goalRemindNow, goalToday, recentMistakes, studyBadges, weekRecap, type StudyCourseData, type StudyGoal } from "./study.js";
 
 const at = (day: number, hour = 12) => new Date(2026, 10, day, hour).getTime();
 const course = (focus: Array<[number, number]>, reviews: number[]) => ({ focus: focus.map(([t, minutes]) => ({ t, minutes })), reviews: reviews.map((t) => ({ t, cardId: "c", rating: 3 })) }) as unknown as StudyCourseData;
@@ -69,5 +69,13 @@ describe("week recap", () => {
     assert.equal(w.counts.cards, 2);
     assert.equal(w.counts.lectures, 1);
     assert.equal(w.days, 4);
+  });
+});
+
+describe("badges", () => {
+  it("come from her own data", () => {
+    const d = { course: { name: "x" }, lectures: [{ id: "l", summary: "s" }], cards: [], reviews: Array.from({ length: 100 }, (_, i) => ({ cardId: "c", t: i, rating: 3 })), quizzes: [], focus: [] } as unknown as StudyCourseData;
+    const ids = studyBadges([d], [], 8).map((b) => b.id);
+    assert.deepEqual(ids, ["first-lecture", "first-summary", "cards-100", "streak-7"]);
   });
 });

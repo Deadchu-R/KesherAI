@@ -3245,3 +3245,5 @@ html.handheld .palette-list button { min-height: 44px; }
 @keyframes confetti-fall { to { transform: translate(var(--x), 105vh) rotate(var(--r)); opacity: 0.6; } }
 .study-week > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .study-week p { margin: 6px 0 0; }
+.study-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.study-badges span { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-strong); font-size: 13px; }

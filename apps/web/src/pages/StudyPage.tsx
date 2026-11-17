@@ -330,15 +330,30 @@ function NextStep() {
 
 /** The last 7 days in one card (students part 25 #6): what she did, days studied, topics that rose or dropped. */
 function WeekCard() {
-  type Week = { counts: Record<GoalKind, number>; days: number; streak: number; rose: Array<{ course: string; title: string; change: number }>; dropped: Array<{ course: string; title: string; change: number }> };
+  type Week = { counts: Record<GoalKind, number>; days: number; streak: number; badges: Array<{ id: string; icon: string; he: string; en: string }>; rose: Array<{ course: string; title: string; change: number }>; dropped: Array<{ course: string; title: string; change: number }> };
   const [w, setW] = useState<Week | null>(null);
-  useEffect(() => void api<Week>("/api/study/week").then(setW, () => undefined), []);
-  if (!w || !w.days) return null;
+  useEffect(() => void api<Week>("/api/study/week").then((r) => {
+    setW(r);
+    // A badge not seen on this device before: a small celebration and its name.
+    try {
+      const seen = new Set((localStorage.getItem("kesher-badges-seen") ?? "").split(",").filter(Boolean));
+      const fresh = r.badges.filter((b) => !seen.has(b.id));
+      localStorage.setItem("kesher-badges-seen", r.badges.map((b) => b.id).join(","));
+      if (fresh.length && seen.size) {
+        celebrate();
+        toast(`${fresh[0]!.icon} ${L(`תג חדש: ${fresh[0]!.he}`, `New badge: ${fresh[0]!.en}`)}`);
+      }
+    } catch {
+      // private mode
+    }
+  }, () => undefined), []);
+  if (!w || (!w.days && !w.badges.length)) return null;
   const parts = GOAL_KINDS.filter((k) => w.counts[k] > 0).map((k) => `${w.counts[k]} ${L(GOAL_NAMES[k][0], GOAL_NAMES[k][1].toLowerCase())}`);
   return (
     <details className="card study-week">
       <summary><b>📊 {L("השבוע שלך", "Your week")}</b> <span className="muted small">{L(`למדת ב-${w.days} מתוך 7 ימים`, `You studied on ${w.days} of 7 days`)}{w.streak ? ` · 🔥 ${w.streak}` : ""}</span></summary>
-      <p dir="auto">{parts.join(" · ")}</p>
+      {parts.length > 0 && <p dir="auto">{parts.join(" · ")}</p>}
+      {w.badges.length > 0 && <p className="study-badges" aria-label={L("תגים", "Badges")}>{w.badges.map((b) => <span key={b.id} title={L(b.he, b.en)}>{b.icon} <small>{L(b.he, b.en)}</small></span>)}</p>}
       {w.rose.length > 0 && <p className="small" dir="auto">📈 {L("עלו", "Rose")}: {w.rose.map((m) => `${m.title} (+${m.change})`).join(", ")}</p>}
       {w.dropped.length > 0 && <p className="small" dir="auto">📉 {L("ירדו, שווה חזרה", "Dropped, worth a review")}: {w.dropped.map((m) => `${m.title} (${m.change})`).join(", ")}</p>}
       <p className="muted small">{w.days >= 5 ? L("שבוע חזק. 💪", "A strong week. 💪") : w.days >= 3 ? L("שבוע טוב. עוד יום אחד וזה כבר הרגל.", "A good week. One more day and it's a habit.") : L("כל יום שלומדים בו נחשב. גם 10 דקות.", "Every day you study counts. Even 10 minutes.")}</p>

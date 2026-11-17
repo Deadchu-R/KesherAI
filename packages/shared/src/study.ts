@@ -1221,6 +1221,40 @@ export function weekRecap(courses: StudyCourseData[], activity: StudyActivity[],
   };
 }
 
+/** A milestone she reached (students part 25 #9). */
+export interface StudyBadge { id: string; icon: string; he: string; en: string }
+
+/**
+ * Her milestones, from her own data: a first lecture, summary and quiz, 100 and 1,000 cards reviewed, 7- and 30-day
+ * streaks, 10 hours of focus, and a lecture or a whole course at mastery 80+.
+ *
+ * @param courses - Her courses.
+ * @param activity - What she did.
+ * @param streakDays - Her study streak now.
+ * @param now - Now.
+ */
+export function studyBadges(courses: StudyCourseData[], activity: StudyActivity[], streakDays: number, now = Date.now()): StudyBadge[] {
+  const out: StudyBadge[] = [];
+  const add = (ok: boolean, id: string, icon: string, he: string, en: string) => ok && out.push({ id, icon, he, en });
+  const reviews = courses.reduce((n, d) => n + d.reviews.length, 0);
+  const minutes = courses.reduce((n, d) => n + (d.focus ?? []).reduce((m, f) => m + f.minutes, 0), 0);
+  const quizzes = courses.reduce((n, d) => n + d.quizzes.filter((z) => z.answers || z.marks).length, 0);
+  const crowns = courses.map((d) => ({ d, m: topicMastery(d.cards, d.reviews, d.quizzes, now) }));
+  add(courses.some((d) => d.lectures.length > 0), "first-lecture", "🌱", "הרצאה ראשונה", "First lecture");
+  add(courses.some((d) => d.lectures.some((l) => l.summary)), "first-summary", "📝", "סיכום ראשון", "First summary");
+  add(quizzes > 0, "first-quiz", "❓", "בוחן ראשון", "First quiz");
+  add(quizzes >= 10, "ten-quizzes", "🧠", "10 בחנים", "10 quizzes");
+  add(reviews >= 100, "cards-100", "🃏", "100 כרטיסיות", "100 cards");
+  add(reviews >= 1000, "cards-1000", "🏅", "1,000 כרטיסיות", "1,000 cards");
+  add(minutes >= 600, "focus-10h", "⏳", "10 שעות ריכוז", "10 hours of focus");
+  add(streakDays >= 7, "streak-7", "🔥", "שבוע ברצף", "A week in a row");
+  add(streakDays >= 30, "streak-30", "🌟", "30 ימים ברצף", "30 days in a row");
+  add(crowns.some((c) => c.m.some((x) => x.mastery >= 80)), "crown", "👑", "כתר ראשון", "First crown");
+  add(crowns.some((c) => c.d.lectures.length >= 3 && c.d.lectures.every((l) => c.m.some((x) => x.lectureId === l.id && x.mastery >= 80))), "course-mastered", "🏆", "קורס שלם בשליטה", "A whole course mastered");
+  add(activity.some((a) => a.kind === "videos"), "first-video", "🎞", "סרטון ראשון עד הסוף", "First video to the end");
+  return out;
+}
+
 /** What a daily goal can count (Roee, 2026-11-17: minutes, lectures, videos, scripts…). */
 export type GoalKind = "minutes" | "cards" | "lectures" | "videos" | "quizzes" | "summaries";
 export const GOAL_KINDS: GoalKind[] = ["minutes", "cards", "lectures", "videos", "quizzes", "summaries"];
