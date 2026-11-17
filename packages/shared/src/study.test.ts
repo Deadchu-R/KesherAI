@@ -424,3 +424,10 @@ test("a teach-back check is parsed and trimmed", async () => {
   assert.equal(r?.missing.length, 1);
   assert.equal(parseTeachBack({ score: 50 }), undefined);
 });
+
+test("a video's chapters are checked: in order, inside the video, questions only when whole", async () => {
+  const { parseChapters, lastStamp } = await import("./study.js");
+  assert.equal(lastStamp("[0:01] a\n[52:30] b\n[1:02:03] c"), 3723);
+  const c = parseChapters({ chapters: [{ start: 5, title: "מבוא", summary: "s", question: { q: "?", options: ["a", "b", "c"], answer: 1, explain: "e" } }, { start: 3, title: "back in time" }, { start: 400, title: "חוסמי בטא", question: { q: "?", options: ["a"], answer: 0 } }, { start: 9999, title: "after the end" }] }, 1000);
+  assert.deepEqual(c.map((x) => [x.start, x.end, x.title, !!x.question]), [[0, 400, "מבוא", true], [400, 1000, "חוסמי בטא", false]]);
+});

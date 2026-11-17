@@ -52,6 +52,10 @@ export interface StudyLecture {
   audio?: string;
   /** The YouTube video the lecture came from (its id): the text's minute marks open it at that minute. */
   youtube?: string;
+  /** A video of the lecture kept on this computer (an MP4 she added, or one brought from Panopto/Kaltura). */
+  videoFile?: { mime: string; bytes: number; from?: string };
+  /** The video's chapters, each with a short summary and a question asked at its end (design VideoLecture). */
+  chapters?: VideoChapter[];
   /** A video overview: narrated slides made from the lecture (design VideoOverview), once made. */
   video?: VideoSlide[];
   /** Her own notes beside the summary (what the lecturer stressed, what to ask, what she did not get). */
@@ -1512,6 +1516,45 @@ export function parseTeachBack(raw: unknown): TeachBackResult | undefined {
   const score = Math.max(0, Math.min(100, Math.round(Number(o.score) || 0)));
   if (!covered.length && !missing.length && !wrong.length) return undefined;
   return { score, covered, missing, wrong, tip: t(o.tip, 400) };
+}
+
+/** A chapter of a video lecture: where it starts and ends (seconds), what it says, and a question at its end. */
+export interface VideoChapter { start: number; end: number; title: string; summary: string; question?: { q: string; options: string[]; answer: number; explain: string } }
+
+export const CHAPTERS_PROMPT =
+  "Split this video lecture into 3 to 10 chapters by its own topics, using the [m:ss] times in the transcript. For each chapter: the second it starts, a short title, a 1–2 sentence summary, and one multiple-choice question about its most important point (3 or 4 options, the index of the right one from 0, and a one-sentence explanation), asked when the chapter ends. Use only what is said in the video; write in the transcript's language. Answer with JSON only: {\"chapters\":[{\"start\":0,\"title\":\"…\",\"summary\":\"…\",\"question\":{\"q\":\"…\",\"options\":[\"…\",\"…\",\"…\"],\"answer\":1,\"explain\":\"…\"}}]}";
+
+/** The last [m:ss] / [h:mm:ss] mark in a transcript, in seconds (the video's length, near enough). */
+export function lastStamp(text: string): number {
+  let last = 0;
+  for (const m of text.matchAll(/^\[(?:(\d+):)?(\d+):(\d\d)\]/gm)) last = Math.max(last, Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]));
+  return last;
+}
+
+/**
+ * A video's chapters from the model's answer, checked: starts in order inside the video, the first at 0, each ending
+ * where the next starts (the last at the video's end); a question kept only with 3–4 options and a valid answer.
+ *
+ * @param raw - The model's JSON.
+ * @param length - The video's length in seconds.
+ */
+export function parseChapters(raw: unknown, length: number): VideoChapter[] {
+  const t = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/[#*_`>|]/g, "").replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const list = (Array.isArray((raw as { chapters?: unknown })?.chapters) ? (raw as { chapters: unknown[] }).chapters : []).slice(0, 12);
+  const out: VideoChapter[] = [];
+  for (const x of list) {
+    const o = x as { start?: unknown; title?: unknown; summary?: unknown; question?: { q?: unknown; options?: unknown; answer?: unknown; explain?: unknown } };
+    const start = Math.max(0, Math.round(Number(o.start) || 0));
+    const title = t(o.title, 120);
+    if (!title || (out.length && start <= out.at(-1)!.start) || (length > 0 && start >= length)) continue;
+    const opts = Array.isArray(o.question?.options) ? o.question!.options.map((v) => t(v, 200)).filter(Boolean).slice(0, 4) : [];
+    const answer = Math.round(Number(o.question?.answer));
+    const q = t(o.question?.q, 300);
+    out.push({ start, end: 0, title, summary: t(o.summary, 500), ...(q && opts.length >= 3 && answer >= 0 && answer < opts.length ? { question: { q, options: opts, answer, explain: t(o.question?.explain, 400) } } : {}) });
+  }
+  if (out.length) out[0]!.start = 0;
+  out.forEach((c, i) => (c.end = out[i + 1]?.start ?? Math.max(length, c.start + 1)));
+  return out;
 }
 
 /** One slide of a video overview: what it shows and what the narrator says over it. */

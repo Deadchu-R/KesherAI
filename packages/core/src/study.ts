@@ -4,11 +4,11 @@
  * One JSON file per course, on this computer.
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -35,6 +35,8 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(l.audio ? { audio: str(l.audio, 20_000) } : {}),
     ...(Array.isArray(l.video) ? { video: parseVideoSlides({ slides: l.video }) } : {}),
     ...(typeof l.youtube === "string" && /^[\w-]{11}$/.test(l.youtube) ? { youtube: l.youtube } : {}),
+    ...(l.videoFile && typeof l.videoFile === "object" ? { videoFile: { mime: str(l.videoFile.mime, 40) || "video/mp4", bytes: Number(l.videoFile.bytes) || 0, ...(l.videoFile.from ? { from: str(l.videoFile.from, 200) } : {}) } } : {}),
+    ...(Array.isArray(l.chapters) ? { chapters: parseChapters({ chapters: l.chapters }, Number(l.chapters.at(-1)?.end) || 0) } : {}),
     ...(l.notes ? { notes: str(l.notes, 50_000), notesT: Number(l.notesT) || Date.now() } : {}),
   }));
   const cards = arr<StudyCard>(d.cards, 20_000).filter((k) => okId(k?.id)).map((k) => ({
@@ -478,6 +480,7 @@ export class Study {
     d.lectures = d.lectures.filter((l) => l.id !== lectureId);
     d.removed = [...(d.removed ?? []), lectureId].slice(-5000);
     await rm(join(this.recDir(id), `${lectureId.replace(/[^\w-]/g, "")}.audio`), { force: true }).catch(() => undefined);
+    await rm(this.videoPath(id, lectureId), { force: true }).catch(() => undefined);
     for (const c of d.cards) if (c.lectureId === lectureId) delete c.lectureId;
     await this.save(d);
   }
@@ -876,6 +879,45 @@ export class Study {
     const r = parseTeachBack(jsonIn(await this.ask(`${TEACH_BACK_PROMPT}${he ? " Write it all in Hebrew." : ""}`, `Lecture: ${l.title}\n\n${material}\n\nTopic: ${topic.slice(0, 200) || l.title}\n\nHer explanation:\n${explanation.slice(0, 6000)}`, signal, d.course)));
     if (!r) throw Object.assign(new Error("The model did not check it in the expected form; try again or pick another model."), { statusCode: 502 });
     return r;
+  }
+
+  /** Where a lecture's kept video is (her MP4, or one brought from Panopto/Kaltura). */
+  videoPath(id: string, lectureId: string): string {
+    return join(this.recDir(id), `${lectureId.replace(/[^\w-]/g, "")}.video`);
+  }
+
+  /** Keeps a video file with a lecture (moved into the course's recordings folder). */
+  async keepVideo(id: string, lectureId: string, file: string, mime: string, from?: string): Promise<StudyLecture> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    await mkdir(this.recDir(id), { recursive: true });
+    const dest = this.videoPath(id, lectureId);
+    await rename(file, dest).catch(async () => {
+      await copyFile(file, dest);
+      await rm(file, { force: true });
+    });
+    l.videoFile = { mime: /^video\/(mp4|webm|quicktime|x-matroska)$/.test(mime) ? mime : "video/mp4", bytes: (await stat(dest)).size, ...(from ? { from: from.slice(0, 200) } : {}) };
+    await this.save(d);
+    return l;
+  }
+
+  /**
+   * A video lecture's chapters, each with a summary and a question at its end (design VideoLecture), from the
+   * transcript's minute marks; kept with the lecture.
+   */
+  async makeChapters(id: string, lectureId: string, signal?: AbortSignal): Promise<StudyLecture> {
+    const d = await this.get(id);
+    const l = this.lecture(d, lectureId);
+    const length = lastStamp(l.text);
+    if (!length) throw Object.assign(new Error("This lecture's text has no minute marks (it did not come from a video)."), { statusCode: 400 });
+    const he = hebrewLecture(l.text);
+    const ask = async (extra: string) => parseChapters(jsonIn(await this.ask(`${CHAPTERS_PROMPT}${extra}`, `Video: ${l.title}\nLength: ${Math.round(length / 60)} minutes\n\nTranscript:\n${l.text.slice(0, 60_000)}`, signal, d.course)), length + 30);
+    let chapters = await ask(he ? " Write it all in Hebrew." : "");
+    if (he && latinMostly(chapters.map((c) => `${c.title} ${c.summary}`).join(" "))) chapters = await ask(" Answer in Hebrew only (עברית).");
+    if (chapters.length < 2) throw Object.assign(new Error("The model did not split the video in the expected form; try again or pick another model."), { statusCode: 502 });
+    l.chapters = chapters;
+    await this.save(d);
+    return l;
   }
 
   /** Adds a card by hand. */

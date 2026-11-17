@@ -3,14 +3,15 @@
  * recall per study format. The phone reaches it through remote like every other page.
  */
 import type { FastifyInstance } from "fastify";
-import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createReadStream, createWriteStream, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cardsToTsv, examPlan, formatStats, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
-import { cleanYoutube, ensureYtDlp, youtubeId, youtubeLecture } from "../youtube-lecture.js";
-import { readMedia } from "../speech-tools.js";
+import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
+import { readMedia, toWav, transcribeWith } from "../speech-tools.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import WebSocket from "ws";
 
@@ -95,6 +96,77 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<L & { Body: { text?: string; kind?: string } }>("/api/study/courses/:id/lectures/:lid/explain", async (req) => st.explainPassage(req.params.id, req.params.lid, String(req.body?.text ?? "").slice(0, 3000), req.body?.kind === "simple" ? "simple" : req.body?.kind === "example" ? "example" : "explain"));
   /** A lecture's spoken review (audio overview), written by the chat model and kept. */
   app.post<L>("/api/study/courses/:id/lectures/:lid/audio", async (req) => st.audioOverview(req.params.id, req.params.lid));
+  // ---- Video lectures (design VideoLecture): her MP4, or a Panopto/Kaltura/Vimeo video, kept and split into chapters.
+  const speechDeps = () => ({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg: () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }) });
+  /** A video's speech as text with a [m:ss] mark per line (whisper on this computer, or the chosen cloud service). */
+  const stampedTranscript = async (file: string) => {
+    const d = speechDeps();
+    const wav = await toWav(file, d.ffmpeg);
+    return (await transcribeWith(d, wav, ".wav", s.config.speech?.language ?? "auto", true)).text;
+  };
+  const sendRange = (req: { headers: Record<string, unknown> }, reply: import("fastify").FastifyReply, path: string, size: number, mime: string) => {
+    reply.header("accept-ranges", "bytes").type(mime);
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (!m || (!m[1] && !m[2])) return reply.header("content-length", size).send(createReadStream(path));
+    const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start >= size || start > end) return reply.code(416).header("content-range", `bytes */${size}`).send();
+    return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).send(createReadStream(path, { start, end }));
+  };
+  // Her video arrives as a stream straight to disk (lectures run to gigabytes), never held in memory.
+  app.addContentTypeParser("application/x-kesher-video", (_req, payload, done) => done(null, payload));
+  app.post<C>("/api/study/courses/:id/lectures/video-upload", { bodyLimit: 6 * 1024 ** 3 }, async (req, reply) => {
+    const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "video.mp4")).replace(/[\\/:*?"<>|]+/g, "").slice(0, 120) || "video.mp4";
+    const mime = String(req.headers["x-video-type"] ?? "video/mp4").slice(0, 40);
+    const dir = await mkdtemp(join(tmpdir(), "kesher-up-"));
+    const file = join(dir, "video");
+    try {
+      let bytes = 0;
+      const out = createWriteStream(file);
+      for await (const chunk of req.body as AsyncIterable<Buffer>) {
+        bytes += chunk.length;
+        if (bytes > 6 * 1024 ** 3) throw Object.assign(new Error("The video is over 6 GB."), { statusCode: 413 });
+        if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
+      }
+      await new Promise<void>((ok, bad) => out.end((e?: Error | null) => (e ? bad(e) : ok())));
+      const text = await stampedTranscript(file);
+      if (!text.trim()) return reply.code(422).send({ error: "No speech was found in this video." });
+      const l = await st.addLecture(req.params.id, { title: name.replace(/\.[^.]+$/, ""), text });
+      return await st.keepVideo(req.params.id, l.id, file, mime);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  /** A lecture video from Panopto, Kaltura, Vimeo, Zoom… with her sign-in in KesherAI's browser (read through yt-dlp). */
+  app.post<C & { Body: { url?: string } }>("/api/study/courses/:id/lectures/web-video", async (req, reply) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!/^https:\/\/[\w.-]+(:\d+)?\/\S*$/.test(url)) return reply.code(400).send({ error: "A video link (https)." });
+    if (youtubeId(url)) return reply.code(400).send({ error: "That is a YouTube link: use \"Lecture from YouTube\"." });
+    const ytdlp = await ensureYtDlp({ dir: s.paths.engines, downloads: s.downloads });
+    const cdir = await mkdtemp(join(tmpdir(), "kesher-ck-"));
+    const cookies = join(cdir, "cookies.txt");
+    let got: Awaited<ReturnType<typeof webLectureVideo>> | undefined;
+    try {
+      if (s.browser.status().pane) await writeFile(cookies, await s.browser.call<string>("site-cookies", { url }), { mode: 0o600 });
+      got = await webLectureVideo(ytdlp, url, existsSync(cookies) ? cookies : undefined);
+      if (!got.video) return reply.code(422).send({ error: "No video was found at that link (are you signed in to it in KesherAI's browser?)." });
+      const text = got.text ?? (await stampedTranscript(got.video));
+      if (!text.trim()) return reply.code(422).send({ error: "No captions or speech were found in this video." });
+      const l = await st.addLecture(req.params.id, { title: got.title, text });
+      return await st.keepVideo(req.params.id, l.id, got.video, "video/mp4", new URL(url).hostname);
+    } finally {
+      await rm(cdir, { recursive: true, force: true });
+      if (got) await cleanYoutube(got.tmp);
+    }
+  });
+  app.get<L>("/api/study/courses/:id/lectures/:lid/video-file", async (req, reply) => {
+    const path = st.videoPath(req.params.id, req.params.lid);
+    const size = await stat(path).then((x) => x.size, () => -1);
+    if (size < 0) return reply.code(404).send({ error: "This lecture has no kept video." });
+    const l = (await st.get(req.params.id)).lectures.find((x) => x.id === req.params.lid);
+    return sendRange(req, reply, path, size, l?.videoFile?.mime ?? "video/mp4");
+  });
+  app.post<L>("/api/study/courses/:id/lectures/:lid/chapters", async (req) => st.makeChapters(req.params.id, req.params.lid));
   /** A YouTube lecture by its link: its captions (or its sound, through whisper) become a lecture with minute marks. */
   app.post<C & { Body: { url?: string } }>("/api/study/courses/:id/lectures/youtube", async (req, reply) => {
     const id = youtubeId(String(req.body?.url ?? ""));

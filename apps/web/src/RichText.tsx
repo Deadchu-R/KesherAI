@@ -2,6 +2,7 @@ import type React from "react";
 import { useState } from "react";
 import { CodeView } from "./ide/CodeView";
 import { getLocale, he$ } from "./i18n";
+import { withToken } from "./api";
 import { ChartView } from "./ChartView";
 import { MathView, MermaidView } from "./MathMermaid";
 import { artifactKey, isArtifact, openArtifact } from "./ArtifactPanel";
@@ -235,7 +236,9 @@ function AnswerImage({ src, alt }: { src: string; alt: string }) {
     return <>{alt}</>;
   }
   if (!show) return <button type="button" className="md-img-ask" onClick={() => setShow(true)}>🖼️ {L(`תמונה מ-${host}: הצג`, `A picture from ${host}: show`)}{alt ? ` · ${alt}` : ""}</button>;
-  return <a href={src} target="_blank" rel="noreferrer"><img className="md-img" src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" /></a>;
+  // The app loads pictures only from itself: another site's picture comes through KesherAI (on this tap only).
+  const shown = own ? src : withToken(`/api/web/image?url=${encodeURIComponent(src)}`);
+  return <a href={src} target="_blank" rel="noreferrer"><img className="md-img" src={shown} alt={alt} loading="lazy" referrerPolicy="no-referrer" /></a>;
 }
 
 /** Code without the indentation every line shares (a block written inside a list item). */

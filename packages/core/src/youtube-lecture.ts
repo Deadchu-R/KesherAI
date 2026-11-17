@@ -127,3 +127,22 @@ export async function youtubeLecture(ytdlp: string, id: string, prefer: string[]
 export async function cleanYoutube(tmp: string): Promise<void> {
   await rm(tmp, { recursive: true, force: true });
 }
+
+/**
+ * A lecture video from a site yt-dlp knows (Panopto, Kaltura, Vimeo, Zoom recordings…) with her sign-in cookies:
+ * the video itself (at most 720p, MP4) kept for watching, and its captions when the site has them.
+ *
+ * @param ytdlp - The yt-dlp program.
+ * @param url - The video's page.
+ * @param cookies - A Netscape cookies file with her sign-in for that site (or undefined).
+ */
+export async function webLectureVideo(ytdlp: string, url: string, cookies?: string): Promise<{ title: string; text?: string; video?: string; tmp: string }> {
+  const tmp = await mkdtemp(join(tmpdir(), "kesher-vid-"));
+  const r = await run(ytdlp, ["--no-playlist", ...(cookies ? ["--cookies", cookies] : []), "-f", "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/b[height<=720]/b", "--merge-output-format", "mp4", "--write-subs", "--write-auto-subs", "--sub-langs", "he,iw,en.*", "--sub-format", "vtt", "--print", "after_move:title", "-o", join(tmp, "video.%(ext)s"), url], { timeout: 3_600_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+  const title = r.stdout.split("\n").map((l) => l.trim()).filter(Boolean).pop()?.slice(0, 160) || "Video";
+  const files = await readdir(tmp);
+  const video = files.find((f) => /^video\.(mp4|webm|mkv|mov)$/.test(f));
+  const vtt = files.filter((f) => f.endsWith(".vtt")).sort((a, b) => Number(/\.(he|iw)/.test(b)) - Number(/\.(he|iw)/.test(a)))[0];
+  const text = vtt ? vttText(await readFile(join(tmp, vtt), "utf8")) : undefined;
+  return { title, ...(text?.trim() ? { text } : {}), ...(video ? { video: join(tmp, video) } : {}), tmp };
+}

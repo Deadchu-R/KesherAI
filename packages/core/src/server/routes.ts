@@ -62,6 +62,7 @@ import { gameRoutes } from "../routes/game.js";
 import { timerRoutes } from "../routes/timers.js";
 import { studyRoutes } from "../routes/study.js";
 import { moodleRoutes } from "../routes/moodle.js";
+import { webImageRoutes } from "../routes/web-image.js";
 import { studyPlanRoutes } from "../routes/study-plans.js";
 import { canvasRoutes } from "../routes/canvas.js";
 import { shareRoutes } from "../routes/shares.js";
@@ -122,6 +123,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await timerRoutes(app, chatTimers);
   await studyRoutes(app, services);
   await moodleRoutes(app, services);
+  await webImageRoutes(app);
   await studyPlanRoutes(app, services);
   await canvasRoutes(app, canvases, (convId) => library.summary(convId)?.title);
   // Share links: a chat as a read-only page at /s/<token> (never an incognito chat).

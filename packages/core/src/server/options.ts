@@ -83,7 +83,8 @@ export const WEB_CSP = [
   "media-src 'self' data: blob:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  "frame-src 'self' blob: data:",
+  // A YouTube lecture plays in YouTube's own privacy-enhanced player (no cookies until it plays), nothing else.
+  "frame-src 'self' blob: data: https://www.youtube-nocookie.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

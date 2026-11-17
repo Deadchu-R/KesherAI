@@ -11,6 +11,7 @@ import { AvatarCamera } from "./AvatarCamera";
 import { MoodleCard } from "../MoodleCard";
 import { StudyVideo } from "../StudyVideo";
 import { StudyTeachBack } from "../StudyTeachBack";
+import { StudyVideoLecture } from "../StudyVideoLecture";
 import { StudyPlans } from "../StudyPlans";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -738,9 +739,23 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
     if (r) setText((t) => (t.trim() ? `${t}\n\n${r.text}` : r.text));
   };
   const [yt, setYt] = useState("");
+  const videoFile = useRef<HTMLInputElement>(null);
+  const fromVideoFile = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(true);
+    toast(L("מעלה ומתמלל את הסרטון… (הרצאה ארוכה לוקחת כמה דקות)", "Uploading and transcribing the video… (a long lecture takes a few minutes)"));
+    const res = await fetch(withToken(`/api/study/courses/${courseId}/lectures/video-upload`), { method: "POST", headers: { "content-type": "application/x-kesher-video", "x-file-name": encodeURIComponent(f.name), "x-video-type": f.type || "video/mp4" }, body: f }).catch(() => undefined);
+    setBusy(false);
+    const l = res?.ok ? ((await res.json()) as StudyLecture) : undefined;
+    if (!l) return toast(res ? ((await res.json().catch(() => ({}))) as { error?: string }).error ?? L("ההעלאה נכשלה.", "The upload failed.") : L("ההעלאה נכשלה.", "The upload failed."));
+    onChange();
+    go(`#/study/${courseId}/l/${l.id}`);
+  };
   const fromYoutube = async () => {
     setBusy(true);
-    const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures/youtube`, { method: "POST", body: { url: yt } }));
+    // YouTube by its captions; any other video site (Panopto, Kaltura, Vimeo…) through her sign-in in KesherAI's browser.
+    const isYt = /(^|\.)(youtube\.com|youtu\.be)\//.test(yt.replace(/^https?:\/\//, ""));
+    const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures/${isYt ? "youtube" : "web-video"}`, { method: "POST", body: { url: yt } }));
     setBusy(false);
     if (!l) return;
     setYt("");
@@ -786,10 +801,12 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
           </div>
           <form className="row study-youtube" onSubmit={(e) => { e.preventDefault(); void fromYoutube(); }}>
             <span aria-hidden className="yt-mark">▶</span>
-            <input className="grow" dir="ltr" value={yt} onChange={(e) => setYt(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" aria-label={L("קישור להרצאה ב-YouTube", "A YouTube lecture link")} />
-            <button type="submit" disabled={busy || !yt.trim()}>{busy && yt ? L("מביא את הכתוביות…", "Getting the captions…") : L("הרצאה מ-YouTube", "Lecture from YouTube")}</button>
+            <input className="grow" dir="ltr" value={yt} onChange={(e) => setYt(e.target.value)} placeholder={L("קישור: YouTube, Panopto, Kaltura, Vimeo…", "A link: YouTube, Panopto, Kaltura, Vimeo…")} aria-label={L("קישור להרצאה בווידאו", "A video lecture link")} />
+            <button type="submit" disabled={busy || !yt.trim()}>{busy && yt ? L("מביא את ההרצאה…", "Getting the lecture…") : L("הרצאה מקישור", "Lecture from a link")}</button>
+            <button type="button" disabled={busy} onClick={() => videoFile.current?.click()}>🎞 {L("קובץ וידאו", "A video file")}</button>
+            <input ref={videoFile} type="file" accept="video/*,.mp4,.mkv,.mov,.webm" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void fromVideoFile(f); }} />
           </form>
-          <p className="muted small">{L("הכתוביות של הסרטון (או הדיבור, כשאין) נכנסות כהרצאה, וכל דקה בטקסט פותחת את הסרטון באותו מקום. בפעם הראשונה קשר מוריד את yt-dlp (חינם, קוד פתוח).", "The video's captions (or its speech, when there are none) become the lecture, and each minute in the text opens the video at that point. The first time, KesherAI downloads yt-dlp (free, open source).")}</p>
+          <p className="muted small">{L("הסרטון נכנס כהרצאה עם הכתוביות שלו (או הדיבור, כשאין), ואפשר לחלק אותו לפרקים עם שאלות. Panopto ו-Kaltura של המודל: היכנסי פעם אחת בדפדפן של קשר. בפעם הראשונה קשר מוריד את yt-dlp (חינם, קוד פתוח).", "The video becomes a lecture with its captions (or its speech, when there are none), and can be split into chapters with questions. Your Moodle's Panopto or Kaltura: sign in once in KesherAI's browser. The first time, KesherAI downloads yt-dlp (free, open source).")}</p>
         </section>
       ) : (
         <div className="study-actions">
@@ -898,7 +915,11 @@ function LectureAudio({ courseId, lecture, player, onRemoved }: { courseId: stri
 
 function LectureView({ courseId, lectureId, courseField, onChange }: { courseId: string; lectureId: string; courseField?: string; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
-  const [view, setView] = useState<"summary" | "terms" | "diagram" | "video" | "teach" | "text">("summary");
+  const [view, setView] = useState<"watch" | "summary" | "terms" | "diagram" | "video" | "teach" | "text">("summary");
+  // A video lecture opens on its video.
+  useEffect(() => {
+    if (l?.youtube || l?.videoFile) setView("watch");
+  }, [l?.id]);
   const player = useRef<HTMLAudioElement>(null);
   // "Explain this": text she selected in the lecture, and its explanation.
   const [sel, setSel] = useState("");
@@ -963,14 +984,15 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
       <h2 dir="auto">{l.title}</h2>
       {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
-        {(["summary", "terms", "diagram", "video", "teach", "text"] as const).map((v) => (
+        {(["watch", "summary", "terms", "diagram", "video", "teach", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
-            {{ summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), text: L("הטקסט המלא", "Full text") }[v]}
+            {{ watch: L("▶ הרצאה בווידאו", "▶ Video lecture"), summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), text: L("הטקסט המלא", "Full text") }[v]}
           </button>
         ))}
       </div>
       <div className="study-lecture-body" onMouseUp={pickSelection} onTouchEnd={() => setTimeout(pickSelection, 50)} onKeyUp={pickSelection}>
-        {view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
+        {view === "watch" ? <StudyVideoLecture base={base} lecture={l} onLecture={setL} />
+          : view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
           : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
           : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : l.text}</div>
           : !l.summary ? (

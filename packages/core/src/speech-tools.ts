@@ -117,7 +117,7 @@ export async function readMedia(d: SpeechDeps, path: string, frames = 4): Promis
 }
 
 /** Converts any audio or video to 16 kHz mono WAV with ffmpeg, when it is installed. */
-async function toWav(path: string, ffmpeg: () => Promise<string> = async () => "ffmpeg"): Promise<Buffer> {
+export async function toWav(path: string, ffmpeg: () => Promise<string> = async () => "ffmpeg"): Promise<Buffer> {
   const out = join(tmpdir(), `kesher-audio-${randomUUID()}.wav`);
   try {
     await run(await ffmpeg(), ["-hide_banner", "-loglevel", "error", "-y", "-i", path, "-vn", "-ac", "1", "-ar", "16000", out], 1_800_000);

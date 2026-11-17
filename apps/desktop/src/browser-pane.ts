@@ -245,6 +245,7 @@ export class BrowserPane {
     }
     if (action === "fab-search") return this.fabSearch(String(a.path ?? ""));
     if (action === "moodle") return this.moodle(a);
+    if (action === "site-cookies") return this.siteCookies(String(a.url ?? ""));
     const t = this.tab(a.tabId);
     if (action === "read") return this.inPage(t, "readPage()");
     if (action === "click") {
@@ -323,6 +324,30 @@ export class BrowserPane {
       })`);
     }
     throw new Error("Unknown Moodle step.");
+  }
+
+  /**
+   * Her sign-in cookies for one video site, as a Netscape cookies file's text, so yt-dlp can fetch a lecture video she
+   * can see there (Panopto, Kaltura, Vimeo…: RESEARCH_LOG "Students, part 21"). Only the cookies of that site's own
+   * domain, only https, asked for on her click; the caller writes them to a temporary file and removes it after.
+   */
+  private async siteCookies(url: string): Promise<string> {
+    let u: URL;
+    try {
+      u = new URL(url);
+    } catch {
+      throw new Error("A video link.");
+    }
+    if (u.protocol !== "https:") throw new Error("Only https video links.");
+    // The site's registrable part (panopto.tau.ac.il → tau.ac.il keeps its sign-in cookies, which often sit on the university's domain).
+    const parts = u.hostname.split(".");
+    const base = parts.slice(-(parts.at(-2)!.length <= 3 && parts.length > 2 ? 3 : 2)).join(".");
+    const all = await session.fromPartition(PARTITION).cookies.get({});
+    const mine = all.filter((c) => {
+      const d = (c.domain ?? "").replace(/^\./, "");
+      return d === u.hostname || u.hostname.endsWith(`.${d}`) || d.endsWith(`.${base}`) || d === base;
+    });
+    return ["# Netscape HTTP Cookie File", ...mine.map((c) => [c.domain?.startsWith(".") ? c.domain : (c.hostOnly ? c.domain : `.${c.domain}`), c.hostOnly ? "FALSE" : "TRUE", c.path ?? "/", c.secure ? "TRUE" : "FALSE", String(Math.floor(c.expirationDate ?? 0)), c.name, c.value].join("\t"))].join("\n");
   }
 
   /** The fab.com tab KesherAI opened for searching, and when it closes. */
