@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StudyMistakes } from "../StudyMistakes";
 import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from "../focus-sounds";
 import { ReadAlong } from "../ReadAlong";
 import { StudyWelcome } from "../StudyWelcome";
@@ -684,7 +685,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
         {prefs?.simple && <button type="button" className="study-more-tabs" aria-expanded={allTabs} onClick={() => setAllTabs(!allTabs)}>{allTabs ? L("פחות", "Fewer") : `⋯ ${L("עוד כלים", "More tools")}`}</button>}
       </div>
       {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
-        : on === "review" ? <Review courseId={id} onChange={load} />
+        : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
@@ -1335,8 +1336,9 @@ const RATINGS: Array<[number, [string, string], string]> = [
   [4, ["קל", "Easy"], "good"],
 ];
 
-function Review({ courseId, onChange }: { courseId: string; onChange: () => void }) {
+function Review({ courseId, courseName, onChange }: { courseId: string; courseName: string; onChange: () => void }) {
   const [cards, setCards] = useState<StudyCard[] | null>(null);
+  const [mistakes, setMistakes] = useState(false);
   const [shown, setShown] = useState(false);
   const [done, setDone] = useState(0);
   // The last missed card's explanation (shown above the next card).
@@ -1366,11 +1368,13 @@ function Review({ courseId, onChange }: { courseId: string; onChange: () => void
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
   }, [shown, rate]);
+  if (mistakes) return <StudyMistakes courseId={courseId} courseName={courseName} onClose={() => { setMistakes(false); onChange(); }} />;
+  const toMistakes = <button type="button" className="study-mistakes-btn" onClick={() => setMistakes(true)}>❌ {L("הטעויות שלי", "My mistakes")}</button>;
   if (!cards) return <p className="muted">…</p>;
-  if (!card) return <div className="study-empty"><p>{done ? L(`סיימת! חזרת על ${done} כרטיסיות.`, `Done! You reviewed ${done} cards.`) : L("אין כרטיסיות לחזרה עכשיו. כרטיסיות חדשות נוצרות מהרצאה.", "No cards to review now. New cards are made from a lecture.")}</p></div>;
+  if (!card) return <div className="study-empty">{toMistakes}<p>{done ? L(`סיימת! חזרת על ${done} כרטיסיות.`, `Done! You reviewed ${done} cards.`) : L("אין כרטיסיות לחזרה עכשיו. כרטיסיות חדשות נוצרות מהרצאה.", "No cards to review now. New cards are made from a lecture.")}</p></div>;
   return (
     <section className="study-review">
-      <p className="muted small">{L(`נשארו ${cards.length}`, `${cards.length} left`)} · {fmtName(card.format)}</p>
+      <p className="muted small">{L(`נשארו ${cards.length}`, `${cards.length} left`)} · {fmtName(card.format)} · {toMistakes}</p>
       {why && (
         <div className="study-why" aria-live="polite" dir="auto">
           <strong>{L("למה? ", "Why? ")}</strong>{why.front}

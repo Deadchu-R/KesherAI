@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { cardsToTsv, examPlan, formatStats, GOAL_KINDS, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
+import { cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -428,6 +428,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
   app.get<C>("/api/study/courses/:id/review", async (req) => ({ cards: await st.due(req.params.id) }));
+  /** "My mistakes" (design MyMistakes): cards she forgot and quiz questions she got wrong lately. */
+  app.get<C>("/api/study/courses/:id/mistakes", async (req) => recentMistakes(await st.get(req.params.id)));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
 
   app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: string; level?: string } }>("/api/study/courses/:id/quiz", async (req) => {

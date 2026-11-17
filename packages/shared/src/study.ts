@@ -1155,6 +1155,41 @@ export function studyStreak(days: Set<string>, now = Date.now()): { days: number
   return { days: n, today, shield };
 }
 
+/**
+ * "My mistakes" (design MyMistakes, like Duolingo's practice hub): the cards she forgot and the multiple-choice
+ * questions she got wrong in the last days, newest first. A card she has since remembered twice in a row is left out.
+ *
+ * @param d - The course.
+ * @param now - Now.
+ * @param days - How far back.
+ */
+export function recentMistakes(d: StudyCourseData, now = Date.now(), days = 30): { cards: StudyCard[]; questions: Array<StudyQuestion & { t: number }> } {
+  const from = now - days * 86_400_000;
+  const byCard = new Map<string, StudyReview[]>();
+  for (const r of d.reviews) if (r.t >= from) (byCard.get(r.cardId) ?? byCard.set(r.cardId, []).get(r.cardId)!).push(r);
+  const cards: Array<{ c: StudyCard; t: number }> = [];
+  for (const [id, rs] of byCard) {
+    rs.sort((a, b) => a.t - b.t);
+    const lastMiss = rs.findLastIndex((r) => r.rating === 1);
+    if (lastMiss < 0) continue;
+    const after = rs.slice(lastMiss + 1);
+    if (after.length >= 2 && after.slice(-2).every((r) => r.rating >= 3)) continue;
+    const c = d.cards.find((x) => x.id === id);
+    if (c) cards.push({ c, t: rs[lastMiss]!.t });
+  }
+  const seen = new Set<string>();
+  const questions: Array<StudyQuestion & { t: number }> = [];
+  for (const z of [...d.quizzes].sort((a, b) => b.t - a.t)) {
+    if (z.t < from || !z.answers || z.kind) continue;
+    z.questions.forEach((q, i) => {
+      if (q.answer < 0 || z.answers![i] === q.answer || seen.has(q.q)) return;
+      seen.add(q.q);
+      questions.push({ ...q, t: z.t });
+    });
+  }
+  return { cards: cards.sort((a, b) => b.t - a.t).map((x) => x.c).slice(0, 40), questions: questions.slice(0, 30) };
+}
+
 /** What a daily goal can count (Roee, 2026-11-17: minutes, lectures, videos, scripts…). */
 export type GoalKind = "minutes" | "cards" | "lectures" | "videos" | "quizzes" | "summaries";
 export const GOAL_KINDS: GoalKind[] = ["minutes", "cards", "lectures", "videos", "quizzes", "summaries"];

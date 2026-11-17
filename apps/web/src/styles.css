@@ -3208,3 +3208,20 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-energy .row { flex-wrap: wrap; gap: 6px; }
 .study-energy button { padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; }
 .study-energy button.on { border-color: var(--accent); color: var(--accent); }
+/* My mistakes (design MyMistakes). */
+.study-mistakes-btn { padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; }
+.study-mistakes { display: flex; flex-direction: column; gap: 10px; }
+.mistakes-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.mistakes-head .link { margin-inline-start: auto; }
+.mistakes-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.mistakes-bar span { display: block; height: 100%; background: #7fd8a8; transition: width 0.3s; }
+.mistakes-item { padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.mistakes-item > button, .mistakes-item .row { align-self: flex-start; }
+.mistakes-front { font-size: 1.1em; font-weight: 600; }
+.mistakes-back { padding-top: 8px; border-top: 1px solid var(--border); }
+.mistakes-options { display: flex; flex-direction: column; gap: 6px; }
+.mistakes-options button { text-align: start; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--border-strong); background: transparent; }
+.mistakes-options button.right { border-color: #7fd8a8; background: #7fd8a822; }
+.mistakes-options button.wrong { border-color: #ff7a7a; background: #ff7a7a22; }
+.mistakes-done { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 20px; }
+@media (prefers-reduced-motion: reduce) { .mistakes-bar span { transition: none; } }

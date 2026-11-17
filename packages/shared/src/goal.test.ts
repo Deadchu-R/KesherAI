@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { goalRemindNow, goalToday, type StudyCourseData, type StudyGoal } from "./study.js";
+import { goalRemindNow, goalToday, recentMistakes, type StudyCourseData, type StudyGoal } from "./study.js";
 
 const at = (day: number, hour = 12) => new Date(2026, 10, day, hour).getTime();
 const course = (focus: Array<[number, number]>, reviews: number[]) => ({ focus: focus.map(([t, minutes]) => ({ t, minutes })), reviews: reviews.map((t) => ({ t, cardId: "c", rating: 3 })) }) as unknown as StudyCourseData;
@@ -36,5 +36,26 @@ describe("daily goal", () => {
     assert.equal(goalRemindNow(g, false, "2026-11-17", new Date(2026, 10, 17, 21)), false);
     assert.equal(goalRemindNow({ ...g, on: false }, false, undefined, new Date(2026, 10, 17, 21)), false);
     assert.equal(goalToday([], [], { on: true, targets: {} }).done, false);
+  });
+});
+
+describe("my mistakes", () => {
+  it("forgotten cards until remembered twice, and wrong multiple-choice answers, newest first", () => {
+    const now = at(17, 18);
+    const d = {
+      cards: [{ id: "a", front: "A" }, { id: "b", front: "B" }, { id: "c", front: "C" }],
+      reviews: [
+        { cardId: "a", t: at(15), rating: 1 },
+        { cardId: "b", t: at(14), rating: 1 }, { cardId: "b", t: at(15), rating: 3 }, { cardId: "b", t: at(16), rating: 4 },
+        { cardId: "c", t: at(16), rating: 1 }, { cardId: "c", t: at(16, 13), rating: 3 },
+      ],
+      quizzes: [
+        { id: "z", t: at(16), questions: [{ q: "Q1", options: ["x", "y"], answer: 0, explain: "" }, { q: "Q2", options: ["x", "y"], answer: 1, explain: "" }], answers: [1, 1] },
+        { id: "o", t: at(16), kind: "open", questions: [{ q: "O", options: [], answer: -1, explain: "" }], answers: [-1] },
+      ],
+    } as unknown as StudyCourseData;
+    const m = recentMistakes(d, now);
+    assert.deepEqual(m.cards.map((c) => c.id), ["c", "a"]);
+    assert.deepEqual(m.questions.map((q) => q.q), ["Q1"]);
   });
 });
