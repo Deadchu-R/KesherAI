@@ -793,6 +793,31 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
   const switchMode = (m: "ask" | "study" | "homework") => { setMode(m); setTurns([]); setQ(""); };
   // Oral exam (design OralExam): in study mode, each question is read aloud and she answers by voice.
   const [oral, setOral] = useState(false);
+  // A photo of the exercise (design ProblemPhoto, students part 29 #1): the vision model writes it out into the box.
+  const [reading, setReading] = useState(false);
+  const fromPhoto = async (f: File | undefined) => {
+    if (!f) return;
+    setReading(true);
+    try {
+      const im = new Image();
+      im.src = URL.createObjectURL(f);
+      await im.decode();
+      const k = Math.min(1, 2000 / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(im.naturalWidth * k);
+      c.height = Math.round(im.naturalHeight * k);
+      c.getContext("2d")!.drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(im.src);
+      const r = await api<{ text: string }>("/api/study/extract", { method: "POST", body: { name: "problem.jpg", data: c.toDataURL("image/jpeg", 0.9).split(",")[1] } });
+      const text = r.text.replace(/\s*\n+\s*/g, " ").trim();
+      setQ((x) => (x.trim() ? `${x} ${text}` : text).slice(0, 4000));
+      toast(L("התרגיל הועתק מהצילום. בדקי שהוא נכון ושלחי.", "The exercise was copied from the photo. Check it and send."));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setReading(false);
+    }
+  };
   const send = async (start = false, preset?: string) => {
     const question = (preset ?? q).trim();
     if ((!question && !start) || busy) return;
@@ -804,7 +829,7 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
     setBusy(false);
     if (r) {
       setTurns((t) => [...t, { role: "assistant", content: r.answer, sources: r.sources }]);
-      if (oral && mode === "study") void speak(r.answer);
+      if (oral) void speak(r.answer);
     }
   };
   if (!hasLectures) return <p className="muted">{L("קודם הוסיפי הרצאה: התשובות מגיעות רק מההרצאות שלך.", "Add a lecture first: answers come only from your lectures.")}</p>;
@@ -816,8 +841,8 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
         <button type="button" role="tab" aria-selected={mode === "homework"} className={mode === "homework" ? "on" : ""} onClick={() => switchMode("homework")}>{L("שיעורי בית: צעד אחר צעד", "Homework: step by step")}</button>
       </div>
       <p className="muted small">{mode === "homework" ? L("הדביקי את התרגיל. המורה עוזרת צעד אחר צעד: כתבי כל צעד שעשית והיא תבדוק, בקשי רמז כשנתקעת, ופתרון מלא כשתרצי.", "Paste the exercise. The tutor helps step by step: write each step you took and it checks it, ask for a hint when stuck, and for the full solution when you want it.") : mode === "ask" ? L("התשובות רק מההרצאות שלך, עם שם ההרצאה ליד כל עובדה. כשההרצאות לא מכסות שאלה, זה ייאמר.", "Answers come only from your lectures, with the lecture named by each fact. When they do not cover a question, it says so.") : L("המורה שואלת שאלה אחת מההרצאות שלך, מחכה לתשובה, אומרת אם צדקת ומסבירה, וממשיכה. אפשר לבקש רמז.", "The tutor asks one question from your lectures, waits for your answer, says whether it is right and explains, then goes on. You can ask for a hint.")}</p>
-      {mode === "study" && (
-        <label className="study-check"><input type="checkbox" checked={oral} onChange={(e) => { setOral(e.target.checked); if (!e.target.checked) stopSpeaking(); }} /> 🗣 {L("בעל פה: השאלות מוקראות ועונים בקול, כמו מבחן בעל פה", "Oral: questions read aloud, you answer by voice, like an oral exam")}</label>
+      {(
+        <label className="study-check"><input type="checkbox" checked={oral} onChange={(e) => { setOral(e.target.checked); if (!e.target.checked) stopSpeaking(); }} /> 🗣 {mode === "study" ? L("בעל פה: השאלות מוקראות ועונים בקול, כמו מבחן בעל פה", "Oral: questions read aloud, you answer by voice, like an oral exam") : L("בקול: שואלים במיקרופון ושומעים את התשובה", "By voice: ask with the microphone and hear the answer")}</label>
       )}
       {mode === "study" && turns.length === 0 && !busy && <button type="button" className="primary" onClick={() => void send(true)}>{L("התחילי תרגול", "Start practising")}</button>}
       <div className="study-ask-turns" aria-live="polite">
@@ -838,7 +863,8 @@ function AskCourse({ courseId, hasLectures }: { courseId: string; hasLectures: b
       )}
       <form className="study-add" onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} dir={q ? "auto" : getLocale() === "he" ? "rtl" : "ltr"} aria-label={mode === "study" ? L("התשובה שלך", "Your answer") : L("שאלה", "Question")} placeholder={mode === "homework" ? (turns.length ? L("הצעד שעשית, או שאלה", "Your step, or a question") : L("התרגיל (הדביקי את הנוסח)", "The exercise (paste it)")) : mode === "study" ? L("התשובה שלך, או \"רמז\"", "Your answer, or \"hint\"") : L("למשל: מה ההבדל בין סוג 1 לסוג 2?", "e.g. What is the difference between type 1 and type 2?")} />
-        {oral && mode === "study" && <Mic onText={(t) => { stopSpeaking(); void send(false, t); }} />}
+        {oral && <Mic onText={(t) => { stopSpeaking(); void send(false, t); }} />}
+        {mode !== "study" && <label className="button study-photo" title={L("צילום של התרגיל או השאלה", "A photo of the exercise or question")} aria-disabled={busy || reading}>{reading ? "…" : "📷"}<input type="file" accept="image/*" hidden disabled={busy || reading} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void fromPhoto(f); }} /></label>}
         <button type="submit" className="primary" disabled={busy || !q.trim()}>{mode === "study" ? L("שליחת תשובה", "Answer") : mode === "homework" ? L("שליחה", "Send") : L("שאלי", "Ask")}</button>
       </form>
     </section>

@@ -3552,3 +3552,5 @@ div.slide-list { padding-inline-start: 0; }
 .study-where-spot:hover { color: var(--accent, #a5b4ff); }
 .study-where-spot .study-stamp { flex: none; }
 .study-where-spot > .muted { white-space: nowrap; flex: none; }
+.study-photo { flex: none; display: grid; place-items: center; padding: 0 12px; cursor: pointer; }
+.study-photo[aria-disabled="true"] { opacity: .5; pointer-events: none; }
