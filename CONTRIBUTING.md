@@ -15,6 +15,18 @@ pnpm dev                 # core on :7420, UI on :5173 with hot reload
 
 You do not need a GPU or a model to work on most of KesherAI: the `example-hello` plugin adds an `echo` provider (add it under Connections) that answers instantly.
 
+## Your first change in 10 minutes
+
+A real round trip, so you see every step once (like the walk-throughs Obsidian and VS Code give):
+
+1. **Find the string.** Open the app (`pnpm dev`, then http://localhost:5173), pick a button you want to change, and search its text: `git grep -n "New document"`. You land in `apps/web/src/pages/DocsPage.tsx`.
+2. **Change it.** Edit the English and the Hebrew (`L("מסמך חדש", "New document")`). The page reloads by itself.
+3. **Check it at phone width.** In the browser's dev tools pick a 390 px wide device; nothing may scroll sideways.
+4. **Run the checks.** `pnpm typecheck && pnpm lint && pnpm test`. For a server change, add a `node:test` file next to the code (`*.test.ts`); `packages/core/src/routes/app-link.test.ts` is a short example that starts the routes with `app.inject`, no port.
+5. **Open the pull request.** One change, a sentence on what and why, and a screenshot for UI. The template asks the rest.
+
+Building a plugin instead? `pnpm create-plugin my-plugin --dir C:\dev\my-plugin`, then in the installed app **Connections → Plugins → 🛠 Load a folder (development)**: it reloads on every save. Before publishing: `pnpm plugin:check C:\dev\my-plugin`.
+
 ## How the code is organised
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. In short: `packages/core` is a local HTTP server; everything else (desktop window, phone, CLI) is a client of it; models come from **providers** (`packages/providers`); plugins extend the app through `packages/plugin-sdk`.
