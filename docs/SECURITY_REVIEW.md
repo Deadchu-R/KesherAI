@@ -978,3 +978,11 @@ S5 an outside scanner's rules for Electron.
 - **Design canvas**: screens run in the same sandbox as artifacts (no same-origin, a content policy with no network); comments stay in this browser; "ask for a change" sends a chat message, nothing else.
 - **KaTeX**: back on the patched version the repository's overrides require (^0.18.2); the release had failed on the lockfile.
 - Performance: Moodle and plans are read on her click or when Study opens; the plan file drops plans two weeks after their due day. Secrets/personal paths: none in the diff.
+
+## Scan 107 (2026-11-17): video overview, media in previews, "Open live" for files, the ↓ button, per-file undo
+- **Per-file undo**: the path from the page is only compared with the run's own kept files (never used to open or write anything else); a file changed since asks first, as Undo all does.
+- **Open live for a written file**: fetched through the chat's existing file route (inside the chat's folders, with its key) and shown in the artifact sandbox (no same-origin, no network).
+- **Video overview**: slides are the model's text, checked and shown as text; pictures come from the existing Wikimedia Commons search with author and licence; nothing new is fetched.
+- **Media previews**: the chat's existing download route as the player's source; no new route.
+- **↓ button, list numbers, dedent**: display only.
+- Performance: the ↓ state changes only when crossing 400 px from the end. Secrets/personal paths: none in the diff.
