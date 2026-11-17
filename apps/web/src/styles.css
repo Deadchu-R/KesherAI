@@ -3264,3 +3264,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .writing-comment { display: flex; flex-direction: column; gap: 4px; text-align: start; padding: 10px 12px; border-color: #f0a83088; }
 .writing-comment.on { border-color: var(--accent); }
 .writing-next { margin: 0; padding-inline-start: 20px; }
+.study-sources > summary { cursor: pointer; } .study-sources ul { margin: 8px 0; padding-inline-start: 20px; line-height: 1.8; }

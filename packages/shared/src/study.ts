@@ -586,8 +586,8 @@ export interface StudyTool {
   en: string;
   /** Who it is for (field ids). */
   fields: string[];
-  /** "text": she pastes something; "course": it reads the course's lectures. */
-  input: "text" | "course";
+  /** "text": she pastes something; "course": it reads the course's lectures; "both": she says what, from the lectures. */
+  input: "text" | "course" | "both";
   placeholder?: [string, string];
   prompt: string;
 }
@@ -596,6 +596,11 @@ const TOOL_LANG = "Write in Hebrew unless the student's own text is in another l
 
 /** The tools for each field (the same on the computer and the phone). */
 export const STUDY_TOOLS: StudyTool[] = [
+  // For every field ("*"): a comparison table and a mind map from her own lectures (RESEARCH_LOG students, NotebookLM's data tables and mind map).
+  { id: "compare", he: "טבלת השוואה", en: "Comparison table", fields: ["*"], input: "both", placeholder: ["מה להשוות? למשל: חוסמי בטא מול חוסמי תעלות סידן", "What to compare? e.g. beta blockers vs calcium channel blockers"],
+    prompt: `Make a comparison table of what the student asks to compare, from her lectures only: one markdown table, a column for each thing compared and a row for each point of comparison that the lectures cover (mechanism, uses, advantages, disadvantages, examples, numbers… whatever fits). Short cells. Under the table, one line on the most important difference, then the lectures it came from. ${TOOL_LANG}` },
+  { id: "mindmap", he: "מפת חשיבה", en: "Mind map", fields: ["*"], input: "both", placeholder: ["על מה? (ריק: כל הקורס)", "About what? (empty: the whole course)"],
+    prompt: `Make a mind map of the topic the student asks about (or of the whole course when she asks nothing), from her lectures only, as one Mermaid mindmap in a \`\`\`mermaid block: "mindmap", then the root in (( )), then the main branches and up to two levels under each, a few words per node, indented with two spaces per level, no brackets or quotes inside node text except the root. At most 40 nodes. Under it, one line naming the lectures it came from. ${TOOL_LANG}` },
   { id: "formulas", he: "דף נוסחאות מהקורס", en: "Formula sheet from the course", fields: ["engineering", "math", "cs", "economics", "biology", "gamedev"], input: "course",
     prompt: `Make a formula sheet from these lectures: every formula, law and rule written in them, grouped by topic (## heading per topic). For each: the formula (plain text, like F = m * a, no LaTeX), what each symbol means with its units, and when to use it, in one line. Then the lecture it came from in brackets. ${TOOL_LANG}` },
   { id: "brief", he: "תקציר פסק דין (IRAC)", en: "Case brief (IRAC)", fields: ["law"], input: "text", placeholder: ["הדביקי את פסק הדין או חלק ממנו", "Paste the ruling or part of it"],
@@ -751,7 +756,7 @@ export function parseCommonsPictures(json: unknown, max = 8, kind: StudyMediaKin
 /** The tools that fit a course's field (all of them when the field is unknown). */
 export function toolsFor(field: string | undefined): StudyTool[] {
   if (!field) return STUDY_TOOLS;
-  return STUDY_TOOLS.filter((t) => t.fields.includes(field));
+  return STUDY_TOOLS.filter((t) => t.fields.includes(field) || t.fields.includes("*"));
 }
 
 /** The course's material for a "course" tool: summaries (or text), each with its title, within a budget. */

@@ -926,9 +926,14 @@ export class Study {
     const tool = STUDY_TOOLS.find((t) => t.id === toolId);
     if (!tool) throw Object.assign(new Error("No such tool."), { statusCode: 404 });
     let input: string;
-    if (tool.input === "course") {
+    if (tool.input === "course" || tool.input === "both") {
       if (!d.lectures.length) throw Object.assign(new Error("Add a lecture first."), { statusCode: 400 });
-      input = toolMaterial(d.lectures);
+      // "both": what she asked, then the lectures that match it best (all of them when she asked nothing).
+      const ask = text.trim().slice(0, 1000);
+      if (tool.input === "both" && ask) {
+        const hits = findPassages(d.lectures, ask, 36_000);
+        input = `She asks: ${ask}\n\nFrom her lectures:\n${hits.length ? hits.map((x) => `### ${x.title}\n${x.text}`).join("\n\n") : toolMaterial(d.lectures)}`;
+      } else input = toolMaterial(d.lectures);
     } else {
       input = text.trim().slice(0, 40_000);
       if (input.length < 10) throw Object.assign(new Error("Paste the text first."), { statusCode: 400 });

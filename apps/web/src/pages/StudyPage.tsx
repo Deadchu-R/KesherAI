@@ -920,6 +920,38 @@ function CourseSummary({ id, info, onChange }: { id: string; info: CourseInfo; o
 }
 
 /** The tools of the course's field: she picks one, pastes text (or it reads the course), and can keep the result. */
+/**
+ * The course's sources (RESEARCH_LOG students: a sources library, like Zotero's, kept small): the pages, videos and
+ * files her lectures came from, with an APA 7 list made from them on request.
+ */
+function SourcesCard({ courseId, lectures }: { courseId: string; lectures: LectureRow[] }) {
+  const [apa, setApa] = useState("");
+  const [busy, setBusy] = useState(false);
+  const rows = lectures.flatMap((l) => {
+    const url = l.web ?? (l.youtube ? `https://www.youtube.com/watch?v=${l.youtube}` : l.videoFile?.from);
+    return url ? [{ id: l.id, title: l.title, url, date: l.date }] : [];
+  });
+  if (!rows.length) return null;
+  const make = async () => {
+    setBusy(true);
+    const lines = rows.map((r) => `${r.title}. ${r.url} (retrieved ${r.date})`).join("\n");
+    const res = await call(api<{ text: string }>(`/api/study/courses/${courseId}/tools/apa`, { method: "POST", body: { text: lines } }));
+    setBusy(false);
+    if (res) setApa(res.text);
+  };
+  return (
+    <details className="card study-sources">
+      <summary><b>📚 {L("המקורות של הקורס", "The course's sources")}</b> <span className="muted small">{rows.length}</span></summary>
+      <ul>{rows.map((r) => <li key={r.id}><a href={`#/study/${courseId}/l/${r.id}`} dir="auto">{r.title}</a> · <a href={r.url} target="_blank" rel="noopener noreferrer" dir="ltr" className="small">{r.url.replace(/^https?:\/\//, "").slice(0, 60)}</a></li>)}</ul>
+      <div className="row">
+        <button type="button" disabled={busy} onClick={() => void make()}>{busy ? "…" : L("רשימה ביבליוגרפית APA 7", "APA 7 reference list")}</button>
+        {apa && <button type="button" className="ghost" onClick={() => void navigator.clipboard.writeText(apa).then(() => toast(L("הועתק", "Copied")))}>{L("העתקה", "Copy")}</button>}
+      </div>
+      {apa && <div dir="auto" className="study-summary-text"><RichText text={apa} /></div>}
+    </details>
+  );
+}
+
 function FieldTools({ id, info, onChange }: { id: string; info: CourseInfo; onChange: () => void }) {
   const tools = toolsFor(info.course.field);
   const [pick, setPick] = useState(tools[0]?.id ?? "");
@@ -940,6 +972,8 @@ function FieldTools({ id, info, onChange }: { id: string; info: CourseInfo; onCh
   };
   if (!tool) return null;
   return (
+    <>
+    <SourcesCard courseId={id} lectures={info.lectures} />
     <section className="card study-tools">
       <h2>{L("כלים לתחום", "Field tools")}</h2>
       <div className="study-formats" role="radiogroup" aria-label={L("כלי", "Tool")}>
@@ -947,15 +981,18 @@ function FieldTools({ id, info, onChange }: { id: string; info: CourseInfo; onCh
       </div>
       {tool.input === "text"
         ? <textarea rows={8} dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={tool.placeholder ? L(...tool.placeholder) : ""} aria-label={L(tool.he, tool.en)} />
+        : tool.input === "both"
+        ? <input dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={tool.placeholder ? L(...tool.placeholder) : ""} aria-label={L(tool.he, tool.en)} />
         : <p className="muted small">{L(`נכתב מ-${info.lectures.length} ההרצאות של הקורס.`, `Written from the course's ${info.lectures.length} lectures.`)}</p>}
       <div className="study-actions">
-        <button type="button" className="primary" disabled={busy || (tool.input === "text" ? text.trim().length < 10 : !info.lectures.length)} onClick={() => void run()}>{busy ? L("עובד…", "Working…") : L(tool.he, tool.en)}</button>
+        <button type="button" className="primary" disabled={busy || (tool.input === "text" ? text.trim().length < 10 : !info.lectures.length) || (tool.id === "compare" && text.trim().length < 3)} onClick={() => void run()}>{busy ? L("עובד…", "Working…") : L(tool.he, tool.en)}</button>
         {out && <button type="button" onClick={() => void keep()}>{L("שמירה כהרצאה בקורס", "Keep as a lecture")}</button>}
         {out && <button type="button" className="ghost" onClick={() => void navigator.clipboard.writeText(out).then(() => toast(L("הועתק", "Copied")))}>{L("העתקה", "Copy")}</button>}
       </div>
       {out && <div dir="auto" className="study-summary-text"><RichText text={out} /></div>}
       <p className="muted small">{L("הכלי עובד רק ממה שהדבקת או מההרצאות שלך. מה שחסר מסומן [חסר]. כדאי לבדוק מול המקור.", "The tool works only from what you pasted or your lectures; anything missing is marked [missing]. Check against the source.")}</p>
     </section>
+    </>
   );
 }
 
