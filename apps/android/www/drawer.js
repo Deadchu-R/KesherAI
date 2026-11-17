@@ -405,8 +405,12 @@
     if (here === "index.html" && lastComputer) return;
     const s = await Share.take().catch(() => ({}));
     if (!s || (!s.text && !s.subject && !s.action && !s.files?.length)) return;
+    // Files: the chat on the phone (the computer's page takes them when the last chat was there, above).
     const text = [s.subject, s.text].filter(Boolean).join("\n");
     if (text) sessionStorage.setItem("kesherai-shared-text", text);
+    // Pictures and files shared from another app (a screenshot, a photo of a page): the phone's chat takes them, with
+    // the lens's quick actions (explain, translate, summarize, text) — the phone's own "screen lens".
+    if (s.files?.length) sessionStorage.setItem("kesherai-shared-files", JSON.stringify(s.files.slice(0, 10)));
     const target = s.action === "new" ? "local.html?new=1" : s.action === "talk" ? "local.html?chat=1&talk=1" : s.action === "photo" ? "local.html?chat=1&photo=1" : "local.html?chat=1";
     location.href = target;
   };

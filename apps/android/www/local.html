@@ -1588,6 +1588,12 @@
     if (act.has("talk") || act.has("photo")) setTimeout(() => (act.has("talk") ? $("mic") : $("photoPick"))?.click(), 400);
     const shared = sessionStorage.getItem("kesherai-shared-text");
     if (shared) { sessionStorage.removeItem("kesherai-shared-text"); setTimeout(() => { $("input").value = shared; $("input").dispatchEvent(new Event("input")); }, 0); }
+    // Shared pictures and files (Share → KesherAI from any app): attached, with the lens's quick actions.
+    const sharedFiles = sessionStorage.getItem("kesherai-shared-files");
+    if (sharedFiles) {
+      sessionStorage.removeItem("kesherai-shared-files");
+      setTimeout(() => void takeShared(JSON.parse(sharedFiles)).catch(() => undefined), 0);
+    }
     current = { item, url };
     activeUrl = url;
     localStorage.setItem("kesherai-phone-model", url);
@@ -1990,6 +1996,41 @@
     URL.revokeObjectURL(url);
     return out;
   }
+  /**
+   * Files another app shared (read from the app's share folder, then removed there), attached to the next message; for
+   * a picture, the lens's quick actions appear (like the computer's screen lens: explain, translate, summarize, text).
+   */
+  async function takeShared(list) {
+    const Share = window.Capacitor?.Plugins?.KesherShare;
+    if (!Share?.read) return;
+    const files = [];
+    for (const f of list) {
+      const r = await Share.read({ path: f.path }).catch(() => null);
+      void Share.remove?.({ path: f.path }).catch(() => undefined);
+      if (!r?.data) continue;
+      const bin = atob(r.data);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      files.push(new File([bytes], f.name || "shared", { type: f.mime || "application/octet-stream" }));
+    }
+    if (!files.length) return;
+    await addFiles(files);
+    if (!files.some((f) => f.type.startsWith("image/"))) return;
+    const row = document.createElement("div");
+    row.className = "q-opts";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", T("מה לעשות עם התמונה", "What to do with the picture"));
+    for (const [he, en, ask] of [["💡 הסבר", "💡 Explain", ["תסביר מה רואים כאן ומה חשוב בזה, בקצרה.", "Explain what this shows and what matters in it, briefly."]], ["🌐 תרגום", "🌐 Translate", ["תתרגם לעברית את כל הטקסט שבתמונה, שורה אחרי שורה.", "Translate all the text in the picture into English, line by line."]], ["📝 סיכום", "📝 Summarize", ["תסכם את מה שכתוב בתמונה בכמה נקודות.", "Summarize what the picture says in a few points."]], ["🔤 הטקסט", "🔤 The text", ["תכתוב בדיוק את כל הטקסט שבתמונה, בשפה שלו.", "Write out exactly all the text in the picture, in its language."]]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = T(he, en);
+      b.onclick = () => { row.remove(); $("input").value = T(ask[0], ask[1]); $("input").dispatchEvent(new Event("input")); $("send")?.click(); };
+      row.append(b);
+    }
+    $("input").closest("form, footer, .composer")?.before(row);
+  }
+
   async function addFiles(files) {
     for (const f of files) {
       if (f.type.startsWith("image/")) attachments.push({ kind: "image", url: await shrink(await readAs(f, "readAsDataURL")) });
