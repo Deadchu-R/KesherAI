@@ -1196,10 +1196,20 @@ export function goalCounts(courses: StudyCourseData[], activity: StudyActivity[]
   return days;
 }
 
-/** Whether a day's counts reach every target of the goal. */
-export function goalMet(goal: StudyGoal, counts: Record<GoalKind, number> | undefined): boolean {
-  const kinds = GOAL_KINDS.filter((k) => (goal.targets[k] ?? 0) > 0);
-  return kinds.length > 0 && kinds.every((k) => (counts?.[k] ?? 0) >= goal.targets[k]!);
+/** How she felt a day ("how am I today", design FocusComfort): a low day asks half. */
+export type StudyEnergy = "high" | "ok" | "low";
+
+/** The day's targets: half (rounded up) on a low-energy day. */
+export function dayTargets(goal: StudyGoal, energy?: StudyEnergy): Partial<Record<GoalKind, number>> {
+  if (energy !== "low") return goal.targets;
+  return Object.fromEntries(Object.entries(goal.targets).map(([k, v]) => [k, v ? Math.max(1, Math.ceil(v / 2)) : 0]));
+}
+
+/** Whether a day's counts reach every target of the goal (half of it on a low-energy day). */
+export function goalMet(goal: StudyGoal, counts: Record<GoalKind, number> | undefined, energy?: StudyEnergy): boolean {
+  const t = dayTargets(goal, energy);
+  const kinds = GOAL_KINDS.filter((k) => (t[k] ?? 0) > 0);
+  return kinds.length > 0 && kinds.every((k) => (counts?.[k] ?? 0) >= t[k]!);
 }
 
 /**
@@ -1211,19 +1221,21 @@ export function goalMet(goal: StudyGoal, counts: Record<GoalKind, number> | unde
  * @param goal - The goal.
  * @param now - Now.
  */
-export function goalToday(courses: StudyCourseData[], activity: StudyActivity[], goal: StudyGoal, now = Date.now()): { counts: Record<GoalKind, number>; done: boolean; streak: number } {
+export function goalToday(courses: StudyCourseData[], activity: StudyActivity[], goal: StudyGoal, now = Date.now(), energy: Record<string, StudyEnergy> = {}): { counts: Record<GoalKind, number>; done: boolean; streak: number; targets: Partial<Record<GoalKind, number>>; energy?: StudyEnergy } {
   const days = goalCounts(courses, activity);
   const counts = days.get(dayKey(now)) ?? { minutes: 0, cards: 0, lectures: 0, videos: 0, quizzes: 0, summaries: 0 };
-  const done = goalMet(goal, counts);
+  const today = energy[dayKey(now)];
+  const done = goalMet(goal, counts, today);
   let streak = 0;
   // Noon steps, so a clock change never skips or repeats a day.
   const noon = new Date(now);
   noon.setHours(12, 0, 0, 0);
   for (let i = done ? 0 : 1; i < 3650; i++) {
-    if (!goalMet(goal, days.get(dayKey(noon.getTime() - i * 86_400_000)))) break;
+    const k = dayKey(noon.getTime() - i * 86_400_000);
+    if (!goalMet(goal, days.get(k), energy[k])) break;
     streak++;
   }
-  return { counts, done, streak };
+  return { counts, done, streak, targets: dayTargets(goal, today), ...(today ? { energy: today } : {}) };
 }
 
 /**

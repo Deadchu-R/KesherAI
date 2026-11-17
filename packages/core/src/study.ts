@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -247,6 +247,20 @@ export class Study {
     return next;
   }
 
+  /** How she felt each day (dayKey → level), the last 400 days. */
+  async energy(): Promise<Record<string, StudyEnergy>> {
+    const j = await readFile(join(this.dir, "_energy.json"), "utf8").then((t) => JSON.parse(t) as Record<string, unknown>, () => ({}) as Record<string, unknown>);
+    return Object.fromEntries(Object.entries(j).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && (v === "high" || v === "ok" || v === "low"))) as Record<string, StudyEnergy>;
+  }
+
+  /** Today's "how am I today". */
+  async setEnergy(level: StudyEnergy, now = Date.now()): Promise<void> {
+    const all = { ...(await this.energy()), [dayKey(now)]: level };
+    const keep = Object.keys(all).sort().slice(-400);
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(join(this.dir, "_energy.json"), JSON.stringify(Object.fromEntries(keep.map((k) => [k, all[k]]))));
+  }
+
   /** What she did that a goal counts (a lecture added, a video watched, a quiz done, a summary), newest last. */
   async activity(): Promise<StudyActivity[]> {
     const j = await readFile(join(this.dir, "_activity.json"), "utf8").then((t) => JSON.parse(t) as unknown, () => []);
@@ -288,12 +302,12 @@ export class Study {
     const goal = await this.goal();
     if (!goal.on || !goal.remind) return false;
     const all = await this.allData();
-    const t = goalToday(all, await this.activity(), goal, now.getTime());
+    const t = goalToday(all, await this.activity(), goal, now.getTime(), await this.energy());
     if (!goalRemindNow(goal, t.done, goal.lastReminded, now)) return false;
     await this.setGoal({}, dayKey(now.getTime()));
     const he = all.length === 0 || all.some((d) => /[\u0590-\u05FF]/.test(d.course.name));
     const names: Record<GoalKind, [string, string]> = { minutes: ["דקות", "min"], cards: ["כרטיסיות", "cards"], lectures: ["הרצאות", "lectures"], videos: ["סרטונים", "videos"], quizzes: ["בחנים", "quizzes"], summaries: ["סיכומים", "summaries"] };
-    const left = GOAL_KINDS.filter((k) => (goal.targets[k] ?? 0) > t.counts[k]).map((k) => `${goal.targets[k]! - t.counts[k]} ${names[k][he ? 0 : 1]}`).join(", ");
+    const left = GOAL_KINDS.filter((k) => (t.targets[k] ?? 0) > t.counts[k]).map((k) => `${t.targets[k]! - t.counts[k]} ${names[k][he ? 0 : 1]}`).join(", ");
     const next = studyNext(all, now.getTime());
     const streak = t.streak ? (he ? ` · רצף של ${t.streak} ימים` : ` · ${t.streak}-day streak`) : "";
     const title = he ? `🎯 עוד ${left} ליעד של היום${streak}` : `🎯 ${left} left for today's goal${streak}`;
@@ -311,7 +325,7 @@ export class Study {
       if (d) all.push(d);
     }
     const { lastReminded: _l, ...goal } = await this.goal();
-    return { streak: studyStreak(studyDays(all), now), week: focusWeek(all, now), goal, today: goalToday(all, await this.activity(), goal, now) };
+    return { streak: studyStreak(studyDays(all), now), week: focusWeek(all, now), goal, today: goalToday(all, await this.activity(), goal, now, await this.energy()) };
   }
 
   /**

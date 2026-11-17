@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from "../focus-sounds";
 import { ReadAlong } from "../ReadAlong";
 import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
@@ -337,7 +338,7 @@ const readRunning = (): Running | null => {
  * days in a row she reached it, and when the reminder comes.
  */
 function GoalCard() {
-  const [p, setP] = useState<{ goal: StudyGoal; today: { counts: Record<GoalKind, number>; done: boolean; streak: number } } | null>(null);
+  const [p, setP] = useState<{ goal: StudyGoal; today: { counts: Record<GoalKind, number>; done: boolean; streak: number; targets: Partial<Record<GoalKind, number>>; energy?: "high" | "ok" | "low" } } | null>(null);
   useEffect(() => {
     const load = () => void api<NonNullable<typeof p>>("/api/study/progress").then(setP, () => undefined);
     load();
@@ -348,15 +349,36 @@ function GoalCard() {
       removeEventListener("focus", load);
     };
   }, []);
-  if (!p?.goal.on) return null;
-  const kinds = GOAL_KINDS.filter((k) => (p.goal.targets[k] ?? 0) > 0);
-  if (!kinds.length) return null;
-  const left = kinds.filter((k) => p.today.counts[k] < p.goal.targets[k]!);
+  const energy = async (level: "high" | "ok" | "low") => {
+    try {
+      setP(await api<NonNullable<typeof p>>("/api/study/energy", { method: "PUT", body: { level } }));
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  if (!p) return null;
+  // "How am I today" (design FocusComfort): asked once a day; a low day halves the goal, without guilt.
+  const ask = (
+    <div className="study-energy">
+      <b>{L("איך את היום?", "How are you today?")}</b>
+      <div className="row">
+        {([["high", "🔋", "מלאה אנרגיה", "Full of energy"], ["ok", "🙂", "בסדר", "OK"], ["low", "🪫", "עייפה", "Tired"]] as const).map(([k, icon, he, en]) => (
+          <button type="button" key={k} className={p.today.energy === k ? "on" : ""} aria-pressed={p.today.energy === k} onClick={() => void energy(k)}>{icon} {L(he, en)}</button>
+        ))}
+      </div>
+      {p.today.energy === "low" && <span className="small">{p.goal.on ? L("יום קל: חצי מהיעד מספיק היום, והרצף נשמר 💜", "A light day: half the goal is enough today, and the streak stays 💜") : L("יום קל. גם 10 דקות זה הרבה 💜", "A light day. Even 10 minutes is a lot 💜")}</span>}
+      {p.today.energy === "high" && <span className="small">{L("יום טוב לנושא הכי קשה. 💪", "A good day for the hardest topic. 💪")}</span>}
+    </div>
+  );
+  if (!p.goal.on) return <section className="card study-goal">{ask}</section>;
+  const kinds = GOAL_KINDS.filter((k) => (p.today.targets[k] ?? 0) > 0);
+  if (!kinds.length) return <section className="card study-goal">{ask}</section>;
+  const left = kinds.filter((k) => p.today.counts[k] < p.today.targets[k]!);
   return (
     <section className="card study-goal" aria-label={L("היעד של היום", "Today's goal")}>
       <div className="goal-rings">
         {kinds.map((k) => {
-          const target = p.goal.targets[k]!;
+          const target = p.today.targets[k]!;
           const n = p.today.counts[k];
           return (
             <div key={k} className={`goal-ring${n >= target ? " done" : ""}`} style={{ ["--p" as string]: String(Math.min(1, n / target)) }} title={L(GOAL_NAMES[k][0], GOAL_NAMES[k][1])}>
@@ -368,10 +390,11 @@ function GoalCard() {
       </div>
       <div className="study-goal-text">
         <b>🎯 {L("היעד של היום", "Today's goal")}</b>
-        <span className="small">{p.today.done ? L("הושלם! 🎉", "Done! 🎉") : L(`נשאר: ${left.map((k) => `${p.goal.targets[k]! - p.today.counts[k]} ${GOAL_NAMES[k][0]}`).join(", ")}`, `Left: ${left.map((k) => `${p.goal.targets[k]! - p.today.counts[k]} ${GOAL_NAMES[k][1].toLowerCase()}`).join(", ")}`)}</span>
+        <span className="small">{p.today.done ? L("הושלם! 🎉", "Done! 🎉") : L(`נשאר: ${left.map((k) => `${p.today.targets[k]! - p.today.counts[k]} ${GOAL_NAMES[k][0]}`).join(", ")}`, `Left: ${left.map((k) => `${p.today.targets[k]! - p.today.counts[k]} ${GOAL_NAMES[k][1].toLowerCase()}`).join(", ")}`)}</span>
         <span className="muted small">🔥 {p.today.streak ? L(`${p.today.streak} ימים ברצף ביעד`, `${p.today.streak} days in a row`) : L("היום הראשון של הרצף", "Day one of the streak")}{p.goal.remind ? L(` · תזכורת ב-${p.goal.remind} אם עוד לא`, ` · reminder at ${p.goal.remind} if not yet`) : ""}</span>
         <a href="#/settings/study" className="small">⚙ {L("לשנות יעד", "Change the goal")}</a>
       </div>
+      {ask}
     </section>
   );
 }
@@ -392,6 +415,45 @@ function FocusCard({ courses }: { courses: CourseRow[] }) {
   const [courseId, setCourseId] = useState(courses[0]!.id);
   const [minutes, setMinutes] = useState(25);
   const [, tick] = useState(0);
+  // Focus sounds and the study buddy (design FocusComfort), remembered on this device.
+  const saved = (k: string, d: string) => {
+    try {
+      return localStorage.getItem(k) ?? d;
+    } catch {
+      return d;
+    }
+  };
+  const [sound, setSound] = useState<FocusSound>(() => saved("kesher-focus-sound", "off") as FocusSound);
+  const [vol, setVol] = useState(() => Number(saved("kesher-focus-volume", "0.4")));
+  const [buddy, setBuddy] = useState(() => saved("kesher-focus-buddy", "0") === "1");
+  const remember = (k: string, v: string) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      // private mode
+    }
+  };
+  // The sound plays while the timer runs.
+  useEffect(() => {
+    if (running) playFocusSound(sound);
+    else stopFocusSound();
+  }, [running, sound]);
+  useEffect(() => {
+    setFocusVolume(vol);
+  }, [vol]);
+  useEffect(() => () => stopFocusSound(), []);
+  // The buddy: every 10 minutes a quiet line that she is not alone in it.
+  useEffect(() => {
+    if (!running || !buddy) return;
+    const lines = [
+      L("אני פה איתך. עברו 10 דקות, את בכיוון 💜", "I'm here with you. 10 minutes in, you're on it 💜"),
+      L("עוד קצת. נשימה עמוקה, וממשיכים.", "A bit more. A deep breath, and on we go."),
+      L("כל הכבוד שאת עדיין פה. זה החלק הקשה.", "Well done for still being here. This is the hard part."),
+    ];
+    let n = 0;
+    const t = window.setInterval(() => toast(lines[n++ % lines.length]!), 10 * 60_000);
+    return () => window.clearInterval(t);
+  }, [running, buddy]);
   const load = () => void api<NonNullable<typeof progress>>("/api/study/progress").then(setProgress, () => undefined);
   useEffect(load, []);
   const keep = (r: Running | null) => {
@@ -445,7 +507,17 @@ function FocusCard({ courses }: { courses: CourseRow[] }) {
           <span className="muted small">{courses.find((c) => c.id === running.courseId)?.name}</span>
           <button type="button" onClick={() => void finish(running, true)}>{L("עצירה", "Stop")}</button>
         </div>
-      ) : (
+      ) : null}
+      <div className="focus-comfort">
+        <div className="focus-sounds" role="radiogroup" aria-label={L("צליל רקע", "Background sound")}>
+          {([["off", "🔇", "שקט", "Quiet"], ["brown", "🟤", "רעש חום", "Brown noise"], ["rain", "🌧", "גשם", "Rain"], ["waves", "🌊", "גלים", "Waves"]] as const).map(([k, icon, he, en]) => (
+            <button type="button" key={k} role="radio" aria-checked={sound === k} className={sound === k ? "on" : ""} onClick={() => { setSound(k); remember("kesher-focus-sound", k); }}>{icon} {L(he, en)}</button>
+          ))}
+          {sound !== "off" && <input type="range" min={0} max={1} step={0.05} value={vol} aria-label={L("עוצמה", "Volume")} onChange={(e) => { setVol(Number(e.target.value)); remember("kesher-focus-volume", e.target.value); }} />}
+        </div>
+        <label className="study-check small"><input type="checkbox" checked={buddy} onChange={(e) => { setBuddy(e.target.checked); remember("kesher-focus-buddy", e.target.checked ? "1" : "0"); }} /> 👋 {L("חבר ללמידה: מילה טובה כל 10 דקות", "Study buddy: a kind word every 10 minutes")}</label>
+      </div>
+      {running ? null : (
         <div className="study-actions">
           <select value={courseId} onChange={(e) => setCourseId(e.target.value)} aria-label={L("קורס", "Course")}>{courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
           {[25, 50].map((m) => <button key={m} type="button" className={minutes === m ? "on" : ""} aria-pressed={minutes === m} onClick={() => setMinutes(m)}>{m} {L("דק׳", "min")}</button>)}

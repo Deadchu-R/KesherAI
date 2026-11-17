@@ -19,6 +19,15 @@ describe("daily goal", () => {
     assert.equal(t2.done, false);
     assert.equal(t2.streak, 2);
   });
+  it("a tired day asks half, and keeps the streak", () => {
+    const c = course([[at(16), 20], [at(17), 10]], []);
+    const act = [16, 17].map((d) => ({ t: at(d, 9), kind: "videos" as const }));
+    const t = goalToday([c], act, goal, at(17, 18), { "2026-11-17": "low" });
+    assert.equal(t.targets.minutes, 10);
+    assert.equal(t.done, true);
+    assert.equal(t.streak, 2);
+    assert.equal(goalToday([c], act, goal, at(17, 18)).done, false);
+  });
   it("reminds once, after its time, only when not reached and the goal is on", () => {
     const g: StudyGoal = { ...goal, remind: "20:30" };
     assert.equal(goalRemindNow(g, false, undefined, new Date(2026, 10, 17, 20, 29)), false);

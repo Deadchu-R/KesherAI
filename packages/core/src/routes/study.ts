@@ -39,6 +39,13 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     const targets = b.targets && typeof b.targets === "object" ? Object.fromEntries(Object.entries(b.targets).filter(([k]) => GOAL_KINDS.includes(k as never)).map(([k, v]) => [k, Number(v) || 0])) : undefined;
     return st.setGoal({ ...(typeof b.on === "boolean" ? { on: b.on } : {}), ...(targets ? { targets } : {}), ...(typeof b.remind === "string" ? { remind: b.remind } : {}), ...(typeof b.phone === "boolean" ? { phone: b.phone } : {}) });
   });
+  /** "How am I today" (design FocusComfort): a low day halves the goal, so the streak survives it. */
+  app.put<{ Body: { level?: string } }>("/api/study/energy", async (req, reply) => {
+    const level = req.body?.level;
+    if (level !== "high" && level !== "ok" && level !== "low") return reply.code(400).send({ error: "high, ok or low." });
+    await st.setEnergy(level);
+    return st.progress();
+  });
   /** Simple mode and the first visit (design StudyWelcome / StudySimple). */
   app.get("/api/study/prefs", async () => st.prefs());
   app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean } }>("/api/study/prefs", async (req) => {

@@ -3197,3 +3197,14 @@ html.handheld .palette-list button { min-height: 44px; }
 .read-along-text span { cursor: pointer; border-radius: 5px; padding: 1px 2px; }
 .read-along-text span.read { color: var(--muted); }
 .read-along-text span.now { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--text, #fff); }
+/* Focus sounds and the study buddy (design FocusComfort). */
+.focus-comfort { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.focus-sounds { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.focus-sounds button { padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; }
+.focus-sounds button.on { border-color: var(--accent); color: var(--accent); }
+.focus-sounds input[type="range"] { width: 120px; }
+.study-energy { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.study-goal > .study-energy:only-child { border-top: 0; padding-top: 0; }
+.study-energy .row { flex-wrap: wrap; gap: 6px; }
+.study-energy button { padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; }
+.study-energy button.on { border-color: var(--accent); color: var(--accent); }
