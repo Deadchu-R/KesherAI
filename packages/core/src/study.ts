@@ -232,16 +232,17 @@ export class Study {
   }
 
   /** How Study looks for her (design StudySimple): simple mode, and whether she went through the first visit. */
-  async prefs(): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean }> {
+  async prefs(): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }> {
     const j = await readFile(join(this.dir, "_prefs.json"), "utf8").then((t) => JSON.parse(t) as Record<string, unknown>, () => ({}) as Record<string, unknown>);
-    return { simple: j.simple === true, welcomed: j.welcomed === true, easyRead: j.easyRead === true };
+    // The course path (design CoursePath) is on until she turns it off (Roee: optional, 2026-11-17).
+    return { simple: j.simple === true, welcomed: j.welcomed === true, easyRead: j.easyRead === true, path: j.path !== false };
   }
 
   /** Changes them. */
-  async setPrefs(change: Partial<{ simple: boolean; welcomed: boolean; easyRead: boolean }>): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean }> {
+  async setPrefs(change: Partial<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }>): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }> {
     const cur = await this.prefs();
-    const pick = (k: "simple" | "welcomed" | "easyRead") => (typeof change[k] === "boolean" ? change[k]! : cur[k]);
-    const next = { simple: pick("simple"), welcomed: pick("welcomed"), easyRead: pick("easyRead") };
+    const pick = (k: "simple" | "welcomed" | "easyRead" | "path") => (typeof change[k] === "boolean" ? change[k]! : cur[k]);
+    const next = { simple: pick("simple"), welcomed: pick("welcomed"), easyRead: pick("easyRead"), path: pick("path") };
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, "_prefs.json"), JSON.stringify(next));
     return next;

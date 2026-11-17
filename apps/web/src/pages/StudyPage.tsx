@@ -122,7 +122,7 @@ function BackLink({ to }: { to: string }) {
 }
 
 /** Simple mode and the first visit (design StudySimple / StudyWelcome), shared by the home and the course. */
-type StudyPrefs = { simple: boolean; welcomed: boolean; easyRead?: boolean };
+type StudyPrefs = { simple: boolean; welcomed: boolean; easyRead?: boolean; path?: boolean };
 function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
   const [p, setP] = useState<StudyPrefs | null>(null);
   useEffect(() => void api<StudyPrefs>("/api/study/prefs").then(setP, () => setP({ simple: false, welcomed: true })), []);
@@ -1018,6 +1018,9 @@ function CoursePath({ courseId, lectures }: { courseId: string; lectures: Lectur
 }
 
 function Lectures({ courseId, info, onChange }: { courseId: string; info: CourseInfo; onChange: () => void }) {
+  // The path is optional (Settings → Study → View).
+  const [prefs] = useStudyPrefs();
+  const showPath = prefs?.path !== false;
   const [adding, setAdding] = useState(!info.lectures.length);
   const [recording, setRecording] = useState(false);
   const [title, setTitle] = useState("");
@@ -1079,7 +1082,7 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
   };
   return (
     <div className="study-lectures">
-      {!adding && !recording && <CoursePath courseId={courseId} lectures={info.lectures} />}
+      {!adding && !recording && showPath && <CoursePath courseId={courseId} lectures={info.lectures} />}
       {recording ? (
         <StudyRecorder onCancel={() => setRecording(false)} onDone={async (t, audio) => {
           setRecording(false);

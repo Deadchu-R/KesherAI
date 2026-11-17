@@ -48,9 +48,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
   /** Simple mode and the first visit (design StudyWelcome / StudySimple). */
   app.get("/api/study/prefs", async () => st.prefs());
-  app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean } }>("/api/study/prefs", async (req) => {
+  app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean; path?: boolean } }>("/api/study/prefs", async (req) => {
     const b = req.body ?? {};
-    return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));
+    return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead", "path"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));
   });
   /** A video she watched to the end (a video lecture or a video overview), for the goal. */
   app.post("/api/study/activity/video", async () => {

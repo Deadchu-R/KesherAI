@@ -55,14 +55,15 @@ function GoalSettings() {
 
 /** Settings → Study → View: simple mode (design StudySimple). */
 function ViewSettings() {
-  const [p, setP] = useState<{ simple: boolean; welcomed: boolean; easyRead: boolean } | null>(null);
-  useEffect(() => void api<{ simple: boolean; welcomed: boolean; easyRead: boolean }>("/api/study/prefs").then(setP, () => undefined), []);
+  const [p, setP] = useState<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean } | null>(null);
+  useEffect(() => void api<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }>("/api/study/prefs").then(setP, () => undefined), []);
   if (!p) return null;
   const set = (body: Partial<typeof p>) => void api<typeof p>("/api/study/prefs", { method: "PUT", body }).then(setP, (er: Error) => toast(er.message));
   return (
     <section className="card">
       <h2>🧹 {L("תצוגה", "View")}</h2>
       <label className="study-check"><input type="checkbox" defaultChecked={!studySoundsMuted()} onChange={(e) => muteStudySounds(!e.target.checked)} /> {L("צלילי הצלחה עדינים (במכשיר הזה)", "Soft success sounds (on this device)")}</label>
+      <label className="study-check"><input type="checkbox" checked={p.path} onChange={(e) => set({ path: e.target.checked })} /> 🗺 {L("הקורס כמסלול של שלבים (כמו Duolingo) בדף ההרצאות", "The course as a path of steps (like Duolingo) on the lectures page")}</label>
       <label className="study-check"><input type="checkbox" checked={p.easyRead} onChange={(e) => set({ easyRead: e.target.checked })} /> {L("קריאה נוחה: טקסט גדול ומרווח יותר בלימודים", "Easy reading: larger, more spaced text in Study")}</label>
       <label className="study-check"><input type="checkbox" checked={p.simple} onChange={(e) => set({ simple: e.target.checked })} /> {L("תצוגה פשוטה: רק הכלים של כל יום, השאר תחת \"עוד כלים\"", "Simple view: only the everyday tools, the rest under \"More tools\"")}</label>
     </section>
