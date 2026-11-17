@@ -537,3 +537,14 @@ test("cleanEnglish: questions with a valid answer, words with both sides", async
   assert.equal(r.questions.length, 1);
   assert.deepEqual(r.words, [{ en: "albeit", he: "אף על פי ש" }]);
 });
+
+test("courseWeb: lectures joined by the terms they share", async () => {
+  const { courseWeb } = await import("./study.js");
+  const w = courseWeb([
+    { id: "a", title: "לב", text: "הלב והסיסטולה", terms: [{ term: "סיסטולה", explain: "" }] },
+    { id: "b", title: "לחץ דם", text: "בזמן הסיסטולה הלחץ עולה. תפוקת לב.", terms: [{ term: "תפוקת לב", explain: "" }] },
+    { id: "c", title: "כליה", text: "אין קשר", terms: [] },
+  ]);
+  assert.deepEqual(w.edges, [{ a: "a", b: "b", terms: ["סיסטולה"] }]);
+  assert.equal(w.nodes.length, 3);
+});

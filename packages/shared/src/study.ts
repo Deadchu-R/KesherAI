@@ -1200,6 +1200,28 @@ export function whereTerm(lectures: Array<Pick<StudyLecture, "id" | "title" | "t
   return out.sort((a, b) => b.count - a.count);
 }
 
+/**
+ * The course as a web (design CourseWeb, students part 33 #2, like Obsidian's graph view): lectures joined by the
+ * terms they share (a lecture's term mentioned in another lecture's text), the strongest links first.
+ */
+export function courseWeb(lectures: Array<Pick<StudyLecture, "id" | "title" | "text" | "terms">>): { nodes: Array<{ id: string; title: string }>; edges: Array<{ a: string; b: string; terms: string[] }> } {
+  const pairs = new Map<string, Set<string>>();
+  let seen = 0;
+  for (const l of lectures) {
+    for (const t of l.terms ?? []) {
+      if (seen++ > 400) break;
+      for (const p of whereTerm(lectures.filter((x) => x.id !== l.id), t.term, t.en)) {
+        const [a, b] = [l.id, p.lectureId].sort() as [string, string];
+        const k = `${a}|${b}`;
+        if (!pairs.has(k)) pairs.set(k, new Set());
+        pairs.get(k)!.add(t.term);
+      }
+    }
+  }
+  const edges = [...pairs].map(([k, set]) => { const [a, b] = k.split("|") as [string, string]; return { a, b, terms: [...set].slice(0, 12) }; }).sort((x, y) => y.terms.length - x.terms.length).slice(0, 300);
+  return { nodes: lectures.map((l) => ({ id: l.id, title: l.title })), edges };
+}
+
 /** A course's syllabus, read once from its file and confirmed by her. Dates are YYYY-MM-DD. */
 export interface StudySyllabus {
   exams: Array<{ title: string; date: string }>;

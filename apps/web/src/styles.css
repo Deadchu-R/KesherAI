@@ -3623,3 +3623,18 @@ div.slide-list { padding-inline-start: 0; }
 .study-english-words dl { display: grid; grid-template-columns: 1fr; gap: 4px; margin: 6px 0; }
 .study-english-words dl > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 8px; border-bottom: 1px solid var(--border, #333); }
 .study-english-words dt { font-weight: 600; } .study-english-words dd { margin: 0; }
+.study-web { display: flex; flex-direction: column; gap: 10px; }
+.study-web h2 { margin: 0; }
+.study-web-svg { width: 100%; max-width: 420px; align-self: center; }
+.study-web-svg line { stroke: var(--muted, #888); opacity: .45; }
+.study-web-svg line.on { stroke: var(--accent, #a5b4ff); opacity: 1; }
+.study-web-svg line.off { opacity: .12; }
+.study-web-node { cursor: pointer; }
+.study-web-node circle { fill: var(--panel, #1e1f24); stroke: var(--accent, #a5b4ff); stroke-width: 2; }
+.study-web-node.sel circle { fill: var(--accent, #a5b4ff); }
+.study-web-node text { fill: var(--text, #eee); font-size: 11px; font-weight: 700; pointer-events: none; }
+.study-web-node.sel text { fill: #111; }
+.study-web-list { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 2px; }
+.study-web-list li.sel button { color: var(--accent, #a5b4ff); font-weight: 700; }
+.study-web-sel { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.study-web-node:focus { outline: none; } .study-web-node:focus-visible circle { stroke-width: 4; }

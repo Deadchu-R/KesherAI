@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
+import { courseWeb, whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { youtubeSearch, cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -464,6 +464,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     await st.removeSlides(req.params.id, req.params.lid);
     return { ok: true };
   });
+  /** The course as a web of lectures joined by shared terms (design CourseWeb). */
+  app.get<C>("/api/study/courses/:id/web", async (req) => courseWeb((await st.get(req.params.id)).lectures));
   /** Where else a term appears in the course's lectures (design WhereTerm). */
   app.get<C & { Querystring: { term?: string; en?: string } }>("/api/study/courses/:id/where", async (req) => ({ places: whereTerm((await st.get(req.params.id)).lectures, String(req.query.term ?? "").slice(0, 100), typeof req.query.en === "string" ? req.query.en.slice(0, 100) : undefined).slice(0, 30) }));
   /** Her memory palace (design MemoryPalace): the kept one, and building a new one. */

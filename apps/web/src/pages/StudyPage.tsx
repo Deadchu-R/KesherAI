@@ -20,6 +20,7 @@ import { StudyLetter } from "../StudyLetter";
 import { StudyRehearse } from "../StudyRehearse";
 import { StudyExamEve } from "../StudyExamEve";
 import { StudyEnglish } from "../StudyEnglish";
+import { StudyWeb } from "../StudyWeb";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -650,6 +651,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["ask", ["שאלי את הקורס", "Ask the course"]],
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
+  ["web", ["🕸 מפת הקורס", "🕸 Course web"]],
   ["game", ["🎯 משחק", "🎯 Game"]],
   ["together", ["👥 לומדים יחד", "👥 Study together"]],
   ["rehearse", ["🎤 חזרה על הצגה", "🎤 Rehearse a talk"]],
@@ -785,6 +787,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} clinical={clinicalField(info.course.field)} mocks={info.mocks ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
+        : on === "web" ? <StudyWeb courseId={id} />
         : on === "terms" ? <Glossary courseId={id} lectures={info.lectures} />
         : on === "writing" ? <StudyWriting courseId={id} />
         : on === "game" ? <StudyGames courseId={id} courseName={info.course.name} terms={info.lectures.flatMap((l) => l.terms ?? [])} />
