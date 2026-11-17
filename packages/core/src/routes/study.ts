@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
-import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
+import { youtubeSearch, cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
 import { readMedia, toWav, transcribeWith } from "../speech-tools.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import WebSocket from "ws";
@@ -234,6 +234,12 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return sendRange(req, reply, path, size, l?.videoFile?.mime ?? "video/mp4");
   });
   app.post<L>("/api/study/courses/:id/lectures/:lid/chapters", async (req) => st.makeChapters(req.params.id, req.params.lid));
+  /** Lectures on YouTube for a topic (design TopicVideos): names only; adding one goes through the route below. */
+  app.get<C & { Querystring: { q?: string } }>("/api/study/courses/:id/videos", async (req) => {
+    await st.get(req.params.id);
+    const ytdlp = await ensureYtDlp({ dir: s.paths.engines, downloads: s.downloads });
+    return { videos: await youtubeSearch(ytdlp, String(req.query.q ?? "")) };
+  });
   /** A YouTube lecture by its link: its captions (or its sound, through whisper) become a lecture with minute marks. */
   app.post<C & { Body: { url?: string } }>("/api/study/courses/:id/lectures/youtube", async (req, reply) => {
     const id = youtubeId(String(req.body?.url ?? ""));

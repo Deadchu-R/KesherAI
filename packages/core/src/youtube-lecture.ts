@@ -123,6 +123,50 @@ export async function youtubeLecture(ytdlp: string, id: string, prefer: string[]
   return { title, ...(audio ? { audio: join(tmp, audio) } : {}), tmp };
 }
 
+/** A video found on YouTube for a topic. */
+export interface FoundVideo {
+  id: string;
+  title: string;
+  channel?: string;
+  /** Seconds. */
+  duration?: number;
+}
+
+/** yt-dlp's flat search answer (one JSON per line) as videos: ids checked, titles cut, live streams and shorts left out. */
+export function parseVideoSearch(out: string): FoundVideo[] {
+  const seen = new Set<string>();
+  return out.split("\n").flatMap((line): FoundVideo[] => {
+    let j: Record<string, unknown>;
+    try {
+      j = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      return [];
+    }
+    const id = typeof j.id === "string" && /^[\w-]{11}$/.test(j.id) ? j.id : "";
+    const duration = Number(j.duration);
+    if (!id || seen.has(id) || j.live_status === "is_live" || (Number.isFinite(duration) && duration > 0 && duration < 90)) return [];
+    seen.add(id);
+    const title = String(j.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    const channel = String(j.channel ?? j.uploader ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+    return title ? [{ id, title, ...(channel ? { channel } : {}), ...(Number.isFinite(duration) && duration > 0 ? { duration: Math.round(duration) } : {}) }] : [];
+  });
+}
+
+/**
+ * Lectures on YouTube for a topic (design TopicVideos, students part 29 #7, like Gemini Guided Learning): yt-dlp's
+ * search, names only (nothing is downloaded); at most `n`.
+ *
+ * @param ytdlp - yt-dlp's path.
+ * @param query - What to look for (her lecture's title and terms).
+ * @param n - How many (at most 10).
+ */
+export async function youtubeSearch(ytdlp: string, query: string, n = 6): Promise<FoundVideo[]> {
+  const q = query.replace(/[\r\n]+/g, " ").replace(/^[-\s]+/, "").trim().slice(0, 150);
+  if (q.length < 2) return [];
+  const r = await run(ytdlp, ["--flat-playlist", "--dump-json", "--no-warnings", "--ignore-config", `ytsearch${Math.max(1, Math.min(10, n + 2))}:${q}`], { timeout: 60_000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+  return parseVideoSearch(String(r.stdout)).slice(0, n);
+}
+
 /** Removes the temporary folder of a fetch. */
 export async function cleanYoutube(tmp: string): Promise<void> {
   await rm(tmp, { recursive: true, force: true });

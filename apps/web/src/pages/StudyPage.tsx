@@ -13,6 +13,7 @@ import { StudyLive } from "../StudyLive";
 import { StudyTogether } from "../StudyTogether";
 import { StudyPapers } from "../StudyPapers";
 import { StudyPalace } from "../StudyPalace";
+import { StudyTopicVideos } from "../StudyTopicVideos";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -1513,6 +1514,7 @@ function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { 
         <button type="button" className={talkLine !== null ? "primary" : ""} disabled={busy === "podcast"} onClick={() => void podcast()}>{busy === "podcast" ? L("כותב שיחה בין שני מגישים…", "Writing a talk between two hosts…") : talkLine !== null ? L("⏹ עצירה", "⏹ Stop") : L("🎙 פודקאסט בשני קולות", "🎙 A two-voice podcast")}</button>
         <SpeedSelect rate={speakRate} onRate={setSpeakRate} />
       </div>
+      {!l.youtube && !l.videoFile && <StudyTopicVideos key={`videos-${l.id}`} courseId={courseId} topic={`${l.title} ${(l.terms ?? []).slice(0, 2).map((t) => t.term).join(" ")}`.trim()} />}
       {talkLine !== null && l.podcast && (() => { const line = parsePodcast(l.podcast)[talkLine]; return line ? <p className={`study-podcast-line host${line.host}`} dir="auto"><b>{line.host ? L("איתי", "Itai") : L("נועה", "Noa")}:</b> {line.text}</p> : null; })()}
       {l.summary && view !== "text" && <button type="button" className="small ghost" disabled={!!busy} onClick={() => void summarize()}>{busy === "summary" ? "…" : L("סכם מחדש", "Summarize again")}</button>}
       <h3>{L("להפוך לכרטיסיות, בפורמט:", "Make cards, studied as:")}</h3>
