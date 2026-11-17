@@ -89,6 +89,31 @@ await pg.waitForTimeout(300);
 await sec.locator("button", { hasText: "כלים לתחום" }).first().click();
 await pg.waitForTimeout(300);
 checks.tools = (await sec.locator("select[aria-label='כלי'] option").count()) > 0;
+// The features from the computer's Study, on the phone alone (phone-study-plus.js).
+const wide = async () => (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
+const backTo = async () => { await sec.locator("button", { hasText: "› חזרה" }).first().click().catch(() => undefined); await pg.waitForTimeout(300); };
+const open = async (label, wait = 300) => { await sec.locator("button", { hasText: label }).first().click(); await pg.waitForTimeout(wait); };
+await backTo();
+checks.plusButtons = (await sec.locator("button", { hasText: "📱 פיד" }).count()) > 0 && (await sec.locator("button", { hasText: "✉️ מכתב למרצה" }).count()) > 0;
+for (const [name, label, look] of [["feed", "📱 פיד", "text=הפיד מתמלא"], ["web", "🕸 מפת הקורס", "text=המפה נבנית"], ["palace", "🏛 ארמון זיכרון", "text=ארמון זיכרון נבנה"], ["papers", "📚 מאמרים ומקורות", "input[type=search]"], ["letter", "✉️ מכתב למרצה", "select[aria-label='סוג המכתב']"]]) {
+  await open(label);
+  checks[name] = (await sec.locator(look).count()) > 0 && (await wide());
+  await backTo();
+}
+const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+await sec.locator("input[type=date]").fill(tomorrow);
+await sec.locator("input[type=date]").dispatchEvent("change");
+await pg.waitForTimeout(400);
+checks.examEve = (await sec.locator("text=המבחן מחר").count()) > 0 && (await sec.locator("text=דקה של נשימה רגועה").count()) > 0;
+await backTo();
+await open("🎓 ציונים ותואר");
+await sec.locator("input[placeholder='שם הקורס']").fill("פיזיולוגיה");
+await sec.locator("button", { hasText: "+ קורס" }).last().click();
+await pg.waitForTimeout(300);
+checks.grades = (await sec.locator("text=פיזיולוגיה").count()) > 0 && (await sec.locator("text=התקדמות בתואר").count()) > 0 && (await wide());
+await backTo();
+await open("📘 אנגלית אקדמית");
+checks.english = (await sec.locator("button", { hasText: "לתרגל על הטקסט" }).count()) > 0 && (await wide());
 checks.fits = (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 if (shot) await pg.screenshot({ path: shot });
 await b.close();

@@ -151,10 +151,13 @@ public class KesherSpeechPlugin extends Plugin {
         String text = call.getString("text", "");
         String lang = call.getString("language", "");
         float rate = call.getFloat("rate", 1.0f);
+        // A second voice for a two-host podcast (design Podcast): the same voice, higher or lower.
+        float pitch = Math.max(0.5f, Math.min(2.0f, call.getFloat("pitch", 1.0f)));
         String id = UUID.randomUUID().toString();
         ensureTts(() -> {
             if (lang != null && !lang.isEmpty()) tts.setLanguage(Locale.forLanguageTag(lang));
             tts.setSpeechRate(rate);
+            tts.setPitch(pitch);
             boolean queue = Boolean.TRUE.equals(call.getBoolean("queue", false));
             tts.speak(text, queue ? TextToSpeech.QUEUE_ADD : TextToSpeech.QUEUE_FLUSH, null, id);
             JSObject r = new JSObject();

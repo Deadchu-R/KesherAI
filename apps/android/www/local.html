@@ -160,6 +160,8 @@
     #modelsView[data-tab="health"] > .intro:not([data-cat]) { display: none; }
     .ph-numbers { margin: 0; padding-inline-start: 18px; line-height: 1.9; }
     .ph-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .ph-feed { height: 72vh; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 16px; }
+    .ph-bite { min-height: 72vh; box-sizing: border-box; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 20px 16px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
     .ph-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
     .ph-row button, .ph-btns button { min-height: 40px; flex: none; }
     .ph-btns { display: flex; gap: 6px; flex: none; }
@@ -963,7 +965,7 @@
     void import("./phone-study.js").then((m) => m.renderPhoneStudy($("studySection"), (msgs) => askLong(current?.item, msgs), webSearch, studySpeech, studySync, studyExtract, studySay));
   };
   /** Reading a lecture's review aloud with the phone's voice (the app only). */
-  function studySay(text) { return speak(text); }
+  function studySay(text, o) { return speak(text, o); }
   studySay.stop = () => { SPEECH?.stopSpeaking?.(); };
   /** A lecture file read by the paired computer (scans, photos), or a photo by the phone's own model: undefined when neither can. */
   async function studyExtract(body) {
@@ -2054,12 +2056,12 @@
     const sub = onPartial ? await SPEECH.addListener("partial", (e) => onPartial(e.text)) : null;
     try { return (await SPEECH.start({ language: speakLang() })).text || ""; } finally { sub?.remove?.(); }
   }
-  function speak(text) {
+  function speak(text, o = {}) {
     if (!SPEECH || !text) return Promise.resolve();
     const clean = text.replace(/```[\s\S]*?```/g, T(" (קוד) ", " (code) ")).replace(/[#*_`>|]/g, "").replace(/https?:\/\/\S+/g, "").slice(0, 4000);
     return new Promise(async (res) => {
       const sub = await SPEECH.addListener("spoken", () => { sub.remove?.(); res(); });
-      await SPEECH.speak({ text: clean, language: speakLang() }).catch(() => { sub.remove?.(); res(); });
+      await SPEECH.speak({ text: clean, language: speakLang(), ...(o.pitch ? { pitch: o.pitch } : {}), ...(o.rate ? { rate: o.rate } : {}) }).catch(() => { sub.remove?.(); res(); });
     });
   }
   $("mic").onclick = async () => {

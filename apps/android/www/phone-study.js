@@ -6,6 +6,7 @@
  * The same shapes as the computer's Study page (packages/shared/src/study.ts), so courses can move to it later.
  */
 import { calcCorrect, createEmptyCard, fsrs, jsonIn, LAB_VALUES, practiceProblem, clinicalField, detectField, formatStats, weakLectures, STUDY_FIELDS, benefitsFor, mergeCourseData, examPlan, cardsToReview, findPassages, tutorMessages, explainMessages, gradeMessages, gradeLine, cleanScript, MISSED_PROMPT, TRANSLATE_PROMPT, AUDIO_PROMPT, shareCourse, openSharedCourse, parseFlow, studyStreak, studyDays, focusWeek, pastExamStyle, parseSyllabus, syllabusNow, SYLLABUS_PROMPT, dayKey, checkCalcQuestion, studyNext, cardsToTsv, cardsFromTsv, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, toolsFor, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, searchStudy, courseSummaryInput, parseCourseSummary } from "./vendor/study-core.js";
+import { studyPlus } from "./phone-study-plus.js";
 
 const KEY = "kesherai-study";
 const he = () => (document.documentElement.lang || "he").startsWith("he");
@@ -122,12 +123,12 @@ async function ankiShare(c) {
 
 /** A phone course (one object) as the computer's course file, for syncing. */
 function toData(c) {
-  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, syllabus, courseSummary, ...course } = c;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}) };
+  const { lectures = [], cards = [], reviews = [], quizzes = [], drugs, removed, focus, pastExams, syllabus, courseSummary, sources, palace, ...course } = c;
+  return { course, lectures, cards, reviews, quizzes, ...(drugs ? { drugs } : {}), ...(removed ? { removed } : {}), ...(focus ? { focus } : {}), ...(pastExams ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}), ...(sources ? { sources } : {}), ...(palace ? { palace } : {}) };
 }
 /** The computer's course file as a phone course. */
 function fromData(d) {
-  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}), ...(d.syllabus ? { syllabus: d.syllabus } : {}), ...(d.courseSummary ? { courseSummary: d.courseSummary } : {}) };
+  return { ...d.course, lectures: d.lectures || [], cards: d.cards || [], reviews: d.reviews || [], quizzes: d.quizzes || [], ...(d.drugs ? { drugs: d.drugs } : {}), ...(d.removed ? { removed: d.removed } : {}), ...(d.focus ? { focus: d.focus } : {}), ...(d.pastExams ? { pastExams: d.pastExams } : {}), ...(d.syllabus ? { syllabus: d.syllabus } : {}), ...(d.courseSummary ? { courseSummary: d.courseSummary } : {}), ...(d.sources ? { sources: d.sources } : {}), ...(d.palace ? { palace: d.palace } : {}) };
 }
 
 /**
@@ -203,6 +204,9 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     }
   };
 
+  // The features from the computer's Study (students parts 25-34), here with no computer (phone-study-plus.js).
+  const plus = studyPlus({ root, el, L, go, need, commit, uid, course, draw: () => draw(), back: (to) => back(to), toData, db: () => db, get view() { return view; }, say, speech, extract, wavBase64: (c, r) => wavBase64(c, r) });
+
   function draw() {
     root.replaceChildren();
     root.onpointerup = null;
@@ -224,6 +228,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     else if (view.at === "record") record();
     else if (view.at === "benefits") benefits();
     else if (view.at === "ask") askView();
+    else if (plus.homeViews[view.at]) plus.homeViews[view.at]();
+    else if (plus.views[view.at]) { const c = course(); if (!c) return go({ at: "home" }); plus.views[view.at](c); }
   }
 
   const back = (to) => el("button", { type: "button", class: "link", onclick: () => go(to) }, L("› חזרה", "‹ Back"));
@@ -470,7 +476,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
   }
 
   /** Her own notes beside the lecture's summary, saved as she types. */
-  function notesBox(l) {
+  function notesBox(l, c) {
     const ta = el("textarea", { rows: "4", dir: "auto", "aria-label": L("ההערות שלי", "My notes"), placeholder: L("מה המרצה הדגיש, מה לשאול, מה לא הבנתי…", "What the lecturer stressed, what to ask, what I did not get…") });
     ta.value = l.notes || "";
     let t = 0;
@@ -483,7 +489,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         commit();
       }, 600);
     };
-    const box = el("details", { class: "api" }, el("summary", {}, L("ההערות שלי", "My notes")), ta);
+    const box = el("details", { class: "api" }, el("summary", {}, L("ההערות שלי", "My notes")), ta, c ? plus.noteCardsBtn(c, l) : null);
     if (l.notes) box.open = true;
     return box;
   }
@@ -519,6 +525,9 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       db.courses.some((c) => clinicalField(c.field)) && el("div", { class: "ph-btns" },
         el("button", { type: "button", onclick: () => go({ at: "calc" }) }, L("חישובי תרופות", "Medication calculations")),
         el("button", { type: "button", onclick: () => go({ at: "labs" }) }, L("ערכי מעבדה", "Lab values"))),
+      el("div", { class: "ph-btns", style: "flex-wrap: wrap" },
+        el("button", { type: "button", onclick: () => go({ at: "grades" }) }, L("🎓 ציונים ותואר", "🎓 Grades and degree")),
+        el("button", { type: "button", onclick: () => go({ at: "english" }) }, L("📘 אנגלית אקדמית", "📘 Academic English"))),
       el("button", { type: "button", onclick: () => go({ at: "benefits" }) }, L("הטבות לסטודנטים", "Student benefits")),
       search && el("button", { type: "button", onclick: () => go({ at: "life" }) }, L("שאלה על הלימודים (עם מקורות מהרשת)", "A question about your studies (sources from the web)")),
       sync && el("div", { class: "ph-row" },
@@ -576,6 +585,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),
+      plus.courseButtons(c), plus.examEve(c),
       el("label", { class: "ph-filter" }, L("תחום: ", "Field: "), (() => {
         const sel = el("select", { onchange: (e) => { const v = e.target.value; if (v) { c.field = v; c.fieldChosen = true; } else { delete c.fieldChosen; c.field = detectField(c.name, c.lectures.map((x) => `${x.title} ${x.text.slice(0, 3000)}`).join(" ")); } if (commit()) draw(); } },
           el("option", { value: "" }, c.field && !c.fieldChosen ? L("זוהה: ", "Recognised: ") + (STUDY_FIELDS.find((f) => f.id === c.field)?.[he() ? "he" : "en"] ?? "") : L("לזהות לבד", "Recognise by itself")),
@@ -782,11 +792,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       }));
     };
     root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), player ? el("section", { class: "api" }, player, el("small", { class: "muted" }, L("ההקלטה שמורה במחשב. לחיצה על דקה בטקסט המלא מנגנת משם.", "The recording is kept on the computer. A minute in the full text plays from there."))) : "", explainBox,
-      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l))),
-      notesBox(l),
+      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l), plus.podcastBtn(c, l))),
+      plus.portions(c, l),
+      notesBox(l, c),
       picturesBox(l),
       flowView(l.diagram),
-      l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms)),
+      l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms, c)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),
       el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), fullText()));
   }
@@ -806,7 +817,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
           return [i > 0 ? el("span", { class: "ph-flow-arrow", "aria-hidden": "true" }, into?.label ? `${into.label} ↓` : "↓") : null, el("span", { class: "ph-flow-box", dir: "auto" }, label(id))];
         })));
   };
-  const termRows = (list) => list.map((t) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, el("b", {}, t.term), t.en && t.en !== t.term ? el("small", { class: "muted", dir: "ltr" }, " · " + t.en) : null, el("br"), el("small", {}, t.explain))));
+  const termRows = (list, c) => list.map((t) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, el("b", {}, t.term), t.en && t.en !== t.term ? el("small", { class: "muted", dir: "ltr" }, " · " + t.en) : null, el("br"), el("small", {}, t.explain), c ? plus.whereBtn(c, t) : null)));
 
   function drugBtn(c, l) {
     const b = el("button", { type: "button" }, L("כרטיסי תרופות", "Drug cards"));
@@ -1243,11 +1254,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       turns.push({ role: "assistant", content: cleanScript(String(r).trim(), heb), sources: [...new Set(passages.map((p) => p.title + (p.page ? L(`, עמ׳ ${p.page}`, `, p. ${p.page}`) : "")))] });
       draw();
     };
+    const hw = homework ? plus.homeworkExtras(send, q) : null;
     const form = el("form", { class: "ph-filter", onsubmit: (e) => {
       e.preventDefault();
       const question = q.value.trim();
       if (question) void send(question, btn);
-    } }, q, btn);
+    } }, hw?.photo, q, btn);
     const seg = el("div", { class: "ph-btns", role: "tablist" }, ...[["ask", "השאלות שלי", "My questions"], ["study", "מצב תרגול", "Study mode"], ["homework", "שיעורי בית", "Homework"]].map(([m, h, e]) =>
       el("button", { type: "button", role: "tab", "aria-selected": String(m === mode), class: m === mode ? "primary" : "", onclick: () => { tutorMode.set(c.id, m); draw(); } }, L(h, e))));
     const startBtn = study && !turns.length ? el("button", { type: "button", class: "primary", style: "width: 100%; min-height: 48px", onclick: (e) => void send("", e.currentTarget) }, L("התחילי תרגול", "Start practising")) : "";
@@ -1256,7 +1268,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
       startBtn, list,
       homework && turns.length ? el("div", { class: "ph-btns" },
         el("button", { type: "button", onclick: (e) => void send(L("רמז, בבקשה", "A hint, please"), e.currentTarget) }, L("רמז", "Hint")),
-        el("button", { type: "button", onclick: (e) => void send(L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"), e.currentTarget) }, L("פתרון מלא", "Full solution"))) : "",
+        el("button", { type: "button", onclick: (e) => void send(L("הראי לי את הפתרון המלא, צעד אחר צעד", "Show me the full solution, step by step"), e.currentTarget) }, L("פתרון מלא", "Full solution")),
+        el("button", { type: "button", onclick: (e) => hw.similar(e.currentTarget) }, L("🔁 תרגיל דומה", "🔁 A similar problem"))) : "",
       form);
     if (!startBtn) q.focus();
   }
@@ -1268,7 +1281,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const now = Date.now();
     const card = cardsToReview(toData(c), now, 1)[0];
     root.append(back({ at: "course", course: c.id }));
-    if (!card) return root.append(el("p", {}, L("סיימת! אין עוד כרטיסיות לחזרה עכשיו.", "Done! No more cards to review now.")));
+    if (!card) return root.append(el("p", {}, L("סיימת! אין עוד כרטיסיות לחזרה עכשיו.", "Done! No more cards to review now.")), plus.hardCards(c));
     const answer = el("p", { dir: "auto", hidden: true, style: "white-space: pre-wrap" }, card.back);
     const rate = (r) => {
       const f = card.fsrs;
@@ -1294,9 +1307,12 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     };
     const rates = el("div", { class: "ph-btns", hidden: true }, ...[[1, "שוב", "Again"], [2, "קשה", "Hard"], [3, "טוב", "Good"], [4, "קל", "Easy"]].map(([r, h, e]) => el("button", { type: "button", onclick: () => rate(r) }, L(h, e))));
     if (missed) root.append(el("div", { class: "ph-why", "aria-live": "polite", dir: "auto" }, el("strong", {}, L("למה? ", "Why? ")), missed.front, el("p", {}, missed.text ?? L("מסביר… (בטלפון זה לוקח זמן)", "Explaining… (this takes a while on a phone)"))));
+    const showBtn = el("button", { type: "button", class: "primary" }, L("הצג תשובה", "Show answer"));
+    const show = () => { answer.hidden = false; rates.hidden = false; showBtn.hidden = true; };
+    showBtn.onclick = show;
     root.append(el("section", { class: "api" },
-      el("p", { dir: "auto", style: "font-size: 18px" }, card.front), answer,
-      el("button", { type: "button", class: "primary", onclick: (ev) => { answer.hidden = false; rates.hidden = false; ev.currentTarget.hidden = true; } }, L("הצג תשובה", "Show answer")), rates));
+      plus.cardTimer(() => { if (!showBtn.hidden) show(); }),
+      el("p", { dir: "auto", style: "font-size: 18px" }, card.front), answer, showBtn, rates), plus.hardCards(c));
   }
 
   function quiz() {
@@ -1379,7 +1395,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         c.quizzes.push({ id: uid(), t: Date.now(), questions: z.questions, answers: z.picked, score });
         commit();
       }
-      return root.append(el("section", { class: "api" }, el("h2", {}, L(`${score} מתוך ${z.questions.length}`, `${score} of ${z.questions.length}`)), el("button", { type: "button", class: "primary", onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן נוסף", "Another quiz"))));
+      return root.append(el("section", { class: "api" }, el("h2", {}, L(`${score} מתוך ${z.questions.length}`, `${score} of ${z.questions.length}`)), plus.quizTalk(c, z), el("button", { type: "button", class: "primary", onclick: () => go({ at: "quiz", course: c.id }) }, L("בוחן נוסף", "Another quiz"))));
     }
     const q = z.questions[z.i];
     const picked = z.picked[z.i];
