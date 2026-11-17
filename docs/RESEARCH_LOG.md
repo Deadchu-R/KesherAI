@@ -1483,6 +1483,7 @@ Stopped at: building (store and public page first, then the chat menu and the se
   work, (3) a cloud key when she has one. Needs a native speech engine in the app (whisper.cpp or Qualcomm's
   runtime): a new dependency, to ask Roee. Test phone: Roee's OnePlus 13 (Snapdragon 8 Elite, 16 GB).
 - Stopped at: no hands-on test; Hebrew accuracy of small vs turbo on a real lecture is the open question.
+- Update (2026-11-17): settled in practice: Hebrew uses ivrit-ai's large-v3-turbo (whisper.ts) where it runs well, the general turbo elsewhere; the first setup offers it with its size. A side-by-side on a real lecture is still not done.
 
 ### Students, part 5: "how do I learn best?" and how the competitors personalise (2026-11-16)
 
