@@ -1123,6 +1123,12 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 134 (2026-11-18): fitting the model's context everywhere, Try again on a report, check_code's Unreal scope
+- **Context fallbacks (computer Study, the course tutor, chat reports, the phone)**: each is bounded (two or three more tries, each shorter; aborting stops them) and only on errors that name the context; any other error is reported as before. The cut keeps the start of the material and says that the rest was cut, so the model is not misled into thinking it saw everything. No new data is kept.
+- **Try again on a failed report**: `POST /api/chat-reports/:id/retry` works only for a report in the error state, refuses one being written (409), reads the chat already stored for it; it uses the same model choice rules as the first run.
+- **check_code**: the new `git status --porcelain` runs in the work folder with a fixed command (no user text), 20 s timeout; paths from it are only compared as text to the checker's lines. A project without git, or an Unreal project, keeps the whole-folder check.
+- **Performance**: a context error now costs one or two more model calls instead of a failed feature; the halving keeps each retry cheaper than the first.
+
 ## Scan 133 (2026-11-18): Back on track, My progress and the goal reminder, long reports and quizzes on a small context
 - **Back on track**: `/review?limit=N&backlog=1` caps N at 1–500; the order and the plan are computed from her own course (no new data kept); the pace is one word in the browser's or phone's storage.
 - **Long reports (fixed from Roee's phone)**: "Context size has been exceeded" ended an import or a new report with a server error. Parts are now smaller on a context error (halves, then quarters; notes 40k → 20k → 10k characters), a model too small even then gets a 422 with what to do, and the error path no longer leaks a stack or a 500. The retries are bounded (at most three sizes, two levels of halving), so a failing model cannot loop.
