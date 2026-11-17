@@ -7,13 +7,14 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { goalToday, weekRecap, studyBadges, topicMastery, studyStreak, studyDays, backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
 const TABLE_KEY = "kesherai-timetable";
 const PLANS_KEY = "kesherai-plans";
 const SETUP_KEY = "kesherai-study-setup";
+const GOAL_KEY = "kesherai-goal";
 const DAYS = [["א׳", "Sun"], ["ב׳", "Mon"], ["ג׳", "Tue"], ["ד׳", "Wed"], ["ה׳", "Thu"], ["ו׳", "Fri"], ["ש׳", "Sat"]];
 
 /**
@@ -777,6 +778,50 @@ export function studyPlus(x) {
     return box;
   }
 
+  // ---------- my progress: daily goal, the week, mastery and milestones (design PhoneProgress) ----------
+  // The same calculations as the computer's Study (goalToday, weekRecap, topicMastery, studyBadges), from the phone's
+  // own data; the goal (minutes of focus and cards reviewed a day) is kept on the phone.
+  function loadGoal() { try { const g = JSON.parse(localStorage.getItem(GOAL_KEY) || "{}"); return { on: g.on === true, targets: { minutes: Math.min(240, Math.max(0, Number(g.targets?.minutes) || 0)), cards: Math.min(500, Math.max(0, Number(g.targets?.cards) || 0)) } }; } catch { return { on: false, targets: { minutes: 15, cards: 20 } }; } }
+  function saveGoal(g) { try { localStorage.setItem(GOAL_KEY, JSON.stringify(g)); } catch { alert(L("אין מקום לשמור.", "No room to save.")); } }
+  const datas = () => x.db().courses.map((c) => x.toData(c));
+  /** On the home: today's goal (or one tap to set one). */
+  function goalCard() {
+    const g = loadGoal();
+    if (!x.db().courses.length) return null;
+    if (!g.on) return el("div", { class: "ph-row" }, el("span", { class: "muted small" }, L("יעד קטן לכל יום עוזר להתמיד.", "A small goal each day helps you keep going.")),
+      el("button", { type: "button", onclick: () => { saveGoal({ on: true, targets: { minutes: 15, cards: 20 } }); x.draw(); } }, L("🎯 15 דקות ו־20 כרטיסיות", "🎯 15 minutes and 20 cards")));
+    const t = goalToday(datas(), [], { on: true, targets: g.targets });
+    const parts = [["minutes", "⏱", "דקות", "minutes"], ["cards", "🃏", "כרטיסיות", "cards"]].filter(([k]) => t.targets[k]);
+    const share = parts.length ? parts.reduce((n, [k]) => n + Math.min(1, t.counts[k] / t.targets[k]), 0) / parts.length : 0;
+    return section("",
+      el("div", { class: "ph-row" }, el("b", {}, t.done ? L("🎯 היעד של היום הושג ✓", "🎯 Today's goal reached ✓") : L("🎯 היעד של היום", "🎯 Today's goal")), el("button", { type: "button", class: "link", onclick: () => go({ at: "myProgress" }) }, L("ההתקדמות שלי ›", "My progress ›"))),
+      el("div", { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(share * 100)), "aria-label": L("היעד של היום", "Today's goal"), style: "height: 6px; border-radius: 3px; background: #2a2a2e; overflow: hidden; margin: 6px 0" }, el("span", { style: `display: block; height: 100%; width: ${Math.round(share * 100)}%; background: #7fd8a8` })),
+      el("p", { class: "small", style: "margin: 0" }, parts.map(([k, icon, he, en]) => `${icon} ${L(`${Math.min(t.counts[k], t.targets[k])} מתוך ${t.targets[k]} ${he}`, `${Math.min(t.counts[k], t.targets[k])} of ${t.targets[k]} ${en}`)}${t.counts[k] >= t.targets[k] ? " ✓" : ""}`).join(" · ")),
+      t.streak ? el("p", { class: "muted small", style: "margin: 4px 0 0" }, L(`🔥 ${t.streak} ימים ברצף`, `🔥 ${t.streak} days in a row`)) : "");
+  }
+  function progress() {
+    x.root.append(back({ at: "home" }), el("h2", {}, L("📈 ההתקדמות שלי", "📈 My progress")));
+    const g = loadGoal();
+    const ds = datas();
+    const pick = (k, values) => el("div", { role: "radiogroup", style: "display: flex; flex-wrap: wrap; gap: 6px" }, ...values.map((v) => chip(g.on && g.targets[k] === v, v ? String(v) : L("בלי", "None"), () => { saveGoal({ on: true, targets: { ...g.targets, [k]: v } }); x.draw(); })));
+    x.root.append(goalCard() ?? "", section(L("היעד היומי", "The daily goal"),
+      el("p", { class: "small", style: "margin: 4px 0" }, L("דקות ריכוז ביום", "Focus minutes a day")), pick("minutes", [0, 10, 15, 30, 60]),
+      el("p", { class: "small", style: "margin: 8px 0 4px" }, L("כרטיסיות ביום", "Cards a day")), pick("cards", [0, 10, 20, 40]),
+      g.on ? el("button", { type: "button", class: "link", onclick: () => { saveGoal({ ...g, on: false }); x.draw(); } }, L("לכבות את היעד", "Turn the goal off")) : ""));
+    const w = weekRecap(ds, []);
+    x.root.append(section(L("השבוע", "This week"),
+      el("p", { class: "small" }, L(`למדת ${w.days} מתוך 7 ימים · ${w.counts.cards} כרטיסיות · ${w.counts.minutes} דקות ריכוז`, `You studied ${w.days} of 7 days · ${w.counts.cards} cards · ${w.counts.minutes} focus minutes`)),
+      ...w.rose.map((m) => el("p", { class: "small", dir: "auto", style: "margin: 2px 0" }, `⬆ ${m.course}: ${m.title} (+${m.change})`)),
+      ...w.dropped.map((m) => el("p", { class: "small", dir: "auto", style: "margin: 2px 0" }, `⬇ ${m.course}: ${m.title} (${m.change})`))));
+    const rows = x.db().courses.map((c) => ({ c, m: topicMastery(c.cards, c.reviews, c.quizzes).sort((a, b) => a.mastery - b.mastery).slice(0, 6) })).filter((y) => y.m.length);
+    x.root.append(section(L("שליטה בנושאים", "Mastery by topic"), ...(rows.length ? rows.flatMap(({ c, m }) => [el("b", { dir: "auto" }, c.name),
+      ...m.map((t) => el("div", { class: "ph-row" }, el("span", { dir: "auto", style: "flex: 1; min-width: 0" }, c.lectures.find((l) => l.id === t.lectureId)?.title ?? ""),
+        el("span", { role: "img", "aria-label": `${t.mastery}`, style: "width: 90px; height: 6px; border-radius: 3px; background: #2a2a2e; overflow: hidden; display: inline-block" }, el("span", { style: `display: block; height: 100%; width: ${t.mastery}%; background: ${t.mastery >= 80 ? "#7fd8a8" : t.mastery >= 50 ? "#a5b4ff" : "#f0a830"}` })),
+        el("small", { style: "width: 28px; text-align: end" }, String(t.mastery))))]) : [el("p", { class: "muted small" }, L("אחרי כמה חזרות ובחנים על הרצאה, השליטה בה תופיע כאן.", "After a few reviews and quizzes on a lecture, its mastery shows here."))])));
+    const badges = studyBadges(ds, [], studyStreak(studyDays(ds)));
+    x.root.append(section(L("הישגים", "Milestones"), badges.length ? el("p", {}, badges.map((b) => `${b.icon} ${L(b.he, b.en)}`).join(" · ")) : el("p", { class: "muted small" }, L("ההרצאה הראשונה, 100 כרטיסיות, 7 ימים ברצף… יופיעו כאן.", "The first lecture, 100 cards, a 7-day streak… show here."))));
+  }
+
   // ---------- back on track after days off (design BackOnTrack, students part 39) ----------
   /** On the home: the course with the biggest pile of due cards, cleared a little each day; null when there is none. */
   function backOnTrack() {
@@ -1233,5 +1278,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week }, classBanner };
+  return { goalCard, backOnTrack, phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week, myProgress: progress }, classBanner };
 }

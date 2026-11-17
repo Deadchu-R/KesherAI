@@ -519,7 +519,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     // The first setup (design StudySetupWizardPhone) until she finishes or closes it.
     if (plus.needsSetup()) return plus.setupView();
     scheduleReminders();
-    if (db.courses.length) root.append(plus.setupList() ?? "", plus.backOnTrack() ?? "", plus.classBanner(), searchBox(), nextCard(), focusCard());
+    if (db.courses.length) root.append(plus.setupList() ?? "", plus.backOnTrack() ?? "", plus.goalCard() ?? "", plus.classBanner(), searchBox(), nextCard(), focusCard());
     const now = Date.now();
     const due = db.courses.reduce((n, c) => n + cardsToReview(toData(c), now).length, 0);
     const first = db.courses.find((c) => cardsToReview(toData(c), now).length);
@@ -531,6 +531,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", onclick: () => go({ at: "labs" }) }, L("ערכי מעבדה", "Lab values"))),
       el("div", { class: "ph-btns", style: "flex-wrap: wrap" },
         el("button", { type: "button", onclick: () => go({ at: "week" }) }, L("📅 השבוע שלי", "📅 My week")),
+        el("button", { type: "button", onclick: () => go({ at: "myProgress" }) }, L("📈 ההתקדמות שלי", "📈 My progress")),
         el("button", { type: "button", onclick: () => go({ at: "timetable" }) }, L("🗓 מערכת שעות", "🗓 Timetable")),
         el("button", { type: "button", onclick: () => go({ at: "grades" }) }, L("🎓 ציונים ותואר", "🎓 Grades and degree")),
         el("button", { type: "button", onclick: () => go({ at: "english" }) }, L("📘 אנגלית אקדמית", "📘 Academic English"))),
