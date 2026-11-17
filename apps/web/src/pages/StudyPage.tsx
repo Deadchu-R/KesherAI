@@ -6,7 +6,7 @@ import { celebrate } from "../celebrate";
 import { StudyMistakes } from "../StudyMistakes";
 import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from "../focus-sounds";
 import { ReadAlong } from "../ReadAlong";
-import { StudyWelcome } from "../StudyWelcome";
+import { StudySetupChecklist, StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
 import { StudyLive } from "../StudyLive";
@@ -30,7 +30,7 @@ import { StudySheet } from "../StudySheet";
 import { StudySlides } from "../StudySlides";
 import { OcclusionCard, OcclusionEditor } from "../StudyOcclusion";
 import { StudyMatch } from "../StudyMatch";
-import { SIMILAR_MARK, markdownTableCsv, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
+import { cleanStudyPrefs, type StudyPrefs, SIMILAR_MARK, markdownTableCsv, noteCards, parsePodcast, type TermPlace, type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { speak, speakDialog, stopSpeaking } from "../Speak";
 import { getLocale, he$ } from "../i18n";
@@ -145,10 +145,9 @@ function BackLink({ to }: { to: string }) {
 }
 
 /** Simple mode and the first visit (design StudySimple / StudyWelcome), shared by the home and the course. */
-type StudyPrefs = { simple: boolean; welcomed: boolean; easyRead?: boolean; path?: boolean; readFont?: boolean };
 function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
   const [p, setP] = useState<StudyPrefs | null>(null);
-  useEffect(() => void api<StudyPrefs>("/api/study/prefs").then(setP, () => setP({ simple: false, welcomed: true })), []);
+  useEffect(() => void api<StudyPrefs>("/api/study/prefs").then(setP, () => setP(cleanStudyPrefs({ welcomed: true }))), []);
   return [p, setP];
 }
 /** The course tabs of simple mode; the rest are under "More tools". */
@@ -169,11 +168,12 @@ function StudyHome() {
   const firstDue = courses?.find((c) => c.due > 0);
   // A 5-minute lesson in the course with the most due cards, else the one with the most cards.
   const quickCourse = firstDue ?? [...(courses ?? [])].sort((a, b) => b.cards - a.cards).find((c) => c.cards > 0);
-  if (courses && !courses.length && prefs && !prefs.welcomed) {
+  // The first setup: for a new start, or to finish a setup she left in the middle (design StudySetupWizard).
+  if (courses && prefs && !prefs.welcomed && (!courses.length || prefs.setupStep > 0)) {
     return (
       <div className="page study-page">
         <h1>{L("לימודים", "Study")}</h1>
-        <StudyWelcome onSkip={() => { setPrefs({ ...prefs, welcomed: true }); void api("/api/study/prefs", { method: "PUT", body: { welcomed: true } }).catch(() => undefined); }} />
+        <StudyWelcome prefs={prefs} onPrefs={setPrefs} onSkip={() => { setPrefs({ ...prefs, welcomed: true }); void api("/api/study/prefs", { method: "PUT", body: { welcomed: true } }).catch(() => undefined); }} />
       </div>
     );
   }
@@ -181,6 +181,7 @@ function StudyHome() {
   return (
     <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}${prefs?.readFont ? " study-read-font" : ""}`}>
       <h1>{L("לימודים", "Study")}</h1>
+      {!!courses?.length && prefs && <StudySetupChecklist prefs={prefs} onPrefs={setPrefs} courses={courses} />}
       {!!courses?.length && <StudySearch />}
       {/* "Now: <class>" first, the timetable itself lower with the other set-up cards (simple mode: under "more"). */}
       {!!courses?.length && <StudyTimetable part="now" courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}

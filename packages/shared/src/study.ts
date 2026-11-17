@@ -2490,3 +2490,52 @@ export function parseWritingFeedback(raw: unknown, text: string): WritingFeedbac
   const next = (Array.isArray(o.next) ? o.next : []).map((n) => str(n, 200)).filter(Boolean).slice(0, 4);
   return summary || comments.length || dimensions.length ? { summary, dimensions, comments, next } : undefined;
 }
+
+/** The setup steps a first visit to Study walks through (design StudySetupWizard), in order. */
+export const SETUP_STEPS = ["field", "courses", "model", "lecture"] as const;
+/** One setup step. */
+export type SetupStep = (typeof SETUP_STEPS)[number];
+
+/** Study's own settings, and where the first setup stands. */
+export interface StudyPrefs {
+  simple: boolean;
+  welcomed: boolean;
+  easyRead: boolean;
+  path: boolean;
+  readFont: boolean;
+  /** Her field from the first setup (one of STUDY_FIELDS' ids); new courses without a clear field get it. */
+  field?: string;
+  /** Her year of study (1–7). */
+  year?: number;
+  /** The setup step she is on (0–3), so leaving and coming back resumes there. */
+  setupStep: number;
+  /** Steps she skipped; they stay on the "Getting set up" list. */
+  setupSkipped: SetupStep[];
+  /** She hid the "Getting set up" list. */
+  checklistHidden: boolean;
+}
+
+/**
+ * Study's settings from a file or a request, checked: booleans stay booleans, the field must be a known one, the year
+ * 1–7, the step 0–3, skipped steps only known ones. The course path is on unless turned off.
+ *
+ * @param raw - The stored or sent object.
+ */
+export function cleanStudyPrefs(raw: unknown): StudyPrefs {
+  const j = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const year = Number(j.year);
+  const step = Number(j.setupStep);
+  const field = typeof j.field === "string" && STUDY_FIELDS.some((f) => f.id === j.field) ? j.field : undefined;
+  return {
+    simple: j.simple === true,
+    welcomed: j.welcomed === true,
+    easyRead: j.easyRead === true,
+    path: j.path !== false,
+    readFont: j.readFont === true,
+    ...(field ? { field } : {}),
+    ...(Number.isInteger(year) && year >= 1 && year <= 7 ? { year } : {}),
+    setupStep: Number.isInteger(step) && step >= 0 && step < SETUP_STEPS.length ? step : 0,
+    setupSkipped: Array.isArray(j.setupSkipped) ? [...new Set(j.setupSkipped.filter((x): x is SetupStep => SETUP_STEPS.includes(x as SetupStep)))] : [],
+    checklistHidden: j.checklistHidden === true,
+  };
+}

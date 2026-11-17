@@ -3192,6 +3192,34 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-more > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
 .study-more-tabs { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .study-welcome-steps li { transition: none; } }
+/* The first setup of Study (design StudySetupWizard) and its "Getting started" list (design StudySetupChecklist). */
+.study-setup { max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+.study-setup-progress { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.study-setup-progress ol { flex: 1; min-width: 120px; display: flex; gap: 5px; list-style: none; margin: 0; padding: 0; }
+.study-setup-progress li { flex: 1; height: 4px; border-radius: 2px; background: var(--border-strong); }
+.study-setup-progress li.on { background: var(--accent); }
+.study-setup-body { display: flex; flex-direction: column; gap: 10px; }
+.study-setup-body h2 { margin: 0; }
+.study-setup-body h2:focus:not(:focus-visible) { outline: none; }
+.study-setup-body > p.muted { margin: 0; }
+.study-setup-body label:not(.button) { display: flex; flex-direction: column; gap: 4px; }
+.study-setup-big { align-self: flex-start; }
+.study-setup-or { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line, #2a2a2e); }
+.study-setup-nav { gap: 10px; align-items: center; margin-top: 4px; }
+.study-setup-skip { margin-inline-start: auto; }
+.study-setup-choices { display: grid; gap: 8px; }
+.study-setup-checks { display: flex; flex-direction: column; gap: 8px; }
+.study-setup-check { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-strong); }
+.study-setup-check.ok { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.study-setup-list { display: flex; flex-direction: column; gap: 10px; }
+.study-setup-list h2 { margin: 0; font-size: 1.05rem; }
+.study-setup-bar { height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
+.study-setup-bar span { display: block; height: 100%; background: var(--accent); }
+.study-setup-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.study-setup-items li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.study-setup-items li.done { opacity: 0.7; }
+.study-setup-items .grow { min-width: 0; flex: 1 1 200px; }
+@media (max-width: 480px) { .study-setup-skip { margin-inline-start: 0; flex-basis: 100%; } }
 /* "Hard to start" (students part 26 #3). */
 .study-stuck-btn { color: var(--muted); }
 .study-stuck { margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--accent); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }

@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { studyFeed, courseWeb, whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
+import { type StudyPrefs, studyFeed, courseWeb, whereTerm, cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { youtubeSearch, cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -52,9 +52,11 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.put("/api/study/grades", { bodyLimit: 512 * 1024 }, async (req) => st.setGrades(req.body));
   app.get("/api/study/timetable", async () => st.timetable());
   app.put("/api/study/timetable", { bodyLimit: 256 * 1024 }, async (req) => st.setTimetable(req.body));
-  app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean; path?: boolean; readFont?: boolean } }>("/api/study/prefs", async (req) => {
+  // Study's settings and the first setup's place (design StudySetupWizard); each value is checked by cleanStudyPrefs.
+  app.put<{ Body: Record<string, unknown> }>("/api/study/prefs", async (req) => {
     const b = req.body ?? {};
-    return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead", "path", "readFont"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));
+    const keys = ["simple", "welcomed", "easyRead", "path", "readFont", "field", "year", "setupStep", "setupSkipped", "checklistHidden"] as const;
+    return st.setPrefs(Object.fromEntries(keys.filter((k) => k in b).map((k) => [k, b[k]])) as Partial<StudyPrefs>);
   });
   /** A video she watched to the end (a video lecture or a video overview), for the goal. */
   app.post("/api/study/activity/video", async () => {

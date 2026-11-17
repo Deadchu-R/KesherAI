@@ -570,3 +570,18 @@ test("studyFeed: terms, cards, questions and summary lines, mixed by the seed, k
   assert.deepEqual(studyFeed(d as never, 7), f);
   for (let i = 1; i < f.length - 1; i++) assert.ok(!(f[i]!.kind === "term" && f[i - 1]!.kind === "term"));
 });
+
+test("Study prefs: checked values, setup step and skipped steps", async () => {
+  const { cleanStudyPrefs } = await import("./study.js");
+  const p = cleanStudyPrefs({ simple: true, field: "nursing", year: 2, setupStep: 2, setupSkipped: ["model", "model", "nope"], checklistHidden: "yes" });
+  assert.equal(p.field, "nursing");
+  assert.equal(p.year, 2);
+  assert.equal(p.setupStep, 2);
+  assert.deepEqual(p.setupSkipped, ["model"]);
+  assert.equal(p.checklistHidden, false);
+  assert.equal(p.path, true);
+  const bad = cleanStudyPrefs({ field: "astrology", year: 12, setupStep: 9 });
+  assert.equal(bad.field, undefined);
+  assert.equal(bad.year, undefined);
+  assert.equal(bad.setupStep, 0);
+});

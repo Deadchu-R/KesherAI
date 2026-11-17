@@ -10,7 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { cleanStudyPrefs, type StudyPrefs, parseBibtex, parseRis, cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -248,17 +248,15 @@ export class Study {
   }
 
   /** How Study looks for her (design StudySimple): simple mode, and whether she went through the first visit. */
-  async prefs(): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean; readFont: boolean }> {
+  async prefs(): Promise<StudyPrefs> {
     const j = await readFile(join(this.dir, "_prefs.json"), "utf8").then((t) => JSON.parse(t) as Record<string, unknown>, () => ({}) as Record<string, unknown>);
     // The course path (design CoursePath) is on until she turns it off (Roee: optional, 2026-11-17).
-    return { simple: j.simple === true, welcomed: j.welcomed === true, easyRead: j.easyRead === true, path: j.path !== false, readFont: j.readFont === true };
+    return cleanStudyPrefs(j);
   }
 
-  /** Changes them. */
-  async setPrefs(change: Partial<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean; readFont: boolean }>): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean; readFont: boolean }> {
-    const cur = await this.prefs();
-    const pick = (k: "simple" | "welcomed" | "easyRead" | "path" | "readFont") => (typeof change[k] === "boolean" ? change[k]! : cur[k]);
-    const next = { simple: pick("simple"), welcomed: pick("welcomed"), easyRead: pick("easyRead"), path: pick("path"), readFont: pick("readFont") };
+  /** Changes them (only the keys given; each checked). */
+  async setPrefs(change: Partial<StudyPrefs>): Promise<StudyPrefs> {
+    const next = cleanStudyPrefs({ ...(await this.prefs()), ...change });
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, "_prefs.json"), JSON.stringify(next));
     return next;
@@ -444,7 +442,8 @@ export class Study {
   /** Adds a course. */
   async addCourse(name: string): Promise<StudyCourse> {
     const n = name.trim().slice(0, 120) || "Course";
-    const field = detectField(n, "");
+    // Her field from the first setup when the name does not tell (design StudySetupWizard).
+    const field = detectField(n, "") || (await this.prefs()).field;
     const course: StudyCourse = { id: randomUUID(), name: n, createdAt: Date.now(), ...(field ? { field } : {}) };
     await this.save({ course, lectures: [], cards: [], reviews: [], quizzes: [] });
     return course;

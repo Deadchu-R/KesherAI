@@ -2099,3 +2099,15 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built (2026-11-17, design StudyWelcomePhoto): the first visit offers "all my courses from a photo of the timetable": each course is opened and every class goes into the timetable, then the goal step as before.
 - Built too: "My week" suggests a time for each step in the free hours around her classes (after 16:00, 15 minutes after a class, not on top of another step).
 - Stopped at: done.
+
+## Students, part 38: a guided first setup for Study (2026-11-17, Roee: "the first setup of Study should be the easiest and most comfortable there is, really guided and explained")
+- What others do: Duolingo asks the language and level, then a 2-minute first lesson (value before anything else); Quizlet asks what you study, the school and a course, then shows material for that course; Knowt walks through a sample PDF becoming notes, cards and a quiz before asking anything; StudySmarter and Seneca ask subjects and exam dates first. The common thread: the first questions are about what she studies, and the setup ends inside the product with something already made, not on an empty page.
+- Wizard rules from onboarding research (Appcues, Kompassify, UX pattern guides): 2–4 steps (completion falls after 5), one question per screen, an honest "step 2 of 4", every step skippable with the skipped items kept in a checklist (deferred, not lost), progress saved so leaving and coming back resumes, sensible defaults, permissions (microphone, camera) asked only at the step that needs them, and finish inside the work.
+- KesherAI had: three steps (first course or all from a timetable photo, a daily goal, simple view), then "add a first lecture". Nothing about her field, whether a model can actually do the work, the phone, or what each step is for; skipped items were gone.
+- Plan (designs StudySetupWizard + StudySetupChecklist, computer, remote and phone alone):
+  1. "What do you study?" field chips (nursing, medicine, law, engineering, psychology, other) and year: picks the field tools and the words the model uses.
+  2. "Your courses": all from a timetable photo, or the first course by name with its exam date.
+  3. "Will it work on this computer?": checks the chat model (Hebrew, enough memory) and speech-to-text for recordings; when missing, names the suggested model, its size and time, and downloads only when she taps. On the phone alone: the phone's own model.
+  4. "Your first lecture": record now, upload a file, or later; ends inside the course with a three-point tour (summary, cards, quiz).
+  - Each step says in one line why it is asked. A "Getting set up" checklist on Study's home keeps what was skipped plus the extras (connect the phone with a QR code, a daily goal and reminder, simple or all tools), each with its reason; it goes away when done or dismissed.
+- Stopped at: research done; next the design boards, then the computer wizard, then the phone.
