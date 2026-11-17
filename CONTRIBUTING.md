@@ -13,6 +13,10 @@ pnpm lint
 pnpm dev                 # core on :7420, UI on :5173 with hot reload
 ```
 
+**Space:** the install and builds take about 6 GB (node_modules, the interface build, Electron when you package the app). With Docker or Codespaces, `.devcontainer/` sets everything up ("Reopen in Container").
+
+**A separate development profile:** your own KesherAI's chats, models settings and keys stay apart when the core you run has its own data folder, for example `node packages/core/dist/main.js --port 7421 --data-dir ~/kesher-dev` (any empty folder). Delete the folder to start fresh.
+
 You do not need a GPU or a model to work on most of KesherAI: the `example-hello` plugin adds an `echo` provider (add it under Connections) that answers instantly.
 
 ## Your first change in 10 minutes

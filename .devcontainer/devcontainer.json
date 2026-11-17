@@ -1,0 +1,16 @@
+{
+  // A ready development container (VS Code "Reopen in Container", GitHub Codespaces): Node 22 and pnpm, the
+  // packages built, the core on 7420 and the interface on 5173. No GPU or model is needed for most work.
+  "name": "KesherAI",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "postCreateCommand": "corepack enable && pnpm install && pnpm build:packages",
+  "forwardPorts": [7420, 5173],
+  "portsAttributes": {
+    "7420": { "label": "KesherAI core" },
+    "5173": { "label": "Interface (hot reload)", "onAutoForward": "openBrowser" }
+  },
+  "hostRequirements": { "storage": "16gb", "memory": "8gb" },
+  "customizations": {
+    "vscode": { "extensions": ["dbaeumer.vscode-eslint"] }
+  }
+}
