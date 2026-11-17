@@ -3449,3 +3449,4 @@ div.slide-list { padding-inline-start: 0; }
 .lens-card { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-height: 40vh; }
 .lens-text { white-space: pre-wrap; overflow: auto; line-height: 1.6; }
 .lens-pick label.button { align-self: flex-start; }
+.lens-over { position: absolute; z-index: 2; background: #fbfaf7; color: #1d1d22; border-radius: 3px; padding: 0 3px; line-height: 1.15; white-space: nowrap; display: flex; align-items: center; box-shadow: 0 1px 3px #0005; pointer-events: none; }

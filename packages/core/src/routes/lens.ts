@@ -45,11 +45,26 @@ const pngOf = (b64: unknown) => {
   return buf;
 };
 
+/** A line Windows' OCR found: its text and box, in the picture's pixels. */
+export interface OcrLine { t: string; x: number; y: number; w: number; h: number }
+
+/** The OCR script's JSON (one line or a list), checked. */
+export function parseOcr(out: string): OcrLine[] | undefined {
+  try {
+    const j = JSON.parse(out.trim().replace(/^\uFEFF/, "")) as unknown;
+    const list = (Array.isArray(j) ? j : [j]) as Array<Record<string, unknown>>;
+    const lines = list.filter((l) => l && typeof l.t === "string" && l.t.trim()).map((l) => ({ t: String(l.t), x: Number(l.x) || 0, y: Number(l.y) || 0, w: Number(l.w) || 0, h: Number(l.h) || 0 }));
+    return lines.length ? lines : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Windows' own text recognition (Windows.Media.Ocr, on the computer, nothing sent): the text of a picture, or
  * undefined when it is not available (not Windows, no language pack) so the vision model reads it instead.
  */
-async function windowsOcr(png: Buffer, he: boolean): Promise<string | undefined> {
+async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefined> {
   if (process.platform !== "win32") return undefined;
   const dir = await mkdtemp(join(tmpdir(), "kesher-ocr-"));
   try {
@@ -72,12 +87,13 @@ async function windowsOcr(png: Buffer, he: boolean): Promise<string | undefined>
       "if(-not $e){exit 3}",
       "$r=Await ($e.RecognizeAsync($b)) ([Windows.Media.Ocr.OcrResult])",
       "[Console]::OutputEncoding=[Text.Encoding]::UTF8",
-      "($r.Lines|%{$_.Text}) -join \"`n\"",
+      // Each line with its box (the union of its words), for drawing a translation over it.
+      "ConvertTo-Json -Compress -Depth 3 @($r.Lines|%{$ws=@($_.Words|%{$_.BoundingRect});$x=($ws|%{$_.X}|Measure-Object -Minimum).Minimum;$y=($ws|%{$_.Y}|Measure-Object -Minimum).Minimum;$r2=($ws|%{$_.X+$_.Width}|Measure-Object -Maximum).Maximum;$b=($ws|%{$_.Y+$_.Height}|Measure-Object -Maximum).Maximum;@{t=$_.Text;x=$x;y=$y;w=$r2-$x;h=$b-$y}})",
     ].join(";");
     const out = await new Promise<string>((resolve, reject) =>
       execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, KESHER_OCR_FILE: file }, timeout: 20_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
     );
-    return out.trim() || undefined;
+    return parseOcr(out);
   } catch {
     return undefined;
   } finally {
@@ -114,14 +130,26 @@ export async function lensRoutes(app: FastifyInstance, s: KesherServices): Promi
     const action = ACTIONS.includes(b.action as LensAction) ? (b.action as LensAction) : "ask";
     const png = pngOf(b.image);
     const he = b.he !== false;
-    if (action === "text") {
-      const t = await windowsOcr(png, he);
-      if (t) return { text: t, by: "ocr" };
-    }
+    const ocr = action === "text" || action === "translate" ? await windowsOcr(png, he) : undefined;
+    if (action === "text" && ocr) return { text: ocr.map((l) => l.t).join("\n"), by: "ocr" };
     const chat = s.config.activeModels.chat;
     if (!chat) return reply.code(400).send({ error: "Choose a chat model first (one that sees pictures)." });
     const ac = new AbortController();
     reply.raw.on("close", () => !reply.raw.writableFinished && ac.abort());
+    if (action === "translate" && ocr) {
+      // Translation in place (like Google Lens): each line the OCR found is translated as text, and drawn over itself.
+      const r = await modelTurnFor(s.registry, chat)(
+        { messages: [{ role: "system", content: "Translate each numbered line: Hebrew into English, anything else into Hebrew. Answer with JSON only: an array of strings, one per line, in the same order and count." }, { role: "user", content: ocr.map((l, i) => `${i + 1}. ${l.t}`).join("\n") }], tools: [] },
+        AbortSignal.any([ac.signal, AbortSignal.timeout(180_000)]),
+        () => undefined,
+      );
+      const raw = r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "");
+      const arr = (() => { try { return JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1)) as unknown; } catch { return undefined; } })();
+      if (Array.isArray(arr) && arr.length === ocr.length) {
+        const lines = ocr.map((l, i) => ({ ...l, t: String(arr[i] ?? "").slice(0, 500) }));
+        return { text: lines.map((l) => l.t).join("\n"), lines, by: "ocr" };
+      }
+    }
     const r = await modelTurnFor(s.registry, chat)(
       { messages: [{ role: "user", content: lensPrompt(action, String(b.question ?? "").slice(0, 1000), he), images: [{ mimeType: "image/png", data: png.toString("base64") }] }], tools: [] },
       AbortSignal.any([ac.signal, AbortSignal.timeout(180_000)]),

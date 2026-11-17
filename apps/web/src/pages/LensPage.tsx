@@ -27,7 +27,7 @@ function shown(img: HTMLImageElement): Box & { left: number; top: number; width:
 }
 
 /** A PNG (base64) of a part of the picture, in the picture's own pixels. */
-function crop(img: HTMLImageElement, marked: Box): string {
+function crop(img: HTMLImageElement, marked: Box): { data: string; box: Box; sx: number; sy: number } {
   const r = shown(img);
   // Only the part over the picture (not the bars beside it).
   const x = Math.max(marked.x, r.x);
@@ -39,7 +39,7 @@ function crop(img: HTMLImageElement, marked: Box): string {
   c.width = Math.max(1, Math.round(box.w * sx));
   c.height = Math.max(1, Math.round(box.h * sy));
   c.getContext("2d")!.drawImage(img, (box.x - r.left) * sx, (box.y - r.top) * sy, c.width, c.height, 0, 0, c.width, c.height);
-  return c.toDataURL("image/png").split(",")[1]!;
+  return { data: c.toDataURL("image/png").split(",")[1]!, box, sx, sy };
 }
 
 /**
@@ -56,6 +56,8 @@ export function LensPage({ id }: { id?: string }) {
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = useState<Action | "">("");
   const [result, setResult] = useState<{ action: Action; text: string } | null>(null);
+  // A translation drawn over the picture, line by line (Windows' OCR found where each line is).
+  const [over, setOver] = useState<Array<{ t: string; left: number; top: number; width: number; height: number }>>([]);
   const [question, setQuestion] = useState("");
   const img = useRef<HTMLImageElement>(null);
   const he = getLocale() === "he";
@@ -89,15 +91,17 @@ export function LensPage({ id }: { id?: string }) {
       toast((e as Error).message);
     }
   };
-  const part = () => (img.current && box ? crop(img.current, box) : "");
+  const part = () => (img.current && box ? crop(img.current, box).data : "");
   const act = async (action: Action) => {
-    const image = part();
-    if (!image) return;
+    if (!img.current || !box) return;
+    const cut = crop(img.current, box);
     setBusy(action);
     setResult(null);
+    setOver([]);
     try {
-      const r = await api<{ text: string }>("/api/lens/act", { method: "POST", body: { image, action, question, he } });
+      const r = await api<{ text: string; lines?: Array<{ t: string; x: number; y: number; w: number; h: number }> }>("/api/lens/act", { method: "POST", body: { image: cut.data, action, question, he } });
       setResult({ action, text: r.text });
+      if (r.lines?.length) setOver(r.lines.map((l) => ({ t: l.t, left: cut.box.x + l.x / cut.sx, top: cut.box.y + l.y / cut.sy, width: l.w / cut.sx, height: l.h / cut.sy })));
       if (action === "text") void navigator.clipboard.writeText(r.text).then(() => toast(L("הטקסט הועתק", "Text copied")), () => undefined);
     } catch (e) {
       toast((e as Error).message);
@@ -130,6 +134,7 @@ export function LensPage({ id }: { id?: string }) {
     if ((e.target as HTMLElement).closest(".lens-bar, .lens-card")) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setDrag({ x: e.clientX, y: e.clientY });
+    setOver([]);
     setBox({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
     setResult(null);
   };
@@ -148,6 +153,7 @@ export function LensPage({ id }: { id?: string }) {
     <div className={`lens${overlay ? " overlay" : ""}`} onPointerDown={down} onPointerMove={moveTo} onPointerUp={up}>
       <img ref={img} src={withToken(`/api/lens/shot/${shot}`)} alt="" draggable={false} onLoad={() => { if (all && img.current) { const r = shown(img.current); setBox({ x: r.x, y: r.y, w: r.w, h: r.h }); } }} onError={() => { toast(L("התמונה כבר לא שמורה. לחצי שוב על המקש.", "The picture is gone. Press the key again.")); setShot(undefined); }} />
       {box && <div className="lens-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />}
+      {over.map((o, i) => <div key={i} className="lens-over" dir="auto" style={{ left: o.left, top: o.top, minWidth: o.width, height: Math.max(14, o.height), fontSize: Math.max(10, Math.min(28, o.height * 0.8)) }}>{o.t}</div>)}
       {!box && <div className="lens-hint chip">{L("גוררים כדי לסמן · נגיעה = כל התמונה · Esc לסגירה", "Drag to mark · a tap = the whole picture · Esc to close")}</div>}
       <button type="button" className="lens-close ghost" onClick={close} aria-label={L("סגירה", "Close")}>✕</button>
       {box && !drag && box.w >= 8 && (
